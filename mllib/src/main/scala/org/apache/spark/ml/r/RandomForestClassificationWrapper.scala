@@ -30,12 +30,12 @@ import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private[r] class RandomForestClassifierWrapper private (
+private[r] class RandomForestClassificationWrapper private (
   val pipeline: PipelineModel,
   val formula: String,
   val features: Array[String]) extends MLWritable {
 
-  import RandomForestClassifierWrapper._
+  import RandomForestClassificationWrapper._
 
   private val rfcModel: RandomForestClassificationModel =
     pipeline.stages(1).asInstanceOf[RandomForestClassificationModel]
@@ -56,10 +56,11 @@ private[r] class RandomForestClassifierWrapper private (
   }
 
   override def write: MLWriter = new
-      RandomForestClassifierWrapper.RandomForestClassifierWrapperWriter(this)
+      RandomForestClassificationWrapper.RandomForestClassificationWrapperWriter(this)
 }
 
-private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestClassifierWrapper] {
+private[r] object RandomForestClassificationWrapper
+  extends MLReadable[RandomForestClassificationWrapper] {
 
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
@@ -80,7 +81,7 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       maxMemoryInMB: Int,
       cacheNodeIds: Boolean,
       handleInvalid: String,
-      bootstrap: Boolean): RandomForestClassifierWrapper = {
+      bootstrap: Boolean): RandomForestClassificationWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
@@ -120,15 +121,15 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       .setStages(Array(rFormulaModel, rfc, idxToStr))
       .fit(data)
 
-    new RandomForestClassifierWrapper(pipeline, formula, features)
+    new RandomForestClassificationWrapper(pipeline, formula, features)
   }
 
-  override def read: MLReader[RandomForestClassifierWrapper] =
-    new RandomForestClassifierWrapperReader
+  override def read: MLReader[RandomForestClassificationWrapper] =
+    new RandomForestClassificationWrapperReader
 
-  override def load(path: String): RandomForestClassifierWrapper = super.load(path)
+  override def load(path: String): RandomForestClassificationWrapper = super.load(path)
 
-  class RandomForestClassifierWrapperWriter(instance: RandomForestClassifierWrapper)
+  class RandomForestClassificationWrapperWriter(instance: RandomForestClassificationWrapper)
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
@@ -145,9 +146,10 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
     }
   }
 
-  class RandomForestClassifierWrapperReader extends MLReader[RandomForestClassifierWrapper] {
+  class RandomForestClassificationWrapperReader
+    extends MLReader[RandomForestClassificationWrapper] {
 
-    override def load(path: String): RandomForestClassifierWrapper = {
+    override def load(path: String): RandomForestClassificationWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
@@ -158,7 +160,7 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       val formula = (rMetadata \ "formula").extract[String]
       val features = (rMetadata \ "features").extract[Array[String]]
 
-      new RandomForestClassifierWrapper(pipeline, formula, features)
+      new RandomForestClassificationWrapper(pipeline, formula, features)
     }
   }
 }

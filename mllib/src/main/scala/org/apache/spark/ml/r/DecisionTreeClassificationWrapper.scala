@@ -30,12 +30,12 @@ import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private[r] class DecisionTreeClassifierWrapper private (
+private[r] class DecisionTreeClassificationWrapper private (
   val pipeline: PipelineModel,
   val formula: String,
   val features: Array[String]) extends MLWritable {
 
-  import DecisionTreeClassifierWrapper._
+  import DecisionTreeClassificationWrapper._
 
   private val dtcModel: DecisionTreeClassificationModel =
     pipeline.stages(1).asInstanceOf[DecisionTreeClassificationModel]
@@ -54,10 +54,11 @@ private[r] class DecisionTreeClassifierWrapper private (
   }
 
   override def write: MLWriter = new
-      DecisionTreeClassifierWrapper.DecisionTreeClassifierWrapperWriter(this)
+      DecisionTreeClassificationWrapper.DecisionTreeClassificationWrapperWriter(this)
 }
 
-private[r] object DecisionTreeClassifierWrapper extends MLReadable[DecisionTreeClassifierWrapper] {
+private[r] object DecisionTreeClassificationWrapper extends
+  MLReadable[DecisionTreeClassificationWrapper] {
 
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
@@ -74,7 +75,7 @@ private[r] object DecisionTreeClassifierWrapper extends MLReadable[DecisionTreeC
       seed: String,
       maxMemoryInMB: Int,
       cacheNodeIds: Boolean,
-      handleInvalid: String): DecisionTreeClassifierWrapper = {
+      handleInvalid: String): DecisionTreeClassificationWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
@@ -110,15 +111,15 @@ private[r] object DecisionTreeClassifierWrapper extends MLReadable[DecisionTreeC
       .setStages(Array(rFormulaModel, dtc, idxToStr))
       .fit(data)
 
-    new DecisionTreeClassifierWrapper(pipeline, formula, features)
+    new DecisionTreeClassificationWrapper(pipeline, formula, features)
   }
 
-  override def read: MLReader[DecisionTreeClassifierWrapper] =
-    new DecisionTreeClassifierWrapperReader
+  override def read: MLReader[DecisionTreeClassificationWrapper] =
+    new DecisionTreeClassificationWrapperReader
 
-  override def load(path: String): DecisionTreeClassifierWrapper = super.load(path)
+  override def load(path: String): DecisionTreeClassificationWrapper = super.load(path)
 
-  class DecisionTreeClassifierWrapperWriter(instance: DecisionTreeClassifierWrapper)
+  class DecisionTreeClassificationWrapperWriter(instance: DecisionTreeClassificationWrapper)
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
@@ -135,9 +136,10 @@ private[r] object DecisionTreeClassifierWrapper extends MLReadable[DecisionTreeC
     }
   }
 
-  class DecisionTreeClassifierWrapperReader extends MLReader[DecisionTreeClassifierWrapper] {
+  class DecisionTreeClassificationWrapperReader
+    extends MLReader[DecisionTreeClassificationWrapper] {
 
-    override def load(path: String): DecisionTreeClassifierWrapper = {
+    override def load(path: String): DecisionTreeClassificationWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
@@ -148,7 +150,7 @@ private[r] object DecisionTreeClassifierWrapper extends MLReadable[DecisionTreeC
       val formula = (rMetadata \ "formula").extract[String]
       val features = (rMetadata \ "features").extract[Array[String]]
 
-      new DecisionTreeClassifierWrapper(pipeline, formula, features)
+      new DecisionTreeClassificationWrapper(pipeline, formula, features)
     }
   }
 }

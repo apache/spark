@@ -56,18 +56,18 @@ private[r] object RWrappers extends MLReader[Object] {
         ALSWrapper.load(path)
       case "org.apache.spark.ml.r.LogisticRegressionWrapper" =>
         LogisticRegressionWrapper.load(path)
-      case "org.apache.spark.ml.r.RandomForestRegressorWrapper" =>
-        RandomForestRegressorWrapper.load(path)
-      case "org.apache.spark.ml.r.RandomForestClassifierWrapper" =>
-        RandomForestClassifierWrapper.load(path)
+      case "org.apache.spark.ml.r.RandomForestRegressionWrapper" =>
+        RandomForestRegressionWrapper.load(path)
+      case "org.apache.spark.ml.r.RandomForestClassificationWrapper" =>
+        RandomForestClassificationWrapper.load(path)
       case "org.apache.spark.ml.r.DecisionTreeRegressorWrapper" =>
         DecisionTreeRegressorWrapper.load(path)
-      case "org.apache.spark.ml.r.DecisionTreeClassifierWrapper" =>
-        DecisionTreeClassifierWrapper.load(path)
-      case "org.apache.spark.ml.r.GBTRegressorWrapper" =>
-        GBTRegressorWrapper.load(path)
-      case "org.apache.spark.ml.r.GBTClassifierWrapper" =>
-        GBTClassifierWrapper.load(path)
+      case "org.apache.spark.ml.r.DecisionTreeClassificationWrapper" =>
+        DecisionTreeClassificationWrapper.load(path)
+      case "org.apache.spark.ml.r.GBTRegressionWrapper" =>
+        GBTRegressionWrapper.load(path)
+      case "org.apache.spark.ml.r.GBTClassificationWrapper" =>
+        GBTClassificationWrapper.load(path)
       case "org.apache.spark.ml.r.BisectingKMeansWrapper" =>
         BisectingKMeansWrapper.load(path)
       case "org.apache.spark.ml.r.LinearSVCWrapper" =>

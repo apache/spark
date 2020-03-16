@@ -30,12 +30,12 @@ import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private[r] class GBTClassifierWrapper private (
+private[r] class GBTClassificationWrapper private (
   val pipeline: PipelineModel,
   val formula: String,
   val features: Array[String]) extends MLWritable {
 
-  import GBTClassifierWrapper._
+  import GBTClassificationWrapper._
 
   private val gbtcModel: GBTClassificationModel =
     pipeline.stages(1).asInstanceOf[GBTClassificationModel]
@@ -56,10 +56,10 @@ private[r] class GBTClassifierWrapper private (
   }
 
   override def write: MLWriter = new
-      GBTClassifierWrapper.GBTClassifierWrapperWriter(this)
+      GBTClassificationWrapper.GBTClassificationWrapperWriter(this)
 }
 
-private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] {
+private[r] object GBTClassificationWrapper extends MLReadable[GBTClassificationWrapper] {
 
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
@@ -79,7 +79,7 @@ private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] 
       subsamplingRate: Double,
       maxMemoryInMB: Int,
       cacheNodeIds: Boolean,
-      handleInvalid: String): GBTClassifierWrapper = {
+      handleInvalid: String): GBTClassificationWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
@@ -118,14 +118,14 @@ private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] 
       .setStages(Array(rFormulaModel, rfc, idxToStr))
       .fit(data)
 
-    new GBTClassifierWrapper(pipeline, formula, features)
+    new GBTClassificationWrapper(pipeline, formula, features)
   }
 
-  override def read: MLReader[GBTClassifierWrapper] = new GBTClassifierWrapperReader
+  override def read: MLReader[GBTClassificationWrapper] = new GBTClassificationWrapperReader
 
-  override def load(path: String): GBTClassifierWrapper = super.load(path)
+  override def load(path: String): GBTClassificationWrapper = super.load(path)
 
-  class GBTClassifierWrapperWriter(instance: GBTClassifierWrapper)
+  class GBTClassificationWrapperWriter(instance: GBTClassificationWrapper)
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
@@ -142,9 +142,9 @@ private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] 
     }
   }
 
-  class GBTClassifierWrapperReader extends MLReader[GBTClassifierWrapper] {
+  class GBTClassificationWrapperReader extends MLReader[GBTClassificationWrapper] {
 
-    override def load(path: String): GBTClassifierWrapper = {
+    override def load(path: String): GBTClassificationWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
@@ -155,7 +155,7 @@ private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] 
       val formula = (rMetadata \ "formula").extract[String]
       val features = (rMetadata \ "features").extract[Array[String]]
 
-      new GBTClassifierWrapper(pipeline, formula, features)
+      new GBTClassificationWrapper(pipeline, formula, features)
     }
   }
 }

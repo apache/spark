@@ -30,7 +30,7 @@ import org.apache.spark.ml.regression.{GBTRegressionModel, GBTRegressor}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private[r] class GBTRegressorWrapper private (
+private[r] class GBTRegressionWrapper private (
   val pipeline: PipelineModel,
   val formula: String,
   val features: Array[String]) extends MLWritable {
@@ -51,10 +51,10 @@ private[r] class GBTRegressorWrapper private (
   }
 
   override def write: MLWriter = new
-      GBTRegressorWrapper.GBTRegressorWrapperWriter(this)
+      GBTRegressionWrapper.GBTRegressionWrapperWriter(this)
 }
 
-private[r] object GBTRegressorWrapper extends MLReadable[GBTRegressorWrapper] {
+private[r] object GBTRegressionWrapper extends MLReadable[GBTRegressionWrapper] {
   def fit(  // scalastyle:ignore
       data: DataFrame,
       formula: String,
@@ -69,7 +69,7 @@ private[r] object GBTRegressorWrapper extends MLReadable[GBTRegressorWrapper] {
       seed: String,
       subsamplingRate: Double,
       maxMemoryInMB: Int,
-      cacheNodeIds: Boolean): GBTRegressorWrapper = {
+      cacheNodeIds: Boolean): GBTRegressionWrapper= {
 
     val rFormula = new RFormula()
       .setFormula(formula)
@@ -102,14 +102,14 @@ private[r] object GBTRegressorWrapper extends MLReadable[GBTRegressorWrapper] {
       .setStages(Array(rFormulaModel, rfr))
       .fit(data)
 
-    new GBTRegressorWrapper(pipeline, formula, features)
+    new GBTRegressionWrapper(pipeline, formula, features)
   }
 
-  override def read: MLReader[GBTRegressorWrapper] = new GBTRegressorWrapperReader
+  override def read: MLReader[GBTRegressionWrapper] = new GBTRegressionWrapperReader
 
-  override def load(path: String): GBTRegressorWrapper = super.load(path)
+  override def load(path: String): GBTRegressionWrapper = super.load(path)
 
-  class GBTRegressorWrapperWriter(instance: GBTRegressorWrapper)
+  class GBTRegressionWrapperWriter(instance: GBTRegressionWrapper)
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
@@ -126,9 +126,9 @@ private[r] object GBTRegressorWrapper extends MLReadable[GBTRegressorWrapper] {
     }
   }
 
-  class GBTRegressorWrapperReader extends MLReader[GBTRegressorWrapper] {
+  class GBTRegressionWrapperReader extends MLReader[GBTRegressionWrapper] {
 
-    override def load(path: String): GBTRegressorWrapper = {
+    override def load(path: String): GBTRegressionWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
@@ -139,7 +139,7 @@ private[r] object GBTRegressorWrapper extends MLReadable[GBTRegressorWrapper] {
       val formula = (rMetadata \ "formula").extract[String]
       val features = (rMetadata \ "features").extract[Array[String]]
 
-      new GBTRegressorWrapper(pipeline, formula, features)
+      new GBTRegressionWrapper(pipeline, formula, features)
     }
   }
 }
