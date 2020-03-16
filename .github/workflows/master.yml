@@ -148,6 +148,7 @@ jobs:
     - name: Install packages
       run: |
         pip install -r ./docs/requirements.txt
+        gem install jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0
         sudo Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
     - name: Run jekyll build
       run: |
