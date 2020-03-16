@@ -124,16 +124,13 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
       readContext: ReadContext): RecordMaterializer[InternalRow] = {
     val caseSensitive = conf.getBoolean(SQLConf.CASE_SENSITIVE.key,
       SQLConf.CASE_SENSITIVE.defaultValue.get)
-    val schemaPruningEnabled = conf.getBoolean(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.defaultValue.get)
     val parquetRequestedSchema = readContext.getRequestedSchema
     new ParquetRecordMaterializer(
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
       convertTz,
-      caseSensitive,
-      schemaPruningEnabled && !enableVectorizedReader)
+      caseSensitive)
   }
 }
 
