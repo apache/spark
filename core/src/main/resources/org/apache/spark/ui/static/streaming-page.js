@@ -56,29 +56,32 @@ function getOnClickTimelineFunction() {
     var lastTimeout = null;
 
     return function(d) {
-        if (lastTimeout != null) {
-            window.clearTimeout(lastTimeout);
-        }
-        if (lastClickedBatch != null) {
-            clearBatchRow(lastClickedBatch);
-            lastClickedBatch = null;
-        }
-        lastClickedBatch = d.x;
-        highlightBatchRow(lastClickedBatch);
-        lastTimeout = window.setTimeout(function () {
-            lastTimeout = null;
+        var batchSelector = $("#batch-" + d.x);
+        // If there is a corresponding batch row, scroll down to it and highlight it.
+        if (batchSelector.length > 0) {
+            if (lastTimeout != null) {
+                window.clearTimeout(lastTimeout);
+            }
             if (lastClickedBatch != null) {
                 clearBatchRow(lastClickedBatch);
                 lastClickedBatch = null;
             }
-        }, 3000); // Clean up after 3 seconds
+            lastClickedBatch = d.x;
+            highlightBatchRow(lastClickedBatch);
+            lastTimeout = window.setTimeout(function () {
+                lastTimeout = null;
+                if (lastClickedBatch != null) {
+                    clearBatchRow(lastClickedBatch);
+                    lastClickedBatch = null;
+                }
+            }, 3000); // Clean up after 3 seconds
 
-        var batchSelector = $("#batch-" + d.x);
-        var topOffset = batchSelector.offset().top - 15;
-        if (topOffset < 0) {
-            topOffset = 0;
+            var topOffset = batchSelector.offset().top - 15;
+            if (topOffset < 0) {
+                topOffset = 0;
+            }
+            $('html,body').animate({scrollTop: topOffset}, 200);
         }
-        $('html,body').animate({scrollTop: topOffset}, 200);
     }
 }
 
