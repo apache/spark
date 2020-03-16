@@ -28,6 +28,7 @@
 
 set -e
 SELF=$(cd $(dirname $0) && pwd)
+SPARK_ROOT="$SELF/../.."
 . "$SELF/release-util.sh"
 
 function usage {
@@ -90,6 +91,8 @@ for f in "$SELF"/*; do
     cp "$f" "$WORKDIR"
   fi
 done
+
+cp "$SPARK_ROOT/docs/requirements.txt" "$WORKDIR/docs-requirements.txt"
 
 GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"
