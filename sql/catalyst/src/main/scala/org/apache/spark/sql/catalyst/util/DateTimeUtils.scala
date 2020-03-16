@@ -987,20 +987,16 @@ object DateTimeUtils {
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
-    if (micros < GREGORIAN_CUTOVER_MICROS) {
-      val ldt = microsToInstant(micros).atOffset(ZoneOffset.UTC).toLocalDateTime
-      val utcCal = new Calendar.Builder()
-        // `gregory` is a hybrid calendar that supports both
-        // the Julian and Gregorian calendar systems
-        .setCalendarType("gregory")
-        .setTimeZone(TimeZoneUTC)
-        .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
-        .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
-        .build()
-      millisToMicros(utcCal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
-    } else {
-      micros
-    }
+    val ldt = microsToInstant(micros).atOffset(ZoneOffset.UTC).toLocalDateTime
+    val utcCal = new Calendar.Builder()
+      // `gregory` is a hybrid calendar that supports both
+      // the Julian and Gregorian calendar systems
+      .setCalendarType("gregory")
+      .setTimeZone(TimeZoneUTC)
+      .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
+      .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
+      .build()
+    millisToMicros(utcCal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
 
   /**
@@ -1012,26 +1008,22 @@ object DateTimeUtils {
    * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
-    if (micros < JULIAN_CUTOVER_MICROS) {
-      val utcCal = new Calendar.Builder()
-        // `gregory` is a hybrid calendar that supports both
-        // the Julian and Gregorian calendar systems
-        .setCalendarType("gregory")
-        .setTimeZone(TimeZoneUTC)
-        .setInstant(microsToMillis(micros))
-        .build()
-      val localDateTime = LocalDateTime.of(
-        utcCal.get(Calendar.YEAR),
-        utcCal.get(Calendar.MONTH) + 1,
-        utcCal.get(Calendar.DAY_OF_MONTH),
-        utcCal.get(Calendar.HOUR_OF_DAY),
-        utcCal.get(Calendar.MINUTE),
-        utcCal.get(Calendar.SECOND),
-        (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
-      instantToMicros(localDateTime.atOffset(ZoneOffset.UTC).toInstant)
-    } else {
-      micros
-    }
+    val utcCal = new Calendar.Builder()
+      // `gregory` is a hybrid calendar that supports both
+      // the Julian and Gregorian calendar systems
+      .setCalendarType("gregory")
+      .setTimeZone(TimeZoneUTC)
+      .setInstant(microsToMillis(micros))
+      .build()
+    val localDateTime = LocalDateTime.of(
+      utcCal.get(Calendar.YEAR),
+      utcCal.get(Calendar.MONTH) + 1,
+      utcCal.get(Calendar.DAY_OF_MONTH),
+      utcCal.get(Calendar.HOUR_OF_DAY),
+      utcCal.get(Calendar.MINUTE),
+      utcCal.get(Calendar.SECOND),
+      (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
+    instantToMicros(localDateTime.atOffset(ZoneOffset.UTC).toInstant)
   }
 
   /**
@@ -1044,22 +1036,18 @@ object DateTimeUtils {
    * @return The rebased number of days in Gregorian calendar.
    */
   def rebaseJulianToGregorianDays(days: Int): Int = {
-    if (days < JULIAN_CUTOVER_DAY) {
-      val utcCal = new Calendar.Builder()
-        // `gregory` is a hybrid calendar that supports both
-        // the Julian and Gregorian calendar systems
-        .setCalendarType("gregory")
-        .setTimeZone(TimeZoneUTC)
-        .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
-        .build()
-      val localDate = LocalDate.of(
-        utcCal.get(Calendar.YEAR),
-        utcCal.get(Calendar.MONTH) + 1,
-        utcCal.get(Calendar.DAY_OF_MONTH))
-      Math.toIntExact(localDate.toEpochDay)
-    } else {
-      days
-    }
+    val utcCal = new Calendar.Builder()
+      // `gregory` is a hybrid calendar that supports both
+      // the Julian and Gregorian calendar systems
+      .setCalendarType("gregory")
+      .setTimeZone(TimeZoneUTC)
+      .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
+      .build()
+    val localDate = LocalDate.of(
+      utcCal.get(Calendar.YEAR),
+      utcCal.get(Calendar.MONTH) + 1,
+      utcCal.get(Calendar.DAY_OF_MONTH))
+    Math.toIntExact(localDate.toEpochDay)
   }
 
   /**
@@ -1079,18 +1067,14 @@ object DateTimeUtils {
    * @return The rebased number of days since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianDays(days: Int): Int = {
-    if (days < GREGORIAN_CUTOVER_DAY) {
-      val localDate = LocalDate.ofEpochDay(days)
-      val utcCal = new Calendar.Builder()
-        // `gregory` is a hybrid calendar that supports both
-        // the Julian and Gregorian calendar systems
-        .setCalendarType("gregory")
-        .setTimeZone(TimeZoneUTC)
-        .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
-        .build()
-      Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
-    } else {
-      days
-    }
+    val localDate = LocalDate.ofEpochDay(days)
+    val utcCal = new Calendar.Builder()
+      // `gregory` is a hybrid calendar that supports both
+      // the Julian and Gregorian calendar systems
+      .setCalendarType("gregory")
+      .setTimeZone(TimeZoneUTC)
+      .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
+      .build()
+    Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
   }
 }
