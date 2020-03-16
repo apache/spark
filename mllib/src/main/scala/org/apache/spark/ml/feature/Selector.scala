@@ -217,11 +217,6 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
   @Since("3.1.0")
   override def fit(dataset: Dataset[_]): T = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[LabeledPoint] =
-      dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
-        case Row(label: Double, features: Vector) =>
-          LabeledPoint(label, features)
-      }
     val testResult = getSelectionTestResult(dataset)
       .zipWithIndex
     val features = $(selectorType) match {
