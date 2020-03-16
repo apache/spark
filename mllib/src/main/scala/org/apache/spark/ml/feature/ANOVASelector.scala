@@ -98,10 +98,6 @@ final class ANOVASelector @Since("3.1.0")(@Since("3.1.0") override val uid: Stri
   @Since("3.1.0")
   override def fit(dataset: Dataset[_]): ANOVASelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
-    }
 
     val testResult = ANOVATest.testClassification(dataset, getFeaturesCol, getLabelCol)
       .zipWithIndex
