@@ -82,7 +82,7 @@ object FValueTest {
       .select("summary.mean", "summary.std", "yMean", "yStd", "summary.count")
       .first()
 
-    val labeledPointRdd = dataset.select(col("label").cast("double"), col("features"))
+    val labeledPointRdd = dataset.select(col(labelCol).cast("double"), col(featuresCol))
       .as[(Double, Vector)].rdd
 
     val numFeatures = xMeans.size
