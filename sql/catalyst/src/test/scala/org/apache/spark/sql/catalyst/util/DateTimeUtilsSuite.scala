@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
-import java.time.temporal.ChronoField
-import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
+import java.util.{GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
@@ -689,38 +688,25 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("rebase julian to/from gregorian micros") {
-    outstandingTimezones.foreach { timeZone =>
-      withDefaultTimeZone(timeZone) {
-        Seq(
-          "0001-01-01 01:02:03.654321",
-          "1000-01-01 03:02:01.123456",
-          "1582-10-04 00:00:00.000000",
-          "1582-10-16 00:00:00.999999",
-          "1969-12-31 11:22:33.000100",
-          "1970-01-01 00:00:00.000001",
-          "2020-03-14 09:33:01.500000").foreach { ts =>
-          withClue(s"time zone = ${timeZone.getID} timestamp = $ts") {
-            val julianTs = Timestamp.valueOf(ts)
-            val julianMicros = millisToMicros(julianTs.getTime) +
-              ((julianTs.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
-            val gregCal = new GregorianCalendar()
-            gregCal.setGregorianChange(new Date(Long.MinValue))
-            val ldt = LocalDateTime.parse(ts.replace(' ', 'T'))
-            gregCal.set(
-              ldt.getYear,
-              ldt.getMonthValue - 1,
-              ldt.getDayOfMonth,
-              ldt.getHour,
-              ldt.getMinute,
-              ldt.getSecond)
-            gregCal.set(Calendar.MILLISECOND, 0)
-            val gregorianMicros = millisToMicros(gregCal.getTimeInMillis) +
-              ldt.get(ChronoField.MICRO_OF_SECOND)
+    val timeZone = DateTimeUtils.TimeZoneUTC
+    withDefaultTimeZone(timeZone) {
+      Seq(
+        "0001-01-01 01:02:03.654321",
+        "1000-01-01 03:02:01.123456",
+        "1582-10-04 00:00:00.000000",
+        "1582-10-15 00:00:00.999999",
+        "1969-12-31 11:22:33.000100",
+        "1970-01-01 00:00:00.000001",
+        "2020-03-14 09:33:01.500000").foreach { ts =>
+        val julianTs = Timestamp.valueOf(ts)
+        val julianMicros = millisToMicros(julianTs.getTime) +
+          ((julianTs.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
+        val gregorianMicros = instantToMicros(LocalDateTime.parse(ts.replace(' ', 'T'))
+          .atZone(timeZone.toZoneId)
+          .toInstant)
 
-            assert(rebaseJulianToGregorianMicros(julianMicros) === gregorianMicros)
-            assert(rebaseGregorianToJulianMicros(gregorianMicros) === julianMicros)
-          }
-        }
+        assert(rebaseJulianToGregorianMicros(julianMicros) === gregorianMicros)
+        assert(rebaseGregorianToJulianMicros(gregorianMicros) === julianMicros)
       }
     }
   }
@@ -741,9 +727,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
             val julianDays = Math.floorDiv(Date.valueOf(date).getTime, MILLIS_PER_DAY).toInt
             val gregCal = new GregorianCalendar()
             gregCal.setGregorianChange(new Date(Long.MinValue))
-            val ld = LocalDate.parse(date)
-            gregCal.set(ld.getYear, ld.getMonthValue - 1, ld.getDayOfMonth, 0, 0, 0)
-            gregCal.set(Calendar.MILLISECOND, 0)
+            val ldt = LocalDate.parse(date)
+            gregCal.set(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth, 0, 0, 0)
             val gregorianDays = Math.floorDiv(gregCal.getTimeInMillis, MILLIS_PER_DAY).toInt
 
             assert(rebaseGregorianToJulianDays(gregorianDays) === julianDays)
