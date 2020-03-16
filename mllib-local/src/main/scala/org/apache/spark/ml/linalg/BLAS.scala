@@ -37,7 +37,7 @@ private[spark] object BLAS extends Serializable {
     _f2jBLAS
   }
 
-  private def getBLAS(vectorSize: Int): NetlibBLAS = {
+  private[ml] def getBLAS(vectorSize: Int): NetlibBLAS = {
     if (vectorSize < nativeL1Threshold) {
       f2jBLAS
     } else {
@@ -236,7 +236,7 @@ private[spark] object BLAS extends Serializable {
   }
 
   // For level-3 routines, we use the native BLAS.
-  private def nativeBLAS: NetlibBLAS = {
+  private[ml] def nativeBLAS: NetlibBLAS = {
     if (_nativeBLAS == null) {
       _nativeBLAS = NativeBLAS
     }

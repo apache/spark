@@ -23,6 +23,15 @@ import org.apache.spark.mllib.util.TestingUtils._
 
 class BLASSuite extends SparkFunSuite {
 
+  test("nativeL1Threshold") {
+    var vectorSize = 128
+    assert(getBLAS(vectorSize) == BLAS.f2jBLAS)
+    vectorSize = 256
+    assert(getBLAS(vectorSize) == BLAS.nativeBLAS)
+    vectorSize = 512
+    assert(getBLAS(vectorSize) == BLAS.nativeBLAS)
+  }
+
   test("copy") {
     val sx = Vectors.sparse(4, Array(0, 2), Array(1.0, -2.0))
     val dx = Vectors.dense(1.0, 0.0, -2.0, 0.0)
