@@ -712,20 +712,30 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("rebase gregorian to/from julian days") {
-    withDefaultTimeZone(DateTimeUtils.TimeZoneUTC) {
-      Seq(
-        "0001-01-01",
-        "1000-01-01",
-        "1582-10-04",
-        "1582-10-15",
-        "1969-12-31",
-        "1970-01-01",
-        "2020-03-14").foreach { date =>
-        val julianDays = Math.toIntExact(Math.floorDiv(Date.valueOf(date).getTime, MILLIS_PER_DAY))
-        val gregorianDays = localDateToDays(LocalDate.parse(date))
+    // millisToDays() and fromJavaDate() are taken from Spark 2.4
+    def millisToDays(millisUtc: Long, timeZone: TimeZone): Int = {
+      val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
+      Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+    }
+    def fromJavaDate(date: Date): Int = {
+      millisToDays(date.getTime, defaultTimeZone())
+    }
+    outstandingTimezones.foreach { timeZone =>
+      withDefaultTimeZone(timeZone) {
+        Seq(
+          "0001-01-01",
+          "1000-01-01",
+          "1582-10-04",
+          "1582-10-15",
+          "1969-12-31",
+          "1970-01-01",
+          "2020-03-14").foreach { date =>
+          val julianDays = fromJavaDate(Date.valueOf(date))
+          val gregorianDays = localDateToDays(LocalDate.parse(date))
 
-        assert(rebaseGregorianToJulianDays(gregorianDays) === julianDays)
-        assert(rebaseJulianToGregorianDays(julianDays) === gregorianDays)
+          assert(rebaseGregorianToJulianDays(gregorianDays) === julianDays)
+          assert(rebaseJulianToGregorianDays(julianDays) === gregorianDays)
+        }
       }
     }
   }
