@@ -65,7 +65,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
-  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
+  private def withTable(tableNames: String*)(f: => Unit): Unit = {
     try {
       f
     } finally {
@@ -89,6 +89,19 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
     spark.read.format(NATIVE_ORC_FORMAT).load(dirORC).createOrReplaceTempView("nativeOrcTable")
     spark.read.format(HIVE_ORC_FORMAT).load(dirORC).createOrReplaceTempView("hiveOrcTable")
+  }
+
+  private def addDeserFactorCases(benchmark: Benchmark): Unit = {
+    benchmark.addCase("Native ORC (no deserFactor calc)") { _ =>
+      withSQLConf(SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "false") {
+        spark.sql(s"ANALYZE TABLE nativeOrcTable COMPUTE STATISTICS")
+      }
+    }
+    benchmark.addCase("Native ORC (with deserFactor calc)") { _ =>
+      withSQLConf(SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "true") {
+        spark.sql(s"ANALYZE TABLE nativeOrcTable COMPUTE STATISTICS")
+      }
+    }
   }
 
   def numericScanBenchmark(values: Int, dataType: DataType): Unit = {
@@ -305,7 +318,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def deserializationFactorBenchmark(values: Int, width: Int): Unit = {
+  def deserFactorWithWideColumnBenchmark(values: Int, width: Int): Unit = {
     val benchmark =
       new Benchmark(s"DeserFactor calculation with $width columns", values, output = output)
 
@@ -320,18 +333,26 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
           spark.sql(s"CREATE TABLE nativeOrcTable USING `${NATIVE_ORC_FORMAT}` " +
             s"LOCATION '${dir.getCanonicalPath}' AS SELECT * FROM t1")
 
-          benchmark.addCase("Native ORC (no deserFactor calc)") { _ =>
-            withSQLConf(SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "false") {
-              spark.sql(s"ANALYZE TABLE nativeOrcTable COMPUTE STATISTICS")
-            }
-          }
-          benchmark.addCase("Native ORC (with deserFactor calc)") { _ =>
-            withSQLConf(SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "true") {
-              spark.sql(s"ANALYZE TABLE nativeOrcTable COMPUTE STATISTICS")
-            }
-          }
+          addDeserFactorCases(benchmark)
           benchmark.run()
         }
+      }
+    }
+  }
+
+  def deserFactorWithRepeatedStringScanBenchmark(values: Int): Unit = {
+    val benchmark =
+      new Benchmark("DeserFactor calculation with Repeated String", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1", "nativeOrcTable") {
+        spark.range(values).createOrReplaceTempView("t1")
+
+        spark.sql(s"CREATE TABLE nativeOrcTable USING `${NATIVE_ORC_FORMAT}` LOCATION " +
+          s"'${dir.getCanonicalPath}' AS SELECT CAST((id % 200) + 10000 as STRING) AS c1 FROM t1")
+
+        addDeserFactorCases(benchmark)
+        benchmark.run()
       }
     }
   }
@@ -362,9 +383,12 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
       columnsBenchmark(1024 * 1024 * 1, 300)
     }
     runBenchmark("Deser Factor Calculation From Wide Columns") {
-      deserializationFactorBenchmark(1024 * 1024 * 10, 100)
-      deserializationFactorBenchmark(1024 * 1024 * 10, 200)
-      deserializationFactorBenchmark(1024 * 1024 * 10, 300)
+      deserFactorWithWideColumnBenchmark(1024 * 1024 * 10, 100)
+      deserFactorWithWideColumnBenchmark(1024 * 1024 * 10, 200)
+      deserFactorWithWideColumnBenchmark(1024 * 1024 * 10, 300)
+    }
+    runBenchmark("Deser Factor with Repeated String Scan") {
+      deserFactorWithRepeatedStringScanBenchmark(1024 * 1024 * 10)
     }
   }
 }

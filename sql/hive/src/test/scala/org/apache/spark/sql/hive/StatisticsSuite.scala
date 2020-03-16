@@ -1592,7 +1592,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         logInfo(s"sizeInBytes after applying deserFactor: $newSizeInBytes")
         val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
         checkNumBroadcastHashJoins(res, 0,
-          "sort merge join should be taken despite the threshold is greater than the table" +
+          "sort merge join should be taken despite the threshold is greater than the table " +
             "size as the deserialization factor is applied")
       }
 
@@ -1614,8 +1614,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
         spark.sessionState.catalog.refreshTable(TableIdentifier(table))
         val catalogTable1 = getCatalogTable(table)
-        assert(catalogTable1.stats.isDefined &&
-          catalogTable1.stats.get.deserFactor.isDefined)
+        assert(catalogTable1.stats.isDefined && catalogTable1.stats.get.deserFactor.isDefined)
         assert(catalogTable1.stats.get.deserFactor.get === deserFactorBefore,
           "deserFactor should not change by adding a smaller or same size partition")
 
@@ -1624,8 +1623,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         spark.sessionState.catalog.refreshTable(TableIdentifier(table))
         val catalogTable2 = getCatalogTable(table)
-        assert(catalogTable2.stats.isDefined &&
-          catalogTable2.stats.get.deserFactor.isDefined)
+        assert(catalogTable2.stats.isDefined && catalogTable2.stats.get.deserFactor.isDefined)
         assert(catalogTable2.stats.get.deserFactor.get > deserFactorBefore,
           "deserialization factor increased after adding a partition which is more compressed")
       }
@@ -1643,44 +1641,54 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("SPARK-24914 - test changing of the deserialization factor by setting the table property") {
+  test("SPARK-24914 - test manually overwriting the deserialization factor by the table property") {
     val table = s"sizeTest"
     withTable(table) {
       import spark.implicits._
       sql(s"CREATE TABLE $table (key INT, value1 BIGINT, value2 BIGINT, value3 BIGINT, " +
-        s"value4 BIGINT) STORED AS PARQUET")
+        s"value4 BIGINT) STORED AS ORC")
       spark.range(500)
-        .map(i => (i * 6, i * 5, i * 4, i * 3, i * 2))
+        .map(i => (5, 4, 3, 2, 1))
         .toDF("key", "value1", "value2", "value3", "value4")
         .createOrReplaceTempView("TMP1")
 
       sql(s"INSERT INTO TABLE $table SELECT * FROM TMP1")
-      val catalogTable = getCatalogTable(table)
-      assert(catalogTable.stats.isEmpty)
+      val catalogTable1 = getCatalogTable(table)
+      assert(catalogTable1.stats.isEmpty)
       val origSizeInBytes = spark.table(table).queryExecution.optimizedPlan.stats.sizeInBytes
       logInfo(s"original sizeInBytes (file size): $origSizeInBytes")
 
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes - 1}") {
-        val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
-        checkNumBroadcastHashJoins(res, 0,
-          "sort merge join should be taken as threshold is smaller than table size")
-      }
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes + 1}") {
         val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
         checkNumBroadcastHashJoins(res, 1,
           "broadcast join should be taken as the threshold is greater than table size")
       }
-      withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes + 1}") {
-        val factor = 3
+
+      withSQLConf(SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "true") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+      }
+
+      val catalogTable2 = getCatalogTable(table)
+      assert(catalogTable2.stats.isDefined && catalogTable2.stats.get.deserFactor.isDefined)
+      val computedDeserFactor = catalogTable2.stats.get.deserFactor.get
+      assert(computedDeserFactor >= 2)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes + 1}") {
+        val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
+        checkNumBroadcastHashJoins(res, 0,
+          "sort merge join should be taken despite the threshold is greater than the table " +
+            "size as the deserialization factor is applied")
+      }
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes + 1}") {
+        val factor = 1
         sql(s"ALTER TABLE $table SET TBLPROPERTIES ('spark.deserFactor'='$factor')")
         checkDeserializationFactor(table, exists = true)
         val newSizeInBytes = spark.table(table).queryExecution.optimizedPlan.stats.sizeInBytes
-        assert(factor * origSizeInBytes == newSizeInBytes)
+        assert(origSizeInBytes == newSizeInBytes)
         val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
-        checkNumBroadcastHashJoins(res, 0,
-          "sort merge join should be taken despite the threshold is greater than the table" +
-            "size as the deserialization factor is applied")
+        checkNumBroadcastHashJoins(res, 1,
+          "broadcast join should be taken as the threshold is greater than table size " +
+            "as deserFactor is manually overwritten to 1")
       }
     }
   }

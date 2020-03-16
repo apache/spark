@@ -25,8 +25,6 @@ import java.util.Date
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import com.google.common.math.DoubleMath.roundToBigInteger
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
@@ -447,7 +445,7 @@ case class CatalogStatistics(
       // When plan statistics are disabled or the table doesn't have other statistics,
       // we apply the size-only estimation strategy and only propagate sizeInBytes in statistics.
       val size = deserFactor.map { factor =>
-        BigInt(roundToBigInteger(sizeInBytes.doubleValue * deserFactorDistortion * factor, UP))
+        BigDecimal(Math.ceil(sizeInBytes.doubleValue * deserFactorDistortion * factor)).toBigInt()
       }.getOrElse(sizeInBytes)
       Statistics(sizeInBytes = size)
     }

@@ -47,13 +47,15 @@ object OrcUtils extends Logging {
     "ZLIB" -> ".zlib",
     "LZO" -> ".lzo")
 
-  def rawSize(hadoopConf: Configuration, filePath: Path): BigInt = {
+  def rawSize(hadoopConf: Configuration, filePath: Path): Option[BigInt] = {
     val fs = filePath.getFileSystem(hadoopConf)
     val readerOptions = OrcFile.readerOptions(hadoopConf).filesystem(fs)
     try {
-      Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions))(_.getRawDataSize)
+      Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { r =>
+        Some(r.getRawDataSize)
+      }
     } catch {
-      case _: IOException => BigInt(0)
+      case _: IOException => None
     }
   }
 

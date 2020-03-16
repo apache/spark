@@ -120,7 +120,7 @@ object CommandUtils extends Logging {
     assert(fStatus.isFile)
     val factor = if (calcDeserFact) {
       val isOrc = serde.contains(orcSerDeCanonicalClass) || fStatus.getPath.getName.endsWith(".orc")
-      val rawSize = if (isOrc) Some(OrcUtils.rawSize(hadoopConf, fStatus.getPath)) else None
+      val rawSize = if (isOrc) OrcUtils.rawSize(hadoopConf, fStatus.getPath) else None
       rawSize.map { rawSize =>
         // deserialization factor is a ratio of the data size in memory to file size rounded up
         // to the next integer number
