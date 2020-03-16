@@ -879,6 +879,27 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
     }
   }
+
+  test("compatibility with Spark 2.4 in reading dates/timestamps") {
+    Seq(false).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+        SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+        checkAnswer(
+          readResourceParquetFile("test-data/before_1582_date_v2_4.snappy.parquet"),
+          Row(java.sql.Date.valueOf("1001-01-01")))
+        checkAnswer(readResourceParquetFile(
+          "test-data/before_1582_timestamp_micros_v2_4.snappy.parquet"),
+          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+        checkAnswer(readResourceParquetFile(
+          "test-data/before_1582_timestamp_millis_v2_4.snappy.parquet"),
+          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123")))
+        // TODO: Rebase INT96 timestamps
+        // checkAnswer(readResourceParquetFile(
+        //  "test-data/before_1582_timestamp_int96_v2_4.snappy.parquet"),
+        //  Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
