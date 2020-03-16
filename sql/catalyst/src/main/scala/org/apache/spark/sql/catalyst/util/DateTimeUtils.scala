@@ -987,12 +987,11 @@ object DateTimeUtils {
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
-    val ldt = microsToInstant(micros).atOffset(ZoneOffset.UTC).toLocalDateTime
+    val ldt = microsToInstant(micros).atZone(ZoneId.systemDefault).toLocalDateTime
     val utcCal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
-      .setTimeZone(TimeZoneUTC)
       .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
       .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
       .build()
@@ -1012,7 +1011,6 @@ object DateTimeUtils {
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
-      .setTimeZone(TimeZoneUTC)
       .setInstant(microsToMillis(micros))
       .build()
     val localDateTime = LocalDateTime.of(
@@ -1023,7 +1021,7 @@ object DateTimeUtils {
       utcCal.get(Calendar.MINUTE),
       utcCal.get(Calendar.SECOND),
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
-    instantToMicros(localDateTime.atOffset(ZoneOffset.UTC).toInstant)
+    instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
   }
 
   /**
@@ -1040,7 +1038,6 @@ object DateTimeUtils {
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
-      .setTimeZone(TimeZoneUTC)
       .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
       .build()
     val localDate = LocalDate.of(
@@ -1072,7 +1069,6 @@ object DateTimeUtils {
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
-      .setTimeZone(TimeZoneUTC)
       .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
       .build()
     Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
