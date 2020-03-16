@@ -704,7 +704,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
             val julianMicros = millisToMicros(julianTs.getTime) +
               ((julianTs.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
             val gregCal = new GregorianCalendar()
-            // Obtain a pure Gregorian calendar
             gregCal.setGregorianChange(new Date(Long.MinValue))
             val ldt = LocalDateTime.parse(ts.replace(' ', 'T'))
             gregCal.set(
@@ -741,7 +740,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           withClue(s"time zone = ${timeZone.getID} date = $date") {
             val julianDays = Math.floorDiv(Date.valueOf(date).getTime, MILLIS_PER_DAY).toInt
             val gregCal = new GregorianCalendar()
-            // Obtain a pure Gregorian calendar
             gregCal.setGregorianChange(new Date(Long.MinValue))
             val ld = LocalDate.parse(date)
             gregCal.set(ld.getYear, ld.getMonthValue - 1, ld.getDayOfMonth, 0, 0, 0)
