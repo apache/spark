@@ -243,7 +243,8 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
         val selected = tempRes
           .zipWithIndex
           .filter { case ((res, _), index) =>
-            res.pValue <= getFdr * (index + 1) / testResult.length }
+            res.pValue <= getFdr * (index + 1) / testResult.length
+          }
         if (selected.isEmpty) {
           Array.empty[(SelectionTestResult, Int)]
         } else {
