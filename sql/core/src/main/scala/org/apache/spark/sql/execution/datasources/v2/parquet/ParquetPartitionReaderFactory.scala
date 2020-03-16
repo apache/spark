@@ -73,6 +73,7 @@ case class ParquetPartitionReaderFactory(
   private val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
   private val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+  private val rebaseDateTime = sqlConf.parquetRebaseDateTimeEnabled
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.parquetVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
@@ -117,7 +118,7 @@ case class ParquetPartitionReaderFactory(
       file: PartitionedFile,
       buildReaderFunc: (
         ParquetInputSplit, InternalRow, TaskAttemptContextImpl, Option[FilterPredicate],
-          Option[ZoneId]) => RecordReader[Void, T]): RecordReader[Void, T] = {
+          Option[ZoneId], Boolean) => RecordReader[Void, T]): RecordReader[Void, T] = {
     val conf = broadcastedConf.value.value
 
     val filePath = new Path(new URI(file.filePath))
@@ -169,8 +170,13 @@ case class ParquetPartitionReaderFactory(
     if (pushed.isDefined) {
       ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
     }
-    val reader =
-      buildReaderFunc(split, file.partitionValues, hadoopAttemptContext, pushed, convertTz)
+    val reader = buildReaderFunc(
+      split,
+      file.partitionValues,
+      hadoopAttemptContext,
+      pushed,
+      convertTz,
+      rebaseDateTime)
     reader.initialize(split, hadoopAttemptContext)
     reader
   }
@@ -184,11 +190,15 @@ case class ParquetPartitionReaderFactory(
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
-      convertTz: Option[ZoneId]): RecordReader[Void, InternalRow] = {
+      convertTz: Option[ZoneId],
+      rebaseDateTime: Boolean): RecordReader[Void, InternalRow] = {
     logDebug(s"Falling back to parquet-mr")
     val taskContext = Option(TaskContext.get())
     // ParquetRecordReader returns InternalRow
-    val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
+    val readSupport = new ParquetReadSupport(
+      convertTz,
+      enableVectorizedReader = false,
+      rebaseDateTime)
     val reader = if (pushed.isDefined && enableRecordFilter) {
       val parquetFilter = FilterCompat.get(pushed.get, null)
       new ParquetRecordReader[InternalRow](readSupport, parquetFilter)
@@ -213,10 +223,14 @@ case class ParquetPartitionReaderFactory(
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
-      convertTz: Option[ZoneId]): VectorizedParquetRecordReader = {
+      convertTz: Option[ZoneId],
+      rebaseDateTime: Boolean): VectorizedParquetRecordReader = {
     val taskContext = Option(TaskContext.get())
     val vectorizedReader = new VectorizedParquetRecordReader(
-      convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
+      convertTz.orNull,
+      enableOffHeapColumnVector && taskContext.isDefined,
+      capacity,
+      rebaseDateTime)
     val iter = new RecordReaderIterator(vectorizedReader)
     // SPARK-23457 Register a task completion listener before `initialization`.
     taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))

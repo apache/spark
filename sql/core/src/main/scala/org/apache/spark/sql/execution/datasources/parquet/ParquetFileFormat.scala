@@ -256,6 +256,7 @@ class ParquetFileFormat
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+    val rebaseDateTime = sqlConf.parquetRebaseDateTimeEnabled
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
@@ -316,7 +317,10 @@ class ParquetFileFormat
       val taskContext = Option(TaskContext.get())
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
-          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
+          convertTz.orNull,
+          enableOffHeapColumnVector && taskContext.isDefined,
+          capacity,
+          rebaseDateTime)
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
@@ -332,7 +336,10 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns InternalRow
-        val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
+        val readSupport = new ParquetReadSupport(
+          convertTz,
+          enableVectorizedReader = false,
+          rebaseDateTime)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
           new ParquetRecordReader[InternalRow](readSupport, parquetFilter)

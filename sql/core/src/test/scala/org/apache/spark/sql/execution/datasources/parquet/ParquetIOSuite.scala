@@ -719,7 +719,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null,
+          conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize,
+          conf.parquetRebaseDateTimeEnabled)
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -738,7 +741,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null,
+          conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize,
+          conf.parquetRebaseDateTimeEnabled)
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -756,7 +762,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null,
+          conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize,
+          conf.parquetRebaseDateTimeEnabled)
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -775,7 +784,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null,
+          conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize,
+          conf.parquetRebaseDateTimeEnabled)
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0
@@ -816,7 +828,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val schema = StructType(StructField("pcol", dt) :: Nil)
         val conf = sqlContext.conf
         val vectorizedReader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null,
+          conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize,
+          conf.parquetRebaseDateTimeEnabled)
         val partitionValues = new GenericInternalRow(Array(v))
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
 
@@ -881,7 +896,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("compatibility with Spark 2.4 in reading dates/timestamps") {
-    Seq(false).foreach { vectorized =>
+    Seq(false, true).foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
         SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
         checkAnswer(
