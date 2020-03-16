@@ -626,16 +626,22 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   @transient private lazy val formatter: Option[TimestampFormatter] = {
     if (right.foldable) {
       Option(right.eval()).map { format =>
-        TimestampFormatter(format.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT,
-          varLenEnabled = false)
+        TimestampFormatter(
+          format.toString,
+          zoneId,
+          legacyFormat = SIMPLE_DATE_FORMAT,
+          isParsing = false)
       }
     } else None
   }
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val tf = if (formatter.isEmpty) {
-      TimestampFormatter(format.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT,
-        varLenEnabled = false)
+      TimestampFormatter(
+        format.toString,
+        zoneId,
+        legacyFormat = SIMPLE_DATE_FORMAT,
+        isParsing = false)
     } else {
       formatter.get
     }
@@ -775,7 +781,7 @@ abstract class ToTimestamp
         pattern,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        varLenEnabled = true)
+        isParsing = true)
     } catch {
       case NonFatal(_) => null
     }
@@ -813,7 +819,7 @@ abstract class ToTimestamp
                 formatString,
                 zoneId,
                 legacyFormat = SIMPLE_DATE_FORMAT,
-                varLenEnabled = true)
+                isParsing = true)
                 .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case e: SparkUpgradeException => throw e
@@ -949,8 +955,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT,
-        varLenEnabled = false)
+      TimestampFormatter(
+        constFormat.toString,
+        zoneId,
+        legacyFormat = SIMPLE_DATE_FORMAT,
+        isParsing = false)
     } catch {
       case NonFatal(_) => null
     }
@@ -977,8 +986,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         } else {
           try {
             UTF8String.fromString(
-              TimestampFormatter(f.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT,
-                varLenEnabled = false).format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
+              TimestampFormatter(
+                f.toString,
+                zoneId,
+                legacyFormat = SIMPLE_DATE_FORMAT,
+                isParsing = false).format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
           }

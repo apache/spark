@@ -45,7 +45,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
         DateTimeUtils.getZoneId(zoneId),
-        varLenEnabled = true)
+        isParsing = true)
       val microsSinceEpoch = formatter.parse(localDate)
       assert(microsSinceEpoch === expectedMicros(zoneId))
     }
@@ -66,7 +66,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
         DateTimeUtils.getZoneId(zoneId),
-        varLenEnabled = true)
+        isParsing = true)
       val timestamp = formatter.format(microsSinceEpoch)
       assert(timestamp === expectedTimestamp(zoneId))
     }
@@ -183,7 +183,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("parsing timestamp strings with various seconds fractions") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
       def check(pattern: String, input: String, reference: String): Unit = {
-        val formatter = TimestampFormatter(pattern, zoneId, varLenEnabled = true)
+        val formatter = TimestampFormatter(pattern, zoneId, isParsing = true)
         val expected = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString(reference), zoneId).get
         val actual = formatter.parse(input)
@@ -221,7 +221,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("formatting timestamp strings up to microsecond precision") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
       def check(pattern: String, input: String, expected: String): Unit = {
-        val formatter = TimestampFormatter(pattern, zoneId, varLenEnabled = false)
+        val formatter = TimestampFormatter(pattern, zoneId, isParsing = false)
         val timestamp = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString(input), zoneId).get
         val actual = formatter.format(timestamp)

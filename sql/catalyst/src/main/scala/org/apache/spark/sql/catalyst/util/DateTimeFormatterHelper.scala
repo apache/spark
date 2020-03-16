@@ -54,9 +54,9 @@ trait DateTimeFormatterHelper {
   protected def getOrCreateFormatter(
       pattern: String,
       locale: Locale,
-      varLenEnabled: Boolean = false): DateTimeFormatter = {
+      isParsing: Boolean = false): DateTimeFormatter = {
     val newPattern = DateTimeUtils.convertIncompatiblePattern(pattern)
-    val useVarLen = varLenEnabled && newPattern.split("'").zipWithIndex
+    val useVarLen = isParsing && newPattern.split("'").zipWithIndex
       .exists { case (p, idx) => idx % 2 == 0 && p.contains('S') }
     val key = (newPattern, locale, useVarLen)
     var formatter = cache.getIfPresent(key)
