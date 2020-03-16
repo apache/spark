@@ -776,47 +776,59 @@ package object config {
 
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
+    .version("2.1.0")
     .stringConf
     .createOptional
 
   private[spark] val METRICS_CONF = ConfigBuilder("spark.metrics.conf")
+    .version("0.8.0")
     .stringConf
     .createOptional
 
   private[spark] val METRICS_EXECUTORMETRICS_SOURCE_ENABLED =
     ConfigBuilder("spark.metrics.executorMetricsSource.enabled")
       .doc("Whether to register the ExecutorMetrics source with the metrics system.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val METRICS_STATIC_SOURCES_ENABLED =
     ConfigBuilder("spark.metrics.staticSources.enabled")
       .doc("Whether to register static sources with the metrics system.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
+    .version("2.1.0")
     .stringConf
     .createOptional
 
   private[spark] val PYSPARK_PYTHON = ConfigBuilder("spark.pyspark.python")
+    .version("2.1.0")
     .stringConf
     .createOptional
 
   // To limit how many applications are shown in the History Server summary ui
   private[spark] val HISTORY_UI_MAX_APPS =
-    ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
+    ConfigBuilder("spark.history.ui.maxApplications")
+      .version("2.0.1")
+      .intConf
+      .createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
+    .version("2.1.0")
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val IO_ENCRYPTION_KEYGEN_ALGORITHM =
     ConfigBuilder("spark.io.encryption.keygen.algorithm")
+      .version("2.1.0")
       .stringConf
       .createWithDefault("HmacSHA1")
 
   private[spark] val IO_ENCRYPTION_KEY_SIZE_BITS = ConfigBuilder("spark.io.encryption.keySizeBits")
+    .version("2.1.0")
     .intConf
     .checkValues(Set(128, 192, 256))
     .createWithDefault(128)
@@ -824,57 +836,68 @@ package object config {
   private[spark] val IO_CRYPTO_CIPHER_TRANSFORMATION =
     ConfigBuilder("spark.io.crypto.cipher.transformation")
       .internal()
+      .version("2.1.0")
       .stringConf
       .createWithDefaultString("AES/CTR/NoPadding")
 
   private[spark] val DRIVER_HOST_ADDRESS = ConfigBuilder("spark.driver.host")
     .doc("Address of driver endpoints.")
+    .version("0.7.0")
     .stringConf
     .createWithDefault(Utils.localCanonicalHostName())
 
   private[spark] val DRIVER_PORT = ConfigBuilder("spark.driver.port")
     .doc("Port of driver endpoints.")
+    .version("0.7.0")
     .intConf
     .createWithDefault(0)
 
   private[spark] val DRIVER_SUPERVISE = ConfigBuilder("spark.driver.supervise")
     .doc("If true, restarts the driver automatically if it fails with a non-zero exit status. " +
       "Only has effect in Spark standalone mode or Mesos cluster deploy mode.")
+    .version("1.3.0")
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
+    .version("2.1.0")
     .fallbackConf(DRIVER_HOST_ADDRESS)
 
   private[spark] val BLOCK_MANAGER_PORT = ConfigBuilder("spark.blockManager.port")
     .doc("Port to use for the block manager when a more specific setting is not provided.")
+    .version("1.1.0")
     .intConf
     .createWithDefault(0)
 
   private[spark] val DRIVER_BLOCK_MANAGER_PORT = ConfigBuilder("spark.driver.blockManager.port")
     .doc("Port to use for the block manager on the driver.")
+    .version("2.1.0")
     .fallbackConf(BLOCK_MANAGER_PORT)
 
   private[spark] val IGNORE_CORRUPT_FILES = ConfigBuilder("spark.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
       "encountering corrupted or non-existing files and contents that have been read will still " +
       "be returned.")
+    .version("2.1.0")
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val IGNORE_MISSING_FILES = ConfigBuilder("spark.files.ignoreMissingFiles")
     .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
       "encountering missing files and the contents that have been read will still be returned.")
+    .version("2.4.0")
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
+    .version("2.2.0")
     .stringConf
     .createOptional
 
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
+    .version("2.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(128 * 1024 * 1024)
 
@@ -883,6 +906,7 @@ package object config {
       " the same time. This is used when putting multiple files into a partition. It's better to" +
       " over estimate, then the partitions with small files will be faster than partitions with" +
       " bigger files.")
+    .version("2.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(4 * 1024 * 1024)
 
@@ -890,6 +914,7 @@ package object config {
     ConfigBuilder("spark.hadoopRDD.ignoreEmptySplits")
       .internal()
       .doc("When true, HadoopRDD/NewHadoopRDD will not create partitions for empty input splits.")
+      .version("2.3.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -899,6 +924,7 @@ package object config {
         "driver and executor environments contain sensitive information. When this regex matches " +
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
+      .version("2.1.2")
       .regexConf
       .createWithDefault("(?i)secret|password|token".r)
 
@@ -907,26 +933,31 @@ package object config {
       .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
         "information. When this regex matches a string part, that string part is replaced by a " +
         "dummy value. This is currently used to redact the output of SQL explain commands.")
+      .version("2.2.0")
       .regexConf
       .createOptional
 
   private[spark] val AUTH_SECRET =
     ConfigBuilder("spark.authenticate.secret")
+      .version("1.0.0")
       .stringConf
       .createOptional
 
   private[spark] val AUTH_SECRET_BIT_LENGTH =
     ConfigBuilder("spark.authenticate.secretBitLength")
+      .version("1.6.0")
       .intConf
       .createWithDefault(256)
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
+      .version("1.0.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val SASL_ENCRYPTION_ENABLED =
     ConfigBuilder("spark.authenticate.enableSaslEncryption")
+      .version("1.4.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -936,6 +967,7 @@ package object config {
         "loaded from this path on both the driver and the executors if overrides are not set for " +
         "either entity (see below). File-based secret keys are only allowed when using " +
         "Kubernetes.")
+      .version("3.0.0")
       .stringConf
       .createOptional
 
@@ -948,6 +980,7 @@ package object config {
         "be specified for the executors. The fallback configuration allows the same path to be " +
         "used for both the driver and the executors when running in cluster mode. File-based " +
         "secret keys are only allowed when using Kubernetes.")
+      .version("3.0.0")
       .fallbackConf(AUTH_SECRET_FILE)
 
   private[spark] val AUTH_SECRET_FILE_EXECUTOR =
@@ -959,12 +992,14 @@ package object config {
         "specified for the executors. The fallback configuration allows the same path to be " +
         "used for both the driver and the executors when running in cluster mode. File-based " +
         "secret keys are only allowed when using Kubernetes.")
+      .version("3.0.0")
       .fallbackConf(AUTH_SECRET_FILE)
 
   private[spark] val BUFFER_WRITE_CHUNK_SIZE =
     ConfigBuilder("spark.buffer.write.chunkSize")
       .internal()
       .doc("The chunk size in bytes during writing out the bytes of ChunkedByteBuffer.")
+      .version("2.3.0")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
         "The chunk size during writing out the bytes of ChunkedByteBuffer should" +
@@ -975,6 +1010,7 @@ package object config {
     ConfigBuilder("spark.checkpoint.compress")
       .doc("Whether to compress RDD checkpoints. Generally a good idea. Compression will use " +
         "spark.io.compression.codec.")
+      .version("2.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -985,6 +1021,7 @@ package object config {
         "Caching preferred locations can relieve query loading to DFS and save the query " +
         "time. The drawback is that the cached locations can be possibly outdated and " +
         "lose data locality. If this config is not specified, it will not cache.")
+      .version("3.0.0")
       .timeConf(TimeUnit.MINUTES)
       .checkValue(_ > 0, "The expire time for caching preferred locations cannot be non-positive.")
       .createOptional
@@ -994,12 +1031,14 @@ package object config {
       .doc("Threshold in bytes above which the size of shuffle blocks in " +
         "HighlyCompressedMapStatus is accurately recorded. This helps to prevent OOM " +
         "by avoiding underestimating shuffle block size when fetch shuffle blocks.")
+      .version("2.2.1")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
 
   private[spark] val SHUFFLE_REGISTRATION_TIMEOUT =
     ConfigBuilder("spark.shuffle.registration.timeout")
       .doc("Timeout in milliseconds for registration to the external shuffle service.")
+      .version("2.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(5000)
 
@@ -1007,6 +1046,7 @@ package object config {
     ConfigBuilder("spark.shuffle.registration.maxAttempts")
       .doc("When we fail to register to the external shuffle service, we will " +
         "retry for maxAttempts times.")
+      .version("2.3.0")
       .intConf
       .createWithDefault(3)
 
@@ -1017,6 +1057,7 @@ package object config {
         "address in a single fetch or simultaneously, this could crash the serving executor or " +
         "Node Manager. This is especially useful to reduce the load on the Node Manager when " +
         "external shuffle is enabled. You can mitigate the issue by setting it to a lower value.")
+      .version("2.2.1")
       .intConf
       .checkValue(_ > 0, "The max no. of blocks in flight cannot be non-positive.")
       .createWithDefault(Int.MaxValue)
@@ -1028,6 +1069,7 @@ package object config {
         "configuration will affect both shuffle fetch and block manager remote block fetch. " +
         "For users who enabled external shuffle service, this feature can only work when " +
         "external shuffle service is at least 2.3.0.")
+      .version("3.0.0")
       .bytesConf(ByteUnit.BYTE)
       // fetch-to-mem is guaranteed to fail if the message is bigger than 2 GB, so we might
       // as well use fetch-to-disk in that case.  The message includes some metadata in addition
@@ -1043,12 +1085,14 @@ package object config {
       .doc("Enable tracking of updatedBlockStatuses in the TaskMetrics. Off by default since " +
         "tracking the block statuses can use a lot of memory and its not used anywhere within " +
         "spark.")
+      .version("2.3.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val SHUFFLE_IO_PLUGIN_CLASS =
     ConfigBuilder("spark.shuffle.sort.io.plugin.class")
       .doc("Name of the class to use for shuffle IO.")
+      .version("3.0.0")
       .stringConf
       .createWithDefault(classOf[LocalDiskShuffleDataIO].getName)
 
@@ -1057,6 +1101,7 @@ package object config {
       .doc("Size of the in-memory buffer for each shuffle file output stream, in KiB unless " +
         "otherwise specified. These buffers reduce the number of disk seeks and system calls " +
         "made in creating intermediate shuffle files.")
+      .version("1.4.0")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
         s"The file buffer size must be positive and less than or equal to" +
@@ -1067,6 +1112,7 @@ package object config {
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")
       .doc("The file system for this buffer size after each partition " +
         "is written in unsafe shuffle writer. In KiB unless otherwise specified.")
+      .version("2.3.0")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
         s"The buffer size must be positive and less than or equal to" +
@@ -1076,6 +1122,7 @@ package object config {
   private[spark] val SHUFFLE_DISK_WRITE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.spill.diskWriteBufferSize")
       .doc("The buffer size, in bytes, to use when writing the sorted records to an on-disk file.")
+      .version("2.3.0")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => v > 12 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
         s"The buffer size must be greater than 12 and less than or equal to " +
@@ -1087,6 +1134,7 @@ package object config {
       .internal()
       .doc("The memory check period is used to determine how often we should check whether "
         + "there is a need to request more memory when we try to unroll the given block in memory.")
+      .version("2.3.0")
       .longConf
       .createWithDefault(16)
 
@@ -1094,6 +1142,7 @@ package object config {
     ConfigBuilder("spark.storage.unrollMemoryGrowthFactor")
       .internal()
       .doc("Memory to request as a multiple of the size that used to unroll the block.")
+      .version("2.3.0")
       .doubleConf
       .createWithDefault(1.5)
 
@@ -1104,12 +1153,14 @@ package object config {
         "where the YARN service does not support schemes that are supported by Spark, like http, " +
         "https and ftp, or jars required to be in the local YARN client's classpath. Wildcard " +
         "'*' is denoted to download resources for all the schemes.")
+      .version("2.3.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
 
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")
+    .version("1.3.0")
     .stringConf
     .toSequence
     .createOptional
@@ -1121,6 +1172,7 @@ package object config {
         "By default it's Integer.MAX_VALUE, which means we never force the sorter to spill, " +
         "until we reach some limitations, like the max page size limitation for the pointer " +
         "array in the sorter.")
+      .version("1.6.0")
       .intConf
       .createWithDefault(Integer.MAX_VALUE)
 
@@ -1130,30 +1182,35 @@ package object config {
       .doc("Multi-thread is used when the number of mappers * shuffle partitions is greater than " +
         "or equal to this threshold. Note that the actual parallelism is calculated by number of " +
         "mappers * shuffle partitions / this threshold + 1, so this threshold should be positive.")
+      .version("2.3.0")
       .intConf
       .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(10000000)
 
   private[spark] val MAX_RESULT_SIZE = ConfigBuilder("spark.driver.maxResultSize")
     .doc("Size limit for results.")
+    .version("1.2.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("1g")
 
   private[spark] val CREDENTIALS_RENEWAL_INTERVAL_RATIO =
     ConfigBuilder("spark.security.credentials.renewalRatio")
       .doc("Ratio of the credential's expiration time when Spark should fetch new credentials.")
+      .version("2.4.0")
       .doubleConf
       .createWithDefault(0.75d)
 
   private[spark] val CREDENTIALS_RENEWAL_RETRY_WAIT =
     ConfigBuilder("spark.security.credentials.retryWait")
       .doc("How long to wait before retrying to fetch new credentials after a failure.")
+      .version("2.4.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
   private[spark] val SHUFFLE_SORT_INIT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.sort.initialBufferSize")
       .internal()
+      .version("2.1.0")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => v > 0 && v <= Int.MaxValue,
         s"The buffer size must be greater than 0 and less than or equal to ${Int.MaxValue}.")
@@ -1163,6 +1220,7 @@ package object config {
     ConfigBuilder("spark.shuffle.compress")
       .doc("Whether to compress shuffle output. Compression will use " +
         "spark.io.compression.codec.")
+      .version("0.6.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1170,6 +1228,7 @@ package object config {
     ConfigBuilder("spark.shuffle.spill.compress")
       .doc("Whether to compress data spilled during shuffles. Compression will use " +
         "spark.io.compression.codec.")
+      .version("0.9.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1179,6 +1238,7 @@ package object config {
       .doc("The codec used to compress MapStatus, which is generated by ShuffleMapTask. " +
         "By default, Spark provides four codecs: lz4, lzf, snappy, and zstd. You can also " +
         "use fully qualified class names to specify the codec.")
+      .version("3.0.0")
       .stringConf
       .createWithDefault("zstd")
 
@@ -1187,6 +1247,7 @@ package object config {
       .internal()
       .doc("Initial threshold for the size of a collection before we start tracking its " +
         "memory usage.")
+      .version("1.1.1")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(5 * 1024 * 1024)
 
@@ -1194,6 +1255,7 @@ package object config {
     ConfigBuilder("spark.shuffle.spill.batchSize")
       .internal()
       .doc("Size of object batches when reading/writing from serializers.")
+      .version("0.9.0")
       .longConf
       .createWithDefault(10000)
 
@@ -1201,34 +1263,40 @@ package object config {
     ConfigBuilder("spark.shuffle.sort.bypassMergeThreshold")
       .doc("In the sort-based shuffle manager, avoid merge-sorting data if there is no " +
         "map-side aggregation and there are at most this many reduce partitions")
+      .version("1.1.1")
       .intConf
       .createWithDefault(200)
 
   private[spark] val SHUFFLE_MANAGER =
     ConfigBuilder("spark.shuffle.manager")
+      .version("1.1.0")
       .stringConf
       .createWithDefault("sort")
 
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")
+      .version("1.5.0")
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST =
     ConfigBuilder("spark.shuffle.mapOutput.minSizeForBroadcast")
       .doc("The size at which we use Broadcast to send the map output statuses to the executors.")
+      .version("2.0.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("512k")
 
   private[spark] val SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS =
     ConfigBuilder("spark.shuffle.mapOutput.dispatcher.numThreads")
+      .version("2.0.0")
       .intConf
       .createWithDefault(8)
 
   private[spark] val SHUFFLE_DETECT_CORRUPT =
     ConfigBuilder("spark.shuffle.detectCorrupt")
       .doc("Whether to detect any corruption in fetched blocks.")
+      .version("2.2.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1238,18 +1306,21 @@ package object config {
         "by using extra memory to detect early corruption. Any IOException thrown will cause " +
         "the task to be retried once and if it fails again with same exception, then " +
         "FetchFailedException will be thrown to retry previous stage")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val SHUFFLE_SYNC =
     ConfigBuilder("spark.shuffle.sync")
       .doc("Whether to force outstanding writes to disk.")
+      .version("0.8.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val SHUFFLE_UNSAFE_FAST_MERGE_ENABLE =
     ConfigBuilder("spark.shuffle.unsafe.fastMergeEnabled")
       .doc("Whether to perform a fast spill merge.")
+      .version("1.4.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1257,6 +1328,7 @@ package object config {
     ConfigBuilder("spark.shuffle.sort.useRadixSort")
       .doc("Whether to use radix sort for sorting in-memory partition ids. Radix sort is much " +
         "faster, but requires additional memory to be reserved memory as pointers are added.")
+      .version("2.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1264,6 +1336,7 @@ package object config {
     ConfigBuilder("spark.shuffle.minNumPartitionsToHighlyCompress")
       .internal()
       .doc("Number of partitions to determine if MapStatus should use HighlyCompressedMapStatus")
+      .version("2.4.0")
       .intConf
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
@@ -1273,6 +1346,7 @@ package object config {
       .doc("Whether to use the old protocol while doing the shuffle block fetching. " +
         "It is only enabled while we need the compatibility in the scenario of new Spark " +
         "version job fetching shuffle blocks from old version external shuffle service.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -1282,6 +1356,7 @@ package object config {
         s"shuffle `${SHUFFLE_SERVICE_ENABLED.key}` is enabled), shuffle " +
         "blocks requested from those block managers which are running on the same host are read " +
         "from the disk directly instead of being fetched as remote blocks over the network.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
