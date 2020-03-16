@@ -1417,7 +1417,7 @@ setMethod("quarter",
 #' @param percentage Numeric percentage at which percentile should be computed
 #'                   All values should be between 0 and 1.
 #'                   If length equals to 1 resulting column is of type double,
-#'                   otherwise array<double>.
+#'                   otherwise, array type of double.
 #' @param accuracy A positive numeric literal (default: 10000) which
 #'                 controls approximation accuracy at the cost of memory.
 #'                 Higher value of accuracy yields better accuracy, 1.0/accuracy
