@@ -843,28 +843,6 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-31116: Select simple parquet with case insensitive mode") {
-    Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
-      withSQLConf(
-        SQLConf.CASE_SENSITIVE.key -> "false",
-        SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedSchemaPruningEnabled) {
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-
-          // Prepare values for testing specific parquet record reader
-          Seq("A").toDF("camelCase").write.parquet(path)
-
-          val exactSchema = new StructType().add("camelCase", StringType)
-          checkAnswer(spark.read.schema(exactSchema).parquet(path), Row("A"))
-
-          // In case insensitive manner, parquet's column cases are ignored
-          val caseInsensitiveSchema = new StructType().add("camelcase", StringType)
-          checkAnswer(spark.read.schema(caseInsensitiveSchema).parquet(path), Row("A"))
-        }
-      }
-    }
-  }
-
   test("SPARK-31116: Select nested parquet with case insensitive mode") {
     Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
       withSQLConf(
