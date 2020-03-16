@@ -59,7 +59,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
       val summary =
         <div>
-          <ul class="unstyled">
+          <ul class="list-unstyled">
             <li>
               <strong>Submitted Time: </strong>{UIUtils.formatDate(executionUIData.submissionTime)}
             </li>
