@@ -101,6 +101,32 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
   }
 
+  /**
+   * Try to split the skewed partition based on the map size and the target partition size
+   * after split, and create a list of `PartialMapperPartitionSpec`.
+   */
+  private def createSkewPartitionSpecs(
+      shuffleId: Int,
+      reducerId: Int,
+      targetSize: Long): Option[Seq[PartialReducerPartitionSpec]] = {
+    val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
+    val mapStartIndices = ShufflePartitionsUtil.splitSizeListByTargetSize(
+      mapPartitionSizes, targetSize)
+    if (mapStartIndices.length > 1) {
+      Some(mapStartIndices.indices.map { i =>
+        val startMapIndex = mapStartIndices(i)
+        val endMapIndex = if (i == mapStartIndices.length - 1) {
+          mapPartitionSizes.length
+        } else {
+          mapStartIndices(i + 1)
+        }
+        PartialReducerPartitionSpec(reducerId, startMapIndex, endMapIndex)
+      })
+    } else {
+      None
+    }
+  }
+
   private def canSplitLeftSide(joinType: JoinType) = {
     joinType == Inner || joinType == Cross || joinType == LeftSemi ||
       joinType == LeftAnti || joinType == LeftOuter
@@ -148,47 +174,50 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       val canSplitRight = canSplitRightSide(joinType)
       // We use the actual partition sizes (may be coalesced) to calculate target size, so that
       // the final data distribution is even (coalesced partitions + split partitions).
-      val leftTargetSize = targetSize(left.partitionsWithSizes.map(_._2), leftMedSize)
-      val rightTargetSize = targetSize(right.partitionsWithSizes.map(_._2), rightMedSize)
+      val leftActualSizes = left.partitionsWithSizes.map(_._2)
+      val rightActualSizes = right.partitionsWithSizes.map(_._2)
+      val leftTargetSize = targetSize(leftActualSizes, leftMedSize)
+      val rightTargetSize = targetSize(rightActualSizes, rightMedSize)
 
       val leftSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
       val rightSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
       val leftSkewDesc = new SkewDesc
       val rightSkewDesc = new SkewDesc
-
-      def getPartitionSpecs(
-          info: ShuffleStageInfo,
-          index: Int,
-          medianSize: Long,
-          targetSize: Long,
-          canSplit: Boolean,
-          skewDesc: SkewDesc): Seq[ShufflePartitionSpec] = {
-        val size = info.partitionsWithSizes(index)._2
-        val skewed = isSkewed(size, medianSize) && canSplit
-        val partitionSpec = info.partitionsWithSizes(index)._1
-        // Ideally a skewed partition won't get coalesced, but skip it here for safety.
-        if (skewed && partitionSpec.endReducerIndex - partitionSpec.startReducerIndex == 1) {
-          val reducerId = partitionSpec.startReducerIndex
-          val mapPartitionSizes = getMapSizesForReduceId(
-            info.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId)
-          val mapStartIndices = ShufflePartitionsUtil.splitSizeListByTargetSize(
-            mapPartitionSizes, targetSize)
-          if (mapStartIndices.length > 1) {
-            skewDesc.addPartitionSize(size)
-            createSkewPartitions(reducerId, mapStartIndices, mapPartitionSizes.length)
-          } else {
-            Seq(partitionSpec)
-          }
-        } else {
-          Seq(partitionSpec)
-        }
-      }
-
       for (partitionIndex <- 0 until numPartitions) {
-        val leftParts = getPartitionSpecs(
-          left, partitionIndex, leftMedSize, leftTargetSize, canSplitLeft, leftSkewDesc)
-        val rightParts = getPartitionSpecs(
-          right, partitionIndex, rightMedSize, rightTargetSize, canSplitRight, rightSkewDesc)
+        val isLeftSkew = isSkewed(leftActualSizes(partitionIndex), leftMedSize) && canSplitLeft
+        val leftPartSpec = left.partitionsWithSizes(partitionIndex)._1
+        val isLeftCoalesced = leftPartSpec.startReducerIndex + 1 < leftPartSpec.endReducerIndex
+
+        val isRightSkew = isSkewed(rightActualSizes(partitionIndex), rightMedSize) && canSplitRight
+        val rightPartSpec = right.partitionsWithSizes(partitionIndex)._1
+        val isRightCoalesced = rightPartSpec.startReducerIndex + 1 < rightPartSpec.endReducerIndex
+
+        // Ideally a skewed partition won't get coalesced, but skip it here for safety.
+        val leftParts = if (isLeftSkew && !isLeftCoalesced) {
+          val reducerId = leftPartSpec.startReducerIndex
+          val skewSpecs = createSkewPartitionSpecs(
+            left.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, leftTargetSize)
+          if (skewSpecs.isDefined) {
+            leftSkewDesc.addPartitionSize(leftActualSizes(partitionIndex))
+          }
+          skewSpecs.getOrElse(Seq(leftPartSpec))
+        } else {
+          Seq(leftPartSpec)
+        }
+
+        // Ideally a skewed partition won't get coalesced, but skip it here for safety.
+        val rightParts = if (isRightSkew && !isRightCoalesced) {
+          val reducerId = rightPartSpec.startReducerIndex
+          val skewSpecs = createSkewPartitionSpecs(
+            right.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, rightTargetSize)
+          if (skewSpecs.isDefined) {
+            rightSkewDesc.addPartitionSize(rightActualSizes(partitionIndex))
+          }
+          skewSpecs.getOrElse(Seq(rightPartSpec))
+        } else {
+          Seq(rightPartSpec)
+        }
+
         for {
           leftSidePartition <- leftParts
           rightSidePartition <- rightParts
@@ -210,21 +239,6 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       } else {
         smj
       }
-  }
-
-  private def createSkewPartitions(
-      reducerIndex: Int,
-      mapStartIndices: Seq[Int],
-      numMappers: Int): Seq[PartialReducerPartitionSpec] = {
-    mapStartIndices.indices.map { i =>
-      val startMapIndex = mapStartIndices(i)
-      val endMapIndex = if (i == mapStartIndices.length - 1) {
-        numMappers
-      } else {
-        mapStartIndices(i + 1)
-      }
-      PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex)
-    }
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
