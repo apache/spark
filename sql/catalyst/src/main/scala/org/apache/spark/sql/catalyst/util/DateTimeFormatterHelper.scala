@@ -114,7 +114,7 @@ private object DateTimeFormatterHelper {
   /**
    * Building a formatter for parsing seconds fraction with variable length
    */
-  def appendPattern(
+  def createBuilderWithVarLengthSecondFraction(
       pattern: String,
       builder: DateTimeFormatterBuilder): DateTimeFormatterBuilder = {
     pattern.split("'").zipWithIndex.foreach {
@@ -122,10 +122,10 @@ private object DateTimeFormatterHelper {
         var rest = pattenPart
         while (rest.nonEmpty) {
           rest match {
-            case extractor(prefix, sss, suffix) =>
+            case extractor(prefix, secondFraction, suffix) =>
               builder.appendPattern(prefix)
-              if (sss.nonEmpty) {
-                builder.appendFraction(ChronoField.NANO_OF_SECOND, 0, sss.length, false)
+              if (secondFraction.nonEmpty) {
+                builder.appendFraction(ChronoField.NANO_OF_SECOND, 0, secondFraction.length, false)
               }
               rest = suffix
             case _ => // never reach
@@ -141,7 +141,7 @@ private object DateTimeFormatterHelper {
       locale: Locale,
       varLenEnabled: Boolean): DateTimeFormatter = {
     val builder = if (varLenEnabled) {
-      appendPattern(pattern, createBuilder())
+      createBuilderWithVarLengthSecondFraction(pattern, createBuilder())
     } else {
       createBuilder().appendPattern(pattern)
     }

@@ -776,9 +776,8 @@ abstract class ToTimestamp
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      val pattern = constFormat.toString
       TimestampFormatter(
-        pattern,
+        constFormat.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
         isParsing = true)

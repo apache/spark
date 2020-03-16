@@ -85,30 +85,8 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
         2177456523456789L,
         11858049903010203L).foreach { micros =>
         DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-          val formatter = TimestampFormatter(pattern, zoneId, true)
-          val timestamp = formatter.format(micros)
-          val parsed = formatter.parse(timestamp)
-          assert(micros === parsed)
-        }
-      }
-    }
-  }
-
-  test("roundtrip micros -> timestamp -> micros using w/ w/o val-len seconds fraction") {
-    Seq("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX").foreach { pattern =>
-      Seq(
-        -58710115316212000L,
-        -18926315945345679L,
-        -9463427405253013L,
-        -244000001L,
-        0L,
-        99628200102030L,
-        1543749753123456L,
-        2177456523456789L,
-        11858049903010203L).foreach { micros =>
-        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-          val timestamp = TimestampFormatter(pattern, zoneId, false).format(micros)
-          val parsed = TimestampFormatter(pattern, zoneId, true).parse(timestamp)
+          val timestamp = TimestampFormatter(pattern, zoneId, isParsing = true).format(micros)
+          val parsed = TimestampFormatter(pattern, zoneId, isParsing = false).parse(timestamp)
           assert(micros === parsed)
         }
       }
@@ -128,16 +106,15 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       "2345-10-07T22:45:03.010203").foreach { timestamp =>
       DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
         val pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
-        val formatter = TimestampFormatter(pattern, zoneId, true)
-        val micros = TimestampFormatter(pattern, zoneId, true).parse(timestamp)
-        val formatted = TimestampFormatter(pattern, zoneId, false).format(micros)
+        val micros = TimestampFormatter(pattern, zoneId, isParsing = true).parse(timestamp)
+        val formatted = TimestampFormatter(pattern, zoneId, isParsing = false).format(micros)
         assert(timestamp === formatted)
       }
     }
   }
 
   test("case insensitive parsing of am and pm") {
-    val formatter = TimestampFormatter("yyyy MMM dd hh:mm:ss a", ZoneOffset.UTC, false)
+    val formatter = TimestampFormatter("yyyy MMM dd hh:mm:ss a", ZoneOffset.UTC, isParsing = false)
     val micros = formatter.parse("2009 Mar 20 11:30:01 am")
     assert(micros === TimeUnit.SECONDS.toMicros(
       LocalDateTime.of(2009, 3, 20, 11, 30, 1).toEpochSecond(ZoneOffset.UTC)))
