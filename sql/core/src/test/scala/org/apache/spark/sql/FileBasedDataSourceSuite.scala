@@ -877,57 +877,6 @@ class FileBasedDataSourceSuite extends QueryTest
       }
     }
   }
-
-  test("SPARK-31116: Select nested parquet with case sensitive mode") {
-    Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
-      withSQLConf(
-        SQLConf.CASE_SENSITIVE.key -> "true",
-        SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedSchemaPruningEnabled) {
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-
-          // Prepare values for testing nested parquet data
-          spark
-            .range(1)
-            .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
-            .write.parquet(path)
-
-          val exactSchema = "StructColumn struct<lowercase: LONG, camelCase: LONG>"
-          checkAnswer(spark.read.schema(exactSchema).parquet(path), Row(Row(0, 1)))
-
-          val innerColumnCaseInsensitiveSchema =
-            "StructColumn struct<Lowercase: LONG, camelcase: LONG>"
-          checkAnswer(
-            spark.read.schema(innerColumnCaseInsensitiveSchema).parquet(path),
-            Row(null))
-
-          val innerPartialColumnCaseInsensitiveSchema =
-            "StructColumn struct<lowercase: LONG, camelcase: LONG>"
-          checkAnswer(
-            spark.read.schema(innerPartialColumnCaseInsensitiveSchema).parquet(path),
-            Row(Row(0, null)))
-
-          val rootColumnCaseInsensitiveSchema =
-            "structColumn struct<lowercase: LONG, camelCase: LONG>"
-          checkAnswer(
-            spark.read.schema(rootColumnCaseInsensitiveSchema).parquet(path),
-            Row(null))
-
-          val combinedSchema =
-            """
-              |StructColumn
-              |struct<lowercase: LONG, camelCase: LONG, LowerCase: LONG, camelcase: LONG>,
-              |structColumn
-              |struct<lowercase: LONG, camelCase: LONG, LowerCase: LONG, camelcase: LONG>
-              |""".stripMargin
-
-          checkAnswer(
-            spark.read.schema(combinedSchema).parquet(path),
-            Row(Row(0, 1, null, null), null))
-        }
-      }
-    }
-  }
 }
 
 object TestingUDT {
