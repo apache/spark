@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 ### Description
-The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using Spark file format. The inserted rows can be specified by value expressions or result from a query.
+The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using a given Spark file format. The inserted rows can be specified by value expressions or result from a query.
 
 ### Syntax
 {% highlight sql %}
@@ -39,7 +39,7 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 <dl>
   <dt><code><em>file_format</em></code></dt>
   <dd>
-  Specifies the file format to use for the insert. Valid options are <code>TEXT</code>, <code>CSV</code>, <code>JSON</code>, <code>JDBC</code>, <code>PARQUET</code>, <code>ORC</code>, <code>HIVE</code>, <code>DELTA</code>, <code>LIBSVM</code>, or a fully qualified class name of a custom implementation of <code>org.apache.spark.sql.execution.datasources.FileFormat</code>.
+  Specifies the file format to use for the insert. Valid options are <code>TEXT</code>, <code>CSV</code>, <code>JSON</code>, <code>JDBC</code>, <code>PARQUET</code>, <code>ORC</code>, <code>HIVE</code>, <code>LIBSVM</code>, or a fully qualified class name of a custom implementation of <code>org.apache.spark.sql.execution.datasources.FileFormat</code>.
   </dd>
 </dl>
 
