@@ -186,7 +186,7 @@ private[parquet] class ParquetRowConverter(
     }
     parquetType.getFields.asScala.map { parquetField =>
       val fieldIndex = catalystFieldNameToIndex.getOrElse(parquetField.getName,
-        throw new IllegalArgumentException(
+        throw new RuntimeException(
           s"${parquetField.getName} does not exist. " +
             s"Available: ${catalystType.fieldNames.mkString(", ")}")
       )
