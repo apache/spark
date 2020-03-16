@@ -356,11 +356,7 @@ private[parquet] class ParquetRowConverter(
           }
         }
         new ParquetRowConverter(
-          schemaConverter,
-          parquetType.asGroupType(),
-          t,
-          convertTz,
-          wrappedUpdater)
+          schemaConverter, parquetType.asGroupType(), t, convertTz, wrappedUpdater)
 
       case t =>
         throw new RuntimeException(
