@@ -1777,10 +1777,10 @@ test_that("column functions", {
   actual <- lapply(
     list(
       percentile_approx(column("foo"), 0.5),
-      percentile_approx(column("bar"), 0.25, 42L),
+      percentile_approx(column("bar"), lit(0.25), lit(42L)),
       percentile_approx(column("bar"), c(0.25, 0.5, 0.75)),
       percentile_approx(column("foo"), c(0.05, 0.95), 100L),
-      percentile_approx("foo", 0.5),
+      percentile_approx("foo", c(0.5)),
       percentile_approx("bar", c(0.1, 0.9), 10L)),
     function(x) SparkR:::callJMethod(x@jc, "toString"))
 

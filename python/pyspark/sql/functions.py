@@ -609,7 +609,7 @@ def percentile_approx(col, percentage, accuracy=10000):
      |    |-- element: double (containsNull = false)
 
     >>> df.groupBy("key").agg(
-    ...     percentile_approx("value", 0.5, 1000000).alias("median")
+    ...     percentile_approx("value", 0.5, lit(1000000)).alias("median")
     ... ).printSchema()
     root
      |-- key: long (nullable = true)
@@ -617,18 +617,16 @@ def percentile_approx(col, percentage, accuracy=10000):
     """
     sc = SparkContext._active_spark_context
 
-    # A local list
     if isinstance(percentage, (list, tuple)):
+        # A local list
         percentage = sc._jvm.functions.array(_to_seq(sc, [
             _create_column_from_literal(x) for x in percentage
         ]))
-
-    # Already a Column
     elif isinstance(percentage, Column):
+        # Already a Column
         percentage = _to_java_column(percentage)
-
-    # Probably scalar
     else:
+        # Probably scalar
         percentage = _create_column_from_literal(percentage)
 
     accuracy = (
