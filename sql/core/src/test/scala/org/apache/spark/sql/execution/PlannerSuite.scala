@@ -975,6 +975,25 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       }
     }
   }
+
+  test("aliases in the sort aggregate expressions should not introduce extra sort") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
+        val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
+
+        val agg1 = t1.groupBy("k1").agg(collect_list("k1")).withColumnRenamed("k1", "k3")
+        val agg2 = t2.groupBy("k2").agg(collect_list("k2"))
+
+        val planned = agg1.join(agg2, $"k3" === $"k2").queryExecution.executedPlan
+        assert(planned.collect { case s: SortAggregateExec => s }.nonEmpty)
+
+        // We expect two SortExec nodes on each side of join.
+        val sorts = planned.collect { case s: SortExec => s }
+        assert(sorts.size == 4)
+      }
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements

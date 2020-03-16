@@ -128,7 +128,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
-    when(manager.currentNamespace).thenReturn(Array.empty[String])
+    when(manager.currentNamespace).thenReturn(Array("default"))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
@@ -171,7 +171,7 @@ class PlanResolutionSuite extends AnalysisTest {
         "USING parquet PARTITIONED BY (a)"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
+      identifier = TableIdentifier("my_tab", Some("default")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType()
@@ -215,7 +215,7 @@ class PlanResolutionSuite extends AnalysisTest {
         "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
+      identifier = TableIdentifier("my_tab", Some("default")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", IntegerType).add("b", StringType),
@@ -236,7 +236,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
+      identifier = TableIdentifier("my_tab", Some("default")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", IntegerType).add("b", StringType),
@@ -256,7 +256,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet TBLPROPERTIES('test' = 'test')"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
+      identifier = TableIdentifier("my_tab", Some("default")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", IntegerType).add("b", StringType),
@@ -276,7 +276,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val v1 = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
+      identifier = TableIdentifier("my_tab", Some("default")),
       tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("/tmp/file"))),
       schema = new StructType().add("a", IntegerType).add("b", StringType),
@@ -330,7 +330,7 @@ class PlanResolutionSuite extends AnalysisTest {
       """.stripMargin
 
     val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("table_name"),
+      identifier = TableIdentifier("table_name", Some("default")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty.copy(
         properties = Map("a" -> "1", "b" -> "0.1", "c" -> "true")
@@ -621,7 +621,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val tableName1 = "db.tab"
     val tableIdent1 = TableIdentifier("tab", Option("db"))
     val tableName2 = "tab"
-    val tableIdent2 = TableIdentifier("tab", None)
+    val tableIdent2 = TableIdentifier("tab", Some("default"))
 
     parseResolveCompare(s"DROP TABLE $tableName1",
       DropTableCommand(tableIdent1, ifExists = false, isView = false, purge = false))
@@ -657,7 +657,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val viewName1 = "db.view"
     val viewIdent1 = TableIdentifier("view", Option("db"))
     val viewName2 = "view"
-    val viewIdent2 = TableIdentifier("view")
+    val viewIdent2 = TableIdentifier("view", Option("default"))
 
     parseResolveCompare(s"DROP VIEW $viewName1",
       DropTableCommand(viewIdent1, ifExists = false, isView = true, purge = false))
@@ -688,7 +688,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val parsed2_view = parseAndResolve(sql2_view)
     val parsed3_view = parseAndResolve(sql3_view)
 
-    val tableIdent = TableIdentifier("table_name", None)
+    val tableIdent = TableIdentifier("table_name", Some("default"))
     val expected1_view = AlterTableSetPropertiesCommand(
       tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = true)
     val expected2_view = AlterTableUnsetPropertiesCommand(
@@ -715,8 +715,8 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed2 = parseAndResolve(sql2)
         val parsed3 = parseAndResolve(sql3)
 
-        val tableIdent = TableIdentifier(tblName, None)
         if (useV1Command) {
+          val tableIdent = TableIdentifier(tblName, Some("default"))
           val expected1 = AlterTableSetPropertiesCommand(
             tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = false)
           val expected2 = AlterTableUnsetPropertiesCommand(
@@ -781,7 +781,7 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed = parseAndResolve(sql)
         if (useV1Command) {
           val expected = AlterTableSetPropertiesCommand(
-            TableIdentifier(tblName),
+            TableIdentifier(tblName, Some("default")),
             Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
             isView = false)
 
@@ -806,7 +806,7 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed = parseAndResolve(sql)
         if (useV1Command) {
           val expected = AlterTableSetLocationCommand(
-            TableIdentifier(tblName, None),
+            TableIdentifier(tblName, Some("default")),
             None,
             "new location")
           comparePlans(parsed, expected)
@@ -828,8 +828,10 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
-          val expected1 = DescribeTableCommand(TableIdentifier(tblName, None), Map.empty, false)
-          val expected2 = DescribeTableCommand(TableIdentifier(tblName, None), Map.empty, true)
+          val expected1 = DescribeTableCommand(
+            TableIdentifier(tblName, Some("default")), Map.empty, false)
+          val expected2 = DescribeTableCommand(
+            TableIdentifier(tblName, Some("default")), Map.empty, true)
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
@@ -851,7 +853,7 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
           val expected3 = DescribeTableCommand(
-            TableIdentifier(tblName, None), Map("a" -> "1"), false)
+            TableIdentifier(tblName, Some("default")), Map("a" -> "1"), false)
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
@@ -1019,8 +1021,8 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
 
-        val tableIdent = TableIdentifier(tblName, None)
         if (useV1Command) {
+          val tableIdent = TableIdentifier(tblName, Some("default"))
           val oldColumn = StructField("i", IntegerType)
           val newColumn = StructField("i", LongType)
           val expected1 = AlterTableChangeColumnCommand(
@@ -1093,7 +1095,7 @@ class PlanResolutionSuite extends AnalysisTest {
         } else {
           val actual = parseAndResolve(sql)
           val expected = AlterTableChangeColumnCommand(
-            TableIdentifier(tblName, None),
+            TableIdentifier(tblName, Some("default")),
             "I",
             StructField("I", IntegerType).withComment("new comment"))
           comparePlans(actual, expected)
@@ -1125,7 +1127,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   val DSV2ResolutionTests = {
-    val v2SessionCatalogTable = s"${CatalogManager.SESSION_CATALOG_NAME}.v2Table"
+    val v2SessionCatalogTable = s"${CatalogManager.SESSION_CATALOG_NAME}.default.v2Table"
     Seq(
       ("ALTER TABLE testcat.tab ALTER COLUMN i TYPE bigint", false),
       ("ALTER TABLE tab ALTER COLUMN i TYPE bigint", false),
@@ -1141,7 +1143,7 @@ class PlanResolutionSuite extends AnalysisTest {
       (s"SHOW TBLPROPERTIES $v2SessionCatalogTable", true),
       ("SELECT * from tab", false),
       ("SELECT * from testcat.tab", false),
-      (s"SELECT * from ${CatalogManager.SESSION_CATALOG_NAME}.v2Table", true)
+      (s"SELECT * from $v2SessionCatalogTable", true)
     )
   }
 

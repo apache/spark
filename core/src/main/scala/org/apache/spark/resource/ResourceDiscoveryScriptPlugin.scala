@@ -21,6 +21,7 @@ import java.io.File
 import java.util.Optional
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils.executeAndGetOutput
@@ -32,6 +33,7 @@ import org.apache.spark.util.Utils.executeAndGetOutput
  * If the user specifies custom plugins, this is the last one to be executed and
  * throws if the resource isn't discovered.
  */
+@DeveloperApi
 class ResourceDiscoveryScriptPlugin extends ResourceDiscoveryPlugin with Logging {
   override def discoverResource(
       request: ResourceRequest,

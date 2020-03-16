@@ -554,28 +554,14 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("arrayOfString", arrayOfString)
       .add("arrayOfArrayOfString", ArrayType(arrayOfString))
       .add("arrayOfArrayOfInt", ArrayType(ArrayType(IntegerType)))
-      .add("arrayOfMap", ArrayType(mapOfString))
       .add("arrayOfStruct", ArrayType(structOfString))
       .add("arrayOfUDT", arrayOfUDT))
-
-  testHash(
-    new StructType()
-      .add("mapOfIntAndString", MapType(IntegerType, StringType))
-      .add("mapOfStringAndArray", MapType(StringType, arrayOfString))
-      .add("mapOfArrayAndInt", MapType(arrayOfString, IntegerType))
-      .add("mapOfArray", MapType(arrayOfString, arrayOfString))
-      .add("mapOfStringAndStruct", MapType(StringType, structOfString))
-      .add("mapOfStructAndString", MapType(structOfString, StringType))
-      .add("mapOfStruct", MapType(structOfString, structOfString)))
 
   testHash(
     new StructType()
       .add("structOfString", structOfString)
       .add("structOfStructOfString", new StructType().add("struct", structOfString))
       .add("structOfArray", new StructType().add("array", arrayOfString))
-      .add("structOfMap", new StructType().add("map", mapOfString))
-      .add("structOfArrayAndMap",
-        new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
 
   test("hive-hash for decimal") {

@@ -147,6 +147,16 @@ private[ui] class StreamingPage(parent: StreamingTab)
     <script>{Unparsed(js)}</script>
   }
 
+  private def generateTimeTipStrings(times: Seq[Long]): Seq[Node] = {
+    // We leverage timeFormat as the value would be same as timeFormat. This means it is
+    // sensitive to the order - generateTimeMap should be called earlier than this.
+    val js = "var timeTipStrings = {};\n" + times.map { time =>
+      s"timeTipStrings[$time] = timeFormat[$time];"
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
   private def generateStatTable(): Seq[Node] = {
     val batches = listener.retainedBatches
 
@@ -320,7 +330,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </table>
     // scalastyle:on
 
-    generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
+    generateTimeMap(batchTimes) ++ generateTimeTipStrings(batchTimes) ++ table ++
+      jsCollector.toHtml
   }
 
   private def generateInputDStreamsTable(
@@ -428,8 +439,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
       sortBy(_.batchTime.milliseconds).reverse
 
     val activeBatchesContent = {
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <span id="activeBatches" class="collapse-aggregated-activeBatches collapse-table"
                 onClick="collapseTable('collapse-aggregated-activeBatches',
                 'aggregated-activeBatches')">
@@ -446,8 +457,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     }
 
     val completedBatchesContent = {
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
                 onClick="collapseTable('collapse-aggregated-completedBatches',
                 'aggregated-completedBatches')">

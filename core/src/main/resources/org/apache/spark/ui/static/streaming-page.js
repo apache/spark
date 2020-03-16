@@ -43,7 +43,7 @@ function showBootstrapTooltip(node, text) {
 
 // Hide the tooltip for "node"
 function hideBootstrapTooltip(node) {
-    $(node).tooltip("destroy");
+    $(node).tooltip("dispose");
 }
 
 // Return the function to scroll to the corresponding
@@ -212,7 +212,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
             .attr("cy", function(d) { return y(d.y); })
             .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "3";})
             .on('mouseover', function(d) {
-                var tip = formatYValue(d.y) + " " + unitY + " at " + timeFormat[d.x];
+                var tip = formatYValue(d.y) + " " + unitY + " at " + timeTipStrings[d.x];
                 showBootstrapTooltip(d3.select(this).node(), tip);
                 // show the point
                 d3.select(this)
