@@ -304,7 +304,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
     if (shuffleStages.length == 2) {
       // When multi table join, there will be too many complex combination to consider.
-      // Currently we only handle 2 table join like following two use cases.
+      // Currently we only handle 2 table join like following use case.
       // SMJ
       //   Sort
       //     Shuffle
