@@ -269,13 +269,10 @@ class FValueSelectorModel private[ml](
     val selectedFeatures: Array[Int])
   extends Model[FValueSelectorModel] with FValueSelectorParams with MLWritable {
 
-  // validate the data
-  {
-    var prev = -1
-    selectedFeatures.foreach { i =>
-      require(prev < i, s"Index $i follows $prev and is not strictly increasing")
-      prev = i
-    }
+  var prev = -1
+  selectedFeatures.foreach { i =>
+    require(prev < i, s"Index $i follows $prev and is not strictly increasing")
+    prev = i
   }
 
   /** @group setParam */
