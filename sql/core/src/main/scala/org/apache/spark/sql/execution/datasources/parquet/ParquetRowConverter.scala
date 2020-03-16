@@ -317,20 +317,18 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
-      case DateType if rebaseDateTime =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addInt(value: Int): Unit = {
-            val rebased = DateTimeUtils.rebaseJulianToGregorianDays(value)
-            // DateType is not specialized in `SpecificMutableRow`, have to box it here.
-            updater.set(rebased.asInstanceOf[DateType#InternalType])
-          }
-        }
-
       case DateType =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addInt(value: Int): Unit = {
-            // DateType is not specialized in `SpecificMutableRow`, have to box it here.
-            updater.set(value.asInstanceOf[DateType#InternalType])
+        if (rebaseDateTime) {
+          new ParquetPrimitiveConverter(updater) {
+            override def addInt(value: Int): Unit = {
+              updater.set(DateTimeUtils.rebaseJulianToGregorianDays(value))
+            }
+          }
+        } else {
+          new ParquetPrimitiveConverter(updater) {
+            override def addInt(value: Int): Unit = {
+              updater.set(value)
+            }
           }
         }
 
