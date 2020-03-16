@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.io.PrintWriter
 import java.util.UUID
-
-import scala.io.Source
-import scala.reflect.io.File
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
