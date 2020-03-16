@@ -694,9 +694,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         "0001-01-01 01:02:03.654321",
         "1000-01-01 03:02:01.123456",
         "1582-10-04 00:00:00.000000",
-        "1582-10-15 00:00:00.999999",
+        "1582-10-15 00:00:00.999999", // Gregorian cutover day
+        "1883-11-10 00:00:00.000000", // America/Los_Angeles -7:52:58 zone offset
+        "1883-11-20 00:00:00.000000", // America/Los_Angeles -08:00 zone offset
         "1969-12-31 11:22:33.000100",
-        "1970-01-01 00:00:00.000001",
+        "1970-01-01 00:00:00.000001", // The epoch day
         "2020-03-14 09:33:01.500000").foreach { ts =>
         val julianTs = Timestamp.valueOf(ts)
         val julianMicros = millisToMicros(julianTs.getTime) +
@@ -726,9 +728,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           "0001-01-01",
           "1000-01-01",
           "1582-10-04",
-          "1582-10-15",
+          "1582-10-15", // Gregorian cutover day
+          "1883-11-10", // America/Los_Angeles -7:52:58 zone offset
+          "1883-11-20", // America/Los_Angeles -08:00 zone offset
           "1969-12-31",
-          "1970-01-01",
+          "1970-01-01", // The epoch day
           "2020-03-14").foreach { date =>
           val julianDays = fromJavaDate(Date.valueOf(date))
           val gregorianDays = localDateToDays(LocalDate.parse(date))
