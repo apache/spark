@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.api;
 import java.io.IOException;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
 
 /**
  * :: Private ::
@@ -63,7 +64,7 @@ public interface ShuffleMapOutputWriter {
    * The returned array should contain, for each partition from (0) to (numPartitions - 1), the
    * number of bytes written by the partition writer for that partition id.
    */
-  long[] commitAllPartitions() throws IOException;
+  MapOutputCommitMessage commitAllPartitions() throws IOException;
 
   /**
    * Abort all of the writes done by any writers returned by {@link #getPartitionWriter(int)}.

@@ -266,7 +266,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (spills.length == 0) {
       final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
           .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
-      return mapWriter.commitAllPartitions();
+      return mapWriter.commitAllPartitions().getPartitionLengths();
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(shuffleId, mapId);
@@ -327,7 +327,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // to be counted as shuffle write, but this will lead to double-counting of the final
       // SpillInfo's bytes.
       writeMetrics.decBytesWritten(spills[spills.length - 1].file.length());
-      partitionLengths = mapWriter.commitAllPartitions();
+      partitionLengths = mapWriter.commitAllPartitions().getPartitionLengths();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);
