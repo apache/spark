@@ -116,8 +116,12 @@ object SQLMetrics {
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
     val acc = new SQLMetric(SIZE_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max (stageId (attemptId): taskId))"),
+    // scalastyle:off
+    acc.register(
+      sc,
+      name = Some(s"$name total (min, med, max<span class='stageId-and-taskId-metrics'> (stageId (attemptId): taskId)</span>)"),
       countFailedValues = false)
+    // scalastyle:on
     acc
   }
 
@@ -126,16 +130,24 @@ object SQLMetrics {
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max (stageId (attemptId): taskId))"),
+    // scalastyle:off
+    acc.register(
+      sc,
+      name = Some(s"$name total (min, med, max<span class='stageId-and-taskId-metrics'> (stageId (attemptId): taskId)</span>)"),
       countFailedValues = false)
+    // scalastyle:on
     acc
   }
 
   def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
     // Same with createTimingMetric, just normalize the unit of time to millisecond.
     val acc = new SQLMetric(NS_TIMING_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max (stageId (attemptId): taskId))"),
+    // scalastyle:off
+    acc.register(
+      sc,
+      name = Some(s"$name total (min, med, max<span class='stageId-and-taskId-metrics'> (stageId (attemptId): taskId)</span>)"),
       countFailedValues = false)
+    // scalastyle:on
     acc
   }
 
@@ -150,8 +162,12 @@ object SQLMetrics {
     // probe avg (min, med, max):
     // (1.2, 2.2, 6.3)
     val acc = new SQLMetric(AVERAGE_METRIC)
-    acc.register(sc, name = Some(s"$name (min, med, max (stageId (attemptId): taskId))"),
+    // scalastyle:off
+    acc.register(
+      sc,
+      name = Some(s"$name (min, med, max<span class='stageId-and-taskId-metrics'> (stageId (attemptId): taskId)</span>)"),
       countFailedValues = false)
+    // scalastyle:on
     acc
   }
 
@@ -173,7 +189,9 @@ object SQLMetrics {
     val stringMetric = if (maxMetrics.isEmpty) {
       "(driver)"
     } else {
-      s"(stage ${maxMetrics(1)} (attempt ${maxMetrics(2)}): task ${maxMetrics(3)})"
+      // scalastyle:off
+      s"<span class='stageId-and-taskId-metrics'>(stage ${maxMetrics(1)} (attempt ${maxMetrics(2)}): task ${maxMetrics(3)})</span>"
+      // scalastyle:on
     }
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
