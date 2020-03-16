@@ -102,8 +102,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   /**
-   * Try to split the skewed partition based on the map size and the target partition size
-   * after split, and create a list of `PartialMapperPartitionSpec`.
+   * Splits the skewed partition based on the map size and the target partition size
+   * after split, and create a list of `PartialMapperPartitionSpec`. Returns None if can't split.
    */
   private def createSkewPartitionSpecs(
       shuffleId: Int,
@@ -136,8 +136,9 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     joinType == Inner || joinType == Cross || joinType == RightOuter
   }
 
-  private def getSizeInfo(medianSize: Long, maxSize: Long): String = {
-    s"median size: $medianSize, max size: ${maxSize}"
+  private def getSizeInfo(medianSize: Long, sizes: Seq[Long]): String = {
+    s"median size: $medianSize, max size: ${sizes.max}, min size: ${sizes.min}, avg size: " +
+      sizes.sum / sizes.length
   }
 
   /*
@@ -164,11 +165,11 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       val rightMedSize = medianSize(right.mapStats)
       logDebug(
         s"""
-          |Try to optimize skewed join.
-          |Left side partition size:
-          |${getSizeInfo(leftMedSize, left.mapStats.bytesByPartitionId.max)}
-          |Right side partition size:
-          |${getSizeInfo(rightMedSize, right.mapStats.bytesByPartitionId.max)}
+          |Optimizing skewed join.
+          |Left side partitions size info:
+          |${getSizeInfo(leftMedSize, left.mapStats.bytesByPartitionId)}
+          |Right side partitions size info:
+          |${getSizeInfo(rightMedSize, right.mapStats.bytesByPartitionId)}
         """.stripMargin)
       val canSplitLeft = canSplitLeftSide(joinType)
       val canSplitRight = canSplitRightSide(joinType)
@@ -198,6 +199,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           val skewSpecs = createSkewPartitionSpecs(
             left.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, leftTargetSize)
           if (skewSpecs.isDefined) {
+            logDebug(s"Left side partition $partitionIndex is skewed, split it into " +
+              s"${skewSpecs.get.length} parts.")
             leftSkewDesc.addPartitionSize(leftActualSizes(partitionIndex))
           }
           skewSpecs.getOrElse(Seq(leftPartSpec))
@@ -211,6 +214,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           val skewSpecs = createSkewPartitionSpecs(
             right.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, rightTargetSize)
           if (skewSpecs.isDefined) {
+            logDebug(s"Right side partition $partitionIndex is skewed, split it into " +
+              s"${skewSpecs.get.length} parts.")
             rightSkewDesc.addPartitionSize(rightActualSizes(partitionIndex))
           }
           skewSpecs.getOrElse(Seq(rightPartSpec))
