@@ -111,7 +111,7 @@ struct<split(aa1cc2ee3, [1-9]+, 2):array<string>>
 -- !query
 SELECT substr('Spark SQL', 5)
 -- !query schema
-struct<substring(Spark SQL, 5, 2147483647):string>
+struct<substr(Spark SQL, 5, 2147483647):string>
 -- !query output
 k SQL
 
@@ -119,7 +119,7 @@ k SQL
 -- !query
 SELECT substr('Spark SQL', -3)
 -- !query schema
-struct<substring(Spark SQL, -3, 2147483647):string>
+struct<substr(Spark SQL, -3, 2147483647):string>
 -- !query output
 SQL
 
@@ -127,7 +127,7 @@ SQL
 -- !query
 SELECT substr('Spark SQL', 5, 1)
 -- !query schema
-struct<substring(Spark SQL, 5, 1):string>
+struct<substr(Spark SQL, 5, 1):string>
 -- !query output
 k
 
