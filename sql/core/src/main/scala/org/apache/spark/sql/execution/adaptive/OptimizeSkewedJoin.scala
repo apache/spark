@@ -101,24 +101,6 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
   }
 
-  /**
-   * Split the skewed partition based on the map size and the max split number, and create
-   * `PartialReducerPartitionSpec`s for it.
-   */
-  private def splitAndCreateSpecs(
-      shuffleId: Int,
-      reducerId: Int,
-      targetSize: Long): Option[Seq[ShufflePartitionSpec]] = {
-    val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
-    val mapStartIndices = ShufflePartitionsUtil.splitSizeListByTargetSize(
-      mapPartitionSizes, targetSize)
-    if (mapStartIndices.length > 1) {
-      Some(createSkewPartitions(reducerId, mapStartIndices, mapPartitionSizes.length))
-    } else {
-      None
-    }
-  }
-
   private def canSplitLeftSide(joinType: JoinType) = {
     joinType == Inner || joinType == Cross || joinType == LeftSemi ||
       joinType == LeftAnti || joinType == LeftOuter
@@ -130,10 +112,6 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def getSizeInfo(medianSize: Long, maxSize: Long): String = {
     s"median size: $medianSize, max size: ${maxSize}"
-  }
-
-  private def isCoalesced(partitionSpec: CoalescedPartitionSpec): Boolean = {
-    partitionSpec.endReducerIndex - partitionSpec.startReducerIndex > 1
   }
 
   /*
@@ -155,8 +133,6 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         if supportedJoinTypes.contains(joinType) =>
       assert(left.partitionsWithSizes.length == right.partitionsWithSizes.length)
       val numPartitions = left.partitionsWithSizes.length
-      val leftShuffleId = left.shuffleStage.shuffle.shuffleDependency.shuffleId
-      val rightShuffleId = right.shuffleStage.shuffle.shuffleDependency.shuffleId
       // We use the median size of the original shuffle partitions to detect skewed partitions.
       val leftMedSize = medianSize(left.mapStats)
       val rightMedSize = medianSize(right.mapStats)
@@ -172,47 +148,47 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       val canSplitRight = canSplitRightSide(joinType)
       // We use the actual partition sizes (may be coalesced) to calculate target size, so that
       // the final data distribution is even (coalesced partitions + split partitions).
-      val leftSizes = left.partitionsWithSizes.map(_._2)
-      val rightSizes = right.partitionsWithSizes.map(_._2)
-      val leftTargetSize = targetSize(leftSizes, leftMedSize)
-      val rightTargetSize = targetSize(rightSizes, rightMedSize)
+      val leftTargetSize = targetSize(left.partitionsWithSizes.map(_._2), leftMedSize)
+      val rightTargetSize = targetSize(right.partitionsWithSizes.map(_._2), rightMedSize)
 
       val leftSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
       val rightSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
       val leftSkewDesc = new SkewDesc
       val rightSkewDesc = new SkewDesc
+
+      def getPartitionSpecs(
+          info: ShuffleStageInfo,
+          index: Int,
+          medianSize: Long,
+          targetSize: Long,
+          canSplit: Boolean,
+          skewDesc: SkewDesc): Seq[ShufflePartitionSpec] = {
+        val size = info.partitionsWithSizes(index)._2
+        val skewed = isSkewed(size, medianSize) && canSplit
+        val partitionSpec = info.partitionsWithSizes(index)._1
+        // Ideally a skewed partition won't get coalesced, but skip it here for safety.
+        if (skewed && partitionSpec.endReducerIndex - partitionSpec.startReducerIndex == 1) {
+          val reducerId = partitionSpec.startReducerIndex
+          val mapPartitionSizes = getMapSizesForReduceId(
+            info.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId)
+          val mapStartIndices = ShufflePartitionsUtil.splitSizeListByTargetSize(
+            mapPartitionSizes, targetSize)
+          if (mapStartIndices.length > 1) {
+            skewDesc.addPartitionSize(size)
+            createSkewPartitions(reducerId, mapStartIndices, mapPartitionSizes.length)
+          } else {
+            Seq(partitionSpec)
+          }
+        } else {
+          Seq(partitionSpec)
+        }
+      }
+
       for (partitionIndex <- 0 until numPartitions) {
-        val leftSize = leftSizes(partitionIndex)
-        val isLeftSkew = isSkewed(leftSize, leftMedSize) && canSplitLeft
-        val leftPartitionSpec = left.partitionsWithSizes(partitionIndex)._1
-        val rightSize = rightSizes(partitionIndex)
-        val isRightSkew = isSkewed(rightSize, rightMedSize) && canSplitRight
-        val rightPartitionSpec = right.partitionsWithSizes(partitionIndex)._1
-
-        // Ideally a skewed partition won't get coalesced, but skip it here for safety.
-        val leftParts = if (isLeftSkew && !isCoalesced(leftPartitionSpec)) {
-          val specsAfterSplit = splitAndCreateSpecs(
-            leftShuffleId, leftPartitionSpec.startReducerIndex, leftTargetSize)
-          if (specsAfterSplit.isDefined) {
-            leftSkewDesc.addPartitionSize(leftSize)
-          }
-          specsAfterSplit.getOrElse(Seq(leftPartitionSpec))
-        } else {
-          Seq(leftPartitionSpec)
-        }
-
-        // Ideally a skewed partition won't get coalesced, but skip it here for safety.
-        val rightParts = if (isRightSkew && !isCoalesced(rightPartitionSpec)) {
-          val specsAfterSplit = splitAndCreateSpecs(
-            rightShuffleId, rightPartitionSpec.startReducerIndex, rightTargetSize)
-          if (specsAfterSplit.isDefined) {
-            rightSkewDesc.addPartitionSize(rightSize)
-          }
-          specsAfterSplit.getOrElse(Seq(rightPartitionSpec))
-        } else {
-          Seq(rightPartitionSpec)
-        }
-
+        val leftParts = getPartitionSpecs(
+          left, partitionIndex, leftMedSize, leftTargetSize, canSplitLeft, leftSkewDesc)
+        val rightParts = getPartitionSpecs(
+          right, partitionIndex, rightMedSize, rightTargetSize, canSplitRight, rightSkewDesc)
         for {
           leftSidePartition <- leftParts
           rightSidePartition <- rightParts
