@@ -688,27 +688,30 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("rebase julian to/from gregorian micros") {
-    val timeZone = DateTimeUtils.TimeZoneUTC
-    withDefaultTimeZone(timeZone) {
-      Seq(
-        "0001-01-01 01:02:03.654321",
-        "1000-01-01 03:02:01.123456",
-        "1582-10-04 00:00:00.000000",
-        "1582-10-15 00:00:00.999999", // Gregorian cutover day
-        "1883-11-10 00:00:00.000000", // America/Los_Angeles -7:52:58 zone offset
-        "1883-11-20 00:00:00.000000", // America/Los_Angeles -08:00 zone offset
-        "1969-12-31 11:22:33.000100",
-        "1970-01-01 00:00:00.000001", // The epoch day
-        "2020-03-14 09:33:01.500000").foreach { ts =>
-        val julianTs = Timestamp.valueOf(ts)
-        val julianMicros = millisToMicros(julianTs.getTime) +
-          ((julianTs.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
-        val gregorianMicros = instantToMicros(LocalDateTime.parse(ts.replace(' ', 'T'))
-          .atZone(timeZone.toZoneId)
-          .toInstant)
+    outstandingTimezones.foreach { timeZone =>
+      withDefaultTimeZone(timeZone) {
+        Seq(
+          "0001-01-01 01:02:03.654321",
+          "1000-01-01 03:02:01.123456",
+          "1582-10-04 00:00:00.000000",
+          "1582-10-15 00:00:00.999999", // Gregorian cutover day
+          "1883-11-10 00:00:00.000000", // America/Los_Angeles -7:52:58 zone offset
+          "1883-11-20 00:00:00.000000", // America/Los_Angeles -08:00 zone offset
+          "1969-12-31 11:22:33.000100",
+          "1970-01-01 00:00:00.000001", // The epoch day
+          "2020-03-14 09:33:01.500000").foreach { ts =>
+          withClue(s"time zone = ${timeZone.getID} ts = $ts") {
+            val julianTs = Timestamp.valueOf(ts)
+            val julianMicros = millisToMicros(julianTs.getTime) +
+              ((julianTs.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
+            val gregorianMicros = instantToMicros(LocalDateTime.parse(ts.replace(' ', 'T'))
+              .atZone(timeZone.toZoneId)
+              .toInstant)
 
-        assert(rebaseJulianToGregorianMicros(julianMicros) === gregorianMicros)
-        assert(rebaseGregorianToJulianMicros(gregorianMicros) === julianMicros)
+            assert(rebaseJulianToGregorianMicros(julianMicros) === gregorianMicros)
+            assert(rebaseGregorianToJulianMicros(gregorianMicros) === julianMicros)
+          }
+        }
       }
     }
   }
