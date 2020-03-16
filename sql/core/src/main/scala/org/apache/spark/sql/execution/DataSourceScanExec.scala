@@ -341,7 +341,6 @@ case class FileSourceScanExec(
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedDownFilters),
         "DataFilters" -> seqToString(dataFilters),
-        "BucketedScan" -> bucketedScan.toString,
         "Location" -> locationDesc)
 
     val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
