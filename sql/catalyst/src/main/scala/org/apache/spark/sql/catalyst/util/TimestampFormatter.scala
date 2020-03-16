@@ -248,7 +248,7 @@ object TimestampFormatter {
   def apply(
       format: String,
       zoneId: ZoneId,
-      needVarLengthSecondFraction: Boolean): TimestampFormatter = {
+      needVarLengthSecondFraction: Boolean = false): TimestampFormatter = {
     getFormatter(Some(format), zoneId, needVarLengthSecondFraction = needVarLengthSecondFraction)
   }
 

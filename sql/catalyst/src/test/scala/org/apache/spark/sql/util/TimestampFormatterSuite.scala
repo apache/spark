@@ -85,10 +85,9 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
         2177456523456789L,
         11858049903010203L).foreach { micros =>
         DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-          val timestamp = TimestampFormatter(
-            pattern, zoneId, needVarLengthSecondFraction = true).format(micros)
+          val timestamp = TimestampFormatter(pattern, zoneId).format(micros)
           val parsed = TimestampFormatter(
-            pattern, zoneId, needVarLengthSecondFraction = false).parse(timestamp)
+            pattern, zoneId, needVarLengthSecondFraction = true).parse(timestamp)
           assert(micros === parsed)
         }
       }
@@ -110,16 +109,14 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
         val pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
         val micros = TimestampFormatter(
           pattern, zoneId, needVarLengthSecondFraction = true).parse(timestamp)
-        val formatted = TimestampFormatter(
-          pattern, zoneId, needVarLengthSecondFraction = false).format(micros)
+        val formatted = TimestampFormatter(pattern, zoneId).format(micros)
         assert(timestamp === formatted)
       }
     }
   }
 
   test("case insensitive parsing of am and pm") {
-    val formatter = TimestampFormatter(
-      "yyyy MMM dd hh:mm:ss a", ZoneOffset.UTC, needVarLengthSecondFraction = false)
+    val formatter = TimestampFormatter("yyyy MMM dd hh:mm:ss a", ZoneOffset.UTC)
     val micros = formatter.parse("2009 Mar 20 11:30:01 am")
     assert(micros === TimeUnit.SECONDS.toMicros(
       LocalDateTime.of(2009, 3, 20, 11, 30, 1).toEpochSecond(ZoneOffset.UTC)))
@@ -203,7 +200,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("formatting timestamp strings up to microsecond precision") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
       def check(pattern: String, input: String, expected: String): Unit = {
-        val formatter = TimestampFormatter(pattern, zoneId, needVarLengthSecondFraction = false)
+        val formatter = TimestampFormatter(pattern, zoneId)
         val timestamp = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString(input), zoneId).get
         val actual = formatter.format(timestamp)
