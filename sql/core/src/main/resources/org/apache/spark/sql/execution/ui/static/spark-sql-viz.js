@@ -47,7 +47,7 @@ function renderPlanViz() {
   }
 
   resizeSvg(svg);
-  setupForAdditionalMetrics();
+  setupForAdditionalMetrics(g);
 }
 
 /* -------------------- *
@@ -71,6 +71,9 @@ function setupTooltipForSparkPlanNode(nodeId) {
     })
 }
 
+// labelSeparator should be a non-graphical character in order not to affect the width of boxes.
+var labelSeparator = "\x01";
+
 /*
  * Helper function to pre-process the graph layout.
  * This step is necessary for certain styles that affect the positioning
@@ -82,6 +85,18 @@ function preprocessGraphLayout(g) {
   for (var i = 0; i < nodes.length; i++) {
       var node = g.node(nodes[i]);
       node.padding = "5";
+
+      if (node.isCluster == "true") {
+        node.label.split("\\n").forEach(function (text, idx) {
+          if (text.indexOf("<span") > 0) {
+            node.newTexts = text.match("^(.*)<span .*>(.*)</span>(.*)$")
+
+            // To adjust the width of boxes, reset labels with labelSeparator.
+            var replacement = node.newTexts[1] + labelSeparator + node.newTexts[2] + labelSeparator + node.newTexts[3];
+            node.label = node.label.replace(node.newTexts[0], replacement);
+          }
+        });
+      }
   }
   // Curve the edges
   var edges = g.edges();
@@ -163,45 +178,45 @@ function getAbsolutePosition(d3selection) {
 /*
  * Helper function to setup for additional metrics.
  */
-function setupForAdditionalMetrics() {
-    // With dagre-d3, we can choose normal text (default) or HTML as a label type.
-    // HTML label for node works well but not for cluster so we need to choose the default label type
-    // and manipulate DOM.
-    $("g.cluster text tspan")
-        .each(function() {
-            var originalText = $(this).text();
-            if (originalText.indexOf("<span") > 0) {
-                var newTexts = originalText.match("^(.*)<span .*>(.*)</span>(.*)$");
-                var thisD3Node = d3.selectAll($(this));
-                thisD3Node.text(newTexts[1]);
-                thisD3Node.append("tspan").attr("class", "stageId-and-taskId-metrics").text(newTexts[2]);
-                $(this).append(newTexts[3]);
-            } else {
-                return originalText;
-            }
-        });
+function setupForAdditionalMetrics(g) {
+  // With dagre-d3, we can choose normal text (default) or HTML as a label type.
+  // HTML label for node works well but not for cluster so we need to choose the default label type
+  // and manipulate DOM.
+  var nodes = g.nodes();
+  $("g.cluster text tspan")
+    .each(function() {
+      var originalText = $(this).text();
+        if (originalText.indexOf(labelSeparator) > 0) {
+          var newTexts = originalText.split(labelSeparator);
+          var thisD3Node = d3.selectAll($(this));
+          thisD3Node.text(newTexts[0]);
+          thisD3Node.append("tspan").attr("class", "stageId-and-taskId-metrics").text(newTexts[1]);
+          $(this).append(newTexts[2]);
+        } else {
+          return originalText;
+        }
+  });
 
-    var checkboxNode = $("#stageId-and-taskId-checkbox");
-    checkboxNode.click(function() {
-        onClickAdditionalMetricsCheckbox($(this));
-    });
-
-    var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") == "true";
-    $("#stageId-and-taskId-checkbox").prop("checked", isChecked);
-    $(".stageId-and-taskId-metrics").hide();
-    onClickAdditionalMetricsCheckbox(checkboxNode);
+  var checkboxNode = $("#stageId-and-taskId-checkbox");
+  checkboxNode.click(function() {
+      onClickAdditionalMetricsCheckbox($(this));
+  });
+  var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") == "true";
+  $("#stageId-and-taskId-checkbox").prop("checked", isChecked);
+  $(".stageId-and-taskId-metrics").hide();
+  onClickAdditionalMetricsCheckbox(checkboxNode);
 }
 
 /*
  * Helper function which defines the action on click the checkbox.
  */
 function onClickAdditionalMetricsCheckbox(checkboxNode) {
-    var additionalMetrics = $(".stageId-and-taskId-metrics");
-    var isChecked = checkboxNode.prop("checked");
-    if (isChecked) {
-        additionalMetrics.show();
-    } else {
-        additionalMetrics.hide();
-    }
-    window.localStorage.setItem("stageId-and-taskId-checked", isChecked);
+  var additionalMetrics = $(".stageId-and-taskId-metrics");
+  var isChecked = checkboxNode.prop("checked");
+  if (isChecked) {
+      additionalMetrics.show();
+  } else {
+      additionalMetrics.hide();
+  }
+  window.localStorage.setItem("stageId-and-taskId-checked", isChecked);
 }

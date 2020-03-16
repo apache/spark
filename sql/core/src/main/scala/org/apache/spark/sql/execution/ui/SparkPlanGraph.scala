@@ -211,6 +211,7 @@ private[ui] class SparkPlanGraphCluster(
     }
     s"""
        |  subgraph cluster${id} {
+       |    isCluster="true";
        |    label="${StringEscapeUtils.escapeJava(labelStr)}";
        |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
        |  }
