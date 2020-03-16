@@ -775,7 +775,7 @@ abstract class ToTimestamp
         pattern,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        varLenEnabled = pattern.contains('S'))
+        varLenEnabled = true)
     } catch {
       case NonFatal(_) => null
     }
@@ -813,7 +813,7 @@ abstract class ToTimestamp
                 formatString,
                 zoneId,
                 legacyFormat = SIMPLE_DATE_FORMAT,
-                varLenEnabled = formatString.contains('S'))
+                varLenEnabled = true)
                 .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case e: SparkUpgradeException => throw e
@@ -863,7 +863,7 @@ abstract class ToTimestamp
                 $format.toString(),
                 $zid,
                 $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
-                $format.toString().contains("S"))
+                true)
               .parse($string.toString()) / $downScaleFactor;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;

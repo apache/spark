@@ -56,10 +56,12 @@ trait DateTimeFormatterHelper {
       locale: Locale,
       varLenEnabled: Boolean = false): DateTimeFormatter = {
     val newPattern = DateTimeUtils.convertIncompatiblePattern(pattern)
-    val key = (newPattern, locale, varLenEnabled)
+    val useVarLen = varLenEnabled && newPattern.split("'").zipWithIndex
+      .exists { case (p, idx) => idx % 2 == 0 && p.contains('S') }
+    val key = (newPattern, locale, useVarLen)
     var formatter = cache.getIfPresent(key)
     if (formatter == null) {
-      formatter = buildFormatter(newPattern, locale, varLenEnabled)
+      formatter = buildFormatter(newPattern, locale, useVarLen)
       cache.put(key, formatter)
     }
     formatter
@@ -157,4 +159,3 @@ private object DateTimeFormatterHelper {
     toFormatter(builder, TimestampFormatter.defaultLocale)
   }
 }
-

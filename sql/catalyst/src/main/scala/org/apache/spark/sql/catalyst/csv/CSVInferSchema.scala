@@ -35,7 +35,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    varLenEnabled = options.timestampFormat.contains('S'))
+    varLenEnabled = true)
 
   private val decimalParser = if (options.locale == Locale.US) {
     // Special handling the default locale for backward compatibility
