@@ -36,8 +36,7 @@ private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,
     catalystSchema: StructType,
     schemaConverter: ParquetToSparkSchemaConverter,
-    convertTz: Option[ZoneId],
-    caseSensitive: Boolean)
+    convertTz: Option[ZoneId])
   extends RecordMaterializer[InternalRow] {
 
   private val rootConverter =
@@ -46,7 +45,6 @@ private[parquet] class ParquetRecordMaterializer(
       parquetSchema,
       catalystSchema,
       convertTz,
-      caseSensitive,
       NoopUpdater)
 
   override def getCurrentRecord: InternalRow = rootConverter.currentRecord

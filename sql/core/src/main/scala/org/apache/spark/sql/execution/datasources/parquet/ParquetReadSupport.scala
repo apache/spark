@@ -122,15 +122,12 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
       keyValueMetaData: JMap[String, String],
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[InternalRow] = {
-    val caseSensitive = conf.getBoolean(SQLConf.CASE_SENSITIVE.key,
-      SQLConf.CASE_SENSITIVE.defaultValue.get)
     val parquetRequestedSchema = readContext.getRequestedSchema
     new ParquetRecordMaterializer(
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
-      convertTz,
-      caseSensitive)
+      convertTz)
   }
 }
 
