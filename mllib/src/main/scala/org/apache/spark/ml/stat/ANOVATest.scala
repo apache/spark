@@ -22,9 +22,9 @@ import org.apache.commons.math3.distribution.FDistribution
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
 import org.apache.spark.util.collection.OpenHashMap
 
 
@@ -80,13 +80,13 @@ object ANOVATest {
     SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
 
-    val labeledPointRdd = dataset.select(col("label").cast("double"), col("features"))
+    val labeledPointRdd = dataset.select(col(labelCol).cast("double"), col(featuresCol))
       .as[(Double, Vector)]
       .rdd.map { case (label, features) => LabeledPoint(label, features) }
 
-    val numFeatures = labeledPointRdd.first().features.size
-    val numSamples = labeledPointRdd.count()
-    val numClasses = labeledPointRdd.map(d => d.label).distinct.count
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, featuresCol)
+    val Row(numSamples: Long, numClasses: Long) =
+      dataset.select(count(labelCol), countDistinct(labelCol)).head
 
     labeledPointRdd.flatMap { case LabeledPoint(label, features) =>
       features.iterator.map { case (col, value) =>
