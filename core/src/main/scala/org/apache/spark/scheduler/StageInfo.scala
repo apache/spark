@@ -46,8 +46,6 @@ class StageInfo(
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
-  /** if stage failure ignored */
-  var ignoredFailure: Option[Boolean] = None
 
   /**
    * Terminal values of accumulables updated during this stage, including all the user-defined
@@ -58,10 +56,6 @@ class StageInfo(
   def stageFailed(reason: String): Unit = {
     failureReason = Some(reason)
     completionTime = Some(System.currentTimeMillis)
-  }
-
-  def stageFailureIgnored(ignored: Boolean) {
-    ignoredFailure = Some(ignored)
   }
 
   // This would just be the second constructor arg, except we need to maintain this method

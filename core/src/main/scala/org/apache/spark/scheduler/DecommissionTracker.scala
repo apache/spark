@@ -79,11 +79,12 @@ private[scheduler] class DecommissionTracker (
   }
 
   /*
-   * Is the node decommissioning i.e from driver point of
-   * view the node is candidate for decommissioning.
-   * Not necessarily decommissioned or terminated
+   * Is the node present in decommission Tracker
+   * This is used by driver for not registering any new executor
+   * on that node which is present in decommission Tracker and
+   * neither to assign any new task to that existing executor on that node.
    */
-  def isNodeDecommissioning(hostname: String): Boolean = synchronized {
+  def isNodePresentInDecommissionTracker(hostname: String): Boolean = synchronized {
     decommissionHostNameMap.contains(hostname)
   }
 
@@ -133,7 +134,7 @@ private[scheduler] class DecommissionTracker (
       terminationTimeMs: Long,
       reason: NodeDecommissionReason): Unit = synchronized {
 
-    val df: SimpleDateFormat = new SimpleDateFormat("YY/MM/dd HH:mm:ss")
+    val df: SimpleDateFormat = new SimpleDateFormat("yy/MM/dd HH:mm:ss")
     val tDateTime = df.format(terminationTimeMs)
     val curTimeMs = clock.getTimeMillis()
 

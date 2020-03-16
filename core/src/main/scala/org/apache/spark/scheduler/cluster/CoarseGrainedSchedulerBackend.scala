@@ -234,7 +234,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // or if it ignored our blacklist), then we reject that executor immediately.
           logInfo(s"Rejecting $executorId as it has been blacklisted.")
           context.sendFailure(new IllegalStateException(s"Executor is blacklisted: $executorId"))
-        } else if (isNodeDecommissioning(hostname)) {
+        } else if (isNodePresentInDecommissionTracker(hostname)) {
           // Refuse any new executor registered from the decommissioning worker. Can only happen
           // in case of spot loss nodes about to be lost. For nodes gracefuly decommissioning this
           // won't happen.
@@ -316,7 +316,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val taskDescs = withLock {
         // Filter out executors under killing
         val activeExecutors = executorDataMap.filterKeys(isExecutorActive)
-          .filter(x => !isNodeDecommissioning(x._2.executorHost))
+          .filter(x => !isNodePresentInDecommissionTracker(x._2.executorHost))
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
@@ -348,7 +348,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         // Filter out executors under killing
         // add the filter to check executor doesnot belong to
         // decommission nodes
-        if (isExecutorActive(executorId) && !isNodeDecommissioning(executorData.executorHost)) {
+        if (isExecutorActive(executorId) &&
+          !isNodePresentInDecommissionTracker(executorData.executorHost)) {
           val workOffers = IndexedSeq(
             new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
               Some(executorData.executorAddress.hostPort),
@@ -909,10 +910,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   def updateNodeToDecommissionSetTerminate(hostname: String): Unit = { None }
 
 
-  private def isNodeDecommissioning(hostname: String): Boolean = {
+  private def isNodePresentInDecommissionTracker(hostname: String): Boolean = {
     decommissionTracker match {
       case None => return false
-      case Some(decommissionTracker) => return decommissionTracker.isNodeDecommissioning(hostname)
+      case Some(decommissionTracker) =>
+        return decommissionTracker.isNodePresentInDecommissionTracker(hostname)
     }
   }
 

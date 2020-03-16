@@ -819,7 +819,7 @@ private[spark] class TaskSetManager(
           // node against stage failure. Here the logic is to specify,
           // if the task failed due to fetchFailed of decommission nodes than
           // don't count towards the stageFailure. countTowardsStageFailures
-          // variable of TaskEndReason, that can be used in DAG scheduler to account
+          // variable of TaskEndReason, that can be used in DAGScheduler to account
           // fetch failure while checking the stage abort
           decommissionTracker match {
             case Some(decommissionTracker) =>

@@ -99,7 +99,7 @@ class DecommissionTrackerSuite extends SparkFunSuite
     })
 
     decommissionTracker.addNodeToDecommission("hostA", 10000, NodeLoss)
-    assert(decommissionTracker.isNodeDecommissioning("hostA"))
+    assert(decommissionTracker.isNodePresentInDecommissionTracker("hostA"))
 
     // Wait for executor decommission give 100ms over 50%
     Thread.sleep(5100)
@@ -122,14 +122,14 @@ class DecommissionTrackerSuite extends SparkFunSuite
 
     // Recomission
     decommissionTracker.removeNodeToDecommission("hostA")
-    assert(!decommissionTracker.isNodeDecommissioning("hostA"))
+    assert(!decommissionTracker.isNodePresentInDecommissionTracker("hostA"))
   }
 
   test("Check the Multiple Node Decommission state") {
     decommissionTracker.addNodeToDecommission("hostA", 10000, NodeLoss)
     decommissionTracker.addNodeToDecommission("hostB", 30000, NodeLoss)
-    assert(decommissionTracker.isNodeDecommissioning("hostA"))
-    assert(decommissionTracker.isNodeDecommissioning("hostB"))
+    assert(decommissionTracker.isNodePresentInDecommissionTracker("hostA"))
+    assert(decommissionTracker.isNodePresentInDecommissionTracker("hostB"))
 
     // Wait for hostA executor decommission
     Thread.sleep(5100)
@@ -152,7 +152,7 @@ class DecommissionTrackerSuite extends SparkFunSuite
 
     // Recommission hostA
     decommissionTracker.removeNodeToDecommission("hostA")
-    assert(!decommissionTracker.isNodeDecommissioning("hostA"))
+    assert(!decommissionTracker.isNodePresentInDecommissionTracker("hostA"))
 
     // Wait for hostB executor decommission
     Thread.sleep(5000)
@@ -175,14 +175,14 @@ class DecommissionTrackerSuite extends SparkFunSuite
 
     // Recommission hostB
     decommissionTracker.removeNodeToDecommission("hostB")
-    assert(!decommissionTracker.isNodeDecommissioning("hostB"))
+    assert(!decommissionTracker.isNodePresentInDecommissionTracker("hostB"))
   }
 
   test("Check Multiple Node Decommission state at same time") {
     decommissionTracker.addNodeToDecommission("hostA", 10000, NodeLoss)
     decommissionTracker.addNodeToDecommission("hostB", 10000, NodeLoss)
-    assert(decommissionTracker.isNodeDecommissioning("hostA"))
-    assert(decommissionTracker.isNodeDecommissioning("hostB"))
+    assert(decommissionTracker.isNodePresentInDecommissionTracker("hostA"))
+    assert(decommissionTracker.isNodePresentInDecommissionTracker("hostB"))
 
     // Wait for both hostA hostB executor decommission
     Thread.sleep(5100)
@@ -211,9 +211,9 @@ class DecommissionTrackerSuite extends SparkFunSuite
 
     // Recommission both
     decommissionTracker.removeNodeToDecommission("hostA")
-    assert(!decommissionTracker.isNodeDecommissioning("hostA"))
+    assert(!decommissionTracker.isNodePresentInDecommissionTracker("hostA"))
     decommissionTracker.removeNodeToDecommission("hostB")
-    assert(!decommissionTracker.isNodeDecommissioning("hostB"))
+    assert(!decommissionTracker.isNodePresentInDecommissionTracker("hostB"))
   }
 
   test("Check Node decommissioning with minimum termination time config") {
@@ -238,7 +238,7 @@ class DecommissionTrackerSuite extends SparkFunSuite
       Some(executorAllocationClient), dagScheduler, clock = clock)
 
     decommissionTracker.addNodeToDecommission("hostA", 10000, NodeLoss)
-    assert(decommissionTracker.isNodeDecommissioning("hostA"))
+    assert(decommissionTracker.isNodePresentInDecommissionTracker("hostA"))
 
     // Wait for hostA executor decommission at 20%
     Thread.sleep(2100)
@@ -261,6 +261,6 @@ class DecommissionTrackerSuite extends SparkFunSuite
 
     // Recommission
     decommissionTracker.removeNodeToDecommission("hostA")
-    assert(!decommissionTracker.isNodeDecommissioning("hostA"))
+    assert(!decommissionTracker.isNodePresentInDecommissionTracker("hostA"))
   }
 }

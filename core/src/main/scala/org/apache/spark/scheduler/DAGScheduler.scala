@@ -1635,23 +1635,22 @@ private[spark] class DAGScheduler(
           // decommission nodes
           if (!event.reason.asInstanceOf[FetchFailed].countTowardsDecommissionStageFailures) {
             // Ignore stage attempts due to fetch failed only
-            // once per attempt
+            // once per attempt due to nodes decommissioning event
             if (!failedStage.failedAttemptIds.contains(task.stageAttemptId)) {
-              failedStage.ignoredFailedStageAttempts += 1
+              failedStage.ignoredDecommissionFailedStage += 1
               DecommissionTracker.incrFetchFailIgnoreCnt()
-              failedStage.latestInfo.stageFailureIgnored(true)
 
               logInfo(s"""Ignoring stage failure due to fetch failed from the decommissioned""" +
                 s""" node : {"stage":"$failedStage","attempt":"${task.stageAttemptId}",""" +
-                s""""totalIgnoredAttempts":"${failedStage.ignoredFailedStageAttempts}",""" +
+                s""""totalIgnoredAttempts":"${failedStage.ignoredDecommissionFailedStage}",""" +
                 s""""node":"$bmAddress"}""")
             }
           }
           failedStage.failedAttemptIds.add(task.stageAttemptId)
           val shouldAbortStage = failedStage.failedAttemptIds.size >=
-              (maxConsecutiveStageAttempts + failedStage.ignoredFailedStageAttempts) ||
+              (maxConsecutiveStageAttempts + failedStage.ignoredDecommissionFailedStage) ||
               disallowStageRetryForTest ||
-              failedStage.ignoredFailedStageAttempts > maxIgnoredFailedStageAttempts
+              failedStage.ignoredDecommissionFailedStage > maxIgnoredFailedStageAttempts
 
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
@@ -1693,7 +1692,7 @@ private[spark] class DAGScheduler(
           }
 
           if (shouldAbortStage) {
-            if (failedStage.ignoredFailedStageAttempts > maxIgnoredFailedStageAttempts
+            if (failedStage.ignoredDecommissionFailedStage > maxIgnoredFailedStageAttempts
               && DecommissionTracker.isDecommissionEnabled(sc.getConf)) {
               DecommissionTracker.setFetchFailIgnoreCntThresholdFlag(true)
             }
@@ -1860,9 +1859,9 @@ private[spark] class DAGScheduler(
           // TODO Refactor the failure handling logic to combine similar code with that of
           // FetchFailed.
           val shouldAbortStage = failedStage.failedAttemptIds.size >=
-            (maxConsecutiveStageAttempts + failedStage.ignoredFailedStageAttempts) ||
+            (maxConsecutiveStageAttempts + failedStage.ignoredDecommissionFailedStage) ||
             disallowStageRetryForTest ||
-            failedStage.ignoredFailedStageAttempts > maxIgnoredFailedStageAttempts
+            failedStage.ignoredDecommissionFailedStage > maxIgnoredFailedStageAttempts
 
           if (shouldAbortStage) {
             val abortMessage = if (disallowStageRetryForTest) {

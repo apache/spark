@@ -59,7 +59,8 @@ private[spark] object NodeState extends Enumeration {
  * Node information used by CoarseGrainedSchedulerBackend.
  *
  * @param nodeState node state
- * @param terminationTime time at which node will terminate
+ * @param terminationTime Time at which node will terminate.
+ *   This optional and will be set only for node state DECOMMISSIONING
  */
 private[spark] case class NodeInfo(nodeState: NodeState.Value, terminationTime: Option[Long])
     extends Serializable {
