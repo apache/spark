@@ -630,7 +630,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
           format.toString,
           zoneId,
           legacyFormat = SIMPLE_DATE_FORMAT,
-          isParsing = false)
+          needVarLengthSecondFraction = false)
       }
     } else None
   }
@@ -641,7 +641,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
         format.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        isParsing = false)
+        needVarLengthSecondFraction = false)
     } else {
       formatter.get
     }
@@ -780,7 +780,7 @@ abstract class ToTimestamp
         constFormat.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        isParsing = true)
+        needVarLengthSecondFraction = true)
     } catch {
       case NonFatal(_) => null
     }
@@ -818,7 +818,7 @@ abstract class ToTimestamp
                 formatString,
                 zoneId,
                 legacyFormat = SIMPLE_DATE_FORMAT,
-                isParsing = true)
+                needVarLengthSecondFraction = true)
                 .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case e: SparkUpgradeException => throw e
@@ -958,7 +958,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         constFormat.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        isParsing = false)
+        needVarLengthSecondFraction = false)
     } catch {
       case NonFatal(_) => null
     }
@@ -989,7 +989,8 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
                 f.toString,
                 zoneId,
                 legacyFormat = SIMPLE_DATE_FORMAT,
-                isParsing = false).format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
+                needVarLengthSecondFraction = false)
+                .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
           }

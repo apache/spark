@@ -54,9 +54,9 @@ trait DateTimeFormatterHelper {
   protected def getOrCreateFormatter(
       pattern: String,
       locale: Locale,
-      isParsing: Boolean = false): DateTimeFormatter = {
+      needVarLengthSecondFraction: Boolean = false): DateTimeFormatter = {
     val newPattern = DateTimeUtils.convertIncompatiblePattern(pattern)
-    val useVarLen = isParsing && newPattern.split("'").zipWithIndex
+    val useVarLen = needVarLengthSecondFraction && newPattern.split("'").zipWithIndex
       .exists { case (p, idx) => idx % 2 == 0 && p.contains('S') }
     val key = (newPattern, locale, useVarLen)
     var formatter = cache.getIfPresent(key)
@@ -125,7 +125,7 @@ private object DateTimeFormatterHelper {
             case extractor(prefix, secondFraction, suffix) =>
               builder.appendPattern(prefix)
               if (secondFraction.nonEmpty) {
-                builder.appendFraction(ChronoField.NANO_OF_SECOND, 0, secondFraction.length, false)
+                builder.appendFraction(ChronoField.NANO_OF_SECOND, 1, secondFraction.length, false)
               }
               rest = suffix
             case _ => // never reach

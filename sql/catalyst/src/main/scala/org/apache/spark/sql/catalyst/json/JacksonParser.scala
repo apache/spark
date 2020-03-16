@@ -61,7 +61,7 @@ class JacksonParser(
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true)
+    needVarLengthSecondFraction = true)
   private val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
