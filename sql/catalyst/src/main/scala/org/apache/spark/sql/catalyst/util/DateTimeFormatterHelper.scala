@@ -128,7 +128,7 @@ private object DateTimeFormatterHelper {
                 builder.appendFraction(ChronoField.NANO_OF_SECOND, 1, secondFraction.length, false)
               }
               rest = suffix
-            case _ => // never reach
+            case _ => throw new IllegalArgumentException(s"Unrecognized datetime pattern: $pattern")
           }
         }
       case (patternPart, _) => builder.appendLiteral(patternPart)
