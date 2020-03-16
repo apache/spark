@@ -116,17 +116,21 @@ private object DateTimeFormatterHelper {
   def appendPattern(
       pattern: String,
       builder: DateTimeFormatterBuilder): DateTimeFormatterBuilder = {
-    var rest = pattern
-    while (rest.nonEmpty) {
-      rest match {
-        case extractor(prefix, sss, suffix) =>
-          builder.appendPattern(prefix)
-          if (sss.nonEmpty) {
-            builder.appendFraction(ChronoField.NANO_OF_SECOND, 0, sss.length, false)
+    pattern.split("'").zipWithIndex.foreach {
+      case (pattenPart, idx) if idx % 2 == 0 =>
+        var rest = pattenPart
+        while (rest.nonEmpty) {
+          rest match {
+            case extractor(prefix, sss, suffix) =>
+              builder.appendPattern(prefix)
+              if (sss.nonEmpty) {
+                builder.appendFraction(ChronoField.NANO_OF_SECOND, 0, sss.length, false)
+              }
+              rest = suffix
+            case _ => // never reach
           }
-          rest = suffix
-        case _ => // never reach
-      }
+        }
+      case (patternPart, _) => builder.appendLiteral(patternPart)
     }
     builder
   }
