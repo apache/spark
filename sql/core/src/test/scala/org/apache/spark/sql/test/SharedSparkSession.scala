@@ -77,8 +77,6 @@ trait SharedSparkSessionBase
       conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
   }
 
-  protected val doInitializeSession = true
-
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
    *
@@ -117,29 +115,11 @@ trait SharedSparkSessionBase
     }
   }
 
-  protected def deInitializeSession(): Unit = {
-    try {
-      if (_spark != null) {
-        try {
-          _spark.sessionState.catalog.reset()
-        } finally {
-          _spark.stop()
-          _spark = null
-        }
-      }
-    } finally {
-      SparkSession.clearActiveSession()
-      SparkSession.clearDefaultSession()
-    }
-  }
-
   /**
    * Make sure the [[TestSparkSession]] is initialized before any tests are run.
    */
   protected override def beforeAll(): Unit = {
-    if (doInitializeSession) {
-      initializeSession()
-    }
+    initializeSession()
 
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()
@@ -152,7 +132,19 @@ trait SharedSparkSessionBase
     try {
       super.afterAll()
     } finally {
-      deInitializeSession()
+      try {
+        if (_spark != null) {
+          try {
+            _spark.sessionState.catalog.reset()
+          } finally {
+            _spark.stop()
+            _spark = null
+          }
+        }
+      } finally {
+        SparkSession.clearActiveSession()
+        SparkSession.clearDefaultSession()
+      }
     }
   }
 

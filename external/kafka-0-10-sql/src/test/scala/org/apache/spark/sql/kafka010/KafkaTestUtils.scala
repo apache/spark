@@ -698,7 +698,3 @@ class KafkaTestUtils(
     }
   }
 }
-
-object KafkaTestUtils {
-  var c = 0
-}
