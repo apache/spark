@@ -95,6 +95,12 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       SQLConf.ParquetOutputTimestampType.withName(configuration.get(key))
     }
 
+    this.rebaseDateTime = {
+      val key = SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key
+      assert(configuration.get(key) != null)
+      configuration.get(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key).toBoolean
+    }
+
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter).toArray[ValueWriter]
 
     val messageType = new SparkToParquetSchemaConverter(configuration).convert(schema)
@@ -109,12 +115,6 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
          |and corresponding Parquet message type:
          |$messageType
        """.stripMargin)
-
-    this.rebaseDateTime = {
-      val key = SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key
-      assert(configuration.get(key) != null)
-      configuration.get(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key).toBoolean
-    }
 
     new WriteContext(messageType, metadata)
   }
