@@ -30,7 +30,7 @@ import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTree
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private[r] class DecisionTreeRegressorWrapper private (
+private[r] class DecisionTreeRegressionWrapper private (
   val pipeline: PipelineModel,
   val formula: String,
   val features: Array[String]) extends MLWritable {
@@ -49,10 +49,10 @@ private[r] class DecisionTreeRegressorWrapper private (
   }
 
   override def write: MLWriter = new
-      DecisionTreeRegressorWrapper.DecisionTreeRegressorWrapperWriter(this)
+      DecisionTreeRegressionWrapper.DecisionTreeRegressionWrapperWriter(this)
 }
 
-private[r] object DecisionTreeRegressorWrapper extends MLReadable[DecisionTreeRegressorWrapper] {
+private[r] object DecisionTreeRegressionWrapper extends MLReadable[DecisionTreeRegressionWrapper] {
   def fit(  // scalastyle:ignore
       data: DataFrame,
       formula: String,
@@ -64,7 +64,7 @@ private[r] object DecisionTreeRegressorWrapper extends MLReadable[DecisionTreeRe
       checkpointInterval: Int,
       seed: String,
       maxMemoryInMB: Int,
-      cacheNodeIds: Boolean): DecisionTreeRegressorWrapper = {
+      cacheNodeIds: Boolean): DecisionTreeRegressionWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
@@ -94,14 +94,14 @@ private[r] object DecisionTreeRegressorWrapper extends MLReadable[DecisionTreeRe
       .setStages(Array(rFormulaModel, dtr))
       .fit(data)
 
-    new DecisionTreeRegressorWrapper(pipeline, formula, features)
+    new DecisionTreeRegressionWrapper(pipeline, formula, features)
   }
 
-  override def read: MLReader[DecisionTreeRegressorWrapper] = new DecisionTreeRegressorWrapperReader
+  override def read: MLReader[DecisionTreeRegressionWrapper] = new DecisionTreeRegressionWrapperReader
 
-  override def load(path: String): DecisionTreeRegressorWrapper = super.load(path)
+  override def load(path: String): DecisionTreeRegressionWrapper = super.load(path)
 
-  class DecisionTreeRegressorWrapperWriter(instance: DecisionTreeRegressorWrapper)
+  class DecisionTreeRegressionWrapperWriter(instance: DecisionTreeRegressionWrapper)
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
@@ -118,9 +118,9 @@ private[r] object DecisionTreeRegressorWrapper extends MLReadable[DecisionTreeRe
     }
   }
 
-  class DecisionTreeRegressorWrapperReader extends MLReader[DecisionTreeRegressorWrapper] {
+  class DecisionTreeRegressionWrapperReader extends MLReader[DecisionTreeRegressionWrapper] {
 
-    override def load(path: String): DecisionTreeRegressorWrapper = {
+    override def load(path: String): DecisionTreeRegressionWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
@@ -131,7 +131,7 @@ private[r] object DecisionTreeRegressorWrapper extends MLReadable[DecisionTreeRe
       val formula = (rMetadata \ "formula").extract[String]
       val features = (rMetadata \ "features").extract[Array[String]]
 
-      new DecisionTreeRegressorWrapper(pipeline, formula, features)
+      new DecisionTreeRegressionWrapper(pipeline, formula, features)
     }
   }
 }

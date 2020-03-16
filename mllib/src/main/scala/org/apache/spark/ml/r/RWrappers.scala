@@ -60,8 +60,8 @@ private[r] object RWrappers extends MLReader[Object] {
         RandomForestRegressionWrapper.load(path)
       case "org.apache.spark.ml.r.RandomForestClassificationWrapper" =>
         RandomForestClassificationWrapper.load(path)
-      case "org.apache.spark.ml.r.DecisionTreeRegressorWrapper" =>
-        DecisionTreeRegressorWrapper.load(path)
+      case "org.apache.spark.ml.r.DecisionTreeRegressionWrapper" =>
+        DecisionTreeRegressionWrapper.load(path)
       case "org.apache.spark.ml.r.DecisionTreeClassificationWrapper" =>
         DecisionTreeClassificationWrapper.load(path)
       case "org.apache.spark.ml.r.GBTRegressionWrapper" =>
