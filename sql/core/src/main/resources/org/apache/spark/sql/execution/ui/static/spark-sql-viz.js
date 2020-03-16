@@ -176,8 +176,9 @@ function setupForAdditionalMetrics() {
                 thisD3Node.text(newTexts[1]);
                 thisD3Node.append("tspan").attr("class", "stageId-and-taskId-metrics").text(newTexts[2]);
                 $(this).append(newTexts[3]);
+            } else {
+                return originalText;
             }
-            else { return originalText; }
         });
 
     var checkboxNode = $("#stageId-and-taskId-checkbox");
