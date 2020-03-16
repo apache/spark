@@ -33,6 +33,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.QueryExecutionListener
 
+private case class Person(age: Int)
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -550,5 +551,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       spark.sql("SELECT CAST(1)")
     }
     assert(e.getMessage.contains("Invalid arguments for function cast"))
+  }
+
+  test("SPARK-30127: Support input case class in typed Scala UDF") {
+    val f = (p: Person) => p.age
+    val myUdf = udf(f)
+    val df = Seq(("Jack", Person(50))).toDF("name", "age")
+    checkAnswer(df.select(myUdf(Column("age"))), Row(50) :: Nil)
   }
 }

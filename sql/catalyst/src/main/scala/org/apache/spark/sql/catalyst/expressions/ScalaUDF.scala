@@ -49,6 +49,7 @@ case class ScalaUDF(
     dataType: DataType,
     children: Seq[Expression],
     inputPrimitives: Seq[Boolean],
+    inputCaseClass: Seq[Option[Class[_]]] = Nil,
     inputTypes: Seq[AbstractDataType] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,

@@ -611,6 +611,15 @@ object ScalaReflection extends ScalaReflection {
     }
   }
 
+  def getClassForCaseClass[T: TypeTag]: Option[Class[_]] = {
+    val tpe = localTypeOf[T]
+    if (isSubtype(tpe.dealias, localTypeOf[Product])) {
+      Some(getClassFromType(tpe))
+    } else {
+      None
+    }
+  }
+
   /*
    * Retrieves the runtime class corresponding to the provided type.
    */
