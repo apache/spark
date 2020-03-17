@@ -2038,60 +2038,32 @@ case class Epoch(child: Expression, timeZoneId: Option[String] = None)
 
 object DatePart {
 
-  def parseExtractField(extractField: String, source: Expression): Expression = {
-    val ef = extractField
-    val dt = source.dataType
-    (dt, ef) match {
-      case (_, null) => Literal(null, DoubleType)
-      case (CalendarIntervalType, "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS") =>
-        ExtractIntervalMillenniums(source)
-      case (_, "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS") => Millennium(source)
-      case (CalendarIntervalType, "CENTURY" | "CENTURIES" | "C" | "CENT") =>
-        ExtractIntervalCenturies(source)
-      case (_, "CENTURY" | "CENTURIES" | "C" | "CENT") => Century(source)
-      case (CalendarIntervalType, "DECADE" | "DECADES" | "DEC" | "DECS") =>
-        ExtractIntervalDecades(source)
-      case (_, "DECADE" | "DECADES" | "DEC" | "DECS") => Decade(source)
-      case (CalendarIntervalType, "YEAR" | "Y" | "YEARS" | "YR" | "YRS") =>
-        ExtractIntervalYears(source)
-      case (_, "YEAR" | "Y" | "YEARS" | "YR" | "YRS") => Year(source)
-      case (_, "ISOYEAR") => IsoYear(source)
-      case (CalendarIntervalType, "QUARTER" | "QTR") => ExtractIntervalQuarters(source)
-      case (_, "QUARTER" | "QTR") => Quarter(source)
-      case (CalendarIntervalType, "MONTH" | "MON" | "MONS" | "MONTHS") =>
-        ExtractIntervalMonths(source)
-      case (_, "MONTH" | "MON" | "MONS" | "MONTHS") => Month(source)
-      case (_, "WEEK" | "W" | "WEEKS") => WeekOfYear(source)
-      case (CalendarIntervalType, "DAY" | "D" | "DAYS") => ExtractIntervalDays(source)
-      case (_, "DAY" | "D" | "DAYS") => DayOfMonth(source)
-      case (_, "DAYOFWEEK") => DayOfWeek(source)
-      case (_, "DOW") => Subtract(DayOfWeek(source), Literal(1))
-      case (_, "ISODOW") => Add(WeekDay(source), Literal(1))
-      case (_, "DOY") => DayOfYear(source)
-      case (CalendarIntervalType, "HOUR" | "H" | "HOURS" | "HR" | "HRS") =>
-        ExtractIntervalHours(source)
-      case (_, "HOUR" | "H" | "HOURS" | "HR" | "HRS") => Hour(source)
-      case (CalendarIntervalType, "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES") =>
-        ExtractIntervalMinutes(source)
-      case (_, "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES") => Minute(source)
-      case (CalendarIntervalType, "SECOND" | "S" | "SEC" | "SECONDS" | "SECS") =>
-        ExtractIntervalSeconds(source)
-      case (_, "SECOND" | "S" | "SEC" | "SECONDS" | "SECS") => SecondWithFraction(source)
-      case (CalendarIntervalType,
-          "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS") =>
-        ExtractIntervalMilliseconds(source)
-      case (_, "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS") =>
-        Milliseconds(source)
-      case (CalendarIntervalType,
-          "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US") =>
-        ExtractIntervalMicroseconds(source)
-      case (_, "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US") =>
-        Microseconds(source)
-      case (CalendarIntervalType, "EPOCH") => ExtractIntervalEpoch(source)
-      case (_, "EPOCH") => Epoch(source)
-      case _ => throw new AnalysisException(
-        s"Extract '$ef' from ${dt.catalogString} type are currently not supported")
-    }
+  def parseExtractField(
+      extractField: String,
+      source: Expression,
+      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
+    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
+    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
+    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
+    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
+    case "ISOYEAR" => IsoYear(source)
+    case "QUARTER" | "QTR" => Quarter(source)
+    case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
+    case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
+    case "DAY" | "D" | "DAYS" => DayOfMonth(source)
+    case "DAYOFWEEK" => DayOfWeek(source)
+    case "DOW" => Subtract(DayOfWeek(source), Literal(1))
+    case "ISODOW" => Add(WeekDay(source), Literal(1))
+    case "DOY" => DayOfYear(source)
+    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
+    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
+    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondWithFraction(source)
+    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
+      Milliseconds(source)
+    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
+      Microseconds(source)
+    case "EPOCH" => Epoch(source)
+    case _ => errorHandleFunc
   }
 }
 
@@ -2161,9 +2133,22 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
         throw new AnalysisException("The field parameter needs to be a foldable string value.")
       }
 
-      val fieldStr =
-        Option(field.eval()).map(_.toString.toUpperCase(Locale.ROOT)).orNull
-      DatePart.parseExtractField(fieldStr, source)
+      val fieldEval = field.eval()
+      if (fieldEval == null) {
+        Literal(null, DoubleType)
+      } else {
+        val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
+        val errMsg = s"Literals of type '$fieldStr' are currently not supported " +
+          s"for the ${source.dataType.catalogString} type."
+        if (source.dataType == CalendarIntervalType) {
+          ExtractIntervalPart.parseExtractField(
+            fieldStr,
+            source,
+            throw new AnalysisException(errMsg))
+        } else {
+          DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
+        }
+      }
     })
   }
 
