@@ -180,33 +180,6 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 private[hive] trait HiveInspectors {
 
-  private final val JULIAN_CUTOVER_DAY =
-    rebaseGregorianToJulianDays(DateTimeUtils.GREGORIAN_CUTOVER_DAY.toInt)
-
-  private def rebaseJulianToGregorianDays(daysSinceEpoch: Int): Int = {
-    val localDate = LocalDate.ofEpochDay(daysSinceEpoch)
-    val utcCal = new Calendar.Builder()
-      .setCalendarType("gregory")
-      .setTimeZone(DateTimeUtils.getTimeZone("UTC"))
-      .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
-      .build()
-    Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, DateTimeConstants.MILLIS_PER_DAY))
-  }
-
-  private def rebaseGregorianToJulianDays(daysSinceEpoch: Int): Int = {
-    val millis = Math.multiplyExact(daysSinceEpoch, DateTimeConstants.MILLIS_PER_DAY)
-    val utcCal = new Calendar.Builder()
-      .setCalendarType("gregory")
-      .setTimeZone(DateTimeUtils.getTimeZone("UTC"))
-      .setInstant(millis)
-      .build()
-    val localDate = LocalDate.of(
-      utcCal.get(Calendar.YEAR),
-      utcCal.get(Calendar.MONTH) + 1,
-      utcCal.get(Calendar.DAY_OF_MONTH))
-    Math.toIntExact(localDate.toEpochDay)
-  }
-
   def javaTypeToDataType(clz: Type): DataType = clz match {
     // writable
     case c: Class[_] if c == classOf[hadoopIo.DoubleWritable] => DoubleType
