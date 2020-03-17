@@ -31,7 +31,7 @@ import org.apache.spark.ml.stat.{FValueTest, SelectionTestResult}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
@@ -200,10 +200,6 @@ final class FValueSelector @Since("3.1.0") (override val uid: String)
   @Since("3.1.0")
   override def fit(dataset: Dataset[_]): FValueSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
-    }
 
     val testResult = FValueTest.testRegression(dataset, getFeaturesCol, getLabelCol)
       .zipWithIndex
@@ -227,7 +223,8 @@ final class FValueSelector @Since("3.1.0") (override val uid: String)
         val selected = tempRes
           .zipWithIndex
           .filter { case ((res, _), index) =>
-            res.pValue <= getFdr * (index + 1) / testResult.length }
+            res.pValue <= getFdr * (index + 1) / testResult.length
+          }
         if (selected.isEmpty) {
           Array.empty[(SelectionTestResult, Int)]
         } else {
