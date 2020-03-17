@@ -99,9 +99,6 @@ class ParquetWriteBuilder(
         s"Set Parquet option ${ParquetOutputFormat.JOB_SUMMARY_LEVEL} to NONE.")
     }
 
-    conf.set(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key,
-      sqlConf.parquetRebaseDateTimeEnabled.toString)
-
     new OutputWriterFactory {
       override def newInstance(
           path: String,
