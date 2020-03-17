@@ -2154,8 +2154,8 @@ object SQLConf {
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
-    .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
-      "The size function returns null for null input if the flag is disabled.")
+    .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
+      "null. Otherwise, it returns -1, which was inherited from Hive.")
     .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
