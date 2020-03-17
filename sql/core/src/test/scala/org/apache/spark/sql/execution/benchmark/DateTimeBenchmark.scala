@@ -114,7 +114,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
     }
     runBenchmark("Parsing") {
       val n = 1000000
-      val timestampStrExpr = "concat('2019-01-27 11:02:01.', rpad(mod(id, 1000), 3, '0'))"
+      val timestampStrExpr = "concat('2019-01-27 11:02:01.', cast(mod(id, 1000) as string))"
       val pattern = "'yyyy-MM-dd HH:mm:ss.SSS'"
       run(n, "to timestamp str", timestampStrExpr)
       run(n, "to_timestamp", s"to_timestamp($timestampStrExpr, $pattern)")

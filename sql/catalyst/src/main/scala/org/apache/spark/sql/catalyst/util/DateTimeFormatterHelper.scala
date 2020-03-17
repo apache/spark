@@ -51,12 +51,16 @@ trait DateTimeFormatterHelper {
   // In this way, synchronised is intentionally omitted in this method to make parallel calls
   // less synchronised.
   // The Cache.get method is not used here to avoid creation of additional instances of Callable.
-  protected def getOrCreateFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
+  protected def getOrCreateFormatter(
+      pattern: String,
+      locale: Locale,
+      needVarLengthSecondFraction: Boolean = false): DateTimeFormatter = {
     val newPattern = DateTimeUtils.convertIncompatiblePattern(pattern)
-    val key = (newPattern, locale)
+    val useVarLen = needVarLengthSecondFraction && newPattern.contains('S')
+    val key = (newPattern, locale, useVarLen)
     var formatter = cache.getIfPresent(key)
     if (formatter == null) {
-      formatter = buildFormatter(newPattern, locale)
+      formatter = buildFormatter(newPattern, locale, useVarLen)
       cache.put(key, formatter)
     }
     formatter
@@ -87,7 +91,9 @@ trait DateTimeFormatterHelper {
 private object DateTimeFormatterHelper {
   val cache = CacheBuilder.newBuilder()
     .maximumSize(128)
-    .build[(String, Locale), DateTimeFormatter]()
+    .build[(String, Locale, Boolean), DateTimeFormatter]()
+
+  final val extractor = "^([^S]*)(S*)(.*)$".r
 
   def createBuilder(): DateTimeFormatterBuilder = {
     new DateTimeFormatterBuilder().parseCaseInsensitive()
@@ -104,8 +110,40 @@ private object DateTimeFormatterHelper {
       .withResolverStyle(ResolverStyle.STRICT)
   }
 
-  def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
-    val builder = createBuilder().appendPattern(pattern)
+  /**
+   * Building a formatter for parsing seconds fraction with variable length
+   */
+  def createBuilderWithVarLengthSecondFraction(
+      pattern: String): DateTimeFormatterBuilder = {
+    val builder = createBuilder()
+    pattern.split("'").zipWithIndex.foreach {
+      case (pattenPart, idx) if idx % 2 == 0 =>
+        var rest = pattenPart
+        while (rest.nonEmpty) {
+          rest match {
+            case extractor(prefix, secondFraction, suffix) =>
+              builder.appendPattern(prefix)
+              if (secondFraction.nonEmpty) {
+                builder.appendFraction(ChronoField.NANO_OF_SECOND, 1, secondFraction.length, false)
+              }
+              rest = suffix
+            case _ => throw new IllegalArgumentException(s"Unrecognized datetime pattern: $pattern")
+          }
+        }
+      case (patternPart, _) => builder.appendLiteral(patternPart)
+    }
+    builder
+  }
+
+  def buildFormatter(
+      pattern: String,
+      locale: Locale,
+      varLenEnabled: Boolean): DateTimeFormatter = {
+    val builder = if (varLenEnabled) {
+      createBuilderWithVarLengthSecondFraction(pattern)
+    } else {
+      createBuilder().appendPattern(pattern)
+    }
     toFormatter(builder, locale)
   }
 
