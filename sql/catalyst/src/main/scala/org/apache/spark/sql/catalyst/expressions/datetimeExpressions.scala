@@ -2132,7 +2132,6 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
       if (!field.foldable) {
         throw new AnalysisException("The field parameter needs to be a foldable string value.")
       }
-
       val fieldEval = field.eval()
       if (fieldEval == null) {
         Literal(null, DoubleType)
