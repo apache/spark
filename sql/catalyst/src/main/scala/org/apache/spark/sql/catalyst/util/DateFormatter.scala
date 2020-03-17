@@ -93,7 +93,8 @@ class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyD
 object DateFormatter {
   import LegacyDateFormats._
 
-  val defaultLocale: Locale = Locale.US
+  // Default locale should be obtained from JVM defaults.
+  val defaultLocale: Locale = Locale.getDefault
 
   val defaultPattern: String = "yyyy-MM-dd"
 
