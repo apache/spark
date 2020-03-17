@@ -88,7 +88,7 @@ Note: Other versions of roxygen2 might work in SparkR documentation generation b
 To generate API docs for any language, you'll need to install these libraries:
 
 ```sh
-pip install -r ./docs/requirements.txt
+pip install -r ./dev/requirements.txt
 ```
 
 ## Generating the Documentation HTML

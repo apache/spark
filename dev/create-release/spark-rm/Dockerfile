@@ -33,7 +33,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
-COPY ./docs-requirements.txt /docs-requirements.txt
+COPY ./dev-requirements.txt /dev-requirements.txt
 ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 
 # Install extra needed repos and refresh.
@@ -61,7 +61,7 @@ RUN pyenv global 3.7.6
 RUN python --version
 RUN pip install --upgrade pip
 RUN pip --version
-RUN pip install -r docs-requirements.txt
+RUN pip install -r dev-requirements.txt
 
 ENV PATH "$PATH:/root/.rbenv/bin:/root/.rbenv/shims"
 RUN curl -fsSL https://github.com/rbenv/rbenv-installer/raw/108c12307621a0aa06f19799641848dde1987deb/bin/rbenv-installer | bash
