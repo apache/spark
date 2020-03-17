@@ -224,7 +224,8 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         val selected = tempRes
           .zipWithIndex
           .filter { case ((res, _), index) =>
-            res.pValue <= getFdr * (index + 1) / testResult.length }
+            res.pValue <= getFdr * (index + 1) / testResult.length
+          }
         if (selected.isEmpty) {
           Array.empty[(SelectionTestResult, Int)]
         } else {

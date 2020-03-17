@@ -158,7 +158,7 @@ object TypeCoercion {
       }
     case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
       findTypeFunc(kt1, kt2)
-        .filter { kt => !Cast.forceNullable(kt1, kt) && !Cast.forceNullable(kt2, kt) }
+        .filter { kt => Cast.canCastMapKeyNullSafe(kt1, kt) && Cast.canCastMapKeyNullSafe(kt2, kt) }
         .flatMap { kt =>
           findTypeFunc(vt1, vt2).map { vt =>
             MapType(kt, vt, valueContainsNull1 || valueContainsNull2 ||
