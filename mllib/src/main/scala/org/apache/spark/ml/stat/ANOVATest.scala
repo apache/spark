@@ -20,7 +20,6 @@ package org.apache.spark.ml.stat
 import org.apache.commons.math3.distribution.FDistribution
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.sql._
