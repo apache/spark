@@ -44,7 +44,8 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     DateTimeTestUtils.outstandingTimezonesIds.foreach { zoneId =>
       val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-        DateTimeUtils.getZoneId(zoneId))
+        DateTimeUtils.getZoneId(zoneId),
+        needVarLengthSecondFraction = true)
       val microsSinceEpoch = formatter.parse(localDate)
       assert(microsSinceEpoch === expectedMicros(zoneId))
     }
@@ -64,8 +65,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     DateTimeTestUtils.outstandingTimezonesIds.foreach { zoneId =>
       val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-        DateTimeUtils.getZoneId(zoneId),
-        needVarLengthSecondFraction = true)
+        DateTimeUtils.getZoneId(zoneId))
       val timestamp = formatter.format(microsSinceEpoch)
       assert(timestamp === expectedTimestamp(zoneId))
     }
