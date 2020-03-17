@@ -581,7 +581,7 @@ object ScalaReflection extends ScalaReflection {
    * Note that it only works for scala classes with primary constructor, and currently doesn't
    * support inner class.
    */
-  // FIXME(wuyi): test on inner class/repl
+  // FIXME(wuyi): support inner class
   def getConstructorParameters(cls: Class[_]): Seq[Class[_]] = {
     val m = runtimeMirror(cls.getClassLoader)
     val classSymbol = m.staticClass(cls.getName)
