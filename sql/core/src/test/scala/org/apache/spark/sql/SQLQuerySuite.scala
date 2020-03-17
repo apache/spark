@@ -3456,6 +3456,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       """.stripMargin)
     checkAnswer(df2, Row(1) :: Nil)
   }
+
+  test("SPARK-31166: UNION map<null, null> and other maps should not fail") {
+    checkAnswer(
+      sql("(SELECT map()) UNION ALL (SELECT map(1, 2))"),
+      Seq(Row(Map[Int, Int]()), Row(Map(1 -> 2))))
+  }
 }
 
 case class Foo(bar: Option[String])
