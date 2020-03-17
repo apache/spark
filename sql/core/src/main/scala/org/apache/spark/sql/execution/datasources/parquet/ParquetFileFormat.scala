@@ -136,10 +136,6 @@ class ParquetFileFormat
         s"Set Parquet option ${ParquetOutputFormat.JOB_SUMMARY_LEVEL} to NONE.")
     }
 
-    conf.set(
-      SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key,
-      sparkSession.sessionState.conf.parquetRebaseDateTimeEnabled.toString)
-
     new OutputWriterFactory {
       // This OutputWriterFactory instance is deserialized when writing Parquet files on the
       // executor side without constructing or deserializing ParquetFileFormat. Therefore, we hold
@@ -256,7 +252,6 @@ class ParquetFileFormat
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-    val rebaseDateTime = sqlConf.parquetRebaseDateTimeEnabled
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
@@ -317,10 +312,7 @@ class ParquetFileFormat
       val taskContext = Option(TaskContext.get())
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
-          convertTz.orNull,
-          enableOffHeapColumnVector && taskContext.isDefined,
-          capacity,
-          rebaseDateTime)
+          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
@@ -336,10 +328,7 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns InternalRow
-        val readSupport = new ParquetReadSupport(
-          convertTz,
-          enableVectorizedReader = false,
-          rebaseDateTime)
+        val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
           new ParquetRecordReader[InternalRow](readSupport, parquetFilter)

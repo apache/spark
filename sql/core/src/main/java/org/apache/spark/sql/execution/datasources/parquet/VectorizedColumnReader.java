@@ -37,6 +37,7 @@ import org.apache.parquet.schema.PrimitiveType;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
@@ -107,8 +108,7 @@ public class VectorizedColumnReader {
       ColumnDescriptor descriptor,
       OriginalType originalType,
       PageReader pageReader,
-      ZoneId convertTz,
-      boolean rebaseDateTime) throws IOException {
+      ZoneId convertTz) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
@@ -131,7 +131,7 @@ public class VectorizedColumnReader {
     if (totalValueCount == 0) {
       throw new IOException("totalValueCount == 0");
     }
-    this.rebaseDateTime = rebaseDateTime;
+    this.rebaseDateTime = SQLConf.get().parquetRebaseDateTimeEnabled();
   }
 
   /**

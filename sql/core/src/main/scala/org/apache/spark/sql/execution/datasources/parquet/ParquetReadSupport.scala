@@ -51,8 +51,7 @@ import org.apache.spark.sql.types._
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
 class ParquetReadSupport(val convertTz: Option[ZoneId],
-    enableVectorizedReader: Boolean,
-    rebaseDateTime: Boolean)
+    enableVectorizedReader: Boolean)
   extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
@@ -60,9 +59,7 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
     // used in the vectorized reader, where we get the convertTz value directly, and the value here
     // is ignored.
-    this(None,
-      enableVectorizedReader = true,
-      rebaseDateTime = SQLConf.get.parquetRebaseDateTimeEnabled)
+    this(None, enableVectorizedReader = true)
   }
 
   /**
@@ -112,7 +109,6 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
          |Catalyst requested schema:
          |${catalystRequestedSchema.treeString}
        """.stripMargin)
-
     new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
   }
 
@@ -131,8 +127,7 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
-      convertTz,
-      rebaseDateTime)
+      convertTz)
   }
 }
 

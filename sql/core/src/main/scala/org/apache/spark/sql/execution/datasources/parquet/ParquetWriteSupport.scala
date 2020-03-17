@@ -95,11 +95,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       SQLConf.ParquetOutputTimestampType.withName(configuration.get(key))
     }
 
-    this.rebaseDateTime = {
-      val key = SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key
-      assert(configuration.get(key) != null)
-      configuration.get(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key).toBoolean
-    }
+    this.rebaseDateTime = SQLConf.get.parquetRebaseDateTimeEnabled
 
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter).toArray[ValueWriter]
 

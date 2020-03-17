@@ -116,21 +116,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final MemoryMode MEMORY_MODE;
 
-  /**
-   * If true, rebase date/timestamp from a hybrid calendar (Julian + Gregorian) to
-   * Proleptic Gregorian calendar which is used by default since Spark 3.0, see SPARK-26651.
-   */
-  private boolean rebaseDateTime;
-
-  public VectorizedParquetRecordReader(
-      ZoneId convertTz,
-      boolean useOffHeap,
-      int capacity,
-      boolean rebaseDateTime) {
+  public VectorizedParquetRecordReader(ZoneId convertTz, boolean useOffHeap, int capacity) {
     this.convertTz = convertTz;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
-    this.rebaseDateTime = rebaseDateTime;
   }
 
   /**
@@ -320,7 +309,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
       columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
-        pages.getPageReader(columns.get(i)), convertTz, rebaseDateTime);
+        pages.getPageReader(columns.get(i)), convertTz);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

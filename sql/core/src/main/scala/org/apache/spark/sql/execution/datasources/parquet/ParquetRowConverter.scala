@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -120,16 +121,17 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  *        types should have been expanded.
  * @param convertTz the optional time zone to convert to for int96 data
  * @param updater   An updater which propagates converted field values to the parent container
- * @param rebaseDateTime Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
  */
 private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetToSparkSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
     convertTz: Option[ZoneId],
-    updater: ParentContainerUpdater,
-    rebaseDateTime: Boolean)
+    updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
+
+  // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
+  private val rebaseDateTime = SQLConf.get.parquetRebaseDateTimeEnabled
 
   assert(
     parquetType.getFieldCount <= catalystType.length,
@@ -376,7 +378,7 @@ private[parquet] class ParquetRowConverter(
           }
         }
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, convertTz, wrappedUpdater, rebaseDateTime)
+          schemaConverter, parquetType.asGroupType(), t, convertTz, wrappedUpdater)
 
       case t =>
         throw new RuntimeException(

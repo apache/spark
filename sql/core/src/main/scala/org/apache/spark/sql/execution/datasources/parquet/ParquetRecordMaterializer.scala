@@ -31,23 +31,16 @@ import org.apache.spark.sql.types.StructType
  * @param parquetSchema Parquet schema of the records to be read
  * @param catalystSchema Catalyst schema of the rows to be constructed
  * @param schemaConverter A Parquet-Catalyst schema converter that helps initializing row converters
- * @param rebaseDateTime Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
  */
 private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,
     catalystSchema: StructType,
     schemaConverter: ParquetToSparkSchemaConverter,
-    convertTz: Option[ZoneId],
-    rebaseDateTime: Boolean)
+    convertTz: Option[ZoneId])
   extends RecordMaterializer[InternalRow] {
 
-  private val rootConverter = new ParquetRowConverter(
-    schemaConverter,
-    parquetSchema,
-    catalystSchema,
-    convertTz,
-    NoopUpdater,
-    rebaseDateTime)
+  private val rootConverter =
+    new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, convertTz, NoopUpdater)
 
   override def getCurrentRecord: InternalRow = rootConverter.currentRecord
 
