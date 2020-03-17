@@ -32,6 +32,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.test.HiveTestJars
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -157,6 +158,17 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     } finally {
       process.destroy()
     }
+  }
+
+  test("Pick spark.sql.warehouse.dir first for Spark Cli if set") {
+    val sparkWareHouseDir = Utils.createTempDir()
+    new File(warehousePath, "metastore_db").delete()
+    runCliWithin(
+      1.minute,
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=$sparkWareHouseDir"))(
+      "desc database default;" -> sparkWareHouseDir.getAbsolutePath
+    )
+    sparkWareHouseDir.delete()
   }
 
   test("Simple commands") {
