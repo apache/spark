@@ -100,7 +100,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def getFilScan(plan: SparkPlan): FileSourceScanExec = {
+  private def getFileScan(plan: SparkPlan): FileSourceScanExec = {
     val fileScan = plan.collect { case f: FileSourceScanExec => f }
     assert(fileScan.nonEmpty, plan)
     fileScan.head
@@ -125,7 +125,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
       val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
-      val fileScan = getFilScan(plan)
+      val fileScan = getFileScan(plan)
 
       // if nothing should be pruned, skip the pruning test
       if (bucketValues.nonEmpty) {
@@ -302,7 +302,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
       val plan = bucketedDataFrame.queryExecution.executedPlan
-      val fileScan = getFilScan(plan)
+      val fileScan = getFileScan(plan)
 
       val emptyBuckets = fileScan.execute().mapPartitionsWithIndex { case (index, iter) =>
         // return indexes of empty partitions
@@ -779,11 +779,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
 
       val scanDF = spark.table("bucketed_table").select("j")
-      assert(!getFilScan(scanDF.queryExecution.executedPlan).bucketedScan)
+      assert(!getFileScan(scanDF.queryExecution.executedPlan).bucketedScan)
       checkAnswer(scanDF, df1.select("j"))
 
       val aggDF = spark.table("bucketed_table").groupBy("j").agg(max("k"))
-      assert(!getFilScan(aggDF.queryExecution.executedPlan).bucketedScan)
+      assert(!getFileScan(aggDF.queryExecution.executedPlan).bucketedScan)
       checkAnswer(aggDF, df1.groupBy("j").agg(max("k")))
     }
   }
