@@ -2768,7 +2768,7 @@ class Analyzer(
                   input
                 }
             }
-            // FIXME(wuyi): why applied 2 times?
+            // assign Nil inputCaseClass to avoid applying this rule for multiple times
             udf.copy(children = newInputs, inputCaseClass = Nil)
           } else {
             udf

@@ -35,6 +35,9 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType}
  *                        UDF return null if there is any null input value of these types. On the
  *                        other hand, Java UDFs can only have boxed types, thus this parameter will
  *                        always be all false.
+ * @param inputCaseClass  Includes the Class[_] of case classes from the input parameter.
+ *                        If the input parameter is not a case class, then, the corresponding value
+ *                        is None.
  * @param inputTypes  The expected input types of this UDF, used to perform type coercion. If we do
  *                    not want to perform coercion, simply use "Nil". Note that it would've been
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no

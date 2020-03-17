@@ -33,8 +33,6 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.QueryExecutionListener
 
-private case class Person(age: Int)
-
 private case class FunctionResult(f1: String, f2: String)
 
 class UDFSuite extends QueryTest with SharedSparkSession {
@@ -553,10 +551,31 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(e.getMessage.contains("Invalid arguments for function cast"))
   }
 
-  test("SPARK-30127: Support input case class in typed Scala UDF") {
-    val f = (p: Person) => p.age
+  test("only one case class parameter") {
+    val f = (d: TestData) => d.key * d.value.toInt
     val myUdf = udf(f)
-    val df = Seq(("Jack", Person(50))).toDF("name", "age")
-    checkAnswer(df.select(myUdf(Column("age"))), Row(50) :: Nil)
+    val df = Seq(("data", TestData(50, "2"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("one case class with primitive parameter") {
+    val f = (i: Int, p: TestData) => p.key * i
+    val myUdf = udf(f)
+    val df = Seq((2, TestData(50, "data"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("multiple case class parameters") {
+    val f = (d1: TestData, d2: TestData) => d1.key * d2.key
+    val myUdf = udf(f)
+    val df = Seq((TestData(10, "d1"), TestData(50, "d2"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(500) :: Nil)
+  }
+
+  test("input case class parameter and return case class ") {
+    val f = (d1: TestData) => TestData(d1.key * 2, "copy")
+    val myUdf = udf(f)
+    val df = Seq(("data", TestData(50, "d2"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(Row(100, "copy")) :: Nil)
   }
 }
