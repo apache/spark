@@ -30,15 +30,16 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
-
 
 /**
  * A class that holds all state shared across sessions in a given [[SQLContext]].
@@ -53,10 +54,10 @@ private[sql] class SharedState(
 
   SharedState.setFsUrlStreamHandlerFactory(sparkContext.conf)
 
-  SharedState.loadHiveConfFile(sparkContext.conf, sparkContext.hadoopConfiguration)
-
   // Load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
   // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
+  SharedState.loadHiveConfFile(sparkContext.conf, sparkContext.hadoopConfiguration)
+
   private val (conf, hadoopConf) = {
     val confClone = sparkContext.conf.clone()
     val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
