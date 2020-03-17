@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -100,6 +100,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  private def getFileScan(plan: SparkPlan): FileSourceScanExec = {
+    val fileScan = plan.collect { case f: FileSourceScanExec => f }
+    assert(fileScan.nonEmpty, plan)
+    fileScan.head
+  }
+
   // To verify if the bucket pruning works, this function checks two conditions:
   //   1) Check if the pruned buckets (before filtering) are empty.
   //   2) Verify the final result is the same as the expected one
@@ -119,8 +125,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
       val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
-      val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
-      assert(rdd.isDefined, plan)
+      val fileScan = getFileScan(plan)
 
       // if nothing should be pruned, skip the pruning test
       if (bucketValues.nonEmpty) {
@@ -128,7 +133,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         bucketValues.foreach { value =>
           matchedBuckets.set(BucketingUtils.getBucketIdFromValue(bucketColumn, numBuckets, value))
         }
-        val invalidBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+        val invalidBuckets = fileScan.execute().mapPartitionsWithIndex { case (index, iter) =>
           // return indexes of partitions that should have been pruned and are not empty
           if (!matchedBuckets.get(index % numBuckets) && iter.nonEmpty) {
             Iterator(index)
@@ -297,10 +302,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
       val plan = bucketedDataFrame.queryExecution.executedPlan
-      val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
-      assert(rdd.isDefined, plan)
+      val fileScan = getFileScan(plan)
 
-      val emptyBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+      val emptyBuckets = fileScan.execute().mapPartitionsWithIndex { case (index, iter) =>
         // return indexes of empty partitions
         if (iter.isEmpty) {
           Iterator(index)
@@ -774,10 +778,13 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
 
-      checkAnswer(spark.table("bucketed_table").select("j"), df1.select("j"))
+      val scanDF = spark.table("bucketed_table").select("j")
+      assert(!getFileScan(scanDF.queryExecution.executedPlan).bucketedScan)
+      checkAnswer(scanDF, df1.select("j"))
 
-      checkAnswer(spark.table("bucketed_table").groupBy("j").agg(max("k")),
-        df1.groupBy("j").agg(max("k")))
+      val aggDF = spark.table("bucketed_table").groupBy("j").agg(max("k"))
+      assert(!getFileScan(aggDF.queryExecution.executedPlan).bucketedScan)
+      checkAnswer(aggDF, df1.groupBy("j").agg(max("k")))
     }
   }
 
