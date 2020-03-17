@@ -6,92 +6,92 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 cast to timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to timestamp wholestage off                    221            232          16         45.3          22.1       1.0X
-cast to timestamp wholestage on                     213            256          71         46.9          21.3       1.0X
+cast to timestamp wholestage off                    217            225          10         46.0          21.7       1.0X
+cast to timestamp wholestage on                     195            224          35         51.2          19.5       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 year of timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-year of timestamp wholestage off                    863            961         139         11.6          86.3       1.0X
-year of timestamp wholestage on                     783            821          26         12.8          78.3       1.1X
+year of timestamp wholestage off                    735            739           5         13.6          73.5       1.0X
+year of timestamp wholestage on                     728            742          10         13.7          72.8       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 quarter of timestamp:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-quarter of timestamp wholestage off                1008           1013           7          9.9         100.8       1.0X
-quarter of timestamp wholestage on                  926            963          36         10.8          92.6       1.1X
+quarter of timestamp wholestage off                 940            941           2         10.6          94.0       1.0X
+quarter of timestamp wholestage on                  910            930          12         11.0          91.0       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 month of timestamp:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-month of timestamp wholestage off                   794            813          27         12.6          79.4       1.0X
-month of timestamp wholestage on                    737            758          23         13.6          73.7       1.1X
+month of timestamp wholestage off                   796            808          17         12.6          79.6       1.0X
+month of timestamp wholestage on                    688            706          11         14.5          68.8       1.2X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 weekofyear of timestamp:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-weekofyear of timestamp wholestage off             1063           1076          18          9.4         106.3       1.0X
-weekofyear of timestamp wholestage on              1070           1366         305          9.3         107.0       1.0X
+weekofyear of timestamp wholestage off             1013           1016           3          9.9         101.3       1.0X
+weekofyear of timestamp wholestage on               988           1011          18         10.1          98.8       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 day of timestamp:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-day of timestamp wholestage off                     847            854           9         11.8          84.7       1.0X
-day of timestamp wholestage on                      799            836          37         12.5          79.9       1.1X
+day of timestamp wholestage off                     686            698          17         14.6          68.6       1.0X
+day of timestamp wholestage on                      693            708          13         14.4          69.3       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 dayofyear of timestamp:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-dayofyear of timestamp wholestage off               816            830          20         12.2          81.6       1.0X
-dayofyear of timestamp wholestage on                856            925          62         11.7          85.6       1.0X
+dayofyear of timestamp wholestage off               711            716           7         14.1          71.1       1.0X
+dayofyear of timestamp wholestage on                713            723          12         14.0          71.3       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 dayofmonth of timestamp:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-dayofmonth of timestamp wholestage off             1150           1159          12          8.7         115.0       1.0X
-dayofmonth of timestamp wholestage on               945           1165         308         10.6          94.5       1.2X
+dayofmonth of timestamp wholestage off              706            726          28         14.2          70.6       1.0X
+dayofmonth of timestamp wholestage on               698            714          11         14.3          69.8       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 dayofweek of timestamp:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-dayofweek of timestamp wholestage off              1062           1074          16          9.4         106.2       1.0X
-dayofweek of timestamp wholestage on                942           1029          74         10.6          94.2       1.1X
+dayofweek of timestamp wholestage off               797            798           2         12.6          79.7       1.0X
+dayofweek of timestamp wholestage on                794            807          18         12.6          79.4       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 weekday of timestamp:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-weekday of timestamp wholestage off                 870            872           3         11.5          87.0       1.0X
-weekday of timestamp wholestage on                  821            855          21         12.2          82.1       1.1X
+weekday of timestamp wholestage off                 783            796          17         12.8          78.3       1.0X
+weekday of timestamp wholestage on                  759            778          21         13.2          75.9       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 hour of timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-hour of timestamp wholestage off                    578            582           5         17.3          57.8       1.0X
-hour of timestamp wholestage on                     533            544          14         18.8          53.3       1.1X
+hour of timestamp wholestage off                    573            575           2         17.5          57.3       1.0X
+hour of timestamp wholestage on                     512            522          16         19.5          51.2       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 minute of timestamp:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-minute of timestamp wholestage off                  611            613           3         16.4          61.1       1.0X
-minute of timestamp wholestage on                   551            557           8         18.2          55.1       1.1X
+minute of timestamp wholestage off                  550            555           7         18.2          55.0       1.0X
+minute of timestamp wholestage on                   507            527          21         19.7          50.7       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 second of timestamp:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-second of timestamp wholestage off                  705            716          16         14.2          70.5       1.0X
-second of timestamp wholestage on                   569            669          99         17.6          56.9       1.2X
+second of timestamp wholestage off                  562            587          35         17.8          56.2       1.0X
+second of timestamp wholestage on                   516            529          12         19.4          51.6       1.1X
 
 
 ================================================================================================
@@ -102,15 +102,15 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 current_date:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-current_date wholestage off                         177            177           0         56.6          17.7       1.0X
-current_date wholestage on                          164            180          13         60.9          16.4       1.1X
+current_date wholestage off                         161            164           4         61.9          16.1       1.0X
+current_date wholestage on                          163            170           8         61.2          16.3       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 current_timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-current_timestamp wholestage off                    182            182           1         55.1          18.2       1.0X
-current_timestamp wholestage on                     168            194          53         59.4          16.8       1.1X
+current_timestamp wholestage off                    174            177           4         57.5          17.4       1.0X
+current_timestamp wholestage on                     159            173          12         62.8          15.9       1.1X
 
 
 ================================================================================================
@@ -121,43 +121,43 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 cast to date:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to date wholestage off                         615            632          24         16.3          61.5       1.0X
-cast to date wholestage on                          596            660          40         16.8          59.6       1.0X
+cast to date wholestage off                         672            688          23         14.9          67.2       1.0X
+cast to date wholestage on                          592            605          10         16.9          59.2       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 last_day:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-last_day wholestage off                             717            728          16         13.9          71.7       1.0X
-last_day wholestage on                              764            834          42         13.1          76.4       0.9X
+last_day wholestage off                             806            809           4         12.4          80.6       1.0X
+last_day wholestage on                              700            713          14         14.3          70.0       1.2X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 next_day:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-next_day wholestage off                             677            677           0         14.8          67.7       1.0X
-next_day wholestage on                              645            796         140         15.5          64.5       1.1X
+next_day wholestage off                             639            683          63         15.7          63.9       1.0X
+next_day wholestage on                              628            640          15         15.9          62.8       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_add:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_add wholestage off                             637            663          37         15.7          63.7       1.0X
-date_add wholestage on                              659            675          16         15.2          65.9       1.0X
+date_add wholestage off                             688            695          10         14.5          68.8       1.0X
+date_add wholestage on                              588            603          13         17.0          58.8       1.2X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_sub:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_sub wholestage off                             630            682          73         15.9          63.0       1.0X
-date_sub wholestage on                              720            762          37         13.9          72.0       0.9X
+date_sub wholestage off                             588            600          18         17.0          58.8       1.0X
+date_sub wholestage on                              597            624          40         16.8          59.7       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 add_months:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-add_months wholestage off                          1064           1088          35          9.4         106.4       1.0X
-add_months wholestage on                            883            909          25         11.3          88.3       1.2X
+add_months wholestage off                           802            816          20         12.5          80.2       1.0X
+add_months wholestage on                            777            836          61         12.9          77.7       1.0X
 
 
 ================================================================================================
@@ -168,8 +168,8 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 format date:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-format date wholestage off                         3667           3854         265          2.7         366.7       1.0X
-format date wholestage on                          3355           3548         195          3.0         335.5       1.1X
+format date wholestage off                         3328           3635         435          3.0         332.8       1.0X
+format date wholestage on                          3335           3549         253          3.0         333.5       1.0X
 
 
 ================================================================================================
@@ -180,8 +180,8 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 from_unixtime:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-from_unixtime wholestage off                       4664           4704          57          2.1         466.4       1.0X
-from_unixtime wholestage on                        4596           4772         193          2.2         459.6       1.0X
+from_unixtime wholestage off                       4414           4548         189          2.3         441.4       1.0X
+from_unixtime wholestage on                        4455           4499          65          2.2         445.5       1.0X
 
 
 ================================================================================================
@@ -192,15 +192,15 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 from_utc_timestamp:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-from_utc_timestamp wholestage off                   810            819          13         12.3          81.0       1.0X
-from_utc_timestamp wholestage on                    795            814          16         12.6          79.5       1.0X
+from_utc_timestamp wholestage off                   781            790          13         12.8          78.1       1.0X
+from_utc_timestamp wholestage on                    819            823           5         12.2          81.9       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 to_utc_timestamp:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_utc_timestamp wholestage off                    1130           1146          22          8.8         113.0       1.0X
-to_utc_timestamp wholestage on                     1034           1063          40          9.7         103.4       1.1X
+to_utc_timestamp wholestage off                    1101           1108          10          9.1         110.1       1.0X
+to_utc_timestamp wholestage on                     1044           1055          10          9.6         104.4       1.1X
 
 
 ================================================================================================
@@ -211,29 +211,29 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 cast interval:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast interval wholestage off                        192            194           2         52.1          19.2       1.0X
-cast interval wholestage on                         172            180           5         58.2          17.2       1.1X
+cast interval wholestage off                        198            202           6         50.6          19.8       1.0X
+cast interval wholestage on                         181            193          14         55.2          18.1       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 datediff:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-datediff wholestage off                            1070           1082          17          9.3         107.0       1.0X
-datediff wholestage on                             1039           1059          13          9.6         103.9       1.0X
+datediff wholestage off                            1037           1043          10          9.6         103.7       1.0X
+datediff wholestage on                             1006           1037          21          9.9         100.6       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 months_between:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-months_between wholestage off                      3118           3137          27          3.2         311.8       1.0X
-months_between wholestage on                       3079           3122          48          3.2         307.9       1.0X
+months_between wholestage off                      2957           2972          21          3.4         295.7       1.0X
+months_between wholestage on                       2931           2952          16          3.4         293.1       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 window:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-window wholestage off                              1147           1157          14          0.9        1146.6       1.0X
-window wholestage on                              16698          17304         715          0.1       16698.2       0.1X
+window wholestage off                              1130           1147          24          0.9        1130.0       1.0X
+window wholestage on                              16253          17068         580          0.1       16253.2       0.1X
 
 
 ================================================================================================
@@ -244,134 +244,134 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc YEAR:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc YEAR wholestage off                     1478           1485           9          6.8         147.8       1.0X
-date_trunc YEAR wholestage on                      1458           1587         213          6.9         145.8       1.0X
+date_trunc YEAR wholestage off                     1361           1380          27          7.3         136.1       1.0X
+date_trunc YEAR wholestage on                      1346           1381          28          7.4         134.6       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc YYYY:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc YYYY wholestage off                     1467           1481          20          6.8         146.7       1.0X
-date_trunc YYYY wholestage on                      1457           1513          52          6.9         145.7       1.0X
+date_trunc YYYY wholestage off                     1352           1364          16          7.4         135.2       1.0X
+date_trunc YYYY wholestage on                      1391           1424          37          7.2         139.1       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc YY:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc YY wholestage off                       1551           1556           7          6.4         155.1       1.0X
-date_trunc YY wholestage on                        1468           1538          78          6.8         146.8       1.1X
+date_trunc YY wholestage off                       1346           1356          15          7.4         134.6       1.0X
+date_trunc YY wholestage on                        1355           1366           9          7.4         135.5       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc MON:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MON wholestage off                      1481           1493          16          6.8         148.1       1.0X
-date_trunc MON wholestage on                       1476           1501          28          6.8         147.6       1.0X
+date_trunc MON wholestage off                      1355           1365          15          7.4         135.5       1.0X
+date_trunc MON wholestage on                       1388           1457          78          7.2         138.8       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc MONTH:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MONTH wholestage off                    1470           1477          10          6.8         147.0       1.0X
-date_trunc MONTH wholestage on                     1449           1610         260          6.9         144.9       1.0X
+date_trunc MONTH wholestage off                    1336           1357          30          7.5         133.6       1.0X
+date_trunc MONTH wholestage on                     1361           1390          22          7.3         136.1       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc MM:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MM wholestage off                       1487           1495          12          6.7         148.7       1.0X
-date_trunc MM wholestage on                        1467           1489          17          6.8         146.7       1.0X
+date_trunc MM wholestage off                       1350           1361          16          7.4         135.0       1.0X
+date_trunc MM wholestage on                        1370           1384          13          7.3         137.0       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc DAY:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc DAY wholestage off                      1321           1328          10          7.6         132.1       1.0X
-date_trunc DAY wholestage on                       1279           1306          28          7.8         127.9       1.0X
+date_trunc DAY wholestage off                      1328           1361          46          7.5         132.8       1.0X
+date_trunc DAY wholestage on                       1356           1432          69          7.4         135.6       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc DD:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc DD wholestage off                       1366           1368           3          7.3         136.6       1.0X
-date_trunc DD wholestage on                        1297           1314          18          7.7         129.7       1.1X
+date_trunc DD wholestage off                       1403           1445          59          7.1         140.3       1.0X
+date_trunc DD wholestage on                        1359           1405          49          7.4         135.9       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc HOUR:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc HOUR wholestage off                     1338           1354          23          7.5         133.8       1.0X
-date_trunc HOUR wholestage on                      1403           1482          71          7.1         140.3       1.0X
+date_trunc HOUR wholestage off                     1447           1494          67          6.9         144.7       1.0X
+date_trunc HOUR wholestage on                      1387           1416          31          7.2         138.7       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc MINUTE:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MINUTE wholestage off                    241            242           2         41.5          24.1       1.0X
-date_trunc MINUTE wholestage on                     196            204           6         51.0          19.6       1.2X
+date_trunc MINUTE wholestage off                    206            215          13         48.5          20.6       1.0X
+date_trunc MINUTE wholestage on                     233            240           4         42.9          23.3       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc SECOND:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc SECOND wholestage off                    211            222          15         47.3          21.1       1.0X
-date_trunc SECOND wholestage on                     205            243          64         48.8          20.5       1.0X
+date_trunc SECOND wholestage off                    200            213          18         49.9          20.0       1.0X
+date_trunc SECOND wholestage on                     219            227           7         45.6          21.9       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc WEEK:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc WEEK wholestage off                     1492           1515          32          6.7         149.2       1.0X
-date_trunc WEEK wholestage on                      1465           1490          39          6.8         146.5       1.0X
+date_trunc WEEK wholestage off                     1287           1293           9          7.8         128.7       1.0X
+date_trunc WEEK wholestage on                      1310           1341          28          7.6         131.0       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 date_trunc QUARTER:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc QUARTER wholestage off                  1908           1982         104          5.2         190.8       1.0X
-date_trunc QUARTER wholestage on                   1879           2020          99          5.3         187.9       1.0X
+date_trunc QUARTER wholestage off                  1852           1880          39          5.4         185.2       1.0X
+date_trunc QUARTER wholestage on                   1857           1877          14          5.4         185.7       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 trunc year:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc year wholestage off                           326            419         132         30.7          32.6       1.0X
-trunc year wholestage on                            187            199           8         53.4          18.7       1.7X
+trunc year wholestage off                           172            178           9         58.2          17.2       1.0X
+trunc year wholestage on                            213            222           8         47.0          21.3       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 trunc yyyy:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc yyyy wholestage off                           194            194           0         51.6          19.4       1.0X
-trunc yyyy wholestage on                            192            207          10         52.1          19.2       1.0X
+trunc yyyy wholestage off                           175            182           9         57.1          17.5       1.0X
+trunc yyyy wholestage on                            224            233          12         44.7          22.4       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 trunc yy:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc yy wholestage off                             177            180           4         56.5          17.7       1.0X
-trunc yy wholestage on                              185            193           9         53.9          18.5       1.0X
+trunc yy wholestage off                             167            180          18         59.7          16.7       1.0X
+trunc yy wholestage on                              212            226           9         47.3          21.2       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 trunc mon:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc mon wholestage off                            208            210           3         48.0          20.8       1.0X
-trunc mon wholestage on                             195            204           8         51.3          19.5       1.1X
+trunc mon wholestage off                            175            175           1         57.2          17.5       1.0X
+trunc mon wholestage on                             219            241          17         45.7          21.9       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 trunc month:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc month wholestage off                          182            185           4         55.1          18.2       1.0X
-trunc month wholestage on                           185            222          70         54.0          18.5       1.0X
+trunc month wholestage off                          176            176           0         56.8          17.6       1.0X
+trunc month wholestage on                           220            226           6         45.4          22.0       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 trunc mm:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc mm wholestage off                             208            218          14         48.0          20.8       1.0X
-trunc mm wholestage on                              197            206          10         50.8          19.7       1.1X
+trunc mm wholestage off                             173            173           1         57.9          17.3       1.0X
+trunc mm wholestage on                              219            230           8         45.7          21.9       0.8X
 
 
 ================================================================================================
@@ -382,36 +382,36 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 to timestamp str:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to timestamp str wholestage off                     121            130          13          8.3         120.7       1.0X
-to timestamp str wholestage on                      128            134           6          7.8         128.4       0.9X
+to timestamp str wholestage off                      98            102           5         10.2          97.9       1.0X
+to timestamp str wholestage on                      102            112           5          9.8         102.5       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 to_timestamp:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_timestamp wholestage off                        1201           1272         100          0.8        1200.8       1.0X
-to_timestamp wholestage on                          973           1019          53          1.0         972.7       1.2X
+to_timestamp wholestage off                        1373           1380          11          0.7        1373.0       1.0X
+to_timestamp wholestage on                          928           1100         103          1.1         928.1       1.5X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 to_unix_timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_unix_timestamp wholestage off                   1002           1077         106          1.0        1001.8       1.0X
-to_unix_timestamp wholestage on                     988           1079         100          1.0         987.8       1.0X
+to_unix_timestamp wholestage off                   1416           1438          32          0.7        1416.0       1.0X
+to_unix_timestamp wholestage on                    1094           1261         194          0.9        1093.6       1.3X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 to date str:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to date str wholestage off                          157            165          12          6.4         157.2       1.0X
-to date str wholestage on                           137            140           3          7.3         137.0       1.1X
+to date str wholestage off                          120            123           5          8.3         120.0       1.0X
+to date str wholestage on                           142            148           6          7.0         142.1       0.8X
 
 Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 to_date:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_date wholestage off                             1597           1614          25          0.6        1597.0       1.0X
-to_date wholestage on                              1503           1573          58          0.7        1502.8       1.1X
+to_date wholestage off                             1661           1673          17          0.6        1661.0       1.0X
+to_date wholestage on                              1567           1617          55          0.6        1567.3       1.1X
 
 
 ================================================================================================
@@ -422,8 +422,8 @@ Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 To/from java.sql.Timestamp:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-From java.sql.Timestamp                             197            202           6         25.4          39.4       1.0X
-Collect longs                                       794            911         110          6.3         158.7       0.2X
-Collect timestamps                                 1030           1079          51          4.9         205.9       0.2X
+From java.sql.Timestamp                             216            234          16         23.1          43.2       1.0X
+Collect longs                                       913           1204         266          5.5         182.6       0.2X
+Collect timestamps                                 1392           1515         124          3.6         278.3       0.2X
 
 

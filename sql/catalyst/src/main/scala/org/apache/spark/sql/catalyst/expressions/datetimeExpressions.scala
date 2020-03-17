@@ -628,14 +628,22 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   @transient private lazy val formatter: Option[TimestampFormatter] = {
     if (right.foldable) {
       Option(right.eval()).map { format =>
-        TimestampFormatter(format.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+        TimestampFormatter(
+          format.toString,
+          zoneId,
+          legacyFormat = SIMPLE_DATE_FORMAT,
+          needVarLengthSecondFraction = false)
       }
     } else None
   }
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val tf = if (formatter.isEmpty) {
-      TimestampFormatter(format.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+      TimestampFormatter(
+        format.toString,
+        zoneId,
+        legacyFormat = SIMPLE_DATE_FORMAT,
+        needVarLengthSecondFraction = false)
     } else {
       formatter.get
     }
@@ -656,7 +664,8 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
         s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
             |  $format.toString(),
             |  $zid,
-            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT())
+            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+            |  false)
             |.format($timestamp))""".stripMargin
       })
     }
@@ -769,7 +778,11 @@ abstract class ToTimestamp
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+      TimestampFormatter(
+        constFormat.toString,
+        zoneId,
+        legacyFormat = SIMPLE_DATE_FORMAT,
+        needVarLengthSecondFraction = true)
     } catch {
       case NonFatal(_) => null
     }
@@ -803,7 +816,11 @@ abstract class ToTimestamp
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              TimestampFormatter(formatString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+              TimestampFormatter(
+                formatString,
+                zoneId,
+                legacyFormat = SIMPLE_DATE_FORMAT,
+                needVarLengthSecondFraction = true)
                 .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case e: SparkUpgradeException => throw e
@@ -852,7 +869,8 @@ abstract class ToTimestamp
               ${ev.value} = $tf$$.MODULE$$.apply(
                 $format.toString(),
                 $zid,
-                $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT())
+                $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+                true)
               .parse($string.toString()) / $downScaleFactor;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
@@ -938,7 +956,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+      TimestampFormatter(
+        constFormat.toString,
+        zoneId,
+        legacyFormat = SIMPLE_DATE_FORMAT,
+        needVarLengthSecondFraction = false)
     } catch {
       case NonFatal(_) => null
     }
@@ -965,7 +987,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         } else {
           try {
             UTF8String.fromString(
-              TimestampFormatter(f.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+              TimestampFormatter(
+                f.toString,
+                zoneId,
+                legacyFormat = SIMPLE_DATE_FORMAT,
+                needVarLengthSecondFraction = false)
                 .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
@@ -1003,7 +1029,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         s"""
         try {
           ${ev.value} = UTF8String.fromString(
-            $tf$$.MODULE$$.apply($f.toString(), $zid, $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT())
+            $tf$$.MODULE$$.apply($f.toString(), $zid, $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(), false)
               .format($seconds * 1000000L));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;
