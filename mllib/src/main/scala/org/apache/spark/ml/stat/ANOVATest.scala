@@ -80,51 +80,49 @@ object ANOVATest {
     SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
 
-    val labeledPointRdd = dataset.select(col(labelCol).cast("double"), col(featuresCol))
-      .as[(Double, Vector)]
-      .rdd.map { case (label, features) => LabeledPoint(label, features) }
-
     val numFeatures = MetadataUtils.getNumFeatures(dataset, featuresCol)
     val Row(numSamples: Long, numClasses: Long) =
       dataset.select(count(labelCol), countDistinct(labelCol)).head
 
-    labeledPointRdd.flatMap { case LabeledPoint(label, features) =>
-      features.iterator.map { case (col, value) =>
-        (col, (label, value, value * value))
-      }
+    dataset.select(col(labelCol).cast("double"), col(featuresCol))
+      .as[(Double, Vector)]
+      .rdd
+      .flatMap { case (label, features) =>
+        features.iterator.map { case (col, value) => (col, (label, value, value * value))}
     }.aggregateByKey[(Double, Double, OpenHashMap[Double, Double], OpenHashMap[Double, Long])](
       (0.0, 0.0, new OpenHashMap[Double, Double], new OpenHashMap[Double, Long]))(
       seqOp = {
         case (
-          (sum: Double, sumOfSq: Double, mapOfSumPerClass, mapOfCountPerClass),
+          // sums: mapOfSumPerClass (key: label, value: sum of features for each label)
+          // counts: mapOfCountPerClass key: label, value: count of features for each label
+          (sum: Double, sumOfSq: Double, sums, counts),
           (label, feature, featureSq)
          ) =>
-          mapOfSumPerClass.changeValue(label, feature, _ + feature)
-          mapOfCountPerClass.changeValue(label, 1L, _ + 1L)
-          (mapOfSumPerClass, mapOfCountPerClass)
-          (sum + feature, sumOfSq + featureSq, mapOfSumPerClass, mapOfCountPerClass)
+          sums.changeValue(label, feature, _ + feature)
+          counts.changeValue(label, 1L, _ + 1L)
+          (sum + feature, sumOfSq + featureSq, sums, counts)
       },
       combOp = {
         case (
-          (sum1, sumOfSq1, mapOfSumPerClass1, mapOfCountPerClass1),
-          (sum2, sumOfSq2, mapOfSumPerClass2, mapOfCountPerClass2)
+          (sum1, sumOfSq1, sums1, counts1),
+          (sum2, sumOfSq2, sums2, counts2)
         ) =>
-          mapOfSumPerClass2.foreach { case (v, w) =>
-            mapOfSumPerClass1.changeValue(v, w, _ + w)
+          sums2.foreach { case (v, w) =>
+            sums1.changeValue(v, w, _ + w)
           }
-          mapOfCountPerClass2.foreach { case (v, w) =>
-            mapOfCountPerClass1.changeValue(v, w, _ + w)
+          counts2.foreach { case (v, w) =>
+            counts1.changeValue(v, w, _ + w)
           }
-          (sum1 + sum2, sumOfSq1 + sumOfSq2, mapOfSumPerClass1, mapOfCountPerClass1)
+          (sum1 + sum2, sumOfSq1 + sumOfSq2, sums1, counts1)
       }
     ).map {
-      case (col, (sum, sumOfSq, mapOfSumPerClass, mapOfCountPerClass)) =>
+      case (col, (sum, sumOfSq, sums, counts)) =>
         // e.g. features are [3.3, 2.5, 1.0, 3.0, 2.0] and labels are [1, 2, 1, 3, 3]
         // sum: sum of all the features (3.3+2.5+1.0+3.0+2.0)
         // sumOfSq: sum of squares of all the features (3.3^2+2.5^2+1.0^2+3.0^2+2.0^2)
-        // mapOfSumPerClass key: label, value: sum of features for each label
+        // sums: mapOfSumPerClass (key: label, value: sum of features for each label)
         //                                         ( 1 -> 3.3 + 1.0, 2 -> 2.5, 3 -> 3.0 + 2.0 )
-        // mapOfCountPerClass key: label, value: count of features for each label
+        // counts: mapOfCountPerClass (key: label, value: count of features for each label)
         //                                         ( 1 -> 2, 2 -> 2, 3 -> 2 )
         // sqSum: square of sum of all data ((3.3+2.5+1.0+3.0+2.0)^2)
         val sqSum = sum * sum
@@ -133,16 +131,8 @@ object ANOVATest {
         // sumOfSqSumPerClass:
         //     sum( sq_sum_classes[k] / n_samples_per_class[k] for k in range(n_classes))
         //     e.g. ((3.3+1.0)^2 / 2 + 2.5^2 / 1 + (3.0+2.0)^2 / 2)
-        var sumOfSqSumPerClass = 0.0
-        val (keys1, values1) = mapOfSumPerClass.toSeq.sortBy(_._1).unzip
-        val keysArray1 = keys1.toArray
-        val valuesArray1 = values1.toArray
-        val (keys2, values2) = mapOfCountPerClass.toSeq.sortBy(_._1).unzip
-        val keysArray2 = keys2.toArray
-        val valuesArray2 = values2.toArray
-        for (i <- 0 until mapOfSumPerClass.size) {
-          sumOfSqSumPerClass += (valuesArray1(i) * valuesArray1(i))/ valuesArray2(i)
-        }
+        val sumOfSqSumPerClass = sums.iterator
+          .map {case (label, sum) => sum * sum / counts(label)}.sum
         // Sums of Squares Between
         val ssbn = sumOfSqSumPerClass - (sqSum / numSamples)
         // Sums of Squares Within
