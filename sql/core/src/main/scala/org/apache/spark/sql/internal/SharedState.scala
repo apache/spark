@@ -54,11 +54,10 @@ private[sql] class SharedState(
 
   SharedState.setFsUrlStreamHandlerFactory(sparkContext.conf)
 
-  // Load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
-  // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
-  SharedState.loadHiveConfFile(sparkContext.conf, sparkContext.hadoopConfiguration)
-
   private val (conf, hadoopConf) = {
+    // Load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
+    // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
+    SharedState.loadHiveConfFile(sparkContext.conf, sparkContext.hadoopConfiguration)
     val confClone = sparkContext.conf.clone()
     val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
     // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing

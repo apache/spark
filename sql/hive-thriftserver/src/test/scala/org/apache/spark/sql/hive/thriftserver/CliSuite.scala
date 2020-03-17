@@ -165,8 +165,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     new File(warehousePath, "metastore_db").delete()
     runCliWithin(
       1.minute,
-      Seq("--conf", s"""${StaticSQLConf.WAREHOUSE_PATH.key}=$sparkWareHouseDir"""))(
-      """desc database default;""" -> sparkWareHouseDir.getAbsolutePath
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=$sparkWareHouseDir"))(
+      "desc database default;" -> sparkWareHouseDir.getAbsolutePath
     )
     sparkWareHouseDir.delete()
   }
