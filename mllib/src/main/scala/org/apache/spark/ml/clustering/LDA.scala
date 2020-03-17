@@ -26,7 +26,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg._
@@ -762,8 +762,6 @@ class DistributedLDAModel private[ml] (
   private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
 
   /**
-   * :: DeveloperApi ::
-   *
    * If using checkpointing and `LDA.keepLastCheckpoint` is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
@@ -773,18 +771,14 @@ class DistributedLDAModel private[ml] (
    *
    * @return  Checkpoint files from training
    */
-  @DeveloperApi
   @Since("2.0.0")
   def getCheckpointFiles: Array[String] = _checkpointFiles
 
   /**
-   * :: DeveloperApi ::
-   *
    * Remove any remaining checkpoint files from training.
    *
    * @see [[getCheckpointFiles]]
    */
-  @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
     val hadoopConf = sparkSession.sparkContext.hadoopConfiguration

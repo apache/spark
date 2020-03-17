@@ -584,6 +584,59 @@ def nanvl(col1, col2):
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
+@since(3.1)
+def percentile_approx(col, percentage, accuracy=10000):
+    """Returns the approximate percentile value of numeric column col at the given percentage.
+    The value of percentage must be between 0.0 and 1.0.
+
+    The accuracy parameter (default: 10000)
+    is a positive numeric literal which controls approximation accuracy at the cost of memory.
+    Higher value of accuracy yields better accuracy, 1.0/accuracy is the relative error
+    of the approximation.
+
+    When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
+    In this case, returns the approximate percentile array of column col
+    at the given percentage array.
+
+    >>> key = (col("id") % 3).alias("key")
+    >>> value = (randn(42) + key * 10).alias("value")
+    >>> df = spark.range(0, 1000, 1, 1).select(key, value)
+    >>> df.select(
+    ...     percentile_approx("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles")
+    ... ).printSchema()
+    root
+     |-- quantiles: array (nullable = true)
+     |    |-- element: double (containsNull = false)
+
+    >>> df.groupBy("key").agg(
+    ...     percentile_approx("value", 0.5, lit(1000000)).alias("median")
+    ... ).printSchema()
+    root
+     |-- key: long (nullable = true)
+     |-- median: double (nullable = true)
+    """
+    sc = SparkContext._active_spark_context
+
+    if isinstance(percentage, (list, tuple)):
+        # A local list
+        percentage = sc._jvm.functions.array(_to_seq(sc, [
+            _create_column_from_literal(x) for x in percentage
+        ]))
+    elif isinstance(percentage, Column):
+        # Already a Column
+        percentage = _to_java_column(percentage)
+    else:
+        # Probably scalar
+        percentage = _create_column_from_literal(percentage)
+
+    accuracy = (
+        _to_java_column(accuracy) if isinstance(accuracy, Column)
+        else _create_column_from_literal(accuracy)
+    )
+
+    return Column(sc._jvm.functions.percentile_approx(_to_java_column(col), percentage, accuracy))
+
+
 @ignore_unicode_prefix
 @since(1.4)
 def rand(seed=None):

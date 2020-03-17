@@ -23,7 +23,6 @@ import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.DoubleType
@@ -72,9 +71,9 @@ object ChiSquareTest {
     val rdd = dataset.select(col(labelCol).cast("double"), col(featuresCol)).as[(Double, Vector)]
       .rdd.map { case (label, features) => OldLabeledPoint(label, OldVectors.fromML(features)) }
     val testResults = OldStatistics.chiSqTest(rdd)
-    val pValues: Vector = Vectors.dense(testResults.map(_.pValue))
-    val degreesOfFreedom: Array[Int] = testResults.map(_.degreesOfFreedom)
-    val statistics: Vector = Vectors.dense(testResults.map(_.statistic))
+    val pValues = Vectors.dense(testResults.map(_.pValue))
+    val degreesOfFreedom = testResults.map(_.degreesOfFreedom)
+    val statistics = Vectors.dense(testResults.map(_.statistic))
     spark.createDataFrame(Seq(ChiSquareResult(pValues, degreesOfFreedom, statistics)))
   }
 
@@ -91,16 +90,12 @@ object ChiSquareTest {
       featuresCol: String,
       labelCol: String): Array[SelectionTestResult] = {
 
-    val spark = dataset.sparkSession
-
     SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
-    val input: RDD[OldLabeledPoint] =
-      dataset.select(col(labelCol).cast(DoubleType), col(featuresCol)).rdd
-        .map {
-          case Row(label: Double, features: Vector) =>
-            OldLabeledPoint(label, OldVectors.fromML(features))
-        }
+    val input = dataset.select(col(labelCol).cast(DoubleType), col(featuresCol)).rdd
+      .map { case Row(label: Double, features: Vector) =>
+        OldLabeledPoint(label, OldVectors.fromML(features))
+      }
     val chiTestResult = OldStatistics.chiSqTest(input)
     chiTestResult.map(r => new ChiSqTestResult(r.pValue, r.degreesOfFreedom, r.statistic))
   }
