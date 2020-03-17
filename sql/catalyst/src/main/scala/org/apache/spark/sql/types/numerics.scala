@@ -22,7 +22,7 @@ import scala.math.Ordering
 
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
-object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
+private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
   private def checkOverflow(res: Int, x: Byte, y: Byte, op: String): Unit = {
     if (res > Byte.MaxValue || res < Byte.MinValue) {
       throw new ArithmeticException(s"$x $op $y caused overflow.")
@@ -56,7 +56,7 @@ object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
 }
 
 
-object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
+private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
   private def checkOverflow(res: Int, x: Short, y: Short, op: String): Unit = {
     if (res > Short.MaxValue || res < Short.MinValue) {
       throw new ArithmeticException(s"$x $op $y caused overflow.")
@@ -90,7 +90,7 @@ object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
 }
 
 
-object IntegerExactNumeric extends IntIsIntegral with Ordering.IntOrdering {
+private[sql] object IntegerExactNumeric extends IntIsIntegral with Ordering.IntOrdering {
   override def plus(x: Int, y: Int): Int = Math.addExact(x, y)
 
   override def minus(x: Int, y: Int): Int = Math.subtractExact(x, y)
@@ -100,7 +100,7 @@ object IntegerExactNumeric extends IntIsIntegral with Ordering.IntOrdering {
   override def negate(x: Int): Int = Math.negateExact(x)
 }
 
-object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
+private[sql] object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
   override def plus(x: Long, y: Long): Long = Math.addExact(x, y)
 
   override def minus(x: Long, y: Long): Long = Math.subtractExact(x, y)
@@ -117,14 +117,14 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
     }
 }
 
-object FloatExactNumeric extends FloatIsFractional {
+private[sql] object FloatExactNumeric extends FloatIsFractional {
   private def overflowException(x: Float, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
-  private val intUpperBound = Int.MaxValue.toFloat
-  private val intLowerBound = Int.MinValue.toFloat
-  private val longUpperBound = Long.MaxValue.toFloat
-  private val longLowerBound = Long.MinValue.toFloat
+  private val intUpperBound = Int.MaxValue
+  private val intLowerBound = Int.MinValue
+  private val longUpperBound = Long.MaxValue
+  private val longLowerBound = Long.MinValue
 
   override def toInt(x: Float): Int = {
     // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
@@ -151,14 +151,14 @@ object FloatExactNumeric extends FloatIsFractional {
   override def compare(x: Float, y: Float): Int = java.lang.Float.compare(x, y)
 }
 
-object DoubleExactNumeric extends DoubleIsFractional {
+private[sql] object DoubleExactNumeric extends DoubleIsFractional {
   private def overflowException(x: Double, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
-  private val intUpperBound = Int.MaxValue.toDouble
-  private val intLowerBound = Int.MinValue.toDouble
-  private val longUpperBound = Long.MaxValue.toDouble
-  private val longLowerBound = Long.MinValue.toDouble
+  private val intUpperBound = Int.MaxValue
+  private val intLowerBound = Int.MinValue
+  private val longUpperBound = Long.MaxValue
+  private val longLowerBound = Long.MinValue
 
   override def toInt(x: Double): Int = {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
@@ -179,7 +179,7 @@ object DoubleExactNumeric extends DoubleIsFractional {
   override def compare(x: Double, y: Double): Int = java.lang.Double.compare(x, y)
 }
 
-object DecimalExactNumeric extends DecimalIsConflicted {
+private[sql] object DecimalExactNumeric extends DecimalIsConflicted {
   override def toInt(x: Decimal): Int = x.roundToInt()
 
   override def toLong(x: Decimal): Long = x.roundToLong()

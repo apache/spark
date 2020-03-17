@@ -2,114 +2,114 @@
 -- Number of queries: 19
 
 
--- !query 0
+-- !query
 CREATE table  desc_temp1 (key int COMMENT 'column_comment', val string) USING PARQUET
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 CREATE table  desc_temp2 (key int, val string) USING PARQUET
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 DESC SELECT key, key + 1 as plusone FROM desc_temp1
--- !query 2 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 2 output
+-- !query output
 key                 	int                 	column_comment      
 plusone             	int
 
 
--- !query 3
+-- !query
 DESC QUERY SELECT * FROM desc_temp2
--- !query 3 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 3 output
+-- !query output
 key                 	int                 	                    
 val                 	string
 
 
--- !query 4
+-- !query
 DESC SELECT key, COUNT(*) as count FROM desc_temp1 group by key
--- !query 4 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 4 output
+-- !query output
 key                 	int                 	column_comment      
 count               	bigint
 
 
--- !query 5
+-- !query
 DESC SELECT 10.00D as col1
--- !query 5 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 5 output
+-- !query output
 col1                	double
 
 
--- !query 6
+-- !query
 DESC QUERY SELECT key FROM desc_temp1 UNION ALL select CAST(1 AS DOUBLE)
--- !query 6 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 6 output
+-- !query output
 key                 	double
 
 
--- !query 7
+-- !query
 DESC QUERY VALUES(1.00D, 'hello') as tab1(col1, col2)
--- !query 7 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 7 output
+-- !query output
 col1                	double              	                    
 col2                	string
 
 
--- !query 8
+-- !query
 DESC QUERY FROM desc_temp1 a SELECT *
--- !query 8 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 8 output
+-- !query output
 key                 	int                 	column_comment      
 val                 	string
 
 
--- !query 9
+-- !query
 DESC WITH s AS (SELECT 'hello' as col1) SELECT * FROM s
--- !query 9 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 9 output
+-- !query output
 col1                	string
 
 
--- !query 10
+-- !query
 DESCRIBE QUERY WITH s AS (SELECT * from desc_temp1) SELECT * FROM s
--- !query 10 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 10 output
+-- !query output
 key                 	int                 	column_comment      
 val                 	string
 
 
--- !query 11
+-- !query
 DESCRIBE SELECT * FROM (FROM desc_temp2 select * select *)
--- !query 11 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 11 output
+-- !query output
 key                 	int                 	                    
 val                 	string
 
 
--- !query 12
+-- !query
 DESCRIBE INSERT INTO desc_temp1 values (1, 'val1')
--- !query 12 schema
+-- !query schema
 struct<>
--- !query 12 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input 'desc_temp1' expecting {<EOF>, '.'}(line 1, pos 21)
@@ -119,11 +119,11 @@ DESCRIBE INSERT INTO desc_temp1 values (1, 'val1')
 ---------------------^^^
 
 
--- !query 13
+-- !query
 DESCRIBE INSERT INTO desc_temp1 SELECT * FROM desc_temp2
--- !query 13 schema
+-- !query schema
 struct<>
--- !query 13 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input 'desc_temp1' expecting {<EOF>, '.'}(line 1, pos 21)
@@ -133,14 +133,14 @@ DESCRIBE INSERT INTO desc_temp1 SELECT * FROM desc_temp2
 ---------------------^^^
 
 
--- !query 14
+-- !query
 DESCRIBE
    FROM desc_temp1 a
      insert into desc_temp1 select *
      insert into desc_temp2 select *
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 mismatched input 'insert' expecting {'MAP', 'REDUCE', 'SELECT'}(line 3, pos 5)
@@ -153,21 +153,21 @@ DESCRIBE
      insert into desc_temp2 select *
 
 
--- !query 15
+-- !query
 EXPLAIN DESC QUERY SELECT * FROM desc_temp2 WHERE key > 0
--- !query 15 schema
+-- !query schema
 struct<plan:string>
--- !query 15 output
+-- !query output
 == Physical Plan ==
 Execute DescribeQueryCommand
    +- DescribeQueryCommand SELECT * FROM desc_temp2 WHERE key > 0
 
 
--- !query 16
+-- !query
 EXPLAIN EXTENDED DESC WITH s AS (SELECT 'hello' as col1) SELECT * FROM s
--- !query 16 schema
+-- !query schema
 struct<plan:string>
--- !query 16 output
+-- !query output
 == Parsed Logical Plan ==
 DescribeQueryCommand WITH s AS (SELECT 'hello' as col1) SELECT * FROM s
 
@@ -183,17 +183,17 @@ Execute DescribeQueryCommand
    +- DescribeQueryCommand WITH s AS (SELECT 'hello' as col1) SELECT * FROM s
 
 
--- !query 17
+-- !query
 DROP TABLE desc_temp1
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 
 
 
--- !query 18
+-- !query
 DROP TABLE desc_temp2
--- !query 18 schema
+-- !query schema
 struct<>
--- !query 18 output
+-- !query output
 

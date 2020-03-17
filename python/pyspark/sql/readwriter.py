@@ -48,7 +48,7 @@ class OptionUtils(object):
 class DataFrameReader(OptionUtils):
     """
     Interface used to load a :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.read`
+    (e.g. file systems, key-value stores, etc). Use :attr:`SparkSession.read`
     to access this.
 
     .. versionadded:: 1.4
@@ -133,7 +133,7 @@ class DataFrameReader(OptionUtils):
 
     @since(1.4)
     def load(self, path=None, format=None, schema=None, **options):
-        """Loads data from a data source and returns it as a :class`DataFrame`.
+        """Loads data from a data source and returns it as a :class:`DataFrame`.
 
         :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
@@ -223,12 +223,12 @@ class DataFrameReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``uuuu-MM-dd``.
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
@@ -432,12 +432,12 @@ class DataFrameReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``uuuu-MM-dd``.
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -616,7 +616,7 @@ class DataFrameReader(OptionUtils):
 class DataFrameWriter(OptionUtils):
     """
     Interface used to write a :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.write`
+    (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
     .. versionadded:: 1.4
@@ -852,12 +852,12 @@ class DataFrameWriter(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``uuuu-MM-dd``.
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param encoding: specifies encoding (charset) of saved json files. If None is set,
                         the default UTF-8 charset will be used.
         :param lineSep: defines the line separator that should be used for writing. If None is
@@ -957,12 +957,12 @@ class DataFrameWriter(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``uuuu-MM-dd``.
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
                                         values being written should be skipped. If None is set, it
                                         uses the default value, ``true``.

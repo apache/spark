@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -31,7 +31,7 @@ WHERE boolean_expression
   <dt><code><em>boolean_expression</em></code></dt>
   <dd>
     Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
-    more expressions may be combined together using the logical 
+    more expressions may be combined together using the logical
     operators ( <code>AND</code>, <code>OR</code> ).
   </dd>
 </dl>
@@ -39,10 +39,11 @@ WHERE boolean_expression
 ### Examples
 {% highlight sql %}
 CREATE TABLE person (id INT, name STRING, age INT);
-INSERT INTO person VALUES (100, 'John', 30),
-                          (200, 'Mary', NULL),
-                          (300, 'Mike', 80),
-                          (400, 'Dan',  50);
+INSERT INTO person VALUES
+    (100, 'John', 30),
+    (200, 'Mary', NULL),
+    (300, 'Mike', 80),
+    (400, 'Dan',  50);
 
 -- Comparison operator in `WHERE` clause.
 SELECT * FROM person WHERE id > 200 ORDER BY id;
@@ -98,8 +99,8 @@ SELECT * FROM person WHERE age > (SELECT avg(age) FROM person);
   |300|Mike|80 |
   +---+----+---+
 
--- Correlated column reference in `WHERE` clause of subquery.
-SELECT * FROM person AS parent 
+-- Correlated Subquery in `WHERE` clause.
+SELECT * FROM person AS parent
 WHERE EXISTS (
               SELECT 1 FROM person AS child
               WHERE parent.id = child.id AND child.age IS NULL
@@ -111,3 +112,13 @@ WHERE EXISTS (
   +---+----+----+
 
 {% endhighlight %}
+
+### Related Clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

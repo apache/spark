@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -39,6 +40,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -175,7 +177,15 @@ class Analyzer(
 
   def resolver: Resolver = conf.resolver
 
-  protected val fixedPoint = FixedPoint(maxIterations)
+  /**
+   * If the plan cannot be resolved within maxIterations, analyzer will throw exception to inform
+   * user to increase the value of SQLConf.ANALYZER_MAX_ITERATIONS.
+   */
+  protected val fixedPoint =
+    FixedPoint(
+      maxIterations,
+      errorOnExceed = true,
+      maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
@@ -240,6 +250,7 @@ class Analyzer(
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
+    Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints(conf)),
     Batch("Nondeterministic", Once,
@@ -426,7 +437,7 @@ class Analyzer(
           val idx = groupByExprs.indexWhere(_.semanticEquals(col))
           if (idx >= 0) {
             Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
-              Literal(1)), ByteType), toPrettySQL(e))()
+              Literal(1L)), ByteType), toPrettySQL(e))()
           } else {
             throw new AnalysisException(s"Column of grouping ($col) can't be found " +
               s"in grouping columns ${groupByExprs.mkString(",")}")
@@ -520,8 +531,6 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
-      val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
-
       // In case of ANSI-SQL compliant syntax for GROUPING SETS, groupByExprs is optional and
       // can be null. In such case, we derive the groupByExprs from the user supplied values for
       // grouping sets.
@@ -540,12 +549,18 @@ class Analyzer(
         groupByExprs
       }
 
+      if (finalGroupByExpressions.size > GroupingID.dataType.defaultSize * 8) {
+        throw new AnalysisException(
+          s"Grouping sets size cannot be greater than ${GroupingID.dataType.defaultSize * 8}")
+      }
+
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
       // instead of the original value we need to create new aliases for all group by expressions
       // that will only be used for the intended purpose.
       val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
 
+      val gid = AttributeReference(VirtualColumn.groupingIdName, GroupingID.dataType, false)()
       val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 
@@ -731,12 +746,11 @@ class Analyzer(
     extends Rule[LogicalPlan] with LookupCatalog {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case s @ ShowTables(UnresolvedNamespace(Seq()), _) =>
-        s.copy(namespace =
-          ResolvedNamespace(currentCatalog.asNamespaceCatalog, catalogManager.currentNamespace))
+        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
-        ResolvedNamespace(currentCatalog.asNamespaceCatalog, Seq.empty[String])
+        ResolvedNamespace(currentCatalog, Seq.empty[String])
       case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
-        ResolvedNamespace(catalog.asNamespaceCatalog, ns)
+        ResolvedNamespace(catalog, ns)
     }
   }
 
@@ -798,7 +812,10 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
-          .getOrElse(u)
+          .map { rel =>
+            val ident = rel.identifier.get
+            SubqueryAlias(rel.catalog.get.name +: ident.namespace :+ ident.name, rel)
+          }.getOrElse(u)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
         CatalogV2Util.loadTable(catalog, ident)
@@ -817,8 +834,8 @@ class Analyzer(
 
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName)
-            .map(rel => alter.copy(table = rel))
-            .getOrElse(alter)
+          .map(rel => alter.copy(table = rel))
+          .getOrElse(alter)
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
@@ -831,7 +848,8 @@ class Analyzer(
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
-            case Some(table) => Some(DataSourceV2Relation.create(table))
+            case Some(table) =>
+              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
             case None => None
           }
         case _ => None
@@ -921,7 +939,9 @@ class Analyzer(
             case v1Table: V1Table =>
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
-              DataSourceV2Relation.create(table)
+              SubqueryAlias(
+                catalog.name +: ident.asMultipartIdentifier,
+                DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           Option(AnalysisContext.get.relationCache.getOrElseUpdate(key, loaded.orNull))
@@ -1780,6 +1800,7 @@ class Analyzer(
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
+    val trimWarningEnabled = new AtomicBoolean(true)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case q: LogicalPlan =>
         q transformExpressions {
@@ -1824,13 +1845,19 @@ class Analyzer(
                   }
                   AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
-                case other =>
-                  if (isDistinct || filter.isDefined) {
-                    failAnalysis("DISTINCT or FILTER specified, " +
-                      s"but ${other.prettyName} is not an aggregate function")
-                  } else {
-                    other
+                case other if (isDistinct || filter.isDefined) =>
+                  failAnalysis("DISTINCT or FILTER specified, " +
+                    s"but ${other.prettyName} is not an aggregate function")
+                case e: String2TrimExpression if arguments.size == 2 =>
+                  if (trimWarningEnabled.get) {
+                    log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
+                      " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
+                      " instead.")
+                    trimWarningEnabled.set(false)
                   }
+                  e
+                case other =>
+                  other
               }
             }
         }
@@ -2149,12 +2176,31 @@ class Analyzer(
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      def hasInnerGenerator(g: Generator): Boolean = g match {
+        // Since `GeneratorOuter` is just a wrapper of generators, we skip it here
+        case go: GeneratorOuter =>
+          hasInnerGenerator(go.child)
+        case _ =>
+          g.children.exists { _.find {
+            case _: Generator => true
+            case _ => false
+          }.isDefined }
+      }
       CleanupAliases.trimNonTopLevelAliases(expr) match {
-        case UnresolvedAlias(_: Generator, _) => false
-        case Alias(_: Generator, _) => false
-        case MultiAlias(_: Generator, _) => false
+        case UnresolvedAlias(g: Generator, _) => hasInnerGenerator(g)
+        case Alias(g: Generator, _) => hasInnerGenerator(g)
+        case MultiAlias(g: Generator, _) => hasInnerGenerator(g)
         case other => hasGenerator(other)
       }
+    }
+
+    private def hasAggFunctionInGenerator(ne: Seq[NamedExpression]): Boolean = {
+      ne.exists(_.find {
+        case g: Generator =>
+          g.children.exists(_.find(_.isInstanceOf[AggregateFunction]).isDefined)
+        case _ =>
+          false
+      }.nonEmpty)
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
@@ -2242,6 +2288,11 @@ class Analyzer(
 
         val newAgg = Aggregate(groupList, newAggList, child)
         Project(projectExprs.toList, newAgg)
+
+      case p @ Project(projectList, _) if hasAggFunctionInGenerator(projectList) =>
+        // If a generator has any aggregate function, we need to apply the `GlobalAggregates` rule
+        // first for replacing `Project` with `Aggregate`.
+        p
 
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.
@@ -2422,6 +2473,10 @@ class Analyzer(
               so.copy(child = newChild)
             }
             wsc.copy(partitionSpec = newPartitionSpec, orderSpec = newOrderSpec)
+
+          case WindowExpression(ae: AggregateExpression, _) if ae.filter.isDefined =>
+            failAnalysis(
+              "window aggregate function with filter predicate is not supported yet.")
 
           // Extract Windowed AggregateExpression
           case we @ WindowExpression(
@@ -2998,6 +3053,168 @@ class Analyzer(
           fail(child, dataType, walkedTypePath)
 
         case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
+      }
+    }
+  }
+
+  /** Rule to mostly resolve, normalize and rewrite column names based on case sensitivity. */
+  object ResolveAlterTableChanges extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
+        // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
+        // normalized parent name of fields to field names that belong to the parent.
+        // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
+        // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
+        val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
+        val schema = t.schema
+        val normalizedChanges = changes.flatMap {
+          case add: AddColumn =>
+            def addColumn(
+                parentSchema: StructType,
+                parentName: String,
+                normalizedParentName: Seq[String]): TableChange = {
+              val fieldsAdded = colsToAdd.getOrElse(normalizedParentName, Nil)
+              val pos = findColumnPosition(add.position(), parentName, parentSchema, fieldsAdded)
+              val field = add.fieldNames().last
+              colsToAdd(normalizedParentName) = fieldsAdded :+ field
+              TableChange.addColumn(
+                (normalizedParentName :+ field).toArray,
+                add.dataType(),
+                add.isNullable,
+                add.comment,
+                pos)
+            }
+            val parent = add.fieldNames().init
+            if (parent.nonEmpty) {
+              // Adding a nested field, need to normalize the parent column and position
+              val target = schema.findNestedField(parent, includeCollections = true, conf.resolver)
+              if (target.isEmpty) {
+                // Leave unresolved. Throws error in CheckAnalysis
+                Some(add)
+              } else {
+                val (normalizedName, sf) = target.get
+                sf.dataType match {
+                  case struct: StructType =>
+                    Some(addColumn(struct, parent.quoted, normalizedName :+ sf.name))
+                  case other =>
+                    Some(add)
+                }
+              }
+            } else {
+              // Adding to the root. Just need to normalize position
+              Some(addColumn(schema, "root", Nil))
+            }
+
+          case typeChange: UpdateColumnType =>
+            // Hive style syntax provides the column type, even if it may not have changed
+            val fieldOpt = schema.findNestedField(
+              typeChange.fieldNames(), includeCollections = true, conf.resolver)
+
+            if (fieldOpt.isEmpty) {
+              // We couldn't resolve the field. Leave it to CheckAnalysis
+              Some(typeChange)
+            } else {
+              val (fieldNames, field) = fieldOpt.get
+              if (field.dataType == typeChange.newDataType()) {
+                // The user didn't want the field to change, so remove this change
+                None
+              } else {
+                Some(TableChange.updateColumnType(
+                  (fieldNames :+ field.name).toArray, typeChange.newDataType()))
+              }
+            }
+          case n: UpdateColumnNullability =>
+            // Need to resolve column
+            resolveFieldNames(
+              schema,
+              n.fieldNames(),
+              TableChange.updateColumnNullability(_, n.nullable())).orElse(Some(n))
+
+          case position: UpdateColumnPosition =>
+            position.position() match {
+              case after: After =>
+                // Need to resolve column as well as position reference
+                val fieldOpt = schema.findNestedField(
+                  position.fieldNames(), includeCollections = true, conf.resolver)
+
+                if (fieldOpt.isEmpty) {
+                  Some(position)
+                } else {
+                  val (normalizedPath, field) = fieldOpt.get
+                  val targetCol = schema.findNestedField(
+                    normalizedPath :+ after.column(), includeCollections = true, conf.resolver)
+                  if (targetCol.isEmpty) {
+                    // Leave unchanged to CheckAnalysis
+                    Some(position)
+                  } else {
+                    Some(TableChange.updateColumnPosition(
+                      (normalizedPath :+ field.name).toArray,
+                      ColumnPosition.after(targetCol.get._2.name)))
+                  }
+                }
+              case _ =>
+                // Need to resolve column
+                resolveFieldNames(
+                  schema,
+                  position.fieldNames(),
+                  TableChange.updateColumnPosition(_, position.position())).orElse(Some(position))
+            }
+
+          case comment: UpdateColumnComment =>
+            resolveFieldNames(
+              schema,
+              comment.fieldNames(),
+              TableChange.updateColumnComment(_, comment.newComment())).orElse(Some(comment))
+
+          case rename: RenameColumn =>
+            resolveFieldNames(
+              schema,
+              rename.fieldNames(),
+              TableChange.renameColumn(_, rename.newName())).orElse(Some(rename))
+
+          case delete: DeleteColumn =>
+            resolveFieldNames(schema, delete.fieldNames(), TableChange.deleteColumn)
+              .orElse(Some(delete))
+
+          case column: ColumnChange =>
+            // This is informational for future developers
+            throw new UnsupportedOperationException(
+              "Please add an implementation for a column change here")
+          case other => Some(other)
+        }
+
+        a.copy(changes = normalizedChanges)
+    }
+
+    /**
+     * Returns the table change if the field can be resolved, returns None if the column is not
+     * found. An error will be thrown in CheckAnalysis for columns that can't be resolved.
+     */
+    private def resolveFieldNames(
+        schema: StructType,
+        fieldNames: Array[String],
+        copy: Array[String] => TableChange): Option[TableChange] = {
+      val fieldOpt = schema.findNestedField(
+        fieldNames, includeCollections = true, conf.resolver)
+      fieldOpt.map { case (path, field) => copy((path :+ field.name).toArray) }
+    }
+
+    private def findColumnPosition(
+        position: ColumnPosition,
+        parentName: String,
+        struct: StructType,
+        fieldsAdded: Seq[String]): ColumnPosition = {
+      position match {
+        case null => null
+        case after: After =>
+          (struct.fieldNames ++ fieldsAdded).find(n => conf.resolver(n, after.column())) match {
+            case Some(colName) =>
+              ColumnPosition.after(colName)
+            case None =>
+              throw new AnalysisException("Couldn't find the reference column for " +
+                s"$after at $parentName")
+          }
+        case other => other
       }
     }
   }

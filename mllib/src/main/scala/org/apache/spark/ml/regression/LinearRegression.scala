@@ -28,7 +28,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
@@ -357,17 +356,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val (featuresSummarizer, ySummarizer) = instances.treeAggregate(
-      (Summarizer.createSummarizerBuffer("mean", "std"),
-        Summarizer.createSummarizerBuffer("mean", "std", "count")))(
-      seqOp = (c: (SummarizerBuffer, SummarizerBuffer), instance: Instance) =>
-        (c._1.add(instance.features, instance.weight),
-          c._2.add(Vectors.dense(instance.label), instance.weight)),
-      combOp = (c1: (SummarizerBuffer, SummarizerBuffer),
-                c2: (SummarizerBuffer, SummarizerBuffer)) =>
-        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
-      depth = $(aggregationDepth)
-    )
+    val (featuresSummarizer, ySummarizer) =
+      Summarizer.getRegressionSummarizers(instances, $(aggregationDepth))
 
     val yMean = ySummarizer.mean(0)
     val rawYStd = ySummarizer.std(0)

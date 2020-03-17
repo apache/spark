@@ -55,12 +55,12 @@ initialization via k-means\|\|.
 The following code snippets can be executed in `spark-shell`.
 
 In the following example after loading and parsing data, we use the
-[`KMeans`](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) object to cluster the data
+[`KMeans`](api/scala/org/apache/spark/mllib/clustering/KMeans.html) object to cluster the data
 into two clusters. The number of desired clusters is passed to the algorithm. We then compute Within
 Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact, the
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
-Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`KMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeansModel) for details on the API.
+Refer to the [`KMeans` Scala docs](api/scala/org/apache/spark/mllib/clustering/KMeans.html) and [`KMeansModel` Scala docs](api/scala/org/apache/spark/mllib/clustering/KMeansModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/KMeansExample.scala %}
 </div>
@@ -111,11 +111,11 @@ has the following parameters:
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 In the following example after loading and parsing data, we use a
-[GaussianMixture](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture)
+[GaussianMixture](api/scala/org/apache/spark/mllib/clustering/GaussianMixture.html)
 object to cluster the data into two clusters. The number of desired clusters is passed
 to the algorithm. We then output the parameters of the mixture model.
 
-Refer to the [`GaussianMixture` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture) and [`GaussianMixtureModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixtureModel) for details on the API.
+Refer to the [`GaussianMixture` Scala docs](api/scala/org/apache/spark/mllib/clustering/GaussianMixture.html) and [`GaussianMixtureModel` Scala docs](api/scala/org/apache/spark/mllib/clustering/GaussianMixtureModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/GaussianMixtureExample.scala %}
 </div>
@@ -172,15 +172,15 @@ In the following, we show code snippets to demonstrate how to use PIC in `spark.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`PowerIterationClustering`](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) 
+[`PowerIterationClustering`](api/scala/org/apache/spark/mllib/clustering/PowerIterationClustering.html) 
 implements the PIC algorithm.
 It takes an `RDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
 affinity matrix.
 Calling `PowerIterationClustering.run` returns a
-[`PowerIterationClusteringModel`](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel),
+[`PowerIterationClusteringModel`](api/scala/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html),
 which contains the computed clustering assignments.
 
-Refer to the [`PowerIterationClustering` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel) for details on the API.
+Refer to the [`PowerIterationClustering` Scala docs](api/scala/org/apache/spark/mllib/clustering/PowerIterationClustering.html) and [`PowerIterationClusteringModel` Scala docs](api/scala/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/PowerIterationClusteringExample.scala %}
 </div>
@@ -278,9 +278,9 @@ separately.
 **Expectation Maximization**
 
 Implemented in
-[`EMLDAOptimizer`](api/scala/index.html#org.apache.spark.mllib.clustering.EMLDAOptimizer)
+[`EMLDAOptimizer`](api/scala/org/apache/spark/mllib/clustering/EMLDAOptimizer.html)
 and
-[`DistributedLDAModel`](api/scala/index.html#org.apache.spark.mllib.clustering.DistributedLDAModel).
+[`DistributedLDAModel`](api/scala/org/apache/spark/mllib/clustering/DistributedLDAModel.html).
 
 For the parameters provided to `LDA`:
 
@@ -350,13 +350,13 @@ perplexity of the provided `documents` given the inferred topics.
 **Examples**
 
 In the following example, we load word count vectors representing a corpus of documents.
-We then use [LDA](api/scala/index.html#org.apache.spark.mllib.clustering.LDA)
+We then use [LDA](api/scala/org/apache/spark/mllib/clustering/LDA.html)
 to infer three topics from the documents. The number of desired clusters is passed
 to the algorithm. We then output the topics, represented as probability distributions over words.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`LDA` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) and [`DistributedLDAModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.DistributedLDAModel) for details on the API.
+Refer to the [`LDA` Scala docs](api/scala/org/apache/spark/mllib/clustering/LDA.html) and [`DistributedLDAModel` Scala docs](api/scala/org/apache/spark/mllib/clustering/DistributedLDAModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/LatentDirichletAllocationExample.scala %}
 </div>
@@ -398,7 +398,7 @@ The implementation in MLlib has the following parameters:
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`BisectingKMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.BisectingKMeans) and [`BisectingKMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.BisectingKMeansModel) for details on the API.
+Refer to the [`BisectingKMeans` Scala docs](api/scala/org/apache/spark/mllib/clustering/BisectingKMeans.html) and [`BisectingKMeansModel` Scala docs](api/scala/org/apache/spark/mllib/clustering/BisectingKMeansModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/BisectingKMeansExample.scala %}
 </div>
@@ -451,7 +451,7 @@ This example shows how to estimate clusters on streaming data.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [`StreamingKMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.StreamingKMeans) for details on the API.
+Refer to the [`StreamingKMeans` Scala docs](api/scala/org/apache/spark/mllib/clustering/StreamingKMeans.html) for details on the API.
 And Refer to [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for details on StreamingContext.
 
 {% include_example scala/org/apache/spark/examples/mllib/StreamingKMeansExample.scala %}

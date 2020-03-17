@@ -286,7 +286,7 @@ private[sql] object CatalogV2Util {
     }
 
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
-    loadTable(catalog, ident).map(DataSourceV2Relation.create)
+    loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
@@ -298,10 +298,9 @@ private[sql] object CatalogV2Util {
       options: Map[String, String],
       location: Option[String],
       comment: Option[String],
-      provider: String): Map[String, String] = {
-    properties ++
-      options ++
-      Map(TableCatalog.PROP_PROVIDER -> provider) ++
+      provider: Option[String]): Map[String, String] = {
+    properties ++ options ++
+      provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       comment.map(TableCatalog.PROP_COMMENT -> _) ++
       location.map(TableCatalog.PROP_LOCATION -> _)
   }

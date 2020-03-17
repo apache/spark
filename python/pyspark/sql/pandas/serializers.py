@@ -120,14 +120,17 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
     def arrow_to_pandas(self, arrow_column):
         from pyspark.sql.pandas.types import _check_series_localize_timestamps
+        import pyarrow
 
         # If the given column is a date type column, creates a series of datetime.date directly
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
         s = arrow_column.to_pandas(date_as_object=True)
 
-        s = _check_series_localize_timestamps(s, self._timezone)
-        return s
+        if pyarrow.types.is_timestamp(arrow_column.type):
+            return _check_series_localize_timestamps(s, self._timezone)
+        else:
+            return s
 
     def _create_batch(self, series):
         """
@@ -158,7 +161,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                             "Array (%s). It can be caused by overflows or other unsafe " + \
                             "conversions warned by Arrow. Arrow safe type check can be " + \
                             "disabled by using SQL config " + \
-                            "`spark.sql.execution.pandas.arrowSafeTypeConversion`."
+                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                 raise RuntimeError(error_msg % (s.dtype, t), e)
             return array
 

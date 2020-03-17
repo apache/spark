@@ -657,7 +657,7 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
     // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
     // been inferred
     val table = df.queryExecution.analyzed.collect {
-      case DataSourceV2Relation(table: FileTable, _, _) => table
+      case DataSourceV2Relation(table: FileTable, _, _, _, _) => table
     }
     assert(table.size === 1)
     assert(table.head.fileIndex.isInstanceOf[MetadataLogFileIndex])

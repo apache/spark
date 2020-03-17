@@ -2,143 +2,143 @@
 -- Number of queries: 39
 
 
--- !query 0
+-- !query
 SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 0 schema
+-- !query schema
 struct<i:int,avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 0 output
+-- !query output
 1	1.5
 2	2.0
 3	NULL
 4	NULL
 
 
--- !query 1
+-- !query
 SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 1 schema
+-- !query schema
 struct<i:int,avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 1 output
+-- !query output
 1	1.5
 2	2.0
 3	NULL
 4	NULL
 
 
--- !query 2
+-- !query
 SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 2 schema
+-- !query schema
 struct<i:int,avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 2 output
+-- !query output
 1	1.5
 2	2.0
 3	NULL
 4	NULL
 
 
--- !query 3
+-- !query
 SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1.5),(2,2.5),(3,NULL),(4,NULL)) t(i,v)
--- !query 3 schema
+-- !query schema
 struct<i:int,avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):decimal(6,5)>
--- !query 3 output
+-- !query output
 1	2.00000
 2	2.50000
 3	NULL
 4	NULL
 
 
--- !query 4
+-- !query
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 4 schema
+-- !query schema
 struct<i:int,sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):bigint>
--- !query 4 output
+-- !query output
 1	3
 2	2
 3	NULL
 4	NULL
 
 
--- !query 5
+-- !query
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 5 schema
+-- !query schema
 struct<i:int,sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):bigint>
--- !query 5 output
+-- !query output
 1	3
 2	2
 3	NULL
 4	NULL
 
 
--- !query 6
+-- !query
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 6 schema
+-- !query schema
 struct<i:int,sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):bigint>
--- !query 6 output
+-- !query output
 1	3
 2	2
 3	NULL
 4	NULL
 
 
--- !query 7
+-- !query
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1.1),(2,2.2),(3,NULL),(4,NULL)) t(i,v)
--- !query 7 schema
+-- !query schema
 struct<i:int,sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):decimal(12,1)>
--- !query 7 output
+-- !query output
 1	3.3
 2	2.2
 3	NULL
 4	NULL
 
 
--- !query 8
+-- !query
 SELECT SUM(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1.01),(2,2),(3,3)) v(i,n)
--- !query 8 schema
+-- !query schema
 struct<sum(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):decimal(22,2)>
--- !query 8 output
+-- !query output
 3.00
 5.00
 6.01
 
 
--- !query 9
+-- !query
 SELECT i,COUNT(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 9 schema
+-- !query schema
 struct<i:int,count(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):bigint>
--- !query 9 output
+-- !query output
 1	2
 2	1
 3	0
 4	0
 
 
--- !query 10
+-- !query
 SELECT i,COUNT(*) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 10 schema
+-- !query schema
 struct<i:int,count(1) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):bigint>
--- !query 10 output
+-- !query output
 1	4
 2	3
 3	2
 4	1
 
 
--- !query 11
+-- !query
 SELECT VAR_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 11 schema
+-- !query schema
 struct<var_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 11 output
+-- !query output
 0.0
 11266.666666666666
 13868.750000000002
@@ -146,12 +146,12 @@ struct<var_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 
 4225.0
 
 
--- !query 12
+-- !query
 SELECT VAR_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 12 schema
+-- !query schema
 struct<var_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 12 output
+-- !query output
 0.0
 11266.666666666666
 13868.750000000002
@@ -159,12 +159,12 @@ struct<var_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 
 4225.0
 
 
--- !query 13
+-- !query
 SELECT VAR_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 13 schema
+-- !query schema
 struct<var_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 13 output
+-- !query output
 0.0
 11266.666666666666
 13868.750000000002
@@ -172,12 +172,12 @@ struct<var_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 
 4225.0
 
 
--- !query 14
+-- !query
 SELECT VAR_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 14 schema
+-- !query schema
 struct<var_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 14 output
+-- !query output
 0.0
 11266.666666666666
 13868.750000000002
@@ -185,12 +185,12 @@ struct<var_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 
 4225.0
 
 
--- !query 15
+-- !query
 SELECT VAR_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 15 schema
+-- !query schema
 struct<var_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 15 output
+-- !query output
 16900.0
 18491.666666666668
 27129.999999999996
@@ -198,12 +198,12 @@ struct<var_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN
 NaN
 
 
--- !query 16
+-- !query
 SELECT VAR_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 16 schema
+-- !query schema
 struct<var_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 16 output
+-- !query output
 16900.0
 18491.666666666668
 27129.999999999996
@@ -211,12 +211,12 @@ struct<var_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN
 NaN
 
 
--- !query 17
+-- !query
 SELECT VAR_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 17 schema
+-- !query schema
 struct<var_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 17 output
+-- !query output
 16900.0
 18491.666666666668
 27129.999999999996
@@ -224,12 +224,12 @@ struct<var_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN
 NaN
 
 
--- !query 18
+-- !query
 SELECT VAR_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 18 schema
+-- !query schema
 struct<var_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 18 output
+-- !query output
 16900.0
 18491.666666666668
 27129.999999999996
@@ -237,12 +237,12 @@ struct<var_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN
 NaN
 
 
--- !query 19
+-- !query
 SELECT VARIANCE(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 19 schema
+-- !query schema
 struct<variance(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 19 output
+-- !query output
 16900.0
 18491.666666666668
 27129.999999999996
@@ -250,12 +250,12 @@ struct<variance(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN
 NaN
 
 
--- !query 20
+-- !query
 SELECT VARIANCE(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 20 schema
+-- !query schema
 struct<variance(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 20 output
+-- !query output
 16900.0
 18491.666666666668
 27129.999999999996
@@ -263,12 +263,12 @@ struct<variance(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN
 NaN
 
 
--- !query 21
+-- !query
 SELECT VARIANCE(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 21 schema
+-- !query schema
 struct<variance(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 21 output
+-- !query output
 16900.0
 18491.666666666668
 27129.999999999996
@@ -276,12 +276,12 @@ struct<variance(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN
 NaN
 
 
--- !query 22
+-- !query
 SELECT VARIANCE(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 22 schema
+-- !query schema
 struct<variance(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 22 output
+-- !query output
 16900.0
 18491.666666666668
 27129.999999999996
@@ -289,12 +289,12 @@ struct<variance(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN
 NaN
 
 
--- !query 23
+-- !query
 SELECT STDDEV_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n)
--- !query 23 schema
+-- !query schema
 struct<stddev_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 23 output
+-- !query output
 0.0
 106.14455552060438
 117.76565713313879
@@ -303,12 +303,12 @@ struct<stddev_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWE
 65.0
 
 
--- !query 24
+-- !query
 SELECT STDDEV_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n)
--- !query 24 schema
+-- !query schema
 struct<stddev_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 24 output
+-- !query output
 0.0
 106.14455552060438
 117.76565713313879
@@ -317,12 +317,12 @@ struct<stddev_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWE
 65.0
 
 
--- !query 25
+-- !query
 SELECT STDDEV_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n)
--- !query 25 schema
+-- !query schema
 struct<stddev_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 25 output
+-- !query output
 0.0
 106.14455552060438
 117.76565713313879
@@ -331,12 +331,12 @@ struct<stddev_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWE
 65.0
 
 
--- !query 26
+-- !query
 SELECT STDDEV_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n)
--- !query 26 schema
+-- !query schema
 struct<stddev_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 26 output
+-- !query output
 0.0
 106.14455552060438
 117.76565713313879
@@ -345,12 +345,12 @@ struct<stddev_pop(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWE
 65.0
 
 
--- !query 27
+-- !query
 SELECT STDDEV_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n)
--- !query 27 schema
+-- !query schema
 struct<stddev_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 27 output
+-- !query output
 130.0
 135.9840676942217
 164.7118696390761
@@ -359,12 +359,12 @@ struct<stddev_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETW
 NaN
 
 
--- !query 28
+-- !query
 SELECT STDDEV_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n)
--- !query 28 schema
+-- !query schema
 struct<stddev_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 28 output
+-- !query output
 130.0
 135.9840676942217
 164.7118696390761
@@ -373,12 +373,12 @@ struct<stddev_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETW
 NaN
 
 
--- !query 29
+-- !query
 SELECT STDDEV_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n)
--- !query 29 schema
+-- !query schema
 struct<stddev_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 29 output
+-- !query output
 130.0
 135.9840676942217
 164.7118696390761
@@ -387,12 +387,12 @@ struct<stddev_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETW
 NaN
 
 
--- !query 30
+-- !query
 SELECT STDDEV_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,NULL),(2,600),(3,470),(4,170),(5,430),(6,300)) r(i,n)
--- !query 30 schema
+-- !query schema
 struct<stddev_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 30 output
+-- !query output
 130.0
 135.9840676942217
 164.7118696390761
@@ -401,12 +401,12 @@ struct<stddev_samp(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETW
 NaN
 
 
--- !query 31
+-- !query
 SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 31 schema
+-- !query schema
 struct<stddev(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 31 output
+-- !query output
 130.0
 135.9840676942217
 164.7118696390761
@@ -415,12 +415,12 @@ struct<stddev(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN C
 NaN
 
 
--- !query 32
+-- !query
 SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 32 schema
+-- !query schema
 struct<stddev(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 32 output
+-- !query output
 130.0
 135.9840676942217
 164.7118696390761
@@ -429,12 +429,12 @@ struct<stddev(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN C
 NaN
 
 
--- !query 33
+-- !query
 SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 33 schema
+-- !query schema
 struct<stddev(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 33 output
+-- !query output
 130.0
 135.9840676942217
 164.7118696390761
@@ -443,12 +443,12 @@ struct<stddev(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN C
 NaN
 
 
--- !query 34
+-- !query
 SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n)
--- !query 34 schema
+-- !query schema
 struct<stddev(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING):double>
--- !query 34 output
+-- !query output
 130.0
 135.9840676942217
 164.7118696390761
@@ -457,48 +457,48 @@ struct<stddev(CAST(n AS DOUBLE)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN C
 NaN
 
 
--- !query 35
+-- !query
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 35 schema
+-- !query schema
 struct<i:int,sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW):bigint>
--- !query 35 output
+-- !query output
 1	1
 2	2
 3	NULL
 4	NULL
 
 
--- !query 36
+-- !query
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v)
--- !query 36 schema
+-- !query schema
 struct<i:int,sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING):bigint>
--- !query 36 output
+-- !query output
 1	3
 2	2
 3	NULL
 4	NULL
 
 
--- !query 37
+-- !query
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,3),(4,4)) t(i,v)
--- !query 37 schema
+-- !query schema
 struct<i:int,sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING):bigint>
--- !query 37 output
+-- !query output
 1	3
 2	6
 3	9
 4	7
 
 
--- !query 38
+-- !query
 SELECT a, b,
        SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
 FROM (VALUES(1,1),(2,2),(3,(cast('nan' as int))),(4,3),(5,4)) t(a,b)
--- !query 38 schema
+-- !query schema
 struct<>
--- !query 38 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 failed to evaluate expression CAST('nan' AS INT): invalid input syntax for type numeric: nan; line 3 pos 6

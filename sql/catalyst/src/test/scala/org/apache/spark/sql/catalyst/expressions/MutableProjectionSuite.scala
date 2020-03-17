@@ -60,7 +60,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val scalaValues = Seq("abc", BigDecimal(10),
       IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 day")),
       Array[Byte](1, 2), Array("123", "456"), Map(1 -> "a", 2 -> "b"), Row(1, "a"),
-      new java.lang.Integer(5))
+      Integer.valueOf(5))
     val inputRow = InternalRow.fromSeq(scalaValues.zip(variableLengthTypes).map {
       case (v, dataType) => CatalystTypeConverters.createToCatalystConverter(dataType)(v)
     })

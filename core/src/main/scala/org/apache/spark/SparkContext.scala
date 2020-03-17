@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReferenc
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.collection.immutable
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
@@ -41,7 +42,6 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.executor.{ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
@@ -53,7 +53,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
-import org.apache.spark.resource.{ResourceID, ResourceInformation}
+import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
@@ -219,9 +219,10 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
-  private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
+  private var _resources: immutable.Map[String, ResourceInformation] = _
   private var _shuffleDriverComponents: ShuffleDriverComponents = _
   private var _plugins: Option[PluginContainer] = None
+  private var _resourceProfileManager: ResourceProfileManager = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -249,15 +250,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
   def isLocal: Boolean = Utils.isLocalMaster(_conf)
-
-  private def isClientStandalone: Boolean = {
-    val isSparkCluster = master match {
-      case SparkMasterRegex.SPARK_REGEX(_) => true
-      case SparkMasterRegex.LOCAL_CLUSTER_REGEX(_, _, _) => true
-      case _ => false
-    }
-    deployMode == "client" && isSparkCluster
-  }
 
   /**
    * @return true if context is stopped or in the midst of stopping.
@@ -343,6 +335,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def executorAllocationManager: Option[ExecutorAllocationManager] =
     _executorAllocationManager
 
+  private[spark] def resourceProfileManager: ResourceProfileManager = _resourceProfileManager
+
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
 
   private[spark] var checkpointDir: Option[String] = None
@@ -396,17 +390,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _driverLogger = DriverLogger(_conf)
 
     val resourcesFileOpt = conf.get(DRIVER_RESOURCES_FILE)
-    val allResources = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
-    _resources = {
-      // driver submitted in client mode under Standalone may have conflicting resources with
-      // other drivers/workers on this host. We should sync driver's resources info into
-      // SPARK_RESOURCES/SPARK_RESOURCES_COORDINATE_DIR/ to avoid collision.
-      if (isClientStandalone) {
-        acquireResources(_conf, SPARK_DRIVER_PREFIX, allResources, Utils.getProcessId)
-      } else {
-        allResources
-      }
-    }
+    _resources = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
     logResourceInfo(SPARK_DRIVER_PREFIX, _resources)
 
     // log out spark.app.name in the Spark driver logs
@@ -451,6 +435,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     _listenerBus = new LiveListenerBus(_conf)
+    _resourceProfileManager = new ResourceProfileManager(_conf)
 
     // Initialize the app status store and listener before SparkEnv is created so that it gets
     // all events.
@@ -542,7 +527,7 @@ class SparkContext(config: SparkConf) extends Logging {
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
     // Initialize any plugins before the task scheduler is initialized.
-    _plugins = PluginContainer(this)
+    _plugins = PluginContainer(this, _resources.asJava)
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
@@ -611,7 +596,7 @@ class SparkContext(config: SparkConf) extends Logging {
           case b: ExecutorAllocationClient =>
             Some(new ExecutorAllocationManager(
               schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
-              cleaner = cleaner))
+              cleaner = cleaner, resourceProfileManager = resourceProfileManager))
           case _ =>
             None
         }
@@ -1622,7 +1607,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
-   * to help it make decisions.
+   * to help it make decisions. This applies to the default ResourceProfile.
    * @param numExecutors The total number of executors we'd like to have. The cluster manager
    *                     shouldn't kill any running executor to reach this number, but,
    *                     if all existing executors were to die, this is the number of executors
@@ -1638,11 +1623,16 @@ class SparkContext(config: SparkConf) extends Logging {
   def requestTotalExecutors(
       numExecutors: Int,
       localityAwareTasks: Int,
-      hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]
+      hostToLocalTaskCount: immutable.Map[String, Int]
     ): Boolean = {
     schedulerBackend match {
       case b: ExecutorAllocationClient =>
-        b.requestTotalExecutors(numExecutors, localityAwareTasks, hostToLocalTaskCount)
+        // this is being applied to the default resource profile, would need to add api to support
+        // others
+        val defaultProfId = resourceProfileManager.defaultResourceProfile.id
+        b.requestTotalExecutors(immutable.Map(defaultProfId-> numExecutors),
+          immutable.Map(localityAwareTasks -> defaultProfId),
+          immutable.Map(defaultProfId -> hostToLocalTaskCount))
       case _ =>
         logWarning("Requesting executors is not supported by current scheduler.")
         false
@@ -2019,9 +2009,6 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _progressBar.foreach(_.stop())
     }
-    if (isClientStandalone) {
-      releaseResources(_conf, SPARK_DRIVER_PREFIX, _resources, Utils.getProcessId)
-    }
     _taskScheduler = null
     // TODO: Cache.stop()?
     if (_env != null) {
@@ -2036,6 +2023,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Clear this `InheritableThreadLocal`, or it will still be inherited in child threads even this
     // `SparkContext` is stopped.
     localProperties.remove()
+    ResourceProfile.clearDefaultProfile()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
@@ -2771,109 +2759,34 @@ object SparkContext extends Logging {
     // When running locally, don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
 
-    // Ensure that executor's resources satisfies one or more tasks requirement.
-    def checkResourcesPerTask(clusterMode: Boolean, executorCores: Option[Int]): Unit = {
+    // Ensure that default executor's resources satisfies one or more tasks requirement.
+    // This function is for cluster managers that don't set the executor cores config, for
+    // others its checked in ResourceProfile.
+    def checkResourcesPerTask(executorCores: Int): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
-      val execCores = if (clusterMode) {
-        executorCores.getOrElse(sc.conf.get(EXECUTOR_CORES))
-      } else {
-        executorCores.get
+      validateTaskCpusLargeEnough(executorCores, taskCores)
+      val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+      // TODO - this is temporary until all of stage level scheduling feature is integrated,
+      // fail if any other resource limiting due to dynamic allocation and scheduler using
+      // slots based on cores
+      val cpuSlots = executorCores/taskCores
+      val limitingResource = defaultProf.limitingResource(sc.conf)
+      if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS) &&
+        defaultProf.maxTasksPerExecutor(sc.conf) < cpuSlots) {
+        throw new IllegalArgumentException("The number of slots on an executor has to be " +
+          "limited by the number of cores, otherwise you waste resources and " +
+          "some scheduling doesn't work properly. Your configuration has " +
+          s"core/task cpu slots = ${cpuSlots} and " +
+          s"${limitingResource} = " +
+          s"${defaultProf.maxTasksPerExecutor(sc.conf)}. Please adjust your configuration " +
+          "so that all resources require same number of executor slots.")
       }
-      // some cluster managers don't set the EXECUTOR_CORES config by default (standalone
-      // and mesos coarse grained), so we can't rely on that config for those.
-      val shouldCheckExecCores = executorCores.isDefined || sc.conf.contains(EXECUTOR_CORES) ||
-        (master.equalsIgnoreCase("yarn") || master.startsWith("k8s"))
-
-      // Number of cores per executor must meet at least one task requirement.
-      if (shouldCheckExecCores && execCores < taskCores) {
-        throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
-          s"the task config: ${CPUS_PER_TASK.key} = $taskCores when run on $master.")
-      }
-
-      // Calculate the max slots each executor can provide based on resources available on each
-      // executor and resources required by each task.
-      val taskResourceRequirements = parseResourceRequirements(sc.conf, SPARK_TASK_PREFIX)
-      val executorResourcesAndAmounts = parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
-          .map(request => (request.id.resourceName, request.amount)).toMap
-
-      var (numSlots, limitingResourceName) = if (shouldCheckExecCores) {
-        (execCores / taskCores, "CPU")
-      } else {
-        (-1, "")
-      }
-
-      taskResourceRequirements.foreach { taskReq =>
-        // Make sure the executor resources were specified through config.
-        val execAmount = executorResourcesAndAmounts.getOrElse(taskReq.resourceName,
-          throw new SparkException("The executor resource config: " +
-            ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName).amountConf +
-            " needs to be specified since a task requirement config: " +
-            ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName).amountConf +
-            " was specified")
-        )
-        // Make sure the executor resources are large enough to launch at least one task.
-        if (execAmount < taskReq.amount) {
-          throw new SparkException("The executor resource config: " +
-            ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName).amountConf +
-            s" = $execAmount has to be >= the requested amount in task resource config: " +
-            ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName).amountConf +
-            s" = ${taskReq.amount}")
-        }
-        // Compare and update the max slots each executor can provide.
-        // If the configured amount per task was < 1.0, a task is subdividing
-        // executor resources. If the amount per task was > 1.0, the task wants
-        // multiple executor resources.
-        val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
-        if (resourceNumSlots < numSlots) {
-          if (shouldCheckExecCores) {
-            throw new IllegalArgumentException("The number of slots on an executor has to be " +
-              "limited by the number of cores, otherwise you waste resources and " +
-              "dynamic allocation doesn't work properly. Your configuration has " +
-              s"core/task cpu slots = ${numSlots} and " +
-              s"${taskReq.resourceName} = ${resourceNumSlots}. " +
-              "Please adjust your configuration so that all resources require same number " +
-              "of executor slots.")
-          }
-          numSlots = resourceNumSlots
-          limitingResourceName = taskReq.resourceName
-        }
-      }
-      if(!shouldCheckExecCores && Utils.isDynamicAllocationEnabled(sc.conf)) {
-        // if we can't rely on the executor cores config throw a warning for user
-        logWarning("Please ensure that the number of slots available on your " +
-          "executors is limited by the number of cores to task cpus and not another " +
-          "custom resource. If cores is not the limiting resource then dynamic " +
-          "allocation will not work properly!")
-      }
-      // warn if we would waste any resources due to another resource limiting the number of
-      // slots on an executor
-      taskResourceRequirements.foreach { taskReq =>
-        val execAmount = executorResourcesAndAmounts(taskReq.resourceName)
-        if ((numSlots * taskReq.amount / taskReq.numParts) < execAmount) {
-          val taskReqStr = if (taskReq.numParts > 1) {
-            s"${taskReq.amount}/${taskReq.numParts}"
-          } else {
-            s"${taskReq.amount}"
-          }
-          val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
-          val message = s"The configuration of resource: ${taskReq.resourceName} " +
-            s"(exec = ${execAmount}, task = ${taskReqStr}, " +
-            s"runnable tasks = ${resourceNumSlots}) will " +
-            s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
-            s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
-            s"your configuration."
-          if (Utils.isTesting) {
-            throw new SparkException(message)
-          } else {
-            logWarning(message)
-          }
-        }
-      }
+      ResourceUtils.warnOnWastedResources(defaultProf, sc.conf, Some(executorCores))
     }
 
     master match {
       case "local" =>
-        checkResourcesPerTask(clusterMode = false, Some(1))
+        checkResourcesPerTask(1)
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, 1)
         scheduler.initialize(backend)
@@ -2886,7 +2799,7 @@ object SparkContext extends Logging {
         if (threadCount <= 0) {
           throw new SparkException(s"Asked to run locally with $threadCount threads")
         }
-        checkResourcesPerTask(clusterMode = false, Some(threadCount))
+        checkResourcesPerTask(threadCount)
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
@@ -2897,14 +2810,13 @@ object SparkContext extends Logging {
         // local[*, M] means the number of cores on the computer with M failures
         // local[N, M] means exactly N threads with M failures
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
-        checkResourcesPerTask(clusterMode = false, Some(threadCount))
+        checkResourcesPerTask(threadCount)
         val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
 
       case SPARK_REGEX(sparkUrl) =>
-        checkResourcesPerTask(clusterMode = true, None)
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
         val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)
@@ -2912,7 +2824,7 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        checkResourcesPerTask(clusterMode = true, Some(coresPerSlave.toInt))
+        checkResourcesPerTask(coresPerSlave.toInt)
         // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
         val memoryPerSlaveInt = memoryPerSlave.toInt
         if (sc.executorMemory > memoryPerSlaveInt) {
@@ -2941,7 +2853,6 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case masterUrl =>
-        checkResourcesPerTask(clusterMode = true, None)
         val cm = getClusterManager(masterUrl) match {
           case Some(clusterMgr) => clusterMgr
           case None => throw new SparkException("Could not parse Master URL: '" + master + "'")

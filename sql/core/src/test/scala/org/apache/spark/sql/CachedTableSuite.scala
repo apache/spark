@@ -195,7 +195,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("SPARK-1669: cacheTable should be idempotent") {
-    assume(!spark.table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
+    assert(!spark.table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
 
     spark.catalog.cacheTable("testData")
     assertCached(spark.table("testData"))

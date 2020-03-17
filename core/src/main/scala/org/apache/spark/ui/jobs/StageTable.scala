@@ -141,7 +141,7 @@ private[ui] class StagePagedTable(
   override def tableId: String = stageTag + "-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
+    "table table-bordered table-sm table-striped " +
       "table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = stageTag + ".pageSize"
@@ -309,19 +309,7 @@ private[ui] class StagePagedTable(
       } else {
         failureReason
       })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{failureReason}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = UIUtils.detailsUINode(isMultiline, failureReason)
     <td valign="middle">{failureReasonSummary}{details}</td>
   }
 

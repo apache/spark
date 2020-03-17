@@ -9,17 +9,19 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-The <code>LIMIT</code> clause is used to constrain the number of rows returned by the <code>SELECT</code> statement. 
-In general, this clause is used in conjuction with <code>ORDER BY</code> to ensure that the results are deterministic.
+The <code>LIMIT</code> clause is used to constrain the number of rows returned by
+the [SELECT](sql-ref-syntax-qry-select.html) statement. In general, this clause
+is used in conjunction with [ORDER BY](sql-ref-syntax-qry-select-orderby.html) to
+ensure that the results are deterministic.
 
 ### Syntax
 {% highlight sql %}
@@ -35,20 +37,21 @@ LIMIT { ALL | integer_expression }
   </dd>
   <dt><code><em>integer_expression</em></code></dt>
   <dd>
-    Specifies an expression that returns an integer. 
+    Specifies a foldable expression that returns an integer.
   </dd>
 </dl>
 
 ### Examples
 {% highlight sql %}
 CREATE TABLE person (name STRING, age INT);
-INSERT INTO person VALUES ('Zen Hui', 25), 
-                          ('Anil B', 18), 
-                          ('Shone S', 16), 
-                          ('Mike A', 25),
-                          ('John A', 18), 
-                          ('Jack N', 16);
-                        
+INSERT INTO person VALUES
+    ('Zen Hui', 25),
+    ('Anil B', 18),
+    ('Shone S', 16),
+    ('Mike A', 25),
+    ('John A', 18),
+    ('Jack N', 16);
+
 -- Select the first two rows.
 SELECT name, age FROM person ORDER BY name LIMIT 2;
 
@@ -73,7 +76,7 @@ SELECT name, age FROM person ORDER BY name LIMIT ALL;
   |Zen Hui|25 |
   +-------+---+
 
--- A function expression as an input to limit.
+-- A function expression as an input to LIMIT.
 SELECT name, age FROM person ORDER BY name LIMIT length('SPARK')
 
   +-------+---+
@@ -85,4 +88,19 @@ SELECT name, age FROM person ORDER BY name LIMIT length('SPARK')
   | Mike A| 25|
   |Shone S| 16|
   +-------+---+
+
+-- A non-foldable expression as an input to LIMIT is not allowed.
+SELECT name, age FROM person ORDER BY name LIMIT length(name)
+
+org.apache.spark.sql.AnalysisException: The limit expression must evaluate to a constant value ...
 {% endhighlight %}
+
+### Related Clauses
+- [SELECT Main](sql-ref-syntax-qry-select.html)
+- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)

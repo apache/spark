@@ -102,7 +102,7 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.asTransforms
+  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 

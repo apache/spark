@@ -21,7 +21,9 @@ import java.io._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
@@ -201,6 +203,38 @@ object Summarizer extends Logging {
   private[spark] def createSummarizerBuffer(requested: String*): SummarizerBuffer = {
     val (metrics, computeMetrics) = getRelevantMetrics(requested)
     new SummarizerBuffer(metrics, computeMetrics)
+  }
+
+  /** Get regression feature and label summarizers for provided data. */
+  private[ml] def getRegressionSummarizers(
+      instances: RDD[Instance],
+      aggregationDepth: Int = 2): (SummarizerBuffer, SummarizerBuffer) = {
+    instances.treeAggregate(
+      (Summarizer.createSummarizerBuffer("mean", "std"),
+        Summarizer.createSummarizerBuffer("mean", "std", "count")))(
+      seqOp = (c: (SummarizerBuffer, SummarizerBuffer), instance: Instance) =>
+        (c._1.add(instance.features, instance.weight),
+          c._2.add(Vectors.dense(instance.label), instance.weight)),
+      combOp = (c1: (SummarizerBuffer, SummarizerBuffer),
+                c2: (SummarizerBuffer, SummarizerBuffer)) =>
+        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
+      depth = aggregationDepth
+    )
+  }
+
+  /** Get classification feature and label summarizers for provided data. */
+  private[ml] def getClassificationSummarizers(
+      instances: RDD[Instance],
+      aggregationDepth: Int = 2): (SummarizerBuffer, MultiClassSummarizer) = {
+    instances.treeAggregate(
+      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
+      seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
+        (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
+      combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
+                c2: (SummarizerBuffer, MultiClassSummarizer)) =>
+        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
+      depth = aggregationDepth
+    )
   }
 }
 

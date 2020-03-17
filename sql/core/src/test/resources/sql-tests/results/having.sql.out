@@ -2,48 +2,48 @@
 -- Number of queries: 5
 
 
--- !query 0
+-- !query
 create temporary view hav as select * from values
   ("one", 1),
   ("two", 2),
   ("three", 3),
   ("one", 5)
   as hav(k, v)
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2
--- !query 1 schema
+-- !query schema
 struct<k:string,sum(v):bigint>
--- !query 1 output
+-- !query output
 one	6
 three	3
 
 
--- !query 2
+-- !query
 SELECT count(k) FROM hav GROUP BY v + 1 HAVING v + 1 = 2
--- !query 2 schema
+-- !query schema
 struct<count(k):bigint>
--- !query 2 output
+-- !query output
 1
 
 
--- !query 3
+-- !query
 SELECT MIN(t.v) FROM (SELECT * FROM hav WHERE v > 0) t HAVING(COUNT(1) > 0)
--- !query 3 schema
+-- !query schema
 struct<min(v):int>
--- !query 3 output
+-- !query output
 1
 
 
--- !query 4
+-- !query
 SELECT a + b FROM VALUES (1L, 2), (3L, 4) AS T(a, b) GROUP BY a + b HAVING a + b > 1
--- !query 4 schema
+-- !query schema
 struct<(a + CAST(b AS BIGINT)):bigint>
--- !query 4 output
+-- !query output
 3
 7

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -26,13 +24,16 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsCatalogOptions, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 
 class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
 
@@ -74,7 +75,12 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     withCatalogOption.foreach(cName => dfw.option("catalog", cName))
     dfw.partitionBy(partitionBy: _*).save()
 
-    val table = catalog(withCatalogOption.getOrElse(SESSION_CATALOG_NAME)).loadTable("t1")
+    val ident = if (withCatalogOption.isEmpty) {
+      Identifier.of(Array("default"), "t1")
+    } else {
+      Identifier.of(Array(), "t1")
+    }
+    val table = catalog(withCatalogOption.getOrElse(SESSION_CATALOG_NAME)).loadTable(ident)
     val namespace = withCatalogOption.getOrElse("default")
     assert(table.name() === s"$namespace.t1", "Table identifier was wrong")
     assert(table.partitioning().length === partitionBy.length, "Partitioning did not match")
@@ -133,7 +139,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
     dfw.save()
 
-    val table = catalog(SESSION_CATALOG_NAME).loadTable("t1")
+    val table = catalog(SESSION_CATALOG_NAME).loadTable(Identifier.of(Array("default"), "t1"))
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
     assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
     assert(load("t1", None).count() === 0)
@@ -196,21 +202,94 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     assert(e.getMessage.contains("not support user specified schema"))
   }
 
+  test("DataFrameReader creates v2Relation with identifiers") {
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
+    val df = load("t1", Some(catalogName))
+    checkV2Identifiers(df.logicalPlan)
+  }
+
+  test("DataFrameWriter creates v2Relation with identifiers") {
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
+
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+
+    spark.listenerManager.register(listener)
+
+    try {
+      // Test append
+      save("t1", SaveMode.Append, Some(catalogName))
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(plan.isInstanceOf[AppendData])
+      val appendRelation = plan.asInstanceOf[AppendData].table
+      checkV2Identifiers(appendRelation)
+
+      // Test overwrite
+      save("t1", SaveMode.Overwrite, Some(catalogName))
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(plan.isInstanceOf[OverwriteByExpression])
+      val overwriteRelation = plan.asInstanceOf[OverwriteByExpression].table
+      checkV2Identifiers(overwriteRelation)
+
+      // Test insert
+      spark.range(10).write.format(format).insertInto(s"$catalogName.t1")
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(plan.isInstanceOf[AppendData])
+      val insertRelation = plan.asInstanceOf[AppendData].table
+      checkV2Identifiers(insertRelation)
+
+      // Test saveAsTable append
+      spark.range(10).write.format(format).mode(SaveMode.Append).saveAsTable(s"$catalogName.t1")
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(plan.isInstanceOf[AppendData])
+      val saveAsTableRelation = plan.asInstanceOf[AppendData].table
+      checkV2Identifiers(saveAsTableRelation)
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  private def checkV2Identifiers(
+      plan: LogicalPlan,
+      identifier: String = "t1",
+      catalogPlugin: TableCatalog = catalog(catalogName)): Unit = {
+    assert(plan.isInstanceOf[DataSourceV2Relation])
+    val v2 = plan.asInstanceOf[DataSourceV2Relation]
+    assert(v2.identifier.exists(_.name() == identifier))
+    assert(v2.catalog.exists(_ == catalogPlugin))
+  }
+
   private def load(name: String, catalogOpt: Option[String]): DataFrame = {
-    val dfr = spark.read.format(format).option("name", "t1")
+    val dfr = spark.read.format(format).option("name", name)
     catalogOpt.foreach(cName => dfr.option("catalog", cName))
     dfr.load()
+  }
+
+  private def save(name: String, mode: SaveMode, catalogOpt: Option[String]): Unit = {
+    val df = spark.range(10).write.format(format).option("name", name)
+    catalogOpt.foreach(cName => df.option("catalog", cName))
+    df.mode(mode).save()
   }
 }
 
 class CatalogSupportingInMemoryTableProvider
-  extends InMemoryTableProvider
+  extends FakeV2Provider
   with SupportsCatalogOptions {
 
   override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier = {
     val name = options.get("name")
     assert(name != null, "The name should be provided for this table")
-    Identifier.of(Array.empty, name)
+    val namespace = if (options.containsKey("catalog")) {
+      Array[String]()
+    } else {
+      Array("default")
+    }
+    Identifier.of(namespace, name)
   }
 
   override def extractCatalog(options: CaseInsensitiveStringMap): String = {

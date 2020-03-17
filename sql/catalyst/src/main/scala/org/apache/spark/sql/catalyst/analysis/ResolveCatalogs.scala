@@ -44,6 +44,27 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
       createAlterTable(nameParts, catalog, tbl, changes)
 
+    case AlterTableReplaceColumnsStatement(
+        nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
+      val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
+        case Some(table) =>
+          // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
+          val deleteChanges = table.schema.fieldNames.map { name =>
+            TableChange.deleteColumn(Array(name))
+          }
+          val addChanges = cols.map { col =>
+            TableChange.addColumn(
+              col.name.toArray,
+              col.dataType,
+              col.nullable,
+              col.comment.orNull,
+              col.position.orNull)
+          }
+          deleteChanges ++ addChanges
+        case None => Seq()
+      }
+      createAlterTable(nameParts, catalog, tbl, changes)
+
     case a @ AlterTableAlterColumnStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
       val colName = a.column.toArray

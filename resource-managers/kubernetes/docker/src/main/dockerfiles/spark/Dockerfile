@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+ARG java_image_tag=8-jre-slim
 
-FROM openjdk:8-jdk-slim
+FROM openjdk:${java_image_tag}
 
 ARG spark_uid=185
 
@@ -29,7 +30,7 @@ ARG spark_uid=185
 RUN set -ex && \
     apt-get update && \
     ln -s /lib /lib64 && \
-    apt install -y bash tini libc6 libpam-modules krb5-user libnss3 && \
+    apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \
@@ -44,6 +45,7 @@ COPY jars /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY kubernetes/dockerfiles/spark/entrypoint.sh /opt/
+COPY kubernetes/dockerfiles/spark/decom.sh /opt/
 COPY examples /opt/spark/examples
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
@@ -52,6 +54,7 @@ ENV SPARK_HOME /opt/spark
 
 WORKDIR /opt/spark/work-dir
 RUN chmod g+w /opt/spark/work-dir
+RUN chmod a+x /opt/decom.sh
 
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
 

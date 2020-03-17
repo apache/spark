@@ -292,7 +292,7 @@ object GradientDescent extends Logging {
       miniBatchFraction: Double,
       initialWeights: Vector): (Vector, Array[Double]) =
     GradientDescent.runMiniBatchSGD(data, gradient, updater, stepSize, numIterations,
-                                    regParam, miniBatchFraction, initialWeights, 0.001)
+      regParam, miniBatchFraction, initialWeights, 0.001)
 
 
   private def isConverged(

@@ -2,26 +2,44 @@
 -- Number of queries: 31
 
 
--- !query 0
+-- !query
 CREATE TABLE empsalary (
     depname string,
     empno integer,
     salary int,
     enroll_date date
 ) USING parquet
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
+INSERT INTO empsalary VALUES
+  ('develop', 10, 5200, date '2007-08-01'),
+  ('sales', 1, 5000, date '2006-10-01'),
+  ('personnel', 5, 3500, date '2007-12-10'),
+  ('sales', 4, 4800, date '2007-08-08'),
+  ('personnel', 2, 3900, date '2006-12-23'),
+  ('develop', 7, 4200, date '2008-01-01'),
+  ('develop', 9, 4500, date '2008-01-01'),
+  ('sales', 3, 4800, date '2007-08-01'),
+  ('develop', 8, 6000, date '2006-10-01'),
+  ('develop', 11, 5200, date '2007-08-15')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT sum(unique1) over (order by four range between 2 preceding and 1 preceding),
 unique1, four
 FROM tenk1 WHERE unique1 < 10
--- !query 1 schema
+-- !query schema
 struct<sum(unique1) OVER (ORDER BY four ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING):bigint,unique1:int,four:int>
--- !query 1 output
+-- !query output
 12	1	1
 12	5	1
 12	9	1
@@ -34,13 +52,13 @@ NULL	4	0
 NULL	8	0
 
 
--- !query 2
+-- !query
 SELECT sum(unique1) over (order by four desc range between 2 preceding and 1 preceding),
 unique1, four
 FROM tenk1 WHERE unique1 < 10
--- !query 2 schema
+-- !query schema
 struct<sum(unique1) OVER (ORDER BY four DESC NULLS LAST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING):bigint,unique1:int,four:int>
--- !query 2 output
+-- !query output
 10	2	2
 10	6	2
 18	1	1
@@ -53,13 +71,13 @@ NULL	3	3
 NULL	7	3
 
 
--- !query 3
+-- !query
 SELECT sum(unique1) over (partition by four order by unique1 range between 5 preceding and 6 following),
 unique1, four
 FROM tenk1 WHERE unique1 < 10
--- !query 3 schema
+-- !query schema
 struct<sum(unique1) OVER (PARTITION BY four ORDER BY unique1 ASC NULLS FIRST RANGE BETWEEN 5 PRECEDING AND 6 FOLLOWING):bigint,unique1:int,four:int>
--- !query 3 output
+-- !query output
 10	3	3
 10	7	3
 12	4	0
@@ -72,18 +90,7 @@ struct<sum(unique1) OVER (PARTITION BY four ORDER BY unique1 ASC NULLS FIRST RAN
 8	6	2
 
 
--- !query 4
-select last(salary) over(order by salary range between 1000 preceding and 1000 following),
-lag(salary) over(order by salary range between 1000 preceding and 1000 following),
-salary from empsalary
--- !query 4 schema
-struct<>
--- !query 4 output
-org.apache.spark.sql.AnalysisException
-Window Frame specifiedwindowframe(RangeFrame, -1000, 1000) must match the required frame specifiedwindowframe(RowFrame, -1, -1);
-
-
--- !query 5
+-- !query
 select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
@@ -93,9 +100,9 @@ from
    union all select null, 43) ss
 window w as
   (order by ss.id asc nulls first range between 2 preceding and 2 following)
--- !query 5 schema
+-- !query schema
 struct<id:bigint,y:bigint,first(y, false) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CAST((- 2) AS BIGINT) FOLLOWING AND CAST(2 AS BIGINT) FOLLOWING):bigint,last(y, false) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CAST((- 2) AS BIGINT) FOLLOWING AND CAST(2 AS BIGINT) FOLLOWING):bigint>
--- !query 5 output
+-- !query output
 1	1	1	3
 2	2	1	4
 3	3	1	5
@@ -105,7 +112,7 @@ NULL	42	42	43
 NULL	43	42	43
 
 
--- !query 6
+-- !query
 select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
@@ -115,9 +122,9 @@ from
    union all select null, 43) ss
 window w as
   (order by ss.id asc nulls last range between 2 preceding and 2 following)
--- !query 6 schema
+-- !query schema
 struct<id:bigint,y:bigint,first(y, false) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN CAST((- 2) AS BIGINT) FOLLOWING AND CAST(2 AS BIGINT) FOLLOWING):bigint,last(y, false) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN CAST((- 2) AS BIGINT) FOLLOWING AND CAST(2 AS BIGINT) FOLLOWING):bigint>
--- !query 6 output
+-- !query output
 1	1	1	3
 2	2	1	4
 3	3	1	5
@@ -127,7 +134,7 @@ NULL	42	42	43
 NULL	43	42	43
 
 
--- !query 7
+-- !query
 select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
@@ -137,9 +144,9 @@ from
    union all select null, 43) ss
 window w as
   (order by ss.id desc nulls first range between 2 preceding and 2 following)
--- !query 7 schema
+-- !query schema
 struct<id:bigint,y:bigint,first(y, false) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN CAST((- 2) AS BIGINT) FOLLOWING AND CAST(2 AS BIGINT) FOLLOWING):bigint,last(y, false) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN CAST((- 2) AS BIGINT) FOLLOWING AND CAST(2 AS BIGINT) FOLLOWING):bigint>
--- !query 7 output
+-- !query output
 1	1	3	1
 2	2	4	1
 3	3	5	1
@@ -149,7 +156,7 @@ NULL	42	42	43
 NULL	43	42	43
 
 
--- !query 8
+-- !query
 select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
@@ -159,9 +166,9 @@ from
    union all select null, 43) ss
 window w as
   (order by ss.id desc nulls last range between 2 preceding and 2 following)
--- !query 8 schema
+-- !query schema
 struct<id:bigint,y:bigint,first(y, false) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CAST((- 2) AS BIGINT) FOLLOWING AND CAST(2 AS BIGINT) FOLLOWING):bigint,last(y, false) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CAST((- 2) AS BIGINT) FOLLOWING AND CAST(2 AS BIGINT) FOLLOWING):bigint>
--- !query 8 output
+-- !query output
 1	1	3	1
 2	2	4	1
 3	3	5	1
@@ -171,80 +178,80 @@ NULL	42	42	43
 NULL	43	42	43
 
 
--- !query 9
+-- !query
 select x.id, last(x.id) over (order by x.id range between current row and 2147450884 following)
 from range(32764, 32767) x
--- !query 9 schema
+-- !query schema
 struct<id:bigint,last(id, false) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND CAST(2147450884 AS BIGINT) FOLLOWING):bigint>
--- !query 9 output
+-- !query output
 32764	32766
 32765	32766
 32766	32766
 
 
--- !query 10
+-- !query
 select x.id, last(x.id) over (order by x.id desc range between current row and 2147450885 following)
 from range(-32766, -32765) x
--- !query 10 schema
+-- !query schema
 struct<id:bigint,last(id, false) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND CAST(2147450885 AS BIGINT) FOLLOWING):bigint>
--- !query 10 output
+-- !query output
 -32766	-32766
 
 
--- !query 11
+-- !query
 select x.id, last(x.id) over (order by x.id range between current row and 4 following)
 from range(2147483644, 2147483647) x
--- !query 11 schema
+-- !query schema
 struct<id:bigint,last(id, false) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND CAST(4 AS BIGINT) FOLLOWING):bigint>
--- !query 11 output
+-- !query output
 2147483644	2147483646
 2147483645	2147483646
 2147483646	2147483646
 
 
--- !query 12
+-- !query
 select x.id, last(x.id) over (order by x.id desc range between current row and 5 following)
 from range(-2147483646, -2147483645) x
--- !query 12 schema
+-- !query schema
 struct<id:bigint,last(id, false) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND CAST(5 AS BIGINT) FOLLOWING):bigint>
--- !query 12 output
+-- !query output
 -2147483646	-2147483646
 
 
--- !query 13
+-- !query
 select x.id, last(x.id) over (order by x.id range between current row and 4 following)
 from range(9223372036854775804, 9223372036854775807) x
--- !query 13 schema
+-- !query schema
 struct<>
--- !query 13 output
+-- !query output
 java.lang.ArithmeticException
 long overflow
 
 
--- !query 14
+-- !query
 select x.id, last(x.id) over (order by x.id desc range between current row and 5 following)
 from range(-9223372036854775806, -9223372036854775805) x
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 java.lang.ArithmeticException
 long overflow
 
 
--- !query 15
+-- !query
 create table numerics (
     id int,
     f_float4 float,
     f_float8 float,
     f_numeric int
 ) using parquet
--- !query 15 schema
+-- !query schema
 struct<>
--- !query 15 output
+-- !query output
 
 
 
--- !query 16
+-- !query
 insert into numerics values
 (1, -3, -3, -3),
 (2, -1, -1, -1),
@@ -253,20 +260,20 @@ insert into numerics values
 (5, 1.12, 1.12, 1.12),
 (6, 2, 2, 2),
 (7, 100, 100, 100)
--- !query 16 schema
+-- !query schema
 struct<>
--- !query 16 output
+-- !query output
 
 
 
--- !query 17
+-- !query
 select id, f_float4, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float4 range between
              1 preceding and 1 following)
--- !query 17 schema
+-- !query schema
 struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int>
--- !query 17 output
+-- !query output
 1	-3.0	1	1
 2	-1.0	2	3
 3	0.0	2	3
@@ -276,14 +283,14 @@ struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS 
 7	100.0	7	7
 
 
--- !query 18
+-- !query
 select id, f_float4, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float4 range between
              1 preceding and 1.1 following)
--- !query 18 schema
+-- !query schema
 struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int>
--- !query 18 output
+-- !query output
 1	-3.0	1	1
 2	-1.0	2	3
 3	0.0	2	4
@@ -293,14 +300,14 @@ struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS 
 7	100.0	7	7
 
 
--- !query 19
+-- !query
 select id, f_float4, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float4 range between
              'inf' preceding and 'inf' following)
--- !query 19 schema
+-- !query schema
 struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int>
--- !query 19 output
+-- !query output
 1	-3.0	1	7
 2	-1.0	1	7
 3	0.0	1	7
@@ -310,14 +317,14 @@ struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS 
 7	100.0	1	7
 
 
--- !query 20
+-- !query
 select id, f_float4, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float4 range between
              1.1 preceding and 'NaN' following)
--- !query 20 schema
+-- !query schema
 struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int>
--- !query 20 output
+-- !query output
 1	-3.0	1	7
 2	-1.0	2	7
 3	0.0	2	7
@@ -327,14 +334,14 @@ struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS 
 7	100.0	7	7
 
 
--- !query 21
+-- !query
 select id, f_float8, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float8 range between
              1 preceding and 1 following)
--- !query 21 schema
+-- !query schema
 struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int>
--- !query 21 output
+-- !query output
 1	-3.0	1	1
 2	-1.0	2	3
 3	0.0	2	3
@@ -344,14 +351,14 @@ struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS 
 7	100.0	7	7
 
 
--- !query 22
+-- !query
 select id, f_float8, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float8 range between
              1 preceding and 1.1 following)
--- !query 22 schema
+-- !query schema
 struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int>
--- !query 22 output
+-- !query output
 1	-3.0	1	1
 2	-1.0	2	3
 3	0.0	2	4
@@ -361,14 +368,14 @@ struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS 
 7	100.0	7	7
 
 
--- !query 23
+-- !query
 select id, f_float8, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float8 range between
              'inf' preceding and 'inf' following)
--- !query 23 schema
+-- !query schema
 struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int>
--- !query 23 output
+-- !query output
 1	-3.0	1	7
 2	-1.0	1	7
 3	0.0	1	7
@@ -378,14 +385,14 @@ struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS 
 7	100.0	1	7
 
 
--- !query 24
+-- !query
 select id, f_float8, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float8 range between
              1.1 preceding and 'NaN' following)
--- !query 24 schema
+-- !query schema
 struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int>
--- !query 24 output
+-- !query output
 1	-3.0	1	7
 2	-1.0	2	7
 3	0.0	2	7
@@ -395,14 +402,14 @@ struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS 
 7	100.0	7	7
 
 
--- !query 25
+-- !query
 select id, f_numeric, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_numeric range between
              1 preceding and 1 following)
--- !query 25 schema
+-- !query schema
 struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING):int>
--- !query 25 output
+-- !query output
 1	-3	1	1
 2	-1	2	3
 3	0	2	5
@@ -412,14 +419,14 @@ struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS 
 7	100	7	7
 
 
--- !query 26
+-- !query
 select id, f_numeric, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_numeric range between
              1 preceding and 1.1 following)
--- !query 26 schema
+-- !query schema
 struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int>
--- !query 26 output
+-- !query output
 1	-3	1	1
 2	-1	2	3
 3	0	2	5
@@ -429,14 +436,14 @@ struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS 
 7	100	7	7
 
 
--- !query 27
+-- !query
 select id, f_numeric, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_numeric range between
              1 preceding and 1.1 following)
--- !query 27 schema
+-- !query schema
 struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int>
--- !query 27 output
+-- !query output
 1	-3	1	1
 2	-1	2	3
 3	0	2	5
@@ -446,29 +453,29 @@ struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS 
 7	100	7	7
 
 
--- !query 28
+-- !query
 select id, f_numeric, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_numeric range between
              1.1 preceding and 'NaN' following)
--- !query 28 schema
+-- !query schema
 struct<>
--- !query 28 output
+-- !query output
 java.lang.NumberFormatException
 invalid input syntax for type numeric: NaN
 
 
--- !query 29
+-- !query
 drop table empsalary
--- !query 29 schema
+-- !query schema
 struct<>
--- !query 29 output
+-- !query output
 
 
 
--- !query 30
+-- !query
 drop table numerics
--- !query 30 schema
+-- !query schema
 struct<>
--- !query 30 output
+-- !query output
 

@@ -631,7 +631,7 @@ abstract class OrcQueryTest extends OrcTest {
   }
 }
 
-class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
+abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   import testImplicits._
 
   test("LZO compression options for writing to an ORC file") {
@@ -721,4 +721,11 @@ class OrcV1QuerySuite extends OrcQuerySuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
+}
+
+class OrcV2QuerySuite extends OrcQuerySuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

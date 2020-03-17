@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactor
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
@@ -93,7 +94,7 @@ trait FakeStreamingWriteTable extends Table with SupportsWrite {
 
 class FakeReadMicroBatchOnly
     extends DataSourceRegister
-    with TableProvider
+    with SimpleTableProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-read-microbatch-only"
 
@@ -116,7 +117,7 @@ class FakeReadMicroBatchOnly
 
 class FakeReadContinuousOnly
     extends DataSourceRegister
-    with TableProvider
+    with SimpleTableProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-read-continuous-only"
 
@@ -137,7 +138,7 @@ class FakeReadContinuousOnly
   }
 }
 
-class FakeReadBothModes extends DataSourceRegister with TableProvider {
+class FakeReadBothModes extends DataSourceRegister with SimpleTableProvider {
   override def shortName(): String = "fake-read-microbatch-continuous"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
@@ -154,7 +155,7 @@ class FakeReadBothModes extends DataSourceRegister with TableProvider {
   }
 }
 
-class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
+class FakeReadNeitherMode extends DataSourceRegister with SimpleTableProvider {
   override def shortName(): String = "fake-read-neither-mode"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
@@ -168,7 +169,7 @@ class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
 
 class FakeWriteOnly
     extends DataSourceRegister
-    with TableProvider
+    with SimpleTableProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-write-microbatch-continuous"
 
@@ -183,7 +184,7 @@ class FakeWriteOnly
   }
 }
 
-class FakeNoWrite extends DataSourceRegister with TableProvider {
+class FakeNoWrite extends DataSourceRegister with SimpleTableProvider {
   override def shortName(): String = "fake-write-neither-mode"
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new Table {
@@ -201,7 +202,7 @@ class FakeSink extends Sink {
 }
 
 class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
-  with TableProvider with StreamSinkProvider {
+  with SimpleTableProvider with StreamSinkProvider {
 
   override def createSink(
       sqlContext: SQLContext,
@@ -378,10 +379,10 @@ class StreamingDataSourceV2Suite extends StreamTest {
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
       val sourceTable = DataSource.lookupDataSource(read, spark.sqlContext.conf).getConstructor()
-        .newInstance().asInstanceOf[TableProvider].getTable(CaseInsensitiveStringMap.empty())
+        .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
 
       val sinkTable = DataSource.lookupDataSource(write, spark.sqlContext.conf).getConstructor()
-        .newInstance().asInstanceOf[TableProvider].getTable(CaseInsensitiveStringMap.empty())
+        .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       trigger match {

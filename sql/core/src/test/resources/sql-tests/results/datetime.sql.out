@@ -2,392 +2,392 @@
 -- Number of queries: 47
 
 
--- !query 0
+-- !query
 select current_date = current_date(), current_timestamp = current_timestamp()
--- !query 0 schema
+-- !query schema
 struct<(current_date() = current_date()):boolean,(current_timestamp() = current_timestamp()):boolean>
--- !query 0 output
+-- !query output
 true	true
 
 
--- !query 1
+-- !query
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd')
--- !query 1 schema
+-- !query schema
 struct<to_date(NULL):date,to_date('2016-12-31'):date,to_date('2016-12-31', 'yyyy-MM-dd'):date>
--- !query 1 output
+-- !query output
 NULL	2016-12-31	2016-12-31
 
 
--- !query 2
+-- !query
 select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('2016-12-31', 'yyyy-MM-dd')
--- !query 2 schema
+-- !query schema
 struct<to_timestamp(NULL):timestamp,to_timestamp('2016-12-31 00:12:00'):timestamp,to_timestamp('2016-12-31', 'yyyy-MM-dd'):timestamp>
--- !query 2 output
+-- !query output
 NULL	2016-12-31 00:12:00	2016-12-31 00:00:00
 
 
--- !query 3
+-- !query
 select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'), dayofweek(null), dayofweek('1582-10-15 13:10:15')
--- !query 3 schema
+-- !query schema
 struct<dayofweek(CAST(2007-02-03 AS DATE)):int,dayofweek(CAST(2009-07-30 AS DATE)):int,dayofweek(CAST(2017-05-27 AS DATE)):int,dayofweek(CAST(NULL AS DATE)):int,dayofweek(CAST(1582-10-15 13:10:15 AS DATE)):int>
--- !query 3 output
+-- !query output
 7	5	7	NULL	6
 
 
--- !query 4
+-- !query
 create temporary view ttf1 as select * from values
   (1, 2),
   (2, 3)
   as ttf1(current_date, current_timestamp)
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 select current_date, current_timestamp from ttf1
--- !query 5 schema
+-- !query schema
 struct<current_date:int,current_timestamp:int>
--- !query 5 output
+-- !query output
 1	2
 2	3
 
 
--- !query 6
+-- !query
 create temporary view ttf2 as select * from values
   (1, 2),
   (2, 3)
   as ttf2(a, b)
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2
--- !query 7 schema
+-- !query schema
 struct<(current_date() = current_date()):boolean,(current_timestamp() = current_timestamp()):boolean,a:int,b:int>
--- !query 7 output
+-- !query output
 true	true	1	2
 true	true	2	3
 
 
--- !query 8
+-- !query
 select a, b from ttf2 order by a, current_date
--- !query 8 schema
+-- !query schema
 struct<a:int,b:int>
--- !query 8 output
+-- !query output
 1	2
 2	3
 
 
--- !query 9
+-- !query
 select weekday('2007-02-03'), weekday('2009-07-30'), weekday('2017-05-27'), weekday(null), weekday('1582-10-15 13:10:15')
--- !query 9 schema
+-- !query schema
 struct<weekday(CAST(2007-02-03 AS DATE)):int,weekday(CAST(2009-07-30 AS DATE)):int,weekday(CAST(2017-05-27 AS DATE)):int,weekday(CAST(NULL AS DATE)):int,weekday(CAST(1582-10-15 13:10:15 AS DATE)):int>
--- !query 9 output
+-- !query output
 5	3	5	NULL	4
 
 
--- !query 10
+-- !query
 select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01')
--- !query 10 schema
+-- !query schema
 struct<year(CAST(1500-01-01 AS DATE)):int,month(CAST(1500-01-01 AS DATE)):int,dayofyear(CAST(1500-01-01 AS DATE)):int>
--- !query 10 output
+-- !query output
 1500	1	1
 
 
--- !query 11
+-- !query
 select date '2019-01-01\t'
--- !query 11 schema
+-- !query schema
 struct<DATE '2019-01-01':date>
--- !query 11 output
+-- !query output
 2019-01-01
 
 
--- !query 12
+-- !query
 select timestamp '2019-01-01\t'
--- !query 12 schema
+-- !query schema
 struct<TIMESTAMP '2019-01-01 00:00:00':timestamp>
--- !query 12 output
+-- !query output
 2019-01-01 00:00:00
 
 
--- !query 13
+-- !query
 select timestamp'2011-11-11 11:11:11' + interval '2' day
--- !query 13 schema
+-- !query schema
 struct<CAST(TIMESTAMP '2011-11-11 11:11:11' + INTERVAL '2 days' AS TIMESTAMP):timestamp>
--- !query 13 output
+-- !query output
 2011-11-13 11:11:11
 
 
--- !query 14
+-- !query
 select timestamp'2011-11-11 11:11:11' - interval '2' day
--- !query 14 schema
+-- !query schema
 struct<CAST(TIMESTAMP '2011-11-11 11:11:11' - INTERVAL '2 days' AS TIMESTAMP):timestamp>
--- !query 14 output
+-- !query output
 2011-11-09 11:11:11
 
 
--- !query 15
+-- !query
 select date'2011-11-11 11:11:11' + interval '2' second
--- !query 15 schema
+-- !query schema
 struct<CAST(CAST(DATE '2011-11-11' AS TIMESTAMP) + INTERVAL '2 seconds' AS DATE):date>
--- !query 15 output
+-- !query output
 2011-11-11
 
 
--- !query 16
+-- !query
 select date'2011-11-11 11:11:11' - interval '2' second
--- !query 16 schema
+-- !query schema
 struct<CAST(CAST(DATE '2011-11-11' AS TIMESTAMP) - INTERVAL '2 seconds' AS DATE):date>
--- !query 16 output
+-- !query output
 2011-11-10
 
 
--- !query 17
+-- !query
 select '2011-11-11' - interval '2' day
--- !query 17 schema
+-- !query schema
 struct<CAST(CAST(2011-11-11 AS TIMESTAMP) - INTERVAL '2 days' AS STRING):string>
--- !query 17 output
+-- !query output
 2011-11-09 00:00:00
 
 
--- !query 18
+-- !query
 select '2011-11-11 11:11:11' - interval '2' second
--- !query 18 schema
+-- !query schema
 struct<CAST(CAST(2011-11-11 11:11:11 AS TIMESTAMP) - INTERVAL '2 seconds' AS STRING):string>
--- !query 18 output
+-- !query output
 2011-11-11 11:11:09
 
 
--- !query 19
+-- !query
 select '1' - interval '2' second
--- !query 19 schema
+-- !query schema
 struct<CAST(CAST(1 AS TIMESTAMP) - INTERVAL '2 seconds' AS STRING):string>
--- !query 19 output
+-- !query output
 NULL
 
 
--- !query 20
+-- !query
 select 1 - interval '2' second
--- !query 20 schema
+-- !query schema
 struct<>
--- !query 20 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '1 - INTERVAL '2 seconds'' due to data type mismatch: argument 1 requires timestamp type, however, '1' is of int type.; line 1 pos 7
 
 
--- !query 21
+-- !query
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678'
--- !query 21 schema
+-- !query schema
 struct<subtracttimestamps(CAST(DATE '2020-01-01' AS TIMESTAMP), TIMESTAMP '2019-10-06 10:11:12.345678'):interval>
--- !query 21 output
+-- !query output
 2078 hours 48 minutes 47.654322 seconds
 
 
--- !query 22
+-- !query
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
--- !query 22 schema
+-- !query schema
 struct<subtracttimestamps(TIMESTAMP '2019-10-06 10:11:12.345678', CAST(DATE '2020-01-01' AS TIMESTAMP)):interval>
--- !query 22 output
+-- !query output
 -2078 hours -48 minutes -47.654322 seconds
 
 
--- !query 23
+-- !query
 select timestamp'2019-10-06 10:11:12.345678' - null
--- !query 23 schema
+-- !query schema
 struct<subtracttimestamps(TIMESTAMP '2019-10-06 10:11:12.345678', CAST(NULL AS TIMESTAMP)):interval>
--- !query 23 output
+-- !query output
 NULL
 
 
--- !query 24
+-- !query
 select null - timestamp'2019-10-06 10:11:12.345678'
--- !query 24 schema
+-- !query schema
 struct<subtracttimestamps(CAST(NULL AS TIMESTAMP), TIMESTAMP '2019-10-06 10:11:12.345678'):interval>
--- !query 24 output
+-- !query output
 NULL
 
 
--- !query 25
+-- !query
 select date_add('2011-11-11', 1Y)
--- !query 25 schema
+-- !query schema
 struct<date_add(CAST(2011-11-11 AS DATE), 1):date>
--- !query 25 output
+-- !query output
 2011-11-12
 
 
--- !query 26
+-- !query
 select date_add('2011-11-11', 1S)
--- !query 26 schema
+-- !query schema
 struct<date_add(CAST(2011-11-11 AS DATE), 1):date>
--- !query 26 output
+-- !query output
 2011-11-12
 
 
--- !query 27
+-- !query
 select date_add('2011-11-11', 1)
--- !query 27 schema
+-- !query schema
 struct<date_add(CAST(2011-11-11 AS DATE), 1):date>
--- !query 27 output
+-- !query output
 2011-11-12
 
 
--- !query 28
+-- !query
 select date_add('2011-11-11', 1L)
--- !query 28 schema
+-- !query schema
 struct<>
--- !query 28 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1L)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1L' is of bigint type.; line 1 pos 7
 
 
--- !query 29
+-- !query
 select date_add('2011-11-11', 1.0)
--- !query 29 schema
+-- !query schema
 struct<>
--- !query 29 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1.0BD)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
 
 
--- !query 30
+-- !query
 select date_add('2011-11-11', 1E1)
--- !query 30 schema
+-- !query schema
 struct<>
--- !query 30 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
 
 
--- !query 31
+-- !query
 select date_add('2011-11-11', '1')
--- !query 31 schema
+-- !query schema
 struct<>
--- !query 31 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'date_add(CAST('2011-11-11' AS DATE), '1')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, ''1'' is of string type.; line 1 pos 7
 
 
--- !query 32
+-- !query
 select date_add(date'2011-11-11', 1)
--- !query 32 schema
+-- !query schema
 struct<date_add(DATE '2011-11-11', 1):date>
--- !query 32 output
+-- !query output
 2011-11-12
 
 
--- !query 33
+-- !query
 select date_add(timestamp'2011-11-11', 1)
--- !query 33 schema
+-- !query schema
 struct<date_add(CAST(TIMESTAMP '2011-11-11 00:00:00' AS DATE), 1):date>
--- !query 33 output
+-- !query output
 2011-11-12
 
 
--- !query 34
+-- !query
 select date_sub(date'2011-11-11', 1)
--- !query 34 schema
+-- !query schema
 struct<date_sub(DATE '2011-11-11', 1):date>
--- !query 34 output
+-- !query output
 2011-11-10
 
 
--- !query 35
+-- !query
 select date_sub(timestamp'2011-11-11', 1)
--- !query 35 schema
+-- !query schema
 struct<date_sub(CAST(TIMESTAMP '2011-11-11 00:00:00' AS DATE), 1):date>
--- !query 35 output
+-- !query output
 2011-11-10
 
 
--- !query 36
+-- !query
 select date_sub(null, 1)
--- !query 36 schema
+-- !query schema
 struct<date_sub(CAST(NULL AS DATE), 1):date>
--- !query 36 output
+-- !query output
 NULL
 
 
--- !query 37
+-- !query
 select date_sub(date'2011-11-11', null)
--- !query 37 schema
+-- !query schema
 struct<date_sub(DATE '2011-11-11', CAST(NULL AS INT)):date>
--- !query 37 output
+-- !query output
 NULL
 
 
--- !query 38
+-- !query
 select date'2011-11-11' + 1E1
--- !query 38 schema
+-- !query schema
 struct<>
--- !query 38 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'date_add(DATE '2011-11-11', 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
 
 
--- !query 39
+-- !query
 select null + date '2001-09-28'
--- !query 39 schema
+-- !query schema
 struct<date_add(DATE '2001-09-28', CAST(NULL AS INT)):date>
--- !query 39 output
+-- !query output
 NULL
 
 
--- !query 40
+-- !query
 select date '2001-09-28' + 7Y
--- !query 40 schema
+-- !query schema
 struct<date_add(DATE '2001-09-28', 7):date>
--- !query 40 output
+-- !query output
 2001-10-05
 
 
--- !query 41
+-- !query
 select 7S + date '2001-09-28'
--- !query 41 schema
+-- !query schema
 struct<date_add(DATE '2001-09-28', 7):date>
--- !query 41 output
+-- !query output
 2001-10-05
 
 
--- !query 42
+-- !query
 select date '2001-10-01' - 7
--- !query 42 schema
+-- !query schema
 struct<date_sub(DATE '2001-10-01', 7):date>
--- !query 42 output
+-- !query output
 2001-09-24
 
 
--- !query 43
+-- !query
 select date '2001-09-28' + null
--- !query 43 schema
+-- !query schema
 struct<date_add(DATE '2001-09-28', CAST(NULL AS INT)):date>
--- !query 43 output
+-- !query output
 NULL
 
 
--- !query 44
+-- !query
 select date '2001-09-28' - null
--- !query 44 schema
+-- !query schema
 struct<date_sub(DATE '2001-09-28', CAST(NULL AS INT)):date>
--- !query 44 output
+-- !query output
 NULL
 
 
--- !query 45
+-- !query
 select null - date '2019-10-06'
--- !query 45 schema
+-- !query schema
 struct<subtractdates(CAST(NULL AS DATE), DATE '2019-10-06'):interval>
--- !query 45 output
+-- !query output
 NULL
 
 
--- !query 46
+-- !query
 select date '2001-10-01' - date '2001-09-28'
--- !query 46 schema
+-- !query schema
 struct<subtractdates(DATE '2001-10-01', DATE '2001-09-28'):interval>
--- !query 46 output
+-- !query output
 3 days

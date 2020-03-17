@@ -56,6 +56,8 @@ import org.apache.spark.annotation.Evolving;
  * Spark only accepts the commit message that arrives first and ignore others.
  *
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface DataWriter<T> extends Closeable {
