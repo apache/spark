@@ -56,8 +56,7 @@ trait DateTimeFormatterHelper {
       locale: Locale,
       needVarLengthSecondFraction: Boolean = false): DateTimeFormatter = {
     val newPattern = DateTimeUtils.convertIncompatiblePattern(pattern)
-    val useVarLen = needVarLengthSecondFraction && newPattern.split("'").zipWithIndex
-      .exists { case (p, idx) => idx % 2 == 0 && p.contains('S') }
+    val useVarLen = needVarLengthSecondFraction && newPattern.contains('S')
     val key = (newPattern, locale, useVarLen)
     var formatter = cache.getIfPresent(key)
     if (formatter == null) {
