@@ -17,16 +17,24 @@
 
 package org.apache.spark.sql.catalyst
 
+trait BaseIdentifier {
+  val identifier: String
+  val qualifier: Seq[String]
+
+  def multipartIdentifier: Seq[String] = qualifier :+ identifier
+}
+
 /**
  * An identifier that optionally specifies a database.
  *
  * Format (unquoted): "name" or "db.name"
  * Format (quoted): "`name`" or "`db`.`name`"
  */
-sealed trait IdentifierWithDatabase {
-  val identifier: String
+sealed trait IdentifierWithDatabase extends BaseIdentifier {
 
   def database: Option[String]
+
+  override val qualifier: Seq[String] = database.map(_ :: Nil).getOrElse(Nil)
 
   /*
    * Escapes back-ticks within the identifier name with double-back-ticks.
@@ -40,9 +48,7 @@ sealed trait IdentifierWithDatabase {
     if (replacedDb.isDefined) s"`${replacedDb.get}`.`$replacedId`" else s"`$replacedId`"
   }
 
-  def unquotedString: String = {
-    if (database.isDefined) s"${database.get}.$identifier" else identifier
-  }
+  def unquotedString: String = multipartIdentifier.mkString(".")
 
   override def toString: String = quotedString
 }
@@ -54,12 +60,14 @@ sealed trait IdentifierWithDatabase {
  * @param name - Is an alias name or a table name
  * @param qualifier - Is a qualifier
  */
-case class AliasIdentifier(name: String, qualifier: Seq[String]) {
+case class AliasIdentifier(name: String, qualifier: Seq[String]) extends BaseIdentifier {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  override val identifier: String = name
 
   def this(identifier: String) = this(identifier, Seq())
 
-  override def toString: String = (qualifier :+ name).quoted
+  override def toString: String = multipartIdentifier.quoted
 }
 
 object AliasIdentifier {

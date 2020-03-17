@@ -20,6 +20,9 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.plans.logical.{ResolvedHint, SubqueryAlias}
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MAX_NESTED_VIEW_DEPTH
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -732,6 +735,41 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TABLE t23519 USING parquet AS SELECT 1 AS c1")
         sql("CREATE VIEW v23519 (c1, c2) AS SELECT c1, c1 FROM t23519")
         checkAnswer(sql("SELECT * FROM v23519"), Row(1, 1))
+      }
+    }
+  }
+
+  test("broadcast hint on temp view") {
+    withTable("t") {
+      spark.range(10).write.saveAsTable("t")
+      withTempView("tv") {
+        sql("CREATE TEMPORARY VIEW tv AS SELECT * FROM t")
+
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          // First, makes sure a join is not broadcastable
+          val plan1 = sql("SELECT * FROM t, tv WHERE t.id = tv.id")
+            .queryExecution.executedPlan
+          assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size == 0)
+
+          // `MAPJOIN(default.tv)` cannot match the temporary table `tv`
+          val plan2 = sql("SELECT /*+ MAPJOIN(default.tv) */ * FROM t, tv WHERE t.id = tv.id")
+            .queryExecution.analyzed
+          assert(plan2.collect { case h: ResolvedHint => h }.size == 0)
+
+          // `MAPJOIN(tv)` can match the temporary table `tv`
+          val df = sql("SELECT /*+ MAPJOIN(tv) */ * FROM t, tv WHERE t.id = tv.id")
+          val logicalPlan = df.queryExecution.analyzed
+          val broadcastData = logicalPlan.collect {
+            case ResolvedHint(SubqueryAlias(name, _), _) => name
+          }
+          assert(broadcastData.size == 1)
+          assert(broadcastData.head.qualifier.isEmpty)
+          assert(broadcastData.head.name === "tv")
+
+          val sparkPlan = df.queryExecution.executedPlan
+          val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
+          assert(broadcastHashJoins.size == 1)
+        }
       }
     }
   }

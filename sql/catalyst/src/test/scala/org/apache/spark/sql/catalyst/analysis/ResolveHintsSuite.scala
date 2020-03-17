@@ -241,4 +241,52 @@ class ResolveHintsSuite extends AnalysisTest {
       Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
+
+  test("Supports multi-part table names for broadcast hint resolution") {
+    // local temp table
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("table", "table2"),
+        table("table").join(table("table2"))),
+      Join(
+        ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+        ResolvedHint(testRelation2, HintInfo(strategy = Some(BROADCAST))),
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = false)
+
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("TaBlE", "table2"),
+        table("TaBlE").join(table("TaBlE2"))),
+      Join(
+        ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+        testRelation2,
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = true)
+
+    // global temp table
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("global_temp.table4", "GlOBal_TeMP.table5"),
+        table("global_temp", "table4").join(table("global_temp", "table5"))),
+      Join(
+        ResolvedHint(testRelation4, HintInfo(strategy = Some(BROADCAST))),
+        ResolvedHint(testRelation5, HintInfo(strategy = Some(BROADCAST))),
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = false)
+
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("global_temp.TaBlE4", "table5"),
+        table("global_temp", "TaBlE4").join(table("global_temp", "TaBlE5"))),
+      Join(
+        ResolvedHint(testRelation4, HintInfo(strategy = Some(BROADCAST))),
+        testRelation5,
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = true)
+  }
 }

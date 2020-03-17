@@ -64,9 +64,40 @@ object ResolveHints {
             _.toUpperCase(Locale.ROOT)).contains(hintName.toUpperCase(Locale.ROOT))))
     }
 
+    // This method checks if given multi-part identifiers are matched with each other.
+    // The [[ResolveJoinStrategyHints]] rule is applied before the resolution batch
+    // in the analyzer and we cannot semantically compare them at this stage.
+    // Therefore, we follow simple rules; the process is independent of a session catalog
+    // (`currentDb` in [[SessionCatalog]]) and it just compares them literally.
+    //
+    // Specifically, we follow simple three rules below:
+    //
+    //  1. they match if an identifier in a hint only has one part and it is the same with
+    //     a relation name in a query. If a relation has a namespace (`db1.t`), we just ignore it.
+    //     For example, in a query `SELECT /* BROADCAST(t) */ * FROM db1.t JOIN t`,
+    //     the broadcast hint will match both tables, `db1.t` and `t`.
+    //
+    //  2. they match if an identifier in a hint has two parts and it is the same with
+    //     a two part identifier (name and namespace) in a relation.
+    //     For example, in a query `SELECT /* BROADCAST(default.t) */ * FROM default.t JOIN t`,
+    //     the broadcast hint will match the left-side table only, `default.t`.
+    //
+    //  3. otherwise, no match happens.
+    private def matchedIdentifier(identInHint: Seq[String], identInQuery: Seq[String]): Boolean = {
+      identInHint match {
+        case Seq(tableName) =>
+          resolver(identInQuery.last, tableName)
+        case Seq(dbName, tableName) if identInQuery.size == 2 =>
+          resolver(identInQuery.head, dbName) && resolver(identInQuery.last, tableName)
+        case _ =>
+          false
+      }
+    }
+
     private def applyJoinStrategyHint(
         plan: LogicalPlan,
-        relations: mutable.HashSet[String],
+        relationsInHint: Seq[Seq[String]],
+        appliedRelations: mutable.ArrayBuffer[Seq[String]],
         hintName: String): LogicalPlan = {
       // Whether to continue recursing down the tree
       var recurse = true
@@ -74,21 +105,22 @@ object ResolveHints {
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
           case ResolvedHint(u @ UnresolvedRelation(ident), hint)
-              if relations.exists(resolver(_, ident.last)) =>
-            relations.remove(ident.last)
+              if relationsInHint.exists(matchedIdentifier(_, ident)) =>
+            appliedRelations += ident
             ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
           case ResolvedHint(r: SubqueryAlias, hint)
-              if relations.exists(resolver(_, r.alias)) =>
-            relations.remove(r.alias)
+              if relationsInHint.exists(matchedIdentifier(_, r.identifier.multipartIdentifier)) =>
+            appliedRelations += r.identifier.multipartIdentifier
             ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
-          case u @ UnresolvedRelation(ident) if relations.exists(resolver(_, ident.last)) =>
-            relations.remove(ident.last)
+          case UnresolvedRelation(ident) if relationsInHint.exists(matchedIdentifier(_, ident)) =>
+            appliedRelations += ident
             ResolvedHint(plan, createHintInfo(hintName))
 
-          case r: SubqueryAlias if relations.exists(resolver(_, r.alias)) =>
-            relations.remove(r.alias)
+          case r: SubqueryAlias
+              if relationsInHint.exists(matchedIdentifier(_, r.identifier.multipartIdentifier)) =>
+            appliedRelations += r.identifier.multipartIdentifier
             ResolvedHint(plan, createHintInfo(hintName))
 
           case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
@@ -107,7 +139,9 @@ object ResolveHints {
       }
 
       if ((plan fastEquals newNode) && recurse) {
-        newNode.mapChildren(child => applyJoinStrategyHint(child, relations, hintName))
+        newNode.mapChildren { child =>
+          applyJoinStrategyHint(child, relationsInHint, appliedRelations, hintName)
+        }
       } else {
         newNode
       }
@@ -120,17 +154,21 @@ object ResolveHints {
           ResolvedHint(h.child, createHintInfo(h.name))
         } else {
           // Otherwise, find within the subtree query plans to apply the hint.
-          val relationNames = h.parameters.map {
-            case tableName: String => tableName
-            case tableId: UnresolvedAttribute => tableId.name
+          val relationNamesInHint = h.parameters.map {
+            case tableName: String => UnresolvedAttribute.parseAttributeName(tableName)
+            case tableId: UnresolvedAttribute => tableId.nameParts
             case unsupported => throw new AnalysisException("Join strategy hint parameter " +
               s"should be an identifier or string but was $unsupported (${unsupported.getClass}")
           }
-          val relationNameSet = new mutable.HashSet[String]
-          relationNames.foreach(relationNameSet.add)
-
-          val applied = applyJoinStrategyHint(h.child, relationNameSet, h.name)
-          hintErrorHandler.hintRelationsNotFound(h.name, h.parameters, relationNameSet.toSet)
+          val appliedNames = new mutable.ArrayBuffer[Seq[String]]
+          val applied = applyJoinStrategyHint(h.child, relationNamesInHint, appliedNames, h.name)
+          val invalidNames = relationNamesInHint.filterNot { relationName =>
+            appliedNames.exists { ident =>
+              relationName.size == ident.size &&
+                relationName.zip(ident).forall { case (a, b) => resolver(a, b) }
+            }
+          }
+          hintErrorHandler.hintRelationsNotFound(h.name, h.parameters, invalidNames)
           applied
         }
     }
