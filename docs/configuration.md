@@ -163,6 +163,7 @@ of the most common options to set are:
     and memory overhead of objects in JVM). Setting a proper limit can protect the driver from
     out-of-memory errors.
   </td>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.driver.memory</code></td>
@@ -322,6 +323,7 @@ of the most common options to set are:
     will be called; otherwise, a zero-argument constructor will be called. If no valid constructor
     can be found, the SparkContext creation will fail with an exception.
   </td>
+  <td>1.3.0</td>
 </tr>
 <tr>
   <td><code>spark.local.dir</code></td>
@@ -368,6 +370,7 @@ of the most common options to set are:
     Its length depends on the Hadoop configuration <code>hadoop.caller.context.max.size</code>. It should be concise,
     and typically can have up to 50 characters.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.driver.supervise</code></td>
@@ -376,6 +379,7 @@ of the most common options to set are:
     If true, restarts the driver automatically if it fails with a non-zero exit status.
     Only has effect in Spark standalone mode or Mesos cluster deploy mode.
   </td>
+  <td>1.3.0</td>
 </tr>
 <tr>
   <td><code>spark.driver.log.dfsDir</code></td>
@@ -635,6 +639,7 @@ Apart from these, the following properties are also available, and may be useful
     executor environments contain sensitive information. When this regex matches a property key or
     value, the value is redacted from the environment UI and various logs like YARN and event logs.
   </td>
+  <td>2.1.2</td>
 </tr>
 <tr>
   <td><code>spark.python.profile</code></td>
@@ -648,6 +653,7 @@ Apart from these, the following properties are also available, and may be useful
     By default the <code>pyspark.profiler.BasicProfiler</code> will be used, but this can be overridden by
     passing a profiler class in as a parameter to the <code>SparkContext</code> constructor.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.python.profile.dump</code></td>
@@ -757,6 +763,7 @@ Apart from these, the following properties are also available, and may be useful
     Python binary executable to use for PySpark in driver.
     (default is <code>spark.pyspark.python</code>)
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.pyspark.python</code></td>
@@ -764,6 +771,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Python binary executable to use for PySpark in both driver and executors.
   </td>
+  <td>2.1.0</td>
 </tr>
 </table>
 
@@ -801,6 +809,7 @@ Apart from these, the following properties are also available, and may be useful
     is especially useful to reduce the load on the Node Manager when external shuffle is enabled.
     You can mitigate this issue by setting it to a lower value.
   </td>
+  <td>2.2.1</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.compress</code></td>
@@ -809,6 +818,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether to compress map output files. Generally a good idea. Compression will use
     <code>spark.io.compression.codec</code>.
   </td>
+  <td>0.6.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.file.buffer</code></td>
@@ -818,6 +828,7 @@ Apart from these, the following properties are also available, and may be useful
     specified. These buffers reduce the number of disk seeks and system calls made in creating 
     intermediate shuffle files.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.io.maxRetries</code></td>
@@ -912,6 +923,7 @@ Apart from these, the following properties are also available, and may be useful
     (Advanced) In the sort-based shuffle manager, avoid merge-sorting data if there is no
     map-side aggregation and there are at most this many reduce partitions.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.spill.compress</code></td>
@@ -920,6 +932,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether to compress data spilled during shuffles. Compression will use
     <code>spark.io.compression.codec</code>.
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.accurateBlockThreshold</code></td>
@@ -929,6 +942,7 @@ Apart from these, the following properties are also available, and may be useful
     accurately recorded. This helps to prevent OOM by avoiding underestimating shuffle 
     block size when fetch shuffle blocks.
   </td>
+  <td>2.2.1</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.registration.timeout</code></td>
@@ -936,6 +950,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Timeout in milliseconds for registration to the external shuffle service.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.registration.maxAttempts</code></td>
@@ -943,6 +958,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     When we fail to register to the external shuffle service, we will retry for maxAttempts times.
   </td>
+  <td>2.3.0</td>
 </tr>
 </table>
 
@@ -1268,7 +1284,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to compress RDD checkpoints. Generally a good idea.
     Compression will use <code>spark.io.compression.codec</code>.
-   </td>
+  </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
@@ -1634,6 +1651,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The maximum number of bytes to pack into a single partition when reading files.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.files.openCostInBytes</code></td>
@@ -1643,6 +1661,7 @@ Apart from these, the following properties are also available, and may be useful
     time. This is used when putting multiple files into a partition. It is better to overestimate,
     then the partitions with small files will be faster than partitions with bigger files.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
     <td><code>spark.hadoop.cloneConf</code></td>
@@ -1744,7 +1763,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Port for all block managers to listen on. These exist on both the driver and the executors.
   </td>
-  <td></td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.driver.blockManager.port</code></td>
@@ -1753,7 +1772,7 @@ Apart from these, the following properties are also available, and may be useful
     Driver-specific port for the block manager to listen on, for cases where it cannot use the same
     configuration as executors.
   </td>
-  <td></td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.driver.bindAddress</code></td>
@@ -1767,7 +1786,7 @@ Apart from these, the following properties are also available, and may be useful
     the different ports used by the driver (RPC, block manager and UI) need to be forwarded from the
     container's host.
   </td>
-  <td></td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.driver.host</code></td>
@@ -1776,7 +1795,7 @@ Apart from these, the following properties are also available, and may be useful
     Hostname or IP address for the driver.
     This is used for communicating with the executors and the standalone Master.
   </td>
-  <td></td>
+  <td>0.7.0</td>
 </tr>
 <tr>
   <td><code>spark.driver.port</code></td>
@@ -1785,7 +1804,7 @@ Apart from these, the following properties are also available, and may be useful
     Port for the driver to listen on.
     This is used for communicating with the executors and the standalone Master.
   </td>
-  <td></td>
+  <td>0.7.0</td>
 </tr>
 <tr>
   <td><code>spark.rpc.io.backLog</code></td>

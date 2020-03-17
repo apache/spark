@@ -309,7 +309,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     val summary: NodeSeq =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           <li>
             <Strong>Status:</Strong>
             {jobData.status}

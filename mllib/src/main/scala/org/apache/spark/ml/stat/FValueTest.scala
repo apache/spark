@@ -52,11 +52,10 @@ object FValueTest {
   def test(dataset: DataFrame, featuresCol: String, labelCol: String): DataFrame = {
     val spark = dataset.sparkSession
     val testResults = testRegression(dataset, featuresCol, labelCol)
-    val pValues: Vector = Vectors.dense(testResults.map(_.pValue))
-    val degreesOfFreedom: Array[Long] = testResults.map(_.degreesOfFreedom)
-    val fValues: Vector = Vectors.dense(testResults.map(_.statistic))
-    spark.createDataFrame(
-      Seq(new FValueResult(pValues, degreesOfFreedom, fValues)))
+    val pValues = Vectors.dense(testResults.map(_.pValue))
+    val degreesOfFreedom = testResults.map(_.degreesOfFreedom)
+    val fValues = Vectors.dense(testResults.map(_.statistic))
+    spark.createDataFrame(Seq(FValueResult(pValues, degreesOfFreedom, fValues)))
   }
 
   /**
@@ -113,17 +112,15 @@ object FValueTest {
       }
       array1
     }
-    var fTestResultArray = new Array[SelectionTestResult](numFeatures)
 
     val fd = new FDistribution(1, degreesOfFreedom)
-    for (i <- 0 until numFeatures) {
+    Array.tabulate(numFeatures) { i =>
       // Cov(X,Y) = Sum(((Xi - Avg(X)) * ((Yi-Avg(Y))) / (N-1)
       val covariance = sumForCov (i) / (numSamples - 1)
       val corr = covariance / (yStd * xStd(i))
       val fValue = corr * corr / (1 - corr * corr) * degreesOfFreedom
       val pValue = 1.0 - fd.cumulativeProbability(fValue)
-      fTestResultArray(i) = new FValueTestResult(pValue, degreesOfFreedom, fValue)
+      new FValueTestResult(pValue, degreesOfFreedom, fValue)
     }
-    fTestResultArray
   }
 }

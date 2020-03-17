@@ -41,7 +41,7 @@ function showBootstrapTooltip(node, text) {
 
 // Hide the tooltip for "node"
 function hideBootstrapTooltip(node) {
-    $(node).tooltip("destroy");
+    $(node).tooltip("dispose");
 }
 
 // Register a timeline graph. All timeline graphs should be register before calling any
@@ -190,29 +190,32 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
                     .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "3";});
             })
             .on("click", function(d) {
-                if (lastTimeout != null) {
-                    window.clearTimeout(lastTimeout);
-                }
-                if (lastClickedBatch != null) {
-                    clearBatchRow(lastClickedBatch);
-                    lastClickedBatch = null;
-                }
-                lastClickedBatch = d.x;
-                highlightBatchRow(lastClickedBatch);
-                lastTimeout = window.setTimeout(function () {
-                    lastTimeout = null;
+                var batchSelector = $("#batch-" + d.x);
+                // If there is a corresponding batch row, scroll down to it and highlight it.
+                if (batchSelector.length > 0) {
+                    if (lastTimeout != null) {
+                        window.clearTimeout(lastTimeout);
+                    }
                     if (lastClickedBatch != null) {
                         clearBatchRow(lastClickedBatch);
                         lastClickedBatch = null;
                     }
-                }, 3000); // Clean up after 3 seconds
+                    lastClickedBatch = d.x;
+                    highlightBatchRow(lastClickedBatch);
+                    lastTimeout = window.setTimeout(function () {
+                        lastTimeout = null;
+                        if (lastClickedBatch != null) {
+                            clearBatchRow(lastClickedBatch);
+                            lastClickedBatch = null;
+                        }
+                    }, 3000); // Clean up after 3 seconds
 
-                var batchSelector = $("#batch-" + d.x);
-                var topOffset = batchSelector.offset().top - 15;
-                if (topOffset < 0) {
-                    topOffset = 0;
+                    var topOffset = batchSelector.offset().top - 15;
+                    if (topOffset < 0) {
+                        topOffset = 0;
+                    }
+                    $('html,body').animate({scrollTop: topOffset}, 200);
                 }
-                $('html,body').animate({scrollTop: topOffset}, 200);
             });
 }
 

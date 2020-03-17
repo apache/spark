@@ -44,7 +44,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
+import org.apache.spark.sql.internal.SharedState
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -86,14 +88,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val sparkConf = new SparkConf(loadDefaults = true)
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    SharedState.loadHiveConfFile(sparkConf, hadoopConf)
     val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
 
-    val cliConf = new HiveConf(classOf[SessionState])
-    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
-      ++ sparkConf.getAll.toMap ++ extraConfigs).foreach {
-      case (k, v) =>
-        cliConf.set(k, v)
-    }
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
 
     val sessionState = new CliSessionState(cliConf)
 

@@ -1772,6 +1772,28 @@ test_that("column functions", {
     collect(select(df, alias(not(df$is_true), "is_false"))),
     data.frame(is_false = c(FALSE, TRUE, NA))
   )
+
+  # Test percentile_approx
+  actual <- lapply(
+    list(
+      percentile_approx(column("foo"), 0.5),
+      percentile_approx(column("bar"), lit(0.25), lit(42L)),
+      percentile_approx(column("bar"), c(0.25, 0.5, 0.75)),
+      percentile_approx(column("foo"), c(0.05, 0.95), 100L),
+      percentile_approx("foo", c(0.5)),
+      percentile_approx("bar", c(0.1, 0.9), 10L)),
+    function(x) SparkR:::callJMethod(x@jc, "toString"))
+
+  expected <- list(
+     "percentile_approx(foo, 0.5, 10000)",
+     "percentile_approx(bar, 0.25, 42)",
+     "percentile_approx(bar, array(0.25, 0.5, 0.75), 10000)",
+     "percentile_approx(foo, array(0.05, 0.95), 100)",
+     "percentile_approx(foo, 0.5, 10000)",
+     "percentile_approx(bar, array(0.1, 0.9), 10)"
+  )
+
+  expect_equal(actual, expected)
 })
 
 test_that("column binary mathfunctions", {

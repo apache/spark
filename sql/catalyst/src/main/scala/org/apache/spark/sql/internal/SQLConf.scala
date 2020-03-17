@@ -434,13 +434,14 @@ object SQLConf {
 
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
-      .doc("The minimum number of shuffle partitions after coalescing. This configuration only " +
+      .doc("The minimum number of shuffle partitions after coalescing. If not set, the default " +
+        "value is the default parallelism of the Spark cluster. This configuration only " +
         s"has an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true.")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The minimum number of partitions must be positive.")
-      .createWithDefault(1)
+      .createOptional
 
   val COALESCE_PARTITIONS_INITIAL_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.initialPartitionNum")
@@ -2207,15 +2208,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-
-  val LEGACY_INTEGRALDIVIDE_RETURN_LONG = buildConf("spark.sql.legacy.integralDivide.returnBigint")
-    .doc("If it is set to true, the div operator returns always a bigint. This behavior was " +
-      "inherited from Hive. Otherwise, the return type is the data type of the operands.")
-    .version("3.0.0")
-    .internal()
-    .booleanConf
-    .createWithDefault(false)
-
   val LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING =
     buildConf("spark.sql.legacy.bucketedTableScan.outputOrdering")
       .internal()
@@ -2257,7 +2249,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.allowUntypedScalaUDF")
       .internal()
       .doc("When set to true, user is allowed to use org.apache.spark.sql.functions." +
-        "udf(f: AnyRef, dataType: DataType). Otherwise, exception will be throw.")
+        "udf(f: AnyRef, dataType: DataType). Otherwise, an exception will be thrown at runtime.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -2401,7 +2393,7 @@ object SQLConf {
       "When set to CORRECTED, classes from java.time.* packages are used for the same purpose. " +
       "The default value is EXCEPTION, RuntimeException is thrown when we will get different " +
       "results.")
-    .version("3.1.0")
+    .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2480,15 +2472,6 @@ object SQLConf {
       .intConf
       .checkValue(_ > 0, "The value of spark.sql.addPartitionInBatch.size must be positive")
       .createWithDefault(100)
-
-  val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
-    .internal()
-    .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
-      "dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
-      "java.time.* packages are used for the same purpose.")
-    .version("3.0.0")
-    .booleanConf
-    .createWithDefault(false)
 
   val LEGACY_ALLOW_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.allowHashOnMapType")
     .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
@@ -2702,8 +2685,6 @@ class SQLConf extends Serializable with Logging {
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
-
-  def minShufflePartitionNum: Int = getConf(COALESCE_PARTITIONS_MIN_PARTITION_NUM)
 
   def initialShufflePartitionNum: Int =
     getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(numShufflePartitions)
@@ -3058,8 +3039,6 @@ class SQLConf extends Serializable with Logging {
 
   def createHiveTableByDefaultEnabled: Boolean =
     getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
-
-  def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
 
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)

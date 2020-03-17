@@ -931,8 +931,9 @@
       <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
-        <version>5.0.2</version>
+        <version>8.14.1</version>
         <scope>test</scope>
+        <classifier>shaded</classifier>
         <exclusions>
           <exclusion>
             <artifactId>guava</artifactId>

@@ -654,6 +654,29 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
+   * Aggregate function: returns and array of the approximate percentile values
+   * of numeric column col at the given percentages.
+   *
+   * If percentage is an array, each value must be between 0.0 and 1.0.
+   * If it is a single floating point value, it must be between 0.0 and 1.0.
+   *
+   * The accuracy parameter is a positive numeric literal
+   * which controls approximation accuracy at the cost of memory.
+   * Higher value of accuracy yields better accuracy, 1.0/accuracy
+   * is the relative error of the approximation.
+   *
+   * @group agg_funcs
+   * @since 3.1.0
+   */
+  def percentile_approx(e: Column, percentage: Column, accuracy: Column): Column = {
+    withAggregateFunction {
+      new ApproximatePercentile(
+        e.expr, percentage.expr, accuracy.expr
+      )
+    }
+  }
+
+  /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs
@@ -4740,8 +4763,9 @@ object functions {
         "information. Spark may blindly pass null to the Scala closure with primitive-type " +
         "argument, and the closure will see the default value of the Java type for the null " +
         "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-        "You could use other typed Scala UDF APIs to avoid this problem, or set " +
-        s"${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with caution."
+        "You could use typed Scala UDF APIs (e.g. `udf((x: Int) => x)`) to avoid this problem, " +
+        s"or set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with " +
+        s"caution."
       throw new AnalysisException(errorMsg)
     }
     SparkUserDefinedFunction(f, dataType, inputSchemas = Nil)
