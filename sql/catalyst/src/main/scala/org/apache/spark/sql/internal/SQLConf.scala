@@ -3014,7 +3014,10 @@ class SQLConf extends Serializable with Logging {
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
-  def legacySizeOfNull: Boolean = getConf(SQLConf.LEGACY_SIZE_OF_NULL)
+  def legacySizeOfNull: Boolean = {
+    // size(null) should return null under ansi mode.
+    getConf(SQLConf.LEGACY_SIZE_OF_NULL) && !getConf(ANSI_ENABLED)
+  }
 
   def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
 
