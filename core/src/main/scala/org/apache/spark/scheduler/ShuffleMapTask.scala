@@ -61,7 +61,7 @@ private[spark] class ShuffleMapTask(
     appId: Option[String] = None,
     appAttemptId: Option[String] = None,
     isBarrier: Boolean = false)
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, localProperties,
+  extends Task[MapTaskResult](stageId, stageAttemptId, partition.index, localProperties,
     serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
   with Logging {
 
@@ -74,7 +74,7 @@ private[spark] class ShuffleMapTask(
     if (locs == null) Nil else locs.distinct
   }
 
-  override def runTask(context: TaskContext): MapStatus = {
+  override def runTask(context: TaskContext): MapTaskResult = {
     // Deserialize the RDD using the broadcast variable.
     val threadMXBean = ManagementFactory.getThreadMXBean
     val deserializeStartTimeNs = System.nanoTime()

@@ -35,8 +35,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, MapStatus}
+import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, MapStatus, MapTaskResult}
 import org.apache.spark.shuffle.MetadataFetchFailedException
+import org.apache.spark.shuffle.api.metadata.{MapOutputMetadata, ShuffleOutputTracker}
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 
@@ -49,7 +50,10 @@ import org.apache.spark.util._
  *
  * All public methods of this class are thread-safe.
  */
-private class ShuffleStatus(numPartitions: Int) {
+private class ShuffleStatus(
+    shuffleId: Int,
+    numPartitions: Int,
+    private val shuffleOutputTracker: Option[ShuffleOutputTracker]) {
 
   private val (readLock, writeLock) = {
     val lock = new ReentrantReadWriteLock()
@@ -73,6 +77,10 @@ private class ShuffleStatus(numPartitions: Int) {
     } finally {
       writeLock.unlock()
     }
+  }
+
+  withWriteLock {
+    this.shuffleOutputTracker.foreach(_.registerShuffle(shuffleId))
   }
 
   /**
@@ -113,12 +121,20 @@ private class ShuffleStatus(numPartitions: Int) {
    * Register a map output. If there is already a registered location for the map output then it
    * will be replaced by the new location.
    */
-  def addMapOutput(mapIndex: Int, status: MapStatus): Unit = withWriteLock {
-    if (mapStatuses(mapIndex) == null) {
-      _numAvailableOutputs += 1
-      invalidateSerializedMapOutputStatusCache()
+  def addMapOutput(
+      mapIndex: Int, status: MapStatus, maybeMetadata: Option[MapOutputMetadata]): Unit = {
+    withWriteLock {
+      if (mapStatuses(mapIndex) == null) {
+        _numAvailableOutputs += 1
+        invalidateSerializedMapOutputStatusCache()
+      }
+      mapStatuses(mapIndex) = status
+      maybeMetadata.foreach { metadata =>
+        shuffleOutputTracker.foreach {
+          _.registerMapOutput(shuffleId, mapIndex, status.mapId, metadata)
+        }
+      }
     }
-    mapStatuses(mapIndex) = status
   }
 
   /**
@@ -128,8 +144,10 @@ private class ShuffleStatus(numPartitions: Int) {
    */
   def removeMapOutput(mapIndex: Int, bmAddress: BlockManagerId): Unit = withWriteLock {
     if (mapStatuses(mapIndex) != null && mapStatuses(mapIndex).location == bmAddress) {
+      val status = mapStatuses(mapIndex)
       _numAvailableOutputs -= 1
       mapStatuses(mapIndex) = null
+      shuffleOutputTracker.foreach(_.removeMapOutput(shuffleId, mapIndex, status.mapId))
       invalidateSerializedMapOutputStatusCache()
     }
   }
@@ -361,7 +379,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   /**
    * Deletes map output status information for the specified shuffle stage.
    */
-  def unregisterShuffle(shuffleId: Int): Unit
+  def unregisterShuffle(shuffleId: Int, blocking: Boolean): Unit
 
   def stop(): Unit = {}
 }
@@ -380,6 +398,8 @@ private[spark] class MapOutputTrackerMaster(
     private[spark] val broadcastManager: BroadcastManager,
     private[spark] val isLocal: Boolean)
   extends MapOutputTracker(conf) {
+
+  private var _shuffleOutputTracker: Option[ShuffleOutputTracker] = None
 
   // The size at which we use Broadcast to send the map output statuses to the executors
   private val minSizeForBroadcast = conf.get(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST).toInt
@@ -473,14 +493,21 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.valuesIterator.count(_.hasCachedSerializedBroadcast)
   }
 
+  def setShuffleOutputTracker(shuffleOutputTracker: Option[ShuffleOutputTracker]): Unit = {
+    _shuffleOutputTracker = shuffleOutputTracker
+  }
+
   def registerShuffle(shuffleId: Int, numMaps: Int): Unit = {
-    if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps)).isDefined) {
+    if (shuffleStatuses.put(
+        shuffleId,
+        new ShuffleStatus(shuffleId, numMaps, _shuffleOutputTracker)).isDefined) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
   }
 
-  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Unit = {
-    shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
+  def registerMapOutput(shuffleId: Int, mapIndex: Int, mapTaskResult: MapTaskResult): Unit = {
+    shuffleStatuses(shuffleId).addMapOutput(
+      mapIndex, mapTaskResult.mapStatus, mapTaskResult.metadata)
   }
 
   /** Unregister map output information of the given shuffle, mapper and block manager */
@@ -507,10 +534,11 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** Unregister shuffle data */
-  def unregisterShuffle(shuffleId: Int): Unit = {
+  def unregisterShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
     }
+    _shuffleOutputTracker.foreach(_.unregisterShuffle(shuffleId, blocking))
   }
 
   /**
@@ -868,7 +896,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
 
 
   /** Unregister shuffle data. */
-  def unregisterShuffle(shuffleId: Int): Unit = {
+  def unregisterShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     mapStatuses.remove(shuffleId)
   }
 

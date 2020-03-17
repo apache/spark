@@ -145,7 +145,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
 
     writer.write(Iterator.empty)
     writer.stop( /* success = */ true)
-    assert(writer.getPartitionLengths.sum === 0)
+    assert(writer.getMapOutputCommitMessage.getPartitionLengths.sum === 0)
     assert(outputFile.exists())
     assert(outputFile.length() === 0)
     assert(temporaryFilesCreated.isEmpty)
@@ -171,8 +171,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       writer.write(records)
       writer.stop( /* success = */ true)
       assert(temporaryFilesCreated.nonEmpty)
-      assert(writer.getPartitionLengths.sum === outputFile.length())
-      assert(writer.getPartitionLengths.count(_ == 0L) === 4) // should be 4 zero length files
+      assert(writer.getMapOutputCommitMessage.getPartitionLengths.sum === outputFile.length())
+      // should be 4 zero length files
+      assert(writer.getMapOutputCommitMessage.getPartitionLengths.count(_ == 0L) === 4)
       assert(temporaryFilesCreated.count(_.exists()) === 0) // check that temp files were deleted
       val shuffleWriteMetrics = taskContext.taskMetrics().shuffleWriteMetrics
       assert(shuffleWriteMetrics.bytesWritten === outputFile.length())

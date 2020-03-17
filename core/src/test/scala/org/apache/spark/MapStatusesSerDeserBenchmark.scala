@@ -21,7 +21,7 @@ import org.scalatest.Assertions._
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.benchmark.BenchmarkBase
-import org.apache.spark.scheduler.CompressedMapStatus
+import org.apache.spark.scheduler.{CompressedMapStatus, MapTaskResult}
 import org.apache.spark.storage.BlockManagerId
 
 /**
@@ -55,12 +55,16 @@ object MapStatusesSerDeserBenchmark extends BenchmarkBase {
     tracker.registerShuffle(shuffleId, numMaps)
     val r = new scala.util.Random(912)
     (0 until numMaps).foreach { i =>
-      tracker.registerMapOutput(shuffleId, i,
-        new CompressedMapStatus(BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
+      tracker.registerMapOutput(
+        shuffleId,
+        i,
+        MapTaskResult(
+          new CompressedMapStatus(BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
           Array.fill(blockSize) {
             // Creating block size ranging from 0byte to 1GB
             (r.nextDouble() * 1024 * 1024 * 1024).toLong
-          }, i))
+          }, i),
+          None))
     }
 
     val shuffleStatus = tracker.shuffleStatuses.get(shuffleId).head
@@ -95,7 +99,7 @@ object MapStatusesSerDeserBenchmark extends BenchmarkBase {
       FileUtils.byteCountToDisplaySize(serializedBroadcastSizes) + "\n\n")
     // scalastyle:on
 
-    tracker.unregisterShuffle(shuffleId)
+    tracker.unregisterShuffle(shuffleId, true)
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {

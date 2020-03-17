@@ -59,9 +59,7 @@ private class CleanupTaskWeakReference(
  * to be processed when the associated object goes out of scope of the application. Actual
  * cleanup is performed in a separate daemon thread.
  */
-private[spark] class ContextCleaner(
-    sc: SparkContext,
-    shuffleDriverComponents: ShuffleDriverComponents) extends Logging {
+private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /**
    * A buffer to ensure that `CleanupTaskWeakReference`s are not garbage collected as long as they
@@ -222,15 +220,10 @@ private[spark] class ContextCleaner(
   /** Perform shuffle cleanup. */
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
-      if (mapOutputTrackerMaster.containsShuffle(shuffleId)) {
-        logDebug("Cleaning shuffle " + shuffleId)
-        mapOutputTrackerMaster.unregisterShuffle(shuffleId)
-        shuffleDriverComponents.removeShuffle(shuffleId, blocking)
-        listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
-        logDebug("Cleaned shuffle " + shuffleId)
-      } else {
-        logDebug("Asked to cleanup non-existent shuffle (maybe it was already removed)")
-      }
+      logDebug("Cleaning shuffle " + shuffleId)
+      mapOutputTrackerMaster.unregisterShuffle(shuffleId, blocking)
+      listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
+      logDebug("Cleaned shuffle " + shuffleId)
     } catch {
       case e: Exception => logError("Error cleaning shuffle " + shuffleId, e)
     }

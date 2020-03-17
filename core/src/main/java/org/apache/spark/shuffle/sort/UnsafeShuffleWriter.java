@@ -28,6 +28,7 @@ import java.util.Iterator;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
+import scala.compat.java8.OptionConverters;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
@@ -45,8 +46,8 @@ import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
-import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
+import org.apache.spark.scheduler.MapTaskResult;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
@@ -56,6 +57,8 @@ import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
+import org.apache.spark.shuffle.api.metadata.MapOutputMetadata;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
@@ -85,7 +88,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final int initialSortBufferSize;
   private final int inputBufferSizeInBytes;
 
-  @Nullable private MapStatus mapStatus;
+  @Nullable private MapTaskResult taskResult;
   @Nullable private ShuffleExternalSorter sorter;
   private long peakMemoryUsedBytes = 0;
 
@@ -218,9 +221,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     serOutputStream = null;
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
-    final long[] partitionLengths;
+    final MapOutputCommitMessage mapOutputCommitMessage;
     try {
-      partitionLengths = mergeSpills(spills);
+      mapOutputCommitMessage = mergeSpills(spills);
     } finally {
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && !spill.file.delete()) {
@@ -228,8 +231,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(
-      blockManager.shuffleServerId(), partitionLengths, mapId);
+    taskResult = new MapTaskResult(
+        MapStatus$.MODULE$.apply(
+            blockManager.shuffleServerId(),
+            mapOutputCommitMessage.getPartitionLengths(),
+            mapId),
+        OptionConverters.toScala(mapOutputCommitMessage.getMapOutputMetadata()));
   }
 
   @VisibleForTesting
@@ -261,31 +268,35 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    *
    * @return the partition lengths in the merged file.
    */
-  private long[] mergeSpills(SpillInfo[] spills) throws IOException {
-    long[] partitionLengths;
+  private MapOutputCommitMessage mergeSpills(SpillInfo[] spills) throws IOException {
+    MapOutputCommitMessage mapOutputCommitMessage;
     if (spills.length == 0) {
       final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
           .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
-      return mapWriter.commitAllPartitions().getPartitionLengths();
+      return mapWriter.commitAllPartitions();
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(shuffleId, mapId);
       if (maybeSingleFileWriter.isPresent()) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
-        partitionLengths = spills[0].partitionLengths;
-        maybeSingleFileWriter.get().transferMapSpillFile(spills[0].file, partitionLengths);
+        Optional<MapOutputMetadata> maybeMetadata =
+            maybeSingleFileWriter.get().transferMapSpillFile(
+                spills[0].file, spills[0].partitionLengths);
+        mapOutputCommitMessage = new MapOutputCommitMessage(
+            spills[0].partitionLengths, maybeMetadata);
       } else {
-        partitionLengths = mergeSpillsUsingStandardWriter(spills);
+        mapOutputCommitMessage = mergeSpillsUsingStandardWriter(spills);
       }
     } else {
-      partitionLengths = mergeSpillsUsingStandardWriter(spills);
+      mapOutputCommitMessage = mergeSpillsUsingStandardWriter(spills);
     }
-    return partitionLengths;
+    return mapOutputCommitMessage;
   }
 
-  private long[] mergeSpillsUsingStandardWriter(SpillInfo[] spills) throws IOException {
-    long[] partitionLengths;
+  private MapOutputCommitMessage mergeSpillsUsingStandardWriter(SpillInfo[] spills)
+      throws IOException {
+    MapOutputCommitMessage commitMessage;
     final boolean compressionEnabled = (boolean) sparkConf.get(package$.MODULE$.SHUFFLE_COMPRESS());
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
     final boolean fastMergeEnabled =
@@ -327,7 +338,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // to be counted as shuffle write, but this will lead to double-counting of the final
       // SpillInfo's bytes.
       writeMetrics.decBytesWritten(spills[spills.length - 1].file.length());
-      partitionLengths = mapWriter.commitAllPartitions().getPartitionLengths();
+      commitMessage = mapWriter.commitAllPartitions();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);
@@ -337,7 +348,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       throw e;
     }
-    return partitionLengths;
+    return commitMessage;
   }
 
   /**
@@ -477,7 +488,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   @Override
-  public Option<MapStatus> stop(boolean success) {
+  public Option<MapTaskResult> stop(boolean success) {
     try {
       taskContext.taskMetrics().incPeakExecutionMemory(getPeakMemoryUsedBytes());
 
@@ -486,10 +497,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       } else {
         stopping = true;
         if (success) {
-          if (mapStatus == null) {
+          if (taskResult == null) {
             throw new IllegalStateException("Cannot call stop(true) without having called write()");
           }
-          return Option.apply(mapStatus);
+          return Option.apply(taskResult);
         } else {
           return Option.apply(null);
         }

@@ -17,9 +17,11 @@
 
 package org.apache.spark.shuffle.sort
 
+import scala.compat.java8.OptionConverters._
+
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.scheduler.{MapStatus, MapTaskResult}
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.util.collection.ExternalSorter
@@ -43,7 +45,7 @@ private[spark] class SortShuffleWriter[K, V, C](
   // we don't try deleting files, etc twice.
   private var stopping = false
 
-  private var mapStatus: MapStatus = null
+  private var taskResult: MapTaskResult = null
 
   private val writeMetrics = context.taskMetrics().shuffleWriteMetrics
 
@@ -67,19 +69,24 @@ private[spark] class SortShuffleWriter[K, V, C](
     val mapOutputWriter = shuffleExecutorComponents.createMapOutputWriter(
       dep.shuffleId, mapId, dep.partitioner.numPartitions)
     sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter)
-    val partitionLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths
-    mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths, mapId)
+    val mapOutputCommitMessage = mapOutputWriter.commitAllPartitions()
+    taskResult = MapTaskResult(
+      MapStatus(
+        blockManager.shuffleServerId,
+        mapOutputCommitMessage.getPartitionLengths,
+        mapId),
+      mapOutputCommitMessage.getMapOutputMetadata.asScala)
   }
 
   /** Close this writer, passing along whether the map completed */
-  override def stop(success: Boolean): Option[MapStatus] = {
+  override def stop(success: Boolean): Option[MapTaskResult] = {
     try {
       if (stopping) {
         return None
       }
       stopping = true
       if (success) {
-        return Option(mapStatus)
+        return Option(taskResult)
       } else {
         return None
       }

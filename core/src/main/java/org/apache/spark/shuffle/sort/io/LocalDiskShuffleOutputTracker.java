@@ -17,36 +17,34 @@
 
 package org.apache.spark.shuffle.sort.io;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Optional;
-
-import org.apache.spark.SparkEnv;
-import org.apache.spark.shuffle.api.ShuffleDriverComponents;
+import org.apache.spark.shuffle.api.metadata.MapOutputMetadata;
 import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker;
 import org.apache.spark.storage.BlockManagerMaster;
 
-public class LocalDiskShuffleDriverComponents implements ShuffleDriverComponents {
+public final class LocalDiskShuffleOutputTracker implements ShuffleOutputTracker {
 
-  private LocalDiskShuffleOutputTracker outputTracker;
+  private final BlockManagerMaster blockManagerMaster;
 
-  @Override
-  public Map<String, String> initializeApplication() {
-    BlockManagerMaster blockManagerMaster = SparkEnv.get().blockManager().master();
-    outputTracker = new LocalDiskShuffleOutputTracker(blockManagerMaster);
-    return Collections.emptyMap();
+  public LocalDiskShuffleOutputTracker(BlockManagerMaster blockManagerMaster) {
+    this.blockManagerMaster = blockManagerMaster;
   }
 
   @Override
-  public void cleanupApplication() {
-    // nothing to clean up
+  public void registerShuffle(int shuffleId) {
   }
 
   @Override
-  public Optional<ShuffleOutputTracker> shuffleOutputTracker() {
-    if (outputTracker == null) {
-      throw new IllegalStateException("Driver components must be initialized before use");
-    }
-    return Optional.of(outputTracker);
+  public void unregisterShuffle(int shuffleId, boolean blocking) {
+    blockManagerMaster.removeShuffle(shuffleId, blocking);
+  }
+
+  @Override
+  public void registerMapOutput(
+      int shuffleId, int mapId, long mapTaskAttemptId, MapOutputMetadata mapOutputMetadata) {
+  }
+
+  @Override
+  public void removeMapOutput(int shuffleId, int mapId, long mapTaskAttemptId) {
+
   }
 }

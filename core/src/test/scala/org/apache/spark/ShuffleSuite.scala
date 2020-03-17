@@ -27,7 +27,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
-import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.scheduler.{MapTaskResult, MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
@@ -385,7 +385,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     def writeAndClose(
         writer: ShuffleWriter[Int, Int],
         taskContext: TaskContext)(
-        iter: Iterator[(Int, Int)]): Option[MapStatus] = {
+        iter: Iterator[(Int, Int)]): Option[MapTaskResult] = {
       try {
         val files = writer.write(iter)
         writer.stop(true)
@@ -400,12 +400,13 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // check that we can read the map output and it has the right data
     assert(mapOutput1.isDefined)
     assert(mapOutput2.isDefined)
-    assert(mapOutput1.get.location === mapOutput2.get.location)
-    assert(mapOutput1.get.getSizeForBlock(0) === mapOutput1.get.getSizeForBlock(0))
+    assert(mapOutput1.get.mapStatus.location === mapOutput2.get.mapStatus.location)
+    assert(mapOutput1.get.mapStatus.getSizeForBlock(0) ===
+      mapOutput1.get.mapStatus.getSizeForBlock(0))
 
     // register one of the map outputs -- doesn't matter which one
-    mapOutput1.foreach { case mapStatus =>
-      mapTrackerMaster.registerMapOutput(0, 0, mapStatus)
+    mapOutput1.foreach { case taskResult =>
+      mapTrackerMaster.registerMapOutput(0, 0, taskResult)
     }
 
     val taskContext = new TaskContextImpl(

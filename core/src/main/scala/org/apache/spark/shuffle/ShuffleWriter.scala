@@ -19,7 +19,7 @@ package org.apache.spark.shuffle
 
 import java.io.IOException
 
-import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.scheduler.MapTaskResult
 
 /**
  * Obtained inside a map task to write out records to the shuffle system.
@@ -30,5 +30,5 @@ private[spark] abstract class ShuffleWriter[K, V] {
   def write(records: Iterator[Product2[K, V]]): Unit
 
   /** Close this writer, passing along whether the map completed */
-  def stop(success: Boolean): Option[MapStatus]
+  def stop(success: Boolean): Option[MapTaskResult]
 }

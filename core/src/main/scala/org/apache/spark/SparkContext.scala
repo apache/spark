@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
+import scala.compat.java8.OptionConverters._
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
@@ -520,6 +521,10 @@ class SparkContext(config: SparkConf) extends Logging {
     _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
       _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
     }
+    // Should really be done in SparkEnv creation, but initialization ordering is quite
+    // difficult...
+    env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].setShuffleOutputTracker(
+      _shuffleDriverComponents.shuffleOutputTracker().asScala)
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
@@ -583,7 +588,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _cleaner =
       if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
-        Some(new ContextCleaner(this, _shuffleDriverComponents))
+        Some(new ContextCleaner(this))
       } else {
         None
       }

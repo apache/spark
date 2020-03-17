@@ -212,7 +212,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
    * A special [[ContextCleaner]] that saves the IDs of the accumulators registered for cleanup.
    */
   private class SaveAccumContextCleaner(sc: SparkContext) extends
-      ContextCleaner(sc, null) {
+      ContextCleaner(sc) {
     private val accumsRegistered = new ArrayBuffer[Long]
 
     override def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {

@@ -18,8 +18,10 @@
 package org.apache.spark.shuffle.api;
 
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker;
 
 /**
  * :: Private ::
@@ -47,18 +49,7 @@ public interface ShuffleDriverComponents {
    */
   void cleanupApplication();
 
-  /**
-   * Called once per shuffle id when the shuffle id is first generated for a shuffle stage.
-   *
-   * @param shuffleId The unique identifier for the shuffle stage.
-   */
-  default void registerShuffle(int shuffleId) {}
-
-  /**
-   * Removes shuffle data associated with the given shuffle.
-   *
-   * @param shuffleId The unique identifier for the shuffle stage.
-   * @param blocking Whether this call should block on the deletion of the data.
-   */
-  default void removeShuffle(int shuffleId, boolean blocking) {}
+  default Optional<ShuffleOutputTracker> shuffleOutputTracker() {
+    return Optional.empty();
+  }
 }
