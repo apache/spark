@@ -166,7 +166,8 @@ object EventLogFileWriter {
   val IN_PROGRESS = ".inprogress"
   val COMPACTED = ".compact"
 
-  val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
+  val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("660", 8).toShort)
+  val LOG_FOLDER_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   def apply(
       appId: String,
@@ -318,7 +319,7 @@ class RollingEventLogFilesWriter(
     }
 
     // SPARK-30860: use the class method to avoid the umask causing permission issues
-    FileSystem.mkdirs(fileSystem, logDirForAppPath, EventLogFileWriter.LOG_FILE_PERMISSIONS)
+    FileSystem.mkdirs(fileSystem, logDirForAppPath, EventLogFileWriter.LOG_FOLDER_PERMISSIONS)
     createAppStatusFile(inProgress = true)
     rollEventLogFile()
   }
