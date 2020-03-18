@@ -49,7 +49,8 @@ public final class MapOutputCommitMessage {
     return new MapOutputCommitMessage(partitionLengths, Optional.empty());
   }
 
-  public static MapOutputCommitMessage of(long[] partitionLengths, MapOutputMetadata mapOutputMetadata) {
+  public static MapOutputCommitMessage of(
+      long[] partitionLengths, MapOutputMetadata mapOutputMetadata) {
     return new MapOutputCommitMessage(partitionLengths, Optional.of(mapOutputMetadata));
   }
 
