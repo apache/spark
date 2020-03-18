@@ -116,8 +116,7 @@ private object DateTimeFormatterHelper {
   def createBuilderWithVarLengthSecondFraction(
       pattern: String): DateTimeFormatterBuilder = {
     val builder = createBuilder()
-    val patternSplits = pattern.split("'")
-    patternSplits.zipWithIndex.foreach {
+    pattern.split("'").zipWithIndex.foreach {
       case (pattenPart, idx) if idx % 2 == 0 =>
         var rest = pattenPart
         while (rest.nonEmpty) {
