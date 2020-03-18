@@ -74,12 +74,12 @@ object ResolveHints {
     //
     //  1. they match if an identifier in a hint only has one part and it is the same with
     //     a relation name in a query. If a relation has a namespace (`db1.t`), we just ignore it.
-    //     For example, in a query `SELECT /* BROADCAST(t) */ * FROM db1.t JOIN t`,
+    //     For example, in a query `SELECT /*+ BROADCAST(t) */ * FROM db1.t JOIN t`,
     //     the broadcast hint will match both tables, `db1.t` and `t`.
     //
     //  2. they match if an identifier in a hint has two parts and it is the same with
     //     a two part identifier (name and namespace) in a relation.
-    //     For example, in a query `SELECT /* BROADCAST(default.t) */ * FROM default.t JOIN t`,
+    //     For example, in a query `SELECT /*+ BROADCAST(default.t) */ * FROM default.t JOIN t`,
     //     the broadcast hint will match the left-side table only, `default.t`.
     //
     //  3. otherwise, no match happens.
