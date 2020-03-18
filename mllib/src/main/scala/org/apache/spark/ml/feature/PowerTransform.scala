@@ -227,28 +227,20 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
         val iter = computeIter()
         var ySum = 0.0
         var ySumL2 = 0.0
-        var xPrev = Double.NaN
-        var yPrev = Double.NaN
 
         if (lambda0) {
           while (iter.hasNext) {
             val (x, c) = iter.next
-            if (x != xPrev) {
-              xPrev = x
-              yPrev = math.log(x)
-            }
-            ySumL2 += yPrev * yPrev * c
+            val y = math.log(x)
+            ySumL2 += y * y * c
           }
           ySum = logxSum
         } else {
           while (iter.hasNext) {
             val (x, w) = iter.next
-            if (x != xPrev) {
-              xPrev = x
-              yPrev = (math.pow(x, lambda) - 1) / lambda
-            }
-            ySum += yPrev * w
-            ySumL2 += yPrev * yPrev * w
+            val y = (math.pow(x, lambda) - 1) / lambda
+            ySum += y * w
+            ySumL2 += y * y * w
           }
         }
 
@@ -276,29 +268,24 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
         val iter = computeIter()
         var ySum = 0.0
         var ySumL2 = 0.0
-        var xPrev = Double.NaN
-        var yPrev = Double.NaN
 
         while (iter.hasNext) {
           val (x, c) = iter.next
-          if (x != xPrev) {
-            xPrev = x
-            yPrev = if (x >= 0) {
-              if (lambda0) {
-                math.log(x + 1)
-              } else {
-                (math.pow(x + 1, lambda) - 1) / lambda
-              }
+          val y = if (x >= 0) {
+            if (lambda0) {
+              math.log(x + 1)
             } else {
-              if (lambda2) {
-                -math.log(1 - x)
-              } else {
-                (math.pow(1 - x, 2 - lambda) - 1) / (lambda - 2)
-              }
+              (math.pow(x + 1, lambda) - 1) / lambda
+            }
+          } else {
+            if (lambda2) {
+              -math.log(1 - x)
+            } else {
+              (math.pow(1 - x, 2 - lambda) - 1) / (lambda - 2)
             }
           }
-          ySum += yPrev * c
-          ySumL2 += yPrev * yPrev * c
+          ySum += y * c
+          ySumL2 += y * y * c
         }
 
         val yAvg = ySum / count
