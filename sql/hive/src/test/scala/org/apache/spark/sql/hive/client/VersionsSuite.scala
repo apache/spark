@@ -114,11 +114,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
   private var versionSpark: TestHiveVersion = null
 
+  private val hadoopConf = new Configuration()
+
   versions.foreach { version =>
     test(s"$version: create client") {
       client = null
       System.gc() // Hack to avoid SEGV on some JVM versions.
-      val hadoopConf = new Configuration()
       hadoopConf.set("test", "success")
       // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
       // hive.metastore.schema.verification from false to true since 2.0
@@ -528,6 +529,26 @@ class VersionsSuite extends SparkFunSuite with Logging {
             purge = false, retainData = false)
       }
 
+      assert(client.getPartitionOption("default", "src_part", spec).isEmpty)
+    }
+
+    test(s"$version: dropPartitions when file not exists") {
+      val partitions = (1 to testPartitionCount).map { key2 =>
+        CatalogTablePartition(Map("key1" -> "1", "key2" -> key2.toString), storageFormat)
+      }
+      client.createPartitions("default", "src_part", partitions, ignoreIfExists = true)
+      val spec = Map("key1" -> "1", "key2" -> "2")
+      val hiveTable = client.getTable("default", "src_part")
+      val parts = client.getPartitions(hiveTable, Some(spec))
+      parts.foreach { partition =>
+        val partPath = new Path(partition.location)
+        val fs = partPath.getFileSystem(hadoopConf)
+        if (fs.exists(partPath)) {
+          fs.delete(partPath, true)
+        }
+      }
+      client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
+        purge = true, retainData = false)
       assert(client.getPartitionOption("default", "src_part", spec).isEmpty)
     }
 
