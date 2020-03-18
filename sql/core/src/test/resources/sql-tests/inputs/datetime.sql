@@ -104,6 +104,6 @@ select to_timestamp("12.1234019-10-06S10:11", "ss.SSSSy-MM-dd'S'HH:mm");
 select to_timestamp("2019-10-06S", "yyyy-MM-dd'S'");
 select to_timestamp("S2019-10-06", "'S'yyyy-MM-dd");
 
-select to_timestamp("2019-10-06 Sunday", "yyyy-MM-dd eeee");
-select to_timestamp("2019-10-06 Sunday", "yyyy-MM-dd cccc");
-select to_timestamp("2019-10-06 Sunday", "yyyy-MM-dd uuuu");
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eeee');
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd cccc');
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu');

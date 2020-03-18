@@ -578,24 +578,26 @@ struct<to_timestamp('S2019-10-06', '\'S\'yyyy-MM-dd'):timestamp>
 
 
 -- !query
-select to_timestamp("2019-10-06 Sunday", "yyyy-MM-dd eeee")
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eeee')
 -- !query schema
-struct<to_timestamp('2019-10-06 Sunday', 'yyyy-MM-dd eeee'):timestamp>
+struct<>
 -- !query output
-NULL
+java.lang.IllegalArgumentException
+Illegal pattern character: e
 
 
 -- !query
-select to_timestamp("2019-10-06 Sunday", "yyyy-MM-dd cccc")
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd cccc')
 -- !query schema
-struct<to_timestamp('2019-10-06 Sunday', 'yyyy-MM-dd cccc'):timestamp>
+struct<>
 -- !query output
-NULL
+java.lang.IllegalArgumentException
+Illegal pattern character: c
 
 
 -- !query
-select to_timestamp("2019-10-06 Sunday", "yyyy-MM-dd uuuu")
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu')
 -- !query schema
-struct<to_timestamp('2019-10-06 Sunday', 'yyyy-MM-dd uuuu'):timestamp>
+struct<date_format(TIMESTAMP '2019-10-06 00:00:00', yyyy-MM-dd uuuu):string>
 -- !query output
-2019-10-06 00:00:00
+2019-10-06 Sunday
