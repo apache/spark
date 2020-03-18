@@ -881,7 +881,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("compatibility with Spark 2.4 in reading dates/timestamps") {
+  test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
     Seq(false, true).foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
         SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
@@ -901,11 +901,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("rebasing timestamps in write") {
+  test("SPARK-31159: rebasing timestamps in write") {
     Seq(
       ("TIMESTAMP_MILLIS", "1001-01-01 01:02:03.123", "1001-01-07 01:09:05.123"),
       ("TIMESTAMP_MICROS", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456"),
-      ("INT96", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456")
+      ("INT96", "1001-01-01 01:02:03.123456", "1001-01-01 01:02:03.123456")
     ).foreach { case (outType, tsStr, nonRebased) =>
       withClue(s"output type $outType") {
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
@@ -919,10 +919,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
               checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(tsStr)))
             }
-            if (outType != "INT96") { // Spark always rebases INT96 timestamps
-              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
-                checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(nonRebased)))
-              }
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
+              checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(nonRebased)))
             }
           }
         }
@@ -930,7 +928,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("rebasing dates in write") {
+  test("SPARK-31159: rebasing dates in write") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
       withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
