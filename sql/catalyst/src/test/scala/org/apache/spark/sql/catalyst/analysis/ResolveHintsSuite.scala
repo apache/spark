@@ -243,7 +243,7 @@ class ResolveHintsSuite extends AnalysisTest {
   }
 
   test("Supports multi-part table names for broadcast hint resolution") {
-    // local temp table
+    // local temp table (single-part identifier case)
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table", "table2"),
         table("table").join(table("table2"))),
@@ -266,7 +266,7 @@ class ResolveHintsSuite extends AnalysisTest {
         JoinHint.NONE),
       caseSensitive = true)
 
-    // global temp table
+    // global temp table (multi-part identifier case)
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("global_temp.table4", "GlOBal_TeMP.table5"),
         table("global_temp", "table4").join(table("global_temp", "table5"))),

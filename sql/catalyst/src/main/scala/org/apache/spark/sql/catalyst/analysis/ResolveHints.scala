@@ -67,30 +67,21 @@ object ResolveHints {
     // This method checks if given multi-part identifiers are matched with each other.
     // The [[ResolveJoinStrategyHints]] rule is applied before the resolution batch
     // in the analyzer and we cannot semantically compare them at this stage.
-    // Therefore, we follow simple rules; the process is independent of a session catalog
-    // (`currentDb` in [[SessionCatalog]]) and it just compares them literally.
+    // Therefore, we follow a simple rule; they match if an identifier in a hint
+    // is a tail of an identifier in a relation. This process is independent of a session
+    // catalog (`currentDb` in [[SessionCatalog]]) and it just compares them literally.
     //
-    // Specifically, we follow simple three rules below:
-    //
-    //  1. they match if an identifier in a hint only has one part and it is the same with
-    //     a relation name in a query. If a relation has a namespace (`db1.t`), we just ignore it.
-    //     For example, in a query `SELECT /*+ BROADCAST(t) */ * FROM db1.t JOIN t`,
-    //     the broadcast hint will match both tables, `db1.t` and `t`.
-    //
-    //  2. they match if an identifier in a hint has two parts and it is the same with
-    //     a two part identifier (name and namespace) in a relation.
-    //     For example, in a query `SELECT /*+ BROADCAST(default.t) */ * FROM default.t JOIN t`,
-    //     the broadcast hint will match the left-side table only, `default.t`.
-    //
-    //  3. otherwise, no match happens.
+    // For example,
+    //  * in a query `SELECT /*+ BROADCAST(t) */ * FROM db1.t JOIN t`,
+    //    the broadcast hint will match both tables, `db1.t` and `t`.
+    //  * in a query `SELECT /*+ BROADCAST(default.t) */ * FROM default.t JOIN t`,
+    //    the broadcast hint will match the left-side table only, `default.t`.
     private def matchedIdentifier(identInHint: Seq[String], identInQuery: Seq[String]): Boolean = {
-      identInHint match {
-        case Seq(tableName) =>
-          resolver(identInQuery.last, tableName)
-        case Seq(dbName, tableName) if identInQuery.size == 2 =>
-          resolver(identInQuery.head, dbName) && resolver(identInQuery.last, tableName)
-        case _ =>
-          false
+      if (identInHint.length <= identInQuery.length) {
+        identInHint.zip(identInQuery.takeRight(identInHint.length))
+          .forall { case (i1, i2) => resolver(i1, i2) }
+      } else {
+        false
       }
     }
 
