@@ -463,5 +463,16 @@ trait InsertIntoSQLOnlyTests
         }
       }
     }
+
+    test("do not double insert on INSERT INTO collect()") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTableAndData(t1) { view =>
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        val tmpView = "test_data"
+        sql(s"INSERT INTO TABLE $t1 SELECT * FROM $view").collect()
+
+        verifyTable(t1, spark.table(view))
+      }
+    }
   }
 }

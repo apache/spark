@@ -41,7 +41,7 @@ case class AppendDataExecV1(
     writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan) extends V1FallbackWriters {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): RDD[InternalRow] = {
     writeWithV1(newWriteBuilder().buildForV1Write())
   }
 }
@@ -67,7 +67,7 @@ case class OverwriteByExpressionExecV1(
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
   }
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): RDD[InternalRow] = {
     newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
         writeWithV1(builder.truncate().asV1Builder.buildForV1Write())
@@ -82,7 +82,7 @@ case class OverwriteByExpressionExecV1(
 }
 
 /** Some helper interfaces that use V2 write semantics through the V1 writer interface. */
-sealed trait V1FallbackWriters extends SupportsV1Write {
+sealed trait V1FallbackWriters extends SupportsV1Write with V2TableWriteExecBase {
   override def output: Seq[Attribute] = Nil
   override final def children: Seq[SparkPlan] = Nil
 
