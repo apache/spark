@@ -100,3 +100,10 @@ select to_timestamp("12.12342019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm");
 select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm");
 select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyy-MM-dd'S'HH:mm");
 select to_timestamp("12.1234019-10-06S10:11", "ss.SSSSy-MM-dd'S'HH:mm");
+
+select to_timestamp("2019-10-06S", "yyyy-MM-dd'S'");
+select to_timestamp("S2019-10-06", "'S'yyyy-MM-dd");
+
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuee');
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc');
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu');
