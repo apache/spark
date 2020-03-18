@@ -117,6 +117,10 @@ private object DateTimeFormatterHelper {
       pattern: String): DateTimeFormatterBuilder = {
     val builder = createBuilder()
     pattern.split("'").zipWithIndex.foreach {
+      // Split string starting with the regex itself which is `'` here will produce an extra empty
+      // string at res(0). So when the first element here is empty string we do not need append `'`
+      // literal to the DateTimeFormatterBuilder.
+      case ("", idx) if idx != 0 => builder.appendLiteral("'")
       case (pattenPart, idx) if idx % 2 == 0 =>
         var rest = pattenPart
         while (rest.nonEmpty) {
