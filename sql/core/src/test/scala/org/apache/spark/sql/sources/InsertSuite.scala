@@ -844,18 +844,20 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-29174 Support LOCAL in INSERT OVERWRITE DIRECTORY to data source") {
-    withTempPath { dir =>
-      val path = dir.toURI.getPath
-      sql(s"""create table tab1 ( a int) location '$path'""")
-      sql("insert into tab1 values(1)")
-      checkAnswer(sql("select * from tab1"), Seq(1).map(i => Row(i)))
-      sql("create table tab2 ( a int)")
-      sql("insert into tab2 values(2)")
-      checkAnswer(sql("select * from tab2"), Seq(2).map(i => Row(i)))
-      sql(s"""insert overwrite local directory '$path' using parquet select * from tab2""")
-      sql("refresh table tab1")
-      checkAnswer(sql("select * from tab1"), Seq(2).map(i => Row(i)))
+    withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.toURI.getPath
+        sql(s"""create table tab1 ( a int) location '$path'""")
+        sql("insert into tab1 values(1)")
+        checkAnswer(sql("select * from tab1"), Seq(1).map(i => Row(i)))
+        sql("create table tab2 ( a int)")
+        sql("insert into tab2 values(2)")
+        checkAnswer(sql("select * from tab2"), Seq(2).map(i => Row(i)))
+        sql(s"""insert overwrite local directory '$path' using parquet select * from tab2""")
+        sql("refresh table tab1")
+        checkAnswer(sql("select * from tab1"), Seq(2).map(i => Row(i)))
       }
+    }
   }
 
   test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {
