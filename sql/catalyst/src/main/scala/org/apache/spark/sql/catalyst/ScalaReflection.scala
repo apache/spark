@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.lang.reflect.Modifier
-
 import org.apache.commons.lang3.reflect.ConstructorUtils
 
 import org.apache.spark.internal.Logging
@@ -580,18 +578,14 @@ object ScalaReflection extends ScalaReflection {
   /**
    * Returns the parameter names and types for the primary constructor of this class.
    *
-   * Note that it only works for scala classes with primary constructor.
+   * Note that it only works for scala classes with primary constructor, and currently doesn't
+   * support inner class.
    */
-  def getConstructorParameters(cls: Class[_]): Seq[Class[_]] = {
+  def getConstructorParameters(cls: Class[_]): Seq[(String, Type)] = {
     val m = runtimeMirror(cls.getClassLoader)
     val classSymbol = m.staticClass(cls.getName)
     val t = classSymbol.selfType
-    val dropHead = if (cls.isMemberClass && !Modifier.isStatic(cls.getModifiers)) {
-      1
-    } else {
-      0
-    }
-    getConstructorParameters(t).drop(dropHead).map { case (_, tpe) => getClassFromType(tpe) }
+    getConstructorParameters(t)
   }
 
   /**
@@ -614,15 +608,6 @@ object ScalaReflection extends ScalaReflection {
   def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
     getConstructorParameterNames(obj.getClass).map { name =>
       obj.getClass.getMethod(name).invoke(obj)
-    }
-  }
-
-  def getClassForCaseClass[T: TypeTag]: Option[Class[_]] = {
-    val tpe = localTypeOf[T]
-    if (isSubtype(tpe.dealias, localTypeOf[Product])) {
-      Some(getClassFromType(tpe))
-    } else {
-      None
     }
   }
 

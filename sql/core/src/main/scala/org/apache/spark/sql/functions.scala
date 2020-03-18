@@ -4388,8 +4388,8 @@ object functions {
   def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4405,8 +4405,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag](f: Function1[A1, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4422,8 +4422,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: Function2[A1, A2, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: ScalaReflection.getClassForCaseClass[A2] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: ExpressionEncoder[A2]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4439,8 +4439,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](f: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: ScalaReflection.getClassForCaseClass[A2] :: ScalaReflection.getClassForCaseClass[A3] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: ExpressionEncoder[A2]() :: ExpressionEncoder[A3]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4456,8 +4456,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](f: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: ScalaReflection.getClassForCaseClass[A2] :: ScalaReflection.getClassForCaseClass[A3] :: ScalaReflection.getClassForCaseClass[A4] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: ExpressionEncoder[A2]() :: ExpressionEncoder[A3]() :: ExpressionEncoder[A4]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4473,8 +4473,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](f: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: ScalaReflection.getClassForCaseClass[A2] :: ScalaReflection.getClassForCaseClass[A3] :: ScalaReflection.getClassForCaseClass[A4] :: ScalaReflection.getClassForCaseClass[A5] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: ExpressionEncoder[A2]() :: ExpressionEncoder[A3]() :: ExpressionEncoder[A4]() :: ExpressionEncoder[A5]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4490,8 +4490,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](f: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: ScalaReflection.getClassForCaseClass[A2] :: ScalaReflection.getClassForCaseClass[A3] :: ScalaReflection.getClassForCaseClass[A4] :: ScalaReflection.getClassForCaseClass[A5] :: ScalaReflection.getClassForCaseClass[A6] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: ExpressionEncoder[A2]() :: ExpressionEncoder[A3]() :: ExpressionEncoder[A4]() :: ExpressionEncoder[A5]() :: ExpressionEncoder[A6]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4507,8 +4507,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](f: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A7])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: ScalaReflection.getClassForCaseClass[A2] :: ScalaReflection.getClassForCaseClass[A3] :: ScalaReflection.getClassForCaseClass[A4] :: ScalaReflection.getClassForCaseClass[A5] :: ScalaReflection.getClassForCaseClass[A6] :: ScalaReflection.getClassForCaseClass[A7] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: ExpressionEncoder[A2]() :: ExpressionEncoder[A3]() :: ExpressionEncoder[A4]() :: ExpressionEncoder[A5]() :: ExpressionEncoder[A6]() :: ExpressionEncoder[A7]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4524,8 +4524,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](f: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A7])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A8])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: ScalaReflection.getClassForCaseClass[A2] :: ScalaReflection.getClassForCaseClass[A3] :: ScalaReflection.getClassForCaseClass[A4] :: ScalaReflection.getClassForCaseClass[A5] :: ScalaReflection.getClassForCaseClass[A6] :: ScalaReflection.getClassForCaseClass[A7] :: ScalaReflection.getClassForCaseClass[A8] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: ExpressionEncoder[A2]() :: ExpressionEncoder[A3]() :: ExpressionEncoder[A4]() :: ExpressionEncoder[A5]() :: ExpressionEncoder[A6]() :: ExpressionEncoder[A7]() :: ExpressionEncoder[A8]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4541,8 +4541,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](f: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A7])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A8])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A9])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: ScalaReflection.getClassForCaseClass[A2] :: ScalaReflection.getClassForCaseClass[A3] :: ScalaReflection.getClassForCaseClass[A4] :: ScalaReflection.getClassForCaseClass[A5] :: ScalaReflection.getClassForCaseClass[A6] :: ScalaReflection.getClassForCaseClass[A7] :: ScalaReflection.getClassForCaseClass[A8] :: ScalaReflection.getClassForCaseClass[A9] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: ExpressionEncoder[A2]() :: ExpressionEncoder[A3]() :: ExpressionEncoder[A4]() :: ExpressionEncoder[A5]() :: ExpressionEncoder[A6]() :: ExpressionEncoder[A7]() :: ExpressionEncoder[A8]() :: ExpressionEncoder[A9]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4558,8 +4558,8 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](f: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A7])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A8])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A9])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A10])).toOption :: Nil
-    val inputCaseClasses: Seq[Option[Class[_]]] = ScalaReflection.getClassForCaseClass[A1] :: ScalaReflection.getClassForCaseClass[A2] :: ScalaReflection.getClassForCaseClass[A3] :: ScalaReflection.getClassForCaseClass[A4] :: ScalaReflection.getClassForCaseClass[A5] :: ScalaReflection.getClassForCaseClass[A6] :: ScalaReflection.getClassForCaseClass[A7] :: ScalaReflection.getClassForCaseClass[A8] :: ScalaReflection.getClassForCaseClass[A9] :: ScalaReflection.getClassForCaseClass[A10] :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputCaseClasses)
+    val inputEncoders: Seq[ExpressionEncoder[_]] = ExpressionEncoder[A1]() :: ExpressionEncoder[A2]() :: ExpressionEncoder[A3]() :: ExpressionEncoder[A4]() :: ExpressionEncoder[A5]() :: ExpressionEncoder[A6]() :: ExpressionEncoder[A7]() :: ExpressionEncoder[A8]() :: ExpressionEncoder[A9]() :: ExpressionEncoder[A10]() :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 

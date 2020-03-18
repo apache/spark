@@ -256,9 +256,6 @@ class Analyzer(
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
-      ResolveCaseClassForUDF,
-      // `ResolveCaseClassForUDF` may generates `NewInstance` so we need to resolve it
-      ResolveNewInstance,
       HandleNullInputsForUDF),
     Batch("UpdateNullability", Once,
       UpdateAttributeNullability),
@@ -2737,39 +2734,6 @@ class Analyzer(
             }
             val newUDF = udf.copy(children = newInputs)
             If(inputNullCheck.get, Literal.create(null, udf.dataType), newUDF)
-          } else {
-            udf
-          }
-      }
-    }
-  }
-
-  object ResolveCaseClassForUDF extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case p if !p.resolved => p // Skip unresolved nodes.
-
-      case p => p transformExpressionsUp {
-
-        case udf @ ScalaUDF(_, _, inputs, _, inputCaseClass, _, _, _, _) =>
-          if (inputCaseClass.exists(_.isDefined)) {
-            assert(inputs.size == inputCaseClass.size)
-            val newInputs = inputs.zip(inputCaseClass).map {
-              case (input, clazzOpt) =>
-                if (clazzOpt.isDefined) {
-                  val clazz = clazzOpt.get
-                  assert(input.dataType.isInstanceOf[StructType],
-                    s"expects StructType, but got ${input.dataType}")
-                  val dataType = input.dataType.asInstanceOf[StructType]
-                  val args = dataType.toAttributes.zipWithIndex.map { case (a, i) =>
-                    GetStructField(input, i, Some(a.name))
-                  }
-                  NewInstance(clazz, args, ObjectType(clazz))
-                } else {
-                  input
-                }
-            }
-            // assign Nil inputCaseClass to avoid applying this rule for multiple times
-            udf.copy(children = newInputs, inputCaseClass = Nil)
           } else {
             udf
           }

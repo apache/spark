@@ -448,20 +448,8 @@ case class NewInstance(
     childrenResolved && !needOuterPointer
   }
 
-  private def argConverters(): Seq[Any => Any] = {
-    val inputTypes = ScalaReflection.expressionJavaClasses(arguments)
-    val neededTypes = ScalaReflection.getConstructorParameters(cls)
-    arguments.zip(inputTypes).zip(neededTypes).map { case ((arg, input), needed) =>
-      if (needed.isAssignableFrom(input)) {
-        identity[Any] _
-      } else {
-        CatalystTypeConverters.createToScalaConverter(arg.dataType)
-      }
-    }
-  }
-
   @transient private lazy val constructor: (Seq[AnyRef]) => Any = {
-    val paramTypes = ScalaReflection.getConstructorParameters(cls)
+    val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
       ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
         sys.error(s"Couldn't find a valid constructor on $cls")
@@ -484,10 +472,6 @@ case class NewInstance(
 
   override def eval(input: InternalRow): Any = {
     val argValues = arguments.map(_.eval(input))
-      .zip(argConverters())
-      .map { case (arg, converter) =>
-        converter(arg)
-      }
     constructor(argValues.map(_.asInstanceOf[AnyRef]))
   }
 
@@ -495,20 +479,6 @@ case class NewInstance(
     val javaType = CodeGenerator.javaType(dataType)
 
     val (argCode, argString, resultIsNull) = prepareArguments(ctx)
-
-    val converterClassName = classOf[Any => Any].getName
-    val convertersTerm = ctx.addReferenceObj(
-      "converters", argConverters().toArray, s"$converterClassName[]")
-    val argTypes = ScalaReflection.getConstructorParameters(cls)
-    val convertedArgs = argTypes.map { a =>
-      ctx.addMutableState(CodeGenerator.boxedType(a.getSimpleName), "convertedArg")
-    }
-    val convertedCode = argString.split(",").zip(argTypes).zipWithIndex.map {
-      case ((arg, tpe), i) =>
-        s"${convertedArgs(i)} = " +
-          s"(${CodeGenerator.boxedType(tpe.getSimpleName)}) $convertersTerm[$i].apply($arg);"
-    }.mkString("\n")
-    val convertedArgString = convertedArgs.mkString(",")
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
@@ -518,17 +488,16 @@ case class NewInstance(
       // If there are no constructors, the `new` method will fail. In
       // this case we can try to call the apply method constructor
       // that might be defined on the companion object.
-      case 0 => s"$className$$.MODULE$$.apply($convertedArgString)"
+      case 0 => s"$className$$.MODULE$$.apply($argString)"
       case _ => outer.map { gen =>
-        s"${gen.value}.new ${cls.getSimpleName}($convertedArgString)"
+        s"${gen.value}.new ${cls.getSimpleName}($argString)"
       }.getOrElse {
-        s"new $className($convertedArgString)"
+        s"new $className($argString)"
       }
     }
 
     val code = code"""
       $argCode
-      $convertedCode
       ${outer.map(_.code).getOrElse("")}
       final $javaType ${ev.value} = ${ev.isNull} ?
         ${CodeGenerator.defaultValue(dataType)} : $constructorCall;

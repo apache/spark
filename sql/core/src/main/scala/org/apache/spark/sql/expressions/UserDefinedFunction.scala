@@ -94,7 +94,7 @@ private[spark] case class SparkUserDefinedFunction(
     f: AnyRef,
     dataType: DataType,
     inputSchemas: Seq[Option[ScalaReflection.Schema]],
-    inputCaseClass: Seq[Option[Class[_]]] = Nil,
+    inputEncoders: Seq[ExpressionEncoder[_]] = Nil,
     name: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
@@ -116,7 +116,7 @@ private[spark] case class SparkUserDefinedFunction(
       dataType,
       exprs,
       inputsPrimitive,
-      inputCaseClass,
+      inputEncoders,
       inputTypes,
       udfName = name,
       nullable = nullable,
