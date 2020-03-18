@@ -88,7 +88,7 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> Tue; Tuesday; T </td>
 </tr>
 <tr>
-  <td> <b>e</b> </td>
+  <td> <b>u</b> </td>
   <td> localized day-of-week </td>
   <td> number/text </td>
   <td> 2; 02; Tue; Tuesday; T </td>
