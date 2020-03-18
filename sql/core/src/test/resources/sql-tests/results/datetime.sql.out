@@ -578,7 +578,7 @@ struct<to_timestamp('S2019-10-06', '\'S\'yyyy-MM-dd'):timestamp>
 
 
 -- !query
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eeee')
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuee')
 -- !query schema
 struct<>
 -- !query output
@@ -587,7 +587,7 @@ Illegal pattern character: e
 
 
 -- !query
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd cccc')
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc')
 -- !query schema
 struct<>
 -- !query output
