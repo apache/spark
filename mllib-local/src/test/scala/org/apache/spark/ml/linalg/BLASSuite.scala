@@ -24,12 +24,9 @@ import org.apache.spark.ml.util.TestingUtils._
 class BLASSuite extends SparkMLFunSuite {
 
   test("nativeL1Threshold") {
-    var vectorSize = 128
-    assert(getBLAS(vectorSize) == BLAS.f2jBLAS)
-    vectorSize = 256
-    assert(getBLAS(vectorSize) == BLAS.nativeBLAS)
-    vectorSize = 512
-    assert(getBLAS(vectorSize) == BLAS.nativeBLAS)
+    assert(getBLAS(128) == BLAS.f2jBLAS)
+    assert(getBLAS(256) == BLAS.nativeBLAS)
+    assert(getBLAS(512) == BLAS.nativeBLAS)
   }
 
   test("copy") {
