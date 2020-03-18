@@ -755,6 +755,10 @@ private[hive] class HiveClientImpl(
     client.getTablesByPattern(dbName, pattern).asScala
   }
 
+  override def listViews(dbName: String, pattern: String): Seq[String] = withHiveState {
+    shim.getTablesByType(client, dbName, pattern, HiveTableType.VIRTUAL_VIEW)
+  }
+
   /**
    * Runs the specified SQL query using Hive.
    */
