@@ -53,7 +53,7 @@ case class ScalaUDF(
     dataType: DataType,
     children: Seq[Expression],
     inputPrimitives: Seq[Boolean],
-    inputEncoders: Seq[ExpressionEncoder[_]] = Nil,
+    inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
     inputTypes: Seq[AbstractDataType] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
@@ -65,10 +65,16 @@ case class ScalaUDF(
   override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
 
   private def createToScalaConverter(i: Int, dataType: DataType): Any => Any = {
-    val encoder = inputEncoders(i)
-    encoder.isSerializedAsStructForTopLevel match {
-      case true => r: Any => encoder.resolveAndBind().fromRow(r.asInstanceOf[InternalRow])
-      case false => CatalystTypeConverters.createToScalaConverter(dataType)
+    inputEncoders.length match {
+      case 0 =>
+        // for untyped Scala UDF
+        CatalystTypeConverters.createToScalaConverter(dataType)
+      case _ =>
+        val encoder = inputEncoders(i)
+        encoder.isDefined && encoder.get.isSerializedAsStructForTopLevel match {
+          case true => r: Any => encoder.get.resolveAndBind().fromRow(r.asInstanceOf[InternalRow])
+          case false => CatalystTypeConverters.createToScalaConverter(dataType)
+        }
     }
   }
 

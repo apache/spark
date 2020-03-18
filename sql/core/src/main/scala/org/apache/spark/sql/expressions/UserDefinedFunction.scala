@@ -94,7 +94,7 @@ private[spark] case class SparkUserDefinedFunction(
     f: AnyRef,
     dataType: DataType,
     inputSchemas: Seq[Option[ScalaReflection.Schema]],
-    inputEncoders: Seq[ExpressionEncoder[_]] = Nil,
+    inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
     name: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {

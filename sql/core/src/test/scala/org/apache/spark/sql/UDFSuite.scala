@@ -572,10 +572,17 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(500) :: Nil)
   }
 
-  test("input case class parameter and return case class ") {
-    val f = (d1: TestData) => TestData(d1.key * 2, "copy")
+  test("input case class parameter and return case class") {
+    val f = (d: TestData) => TestData(d.key * 2, "copy")
     val myUdf = udf(f)
     val df = Seq(("data", TestData(50, "d2"))).toDF("col1", "col2")
     checkAnswer(df.select(myUdf(Column("col2"))), Row(Row(100, "copy")) :: Nil)
+  }
+
+  test("any and case class") {
+    val f = (any: Any, d: TestData) => s"${any.toString}, ${d.value}"
+    val myUdf = udf(f)
+    val df = Seq(("Hello", TestData(50, "World"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row("Hello, World") :: Nil)
   }
 }
