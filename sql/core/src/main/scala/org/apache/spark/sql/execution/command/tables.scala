@@ -1110,7 +1110,9 @@ case class ShowCreateTableCommand(table: TableIdentifier)
         }
 
         if (tableMetadata.tableType == VIEW) {
-          throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE")
+          throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE. " +
+            s"Please use `SHOW CREATE TABLE ${tableMetadata.identifier} AS SERDE` " +
+            "to show Hive DDL instead.")
         }
 
         if ("true".equalsIgnoreCase(tableMetadata.properties.getOrElse("transactional", "false"))) {
