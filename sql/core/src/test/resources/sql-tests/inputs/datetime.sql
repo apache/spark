@@ -107,3 +107,6 @@ select to_timestamp("S2019-10-06", "'S'yyyy-MM-dd");
 select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuee');
 select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc');
 select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu');
+
+select date_format(timestamp '2019-10-06', "yyyy-MM-dd'T'HH:mm:ss''SSSS");
+select date_format(timestamp '2019-10-06', "''");

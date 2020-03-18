@@ -117,6 +117,7 @@ private object DateTimeFormatterHelper {
       pattern: String): DateTimeFormatterBuilder = {
     val builder = createBuilder()
     pattern.split("'").zipWithIndex.foreach {
+      case ("", idx) if idx != 0 => builder.appendLiteral("'")
       case (pattenPart, idx) if idx % 2 == 0 =>
         var rest = pattenPart
         while (rest.nonEmpty) {
