@@ -671,22 +671,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("check incompatible pattern") {
-    assert(convertIncompatiblePattern("MM-DD-u") === "MM-DD-e")
-    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
-      === "uuuu-MM-dd'T'HH:mm:ss.SSSz")
-    assert(convertIncompatiblePattern("yyyy-MM'y contains in quoted text'HH:mm:ss")
-      === "uuuu-MM'y contains in quoted text'HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM-dd-u'T'HH:mm:ss.SSSz")
-      === "uuuu-MM-dd-e'T'HH:mm:ss.SSSz")
-    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss")
-      === "uuuu-MM'u contains in quoted text'HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'''''HH:mm:ss")
-      === "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
-      === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
-  }
-
   test("rebase julian to/from gregorian micros") {
     outstandingTimezones.foreach { timeZone =>
       withDefaultTimeZone(timeZone) {

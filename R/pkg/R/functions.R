@@ -1411,6 +1411,52 @@ setMethod("quarter",
           })
 
 #' @details
+#' \code{percentile_approx} Returns the approximate percentile value of
+#' numeric column at the given percentage.
+#'
+#' @param percentage Numeric percentage at which percentile should be computed
+#'                   All values should be between 0 and 1.
+#'                   If length equals to 1 resulting column is of type double,
+#'                   otherwise, array type of double.
+#' @param accuracy A positive numeric literal (default: 10000) which
+#'                 controls approximation accuracy at the cost of memory.
+#'                 Higher value of accuracy yields better accuracy, 1.0/accuracy
+#'                 is the relative error of the approximation.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases percentile_approx percentile_approx,Column-method
+#' @note percentile_approx since 3.1.0
+setMethod("percentile_approx",
+          signature(x = "characterOrColumn", percentage = "numericOrColumn"),
+          function(x, percentage, accuracy = 10000) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              column(x)@jc
+            }
+
+            percentage <- if (class(percentage) == "Column") {
+              percentage@jc
+            } else if (length(percentage) > 1) {
+              do.call(create_array, lapply(percentage, lit))@jc
+            } else {
+              lit(percentage)@jc
+            }
+
+            accuracy <- if (class(accuracy) == "Column") {
+              accuracy@jc
+            } else {
+              lit(as.integer(accuracy))@jc
+            }
+
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "percentile_approx",
+              col, percentage, accuracy
+            )
+            column(jc)
+          })
+
+#' @details
 #' \code{reverse}: Returns a reversed string or an array with reverse order of elements.
 #'
 #' @rdname column_collection_functions

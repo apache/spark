@@ -127,21 +127,18 @@ class FValueSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test FValue selector: numTopFeatures") {
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
-    val model = selector.fit(dataset)
     testSelector(selector, dataset)
   }
 
   test("Test F Value selector: percentile") {
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("percentile").setPercentile(0.17)
-    val model = selector.fit(dataset)
     testSelector(selector, dataset)
   }
 
   test("Test F Value selector: fpr") {
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("fpr").setFpr(0.01)
-    val model = selector.fit(dataset)
     testSelector(selector, dataset)
   }
 
@@ -169,7 +166,6 @@ class FValueSelectorSuite extends MLTest with DefaultReadWriteTest {
 
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
-    val model = selector.fit(df)
     testSelector(selector, df)
   }
 

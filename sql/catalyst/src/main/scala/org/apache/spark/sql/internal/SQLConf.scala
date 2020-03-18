@@ -2154,8 +2154,8 @@ object SQLConf {
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
-    .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
-      "The size function returns null for null input if the flag is disabled.")
+    .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
+      "null. Otherwise, it returns -1, which was inherited from Hive.")
     .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
@@ -2207,15 +2207,6 @@ object SQLConf {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
-
-
-  val LEGACY_INTEGRALDIVIDE_RETURN_LONG = buildConf("spark.sql.legacy.integralDivide.returnBigint")
-    .doc("If it is set to true, the div operator returns always a bigint. This behavior was " +
-      "inherited from Hive. Otherwise, the return type is the data type of the operands.")
-    .version("3.0.0")
-    .internal()
-    .booleanConf
-    .createWithDefault(false)
 
   val LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING =
     buildConf("spark.sql.legacy.bucketedTableScan.outputOrdering")
@@ -3037,7 +3028,10 @@ class SQLConf extends Serializable with Logging {
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
-  def legacySizeOfNull: Boolean = getConf(SQLConf.LEGACY_SIZE_OF_NULL)
+  def legacySizeOfNull: Boolean = {
+    // size(null) should return null under ansi mode.
+    getConf(SQLConf.LEGACY_SIZE_OF_NULL) && !getConf(ANSI_ENABLED)
+  }
 
   def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
 
@@ -3062,8 +3056,6 @@ class SQLConf extends Serializable with Logging {
 
   def createHiveTableByDefaultEnabled: Boolean =
     getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
-
-  def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
 
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
