@@ -129,7 +129,7 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
       .flatMap { case Row(vec: Vector) =>
         require(vec.size == numFeatures)
         validateFunc(vec)
-        vec.nonZeroIterator
+        vec.iterator
       }.toDF("col", "value")
       .groupBy("col", "value")
       .agg(count(lit(0)).as("cnt"))
@@ -161,46 +161,18 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
       .agg(collect_list(struct("value", "cnt")))
       .as[(Int, Seq[(Double, Long)])]
       .map { case (col, seq) =>
-        val nnz = seq.iterator.map(_._2).sum
-        val nz = numRows - nnz
+        val computeIter = () => seq.iterator
         val (solution, _) = localModelType match {
           case BoxCox =>
-            require(nz >= 0)
-            val computeIter = if (nz > 0) {
-              () => seq.iterator ++ Iterator.single((0.0, nz))
-            } else {
-              () => seq.iterator
-            }
             solveBoxCox(computeIter)
           case YeoJohnson =>
-            require(nz == 0)
-            val computeIter = () => seq.iterator
             solveYeoJohnson(computeIter)
         }
         (col, solution)
-      }.collect().toMap
+      }.collect().sortBy(_._1).map(_._2)
 
-    val lambda = Array.ofDim[Double](numFeatures)
-    solutions.foreach { case (col, solution) => lambda(col) = solution }
-
-    if (solutions.size < numFeatures) {
-      localModelType match {
-        case YeoJohnson =>
-          // if some column only contains 0 values in YeoJohnson
-          val computeIter = () => Iterator.single((0.0, numRows))
-          val (zeroSolution, _) = solveYeoJohnson(computeIter)
-          Iterator.range(0, numFeatures)
-            .filterNot(solutions.contains)
-            .foreach { col => lambda(col) = zeroSolution }
-
-        case BoxCox =>
-          // This should never happen.
-          throw new IllegalArgumentException("BoxCox requires positive values")
-      }
-    }
-
-   copyValues(new PowerTransformModel(uid, Vectors.dense(lambda).compressed)
-    .setParent(this))
+    val lambda = Vectors.dense(solutions)
+   copyValues(new PowerTransformModel(uid, lambda.compressed).setParent(this))
   }
 
   override def copy(extra: ParamMap): PowerTransform = defaultCopy(extra)
