@@ -35,8 +35,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     )
     override val usesIpc = false
     override val jdbcPort = 5432
+    override var dbName: Option[String] = Some("postgres")
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
+      s"jdbc:postgresql://$ip:$port/${dbName.get}?user=postgres&password=rootpass"
+    override def getEntryPoint: Option[String] = None
     override def getStartupProcessName: Option[String] = None
   }
 

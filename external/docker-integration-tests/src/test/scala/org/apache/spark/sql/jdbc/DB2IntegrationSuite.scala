@@ -39,8 +39,10 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     )
     override val usesIpc = false
     override val jdbcPort: Int = 50000
+    override var dbName: Option[String] = Some("foo")
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
+      s"jdbc:db2://$ip:$port/${dbName.get}:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
+    override def getEntryPoint: Option[String] = None
     override def getStartupProcessName: Option[String] = Some("db2start")
   }
 

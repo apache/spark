@@ -17,16 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
-class PostgresConnectionProviderSuite extends ConnectionProviderSuiteBase {
+class MariaDBConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    val driver = registerDriver(PostgresConnectionProvider.driverClass)
-    val defaultProvider = new PostgresConnectionProvider(
-      driver, options("jdbc:postgresql://localhost/postgres"))
-    val customProvider = new PostgresConnectionProvider(
-      driver, options(s"jdbc:postgresql://localhost/postgres?jaasApplicationName=custompgjdbc"))
+    val driver = registerDriver(MariaDBConnectionProvider.driverClass)
+    val provider = new MariaDBConnectionProvider(driver, options("jdbc:mysql://localhost/mysql"))
 
-    assert(defaultProvider.appEntry !== customProvider.appEntry)
-    testSecureConnectionProvider(defaultProvider)
-    testSecureConnectionProvider(customProvider)
+    testSecureConnectionProvider(provider)
   }
 }
