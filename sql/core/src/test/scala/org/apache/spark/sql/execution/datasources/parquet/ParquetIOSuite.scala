@@ -883,21 +883,22 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
   test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
     Seq(false, true).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
-        SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
-        checkAnswer(
-          readResourceParquetFile("test-data/before_1582_date_v2_4.snappy.parquet"),
-          Row(java.sql.Date.valueOf("1001-01-01")))
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+          checkAnswer(
+            readResourceParquetFile("test-data/before_1582_date_v2_4.snappy.parquet"),
+            Row(java.sql.Date.valueOf("1001-01-01")))
+          checkAnswer(readResourceParquetFile(
+            "test-data/before_1582_timestamp_micros_v2_4.snappy.parquet"),
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+          checkAnswer(readResourceParquetFile(
+            "test-data/before_1582_timestamp_millis_v2_4.snappy.parquet"),
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123")))
+        }
         checkAnswer(readResourceParquetFile(
-          "test-data/before_1582_timestamp_micros_v2_4.snappy.parquet"),
+          "test-data/before_1582_timestamp_int96_v2_4.snappy.parquet"),
           Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
-        checkAnswer(readResourceParquetFile(
-          "test-data/before_1582_timestamp_millis_v2_4.snappy.parquet"),
-          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123")))
       }
-      checkAnswer(readResourceParquetFile(
-        "test-data/before_1582_timestamp_int96_v2_4.snappy.parquet"),
-        Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
     }
   }
 
