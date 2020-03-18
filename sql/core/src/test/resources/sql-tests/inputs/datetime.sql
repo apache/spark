@@ -107,3 +107,8 @@ select to_timestamp("S2019-10-06", "'S'yyyy-MM-dd");
 select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuee');
 select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc');
 select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu');
+
+select to_timestamp("2019-10-06T10:11:12'12", "yyyy-MM-dd'T'HH:mm:ss''SSSS"); -- middle
+select to_timestamp("2019-10-06T10:11:12'", "yyyy-MM-dd'T'HH:mm:ss''"); -- tail
+select to_timestamp("'2019-10-06T10:11:12", "''yyyy-MM-dd'T'HH:mm:ss"); -- head
+select to_timestamp("P2019-10-06T10:11:12", "'P'yyyy-MM-dd'T'HH:mm:ss"); -- head but as single quote
