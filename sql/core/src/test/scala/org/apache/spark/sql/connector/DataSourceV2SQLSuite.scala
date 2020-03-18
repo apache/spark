@@ -319,7 +319,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("CreateTableAsSelect: do not double execute on collect()") {
+  test("CreateTableAsSelect: do not double execute on collect(), take() and other queries") {
     val basicCatalog = catalog("testcat").asTableCatalog
     val atomicCatalog = catalog("testcat_atomic").asTableCatalog
     val basicIdentifier = "testcat.table_name"
@@ -327,31 +327,14 @@ class DataSourceV2SQLSuite
 
     Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
       case (catalog, identifier) =>
-        spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source").collect()
+        val df = spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
 
-        val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
-
-        assert(table.name == identifier)
-        assert(table.partitioning.isEmpty)
-        assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
-        assert(table.schema == new StructType()
-          .add("id", LongType)
-          .add("data", StringType))
-
-        val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-        checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
-    }
-  }
-
-  test("CreateTableAsSelect: do not double execute on take()") {
-    val basicCatalog = catalog("testcat").asTableCatalog
-    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
-    val basicIdentifier = "testcat.table_name"
-    val atomicIdentifier = "testcat_atomic.table_name"
-
-    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
-      case (catalog, identifier) =>
-        spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source").take(5)
+        df.collect()
+        df.take(5)
+        df.tail(5)
+        df.where("true").collect()
+        df.where("true").take(5)
+        df.where("true").tail(5)
 
         val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
 
@@ -406,61 +389,15 @@ class DataSourceV2SQLSuite
           spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
           val originalTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
 
-          spark.sql(s"$cmd TABLE $identifier USING foo AS SELECT id FROM source").collect()
-          val replacedTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
+          val df = spark.sql(s"$cmd TABLE $identifier USING foo AS SELECT id FROM source")
 
-          assert(replacedTable != originalTable, "Table should have been replaced.")
-          assert(replacedTable.name == identifier)
-          assert(replacedTable.partitioning.isEmpty)
-          assert(replacedTable.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
-          assert(replacedTable.schema == new StructType().add("id", LongType))
+          df.collect()
+          df.take(5)
+          df.tail(5)
+          df.where("true").collect()
+          df.where("true").take(5)
+          df.where("true").tail(5)
 
-          val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
-          checkAnswer(
-            spark.internalCreateDataFrame(rdd, replacedTable.schema),
-            spark.table("source").select("id"))
-      }
-    }
-
-    test(s"ReplaceTableAsSelect: do not double execute $cmd on take()") {
-      val basicCatalog = catalog("testcat").asTableCatalog
-      val atomicCatalog = catalog("testcat_atomic").asTableCatalog
-      val basicIdentifier = "testcat.table_name"
-      val atomicIdentifier = "testcat_atomic.table_name"
-
-      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
-        case (catalog, identifier) =>
-          spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
-          val originalTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
-
-          spark.sql(s"$cmd TABLE $identifier USING foo AS SELECT id FROM source").take(5)
-          val replacedTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
-
-          assert(replacedTable != originalTable, "Table should have been replaced.")
-          assert(replacedTable.name == identifier)
-          assert(replacedTable.partitioning.isEmpty)
-          assert(replacedTable.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
-          assert(replacedTable.schema == new StructType().add("id", LongType))
-
-          val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
-          checkAnswer(
-            spark.internalCreateDataFrame(rdd, replacedTable.schema),
-            spark.table("source").select("id"))
-      }
-    }
-
-    test(s"ReplaceTableAsSelect: do not double execute $cmd on tail()") {
-      val basicCatalog = catalog("testcat").asTableCatalog
-      val atomicCatalog = catalog("testcat_atomic").asTableCatalog
-      val basicIdentifier = "testcat.table_name"
-      val atomicIdentifier = "testcat_atomic.table_name"
-
-      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
-        case (catalog, identifier) =>
-          spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
-          val originalTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
-
-          spark.sql(s"$cmd TABLE $identifier USING foo AS SELECT id FROM source").tail(5)
           val replacedTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
 
           assert(replacedTable != originalTable, "Table should have been replaced.")
