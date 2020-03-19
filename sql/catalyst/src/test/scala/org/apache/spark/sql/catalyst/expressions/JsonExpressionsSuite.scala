@@ -27,7 +27,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.TimeZoneUTC
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -396,7 +395,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("1")))
   }
 
-  val utcId = Option(TimeZoneUTC.getID)
+  val utcId = Option(DateTimeUtils.TimeZoneUTC.getID)
 
   test("from_json") {
     val jsonData = """{"a": 1}"""
@@ -503,7 +502,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("t", TimestampType) :: Nil)
 
     val jsonData1 = """{"t": "2016-01-01T00:00:00.123Z"}"""
-    var c = Calendar.getInstance(TimeZoneUTC)
+    var c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 123)
     checkEvaluation(
@@ -598,7 +597,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("to_json with timestamp") {
     val schema = StructType(StructField("t", TimestampType) :: Nil)
-    val c = Calendar.getInstance(TimeZoneUTC)
+    val c = Calendar.getInstance(DateTimeUtils.TimeZoneUTC)
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     val struct = Literal.create(create_row(c.getTimeInMillis * 1000L), schema)

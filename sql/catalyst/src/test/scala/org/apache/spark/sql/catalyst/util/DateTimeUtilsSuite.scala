@@ -707,7 +707,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
     }
     def fromJavaDate(date: Date): Int = {
-      millisToDays(date.getTime, defaultTimeZone())
+      millisToDays(date.getTime, TimeZone.getDefault)
     }
     outstandingTimezones.foreach { timeZone =>
       withDefaultTimeZone(timeZone) {

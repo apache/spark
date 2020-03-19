@@ -52,6 +52,8 @@ object DateTimeUtils {
 
   final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
 
+  final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
+
   val TIMEZONE_OPTION = "timeZone"
 
   def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
@@ -150,7 +152,7 @@ object DateTimeUtils {
    * Note: support timestamp since 4717 BC (without negative nanoseconds, compatible with Hive).
    */
   def toJulianDay(micros: Long): (Int, Long) = {
-    val julianUs = rebaseGregorianToJulianMicros(us) + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
+    val julianUs = rebaseGregorianToJulianMicros(micros) + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
     val days = julianUs / MICROS_PER_DAY
     val us = julianUs % MICROS_PER_DAY
     (days.toInt, MICROSECONDS.toNanos(us))

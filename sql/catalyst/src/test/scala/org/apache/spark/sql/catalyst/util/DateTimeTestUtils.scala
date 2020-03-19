@@ -28,8 +28,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
  */
 object DateTimeTestUtils {
 
-  final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
-
   val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
 
   val outstandingTimezonesIds: Seq[String] = Seq(
