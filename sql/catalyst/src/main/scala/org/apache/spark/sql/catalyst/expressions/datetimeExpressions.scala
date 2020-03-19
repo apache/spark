@@ -600,7 +600,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
-  arguments = s"""
+  arguments = """
     Arguments:
       * timestamp - A date/timestamp or string to be converted to the given format.
       * fmt - Date/time format pattern to follow. See http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html for valid date
@@ -681,7 +681,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timeExp[, format]) - Returns the UNIX timestamp of the given time.",
-  arguments = s"""
+  arguments = """
     Arguments:
       * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
@@ -728,7 +728,7 @@ case class ToUnixTimestamp(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_([timeExp[, format]]) - Returns the UNIX timestamp of current or specified time.",
-  arguments = s"""
+  arguments = """
     Arguments:
       * timeExp - A date/timestamp or string. If not provided, this defaults to current time.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
@@ -1512,7 +1512,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
       to a timestamp. Returns null with invalid input. By default, it follows casting rules to
       a timestamp if the `fmt` is omitted.
   """,
-  arguments = s"""
+  arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
       * fmt - Timestamp format pattern to follow. See http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html for valid
