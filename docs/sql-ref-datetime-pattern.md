@@ -234,11 +234,12 @@ The count of pattern letters determines the format.
 - Fraction: Use one or more contiguous `'S'` characters, e,g `SSSSSS`, to parse and format fraction of second.
   For parsing, the acceptable fraction length can be [1, the number of contiguous 'S'].
   For formatting, the fraction length would be padded to the number of contiguous 'S' with zeros.
-  Spark supports datetime with max precision to micro-of-second which has six significant digits at most, but can parse nano-of-second field with exceed part truncated.
+  Spark supports datetime with max precision to micro-of-second which has 6 significant digits at most, but can parse nano-of-second field which can accept 9 contiguous 'S' at most with exceeded part truncated.
 
 - Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present.
 
 - Zone ID(V): This outputs the display the time-zone ID. Pattern letter count must be 2.
+
 - Zone names(z): This outputs the display textual name of the time-zone ID. If the count of letters is one, two or three, then the short name is output. If the count of letters is four, then the full name is output. Five or more letters will fail.
 
 - Offset X and x: This formats the offset based on the number of pattern letters. One letter outputs just the hour, such as '+01', unless the minute is non-zero in which case the minute is also output, such as '+0130'. Two letters outputs the hour and minute, without a colon, such as '+0130'. Three letters outputs the hour and minute, with a colon, such as '+01:30'. Four letters outputs the hour and minute and optional second, without a colon, such as '+013015'. Five letters outputs the hour and minute and optional second, with a colon, such as '+01:30:15'. Six or more letters will fail. Pattern letter 'X' (upper case) will output 'Z' when the offset to be output would be zero, whereas pattern letter 'x' (lower case) will output '+00', '+0000', or '+00:00'.
@@ -247,8 +248,8 @@ The count of pattern letters determines the format.
 
 - Offset Z: This formats the offset based on the number of pattern letters. One, two or three letters outputs the hour and minute, without a colon, such as '+0130'. The output will be '+0000' when the offset is zero. Four letters outputs the full form of localized offset, equivalent to four letters of Offset-O. The output will be the corresponding localized offset text if the offset is zero. Five letters outputs the hour, minute, with optional second if non-zero, with colon. It outputs 'Z' if the offset is zero. Six or more letters will fail.
 
-- Optional section start and end: Use `[]` to define an optional section and maybe nested.All elements in the optional section are treated as optional.
-  During formatting, the section will be output when data is available.
+- Optional section start and end: Use `[]` to define an optional section and maybe nested.
+  During formatting, all valid data will be output even it is in the optional section.
   During parsing, the whole section may be missing from the parsed string.
   An optional section is started by `[` and ended using `]` (or at the end of the pattern).
 
