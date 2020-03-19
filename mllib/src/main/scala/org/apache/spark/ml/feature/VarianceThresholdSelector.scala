@@ -86,7 +86,7 @@ with DefaultParamsWritable {
   override def fit(dataset: Dataset[_]): VarianceThresholdSelectorModel = {
     transformSchema(dataset.schema, logging = true)
 
-    var Row(maxs: Vector, mins: Vector, variances: Vector) = dataset
+    val Row(maxs: Vector, mins: Vector, variances: Vector) = dataset
       .select(Summarizer.metrics("max", "min", "variance").summary(col($(featuresCol)))
         .as("summary"))
       .select("summary.max", "summary.min", "summary.variance")
