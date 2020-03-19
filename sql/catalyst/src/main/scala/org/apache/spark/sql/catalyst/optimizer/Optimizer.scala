@@ -80,6 +80,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         InferFiltersFromConstraints,
         // Operator combine
         CollapseRepartition,
+        PushProjectThroughLimit,
         CollapseProject,
         CollapseWindow,
         CombineFilters,
@@ -199,6 +200,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       ColumnPruning,
+      PushProjectThroughLimit,
       CollapseProject,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
@@ -698,6 +700,26 @@ object ColumnPruning extends Rule[LogicalPlan] {
 }
 
 /**
+ * Pushes Project through Limit when the child node of Limit has the same output as the project.
+ * This allows the stacked projects to be later removed by other rules, and also to keep limit
+ * on the top so that planner can optimize it.
+ */
+object PushProjectThroughLimit extends Rule[LogicalPlan] {
+  import CollapseUtils._
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
+      if isRenaming(l1, l2) =>
+      val newProjectList = buildCleanedProjectList(l1, l2)
+      g.copy(child = limit.copy(child = p2.copy(projectList = newProjectList)))
+
+    case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+      val newProjectList = buildCleanedProjectList(l1, l2)
+      limit.copy(child = p2.copy(projectList = newProjectList))
+  }
+}
+
+/**
  * Combines two [[Project]] operators into one and perform alias substitution,
  * merging the expressions into one single expression for the following cases.
  * 1. When two [[Project]] operators are adjacent.
@@ -706,6 +728,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
  *    `GlobalLimit(LocalLimit)` pattern is also considered.
  */
 object CollapseProject extends Rule[LogicalPlan] {
+  import CollapseUtils._
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, p2: Project) =>
@@ -721,23 +744,10 @@ object CollapseProject extends Rule[LogicalPlan] {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       }
-    case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
-        if isRenaming(l1, l2) =>
-      val newProjectList = buildCleanedProjectList(l1, l2)
-      g.copy(child = limit.copy(child = p2.copy(projectList = newProjectList)))
-    case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
-      val newProjectList = buildCleanedProjectList(l1, l2)
-      limit.copy(child = p2.copy(projectList = newProjectList))
     case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
       r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
     case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
-  }
-
-  private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
-    AttributeMap(projectList.collect {
-      case a: Alias => a.toAttribute -> a
-    })
   }
 
   private def haveCommonNonDeterministicOutput(
@@ -752,8 +762,11 @@ object CollapseProject extends Rule[LogicalPlan] {
       case a: Attribute if aliases.contains(a) => aliases(a).child
     }.exists(!_.deterministic))
   }
+}
 
-  private def buildCleanedProjectList(
+object CollapseUtils {
+
+  def buildCleanedProjectList(
       upper: Seq[NamedExpression],
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
     // Create a map of Aliases to their values from the lower projection.
@@ -773,7 +786,13 @@ object CollapseProject extends Rule[LogicalPlan] {
     }
   }
 
-  private def isRenaming(list1: Seq[NamedExpression], list2: Seq[NamedExpression]): Boolean = {
+  def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
+    AttributeMap(projectList.collect {
+      case a: Alias => a.toAttribute -> a
+    })
+  }
+
+  def isRenaming(list1: Seq[NamedExpression], list2: Seq[NamedExpression]): Boolean = {
     list1.length == list2.length && list1.zip(list2).forall {
       case (e1, e2) if e1.semanticEquals(e2) => true
       case (Alias(a: Attribute, _), b) if a.metadata == Metadata.empty && a.name == b.name => true
