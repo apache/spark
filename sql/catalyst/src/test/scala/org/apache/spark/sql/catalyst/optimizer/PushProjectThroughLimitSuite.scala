@@ -39,4 +39,12 @@ class PushProjectThroughLimitSuite extends PlanTest {
     val expected = LocalLimit(1, relation.select('a as 'b).select('b as 'c)).analyze
     comparePlans(optimized, expected)
   }
+
+  test("push no-op project through local limit") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = LocalLimit(1, relation).select('a, 'b).analyze
+    val optimized = PushProjectThroughLimit.apply(query)
+    val expected = LocalLimit(1, relation.select('a, 'b)).analyze
+    comparePlans(optimized, expected)
+  }
 }
