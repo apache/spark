@@ -365,9 +365,9 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-31183: rebasing timestamps in write") {
-    val tsStr = "1001-01-01 01:02:03.123"
-    val nonRebased = "1001-01-07 01:09:05.123"
+  test("SPARK-31183: rebasing microseconds timestamps in write") {
+    val tsStr = "1001-01-01 01:02:03.123456"
+    val nonRebased = "1001-01-07 01:09:05.123456"
     withTempPath { dir =>
       val path = dir.getAbsolutePath
       withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME.key -> "true") {
@@ -377,6 +377,38 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
           .save(path)
 
         checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(tsStr)))
+      }
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME.key -> "false") {
+        checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(nonRebased)))
+      }
+    }
+  }
+
+  test("SPARK-31183: rebasing milliseconds timestamps in write") {
+    val tsStr = "1001-01-01 01:02:03.123456"
+    val rebased = "1001-01-01 01:02:03.123"
+    val nonRebased = "1001-01-07 01:09:05.123"
+    val timestampSchema = """
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "ts", "type": {"type": "long","logicalType": "timestamp-millis"}}
+        ]
+      }
+    """
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME.key -> "true") {
+        Seq(tsStr).toDF("tsS")
+          .select($"tsS".cast("timestamp").as("ts"))
+          .write
+          .option("avroSchema", timestampSchema)
+          .format("avro")
+          .save(path)
+
+        checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(rebased)))
       }
       withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME.key -> "false") {
         checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(nonRebased)))
