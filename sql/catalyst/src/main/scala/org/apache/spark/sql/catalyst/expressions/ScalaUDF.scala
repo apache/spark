@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{AbstractDataType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 
 /**
  * User-defined function.
@@ -34,17 +34,9 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType}
  *                  null. Use boxed type or [[Option]] if you wanna do the null-handling yourself.
  * @param dataType  Return type of function.
  * @param children  The input expressions of this UDF.
- * @param inputPrimitives The analyzer should be aware of Scala primitive types so as to make the
- *                        UDF return null if there is any null input value of these types. On the
- *                        other hand, Java UDFs can only have boxed types, thus this parameter will
- *                        always be all false.
  * @param inputEncoders ExpressionEncoder for each input parameters. For a input parameter which
  *                      serialized as struct will use encoder instead of CatalystTypeConverters to
  *                      convert internal value to Scala value.
- * @param inputTypes  The expected input types of this UDF, used to perform type coercion. If we do
- *                    not want to perform coercion, simply use "Nil". Note that it would've been
- *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
- *                    type coercion. However, that would require more refactoring of the codebase.
  * @param udfName  The user-specified name of this UDF.
  * @param nullable  True if the UDF can return null value.
  * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
@@ -54,9 +46,7 @@ case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
-    inputPrimitives: Seq[Boolean],
     inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
-    inputTypes: Seq[AbstractDataType] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
@@ -67,6 +57,52 @@ case class ScalaUDF(
   private lazy val resolvedEnc = mutable.HashMap[Int, ExpressionEncoder[_]]()
 
   override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
+
+  /**
+   * The analyzer should be aware of Scala primitive types so as to make the
+   * UDF return null if there is any null input value of these types. On the
+   * other hand, Java UDFs can only have boxed types, thus this parameter will
+   * always be all false.
+   */
+  def inputPrimitives: Seq[Boolean] = {
+    inputEncoders.map { encoderOpt =>
+      // It's possible that some of the inputs don't have a specific encoder(e.g. `Any`)
+      if (encoderOpt.isDefined) {
+        val encoder = encoderOpt.get
+        if (encoder.isSerializedAsStruct) {
+          // struct type is not primitive
+          false
+        } else {
+          // `nullable` is false iff the type is primitive
+          !encoder.schema.head.nullable
+        }
+      } else {
+        // Any type is not primitive
+        false
+      }
+    }
+  }
+
+  /**
+   * The expected input types of this UDF, used to perform type coercion. If we do
+   * not want to perform coercion, simply use "Nil". Note that it would've been
+   * better to use Option of Seq[DataType] so we can use "None" as the case for no
+   * type coercion. However, that would require more refactoring of the codebase.
+   */
+  def inputTypes: Seq[AbstractDataType] = {
+    inputEncoders.map { encoderOpt =>
+      if (encoderOpt.isDefined) {
+        val encoder = encoderOpt.get
+        if (encoder.isSerializedAsStruct) {
+          encoder.schema
+        } else {
+          encoder.schema.head.dataType
+        }
+      } else {
+        AnyDataType
+      }
+    }
+  }
 
   private def createToScalaConverter(i: Int, dataType: DataType): Any => Any = {
     if (inputEncoders.isEmpty) {

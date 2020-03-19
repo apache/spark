@@ -104,30 +104,11 @@ private[spark] case class SparkUserDefinedFunction(
   }
 
   private[sql] def createScalaUDF(exprs: Seq[Expression]): ScalaUDF = {
-    // It's possible that some of the inputs don't have a specific encoder(e.g. `Any`).
-    // And `nullable` is false iff the type is primitive. Also `Any` is not primitive.
-    val (inputTypes, inputsPrimitive) = inputEncoders.map { encoderOpt =>
-      if (encoderOpt.isDefined) {
-        val encoder = encoderOpt.get
-        if (encoder.isSerializedAsStruct) {
-          // struct type is not primitive
-          (encoder.schema, false)
-        } else {
-          val field = encoder.schema.head
-          (field.dataType, !field.nullable)
-        }
-      } else {
-        (AnyDataType, false)
-      }
-    }.unzip
-
     ScalaUDF(
       f,
       dataType,
       exprs,
-      inputsPrimitive,
       inputEncoders,
-      inputTypes,
       udfName = name,
       nullable = nullable,
       udfDeterministic = deterministic)
