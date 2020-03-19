@@ -92,13 +92,12 @@
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
-    <!-- FIXME: testing unreleased version of Janino via JitPack... -->
     <dependency>
-      <groupId>com.github.heartsavior.janino</groupId>
+      <groupId>org.codehaus.janino</groupId>
       <artifactId>janino</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.github.heartsavior.janino</groupId>
+      <groupId>org.codehaus.janino</groupId>
       <artifactId>commons-compiler</artifactId>
     </dependency>
     <dependency>

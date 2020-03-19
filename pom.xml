@@ -178,8 +178,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <!-- FIXME: testing unreleased version of Janino via JitPack... -->
-    <janino.version>SPARK-31101-3.0.x-v4</janino.version>
+    <janino.version>3.0.16</janino.version>
     <jersey.version>2.30</jersey.version>
     <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -247,18 +246,6 @@
     <CodeCacheSize>1g</CodeCacheSize>
   </properties>
   <repositories>
-    <!-- FIXME: testing unreleased version of Janino via JitPack... -->
-    <repository>
-      <id>jitpack.io</id>
-      <url>https://jitpack.io</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-
     <repository>
       <id>gcs-maven-central-mirror</id>
       <!--
@@ -2183,14 +2170,13 @@
         <version>${hive.parquet.version}</version>
         <scope>${hive.parquet.scope}</scope>
       </dependency>
-      <!-- FIXME: testing unreleased version of Janino via JitPack... -->
       <dependency>
-        <groupId>com.github.heartsavior.janino</groupId>
+        <groupId>org.codehaus.janino</groupId>
         <artifactId>janino</artifactId>
         <version>${janino.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.github.heartsavior.janino</groupId>
+        <groupId>org.codehaus.janino</groupId>
         <artifactId>commons-compiler</artifactId>
         <version>${janino.version}</version>
       </dependency>
