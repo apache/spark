@@ -386,6 +386,12 @@ class DataFrameJoinSuite extends QueryTest
           checkIfHintApplied(dfTemplate(s"$dbName.$table1Name", table1Name))
           checkIfHintApplied(dfTemplate(table1Name, s"$dbName.$table1Name"))
           checkIfHintNotApplied(dfTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name.id"))
+
+          withTempView("tv") {
+            sql(s"CREATE TEMPORARY VIEW tv AS SELECT * FROM $dbName.$table1Name")
+            checkIfHintApplied(sqlTemplate("tv", "tv"))
+            checkIfHintNotApplied(sqlTemplate("tv", "default.tv"))
+          }
         }
       }
     }
