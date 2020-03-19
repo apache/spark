@@ -19,13 +19,15 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.util.collection.WritablePartitionedPairCollection._
 
 /**
  * Implementation of WritablePartitionedPairCollection that wraps a map in which the keys are tuples
  * of (partition ID, K)
  */
-private[spark] class PartitionedAppendOnlyMap[K, V]
+private[spark] class PartitionedAppendOnlyMap[K, V: ClassTag]
   extends SizeTrackingAppendOnlyMap[(Int, K), V] with WritablePartitionedPairCollection[K, V] {
 
   def partitionedDestructiveSortedIterator(keyComparator: Option[Comparator[K]])

@@ -17,10 +17,12 @@
 
 package org.apache.spark.util.collection
 
+import scala.reflect.{ClassTag}
+
 /**
  * An append-only map that keeps track of its estimated size in bytes.
  */
-private[spark] class SizeTrackingAppendOnlyMap[K, V]
+private[spark] class SizeTrackingAppendOnlyMap[K, V: ClassTag]
   extends AppendOnlyMap[K, V] with SizeTracker
 {
   override def update(key: K, value: V): Unit = {

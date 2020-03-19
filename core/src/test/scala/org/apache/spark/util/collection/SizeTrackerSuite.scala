@@ -80,7 +80,7 @@ class SizeTrackerSuite extends SparkFunSuite {
     }
   }
 
-  def testMap[K, V](numElements: Int, makeElement: (Int) => (K, V)): Unit = {
+  def testMap[K, V: ClassTag](numElements: Int, makeElement: (Int) => (K, V)): Unit = {
     val map = new SizeTrackingAppendOnlyMap[K, V]
     for (i <- 0 until numElements) {
       val (k, v) = makeElement(i)

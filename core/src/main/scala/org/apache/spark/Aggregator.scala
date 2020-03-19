@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.ExternalAppendOnlyMap
 
@@ -29,7 +31,7 @@ import org.apache.spark.util.collection.ExternalAppendOnlyMap
  * @param mergeCombiners function to merge outputs from multiple mergeValue function.
  */
 @DeveloperApi
-case class Aggregator[K, V, C] (
+case class Aggregator[K, V, C: ClassTag] (
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C) {

@@ -90,6 +90,10 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   private[spark] val combinerClassName: Option[String] =
     Option(reflect.classTag[C]).map(_.runtimeClass.getName)
 
+  private[spark] val keyClassTag = reflect.classTag[K]
+  private[spark] val valueClassTag = reflect.classTag[V]
+  private[spark] val combinerClassTag = reflect.classTag[C]
+
   val shuffleId: Int = _rdd.context.newShuffleId()
 
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(

@@ -22,6 +22,7 @@ import java.util.Comparator
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import com.google.common.io.ByteStreams
 
@@ -89,7 +90,7 @@ import org.apache.spark.util.{Utils => TryUtils}
  *
  *  - Users are expected to call stop() at the end to delete all the intermediate files.
  */
-private[spark] class ExternalSorter[K, V, C](
+private[spark] class ExternalSorter[K, V, C: ClassTag](
     context: TaskContext,
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,

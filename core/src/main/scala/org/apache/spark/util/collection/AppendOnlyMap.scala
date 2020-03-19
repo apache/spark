@@ -19,6 +19,9 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
+import scala.collection.mutable
+import scala.reflect.{classTag, ClassTag}
+
 import com.google.common.hash.Hashing
 
 import org.apache.spark.annotation.DeveloperApi
@@ -37,7 +40,7 @@ import org.apache.spark.annotation.DeveloperApi
  * TODO: Cache the hash values of each key? java.util.HashMap does that.
  */
 @DeveloperApi
-class AppendOnlyMap[K, V](initialCapacity: Int = 64)
+class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
   extends Iterable[(K, V)] with Serializable {
 
   import AppendOnlyMap._
@@ -60,6 +63,18 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   // Treat the null key differently so we can use nulls in "data" to represent empty items.
   private var haveNullValue = false
   private var nullValue: V = null.asInstanceOf[V]
+
+  // Use to track key positions, the size is small enough for most cases.
+  private var keyPositions = new mutable.BitSet(capacity)
+
+  // Tracks the total number of elements in the values, mainly used to do estimation for container
+  // value type like CompactBuffer[_] and Array[CompactBuffer[_]]
+  private var totalValueElements = 0
+
+  private val updateValueElementsIfNeeded: Map[Class[_], () => Unit] = Map(
+    (classOf[CompactBuffer[_]], () => totalValueElements += 1),
+    (classOf[Array[CompactBuffer[_]]], () => totalValueElements += 1)
+  )
 
   // Triggered by destructiveSortedIterator; the underlying data array may no longer be used
   private var destroyed = false
@@ -108,6 +123,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
       if (curKey.eq(null)) {
         data(2 * pos) = k
         data(2 * pos + 1) = value.asInstanceOf[AnyRef]
+        keyPositions += 2 * pos
+        totalValueElements += 1
         incrementSize()  // Since we added a new key
         return
       } else if (k.eq(curKey) || k.equals(curKey)) {
@@ -145,10 +162,13 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
         data(2 * pos) = k
         data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
         incrementSize()
+        keyPositions += 2 * pos
+        totalValueElements += 1
         return newValue
       } else if (k.eq(curKey) || k.equals(curKey)) {
         val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
         data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
+        updateValueElementsIfNeeded(valueClassTag.runtimeClass)
         return newValue
       } else {
         val delta = i
@@ -204,6 +224,12 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
       growTable()
     }
   }
+
+  def getKeyPositions(): mutable.BitSet = {
+    keyPositions
+  }
+
+  def getTotalValueElements: Int = totalValueElements
 
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
@@ -294,6 +320,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
    * Return whether the next insert will cause the map to grow
    */
   def atGrowThreshold: Boolean = curSize == growThreshold
+
+  def valueClassTag: ClassTag[V] = classTag[V]
 }
 
 private object AppendOnlyMap {

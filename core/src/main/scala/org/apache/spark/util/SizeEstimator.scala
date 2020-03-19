@@ -21,6 +21,7 @@ import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.runtime.ScalaRunTime
 
@@ -29,7 +30,8 @@ import com.google.common.collect.MapMaker
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
-import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.rdd.CoGroupedRDD
+import org.apache.spark.util.collection.{AppendOnlyMap, BitSet, CompactBuffer, OpenHashSet}
 
 /**
  * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
@@ -220,6 +222,17 @@ object SizeEstimator extends Logging {
       obj match {
         case s: KnownSizeEstimation =>
           state.size += s.estimatedSize
+//        case map: AppendOnlyMap[_, _] =>
+//          val classInfo = getClassInfo(cls)
+//          state.size += alignSize(classInfo.shellSize)
+//          for (field <- classInfo.pointerFields) {
+//            if (field.getName.equals("data")) {
+//              visitKVDataArray(field.get(map).asInstanceOf[Array[AnyRef]],
+//                map.getKeyPositions(), map.getTotalValueElements, state)
+//            } else {
+//              state.enqueue(field.get(map))
+//            }
+//          }
         case _ =>
           val classInfo = getClassInfo(cls)
           state.size += alignSize(classInfo.shellSize)
@@ -288,6 +301,91 @@ object SizeEstimator extends Logging {
       }
     }
     size
+  }
+
+
+  /** Visit AppendOnlyMap data field which stored all the KVs, we handle this field separately
+   *  because the underlying type of the elems of this array is different, and their size may vary
+   *  significantly, for example, the value may be an array-like buffer to store merged or grouped
+   *  values for aggregation.
+   * */
+  private def visitKVDataArray(
+      data: Array[AnyRef],
+      keyPositions: mutable.BitSet,
+      totalValueElements: Int,
+      state: SearchState): Unit = {
+    val length = data.length
+    var arrSize: Long = alignSize(objectSize + INT_SIZE)
+    state.size += arrSize
+    state.size += alignSize((length - keyPositions.size) * pointerSize)
+
+    if (length <= ARRAY_SIZE_FOR_SAMPLING) {
+      for (e <- data) {
+        state.enqueue(e)
+      }
+    } else {
+      val drawn = new OpenHashSet[Int](ARRAY_SAMPLE_SIZE)
+      val rand = new Random(42)
+      val (numKeys1, keySize1, numValueElements1, valueSize1) =
+        sampleKVDataArray(data, keyPositions, state, rand, drawn, length)
+      val (numKeys2, keySize2, numValueElements2, valueSize2) =
+        sampleKVDataArray(data, keyPositions, state, rand, drawn, length)
+      val (_, keySizeForMax, numKeysForMin, keySizeForMin) = if (keySize1 > keySize2) {
+        (numKeys1, keySize1, numKeys2, keySize2)
+      } else (numKeys2, keySize2, numKeys1, keySize1)
+      val keySize = keySizeForMax +
+        keySizeForMin * ((keyPositions.size - numKeysForMin) / numKeysForMin)
+      state.size += keySize
+
+      val (_, valueSizeForMax, numValueElementsForMin, valueSizeForMin) =
+        if (valueSize1 > valueSize2) {
+          (numValueElements1, valueSize1, numValueElements2, valueSize2)
+        } else {
+          (numValueElements2, valueSize2, numValueElements1, valueSize1)
+        }
+
+      val valueSize = valueSizeForMax +
+        valueSizeForMin * ((totalValueElements - numValueElementsForMin) / numValueElementsForMin)
+      state.size += valueSize
+    }
+  }
+
+  private def sampleKVDataArray(
+      data: Array[AnyRef],
+      keyPositions: mutable.BitSet,
+      state: SearchState,
+      rand: Random,
+      drawn: OpenHashSet[Int],
+      length: Int): (Int, Long, Int, Long) = {
+    for (i <- 0 until ARRAY_SAMPLE_SIZE) {
+      var pos = 0
+      do {
+        pos = rand.nextInt(length)
+      } while (keyPositions.contains(pos))
+      drawn.add(pos)
+    }
+    var sampleKeySize = 0L
+    var sampleKeys = 0
+    var sampleValueSize = 0L
+    var sampleValueElements = 0
+    for (pos <- drawn.iterator) {
+      val key = ScalaRunTime.array_apply(data, pos)
+      val value = ScalaRunTime.array_apply(data, pos + 1)
+      sampleKeySize += SizeEstimator.estimate(key.asInstanceOf[AnyRef], state.visited)
+      sampleKeys += 1
+      value match {
+        case b: CompactBuffer[_] =>
+          sampleValueElements += b.length
+          sampleValueSize += SizeEstimator.estimate(b, state.visited)
+        case a: Array[CompactBuffer[_]] =>
+          sampleValueElements += a.map(_.length).sum
+          sampleValueSize += SizeEstimator.estimate(a, state.visited)
+        case _ =>
+          sampleValueElements += 1
+          sampleValueSize += SizeEstimator.estimate(value.asInstanceOf[AnyRef], state.visited)
+      }
+    }
+    (sampleKeys, sampleKeySize, sampleValueElements, sampleValueSize)
   }
 
   private def primitiveSize(cls: Class[_]): Int = {

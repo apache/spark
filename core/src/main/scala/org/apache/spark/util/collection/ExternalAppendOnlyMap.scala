@@ -23,6 +23,7 @@ import java.util.Comparator
 import scala.collection.BufferedIterator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import com.google.common.io.ByteStreams
 
@@ -52,7 +53,7 @@ import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
  * non-spilling AppendOnlyMap.
  */
 @DeveloperApi
-class ExternalAppendOnlyMap[K, V, C](
+class ExternalAppendOnlyMap[K, V, C: ClassTag](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
