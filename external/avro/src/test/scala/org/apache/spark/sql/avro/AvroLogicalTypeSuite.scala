@@ -391,30 +391,37 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     val tsStr = "1001-01-01 01:02:03.123456"
     val rebased = "1001-01-01 01:02:03.123"
     val nonRebased = "1001-01-07 01:09:05.123"
-    val timestampSchema = """
-      |{
-      |  "namespace": "logical",
-      |  "type": "record",
-      |  "name": "test",
-      |  "fields": [
-      |    {"name": "ts", "type": {"type": "long","logicalType": "timestamp-millis"}}
-      |  ]
-      |}
-      """.stripMargin
-    withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME.key -> "true") {
-        Seq(tsStr).toDF("tsS")
-          .select($"tsS".cast("timestamp").as("ts"))
-          .write
-          .option("avroSchema", timestampSchema)
-          .format("avro")
-          .save(path)
+    Seq(
+      """{"type": "long","logicalType": "timestamp-millis"}""",
+      """"long"""").foreach { tsType =>
+      val timestampSchema = s"""
+          |{
+          |  "namespace": "logical",
+          |  "type": "record",
+          |  "name": "test",
+          |  "fields": [
+          |    {"name": "ts", "type": $tsType}
+          |  ]
+          |}""".stripMargin
+      withTempPath { dir =>
+        val path = dir.getAbsolutePath
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME.key -> "true") {
+          Seq(tsStr).toDF("tsS")
+            .select($"tsS".cast("timestamp").as("ts"))
+            .write
+            .option("avroSchema", timestampSchema)
+            .format("avro")
+            .save(path)
 
-        checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(rebased)))
-      }
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME.key -> "false") {
-        checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(nonRebased)))
+          checkAnswer(
+            spark.read.schema("ts timestamp").format("avro").load(path),
+            Row(Timestamp.valueOf(rebased)))
+        }
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME.key -> "false") {
+          checkAnswer(
+            spark.read.schema("ts timestamp").format("avro").load(path),
+            Row(Timestamp.valueOf(nonRebased)))
+        }
       }
     }
   }
