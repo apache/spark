@@ -1932,7 +1932,7 @@ Apart from these, the following properties are also available, and may be useful
     For users who enabled external shuffle service, this feature can only work when
     external shuffle service is at least 2.3.0.
   </td>
-  <td></td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
