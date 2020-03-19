@@ -21,11 +21,26 @@ license: |
 
 There are several common scenarios for datetime usage in Spark:
 
-- CSV/JSON datasources use the pattern string for parsing and formatting time content.
+- CSV/JSON datasources use the pattern string for parsing and formatting datetime content.
 
-- Datetime functions related to convert string to/from `DateType` or `TimestampType`. For example, unix_timestamp, date_format, to_unix_timestamp, from_unixtime, to_date, to_timestamp, from_utc_timestamp, to_utc_timestamp, etc.
+- Datetime functions related to convert `StringType` to/from `DateType` or `TimestampType`.
+  For example, `unix_timestamp`, `date_format`, `to_unix_timestamp`, `from_unixtime`, `to_date`, `to_timestamp`, `from_utc_timestamp`, `to_utc_timestamp`, etc.
 
-Spark uses the below letters in date and timestamp parsing and formatting:
+Spark uses [java.time.format.DateTimeFormatter](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html)
+for formatting and parsing date-time objects.
+Basically, Spark follows the behaviors of a `DateTimeFormatter` which formed by
+[DateTimeFormatterBuilder.appendPattern](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatterBuilder.html#appendPattern-java.lang.String-)
+exactly for formatting, but slightly different for parsing where the length second fraction part can be variable,
+For instance, the pattern `'yyyy-MM-dd HH:mm:ss.SSS'` can parse timestamp string with [1, 3] significant digits after the decimal point,
+but format timestamp to a string with fixed faction part which length is 3.
+
+Notice that the pattern string used here is similar, but not identical, to [DateTimeFormatter](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html)
+or [SimpleDateFormat](https://docs.oracle.com/javase/8/docs/api/java/text/SimpleDateFormat.html).
+Spark follows `SimpleDateFormat` to use 'u' for the numeric day of week, not use it for year as DateTimeFormatter does, and ban 'e' and 'c' from `DateTimeFormatter` which
+also mean the numeric day of week to eliminate vagueness.
+
+Spark uses pattern letters in the following table for date and timestamp parsing and formatting:
+
 <table class="table">
 <tr>
   <th> <b>Symbol</b> </th>
@@ -52,7 +67,7 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> 189 </td>
 </tr>
 <tr>
-  <td> <b>M</b> </td>
+  <td> <b>M/L</b> </td>
   <td> month-of-year </td>
   <td> number/text </td>
   <td> 7; 07; Jul; July; J </td>
@@ -62,6 +77,12 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> day-of-month </td>
   <td> number </td>
   <td> 28 </td>
+</tr>
+<tr>
+  <td> <b>Q/q</b> </td>
+  <td> quarter-of-year </td>
+  <td> number/text </td>
+  <td> 3; 03; Q3; 3rd quarter </td>
 </tr>
 <tr>
   <td> <b>Y</b> </td>
@@ -148,6 +169,30 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> 978 </td>
 </tr>
 <tr>
+  <td> <b>A</b> </td>
+  <td> milli-of-day </td>
+  <td> number </td>
+  <td> 1234 </td>
+</tr>
+<tr>
+  <td> <b>n</b> </td>
+  <td> nano-of-second </td>
+  <td> number </td>
+  <td> 987654321 </td>
+</tr>
+<tr>
+  <td> <b>N</b> </td>
+  <td> nano-of-second </td>
+  <td> number </td>
+  <td> 1234000000 </td>
+</tr>
+<tr>
+  <td> <b>V</b> </td>
+  <td> time-zone ID </td>
+  <td> zone-id </td>
+  <td> America/Los_Angeles; Z; -08:30 </td>
+</tr>
+<tr>
   <td> <b>z</b> </td>
   <td> time-zone name </td>
   <td> zone-name </td>
@@ -178,6 +223,12 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> +0000; -0800; -08:00; </td>
 </tr>
 <tr>
+  <td> <b>p</b> </td>
+  <td> pad next field with spaces </td>
+  <td> pad modifier </td>
+  <td> 1 </td>
+</tr>
+<tr>
   <td> <b>'</b> </td>
   <td> escape for text </td>
   <td> delimiter </td>
@@ -189,6 +240,18 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> literal </td>
   <td> ' </td>
 </tr>
+<tr>
+  <td> <b>[</b> </td>
+  <td> optional section start </td>
+  <td>  </td>
+  <td>  </td>
+</tr>
+<tr>
+  <td> <b>]</b> </td>
+  <td> optional section end </td>
+  <td>  </td>
+  <td>  </td>
+</tr>
 </table>
 
 The count of pattern letters determines the format.
@@ -199,7 +262,10 @@ The count of pattern letters determines the format.
 
 - Number/Text: If the count of pattern letters is 3 or greater, use the Text rules above. Otherwise use the Number rules above.
 
-- Fraction: Outputs the micro-of-second field as a fraction-of-second. The micro-of-second value has six digits, thus the count of pattern letters is from 1 to 6. If it is less than 6, then the micro-of-second value is truncated, with only the most significant digits being output.
+- Fraction: Use `'S..S'` pattern for parsing and formatting fraction of second.
+  For parsing, the acceptable fraction length can be [1, `'S..S'`.length(<=9)] and with `[]` surrounded can be [0, `'S..S'`.length(<=9)].
+  For formatting, with or without `[]` surrounded, the fraction length would be padded to `'S..S'`.length(<=9) with zeros.
+  Spark supports datetime with max precision to micro-of-second which has six significant digits at most, but can parse nano-of-second field with exceed part truncated.
 
 - Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present.
 
