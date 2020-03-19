@@ -34,6 +34,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Nested column pruning", FixedPoint(100),
       ColumnPruning,
+      PushProjectThroughLimit,
       CollapseProject,
       RemoveNoopOperators) :: Nil
   }
