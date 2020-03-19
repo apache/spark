@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -62,19 +64,22 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
+  private lazy val resolvedEnc = mutable.HashMap[Int, ExpressionEncoder[_]]()
+
   override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
 
   private def createToScalaConverter(i: Int, dataType: DataType): Any => Any = {
-    inputEncoders.length match {
-      case 0 =>
-        // for untyped Scala UDF
+    if (inputEncoders.isEmpty) {
+      // for untyped Scala UDF
+      CatalystTypeConverters.createToScalaConverter(dataType)
+    } else {
+      val encoder = inputEncoders(i)
+      if (encoder.isDefined && encoder.get.isSerializedAsStructForTopLevel) {
+        val enc = resolvedEnc.getOrElseUpdate(i, encoder.get.resolveAndBind())
+        row: Any => enc.fromRow(row.asInstanceOf[InternalRow])
+      } else {
         CatalystTypeConverters.createToScalaConverter(dataType)
-      case _ =>
-        val encoder = inputEncoders(i)
-        encoder.isDefined && encoder.get.isSerializedAsStructForTopLevel match {
-          case true => r: Any => encoder.get.resolveAndBind().fromRow(r.asInstanceOf[InternalRow])
-          case false => CatalystTypeConverters.createToScalaConverter(dataType)
-        }
+      }
     }
   }
 

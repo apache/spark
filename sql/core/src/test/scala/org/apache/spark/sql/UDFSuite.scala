@@ -579,10 +579,18 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(myUdf(Column("col2"))), Row(Row(100, "copy")) :: Nil)
   }
 
-  test("any and case class") {
+  test("any and case class parameter") {
     val f = (any: Any, d: TestData) => s"${any.toString}, ${d.value}"
     val myUdf = udf(f)
     val df = Seq(("Hello", TestData(50, "World"))).toDF("col1", "col2")
     checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row("Hello, World") :: Nil)
+  }
+
+  test("nested case class parameter") {
+    val f = (y: Int, training: TrainingSales) => training.sales.year + y
+    val myUdf = udf(f)
+    val df = Seq((20, TrainingSales("training", CourseSales("course", 2000, 3.14))))
+      .toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(2020) :: Nil)
   }
 }
