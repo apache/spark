@@ -359,9 +359,12 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         readResourceAvroFile("before_1582_date_v2_4.avro"),
         Row(java.sql.Date.valueOf("1001-01-01")))
-      checkAnswer(readResourceAvroFile(
-        "before_1582_ts_micros_v2_4.avro"),
+      checkAnswer(
+        readResourceAvroFile("before_1582_ts_micros_v2_4.avro"),
         Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+      checkAnswer(
+        readResourceAvroFile("before_1582_ts_millis_v2_4.avro"),
+        Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.124")))
     }
   }
 
