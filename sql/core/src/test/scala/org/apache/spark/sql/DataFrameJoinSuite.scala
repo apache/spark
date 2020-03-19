@@ -341,12 +341,9 @@ class DataFrameJoinSuite extends QueryTest
             .queryExecution.executedPlan
           assert(plan.collect { case p: BroadcastHashJoinExec => p }.isEmpty)
 
-          def checkIfHintApplied(tableName: String, hintTableName: String): Unit = {
-            val p = sql(s"SELECT /*+ BROADCASTJOIN($hintTableName) */ * " +
-              s"FROM $tableName, $dbName.$table2Name " +
-              s"WHERE $tableName.id = $table2Name.id")
-              .queryExecution.executedPlan
-            val broadcastHashJoins = p.collect { case p: BroadcastHashJoinExec => p }
+          def checkIfHintApplied(df: DataFrame): Unit = {
+            val sparkPlan = df.queryExecution.executedPlan
+            val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
             assert(broadcastHashJoins.size == 1)
             val broadcastExchanges = broadcastHashJoins.head.collect {
               case p: BroadcastExchangeExec => p
@@ -359,21 +356,36 @@ class DataFrameJoinSuite extends QueryTest
             assert(tables.head === TableIdentifier(table1Name, Some(dbName)))
           }
 
-          def checkIfHintNotApplied(tableName: String, hintTableName: String): Unit = {
-            val p = sql(s"SELECT /*+ BROADCASTJOIN($hintTableName) */ * " +
-              s"FROM $tableName, $dbName.$table2Name " +
-              s"WHERE $tableName.id = $table2Name.id")
-              .queryExecution.executedPlan
-            val broadcastHashJoins = p.collect { case p: BroadcastHashJoinExec => p }
+          def checkIfHintNotApplied(df: DataFrame): Unit = {
+            val sparkPlan = df.queryExecution.executedPlan
+            val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
             assert(broadcastHashJoins.isEmpty)
           }
 
+          def sqlTemplate(tableName: String, hintTableName: String): DataFrame = {
+            sql(s"SELECT /*+ BROADCASTJOIN($hintTableName) */ * " +
+              s"FROM $tableName, $dbName.$table2Name " +
+              s"WHERE $tableName.id = $table2Name.id")
+          }
+
+          def dfTemplate(tableName: String, hintTableName: String): DataFrame = {
+            spark.table(tableName).join(spark.table(s"$dbName.$table2Name"), "id")
+              .hint("broadcast", hintTableName)
+          }
+
           sql(s"USE $dbName")
-          checkIfHintApplied(table1Name, table1Name)
-          checkIfHintApplied(s"$dbName.$table1Name", s"$dbName.$table1Name")
-          checkIfHintApplied(s"$dbName.$table1Name", table1Name)
-          checkIfHintNotApplied(table1Name, s"$dbName.$table1Name")
-          checkIfHintNotApplied(s"$dbName.$table1Name", s"$dbName.$table1Name.id")
+
+          checkIfHintApplied(sqlTemplate(table1Name, table1Name))
+          checkIfHintApplied(sqlTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name"))
+          checkIfHintApplied(sqlTemplate(s"$dbName.$table1Name", table1Name))
+          checkIfHintNotApplied(sqlTemplate(table1Name, s"$dbName.$table1Name"))
+          checkIfHintNotApplied(sqlTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name.id"))
+
+          checkIfHintApplied(dfTemplate(table1Name, table1Name))
+          checkIfHintApplied(dfTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name"))
+          checkIfHintApplied(dfTemplate(s"$dbName.$table1Name", table1Name))
+          checkIfHintApplied(dfTemplate(table1Name, s"$dbName.$table1Name"))
+          checkIfHintNotApplied(dfTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name.id"))
         }
       }
     }

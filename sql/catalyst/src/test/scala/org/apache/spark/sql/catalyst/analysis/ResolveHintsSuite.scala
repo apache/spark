@@ -268,7 +268,7 @@ class ResolveHintsSuite extends AnalysisTest {
 
     // global temp table (multi-part identifier case)
     checkAnalysis(
-      UnresolvedHint("MAPJOIN", Seq("global_temp.table4", "GlOBal_TeMP.table5"),
+      UnresolvedHint("MAPJOIN", Seq("GlOBal_TeMP.table4", "table5"),
         table("global_temp", "table4").join(table("global_temp", "table5"))),
       Join(
         ResolvedHint(testRelation4, HintInfo(strategy = Some(BROADCAST))),

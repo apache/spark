@@ -277,5 +277,4 @@ object ResolveHints {
         h.child
     }
   }
-
 }
