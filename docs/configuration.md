@@ -1475,7 +1475,7 @@ Apart from these, the following properties are also available, and may be useful
 ### Memory Management
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.memory.fraction</code></td>
   <td>0.6</td>
@@ -2388,7 +2388,7 @@ Apart from these, the following properties are also available, and may be useful
 ### Dynamic Allocation
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.dynamicAllocation.enabled</code></td>
   <td>false</td>
