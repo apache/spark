@@ -708,14 +708,13 @@ object PushProjectThroughLimit extends Rule[LogicalPlan] {
   import CollapseUtils._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
-      if isRenaming(l1, l2) =>
-      val newProjectList = buildCleanedProjectList(l1, l2)
-      g.copy(child = limit.copy(child = p2.copy(projectList = newProjectList)))
 
-    case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
-      val newProjectList = buildCleanedProjectList(l1, l2)
-      limit.copy(child = p2.copy(projectList = newProjectList))
+    case p @ Project(l, g @ GlobalLimit(_, limit @ LocalLimit(_, child)))
+        if isRenaming(l, child.output) =>
+      g.copy(child = limit.copy(child = p.copy(l, child)))
+
+    case p @ Project(l, limit @ LocalLimit(_, child)) if isRenaming(l, child.output) =>
+      limit.copy(child = p.copy(l, child))
   }
 }
 
@@ -750,6 +749,12 @@ object CollapseProject extends Rule[LogicalPlan] {
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
   }
 
+  private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
+    AttributeMap(projectList.collect {
+      case a: Alias => a.toAttribute -> a
+    })
+  }
+
   private def haveCommonNonDeterministicOutput(
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
     // Create a map of Aliases to their values from the lower projection.
@@ -762,13 +767,10 @@ object CollapseProject extends Rule[LogicalPlan] {
       case a: Attribute if aliases.contains(a) => aliases(a).child
     }.exists(!_.deterministic))
   }
-}
 
-object CollapseUtils {
-
-  def buildCleanedProjectList(
-      upper: Seq[NamedExpression],
-      lower: Seq[NamedExpression]): Seq[NamedExpression] = {
+  private def buildCleanedProjectList(
+    upper: Seq[NamedExpression],
+    lower: Seq[NamedExpression]): Seq[NamedExpression] = {
     // Create a map of Aliases to their values from the lower projection.
     // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
     val aliases = collectAliases(lower)
@@ -785,13 +787,9 @@ object CollapseUtils {
       CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
     }
   }
+}
 
-  def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
-    AttributeMap(projectList.collect {
-      case a: Alias => a.toAttribute -> a
-    })
-  }
-
+object CollapseUtils {
   def isRenaming(list1: Seq[NamedExpression], list2: Seq[NamedExpression]): Boolean = {
     list1.length == list2.length && list1.zip(list2).forall {
       case (e1, e2) if e1.semanticEquals(e2) => true
