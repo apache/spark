@@ -231,9 +231,9 @@ The count of pattern letters determines the format.
 
 - Number/Text: If the count of pattern letters is 3 or greater, use the Text rules above. Otherwise use the Number rules above.
 
-- Fraction: Use `'S..S'` pattern for parsing and formatting fraction of second.
-  For parsing, the acceptable fraction length can be [1, `'S..S'`.length(<=9)] and with `[]` surrounded can be [0, `'S..S'`.length(<=9)].
-  For formatting, with or without `[]` surrounded, the fraction length would be padded to `'S..S'`.length(<=9) with zeros.
+- Fraction: Use one or more contiguous `'S'` characters, e,g `SSSSSS`, to parse and format fraction of second.
+  For parsing, the acceptable fraction length can be [1, the number of contiguous 'S'].
+  For formatting, the fraction length would be padded to the number of contiguous 'S' with zeros.
   Spark supports datetime with max precision to micro-of-second which has six significant digits at most, but can parse nano-of-second field with exceed part truncated.
 
 - Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present.
@@ -246,6 +246,11 @@ The count of pattern letters determines the format.
 - Offset O: This formats the localized offset based on the number of pattern letters. One letter outputs the short form of the localized offset, which is localized offset text, such as 'GMT', with hour without leading zero, optional 2-digit minute and second if non-zero, and colon, for example 'GMT+8'. Four letters outputs the full form, which is localized offset text, such as 'GMT, with 2-digit hour and minute field, optional second field if non-zero, and colon, for example 'GMT+08:00'. Any other count of letters will fail.
 
 - Offset Z: This formats the offset based on the number of pattern letters. One, two or three letters outputs the hour and minute, without a colon, such as '+0130'. The output will be '+0000' when the offset is zero. Four letters outputs the full form of localized offset, equivalent to four letters of Offset-O. The output will be the corresponding localized offset text if the offset is zero. Five letters outputs the hour, minute, with optional second if non-zero, with colon. It outputs 'Z' if the offset is zero. Six or more letters will fail.
+
+- Optional section start and end: Use `[]` to define an optional section and maybe nested.All elements in the optional section are treated as optional.
+  During formatting, the section will be output when data is available.
+  During parsing, the whole section may be missing from the parsed string.
+  An optional section is started by `[` and ended using `]` (or at the end of the pattern).
 
 More details for the text style:
 

@@ -973,9 +973,9 @@ def date_format(date, format):
     format given by the second argument.
 
     A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
-    pattern letters of
-    `DateTime Pattern <http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_ can be used. # noqa
+    pattern letters of `datetime pattern`_. can be used. # noqa
 
+    .. _datetime pattern: /sql-ref-datetime-pattern.html
     .. note:: Use when ever possible specialized functions like `year`. These benefit from a
         specialized implementation.
 
@@ -1192,8 +1192,7 @@ def months_between(date1, date2, roundOff=True):
 @since(2.2)
 def to_date(col, format=None):
     """Converts a :class:`Column` into :class:`pyspark.sql.types.DateType`
-    using the optionally specified format. Specify formats according to
-    `DateTime Pattern <http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_. # noqa
+    using the optionally specified format. Specify formats according to `datetime pattern`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
 
@@ -1216,8 +1215,7 @@ def to_date(col, format=None):
 @since(2.2)
 def to_timestamp(col, format=None):
     """Converts a :class:`Column` into :class:`pyspark.sql.types.TimestampType`
-    using the optionally specified format. Specify formats according to
-    `DateTime Pattern <http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_. # noqa
+    using the optionally specified format. Specify formats according to `datetime pattern`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
 

@@ -719,7 +719,7 @@ case class ToUnixTimestamp(
 // scalastyle:off line.size.limit
 /**
  * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
- * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime Patterns</a>.
+ * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
