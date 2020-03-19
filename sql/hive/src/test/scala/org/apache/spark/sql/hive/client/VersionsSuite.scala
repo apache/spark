@@ -118,7 +118,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   }
 
   private val versions = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-    Seq("2.0", "2.1", "2.2", "2.3", "3.0", "3.1")
+    Seq("2.2", "2.3", "3.0", "3.1")
   } else {
     Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3", "3.0", "3.1")
   }
@@ -400,16 +400,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
       assert(client.listTables("default", pattern = "nonexist").isEmpty)
     }
 
-    test(s"$version: listViews(database, pattern)") {
-      val versionsNotSupport = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2")
-      try {
-        assert(client.listViews("default", pattern = "view1") === Seq("view1"))
-        assert(client.listViews("default", pattern = "nonexist").isEmpty)
-        assert(!versionsNotSupport.contains(version))
-      } catch {
-        case _: UnsupportedOperationException =>
-          assert(versionsNotSupport.contains(version))
-      }
+    test(s"$version: listTablesByType(database, pattern, tableType)") {
+      assert(client.listTablesByType("default", pattern = "view1",
+        CatalogTableType.VIEW) === Seq("view1"))
+      assert(client.listTablesByType("default", pattern = "nonexist",
+        CatalogTableType.VIEW).isEmpty)
     }
 
     test(s"$version: dropTable") {
