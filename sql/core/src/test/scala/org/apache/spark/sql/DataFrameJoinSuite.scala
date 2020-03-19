@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Filter, HintInfo, Join, JoinHint, LogicalPlan, Project}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -335,12 +336,6 @@ class DataFrameJoinSuite extends QueryTest
           spark.range(50).write.saveAsTable(s"$dbName.$table1Name")
           spark.range(100).write.saveAsTable(s"$dbName.$table2Name")
 
-          // First, makes sure a join is not broadcastable
-          val plan = sql(s"SELECT * FROM $dbName.$table1Name, $dbName.$table2Name " +
-            s"WHERE $table1Name.id = $table2Name.id")
-            .queryExecution.executedPlan
-          assert(plan.collect { case p: BroadcastHashJoinExec => p }.isEmpty)
-
           def checkIfHintApplied(df: DataFrame): Unit = {
             val sparkPlan = df.queryExecution.executedPlan
             val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
@@ -379,18 +374,21 @@ class DataFrameJoinSuite extends QueryTest
           checkIfHintApplied(sqlTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name"))
           checkIfHintApplied(sqlTemplate(s"$dbName.$table1Name", table1Name))
           checkIfHintNotApplied(sqlTemplate(table1Name, s"$dbName.$table1Name"))
-          checkIfHintNotApplied(sqlTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name.id"))
 
           checkIfHintApplied(dfTemplate(table1Name, table1Name))
           checkIfHintApplied(dfTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name"))
           checkIfHintApplied(dfTemplate(s"$dbName.$table1Name", table1Name))
           checkIfHintApplied(dfTemplate(table1Name, s"$dbName.$table1Name"))
-          checkIfHintNotApplied(dfTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name.id"))
+          checkIfHintApplied(dfTemplate(table1Name,
+            s"${CatalogManager.SESSION_CATALOG_NAME}.$dbName.$table1Name"))
 
-          withTempView("tv") {
-            sql(s"CREATE TEMPORARY VIEW tv AS SELECT * FROM $dbName.$table1Name")
+          withView("tv") {
+            sql(s"CREATE VIEW tv AS SELECT * FROM $dbName.$table1Name")
             checkIfHintApplied(sqlTemplate("tv", "tv"))
-            checkIfHintNotApplied(sqlTemplate("tv", "default.tv"))
+            checkIfHintNotApplied(sqlTemplate("tv", s"$dbName.tv"))
+
+            checkIfHintApplied(dfTemplate("tv", "tv"))
+            checkIfHintApplied(dfTemplate("tv", s"$dbName.tv"))
           }
         }
       }

@@ -73,7 +73,8 @@ object ResolveHints {
     //
     // For example,
     //  * in a query `SELECT /*+ BROADCAST(t) */ * FROM db1.t JOIN t`,
-    //    the broadcast hint will match both tables, `db1.t` and `t`.
+    //    the broadcast hint will match both tables, `db1.t` and `t`,
+    //    even when the current db is `db2`.
     //  * in a query `SELECT /*+ BROADCAST(default.t) */ * FROM default.t JOIN t`,
     //    the broadcast hint will match the left-side table only, `default.t`.
     private def matchedIdentifier(identInHint: Seq[String], identInQuery: Seq[String]): Boolean = {

@@ -246,7 +246,7 @@ class ResolveHintsSuite extends AnalysisTest {
     // local temp table (single-part identifier case)
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table", "table2"),
-        table("table").join(table("table2"))),
+        table("TaBlE").join(table("TaBlE2"))),
       Join(
         ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
         ResolvedHint(testRelation2, HintInfo(strategy = Some(BROADCAST))),
