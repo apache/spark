@@ -247,7 +247,6 @@ The count of pattern letters determines the format.
 
 - Offset Z: This formats the offset based on the number of pattern letters. One, two or three letters outputs the hour and minute, without a colon, such as '+0130'. The output will be '+0000' when the offset is zero. Four letters outputs the full form of localized offset, equivalent to four letters of Offset-O. The output will be the corresponding localized offset text if the offset is zero. Five letters outputs the hour, minute, with optional second if non-zero, with colon. It outputs 'Z' if the offset is zero. Six or more letters will fail.
 
-
 More details for the text style:
 
 - Short Form: Short text, typically an abbreviation. For example, day-of-week Monday might output "Mon".
