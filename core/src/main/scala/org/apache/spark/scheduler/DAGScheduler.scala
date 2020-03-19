@@ -485,8 +485,8 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Get or create the list of parent stages for the given shuffle dependencies. The new Stages will be created with
-   * the provided firstJobId.
+   * Get or create the list of parent stages for the given shuffle dependencies. The new
+   * Stages will be created with the provided firstJobId.
    */
   private def getOrCreateParentStages(shuffleDeps: HashSet[ShuffleDependency[_, _, _]],
       firstJobId: Int): List[Stage] = {
