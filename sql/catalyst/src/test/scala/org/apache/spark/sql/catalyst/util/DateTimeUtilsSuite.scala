@@ -671,19 +671,63 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("check incompatible pattern") {
-    assert(convertIncompatiblePattern("MM-DD-u") === "MM-DD-e")
-    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
-      === "uuuu-MM-dd'T'HH:mm:ss.SSSz")
-    assert(convertIncompatiblePattern("yyyy-MM'y contains in quoted text'HH:mm:ss")
-      === "uuuu-MM'y contains in quoted text'HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM-dd-u'T'HH:mm:ss.SSSz")
-      === "uuuu-MM-dd-e'T'HH:mm:ss.SSSz")
-    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss")
-      === "uuuu-MM'u contains in quoted text'HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'''''HH:mm:ss")
-      === "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
-      === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
+  test("rebase julian to/from gregorian micros") {
+    outstandingTimezones.foreach { timeZone =>
+      withDefaultTimeZone(timeZone) {
+        Seq(
+          "0001-01-01 01:02:03.654321",
+          "1000-01-01 03:02:01.123456",
+          "1582-10-04 00:00:00.000000",
+          "1582-10-15 00:00:00.999999", // Gregorian cutover day
+          "1883-11-10 00:00:00.000000", // America/Los_Angeles -7:52:58 zone offset
+          "1883-11-20 00:00:00.000000", // America/Los_Angeles -08:00 zone offset
+          "1969-12-31 11:22:33.000100",
+          "1970-01-01 00:00:00.000001", // The epoch day
+          "2020-03-14 09:33:01.500000").foreach { ts =>
+          withClue(s"time zone = ${timeZone.getID} ts = $ts") {
+            val julianTs = Timestamp.valueOf(ts)
+            val julianMicros = millisToMicros(julianTs.getTime) +
+              ((julianTs.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
+            val gregorianMicros = instantToMicros(LocalDateTime.parse(ts.replace(' ', 'T'))
+              .atZone(timeZone.toZoneId)
+              .toInstant)
+
+            assert(rebaseJulianToGregorianMicros(julianMicros) === gregorianMicros)
+            assert(rebaseGregorianToJulianMicros(gregorianMicros) === julianMicros)
+          }
+        }
+      }
+    }
+  }
+
+  test("rebase gregorian to/from julian days") {
+    // millisToDays() and fromJavaDate() are taken from Spark 2.4
+    def millisToDays(millisUtc: Long, timeZone: TimeZone): Int = {
+      val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
+      Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+    }
+    def fromJavaDate(date: Date): Int = {
+      millisToDays(date.getTime, defaultTimeZone())
+    }
+    outstandingTimezones.foreach { timeZone =>
+      withDefaultTimeZone(timeZone) {
+        Seq(
+          "0001-01-01",
+          "1000-01-01",
+          "1582-10-04",
+          "1582-10-15", // Gregorian cutover day
+          "1883-11-10", // America/Los_Angeles -7:52:58 zone offset
+          "1883-11-20", // America/Los_Angeles -08:00 zone offset
+          "1969-12-31",
+          "1970-01-01", // The epoch day
+          "2020-03-14").foreach { date =>
+          val julianDays = fromJavaDate(Date.valueOf(date))
+          val gregorianDays = localDateToDays(LocalDate.parse(date))
+
+          assert(rebaseGregorianToJulianDays(gregorianDays) === julianDays)
+          assert(rebaseJulianToGregorianDays(julianDays) === gregorianDays)
+        }
+      }
+    }
   }
 }

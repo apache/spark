@@ -2154,8 +2154,8 @@ object SQLConf {
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
-    .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
-      "The size function returns null for null input if the flag is disabled.")
+    .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
+      "null. Otherwise, it returns -1, which was inherited from Hive.")
     .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
@@ -2484,6 +2484,20 @@ object SQLConf {
     buildConf("spark.sql.legacy.integerGroupingId")
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_PARQUET_REBASE_DATETIME =
+    buildConf("spark.sql.legacy.parquet.rebaseDateTime.enabled")
+      .internal()
+      .doc("When true, rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the hybrid calendar (Julian + Gregorian) in write and " +
+        "from the hybrid calendar to Proleptic Gregorian calendar in read. " +
+        "The rebasing is performed by converting micros/millis/days to " +
+        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
+        "timestamp in the target calendar, and getting the number of micros/millis/days " +
+        "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -3014,7 +3028,10 @@ class SQLConf extends Serializable with Logging {
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
-  def legacySizeOfNull: Boolean = getConf(SQLConf.LEGACY_SIZE_OF_NULL)
+  def legacySizeOfNull: Boolean = {
+    // size(null) should return null under ansi mode.
+    getConf(SQLConf.LEGACY_SIZE_OF_NULL) && !getConf(ANSI_ENABLED)
+  }
 
   def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
 
@@ -3060,6 +3077,8 @@ class SQLConf extends Serializable with Logging {
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def parquetRebaseDateTimeEnabled: Boolean = getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME)
 
   /** ********************** SQLConf functionality methods ************ */
 
