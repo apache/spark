@@ -2655,7 +2655,8 @@ object functions {
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * See http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
    * for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
@@ -2914,7 +2915,8 @@ object functions {
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
    *
-   * See http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
    * for valid date and time format patterns
    *
    * @param ut A number of a type that is castable to a long, such as string or integer. Can be
@@ -2959,7 +2961,8 @@ object functions {
   /**
    * Converts time string with given pattern to Unix timestamp (in seconds).
    *
-   * See http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
    * for valid date and time format patterns
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
@@ -2988,7 +2991,8 @@ object functions {
   /**
    * Converts time string with the given pattern to timestamp.
    *
-   * See http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
    * for valid date and time format patterns
    *
    * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
@@ -3014,7 +3018,8 @@ object functions {
   /**
    * Converts the column into a `DateType` with a specified format
    *
-   * See http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
    * for valid date and time format patterns
    *
    * @param e   A date, timestamp or string. If a string, the data must be in a format that can be

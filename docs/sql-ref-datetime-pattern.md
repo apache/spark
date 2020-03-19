@@ -26,19 +26,6 @@ There are several common scenarios for datetime usage in Spark:
 - Datetime functions related to convert `StringType` to/from `DateType` or `TimestampType`.
   For example, `unix_timestamp`, `date_format`, `to_unix_timestamp`, `from_unixtime`, `to_date`, `to_timestamp`, `from_utc_timestamp`, `to_utc_timestamp`, etc.
 
-Spark uses [java.time.format.DateTimeFormatter](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html)
-for formatting and parsing date-time objects.
-Basically, Spark follows the behaviors of a `DateTimeFormatter` which formed by
-[DateTimeFormatterBuilder.appendPattern](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatterBuilder.html#appendPattern-java.lang.String-)
-exactly for formatting, but slightly different for parsing where the length second fraction part can be variable,
-For instance, the pattern `'yyyy-MM-dd HH:mm:ss.SSS'` can parse timestamp string with [1, 3] significant digits after the decimal point,
-but format timestamp to a string with fixed faction part which length is 3.
-
-Notice that the pattern string used here is similar, but not identical, to [DateTimeFormatter](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html)
-or [SimpleDateFormat](https://docs.oracle.com/javase/8/docs/api/java/text/SimpleDateFormat.html).
-Spark follows `SimpleDateFormat` to use 'u' for the numeric day of week, not use it for year as DateTimeFormatter does, and ban 'e' and 'c' from `DateTimeFormatter` which
-also mean the numeric day of week to eliminate vagueness.
-
 Spark uses pattern letters in the following table for date and timestamp parsing and formatting:
 
 <table class="table">
@@ -169,24 +156,6 @@ Spark uses pattern letters in the following table for date and timestamp parsing
   <td> 978 </td>
 </tr>
 <tr>
-  <td> <b>A</b> </td>
-  <td> milli-of-day </td>
-  <td> number </td>
-  <td> 1234 </td>
-</tr>
-<tr>
-  <td> <b>n</b> </td>
-  <td> nano-of-second </td>
-  <td> number </td>
-  <td> 987654321 </td>
-</tr>
-<tr>
-  <td> <b>N</b> </td>
-  <td> nano-of-second </td>
-  <td> number </td>
-  <td> 1234000000 </td>
-</tr>
-<tr>
   <td> <b>V</b> </td>
   <td> time-zone ID </td>
   <td> zone-id </td>
@@ -269,13 +238,15 @@ The count of pattern letters determines the format.
 
 - Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present.
 
-- Zone names: This outputs the display name of the time-zone ID. If the count of letters is one, two or three, then the short name is output. If the count of letters is four, then the full name is output. Five or more letters will fail.
+- Zone ID(V): This outputs the display the time-zone ID. Pattern letter count must be 2.
+- Zone names(z): This outputs the display textual name of the time-zone ID. If the count of letters is one, two or three, then the short name is output. If the count of letters is four, then the full name is output. Five or more letters will fail.
 
 - Offset X and x: This formats the offset based on the number of pattern letters. One letter outputs just the hour, such as '+01', unless the minute is non-zero in which case the minute is also output, such as '+0130'. Two letters outputs the hour and minute, without a colon, such as '+0130'. Three letters outputs the hour and minute, with a colon, such as '+01:30'. Four letters outputs the hour and minute and optional second, without a colon, such as '+013015'. Five letters outputs the hour and minute and optional second, with a colon, such as '+01:30:15'. Six or more letters will fail. Pattern letter 'X' (upper case) will output 'Z' when the offset to be output would be zero, whereas pattern letter 'x' (lower case) will output '+00', '+0000', or '+00:00'.
 
 - Offset O: This formats the localized offset based on the number of pattern letters. One letter outputs the short form of the localized offset, which is localized offset text, such as 'GMT', with hour without leading zero, optional 2-digit minute and second if non-zero, and colon, for example 'GMT+8'. Four letters outputs the full form, which is localized offset text, such as 'GMT, with 2-digit hour and minute field, optional second field if non-zero, and colon, for example 'GMT+08:00'. Any other count of letters will fail.
 
 - Offset Z: This formats the offset based on the number of pattern letters. One, two or three letters outputs the hour and minute, without a colon, such as '+0130'. The output will be '+0000' when the offset is zero. Four letters outputs the full form of localized offset, equivalent to four letters of Offset-O. The output will be the corresponding localized offset text if the offset is zero. Five letters outputs the hour, minute, with optional second if non-zero, with colon. It outputs 'Z' if the offset is zero. Six or more letters will fail.
+
 
 More details for the text style:
 

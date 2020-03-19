@@ -751,11 +751,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * `snappy` and `deflate`). </li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at
-   * http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html.
+   * <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
    * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html.
+   * <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
    * This applies to timestamp type.</li>
    * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
    * files. If it is not set, the UTF-8 charset will be used. </li>
@@ -874,11 +876,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * `snappy` and `deflate`). </li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at
-   * http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html.
+   * <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
    * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html.
+   * <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
    * This applies to timestamp type.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading
    * whitespaces from values being written should be skipped.</li>
