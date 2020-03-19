@@ -70,10 +70,10 @@ case class CreateTableAsSelectExec(
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       if (ifNotExists) {
-        return sparkContext.parallelize(Seq.empty, 1)
+        return Nil
       }
 
       throw new TableAlreadyExistsException(ident)
@@ -125,10 +125,10 @@ case class AtomicCreateTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends AtomicTableWriteExec {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       if (ifNotExists) {
-        return sparkContext.parallelize(Seq.empty, 1)
+        return Nil
       }
 
       throw new TableAlreadyExistsException(ident)
@@ -161,7 +161,7 @@ case class ReplaceTableAsSelectExec(
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
     // RTAS if the catalog does not support atomic operations.
     //
@@ -225,7 +225,7 @@ case class AtomicReplaceTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     orCreate: Boolean) extends AtomicTableWriteExec {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     val schema = query.schema.asNullable
     val staged = if (orCreate) {
       catalog.stageCreateOrReplace(
@@ -255,7 +255,7 @@ case class AppendDataExec(
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     writeWithV2(newWriteBuilder().buildForBatch())
   }
 }
@@ -280,7 +280,7 @@ case class OverwriteByExpressionExec(
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
   }
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
         writeWithV2(builder.truncate().buildForBatch())
@@ -308,7 +308,7 @@ case class OverwritePartitionsDynamicExec(
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     newWriteBuilder() match {
       case builder: SupportsDynamicOverwrite =>
         writeWithV2(builder.overwriteDynamicPartitions().buildForBatch())
@@ -325,7 +325,7 @@ case class WriteToDataSourceV2Exec(
 
   def writeOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     writeWithV2(batchWrite)
   }
 }
@@ -350,7 +350,7 @@ trait BatchWriteHelper {
 /**
  * The base physical plan for writing data into data source v2.
  */
-trait V2TableWriteExec extends UnaryExecNode {
+trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
   def query: SparkPlan
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
@@ -358,7 +358,7 @@ trait V2TableWriteExec extends UnaryExecNode {
   override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
-  protected def writeWithV2(batchWrite: BatchWrite): RDD[InternalRow] = {
+  protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
     val rdd: RDD[InternalRow] = {
       val tempRdd = query.execute()
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
@@ -415,7 +415,7 @@ trait V2TableWriteExec extends UnaryExecNode {
         }
     }
 
-    sparkContext.emptyRDD
+    Nil
   }
 }
 
@@ -485,7 +485,7 @@ private[v2] trait AtomicTableWriteExec extends V2TableWriteExec with SupportsV1W
   protected def writeToStagedTable(
       stagedTable: StagedTable,
       writeOptions: CaseInsensitiveStringMap,
-      ident: Identifier): RDD[InternalRow] = {
+      ident: Identifier): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       stagedTable match {
         case table: SupportsWrite =>
