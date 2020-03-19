@@ -881,6 +881,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
     }
   }
+
+  test("test without set master and name") {
+    val conf = new SparkConf()
+    conf.remove("spark.master")
+
+    val sc = new SparkContext(conf)
+    sc.parallelize(1 to 10).collect()
+    sc.stop()
+  }
 }
 
 object SparkContextSuite {

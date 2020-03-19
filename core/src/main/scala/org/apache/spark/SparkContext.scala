@@ -385,10 +385,10 @@ class SparkContext(config: SparkConf) extends Logging {
     _conf.validateSettings()
 
     if (!_conf.contains("spark.master")) {
-      throw new SparkException("A master URL must be set in your configuration")
+      _conf.set("spark.master", "local[*]")
     }
     if (!_conf.contains("spark.app.name")) {
-      throw new SparkException("An application name must be set in your configuration")
+      _conf.setAppName(java.util.UUID.randomUUID().toString)
     }
 
     _driverLogger = DriverLogger(_conf)
