@@ -85,6 +85,10 @@ object ResolveHints {
       }
     }
 
+    private def extractIdentifier(r: SubqueryAlias): Seq[String] = {
+      r.identifier.qualifier :+ r.identifier.name
+    }
+
     private def applyJoinStrategyHint(
         plan: LogicalPlan,
         relationsInHint: Set[Seq[String]],
@@ -93,30 +97,25 @@ object ResolveHints {
       // Whether to continue recursing down the tree
       var recurse = true
 
-      def extractIdentifier(r: SubqueryAlias): Seq[String] = {
-        r.identifier.qualifier :+ r.identifier.name
+      def matchedIdentifierInHint(identInQuery: Seq[String]): Boolean = {
+        relationsInHint.find(matchedIdentifier(_, identInQuery))
+          .map(relationsInHintWithMatch.add).nonEmpty
       }
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
           case ResolvedHint(u @ UnresolvedRelation(ident), hint)
-              if relationsInHint.exists(matchedIdentifier(_, ident)) =>
-            relationsInHintWithMatch += ident
+              if matchedIdentifierInHint(ident) =>
             ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
           case ResolvedHint(r: SubqueryAlias, hint)
-              if relationsInHint.exists(matchedIdentifier(_, extractIdentifier(r))) =>
-            relationsInHintWithMatch += extractIdentifier(r)
+              if matchedIdentifierInHint(extractIdentifier(r)) =>
             ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
-          case UnresolvedRelation(ident)
-              if relationsInHint.exists(matchedIdentifier(_, ident)) =>
-            relationsInHintWithMatch += ident
+          case UnresolvedRelation(ident) if matchedIdentifierInHint(ident) =>
             ResolvedHint(plan, createHintInfo(hintName))
 
-          case r: SubqueryAlias
-              if relationsInHint.exists(matchedIdentifier(_, extractIdentifier(r))) =>
-            relationsInHintWithMatch += extractIdentifier(r)
+          case r: SubqueryAlias if matchedIdentifierInHint(extractIdentifier(r)) =>
             ResolvedHint(plan, createHintInfo(hintName))
 
           case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
@@ -161,12 +160,7 @@ object ResolveHints {
             h.child, relationNamesInHint, relationsInHintWithMatch, h.name)
 
           // Filters unmatched relation identifiers in the hint
-          val unmatchedIdents = relationNamesInHint.filterNot { relationIdent =>
-            relationsInHintWithMatch.exists { ident =>
-              relationIdent.size == ident.size &&
-                relationIdent.zip(ident).forall { case (a, b) => resolver(a, b) }
-            }
-          }
+          val unmatchedIdents = relationNamesInHint -- relationsInHintWithMatch
           hintErrorHandler.hintRelationsNotFound(h.name, h.parameters, unmatchedIdents)
           applied
         }
