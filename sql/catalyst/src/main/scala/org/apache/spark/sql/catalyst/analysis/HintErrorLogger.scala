@@ -31,7 +31,7 @@ object HintErrorLogger extends HintErrorHandler with Logging {
   }
 
   override def hintRelationsNotFound(
-      name: String, parameters: Seq[Any], invalidRelations: Seq[Seq[String]]): Unit = {
+      name: String, parameters: Seq[Any], invalidRelations: Set[Seq[String]]): Unit = {
     invalidRelations.foreach { ident =>
       logWarning(s"Count not find relation '${ident.quoted}' specified in hint " +
         s"'${hintToPrettyString(name, parameters)}'.")

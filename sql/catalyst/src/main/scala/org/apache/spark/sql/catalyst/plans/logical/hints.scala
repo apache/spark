@@ -187,7 +187,7 @@ trait HintErrorHandler {
    * @param invalidRelations the set of relation names that cannot be associated
    */
   def hintRelationsNotFound(
-    name: String, parameters: Seq[Any], invalidRelations: Seq[Seq[String]]): Unit
+    name: String, parameters: Seq[Any], invalidRelations: Set[Seq[String]]): Unit
 
   /**
    * Callback for a join hint specified on a relation that is not part of a join.

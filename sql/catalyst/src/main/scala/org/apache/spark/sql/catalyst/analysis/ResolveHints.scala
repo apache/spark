@@ -87,11 +87,15 @@ object ResolveHints {
 
     private def applyJoinStrategyHint(
         plan: LogicalPlan,
-        relationsInHint: Seq[Seq[String]],
+        relationsInHint: Set[Seq[String]],
         appliedRelations: mutable.ArrayBuffer[Seq[String]],
         hintName: String): LogicalPlan = {
       // Whether to continue recursing down the tree
       var recurse = true
+
+      def extractMultipartIdentifier(r: SubqueryAlias): Seq[String] = {
+        r.identifier.qualifier :+ r.identifier.name
+      }
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
@@ -101,8 +105,8 @@ object ResolveHints {
             ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
           case ResolvedHint(r: SubqueryAlias, hint)
-              if relationsInHint.exists(matchedIdentifier(_, r.identifier.multipartIdentifier)) =>
-            appliedRelations += r.identifier.multipartIdentifier
+              if relationsInHint.exists(matchedIdentifier(_, extractMultipartIdentifier(r))) =>
+            appliedRelations += extractMultipartIdentifier(r)
             ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
           case UnresolvedRelation(ident) if relationsInHint.exists(matchedIdentifier(_, ident)) =>
@@ -110,8 +114,8 @@ object ResolveHints {
             ResolvedHint(plan, createHintInfo(hintName))
 
           case r: SubqueryAlias
-              if relationsInHint.exists(matchedIdentifier(_, r.identifier.multipartIdentifier)) =>
-            appliedRelations += r.identifier.multipartIdentifier
+              if relationsInHint.exists(matchedIdentifier(_, extractMultipartIdentifier(r))) =>
+            appliedRelations += extractMultipartIdentifier(r)
             ResolvedHint(plan, createHintInfo(hintName))
 
           case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
@@ -150,7 +154,7 @@ object ResolveHints {
             case tableId: UnresolvedAttribute => tableId.nameParts
             case unsupported => throw new AnalysisException("Join strategy hint parameter " +
               s"should be an identifier or string but was $unsupported (${unsupported.getClass}")
-          }
+          }.toSet
           val appliedNames = new mutable.ArrayBuffer[Seq[String]]
           val applied = applyJoinStrategyHint(h.child, relationNamesInHint, appliedNames, h.name)
           val invalidNames = relationNamesInHint.filterNot { relationName =>
