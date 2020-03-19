@@ -2501,7 +2501,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   /**
    * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
-   * getShuffleDependencies correctly returns the direct shuffle dependencies of a particular
+   * getShuffleDependenciesAndResourceProfiles correctly returns the direct shuffle dependencies of a particular
    * RDD. The test creates the following RDD graph (where n denotes a narrow dependency and s
    * denotes a shuffle dependency):
    *
@@ -2512,7 +2512,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
    * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
    */
-  test("getShuffleDependencies correctly returns only direct shuffle parents") {
+  test("getShuffleDependenciesAndResourceProfiles correctly returns only direct shuffle parents") {
     val rddA = new MyRDD(sc, 2, Nil)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
     val rddB = new MyRDD(sc, 2, Nil)
@@ -3138,6 +3138,47 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     }.getMessage()
 
     assert(error.contains("Multiple ResourceProfile's specified in the RDDs"))
+  }
+
+  /**
+   * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
+   * getShuffleDependenciesAndResourceProfiles correctly returns the direct shuffle dependencies of a particular
+   * RDD. The test creates the following RDD graph (where n denotes a narrow dependency and s
+   * denotes a shuffle dependency):
+   *
+   * A <------------s---------,
+   *                           \
+   * B <--s-- C <--s-- D <--n------ E
+   *
+   * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
+   * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
+   */
+  test("getShuffleDependenciesAndResourceProfiles returns deps and profiles correctly") {
+    import org.apache.spark.resource._
+    val ereqs = new ExecutorResourceRequests().cores(4)
+    val treqs = new TaskResourceRequests().cpus(1)
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+
+    val rddA = new MyRDD(sc, 2, Nil).withResources(rp1)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
+    val rddB = new MyRDD(sc, 2, Nil)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
+    val rddC = new MyRDD(sc, 1, List(shuffleDepB))
+    val shuffleDepC = new ShuffleDependency(rddC, new HashPartitioner(1))
+    val rddD = new MyRDD(sc, 1, List(shuffleDepC))
+    val narrowDepD = new OneToOneDependency(rddD)
+    val rddE = new MyRDD(sc, 1, List(shuffleDepA, narrowDepD), tracker = mapOutputTracker)
+
+    val (shuffleDepsA, rprofA) = scheduler.getShuffleDependenciesAndResourceProfiles(rddA)
+    assert(shuffleDepsA === Set())
+    val (shuffleDepsB, rprofB) = scheduler.getShuffleDependenciesAndResourceProfiles(rddB)
+    assert(shuffleDepsB === Set())
+    val (shuffleDepsC, rprofC) = scheduler.getShuffleDependenciesAndResourceProfiles(rddC)
+    assert(shuffleDepsC === Set(shuffleDepB))
+    val (shuffleDepsD, rprofD) = scheduler.getShuffleDependenciesAndResourceProfiles(rddD)
+    assert(shuffleDepsD === Set(shuffleDepC))
+    val (shuffleDepsE, rprofE) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
+    assert(shuffleDepsE === Set(shuffleDepA, shuffleDepC))
   }
 
   /**

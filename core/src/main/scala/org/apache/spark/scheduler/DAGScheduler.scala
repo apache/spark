@@ -445,7 +445,7 @@ private[spark] class DAGScheduler(
 
   private[scheduler] def mergeResourceProfilesForStage(
       stageResourceProfiles: HashSet[ResourceProfile]): ResourceProfile = {
-    logDebug("rdd profiles: " + stageResourceProfiles)
+    logDebug(s"Merging stage rdd profiles: $stageResourceProfiles")
     val resourceProfile = if (stageResourceProfiles.size > 1) {
       // add option later to actually merge profiles - SPARK-29153
       throw new IllegalArgumentException("Multiple ResourceProfile's specified in the RDDs for " +
@@ -485,7 +485,7 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Get or create the list of parent stages for a given RDD.  The new Stages will be created with
+   * Get or create the list of parent stages for the given shuffle dependencies. The new Stages will be created with
    * the provided firstJobId.
    */
   private def getOrCreateParentStages(shuffleDeps: HashSet[ShuffleDependency[_, _, _]],

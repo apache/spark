@@ -1727,7 +1727,7 @@ abstract class RDD[T: ClassTag](
   @Experimental
   @Since("3.0.0")
   private[spark] def withResources(rp: ResourceProfile): this.type = {
-    resourceProfile = Some(rp)
+    resourceProfile = Option(rp)
     sc.resourceProfileManager.addResourceProfile(resourceProfile.get)
     this
   }

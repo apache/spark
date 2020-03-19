@@ -840,10 +840,10 @@ class TaskSetManagerSuite
     }
     // Offer resources for 4 tasks to start
     for ((exec, host) <- Seq(
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec3" -> "host3",
-        "exec2" -> "host2")) {
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec3" -> "host3",
+      "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(exec, host, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -1057,10 +1057,10 @@ class TaskSetManagerSuite
     }
     // Offer resources for 4 tasks to start
     for ((k, v) <- List(
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec2" -> "host2",
-        "exec2" -> "host2")) {
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec2" -> "host2",
+      "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(k, v, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -1556,10 +1556,10 @@ class TaskSetManagerSuite
     }
     // Offer resources for 4 tasks to start
     for ((k, v) <- List(
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec2" -> "host2",
-        "exec2" -> "host2")) {
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec2" -> "host2",
+      "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(k, v, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get

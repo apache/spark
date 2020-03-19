@@ -184,7 +184,7 @@ private[spark] object TaskDescription {
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
-    new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId,
-      taskFiles, taskJars, properties, resources, serializedTask)
+    new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, taskFiles,
+      taskJars, properties, resources, serializedTask)
   }
 }
