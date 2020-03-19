@@ -3158,27 +3158,37 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val ereqs2 = new ExecutorResourceRequests().cores(6)
+    val treqs2 = new TaskResourceRequests().cpus(2)
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
 
+    val rddWithRp = new MyRDD(sc, 2, Nil).withResources(rp1)
     val rddA = new MyRDD(sc, 2, Nil).withResources(rp1)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
     val rddB = new MyRDD(sc, 2, Nil)
     val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
-    val rddC = new MyRDD(sc, 1, List(shuffleDepB))
+    val rddWithRpDep = new OneToOneDependency(rddWithRp)
+    val rddC = new MyRDD(sc, 1, List(rddWithRpDep, shuffleDepB)).withResources(rp2)
     val shuffleDepC = new ShuffleDependency(rddC, new HashPartitioner(1))
     val rddD = new MyRDD(sc, 1, List(shuffleDepC))
     val narrowDepD = new OneToOneDependency(rddD)
     val rddE = new MyRDD(sc, 1, List(shuffleDepA, narrowDepD), tracker = mapOutputTracker)
 
-    val (shuffleDepsA, rprofA) = scheduler.getShuffleDependenciesAndResourceProfiles(rddA)
+    val (shuffleDepsA, rprofsA) = scheduler.getShuffleDependenciesAndResourceProfiles(rddA)
     assert(shuffleDepsA === Set())
-    val (shuffleDepsB, rprofB) = scheduler.getShuffleDependenciesAndResourceProfiles(rddB)
+    assert(rprofsA === Set(rp1))
+    val (shuffleDepsB, rprofsB) = scheduler.getShuffleDependenciesAndResourceProfiles(rddB)
     assert(shuffleDepsB === Set())
-    val (shuffleDepsC, rprofC) = scheduler.getShuffleDependenciesAndResourceProfiles(rddC)
+    assert(rprofsB === Set())
+    val (shuffleDepsC, rprofsC) = scheduler.getShuffleDependenciesAndResourceProfiles(rddC)
     assert(shuffleDepsC === Set(shuffleDepB))
-    val (shuffleDepsD, rprofD) = scheduler.getShuffleDependenciesAndResourceProfiles(rddD)
+    assert(rprofsC === Set(rp1, rp2))
+    val (shuffleDepsD, rprofsD) = scheduler.getShuffleDependenciesAndResourceProfiles(rddD)
     assert(shuffleDepsD === Set(shuffleDepC))
-    val (shuffleDepsE, rprofE) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
+    assert(rprofsD === Set())
+    val (shuffleDepsE, rprofsE) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
     assert(shuffleDepsE === Set(shuffleDepA, shuffleDepC))
+    assert(rprofsE === Set())
   }
 
   /**
