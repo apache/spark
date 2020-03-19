@@ -135,5 +135,3 @@ object VarianceThresholdSelectorSuite {
     "outputCol" -> "myOutput"
   )
 }
-
-
