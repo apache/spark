@@ -254,7 +254,7 @@ class DataFrameReader(OptionUtils):
                                     disables `partition discovery`_.
 
         .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
-        .. _datetime pattern: http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -490,7 +490,7 @@ class DataFrameReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
-        .. _datetime pattern: http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -865,7 +865,7 @@ class DataFrameWriter(OptionUtils):
         :param ignoreNullFields: Whether to ignore null fields when generating JSON objects.
                         If None is set, it uses the default value, ``true``.
 
-        .. _datetime pattern: http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -981,7 +981,7 @@ class DataFrameWriter(OptionUtils):
         :param lineSep: defines the line separator that should be used for writing. If None is
                         set, it uses the default value, ``\\n``. Maximum length is 1 character.
 
-        .. _datetime pattern: http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """

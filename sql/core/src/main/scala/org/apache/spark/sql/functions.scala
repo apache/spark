@@ -2655,7 +2655,7 @@ object functions {
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>
    * for valid date and time format patterns
    *
@@ -2915,7 +2915,7 @@ object functions {
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
    *
-   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>
    * for valid date and time format patterns
    *
@@ -2961,7 +2961,7 @@ object functions {
   /**
    * Converts time string with given pattern to Unix timestamp (in seconds).
    *
-   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>
    * for valid date and time format patterns
    *
@@ -2991,7 +2991,7 @@ object functions {
   /**
    * Converts time string with the given pattern to timestamp.
    *
-   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>
    * for valid date and time format patterns
    *
@@ -3018,7 +3018,7 @@ object functions {
   /**
    * Converts the column into a `DateType` with a specified format
    *
-   * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>
    * for valid date and time format patterns
    *

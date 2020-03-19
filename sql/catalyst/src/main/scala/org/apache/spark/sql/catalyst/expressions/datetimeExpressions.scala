@@ -603,7 +603,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   arguments = """
     Arguments:
       * timestamp - A date/timestamp or string to be converted to the given format.
-      * fmt - Date/time format pattern to follow. See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid date
+      * fmt - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid date
               and time format patterns.
   """,
   examples = """
@@ -685,7 +685,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     Arguments:
       * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "yyyy-MM-dd HH:mm:ss". See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
+                 Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
                  for valid date and time format patterns.
   """,
   examples = """
@@ -719,7 +719,7 @@ case class ToUnixTimestamp(
 // scalastyle:off line.size.limit
 /**
  * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
- * See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+ * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
@@ -732,7 +732,7 @@ case class ToUnixTimestamp(
     Arguments:
       * timeExp - A date/timestamp or string. If not provided, this defaults to current time.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "yyyy-MM-dd HH:mm:ss". See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime Patterns</a>
+                 Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime Patterns</a>
                  for valid date and time format patterns.
   """,
   examples = """
@@ -927,7 +927,7 @@ abstract class UnixTime extends ToTimestamp {
   arguments = """
     Arguments:
       * unix_time - UNIX Timestamp to be converted to the provided format.
-      * format - Date/time format pattern to follow. See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
+      * format - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
                  for valid date and time format patterns.
   """,
   examples = """
@@ -1467,7 +1467,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
   arguments = """
     Arguments:
       * date_str - A string to be parsed to date.
-      * fmt - Date format pattern to follow. See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+      * fmt - Date format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
   """,
   examples = """
@@ -1517,7 +1517,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
-      * fmt - Timestamp format pattern to follow. See <a href="http://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+      * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
   """,
   examples = """
