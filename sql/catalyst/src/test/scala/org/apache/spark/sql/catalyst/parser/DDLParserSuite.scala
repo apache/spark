@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -2163,18 +2164,20 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("create table - without using") {
-    val sql = "CREATE TABLE 1m.2g(a INT)"
-    val expectedTableSpec = TableSpec(
-      Seq("1m", "2g"),
-      Some(new StructType().add("a", IntegerType)),
-      Seq.empty[Transform],
-      None,
-      Map.empty[String, String],
-      None,
-      Map.empty[String, String],
-      None,
-      None)
+    withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "false") {
+      val sql = "CREATE TABLE 1m.2g(a INT)"
+      val expectedTableSpec = TableSpec(
+        Seq("1m", "2g"),
+        Some(new StructType().add("a", IntegerType)),
+        Seq.empty[Transform],
+        None,
+        Map.empty[String, String],
+        None,
+        Map.empty[String, String],
+        None,
+        None)
 
-    testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
   }
 }
