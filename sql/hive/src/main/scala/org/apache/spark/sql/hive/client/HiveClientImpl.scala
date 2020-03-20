@@ -616,11 +616,9 @@ private[hive] class HiveClientImpl(
     shim.createPartitions(client, db, table, parts, ignoreIfExists)
   }
 
-  val HIDDEN_FILES_PATH_FILTER: PathFilter = new PathFilter() {
-    override def accept(p: Path): Boolean = {
+  val HIDDEN_FILES_PATH_FILTER: PathFilter = (p: Path) => {
       val name = p.getName
       !name.startsWith("_") && !name.startsWith(".")
-    }
   }
 
   @throws[Exception]
