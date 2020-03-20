@@ -194,7 +194,7 @@ public class TransportContext implements Closeable {
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
         .addLast("decoder", DECODER)
         .addLast("idleStateHandler",
-          new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
+          new IdleStateHandler(0, 0, conf.idleTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
         .addLast("handler", channelHandler);
@@ -220,7 +220,7 @@ public class TransportContext implements Closeable {
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
       rpcHandler, conf.maxChunksBeingTransferred());
     return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs(), closeIdleConnections, this);
+      conf.idleTimeoutMs(), closeIdleConnections, this);
   }
 
   /**

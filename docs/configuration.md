@@ -1823,7 +1823,9 @@ Apart from these, the following properties are also available, and may be useful
     Default timeout for all network interactions. This config will be used in place of
     <code>spark.core.connection.ack.wait.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code>,
-    <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
+    <code>spark.shuffle.io.connectionTimeout</code>,
+    <code>spark.shuffle.io.idleTimeout</code>
+    <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
   </td>
   <td>1.3.0</td>
