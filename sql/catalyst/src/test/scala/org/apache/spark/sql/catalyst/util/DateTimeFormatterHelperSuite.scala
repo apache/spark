@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper.convertIncompatiblePattern
+import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 class DateTimeFormatterHelperSuite extends SparkFunSuite {
 
@@ -36,10 +36,10 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
       === "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
     assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
       === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
-    val e1 = intercept[IllegalArgumentException](convertIncompatiblePattern("yyyy-MM-dd eeee G"))
-    assert(e1.getMessage === "Illegal pattern character: e")
-    val e2 = intercept[IllegalArgumentException](convertIncompatiblePattern("yyyy-MM-dd cccc G"))
-    assert(e2.getMessage === "Illegal pattern character: c")
+    unsupportedLetters.foreach { l =>
+      val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
+      assert(e.getMessage === s"Illegal pattern character: $l")
+    }
     assert(convertIncompatiblePattern("yyyy-MM-dd uuuu") === "uuuu-MM-dd eeee")
     assert(convertIncompatiblePattern("yyyy-MM-dd EEEE") === "uuuu-MM-dd EEEE")
     assert(convertIncompatiblePattern("yyyy-MM-dd'e'HH:mm:ss") === "uuuu-MM-dd'e'HH:mm:ss")
