@@ -133,7 +133,7 @@
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>2.4.1</kafka.version>
-    <derby.version>10.12.1.1</derby.version>
+    <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.10.1</parquet.version>
     <orc.version>1.5.9</orc.version>
     <orc.classifier></orc.classifier>
