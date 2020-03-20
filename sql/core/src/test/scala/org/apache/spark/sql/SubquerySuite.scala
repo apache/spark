@@ -1647,7 +1647,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(df, Nil)
   }
 
-  test("AQE should not silently reuse subquery") {
+  test("SPARK-31206: AQE should not use same SubqueryExec when reuse is off") {
     Seq(true, false).foreach { reuse =>
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
