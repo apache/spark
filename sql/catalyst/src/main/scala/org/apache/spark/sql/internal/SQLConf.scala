@@ -2501,6 +2501,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_AVRO_REBASE_DATETIME =
+    buildConf("spark.sql.legacy.avro.rebaseDateTime.enabled")
+      .internal()
+      .doc("When true, rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the hybrid calendar (Julian + Gregorian) in write and " +
+        "from the hybrid calendar to Proleptic Gregorian calendar in read. " +
+        "The rebasing is performed by converting micros/millis/days to " +
+        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
+        "timestamp in the target calendar, and getting the number of micros/millis/days " +
+        "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3079,6 +3093,8 @@ class SQLConf extends Serializable with Logging {
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
   def parquetRebaseDateTimeEnabled: Boolean = getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME)
+
+  def avroRebaseDateTimeEnabled: Boolean = getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME)
 
   /** ********************** SQLConf functionality methods ************ */
 
