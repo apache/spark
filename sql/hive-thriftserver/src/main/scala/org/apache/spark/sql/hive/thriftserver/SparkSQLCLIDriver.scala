@@ -46,6 +46,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
+import org.apache.spark.sql.internal.{SharedState, StaticSQLConf}
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -85,43 +86,51 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       System.exit(1)
     }
 
+    val dummyHiveConf = new HiveConf(classOf[SessionState])
+    // a dummy CliSessionState to parse hive cmd line properties and other hive options,
+    // e.g. database.
+    val dummySessionState = new CliSessionState(dummyHiveConf)
+
+    dummySessionState.in = System.in
+    try {
+      dummySessionState.out = new PrintStream(System.out, true, UTF_8.name())
+      dummySessionState.info = new PrintStream(System.err, true, UTF_8.name())
+      dummySessionState.err = new PrintStream(System.err, true, UTF_8.name())
+    } catch {
+      case _: UnsupportedEncodingException => System.exit(3)
+    }
+    if (!oproc.process_stage2(dummySessionState)) {
+      System.exit(2)
+    }
+
+    val cmdProperties = dummySessionState.cmdProperties.entrySet().asScala.map { e =>
+      (e.getKey.toString, e.getValue.toString)
+    }.toMap
+
+    // We do not propagate metastore options to the execution copy of hive.
+    for ((k, v) <- cmdProperties if k != "javax.jdo.option.ConnectionURL") {
+      // If the same property is configured by spark.hadoop.xxx, we ignore it and
+      // obey settings from spark properties
+      sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + k, v)
+    }
+
+    // For hadoop and hive settings, the priority order is: (descending)
+    // spark.hive.xxx -> spark.hadoop.xxx -> --hiveconf xxx(cmdProperties) -> xxx from hive-site.xml
     val sparkConf = new SparkConf(loadDefaults = true)
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
+    SharedState.loadHiveConfFile(sparkConf, hadoopConf)
     val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
 
     val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
 
     val sessionState = new CliSessionState(cliConf)
 
-    sessionState.in = System.in
-    try {
-      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
-      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
-      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
-    } catch {
-      case e: UnsupportedEncodingException => System.exit(3)
-    }
-
-    if (!oproc.process_stage2(sessionState)) {
-      System.exit(2)
-    }
-
-    // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
     // Hive 2.0.0 onwards HiveConf.getClassLoader returns the UDFClassLoader (created by Hive).
     // Because of this spark cannot find the jars as class loader got changed
     // Hive changed the class loader because of HIVE-11878, so it is required to use old
     // classLoader as sparks loaded all the jars in this classLoader
     conf.setClassLoader(Thread.currentThread().getContextClassLoader)
-    sessionState.cmdProperties.entrySet().asScala.foreach { item =>
-      val key = item.getKey.toString
-      val value = item.getValue.toString
-      // We do not propagate metastore options to the execution copy of hive.
-      if (key != "javax.jdo.option.ConnectionURL") {
-        conf.set(key, value)
-        sessionState.getOverriddenConfigurations.put(key, value)
-      }
-    }
 
     val tokenProvider = new HiveDelegationTokenProvider()
     if (tokenProvider.delegationTokensRequired(sparkConf, hadoopConf)) {
@@ -138,16 +147,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     if (isRemoteMode(sessionState)) {
       // Hive 1.2 + not supported in CLI
       throw new RuntimeException("Remote operations not supported")
-    }
-    // Respect the configurations set by --hiveconf from the command line
-    // (based on Hive's CliDriver).
-    val hiveConfFromCmd = sessionState.getOverriddenConfigurations.entrySet().asScala
-    val newHiveConf = hiveConfFromCmd.map { kv =>
-      // If the same property is configured by spark.hadoop.xxx, we ignore it and
-      // obey settings from spark properties
-      val k = kv.getKey
-      val v = sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + k, kv.getValue)
-      (k, v)
     }
 
     val cli = new SparkSQLCLIDriver
@@ -177,28 +176,24 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.info = new PrintStream(System.err, true, UTF_8.name())
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
-      case e: UnsupportedEncodingException => System.exit(3)
+      case _: UnsupportedEncodingException => System.exit(3)
     }
 
-    if (sessionState.database != null) {
+    if (dummySessionState.database != null) {
       SparkSQLEnv.sqlContext.sessionState.catalog.setCurrentDatabase(
-        s"${sessionState.database}")
+        s"${dummySessionState.database}")
     }
 
     // Execute -i init files (always in silent mode)
-    cli.processInitFiles(sessionState)
+    cli.processInitFiles(dummySessionState)
 
-    newHiveConf.foreach { kv =>
-      SparkSQLEnv.sqlContext.setConf(kv._1, kv._2)
-    }
-
-    if (sessionState.execString != null) {
-      System.exit(cli.processLine(sessionState.execString))
+    if (dummySessionState.execString != null) {
+      System.exit(cli.processLine(dummySessionState.execString))
     }
 
     try {
-      if (sessionState.fileName != null) {
-        System.exit(cli.processFile(sessionState.fileName))
+      if (dummySessionState.fileName != null) {
+        System.exit(cli.processFile(dummySessionState.fileName))
       }
     } catch {
       case e: FileNotFoundException =>
