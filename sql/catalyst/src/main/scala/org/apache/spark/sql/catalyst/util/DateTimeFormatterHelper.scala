@@ -162,7 +162,7 @@ private object DateTimeFormatterHelper {
     toFormatter(builder, TimestampFormatter.defaultLocale)
   }
 
-  final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N')
+  final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
 
   /**
    * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for

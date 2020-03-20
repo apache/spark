@@ -192,12 +192,6 @@ Spark uses pattern letters in the following table for date and timestamp parsing
   <td> +0000; -0800; -08:00; </td>
 </tr>
 <tr>
-  <td> <b>p</b> </td>
-  <td> pad next field with spaces </td>
-  <td> pad modifier </td>
-  <td> 1 </td>
-</tr>
-<tr>
   <td> <b>'</b> </td>
   <td> escape for text </td>
   <td> delimiter </td>
@@ -252,10 +246,6 @@ The count of pattern letters determines the format.
   During formatting, all valid data will be output even it is in the optional section.
   During parsing, the whole section may be missing from the parsed string.
   An optional section is started by `[` and ended using `]` (or at the end of the pattern).
-
-- Pad next(p): Use one or more contiguous `'p'` characters to decorate next element, e.g. `pppppHH`. This causes the next decorated element to pad to a fixed width (the number of contiguous 'p') using spaces.
-  During formatting, the decorated element will be output and then padded to the specified width, it would fail if the output is longer than the specified width, e.g. `2004` will be printed as ` 2004`, but`432004` fails with pattern `pppppy`.
-  During parsing, the padding and decorated element are parsed, the total input length should equal to the number of contiguous 'p'. e.g. for pattern `ppppy`, `2004` and ` 004` will be parsed but `02004` or `004` will not be.
 
 More details for the text style:
 
