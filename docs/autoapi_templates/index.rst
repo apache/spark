@@ -110,6 +110,8 @@ All operators are in the following packages:
 
   airflow/providers/ftp/sensors/index
 
+  airflow/providers/google/ads/operators/index
+
   airflow/providers/google/cloud/operators/index
 
   airflow/providers/google/cloud/sensors/index
@@ -248,6 +250,8 @@ All hooks are in the following packages:
   airflow/providers/elasticsearch/hooks/index
 
   airflow/providers/ftp/hooks/index
+
+  airflow/providers/google/ads/hooks/index
 
   airflow/providers/google/cloud/hooks/index
 
