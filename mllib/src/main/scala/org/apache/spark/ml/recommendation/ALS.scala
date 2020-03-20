@@ -32,7 +32,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
 import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext, SparkException}
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.BLAS
@@ -731,21 +731,17 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
 
 /**
- * :: DeveloperApi ::
  * An implementation of ALS that supports generic ID types, specialized for Int and Long. This is
  * exposed as a developer API for users who do need other ID types. But it is not recommended
  * because it increases the shuffle size and memory requirement during training. For simplicity,
  * users and items must have the same type. The number of distinct users/items should be smaller
  * than 2 billion.
  */
-@DeveloperApi
 object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
-   * :: DeveloperApi ::
    * Rating class for better code readability.
    */
-  @DeveloperApi
   case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
 
   @Since("1.6.0")
@@ -908,7 +904,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   }
 
   /**
-   * :: DeveloperApi ::
    * Implementation of the ALS algorithm.
    *
    * This implementation of the ALS factorization algorithm partitions the two sets of factors among
@@ -933,7 +928,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * "block" as referring to a subset of an RDD containing the ratings rather than a contiguous
    * submatrix of the ratings matrix.
    */
-  @DeveloperApi
   def train[ID: ClassTag]( // scalastyle:ignore
       ratings: RDD[Rating[ID]],
       rank: Int = 10,

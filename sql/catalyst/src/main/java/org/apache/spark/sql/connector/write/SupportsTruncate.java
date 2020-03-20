@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.write;
 
+import org.apache.spark.annotation.Evolving;
+
 /**
  * Write builder trait for tables that support truncation.
  * <p>
@@ -24,6 +26,7 @@ package org.apache.spark.sql.connector.write;
  *
  * @since 3.0.0
  */
+@Evolving
 public interface SupportsTruncate extends WriteBuilder {
   /**
    * Configures a write to replace all existing data with data committed in the write.

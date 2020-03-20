@@ -66,6 +66,15 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val lock = new Object()
 
+  @transient private val logOnLevel: ( => String) => Unit = conf.adaptiveExecutionLogLevel match {
+    case "TRACE" => logTrace(_)
+    case "DEBUG" => logDebug(_)
+    case "INFO" => logInfo(_)
+    case "WARN" => logWarning(_)
+    case "ERROR" => logError(_)
+    case _ => logDebug(_)
+  }
+
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new RuleExecutor[LogicalPlan] {
     // TODO add more optimization rules
@@ -87,13 +96,10 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, context.subqueryCache),
-    // Here the 'OptimizeSkewedJoin' rule should be executed
-    // before 'ReduceNumShufflePartitions', as the skewed partition handled
-    // in 'OptimizeSkewedJoin' rule, should be omitted in 'ReduceNumShufflePartitions'.
+    CoalesceShufflePartitions(context.session),
+    // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
+    // added by `CoalesceShufflePartitions`. So they must be executed after it.
     OptimizeSkewedJoin(conf),
-    CoalesceShufflePartitions(conf),
-    // The rule of 'OptimizeLocalShuffleReader' need to make use of the 'partitionStartIndices'
-    // in 'ReduceNumShufflePartitions' rule. So it must be after 'ReduceNumShufflePartitions' rule.
     OptimizeLocalShuffleReader(conf),
     ApplyColumnarRulesAndInsertTransitions(conf, context.session.sessionState.columnarRules),
     CollapseCodegenStages(conf)
@@ -204,6 +210,7 @@ case class AdaptiveSparkPlanExec(
         val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
         if (newCost < origCost ||
             (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
+          logOnLevel(s"Plan changed from $currentPhysicalPlan to $newPhysicalPlan")
           cleanUpTempTags(newPhysicalPlan)
           currentPhysicalPlan = newPhysicalPlan
           currentLogicalPlan = newLogicalPlan
@@ -217,7 +224,7 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
-      logDebug(s"Final plan: $currentPhysicalPlan")
+      logOnLevel(s"Final plan: $currentPhysicalPlan")
     }
     currentPhysicalPlan
   }

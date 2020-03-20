@@ -1520,10 +1520,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val ext_tbl = "SPARK_30269_external"
     withTempDir { dir =>
       withTable(tbl, ext_tbl) {
-        sql(s"CREATE TABLE $tbl (key INT, value STRING, ds STRING) PARTITIONED BY (ds)")
+        sql(s"CREATE TABLE $tbl (key INT, value STRING, ds STRING)" +
+          "USING parquet PARTITIONED BY (ds)")
         sql(
           s"""
              | CREATE TABLE $ext_tbl (key INT, value STRING, ds STRING)
+             | USING PARQUET
              | PARTITIONED BY (ds)
              | LOCATION '${dir.toURI}'
            """.stripMargin)

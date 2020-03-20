@@ -29,6 +29,7 @@ import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
@@ -99,7 +100,8 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 
   override def eval(input: InternalRow): Any = currentTimestamp()
 
-  override def prettyName: String = "current_timestamp"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_timestamp")
 }
 
 /**
@@ -626,14 +628,22 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   @transient private lazy val formatter: Option[TimestampFormatter] = {
     if (right.foldable) {
       Option(right.eval()).map { format =>
-        TimestampFormatter(format.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+        TimestampFormatter(
+          format.toString,
+          zoneId,
+          legacyFormat = SIMPLE_DATE_FORMAT,
+          needVarLengthSecondFraction = false)
       }
     } else None
   }
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val tf = if (formatter.isEmpty) {
-      TimestampFormatter(format.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+      TimestampFormatter(
+        format.toString,
+        zoneId,
+        legacyFormat = SIMPLE_DATE_FORMAT,
+        needVarLengthSecondFraction = false)
     } else {
       formatter.get
     }
@@ -654,7 +664,8 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
         s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
             |  $format.toString(),
             |  $zid,
-            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT())
+            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+            |  false)
             |.format($timestamp))""".stripMargin
       })
     }
@@ -673,7 +684,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     Arguments:
       * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
+                 Default value is "yyyy-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
                  for valid date and time format patterns.
   """,
   examples = """
@@ -707,7 +718,7 @@ case class ToUnixTimestamp(
  * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
  * See [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
- * If the second parameter is missing, use "uuuu-MM-dd HH:mm:ss".
+ * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
  * If the first parameter is a Date or Timestamp instead of String, we will ignore the
  * second parameter.
@@ -718,7 +729,7 @@ case class ToUnixTimestamp(
     Arguments:
       * timeExp - A date/timestamp or string. If not provided, this defaults to current time.
       * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "uuuu-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
+                 Default value is "yyyy-MM-dd HH:mm:ss". See `java.time.format.DateTimeFormatter`
                  for valid date and time format patterns.
   """,
   examples = """
@@ -767,7 +778,11 @@ abstract class ToTimestamp
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+      TimestampFormatter(
+        constFormat.toString,
+        zoneId,
+        legacyFormat = SIMPLE_DATE_FORMAT,
+        needVarLengthSecondFraction = true)
     } catch {
       case NonFatal(_) => null
     }
@@ -801,7 +816,11 @@ abstract class ToTimestamp
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              TimestampFormatter(formatString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+              TimestampFormatter(
+                formatString,
+                zoneId,
+                legacyFormat = SIMPLE_DATE_FORMAT,
+                needVarLengthSecondFraction = true)
                 .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case e: SparkUpgradeException => throw e
@@ -850,7 +869,8 @@ abstract class ToTimestamp
               ${ev.value} = $tf$$.MODULE$$.apply(
                 $format.toString(),
                 $zid,
-                $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT())
+                $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+                true)
               .parse($string.toString()) / $downScaleFactor;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
@@ -936,7 +956,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: TimestampFormatter =
     try {
-      TimestampFormatter(constFormat.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+      TimestampFormatter(
+        constFormat.toString,
+        zoneId,
+        legacyFormat = SIMPLE_DATE_FORMAT,
+        needVarLengthSecondFraction = false)
     } catch {
       case NonFatal(_) => null
     }
@@ -963,7 +987,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         } else {
           try {
             UTF8String.fromString(
-              TimestampFormatter(f.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT)
+              TimestampFormatter(
+                f.toString,
+                zoneId,
+                legacyFormat = SIMPLE_DATE_FORMAT,
+                needVarLengthSecondFraction = false)
                 .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
@@ -1001,7 +1029,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         s"""
         try {
           ${ev.value} = UTF8String.fromString(
-            $tf$$.MODULE$$.apply($f.toString(), $zid, $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT())
+            $tf$$.MODULE$$.apply($f.toString(), $zid, $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(), false)
               .format($seconds * 1000000L));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;

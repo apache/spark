@@ -18,6 +18,8 @@
 .idea_modules/
 .project
 .pydevproject
+.python-version
+.ruby-version
 .scala_dependencies
 .settings
 /lib/

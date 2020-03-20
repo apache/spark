@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.sql.{Date, Timestamp}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -877,6 +878,71 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       m.close()
 
       assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
+    }
+  }
+
+  test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+          checkAnswer(
+            readResourceParquetFile("test-data/before_1582_date_v2_4.snappy.parquet"),
+            Row(java.sql.Date.valueOf("1001-01-01")))
+          checkAnswer(readResourceParquetFile(
+            "test-data/before_1582_timestamp_micros_v2_4.snappy.parquet"),
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+          checkAnswer(readResourceParquetFile(
+            "test-data/before_1582_timestamp_millis_v2_4.snappy.parquet"),
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123")))
+        }
+        checkAnswer(readResourceParquetFile(
+          "test-data/before_1582_timestamp_int96_v2_4.snappy.parquet"),
+          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+      }
+    }
+  }
+
+  test("SPARK-31159: rebasing timestamps in write") {
+    Seq(
+      ("TIMESTAMP_MILLIS", "1001-01-01 01:02:03.123", "1001-01-07 01:09:05.123"),
+      ("TIMESTAMP_MICROS", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456"),
+      ("INT96", "1001-01-01 01:02:03.123456", "1001-01-01 01:02:03.123456")
+    ).foreach { case (outType, tsStr, nonRebased) =>
+      withClue(s"output type $outType") {
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
+          withTempPath { dir =>
+            val path = dir.getAbsolutePath
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+              Seq(tsStr).toDF("tsS")
+                .select($"tsS".cast("timestamp").as("ts"))
+                .write
+                .parquet(path)
+
+              checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(tsStr)))
+            }
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
+              checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(nonRebased)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-31159: rebasing dates in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+        Seq("1001-01-01").toDF("dateS")
+          .select($"dateS".cast("date").as("date"))
+          .write
+          .parquet(path)
+
+        checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-01")))
+      }
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
+        checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-07")))
+      }
     }
   }
 }

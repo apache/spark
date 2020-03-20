@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchem
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.sql.execution.LeafExecNode
 
 /**
  * Physical plan node for showing namespaces.
@@ -33,8 +34,7 @@ case class ShowNamespacesExec(
     output: Seq[Attribute],
     catalog: SupportsNamespaces,
     namespace: Seq[String],
-    pattern: Option[String])
-    extends V2CommandExec {
+    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
 
   override protected def run(): Seq[InternalRow] = {
     val namespaces = if (namespace.nonEmpty) {

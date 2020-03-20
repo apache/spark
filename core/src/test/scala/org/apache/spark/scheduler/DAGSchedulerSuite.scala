@@ -1933,7 +1933,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
-  test("shuffle fetch failed on speculative task, but original task succeed (SPARK-30388)") {
+  test("SPARK-30388: shuffle fetch failed on speculative task, but original task succeed") {
     var completedStage: List[Int] = Nil
     val listener = new SparkListener() {
       override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
@@ -1947,6 +1947,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
     completeShuffleMapStageSuccessfully(0, 0, 2)
+    sc.listenerBus.waitUntilEmpty()
     assert(completedStage === List(0))
 
     // result task 0.0 succeed
@@ -1962,6 +1963,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
         info
       )
     )
+    sc.listenerBus.waitUntilEmpty()
     assert(completedStage === List(0, 1))
 
     Thread.sleep(DAGScheduler.RESUBMIT_TIMEOUT * 2)
@@ -1973,6 +1975,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     // original result task 1.0 succeed
     runEvent(makeCompletionEvent(taskSets(1).tasks(1), Success, 42))
+    sc.listenerBus.waitUntilEmpty()
     assert(completedStage === List(0, 1, 1, 0))
     assert(scheduler.activeJobs.isEmpty)
   }
