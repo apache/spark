@@ -209,9 +209,7 @@ class KMeans private (
    */
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
-    val instances: RDD[(Vector, Double)] = data.map {
-      case (point) => (point, 1.0)
-    }
+    val instances = data.map(point => (point, 1.0))
     runWithWeight(instances, None)
   }
 
@@ -260,6 +258,7 @@ class KMeans private (
           initKMeansParallel(data, distanceMeasureInstance)
         }
     }
+    val numFeatures = centers.head.vector.size
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(f"Initialization with $initializationMode took $initTimeInSeconds%.3f seconds.")
 
@@ -269,18 +268,26 @@ class KMeans private (
 
     val iterationStartTime = System.nanoTime()
 
-    instr.foreach(_.logNumFeatures(centers.head.vector.size))
+    instr.foreach(_.logNumFeatures(numFeatures))
+
+    val shouldDistributed = centers.length * centers.length * numFeatures.toLong > 1000000L
 
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
-      val statistics = distanceMeasureInstance.computeStatistics(centers)
+      val bcCenters = sc.broadcast(centers)
+      val stats = if (shouldDistributed) {
+        distanceMeasureInstance.computeStatisticsDistributedly(sc, bcCenters)
+      } else {
+        distanceMeasureInstance.computeStatistics(centers)
+      }
+      val bcStats = sc.broadcast(stats)
 
       val costAccum = sc.doubleAccumulator
-      val bcCenters = sc.broadcast((centers, statistics))
 
       // Find the new centers
       val collected = data.mapPartitions { points =>
-        val (centers, radii) = bcCenters.value
+        val centers = bcCenters.value
+        val stats = bcStats.value
         val dims = centers.head.vector.size
 
         val sums = Array.fill(centers.length)(Vectors.zeros(dims))
@@ -291,14 +298,14 @@ class KMeans private (
         val clusterWeightSum = Array.ofDim[Double](centers.length)
 
         points.foreach { point =>
-          val (bestCenter, cost) = distanceMeasureInstance.findClosest(centers, radii, point)
+          val (bestCenter, cost) = distanceMeasureInstance.findClosest(centers, stats, point)
           costAccum.add(cost * point.weight)
           distanceMeasureInstance.updateClusterSum(point, sums(bestCenter))
           clusterWeightSum(bestCenter) += point.weight
         }
 
-        clusterWeightSum.indices.filter(clusterWeightSum(_) > 0)
-          .map(j => (j, (sums(j), clusterWeightSum(j)))).iterator
+        Iterator.tabulate(centers.length)(j => (j, (sums(j), clusterWeightSum(j))))
+          .filter(_._2._2 > 0)
       }.reduceByKey { (sumweight1, sumweight2) =>
         axpy(1.0, sumweight2._1, sumweight1._1)
         (sumweight1._1, sumweight1._2 + sumweight2._2)
@@ -310,6 +317,7 @@ class KMeans private (
       }
 
       bcCenters.destroy()
+      bcStats.destroy()
 
       // Update the cluster centers and costs
       converged = true

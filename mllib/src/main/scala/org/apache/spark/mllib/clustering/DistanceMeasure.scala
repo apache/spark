@@ -17,7 +17,9 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
 import org.apache.spark.mllib.util.MLUtils
@@ -26,8 +28,93 @@ private[spark] abstract class DistanceMeasure extends Serializable {
 
   /**
    * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
+   * @param distance distance between two centers
    */
-  def computeStatistics(centers: Array[VectorWithNorm]): Array[Array[Double]]
+  def computeStatistics(distance: Double): Double
+
+  /**
+   * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
+   *
+   * @return A symmetric matrix containing statistics, matrix(i)(j) represents:
+   *         1, a lower bound r of the center i, if i==j. If distance between point x and center i
+   *         is less than f(r), then center i is the closest center to point x.
+   *         2, a lower bound r=matrix(i)(j) to help avoiding unnecessary distance computation.
+   *         Given point x, let i be current closest center, and d be current best distance,
+   *         if d < f(r), then we no longer need to compute the distance to center j.
+   */
+  def computeStatistics(centers: Array[VectorWithNorm]): Array[Array[Double]] = {
+    val k = centers.length
+    if (k == 1) return Array(Array(Double.NaN))
+
+    val stats = Array.ofDim[Double](k, k)
+    var i = 0
+    while (i < k) {
+      stats(i)(i) = Double.PositiveInfinity
+      i += 1
+    }
+    i = 0
+    while (i < k) {
+      var j = i + 1
+      while (j < k) {
+        val d = distance(centers(i), centers(j))
+        val s = computeStatistics(d)
+        stats(i)(j) = s
+        stats(j)(i) = s
+        if (s < stats(i)(i)) stats(i)(i) = s
+        if (s < stats(j)(j)) stats(j)(j) = s
+        j += 1
+      }
+      i += 1
+    }
+    stats
+  }
+
+  /**
+   * Compute distance between centers in a distributed way.
+   */
+  def computeStatisticsDistributedly(
+      sc: SparkContext,
+      bcCenters: Broadcast[Array[VectorWithNorm]]): Array[Array[Double]] = {
+    val k = bcCenters.value.length
+    if (k == 1) return Array(Array(Double.NaN))
+
+    val numParts = math.min(k, 1024)
+    val collected = sc.range(0, numParts, 1, numParts)
+      .mapPartitionsWithIndex { case (pid, _) =>
+        val centers = bcCenters.value
+        Iterator.range(0, k).flatMap { i =>
+          Iterator.range(i + 1, k).flatMap { j =>
+            val hash = (i, j).hashCode.abs
+            if (hash % numParts == pid) {
+              val d = distance(centers(i), centers(j))
+              val s = computeStatistics(d)
+              Iterator.single(((i, j), s))
+            } else Iterator.empty
+          }
+        }.filterNot(_._2 == 0)
+      }.collectAsMap()
+
+    val stats = Array.ofDim[Double](k, k)
+    var i = 0
+    while (i < k) {
+      stats(i)(i) = Double.PositiveInfinity
+      i += 1
+    }
+    i = 0
+    while (i < k) {
+      var j = i + 1
+      while (j < k) {
+        val s = collected.getOrElse((i, j), 0.0)
+        stats(i)(j) = s
+        stats(j)(i) = s
+        if (s < stats(i)(i)) stats(i)(i) = s
+        if (s < stats(j)(j)) stats(j)(j) = s
+        j += 1
+      }
+      i += 1
+    }
+    stats
+  }
 
   /**
    * @return the index of the closest center to the given point, as well as the cost.
@@ -174,7 +261,7 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
    * @see <a href="https://www.aaai.org/Papers/ICML/2003/ICML03-022.pdf">Charles Elkan,
    *      Using the Triangle Inequality to Accelerate k-Means</a>
    *
-   * @return A symmetric matrix containing statistics, matrix(i)(j) represents:
+   * @return One element used in statistics matrix to make matrix(i)(j) represents:
    *         1, squared radii of the center i, if i==j. If distance between point x and center i
    *         is less than the radius of center i, then center i is the closest center to point x.
    *         For Euclidean distance, radius of center i is half of the distance between center i
@@ -183,33 +270,8 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
    *         Given point x, let i be current closest center, and d be current best squared
    *         distance, if d < r, then we no longer need to compute the distance to center j.
    */
-  override def computeStatistics(centers: Array[VectorWithNorm]): Array[Array[Double]] = {
-    val k = centers.length
-    if (k == 1) {
-      Array(Array(Double.NaN))
-    } else {
-      val matrix = Array.ofDim[Double](k, k)
-      var i = 0
-      while (i < k) {
-        matrix(i)(i) = Double.PositiveInfinity
-        i += 1
-      }
-      i = 0
-      while (i < k) {
-        var j = i + 1
-        while (j < k) {
-          val d = distance(centers(i), centers(j))
-          val r = 0.25 * d * d
-          matrix(i)(j) = r
-          matrix(j)(i) = r
-          if (r < matrix(i)(i)) matrix(i)(i) = r
-          if (r < matrix(j)(j)) matrix(j)(j) = r
-          j += 1
-        }
-        i += 1
-      }
-      matrix
-    }
+  override def computeStatistics(distance: Double): Double = {
+    0.25 * distance * distance
   }
 
   /**
@@ -330,7 +392,8 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
 
   /**
    * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
-   * @return A symmetric matrix containing statistics, matrix(i)(j) represents:
+   *
+   * @return One element used in statistics matrix to make matrix(i)(j) represents:
    *         1, squared radii of the center i, if i==j. If distance between point x and center i
    *         is less than the radius of center i, then center i is the closest center to point x.
    *         For Cosine distance, it is similar to Euclidean distance. However, here radian/angle
@@ -341,35 +404,10 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
    *         Given point x, let i be current closest center, and d be current best squared
    *         distance, if d < r, then we no longer need to compute the distance to center j.
    */
-  override def computeStatistics(centers: Array[VectorWithNorm]): Array[Array[Double]] = {
-    val k = centers.length
-    if (k == 1) {
-      Array(Array(Double.NaN))
-    } else {
-      val matrix = Array.ofDim[Double](k, k)
-      var i = 0
-      while (i < k) {
-        matrix(i)(i) = Double.PositiveInfinity
-        i += 1
-      }
-      i = 0
-      while (i < k) {
-        var j = i + 1
-        while (j < k) {
-          // d = 1 - cos(x)
-          // r = 1 - cos(x/2) = 1 - sqrt((cos(x) + 1) / 2) = 1 - sqrt(1 - d/2)
-          val d = distance(centers(i), centers(j))
-          val r = 1 - math.sqrt(1 - d / 2)
-          matrix(i)(j) = r
-          matrix(j)(i) = r
-          if (r < matrix(i)(i)) matrix(i)(i) = r
-          if (r < matrix(j)(j)) matrix(j)(j) = r
-          j += 1
-        }
-        i += 1
-      }
-      matrix
-    }
+  override def computeStatistics(distance: Double): Double = {
+    // d = 1 - cos(x)
+    // r = 1 - cos(x/2) = 1 - sqrt((cos(x) + 1) / 2) = 1 - sqrt(1 - d/2)
+    1 - math.sqrt(1 - distance / 2)
   }
 
   /**
