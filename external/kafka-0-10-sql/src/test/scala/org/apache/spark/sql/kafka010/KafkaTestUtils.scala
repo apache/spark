@@ -74,7 +74,6 @@ class KafkaTestUtils(
   logInfo(s"Local host name is $localCanonicalHostName")
 
   private var kdc: MiniKdc = _
-  private var kdcDataDir: File = _
 
   // Zookeeper related configurations
   private val zkHost = localCanonicalHostName
@@ -180,28 +179,28 @@ class KafkaTestUtils(
 
   private def createKeytabsAndJaasConfigFile(): String = {
     assert(kdcReady, "KDC should be set up beforehand")
-    kdcDataDir = Utils.createTempDir()
+    val baseDir = Utils.createTempDir()
 
     val zkServerUser = s"zookeeper/$localCanonicalHostName"
-    val zkServerKeytabFile = new File(kdcDataDir, "zookeeper.keytab")
+    val zkServerKeytabFile = new File(baseDir, "zookeeper.keytab")
     kdc.createPrincipal(zkServerKeytabFile, zkServerUser)
     logDebug(s"Created keytab file: ${zkServerKeytabFile.getAbsolutePath()}")
 
     val zkClientUser = s"zkclient/$localCanonicalHostName"
-    val zkClientKeytabFile = new File(kdcDataDir, "zkclient.keytab")
+    val zkClientKeytabFile = new File(baseDir, "zkclient.keytab")
     kdc.createPrincipal(zkClientKeytabFile, zkClientUser)
     logDebug(s"Created keytab file: ${zkClientKeytabFile.getAbsolutePath()}")
 
     val kafkaServerUser = s"kafka/$localCanonicalHostName"
-    val kafkaServerKeytabFile = new File(kdcDataDir, "kafka.keytab")
+    val kafkaServerKeytabFile = new File(baseDir, "kafka.keytab")
     kdc.createPrincipal(kafkaServerKeytabFile, kafkaServerUser)
     logDebug(s"Created keytab file: ${kafkaServerKeytabFile.getAbsolutePath()}")
 
-    clientKeytabFile = new File(kdcDataDir, "client.keytab")
+    clientKeytabFile = new File(baseDir, "client.keytab")
     kdc.createPrincipal(clientKeytabFile, clientUser)
     logDebug(s"Created keytab file: ${clientKeytabFile.getAbsolutePath()}")
 
-    val file = new File(kdcDataDir, "jaas.conf");
+    val file = new File(baseDir, "jaas.conf");
     val realm = kdc.getRealm()
     val content =
       s"""
@@ -356,10 +355,6 @@ class KafkaTestUtils(
     if (kdc != null) {
       kdc.stop()
       kdc = null
-    }
-    if (kdcDataDir != null) {
-      kdcDataDir.delete()
-      kdcDataDir = null
     }
     UserGroupInformation.reset()
     teardownKrbDebug()
