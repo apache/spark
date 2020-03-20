@@ -162,6 +162,8 @@ private object DateTimeFormatterHelper {
     toFormatter(builder, TimestampFormatter.defaultLocale)
   }
 
+  final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
+
   /**
    * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
    * parsing/formatting datetime values. The pattern string is incompatible with the one defined
@@ -179,7 +181,7 @@ private object DateTimeFormatterHelper {
     (pattern + " ").split("'").zipWithIndex.map {
       case (patternPart, index) =>
         if (index % 2 == 0) {
-          for (c <- patternPart if c == 'c' || c == 'e') {
+          for (c <- patternPart if unsupportedLetters.contains(c)) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
           }
           // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
