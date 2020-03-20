@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.Table
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -168,6 +169,27 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
         description = null,
         tableType = "TEMPORARY",
         isTemporary = true).toString)
+    }
+  }
+
+  test("broadcast hint on global temp view") {
+    withGlobalTempView("v1") {
+      spark.range(10).createGlobalTempView("v1")
+      withTempView("v2") {
+        spark.range(10).createTempView("v2")
+
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          Seq(
+            "SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id",
+            "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
+          ).foreach { statement =>
+            sql(statement).queryExecution.optimizedPlan match {
+              case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST))), None)) =>
+              case _ => fail("broadcast hint not found in a left-side table")
+            }
+          }
+        }
+      }
     }
   }
 }
