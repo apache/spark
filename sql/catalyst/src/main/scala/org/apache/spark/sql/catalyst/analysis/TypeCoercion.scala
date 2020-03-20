@@ -1049,7 +1049,7 @@ object TypeCoercion {
   /**
    * A special rule to support string literal as the second argument of date_add/date_sub functions,
    * to keep backward compatibility as a temporary workaround.
-   * TODO: revisit the type coercion rules for string.
+   * TODO(SPARK-28589): implement ANSI type type coercion and handle string literals.
    */
   object StringLiteralCoercion extends TypeCoercionRule {
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
