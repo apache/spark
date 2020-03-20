@@ -168,7 +168,7 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
       } else if (k.eq(curKey) || k.equals(curKey)) {
         val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
         data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
-        updateValueElementsIfNeeded(valueClassTag.runtimeClass)
+        updateValueElementsIfNeeded(valueClassTag.runtimeClass)()
         return newValue
       } else {
         val delta = i
@@ -241,6 +241,7 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
     // capacity < MAXIMUM_CAPACITY (2 ^ 29) so capacity * 2 won't overflow
     val newCapacity = capacity * 2
     require(newCapacity <= MAXIMUM_CAPACITY, s"Can't contain more than ${growThreshold} elements")
+    keyPositions.clear()
     val newData = new Array[AnyRef](2 * newCapacity)
     val newMask = newCapacity - 1
     // Insert all our old values into the new array. Note that because our old keys are
@@ -258,6 +259,7 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
           if (curKey.eq(null)) {
             newData(2 * newPos) = key
             newData(2 * newPos + 1) = value
+            keyPositions += 2 * newPos
             keepGoing = false
           } else {
             val delta = i

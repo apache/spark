@@ -30,8 +30,7 @@ import com.google.common.collect.MapMaker
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
-import org.apache.spark.rdd.CoGroupedRDD
-import org.apache.spark.util.collection.{AppendOnlyMap, BitSet, CompactBuffer, OpenHashSet}
+import org.apache.spark.util.collection.{AppendOnlyMap, CompactBuffer, OpenHashSet}
 
 /**
  * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
@@ -222,17 +221,17 @@ object SizeEstimator extends Logging {
       obj match {
         case s: KnownSizeEstimation =>
           state.size += s.estimatedSize
-//        case map: AppendOnlyMap[_, _] =>
-//          val classInfo = getClassInfo(cls)
-//          state.size += alignSize(classInfo.shellSize)
-//          for (field <- classInfo.pointerFields) {
-//            if (field.getName.equals("data")) {
-//              visitKVDataArray(field.get(map).asInstanceOf[Array[AnyRef]],
-//                map.getKeyPositions(), map.getTotalValueElements, state)
-//            } else {
-//              state.enqueue(field.get(map))
-//            }
-//          }
+        case map: AppendOnlyMap[_, _] =>
+          val classInfo = getClassInfo(cls)
+          state.size += alignSize(classInfo.shellSize)
+          for (field <- classInfo.pointerFields) {
+            if (field.getName.endsWith("$$data")) {
+              visitKVDataArray(field.get(map).asInstanceOf[Array[AnyRef]],
+                map.getKeyPositions(), map.getTotalValueElements, state)
+            } else {
+              state.enqueue(field.get(map))
+            }
+          }
         case _ =>
           val classInfo = getClassInfo(cls)
           state.size += alignSize(classInfo.shellSize)
@@ -243,8 +242,13 @@ object SizeEstimator extends Logging {
     }
   }
 
+  // Visible for Testing
+  private[util] def setArraySizeForSampling(n: Int): Unit = {
+    ARRAY_SIZE_FOR_SAMPLING = n
+  }
+
   // Estimate the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
-  private val ARRAY_SIZE_FOR_SAMPLING = 400
+  private var ARRAY_SIZE_FOR_SAMPLING = 400
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
   private def visitArray(array: AnyRef, arrayClass: Class[_], state: SearchState): Unit = {
@@ -324,12 +328,12 @@ object SizeEstimator extends Logging {
         state.enqueue(e)
       }
     } else {
-      val drawn = new OpenHashSet[Int](ARRAY_SAMPLE_SIZE)
-      val rand = new Random(42)
+      val rand1 = new Random(42)
+      val rand2 = new Random(63)
       val (numKeys1, keySize1, numValueElements1, valueSize1) =
-        sampleKVDataArray(data, keyPositions, state, rand, drawn, length)
+        sampleKVDataArray(data, keyPositions, state, rand1, length)
       val (numKeys2, keySize2, numValueElements2, valueSize2) =
-        sampleKVDataArray(data, keyPositions, state, rand, drawn, length)
+        sampleKVDataArray(data, keyPositions, state, rand2, length)
       val (_, keySizeForMax, numKeysForMin, keySizeForMin) = if (keySize1 > keySize2) {
         (numKeys1, keySize1, numKeys2, keySize2)
       } else (numKeys2, keySize2, numKeys1, keySize1)
@@ -345,7 +349,7 @@ object SizeEstimator extends Logging {
         }
 
       val valueSize = valueSizeForMax +
-        valueSizeForMin * ((totalValueElements - numValueElementsForMin) / numValueElementsForMin)
+        valueSizeForMin * (totalValueElements - numValueElementsForMin) / numValueElementsForMin
       state.size += valueSize
     }
   }
@@ -355,15 +359,28 @@ object SizeEstimator extends Logging {
       keyPositions: mutable.BitSet,
       state: SearchState,
       rand: Random,
-      drawn: OpenHashSet[Int],
       length: Int): (Int, Long, Int, Long) = {
-    for (i <- 0 until ARRAY_SAMPLE_SIZE) {
-      var pos = 0
-      do {
-        pos = rand.nextInt(length)
-      } while (keyPositions.contains(pos))
-      drawn.add(pos)
+    val drawn = new mutable.HashSet[Int]
+    // Due to the keyPosition is not a continuous sequence and it's not indexible, here we use
+    // reservoir sampling algorithm
+    val iter = keyPositions.iterator
+    var index = 0
+    val chosen = new Array[Int](ARRAY_SAMPLE_SIZE)
+    for (e <- iter) {
+      if (drawn.size < ARRAY_SAMPLE_SIZE) {
+        drawn.add(e)
+        chosen(index) = e
+      } else {
+        val s = rand.nextInt(index + 1)
+        if (s < ARRAY_SAMPLE_SIZE) {
+          drawn.remove(chosen(s))
+          drawn.add(e)
+          chosen(s) = e
+        }
+      }
+      index += 1
     }
+    assert(drawn.size == math.min(ARRAY_SAMPLE_SIZE, keyPositions.size))
     var sampleKeySize = 0L
     var sampleKeys = 0
     var sampleValueSize = 0L

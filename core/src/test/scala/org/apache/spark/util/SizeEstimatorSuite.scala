@@ -24,7 +24,7 @@ import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
-import org.apache.spark.util.collection.{CompactBuffer, SizeTrackingAppendOnlyMap}
+import org.apache.spark.util.collection.{AppendOnlyMap, CompactBuffer}
 
 class DummyClass1 {}
 
@@ -238,7 +238,7 @@ class SizeEstimatorSuite
     val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
 
-    val map = new SizeTrackingAppendOnlyMap[String, CompactBuffer[DummyString]]
+    val map = new AppendOnlyMap[String, CompactBuffer[DummyString]]
     val mergeValue: (CompactBuffer[DummyString], DummyString) => CompactBuffer[DummyString] =
       (buffer, v) => {
       buffer += v
@@ -247,35 +247,28 @@ class SizeEstimatorSuite
       CompactBuffer[DummyString](v)
     }
 
-    val rand = new Random(123456789)
-    def randString(minLen: Int, maxLen: Int): String = {
-      "a" * (rand.nextInt(maxLen - minLen) + minLen)
-    }
-    def makeKeys(numElements: Int): Seq[String] = {
-      var step = 1
-      val buffer = new ArrayBuffer[String]
-      for (i <- 0 until numElements) {
-        buffer += "a" * step
-        step *= 2
+    val keyNums = Array.fill(10)(1000) ++ Array.fill(10000)(1)
+    for (i <- keyNums.indices) {
+      val key = Random.nextString(100)
+      val valueBuffer = new CompactBuffer[DummyString]
+      for (j <- 0 until keyNums(i)) {
+        val value = DummyString(Random.nextString(100))
+        val updateFunc: (Boolean, CompactBuffer[DummyString]) => CompactBuffer[DummyString] =
+          (hadVal, oldVal) => {
+            if (hadVal) mergeValue(oldVal, value) else createCombiner(value)
+          }
+        map.changeValue(key, updateFunc)
+        valueBuffer += value
       }
-      buffer
     }
 
-    val keys = makeKeys(100)
-    for (i <- 0 until 10000) {
-      val key = keys(rand.nextInt(100))
-      val value = DummyString(Random.nextString(100))
-      val updateFunc: (Boolean, CompactBuffer[DummyString]) => CompactBuffer[DummyString] =
-        (hadVal, oldVal) => {
-          if (hadVal) mergeValue(oldVal, value) else createCombiner(value)
-        }
-      map.changeValue(key, updateFunc)
-    }
-    val size = SizeEstimator.estimate(map)
-    println(size)
-    println(SizeEstimator.estimate(new SizeTrackingAppendOnlyMap[String, CompactBuffer[DummyString]]))
-    println(SizeEstimator.estimate(new CompactBuffer[DummyString]))
-    println(SizeEstimator.estimate(Random.nextString(10)))
-    println(SizeEstimator.estimate(DummyString(Random.nextString(100))))
+    val estimateSize = SizeEstimator.estimate(map)
+    // disable array sampling
+    SizeEstimator.setArraySizeForSampling(Int.MaxValue)
+    val betterEstimateSize = SizeEstimator.estimate(map)
+    val ERROR = 0.1
+
+    assert(estimateSize > betterEstimateSize * (1 - ERROR))
+    assert(estimateSize < betterEstimateSize * (1 + 2 * ERROR))
   }
 }
