@@ -41,15 +41,16 @@ private[feature] trait VarianceThresholdSelectorParams extends Params
   with HasFeaturesCol with HasOutputCol {
 
   /**
-   * Param for variance threshold. Features with a variance lower than this threshold will
-   * be removed.
+   * Param for variance threshold. Features with a variance lower than or equal to this threshold
+   * will be removed. The default value is 0.0.
    *
    * @group param
    */
   @Since("3.1.0")
   final val varianceThreshold = new DoubleParam(this, "varianceThreshold",
     "Param for variance threshold. Features with a variance lower than this threshold" +
-      " will be removed.", ParamValidators.gt(0))
+      " will be removed. The default value is 0.0.", ParamValidators.gtEq(0))
+  setDefault(varianceThreshold -> 0.0)
 
   /** @group getParam */
   @Since("3.1.0")
@@ -92,16 +93,10 @@ with DefaultParamsWritable {
       .select("summary.max", "summary.min", "summary.variance")
       .first()
 
-    val result = variances.toArray.zip(maxs.toArray).zip(mins.toArray).zipWithIndex
-    // if varianceThreshold not set, remove the features that have the same value in all samples.
-    val features = if (!isSet(varianceThreshold)) {
-      // use max and min to avoid numeric precision issues for constant features
-      result.filter { case (((vari, max), min), _) => ((max != min) && (vari != 0)) }
-    } else {
-      result.filter { case (((vari, _), _), _) => !(vari < getVarianceThreshold) }
-    }
-
-    val indices = features.map { case (((_, _), _), index) => index }
+    val numFeatures = maxs.size
+    val indices = Array.tabulate(numFeatures) { i =>
+      (i, if (maxs(i) == mins(i)) 0.0 else variances(i))
+    } .filter(_._2 > getVarianceThreshold).map(_._1)
     copyValues(new VarianceThresholdSelectorModel(uid, indices.sorted)
       .setParent(this))
   }
