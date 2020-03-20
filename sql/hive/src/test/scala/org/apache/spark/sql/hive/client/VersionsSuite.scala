@@ -547,8 +547,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
           fs.delete(partPath, true)
         }
       }
-      client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
-        purge = true, retainData = false)
+      client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = false,
+        purge = false, retainData = false)
       assert(client.getPartitionOption("default", "src_part", spec).isEmpty)
     }
 
