@@ -95,11 +95,6 @@ class KafkaDelegationTokenSuite extends StreamTest with SharedSparkSession with 
       }
     }
 
-    if (KafkaDelegationTokenSuite.cnt == 0) {
-      KafkaDelegationTokenSuite.cnt += 1
-      throw new IllegalArgumentException("Planned exception for testing only")
-    }
-
     val streamingDf = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -120,8 +115,4 @@ class KafkaDelegationTokenSuite extends StreamTest with SharedSparkSession with 
       StopStream
     )
   }
-}
-
-object KafkaDelegationTokenSuite {
-  var cnt = 0
 }
