@@ -3578,11 +3578,13 @@ class SQLTests(ReusedSQLTestCase):
     # SPARK-26293
     def test_udf_in_subquery(self):
         f = udf(lambda x: x, "long")
-        with self.tempView("v"):
+        try:
             self.spark.range(1).filter(f("id") >= 0).createTempView("v")
             sql = self.spark.sql
             result = sql("select i from values(0L) as data(i) where i in (select id from v)")
             self.assertEqual(result.collect(), [Row(i=0)])
+        finally:
+            self.spark.catalog.dropTempView("v")
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
