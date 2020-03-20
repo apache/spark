@@ -658,7 +658,7 @@ private[hive] class HiveClientImpl(
         // Check whether the partition we are going to drop is empty.
         // We make a dummy one for the empty partition. See [SPARK-29786] for more details.
         parts.foreach { partition =>
-          val partPath = partition.getPartitionPath
+          val partPath = partition.getPath.head
           if (isEmptyPath(partPath)) {
             val fs = partPath.getFileSystem(conf)
             fs.mkdirs(partPath)
