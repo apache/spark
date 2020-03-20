@@ -2,7 +2,7 @@ flake8==3.7.*
 jira==1.0.*
 pycodestyle==2.5.*
 PyGithub==1.26.*
-Unidecode==0.04.*
+Unidecode==0.4.*
 
 # docs
 mkdocs==1.0.*
