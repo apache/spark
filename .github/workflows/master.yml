@@ -13,6 +13,7 @@ jobs:
 
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         java: [ '1.8', '11' ]
         hadoop: [ 'hadoop-2.7', 'hadoop-3.2' ]
