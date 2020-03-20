@@ -1,0 +1,2 @@
+deb https://deb.debian.org/debian buster main
+deb-src https://deb.debian.org/debian buster main
