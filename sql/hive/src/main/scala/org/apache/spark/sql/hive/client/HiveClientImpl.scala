@@ -27,7 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.common.{FileUtils, StatsSetupConst}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -616,11 +616,18 @@ private[hive] class HiveClientImpl(
     shim.createPartitions(client, db, table, parts, ignoreIfExists)
   }
 
+  val HIDDEN_FILES_PATH_FILTER: PathFilter = new PathFilter() {
+    override def accept(p: Path): Boolean = {
+      val name = p.getName
+      !name.startsWith("_") && !name.startsWith(".")
+    }
+  }
+
   @throws[Exception]
   private def isEmptyPath(dirPath: Path): Boolean = {
     val inpFs = dirPath.getFileSystem(conf)
     if (inpFs.exists(dirPath)) {
-      val fStats = inpFs.listStatus(dirPath, FileUtils.HIDDEN_FILES_PATH_FILTER)
+      val fStats = inpFs.listStatus(dirPath, HIDDEN_FILES_PATH_FILTER)
       if (fStats.nonEmpty) {
         return false
       }
