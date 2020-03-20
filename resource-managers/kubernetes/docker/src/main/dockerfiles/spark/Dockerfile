@@ -25,7 +25,7 @@ ARG spark_uid=185
 # If this docker file is being used in the context of building your images from a Spark
 # distribution, the docker build command should be invoked from the top level directory
 # of the Spark distribution. E.g.:
-# docker build -t spark:latest -f kubernetes/dockerfiles/spark/Dockerfile .
+# docker build -t spark:latest -f resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile . 
 
 RUN set -ex && \
     apt-get update && \
@@ -41,13 +41,13 @@ RUN set -ex && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd && \
     rm -rf /var/cache/apt/*
 
-COPY jars /opt/spark/jars
+COPY assembly/target/scala-2.12/jars /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
-COPY kubernetes/dockerfiles/spark/entrypoint.sh /opt/
-COPY kubernetes/dockerfiles/spark/decom.sh /opt/
+COPY resource-managers/kubernetes/docker/src/main/dockerfiles/spark/entrypoint.sh /opt/
+COPY resource-managers/kubernetes/docker/src/main/dockerfiles/spark/decom.sh /opt/
 COPY examples /opt/spark/examples
-COPY kubernetes/tests /opt/spark/tests
+COPY resource-managers/kubernetes/integration-tests /opt/spark/tests
 COPY data /opt/spark/data
 
 ENV SPARK_HOME /opt/spark
