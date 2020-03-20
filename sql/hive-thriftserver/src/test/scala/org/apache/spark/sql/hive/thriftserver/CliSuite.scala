@@ -45,10 +45,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
 
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     warehousePath.delete()
-    Utils.deleteRecursively(metastorePath)
+    metastorePath.delete()
     scratchDirPath.delete()
   }
 
@@ -59,20 +60,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       Utils.deleteRecursively(scratchDirPath)
     } finally {
       super.afterAll()
-    }
-  }
-
-  test("Pick spark.sql.warehouse.dir first for Spark Cli if set") {
-    val sparkWareHouseDir = Utils.createTempDir()
-    Utils.deleteRecursively(metastorePath)
-    try {
-      runCliWithin(
-        1.minute,
-        Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=$sparkWareHouseDir"))(
-        "desc database default;" -> sparkWareHouseDir.getAbsolutePath)
-    } finally {
-      Utils.deleteRecursively(metastorePath)
-      Utils.deleteRecursively(sparkWareHouseDir)
     }
   }
 
@@ -171,6 +158,20 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       fail(message, cause)
     } finally {
       process.destroy()
+    }
+  }
+
+  test("Pick spark.sql.warehouse.dir first for Spark Cli if set") {
+    val sparkWareHouseDir = Utils.createTempDir()
+    Utils.deleteRecursively(metastorePath)
+    try {
+      runCliWithin(
+        1.minute,
+        Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=$sparkWareHouseDir"))(
+        "desc database default;" -> sparkWareHouseDir.getAbsolutePath)
+    } finally {
+      Utils.deleteRecursively(metastorePath)
+      Utils.deleteRecursively(sparkWareHouseDir)
     }
   }
 

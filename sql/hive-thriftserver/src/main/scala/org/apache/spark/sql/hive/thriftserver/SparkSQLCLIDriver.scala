@@ -46,7 +46,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
-import org.apache.spark.sql.internal.{SharedState, StaticSQLConf}
+import org.apache.spark.sql.internal.SharedState
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -87,7 +87,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     val dummyHiveConf = new HiveConf(classOf[SessionState])
-    // a dummy CliSessionState to parse hive cmd line properties and other hive options,
+    // a dummy CliSessionState to parse hive command line options and other hive parameters,
     // e.g. database.
     val dummySessionState = new CliSessionState(dummyHiveConf)
 
@@ -105,14 +105,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cmdProperties = dummySessionState.cmdProperties.entrySet().asScala.map { e =>
       (e.getKey.toString, e.getValue.toString)
-    }.toMap
-
-    // We do not propagate metastore options to the execution copy of hive.
-    for ((k, v) <- cmdProperties if k != "javax.jdo.option.ConnectionURL") {
+    }.toMap.filterKeys(_ != "javax.jdo.option.ConnectionURL").map { case (k, v) =>
+      // We do not propagate metastore options to the execution copy of hive.
       // If the same property is configured by spark.hadoop.xxx, we ignore it and
       // obey settings from spark properties
-      sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + k, v)
-    }
+      (k, sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + k, v))
+    }.filterKeys(_ != "hive.metastore.warehouse.dir")
 
     // For hadoop and hive settings, the priority order is: (descending)
     // spark.hive.xxx -> spark.hadoop.xxx -> --hiveconf xxx(cmdProperties) -> xxx from hive-site.xml
@@ -158,7 +156,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
     if (StringUtils.isNotBlank(auxJars)) {
       val resourceLoader = SparkSQLEnv.sqlContext.sessionState.resourceLoader
-      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
+      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar)
     }
 
     // The class loader of CliSessionState's conf is current main thread's class loader
@@ -186,6 +184,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(dummySessionState)
+
+    cmdProperties.foreach { case (k, v) =>
+      SparkSQLEnv.sqlContext.setConf(k, v)
+    }
 
     if (dummySessionState.execString != null) {
       System.exit(cli.processLine(dummySessionState.execString))
