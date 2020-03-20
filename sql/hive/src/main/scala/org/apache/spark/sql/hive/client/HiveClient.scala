@@ -61,8 +61,10 @@ private[hive] trait HiveClient {
   /** Returns the names of tables in the given database that matches the given pattern. */
   def listTables(dbName: String, pattern: String): Seq[String]
 
-  /** Returns the names of tables with specific tableType in the given database that matches
-   * the given pattern. */
+  /**
+   * Returns the names of tables with specific tableType in the given database that matches
+   * the given pattern.
+   */
   def listTablesByType(
       dbName: String,
       pattern: String,

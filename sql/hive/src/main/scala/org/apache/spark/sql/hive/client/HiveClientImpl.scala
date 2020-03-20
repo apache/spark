@@ -760,7 +760,7 @@ private[hive] class HiveClientImpl(
       pattern: String,
       tableType: CatalogTableType): Seq[String] = withHiveState {
     try {
-      // Try with Hive API getTablesByType first, it's supported from Hive 2.3.
+      // Try with Hive API getTablesByType first, it's supported from Hive 2.3+.
       shim.getTablesByType(client, dbName, pattern, toHiveTableType(tableType))
     } catch {
       case _: UnsupportedOperationException =>
