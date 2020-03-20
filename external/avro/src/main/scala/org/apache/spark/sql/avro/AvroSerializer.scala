@@ -149,17 +149,15 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       case (TimestampType, LONG) => avroType.getLogicalType match {
           // For backward compatibility, if the Avro type is Long and it is not logical type
           // (the `null` case), output the timestamp value as with millisecond precision.
-          case null | _: TimestampMillis => (getter, ordinal) =>
+          case null | _: TimestampMillis if rebaseDateTime => (getter, ordinal) =>
             val micros = getter.getLong(ordinal)
-            val rebasedMicros = if (rebaseDateTime) {
-              DateTimeUtils.rebaseGregorianToJulianMicros(micros)
-            } else micros
+            val rebasedMicros = DateTimeUtils.rebaseGregorianToJulianMicros(micros)
             DateTimeUtils.microsToMillis(rebasedMicros)
-          case _: TimestampMicros => (getter, ordinal) =>
-            val micros = getter.getLong(ordinal)
-            if (rebaseDateTime) {
-              DateTimeUtils.rebaseGregorianToJulianMicros(micros)
-            } else micros
+          case null | _: TimestampMillis => (getter, ordinal) =>
+            DateTimeUtils.microsToMillis(getter.getLong(ordinal))
+          case _: TimestampMicros if rebaseDateTime => (getter, ordinal) =>
+            DateTimeUtils.rebaseGregorianToJulianMicros(getter.getLong(ordinal))
+          case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
           case other => throw new IncompatibleSchemaException(
             s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
         }
