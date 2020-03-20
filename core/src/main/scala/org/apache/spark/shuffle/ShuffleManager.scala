@@ -17,8 +17,6 @@
 
 package org.apache.spark.shuffle
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.{ShuffleDependency, TaskContext}
 
 /**

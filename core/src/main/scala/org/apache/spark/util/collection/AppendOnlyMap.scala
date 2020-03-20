@@ -71,7 +71,7 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
   // value type like CompactBuffer[_] and Array[CompactBuffer[_]]
   private var totalValueElements = 0
 
-  private val updateValueElementsIfNeeded: Map[Class[_], () => Unit] = Map(
+  private val updateValueElements: Map[Class[_], () => Unit] = Map(
     (classOf[CompactBuffer[_]], () => totalValueElements += 1),
     (classOf[Array[CompactBuffer[_]]], () => totalValueElements += 1)
   )
@@ -168,7 +168,9 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
       } else if (k.eq(curKey) || k.equals(curKey)) {
         val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
         data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
-        updateValueElementsIfNeeded(valueClassTag.runtimeClass)()
+        if (updateValueElements.isDefinedAt(valueClassTag.runtimeClass)) {
+          updateValueElements(valueClassTag.runtimeClass)()
+        }
         return newValue
       } else {
         val delta = i
