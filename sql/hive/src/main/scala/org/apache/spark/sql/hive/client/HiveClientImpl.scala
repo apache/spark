@@ -648,12 +648,12 @@ private[hive] class HiveClientImpl(
         if (parts.isEmpty && !ignoreIfNotExists) {
           throw new AnalysisException(
             s"No partition is dropped. One partition spec '$s' does not exist in table '$table' " +
-              s"database '$db'")
+            s"database '$db'")
         }
         // Check whether the partition we are going to drop is empty.
         // We make a dummy one for the empty partition. See [SPARK-29786] for more details.
         parts.foreach { partition =>
-          val partPath = partition.getDataLocation
+          val partPath = partition.getPartitionPath
           if (isEmptyPath(partPath)) {
             val fs = partPath.getFileSystem(conf)
             fs.mkdirs(partPath)
