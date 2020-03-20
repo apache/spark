@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.internal.SQLConf
@@ -1645,5 +1645,25 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
                     |   ) = 2""".stripMargin)
     checkAnswer(df, df2)
     checkAnswer(df, Nil)
+  }
+
+  test("AQE should not silently reuse subquery") {
+    Seq(true, false).foreach { reuse =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
+        withTempView("t1", "t2") {
+          spark.range(10).selectExpr("id as a").createOrReplaceTempView("t1")
+          spark.range(10).selectExpr("id as b").createOrReplaceTempView("t2")
+          val plan = stripAQEPlan(spark.sql(
+            "select b as b1, b as b2 from (select a, (select b from t2 where b = 51) b from t1)")
+            .queryExecution.executedPlan)
+          val subqueries = collectInPlanAndSubqueries(plan) {
+            case subqury: BaseSubqueryExec => subqury
+          }
+          assert(subqueries.size == 2)
+          assert(subqueries.map(_.id).toSet.size === (if (reuse) 1 else 2))
+        }
+      }
+    }
   }
 }

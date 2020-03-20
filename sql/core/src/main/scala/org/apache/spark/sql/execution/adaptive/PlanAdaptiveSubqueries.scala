@@ -17,18 +17,27 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{InSubqueryExec, SparkPlan, SubqueryExec}
 
-case class PlanAdaptiveSubqueries(subqueryMap: Map[Long, SubqueryExec]) extends Rule[SparkPlan] {
+case class PlanAdaptiveSubqueries(
+    subqueryMap: Map[Long, mutable.Queue[SubqueryExec]],
+    reuseSubquery: Boolean) extends Rule[SparkPlan] {
+
+  private def subqueryExec(id: Long): SubqueryExec = {
+    val subqueries = subqueryMap(id)
+    if (reuseSubquery) subqueries.head else subqueries.dequeue()
+  }
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case expressions.ScalarSubquery(_, _, exprId) =>
-        execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
+        execution.ScalarSubquery(subqueryExec(exprId.id), exprId)
       case expressions.InSubquery(values, ListQuery(_, _, exprId, _)) =>
         val expr = if (values.length == 1) {
           values.head
@@ -39,7 +48,7 @@ case class PlanAdaptiveSubqueries(subqueryMap: Map[Long, SubqueryExec]) extends 
             }
           )
         }
-        InSubqueryExec(expr, subqueryMap(exprId.id), exprId)
+        InSubqueryExec(expr, subqueryExec(exprId.id), exprId)
     }
   }
 }

@@ -51,7 +51,7 @@ case class InsertAdaptiveSparkPlan(
           // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
           val subqueryMap = buildSubqueryMap(plan)
-          val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
+          val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap, conf.subqueryReuseEnabled)
           val preprocessingRules = Seq(
             planSubqueriesRule)
           // Run pre-processing rules.
@@ -112,21 +112,24 @@ case class InsertAdaptiveSparkPlan(
    * For each sub-query, generate the adaptive execution plan for each sub-query by applying this
    * rule, or reuse the execution plan from another sub-query of the same semantics if possible.
    */
-  private def buildSubqueryMap(plan: SparkPlan): Map[Long, SubqueryExec] = {
-    val subqueryMap = mutable.HashMap.empty[Long, SubqueryExec]
+  private def buildSubqueryMap(plan: SparkPlan): Map[Long, mutable.Queue[SubqueryExec]] = {
+    val reuseSubquery = conf.subqueryReuseEnabled
+    val subqueryMap = mutable.HashMap.empty[Long, mutable.Queue[SubqueryExec]]
     plan.foreach(_.expressions.foreach(_.foreach {
       case expressions.ScalarSubquery(p, _, exprId)
-          if !subqueryMap.contains(exprId.id) =>
+          if !(reuseSubquery && subqueryMap.contains(exprId.id)) =>
         val executedPlan = compileSubquery(p)
         verifyAdaptivePlan(executedPlan, p)
         val subquery = SubqueryExec(s"subquery${exprId.id}", executedPlan)
-        subqueryMap.put(exprId.id, subquery)
+        val subqueries = subqueryMap.getOrElseUpdate(exprId.id, mutable.Queue())
+        subqueries.enqueue(subquery)
       case expressions.InSubquery(_, ListQuery(query, _, exprId, _))
-          if !subqueryMap.contains(exprId.id) =>
+          if !(reuseSubquery && subqueryMap.contains(exprId.id)) =>
         val executedPlan = compileSubquery(query)
         verifyAdaptivePlan(executedPlan, query)
         val subquery = SubqueryExec(s"subquery#${exprId.id}", executedPlan)
-        subqueryMap.put(exprId.id, subquery)
+        val subqueries = subqueryMap.getOrElseUpdate(exprId.id, mutable.Queue())
+        subqueries.enqueue(subquery)
       case _ =>
     }))
 
