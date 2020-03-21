@@ -41,14 +41,14 @@ private[feature] trait VarianceThresholdSelectorParams extends Params
   with HasFeaturesCol with HasOutputCol {
 
   /**
-   * Param for variance threshold. Features with a variance lower than or equal to this threshold
+   * Param for variance threshold. Features with a variance not greater than this threshold
    * will be removed. The default value is 0.0.
    *
    * @group param
    */
   @Since("3.1.0")
   final val varianceThreshold = new DoubleParam(this, "varianceThreshold",
-    "Param for variance threshold. Features with a variance lower than this threshold" +
+    "Param for variance threshold. Features with a variance not greater than this threshold" +
       " will be removed. The default value is 0.0.", ParamValidators.gtEq(0))
   setDefault(varianceThreshold -> 0.0)
 
@@ -59,7 +59,7 @@ private[feature] trait VarianceThresholdSelectorParams extends Params
 
 /**
  * Feature selector that removes all low-variance features. Features with a
- * variance lower than the threshold will be removed. The default is to keep
+ * variance not greater than the threshold will be removed. The default is to keep
  * all features with non-zero variance, i.e. remove the features that have the
  * same value in all samples.
  */
@@ -95,8 +95,9 @@ with DefaultParamsWritable {
 
     val numFeatures = maxs.size
     val indices = Array.tabulate(numFeatures) { i =>
+      // Use peak-to-peak to avoid numeric precision issues for constant features
       (i, if (maxs(i) == mins(i)) 0.0 else variances(i))
-    } .filter(_._2 > getVarianceThreshold).map(_._1)
+    }.filter(_._2 > getVarianceThreshold).map(_._1)
     copyValues(new VarianceThresholdSelectorModel(uid, indices.sorted)
       .setParent(this))
   }
