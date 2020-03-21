@@ -977,11 +977,16 @@ object DateTimeUtils {
     val localDateTime = LocalDateTime.of(
       cal.get(Calendar.YEAR),
       cal.get(Calendar.MONTH) + 1,
-      cal.get(Calendar.DAY_OF_MONTH),
+      // The number of days will be added later to handle non-existing
+      // Julian dates in Proleptic Gregorian calendar.
+      // For example, 1000-02-29 exists in Julian calendar because 1000
+      // is a leap year but it is not a leap year in Gregorian calendar.
+      1,
       cal.get(Calendar.HOUR_OF_DAY),
       cal.get(Calendar.MINUTE),
       cal.get(Calendar.SECOND),
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
+      .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
     instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
   }
 
@@ -1005,7 +1010,12 @@ object DateTimeUtils {
     val localDate = LocalDate.of(
       utcCal.get(Calendar.YEAR),
       utcCal.get(Calendar.MONTH) + 1,
-      utcCal.get(Calendar.DAY_OF_MONTH))
+      // The number of days will be added later to handle non-existing
+      // Julian dates in Proleptic Gregorian calendar.
+      // For example, 1000-02-29 exists in Julian calendar because 1000
+      // is a leap year but it is not a leap year in Gregorian calendar.
+      1)
+      .plusDays(utcCal.get(Calendar.DAY_OF_MONTH) - 1)
     Math.toIntExact(localDate.toEpochDay)
   }
 
