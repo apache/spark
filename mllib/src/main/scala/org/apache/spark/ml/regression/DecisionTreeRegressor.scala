@@ -22,7 +22,6 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -43,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Since("1.4.0")
 class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
+  extends Regressor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeRegressorParams with DefaultParamsWritable {
 
   @Since("1.4.0")
@@ -117,6 +116,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val instances = extractInstances(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
+    require(!strategy.bootstrap, "DecisionTreeRegressor does not need bootstrap sampling")
 
     instr.logPipelineStage(this)
     instr.logDataset(instances)
@@ -159,7 +159,7 @@ class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
     override val rootNode: Node,
     override val numFeatures: Int)
-  extends PredictionModel[Vector, DecisionTreeRegressionModel]
+  extends RegressionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with DecisionTreeRegressorParams with MLWritable with Serializable {
 
   /** @group setParam */

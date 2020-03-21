@@ -284,7 +284,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         == Physical Plan ==
         * Scan ExistingRDD (1)
         (1) Scan ExistingRDD [codegen id : 1]
-        Output: [age#0, name#1]
+        Output [2]: [age#0, name#1]
+        ...
 
         .. versionchanged:: 3.0.0
            Added optional argument `mode` to specify the expected output format of plans.
@@ -604,6 +605,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         return self.limit(num).collect()
+
+    @ignore_unicode_prefix
+    @since(3.0)
+    def tail(self, num):
+        """
+        Returns the last ``num`` rows as a :class:`list` of :class:`Row`.
+
+        Running tail requires moving data into the application's driver process, and doing so with
+        a very large ``num`` can crash the driver process with OutOfMemoryError.
+
+        >>> df.tail(1)
+        [Row(age=5, name=u'Bob')]
+        """
+        with SCCallSiteSync(self._sc):
+            sock_info = self._jdf.tailToPython(num)
+        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
 
     @since(1.3)
     def foreach(self, f):
@@ -1016,7 +1033,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df_as1 = df.alias("df_as1")
         >>> df_as2 = df.alias("df_as2")
         >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
-        >>> joined_df.select("df_as1.name", "df_as2.name", "df_as2.age").collect()
+        >>> joined_df.select("df_as1.name", "df_as2.name", "df_as2.age") \
+                .sort(desc("df_as1.name")).collect()
         [Row(name=u'Bob', name=u'Bob', age=5), Row(name=u'Alice', name=u'Alice', age=2)]
         """
         assert isinstance(alias, basestring), "alias should be a string"
@@ -1057,11 +1075,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             ``anti``, ``leftanti`` and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
+        >>> from pyspark.sql.functions import desc
+        >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height) \
+                .sort(desc("name")).collect()
+        [Row(name=u'Bob', height=85), Row(name=u'Alice', height=None), Row(name=None, height=80)]
 
-        >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
-        [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
-
-        >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
+        >>> df.join(df2, 'name', 'outer').select('name', 'height').sort(desc("name")).collect()
         [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
 
         >>> cond = [df.name == df3.name, df.age == df3.age]
@@ -2134,6 +2153,52 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         assert isinstance(result, DataFrame), "Func returned an instance of type [%s], " \
                                               "should have been DataFrame." % type(result)
         return result
+
+    @since(3.1)
+    def sameSemantics(self, other):
+        """
+        Returns `True` when the logical query plans inside both :class:`DataFrame`\\s are equal and
+        therefore return same results.
+
+        .. note:: The equality comparison here is simplified by tolerating the cosmetic differences
+            such as attribute names.
+
+        .. note:: This API can compare both :class:`DataFrame`\\s very fast but can still return
+            `False` on the :class:`DataFrame` that return the same results, for instance, from
+            different plans. Such false negative semantic can be useful when caching as an example.
+
+        .. note:: DeveloperApi
+
+        >>> df1 = spark.range(10)
+        >>> df2 = spark.range(10)
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col1", df2.id * 2))
+        True
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col1", df2.id + 2))
+        False
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col0", df2.id * 2))
+        True
+        """
+        if not isinstance(other, DataFrame):
+            raise ValueError("other parameter should be of DataFrame; however, got %s"
+                             % type(other))
+        return self._jdf.sameSemantics(other._jdf)
+
+    @since(3.1)
+    def semanticHash(self):
+        """
+        Returns a hash code of the logical query plan against this :class:`DataFrame`.
+
+        .. note:: Unlike the standard hash code, the hash is calculated against the query plan
+            simplified by tolerating the cosmetic differences such as attribute names.
+
+        .. note:: DeveloperApi
+
+        >>> spark.range(10).selectExpr("id as col0").semanticHash()  # doctest: +SKIP
+        1855039936
+        >>> spark.range(10).selectExpr("id as col1").semanticHash()  # doctest: +SKIP
+        1855039936
+        """
+        return self._jdf.semanticHash()
 
     where = copy_func(
         filter,

@@ -415,18 +415,6 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
         """
         return self._set(bucketLength=value)
 
-    def setInputCol(self, value):
-        """
-        Sets the value of :py:attr:`inputCol`.
-        """
-        return self._set(inputCol=value)
-
-    def setOutputCol(self, value):
-        """
-        Sets the value of :py:attr:`outputCol`.
-        """
-        return self._set(outputCol=value)
-
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
@@ -448,20 +436,6 @@ class BucketedRandomProjectionLSHModel(_LSHModel, _BucketedRandomProjectionLSHPa
 
     .. versionadded:: 2.2.0
     """
-
-    @since("3.0.0")
-    def setInputCol(self, value):
-        """
-        Sets the value of :py:attr:`inputCol`.
-        """
-        return self._set(inputCol=value)
-
-    @since("3.0.0")
-    def setOutputCol(self, value):
-        """
-        Sets the value of :py:attr:`outputCol`.
-        """
-        return self._set(outputCol=value)
 
 
 @inherit_doc
@@ -872,20 +846,6 @@ class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, Ja
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
-
-    @since("3.0.0")
-    def setMinTF(self, value):
-        """
-        Sets the value of :py:attr:`minTF`.
-        """
-        return self._set(minTF=value)
-
-    @since("3.0.0")
-    def setBinary(self, value):
-        """
-        Sets the value of :py:attr:`binary`.
-        """
-        return self._set(binary=value)
 
     @classmethod
     @since("2.4.0")
@@ -1507,7 +1467,7 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     """
     Imputation estimator for completing missing values, either using the mean or the median
     of the columns in which the missing values are located. The input columns should be of
-    DoubleType or FloatType. Currently Imputer does not support categorical features and
+    numeric type. Currently Imputer does not support categorical features and
     possibly creates incorrect values for a categorical feature.
 
     Note that the mean/median value is computed after filtering out missing values.
@@ -1713,6 +1673,20 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable, JavaMLWritable):
         Sets the value of :py:attr:`outputCols`.
         """
         return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.2.0")
@@ -2554,6 +2528,20 @@ class OneHotEncoderModel(JavaModel, _OneHotEncoderParams, JavaMLReadable, JavaML
         Sets the value of :py:attr:`outputCols`.
         """
         return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @since("3.0.0")
     def setHandleInvalid(self, value):

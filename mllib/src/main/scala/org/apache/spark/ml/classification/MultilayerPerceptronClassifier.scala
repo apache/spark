@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -34,7 +32,7 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 /** Params for Multilayer Perceptron. */
 private[classification] trait MultilayerPerceptronParams extends ProbabilisticClassifierParams
-  with HasSeed with HasMaxIter with HasTol with HasStepSize with HasSolver {
+  with HasSeed with HasMaxIter with HasTol with HasStepSize with HasSolver with HasBlockSize {
 
   import MultilayerPerceptronClassifier._
 
@@ -53,26 +51,6 @@ private[classification] trait MultilayerPerceptronParams extends ProbabilisticCl
   /** @group getParam */
   @Since("1.5.0")
   final def getLayers: Array[Int] = $(layers)
-
-  /**
-   * Block size for stacking input data in matrices to speed up the computation.
-   * Data is stacked within partitions. If block size is more than remaining data in
-   * a partition then it is adjusted to the size of this data.
-   * Recommended size is between 10 and 1000.
-   * Default: 128
-   *
-   * @group expertParam
-   */
-  @Since("1.5.0")
-  final val blockSize: IntParam = new IntParam(this, "blockSize",
-    "Block size for stacking input data in matrices. Data is stacked within partitions." +
-      " If block size is more than remaining data in a partition then " +
-      "it is adjusted to the size of this data. Recommended size is between 10 and 1000",
-    ParamValidators.gt(0))
-
-  /** @group expertGetParam */
-  @Since("1.5.0")
-  final def getBlockSize: Int = $(blockSize)
 
   /**
    * The solver algorithm for optimization.

@@ -1105,6 +1105,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toLong(LongWrapper toLongResult) {
+    return toLong(toLongResult, true);
+  }
+
+  private boolean toLong(LongWrapper toLongResult, boolean allowDecimal) {
     int offset = 0;
     while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
     if (offset == this.numBytes) return false;
@@ -1129,7 +1133,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     while (offset <= end) {
       b = getByte(offset);
       offset++;
-      if (b == separator) {
+      if (b == separator && allowDecimal) {
         // We allow decimals and will return a truncated integral in that case.
         // Therefore we won't throw an exception here (checking the fractional
         // part happens below.)
@@ -1198,6 +1202,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toInt(IntWrapper intWrapper) {
+    return toInt(intWrapper, true);
+  }
+
+  private boolean toInt(IntWrapper intWrapper, boolean allowDecimal) {
     int offset = 0;
     while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
     if (offset == this.numBytes) return false;
@@ -1222,7 +1230,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     while (offset <= end) {
       b = getByte(offset);
       offset++;
-      if (b == separator) {
+      if (b == separator && allowDecimal) {
         // We allow decimals and will return a truncated integral in that case.
         // Therefore we won't throw an exception here (checking the fractional
         // part happens below.)
@@ -1276,9 +1284,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toInt(intWrapper)) {
       int intValue = intWrapper.value;
       short result = (short) intValue;
-      if (result == intValue) {
-        return true;
-      }
+      return result == intValue;
     }
     return false;
   }
@@ -1287,11 +1293,55 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toInt(intWrapper)) {
       int intValue = intWrapper.value;
       byte result = (byte) intValue;
-      if (result == intValue) {
-        return true;
-      }
+      return result == intValue;
     }
     return false;
+  }
+
+  /**
+   * Parses UTF8String(trimmed if needed) to long. This method is used when ANSI is enabled.
+   *
+   * @return If string contains valid numeric value then it returns the long value otherwise a
+   * NumberFormatException  is thrown.
+   */
+  public long toLongExact() {
+    LongWrapper result = new LongWrapper();
+    if (toLong(result, false)) {
+      return result.value;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  /**
+   * Parses UTF8String(trimmed if needed) to int. This method is used when ANSI is enabled.
+   *
+   * @return If string contains valid numeric value then it returns the int value otherwise a
+   * NumberFormatException  is thrown.
+   */
+  public int toIntExact() {
+    IntWrapper result = new IntWrapper();
+    if (toInt(result, false)) {
+      return result.value;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  public short toShortExact() {
+    int value = this.toIntExact();
+    short result = (short) value;
+    if (result == value) {
+      return result;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  public byte toByteExact() {
+    int value = this.toIntExact();
+    byte result = (byte) value;
+    if (result == value) {
+      return result;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
   }
 
   @Override

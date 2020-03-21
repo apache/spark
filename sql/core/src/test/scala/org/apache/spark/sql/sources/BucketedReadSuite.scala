@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -42,7 +42,7 @@ import org.apache.spark.util.collection.BitSet
 class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
   }
 }
 
@@ -100,6 +100,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  private def getFileScan(plan: SparkPlan): FileSourceScanExec = {
+    val fileScan = plan.collect { case f: FileSourceScanExec => f }
+    assert(fileScan.nonEmpty, plan)
+    fileScan.head
+  }
+
   // To verify if the bucket pruning works, this function checks two conditions:
   //   1) Check if the pruned buckets (before filtering) are empty.
   //   2) Verify the final result is the same as the expected one
@@ -119,8 +125,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
       val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
-      val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
-      assert(rdd.isDefined, plan)
+      val fileScan = getFileScan(plan)
 
       // if nothing should be pruned, skip the pruning test
       if (bucketValues.nonEmpty) {
@@ -128,7 +133,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         bucketValues.foreach { value =>
           matchedBuckets.set(BucketingUtils.getBucketIdFromValue(bucketColumn, numBuckets, value))
         }
-        val invalidBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+        val invalidBuckets = fileScan.execute().mapPartitionsWithIndex { case (index, iter) =>
           // return indexes of partitions that should have been pruned and are not empty
           if (!matchedBuckets.get(index % numBuckets) && iter.nonEmpty) {
             Iterator(index)
@@ -297,10 +302,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
       val plan = bucketedDataFrame.queryExecution.executedPlan
-      val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
-      assert(rdd.isDefined, plan)
+      val fileScan = getFileScan(plan)
 
-      val emptyBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+      val emptyBuckets = fileScan.execute().mapPartitionsWithIndex { case (index, iter) =>
         // return indexes of empty partitions
         if (iter.isEmpty) {
           Iterator(index)
@@ -604,6 +608,32 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("sort should not be introduced when aliases are used") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t") {
+        df1.repartition(1).write.format("parquet").bucketBy(8, "i").sortBy("i").saveAsTable("t")
+        val t1 = spark.table("t")
+        val t2 = t1.selectExpr("i as ii")
+        val plan = t1.join(t2, t1("i") === t2("ii")).queryExecution.executedPlan
+        assert(plan.collect { case sort: SortExec => sort }.isEmpty)
+      }
+    }
+  }
+
+  test("bucket join should work with SubqueryAlias plan") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t") {
+        withView("v") {
+          spark.range(20).selectExpr("id as i").write.bucketBy(8, "i").saveAsTable("t")
+          sql("CREATE VIEW v AS SELECT * FROM t").collect()
+
+          val plan = sql("SELECT * FROM t a JOIN v b ON a.i = b.i").queryExecution.executedPlan
+          assert(plan.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
+        }
+      }
+    }
+  }
+
   test("avoid shuffle when grouping keys are a super-set of bucket keys") {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
@@ -748,10 +778,13 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
 
-      checkAnswer(spark.table("bucketed_table").select("j"), df1.select("j"))
+      val scanDF = spark.table("bucketed_table").select("j")
+      assert(!getFileScan(scanDF.queryExecution.executedPlan).bucketedScan)
+      checkAnswer(scanDF, df1.select("j"))
 
-      checkAnswer(spark.table("bucketed_table").groupBy("j").agg(max("k")),
-        df1.groupBy("j").agg(max("k")))
+      val aggDF = spark.table("bucketed_table").groupBy("j").agg(max("k"))
+      assert(!getFileScan(aggDF.queryExecution.executedPlan).bucketedScan)
+      checkAnswer(aggDF, df1.groupBy("j").agg(max("k")))
     }
   }
 
@@ -807,7 +840,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   test("SPARK-29655 Read bucketed tables obeys spark.sql.shuffle.partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key -> "7")  {
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7")  {
       val bucketSpec = Some(BucketSpec(6, Seq("i", "j"), Nil))
       Seq(false, true).foreach { enableAdaptive =>
         withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enableAdaptive") {

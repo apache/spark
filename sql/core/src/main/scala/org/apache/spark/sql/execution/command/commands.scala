@@ -17,21 +17,21 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.UUID
+import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.execution.{ExplainMode, LeafExecNode, QueryExecution, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.debug._
+import org.apache.spark.sql.connector.ExternalCommandRunner
+import org.apache.spark.sql.execution.{ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.execution.streaming.IncrementalExecution
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -181,5 +181,23 @@ case class StreamingExplainCommand(
     Seq(Row(outputString))
   } catch { case cause: TreeNodeException[_] =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
+  }
+}
+
+/**
+ * Used to execute an arbitrary string command inside an external execution engine
+ * rather than Spark. Please check [[ExternalCommandRunner]] for more details.
+ */
+case class ExternalCommandExecutor(
+    runner: ExternalCommandRunner,
+    command: String,
+    options: Map[String, String]) extends RunnableCommand {
+
+  override def output: Seq[Attribute] =
+    Seq(AttributeReference("command_output", StringType)())
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val output = runner.executeCommand(command, new CaseInsensitiveStringMap(options.asJava))
+    output.map(Row(_))
   }
 }

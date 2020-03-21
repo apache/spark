@@ -342,9 +342,6 @@ class GBTClassificationModel private[ml](
     }
   }
 
-  /** Number of trees in ensemble */
-  val numTrees: Int = trees.length
-
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTClassificationModel = {
     copyValues(new GBTClassificationModel(uid, _trees, _treeWeights, numFeatures, numClasses),
@@ -353,7 +350,7 @@ class GBTClassificationModel private[ml](
 
   @Since("1.4.0")
   override def toString: String = {
-    s"GBTClassificationModel: uid = $uid, numTrees=$numTrees, numClasses=$numClasses, " +
+    s"GBTClassificationModel: uid = $uid, numTrees=$getNumTrees, numClasses=$numClasses, " +
       s"numFeatures=$numFeatures"
   }
 
@@ -374,7 +371,7 @@ class GBTClassificationModel private[ml](
   /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    blas.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
   }
 
   /** (private[ml]) Convert to a model in the old API */

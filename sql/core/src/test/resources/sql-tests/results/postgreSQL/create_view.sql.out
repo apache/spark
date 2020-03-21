@@ -2,69 +2,69 @@
 -- Number of queries: 195
 
 
--- !query 0
+-- !query
 CREATE TABLE emp (
   name string,
   age int,
   salary int,
   manager string
 ) USING parquet
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 CREATE VIEW toyemp AS
    SELECT name, age, /* location ,*/ 12*salary AS annualsal
    FROM emp
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 DROP VIEW toyemp
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 DROP TABLE emp
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
-CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20))
--- !query 4 schema
+-- !query
+CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20)) USING PARQUET
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 CREATE VIEW key_dependent_view AS
    SELECT * FROM view_base_table GROUP BY key
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-expression 'default.view_base_table.`data`' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;
+expression 'spark_catalog.default.view_base_table.`data`' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;
 
 
--- !query 6
+-- !query
 CREATE VIEW key_dependent_view_no_cols AS
    SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 no viable alternative at input 'FROM'(line 2, pos 10)
@@ -75,174 +75,174 @@ CREATE VIEW key_dependent_view_no_cols AS
 ----------^^^
 
 
--- !query 7
+-- !query
 CREATE TABLE viewtest_tbl (a int, b int) using parquet
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 INSERT INTO viewtest_tbl VALUES (5, 10), (10, 15), (15, 20), (20, 25)
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 
 
 
--- !query 9
+-- !query
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT * FROM viewtest_tbl
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 
 
 
--- !query 10
+-- !query
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT * FROM viewtest_tbl WHERE a > 10
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 
 
 
--- !query 11
+-- !query
 SELECT * FROM viewtest
--- !query 11 schema
+-- !query schema
 struct<a:int,b:int>
--- !query 11 output
+-- !query output
 15	20
 20	25
 
 
--- !query 12
+-- !query
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a, b FROM viewtest_tbl WHERE a > 5 ORDER BY b DESC
--- !query 12 schema
+-- !query schema
 struct<>
--- !query 12 output
+-- !query output
 
 
 
--- !query 13
+-- !query
 SELECT * FROM viewtest
--- !query 13 schema
+-- !query schema
 struct<a:int,b:int>
--- !query 13 output
+-- !query output
 20	25
 15	20
 10	15
 
 
--- !query 14
+-- !query
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a FROM viewtest_tbl WHERE a <> 20
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 
 
 
--- !query 15
+-- !query
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT 1, * FROM viewtest_tbl
--- !query 15 schema
+-- !query schema
 struct<>
--- !query 15 output
+-- !query output
 
 
 
--- !query 16
+-- !query
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a, decimal(b) FROM viewtest_tbl
--- !query 16 schema
+-- !query schema
 struct<>
--- !query 16 output
+-- !query output
 
 
 
--- !query 17
+-- !query
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a, b, 0 AS c FROM viewtest_tbl
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 
 
 
--- !query 18
+-- !query
 DROP VIEW viewtest
--- !query 18 schema
+-- !query schema
 struct<>
--- !query 18 output
+-- !query output
 
 
 
--- !query 19
+-- !query
 DROP TABLE viewtest_tbl
--- !query 19 schema
+-- !query schema
 struct<>
--- !query 19 output
+-- !query output
 
 
 
--- !query 20
+-- !query
 CREATE SCHEMA temp_view_test
--- !query 20 schema
+-- !query schema
 struct<>
--- !query 20 output
+-- !query output
 
 
 
--- !query 21
+-- !query
 CREATE TABLE temp_view_test.base_table (a int, id int) using parquet
--- !query 21 schema
+-- !query schema
 struct<>
--- !query 21 output
+-- !query output
 
 
 
--- !query 22
+-- !query
 CREATE TABLE temp_view_test.base_table2 (a int, id int) using parquet
--- !query 22 schema
+-- !query schema
 struct<>
--- !query 22 output
+-- !query output
 
 
 
--- !query 23
+-- !query
 USE temp_view_test
--- !query 23 schema
+-- !query schema
 struct<>
--- !query 23 output
+-- !query output
 
 
 
--- !query 24
+-- !query
 CREATE TEMPORARY VIEW temp_table AS SELECT * FROM VALUES
   (1, 1) as temp_table(a, id)
--- !query 24 schema
+-- !query schema
 struct<>
--- !query 24 output
+-- !query output
 
 
 
--- !query 25
+-- !query
 CREATE VIEW v1 AS SELECT * FROM base_table
--- !query 25 schema
+-- !query schema
 struct<>
--- !query 25 output
+-- !query output
 
 
 
--- !query 26
+-- !query
 DESC TABLE EXTENDED v1
--- !query 26 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 26 output
+-- !query output
 a                   	int                 	                    
 id                  	int                 	                    
                     	                    	                    
@@ -260,45 +260,45 @@ View Query Output Columns	[a, id]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
--- !query 27
+-- !query
 CREATE VIEW v1_temp AS SELECT * FROM temp_table
--- !query 27 schema
+-- !query schema
 struct<>
--- !query 27 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v1_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temp_view_test`.`v1_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 28
+-- !query
 CREATE TEMP VIEW v2_temp AS SELECT * FROM base_table
--- !query 28 schema
+-- !query schema
 struct<>
--- !query 28 output
+-- !query output
 
 
 
--- !query 29
+-- !query
 DESC TABLE EXTENDED v2_temp
--- !query 29 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 29 output
+-- !query output
 a                   	int                 	                    
 id                  	int
 
 
--- !query 30
+-- !query
 CREATE VIEW temp_view_test.v2 AS SELECT * FROM base_table
--- !query 30 schema
+-- !query schema
 struct<>
--- !query 30 output
+-- !query output
 
 
 
--- !query 31
+-- !query
 DESC TABLE EXTENDED temp_view_test.v2
--- !query 31 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 31 output
+-- !query output
 a                   	int                 	                    
 id                  	int                 	                    
                     	                    	                    
@@ -316,31 +316,31 @@ View Query Output Columns	[a, id]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
--- !query 32
+-- !query
 CREATE VIEW temp_view_test.v3_temp AS SELECT * FROM temp_table
--- !query 32 schema
+-- !query schema
 struct<>
--- !query 32 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Not allowed to create a permanent view `temp_view_test`.`v3_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 33
+-- !query
 CREATE VIEW v3 AS
     SELECT t1.a AS t1_a, t2.a AS t2_a
     FROM base_table t1, base_table2 t2
     WHERE t1.id = t2.id
--- !query 33 schema
+-- !query schema
 struct<>
--- !query 33 output
+-- !query output
 
 
 
--- !query 34
+-- !query
 DESC TABLE EXTENDED v3
--- !query 34 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 34 output
+-- !query output
 t1_a                	int                 	                    
 t2_a                	int                 	                    
                     	                    	                    
@@ -362,43 +362,43 @@ View Query Output Columns	[t1_a, t2_a]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=t1_a, view.query.out.numCols=2, view.query.out.col.1=t2_a, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
--- !query 35
+-- !query
 CREATE VIEW v4_temp AS
     SELECT t1.a AS t1_a, t2.a AS t2_a
     FROM base_table t1, temp_table t2
     WHERE t1.id = t2.id
--- !query 35 schema
+-- !query schema
 struct<>
--- !query 35 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v4_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temp_view_test`.`v4_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 36
+-- !query
 CREATE VIEW v5_temp AS
     SELECT t1.a AS t1_a, t2.a AS t2_a, t3.a AS t3_a
     FROM base_table t1, base_table2 t2, temp_table t3
     WHERE t1.id = t2.id and t2.id = t3.id
--- !query 36 schema
+-- !query schema
 struct<>
--- !query 36 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v5_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temp_view_test`.`v5_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 37
+-- !query
 CREATE VIEW v4 AS SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)
--- !query 37 schema
+-- !query schema
 struct<>
--- !query 37 output
+-- !query output
 
 
 
--- !query 38
+-- !query
 DESC TABLE EXTENDED v4
--- !query 38 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 38 output
+-- !query output
 a                   	int                 	                    
 id                  	int                 	                    
                     	                    	                    
@@ -416,19 +416,19 @@ View Query Output Columns	[a, id]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
--- !query 39
+-- !query
 CREATE VIEW v5 AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2
--- !query 39 schema
+-- !query schema
 struct<>
--- !query 39 output
+-- !query output
 
 
 
--- !query 40
+-- !query
 DESC TABLE EXTENDED v5
--- !query 40 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 40 output
+-- !query output
 id                  	int                 	                    
 a                   	int                 	                    
                     	                    	                    
@@ -446,19 +446,19 @@ View Query Output Columns	[id, a]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=id, view.query.out.numCols=2, view.query.out.col.1=a, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
--- !query 41
+-- !query
 CREATE VIEW v6 AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)
--- !query 41 schema
+-- !query schema
 struct<>
--- !query 41 output
+-- !query output
 
 
 
--- !query 42
+-- !query
 DESC TABLE EXTENDED v6
--- !query 42 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 42 output
+-- !query output
 a                   	int                 	                    
 id                  	int                 	                    
                     	                    	                    
@@ -476,19 +476,19 @@ View Query Output Columns	[a, id]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
--- !query 43
+-- !query
 CREATE VIEW v7 AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)
--- !query 43 schema
+-- !query schema
 struct<>
--- !query 43 output
+-- !query output
 
 
 
--- !query 44
+-- !query
 DESC TABLE EXTENDED v7
--- !query 44 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 44 output
+-- !query output
 a                   	int                 	                    
 id                  	int                 	                    
                     	                    	                    
@@ -506,19 +506,19 @@ View Query Output Columns	[a, id]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
--- !query 45
+-- !query
 CREATE VIEW v8 AS SELECT * FROM base_table WHERE EXISTS (SELECT 1)
--- !query 45 schema
+-- !query schema
 struct<>
--- !query 45 output
+-- !query output
 
 
 
--- !query 46
+-- !query
 DESC TABLE EXTENDED v8
--- !query 46 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 46 output
+-- !query output
 a                   	int                 	                    
 id                  	int                 	                    
                     	                    	                    
@@ -536,123 +536,123 @@ View Query Output Columns	[a, id]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
--- !query 47
+-- !query
 CREATE VIEW v6_temp AS SELECT * FROM base_table WHERE id IN (SELECT id FROM temp_table)
--- !query 47 schema
+-- !query schema
 struct<>
--- !query 47 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v6_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temp_view_test`.`v6_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 48
+-- !query
 CREATE VIEW v7_temp AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM temp_table) t2
--- !query 48 schema
+-- !query schema
 struct<>
--- !query 48 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v7_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temp_view_test`.`v7_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 49
+-- !query
 CREATE VIEW v8_temp AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM temp_table)
--- !query 49 schema
+-- !query schema
 struct<>
--- !query 49 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v8_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temp_view_test`.`v8_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 50
+-- !query
 CREATE VIEW v9_temp AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM temp_table)
--- !query 50 schema
+-- !query schema
 struct<>
--- !query 50 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v9_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `temp_view_test`.`v9_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 51
+-- !query
 CREATE VIEW v10_temp AS SELECT * FROM v7_temp
--- !query 51 schema
+-- !query schema
 struct<>
--- !query 51 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Table or view not found: v7_temp; line 1 pos 38
 
 
--- !query 52
+-- !query
 CREATE VIEW v11_temp AS SELECT t1.id, t2.a FROM base_table t1, v10_temp t2
--- !query 52 schema
+-- !query schema
 struct<>
--- !query 52 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Table or view not found: v10_temp; line 1 pos 63
 
 
--- !query 53
+-- !query
 CREATE VIEW v12_temp AS SELECT true FROM v11_temp
--- !query 53 schema
+-- !query schema
 struct<>
--- !query 53 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Table or view not found: v11_temp; line 1 pos 41
 
 
--- !query 54
+-- !query
 CREATE SCHEMA testviewschm2
--- !query 54 schema
+-- !query schema
 struct<>
--- !query 54 output
+-- !query output
 
 
 
--- !query 55
+-- !query
 USE testviewschm2
--- !query 55 schema
+-- !query schema
 struct<>
--- !query 55 output
+-- !query output
 
 
 
--- !query 56
+-- !query
 CREATE TABLE t1 (num int, name string) using parquet
--- !query 56 schema
+-- !query schema
 struct<>
--- !query 56 output
+-- !query output
 
 
 
--- !query 57
+-- !query
 CREATE TABLE t2 (num2 int, value string) using parquet
--- !query 57 schema
+-- !query schema
 struct<>
--- !query 57 output
+-- !query output
 
 
 
--- !query 58
+-- !query
 CREATE TEMP VIEW tt AS SELECT * FROM VALUES
   (1, 'a') AS tt(num2, value)
--- !query 58 schema
+-- !query schema
 struct<>
--- !query 58 output
+-- !query output
 
 
 
--- !query 59
+-- !query
 CREATE VIEW nontemp1 AS SELECT * FROM t1 CROSS JOIN t2
--- !query 59 schema
+-- !query schema
 struct<>
--- !query 59 output
+-- !query output
 
 
 
--- !query 60
+-- !query
 DESC TABLE EXTENDED nontemp1
--- !query 60 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 60 output
+-- !query output
 num                 	int                 	                    
 name                	string              	                    
 num2                	int                 	                    
@@ -672,28 +672,28 @@ View Query Output Columns	[num, name, num2, value]
 Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
--- !query 61
+-- !query
 CREATE VIEW temporal1 AS SELECT * FROM t1 CROSS JOIN tt
--- !query 61 schema
+-- !query schema
 struct<>
--- !query 61 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal1` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `testviewschm2`.`temporal1` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 62
+-- !query
 CREATE VIEW nontemp2 AS SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2
--- !query 62 schema
+-- !query schema
 struct<>
--- !query 62 output
+-- !query output
 
 
 
--- !query 63
+-- !query
 DESC TABLE EXTENDED nontemp2
--- !query 63 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 63 output
+-- !query output
 num                 	int                 	                    
 name                	string              	                    
 num2                	int                 	                    
@@ -713,28 +713,28 @@ View Query Output Columns	[num, name, num2, value]
 Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
--- !query 64
+-- !query
 CREATE VIEW temporal2 AS SELECT * FROM t1 INNER JOIN tt ON t1.num = tt.num2
--- !query 64 schema
+-- !query schema
 struct<>
--- !query 64 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal2` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `testviewschm2`.`temporal2` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 65
+-- !query
 CREATE VIEW nontemp3 AS SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2
--- !query 65 schema
+-- !query schema
 struct<>
--- !query 65 output
+-- !query output
 
 
 
--- !query 66
+-- !query
 DESC TABLE EXTENDED nontemp3
--- !query 66 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 66 output
+-- !query output
 num                 	int                 	                    
 name                	string              	                    
 num2                	int                 	                    
@@ -754,28 +754,28 @@ View Query Output Columns	[num, name, num2, value]
 Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
--- !query 67
+-- !query
 CREATE VIEW temporal3 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2
--- !query 67 schema
+-- !query schema
 struct<>
--- !query 67 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal3` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `testviewschm2`.`temporal3` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 68
+-- !query
 CREATE VIEW nontemp4 AS SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'
--- !query 68 schema
+-- !query schema
 struct<>
--- !query 68 output
+-- !query output
 
 
 
--- !query 69
+-- !query
 DESC TABLE EXTENDED nontemp4
--- !query 69 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 69 output
+-- !query output
 num                 	int                 	                    
 name                	string              	                    
 num2                	int                 	                    
@@ -795,87 +795,87 @@ View Query Output Columns	[num, name, num2, value]
 Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
--- !query 70
+-- !query
 CREATE VIEW temporal4 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2 AND tt.value = 'xxx'
--- !query 70 schema
+-- !query schema
 struct<>
--- !query 70 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal4` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `testviewschm2`.`temporal4` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 71
+-- !query
 CREATE VIEW temporal5 AS SELECT * FROM t1 WHERE num IN (SELECT num FROM t1 WHERE EXISTS (SELECT 1 FROM tt))
--- !query 71 schema
+-- !query schema
 struct<>
--- !query 71 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `temporal5` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
+Not allowed to create a permanent view `testviewschm2`.`temporal5` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW;
 
 
--- !query 72
+-- !query
 CREATE TABLE tbl1 ( a int, b int) using parquet
--- !query 72 schema
+-- !query schema
 struct<>
--- !query 72 output
+-- !query output
 
 
 
--- !query 73
+-- !query
 CREATE TABLE tbl2 (c int, d int) using parquet
--- !query 73 schema
+-- !query schema
 struct<>
--- !query 73 output
+-- !query output
 
 
 
--- !query 74
+-- !query
 CREATE TABLE tbl3 (e int, f int) using parquet
--- !query 74 schema
+-- !query schema
 struct<>
--- !query 74 output
+-- !query output
 
 
 
--- !query 75
+-- !query
 CREATE TABLE tbl4 (g int, h int) using parquet
--- !query 75 schema
+-- !query schema
 struct<>
--- !query 75 output
+-- !query output
 
 
 
--- !query 76
+-- !query
 CREATE TABLE tmptbl (i int, j int) using parquet
--- !query 76 schema
+-- !query schema
 struct<>
--- !query 76 output
+-- !query output
 
 
 
--- !query 77
+-- !query
 INSERT INTO tmptbl VALUES (1, 1)
--- !query 77 schema
+-- !query schema
 struct<>
--- !query 77 output
+-- !query output
 
 
 
--- !query 78
+-- !query
 CREATE   VIEW  pubview AS SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
--- !query 78 schema
+-- !query schema
 struct<>
--- !query 78 output
+-- !query output
 
 
 
--- !query 79
+-- !query
 DESC TABLE EXTENDED pubview
--- !query 79 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 79 output
+-- !query output
 a                   	int                 	                    
 b                   	int                 	                    
                     	                    	                    
@@ -897,22 +897,22 @@ View Query Output Columns	[a, b]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2]
 
 
--- !query 80
+-- !query
 CREATE   VIEW  mytempview AS SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)
--- !query 80 schema
+-- !query schema
 struct<>
--- !query 80 output
+-- !query output
 
 
 
--- !query 81
+-- !query
 DESC TABLE EXTENDED mytempview
--- !query 81 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 81 output
+-- !query output
 a                   	int                 	                    
 b                   	int                 	                    
                     	                    	                    
@@ -936,403 +936,403 @@ View Query Output Columns	[a, b]
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2]
 
 
--- !query 82
+-- !query
 CREATE VIEW tt1 AS
   SELECT * FROM (
     VALUES
        ('abc', '0123456789', 42, 'abcd'),
        ('0123456789', 'abc', 42.12, 'abc')
   ) vv(a,b,c,d)
--- !query 82 schema
+-- !query schema
 struct<>
--- !query 82 output
+-- !query output
 
 
 
--- !query 83
+-- !query
 SELECT * FROM tt1
--- !query 83 schema
+-- !query schema
 struct<a:string,b:string,c:decimal(12,2),d:string>
--- !query 83 output
+-- !query output
 0123456789	abc	42.12	abc
 abc	0123456789	42.00	abcd
 
 
--- !query 84
+-- !query
 SELECT string(a) FROM tt1
--- !query 84 schema
+-- !query schema
 struct<a:string>
--- !query 84 output
+-- !query output
 0123456789
 abc
 
 
--- !query 85
+-- !query
 DROP VIEW tt1
--- !query 85 schema
+-- !query schema
 struct<>
--- !query 85 output
+-- !query output
 
 
 
--- !query 86
+-- !query
 CREATE TABLE tt1 (f1 int, f2 int, f3 string) using parquet
--- !query 86 schema
+-- !query schema
 struct<>
--- !query 86 output
+-- !query output
 
 
 
--- !query 87
+-- !query
 CREATE TABLE tx1 (x1 int, x2 int, x3 string) using parquet
--- !query 87 schema
+-- !query schema
 struct<>
--- !query 87 output
+-- !query output
 
 
 
--- !query 88
+-- !query
 CREATE TABLE temp_view_test.tt1 (y1 int, f2 int, f3 string) using parquet
--- !query 88 schema
+-- !query schema
 struct<>
--- !query 88 output
+-- !query output
 
 
 
--- !query 89
+-- !query
 CREATE VIEW aliased_view_1 AS
   select * from tt1
     where exists (select 1 from tx1 where tt1.f1 = tx1.x1)
--- !query 89 schema
+-- !query schema
 struct<>
--- !query 89 output
+-- !query output
 
 
 
--- !query 90
+-- !query
 CREATE VIEW aliased_view_2 AS
   select * from tt1 a1
     where exists (select 1 from tx1 where a1.f1 = tx1.x1)
--- !query 90 schema
+-- !query schema
 struct<>
--- !query 90 output
+-- !query output
 
 
 
--- !query 91
+-- !query
 CREATE VIEW aliased_view_3 AS
   select * from tt1
     where exists (select 1 from tx1 a2 where tt1.f1 = a2.x1)
--- !query 91 schema
+-- !query schema
 struct<>
--- !query 91 output
+-- !query output
 
 
 
--- !query 92
+-- !query
 CREATE VIEW aliased_view_4 AS
   select * from temp_view_test.tt1
     where exists (select 1 from tt1 where temp_view_test.tt1.y1 = tt1.f1)
--- !query 92 schema
+-- !query schema
 struct<>
--- !query 92 output
+-- !query output
 
 
 
--- !query 93
+-- !query
 DESC TABLE aliased_view_1
--- !query 93 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 93 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 94
+-- !query
 DESC TABLE aliased_view_2
--- !query 94 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 94 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 95
+-- !query
 DESC TABLE aliased_view_3
--- !query 95 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 95 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 96
+-- !query
 DESC TABLE aliased_view_4
--- !query 96 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 96 output
+-- !query output
 y1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 97
+-- !query
 ALTER TABLE tx1 RENAME TO a1
--- !query 97 schema
+-- !query schema
 struct<>
--- !query 97 output
+-- !query output
 
 
 
--- !query 98
+-- !query
 DESC TABLE aliased_view_1
--- !query 98 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 98 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 99
+-- !query
 DESC TABLE aliased_view_2
--- !query 99 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 99 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 100
+-- !query
 DESC TABLE aliased_view_3
--- !query 100 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 100 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 101
+-- !query
 DESC TABLE aliased_view_4
--- !query 101 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 101 output
+-- !query output
 y1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 102
+-- !query
 ALTER TABLE tt1 RENAME TO a2
--- !query 102 schema
+-- !query schema
 struct<>
--- !query 102 output
+-- !query output
 
 
 
--- !query 103
+-- !query
 DESC TABLE aliased_view_1
--- !query 103 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 103 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 104
+-- !query
 DESC TABLE aliased_view_2
--- !query 104 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 104 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 105
+-- !query
 DESC TABLE aliased_view_3
--- !query 105 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 105 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 106
+-- !query
 DESC TABLE aliased_view_4
--- !query 106 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 106 output
+-- !query output
 y1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 107
+-- !query
 ALTER TABLE a1 RENAME TO tt1
--- !query 107 schema
+-- !query schema
 struct<>
--- !query 107 output
+-- !query output
 
 
 
--- !query 108
+-- !query
 DESC TABLE aliased_view_1
--- !query 108 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 108 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 109
+-- !query
 DESC TABLE aliased_view_2
--- !query 109 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 109 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 110
+-- !query
 DESC TABLE aliased_view_3
--- !query 110 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 110 output
+-- !query output
 f1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 111
+-- !query
 DESC TABLE aliased_view_4
--- !query 111 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 111 output
+-- !query output
 y1                  	int                 	                    
 f2                  	int                 	                    
 f3                  	string
 
 
--- !query 112
+-- !query
 ALTER TABLE a2 RENAME TO tx1
--- !query 112 schema
+-- !query schema
 struct<>
--- !query 112 output
+-- !query output
 
 
 
--- !query 113
+-- !query
 create view view_of_joins as
 select * from
   (select * from (tbl1 cross join tbl2) same) ss,
   (tbl3 cross join tbl4) same
--- !query 113 schema
+-- !query schema
 struct<>
--- !query 113 output
+-- !query output
 
 
 
--- !query 114
+-- !query
 create table tt2 (a int, b int, c int) using parquet
--- !query 114 schema
+-- !query schema
 struct<>
--- !query 114 output
+-- !query output
 
 
 
--- !query 115
+-- !query
 create table tt3 (ax bigint, b short, c decimal) using parquet
--- !query 115 schema
+-- !query schema
 struct<>
--- !query 115 output
+-- !query output
 
 
 
--- !query 116
+-- !query
 create table tt4 (ay int, b int, q int) using parquet
--- !query 116 schema
+-- !query schema
 struct<>
--- !query 116 output
+-- !query output
 
 
 
--- !query 117
+-- !query
 create view v1 as select * from tt2 natural join tt3
--- !query 117 schema
+-- !query schema
 struct<>
--- !query 117 output
+-- !query output
 
 
 
--- !query 118
+-- !query
 create view v1a as select * from (tt2 natural join tt3) j
--- !query 118 schema
+-- !query schema
 struct<>
--- !query 118 output
+-- !query output
 
 
 
--- !query 119
+-- !query
 create view v2 as select * from tt2 join tt3 using (b,c) join tt4 using (b)
--- !query 119 schema
+-- !query schema
 struct<>
--- !query 119 output
+-- !query output
 
 
 
--- !query 120
+-- !query
 create view v2a as select * from (tt2 join tt3 using (b,c) join tt4 using (b)) j
--- !query 120 schema
+-- !query schema
 struct<>
--- !query 120 output
+-- !query output
 
 
 
--- !query 121
+-- !query
 create view v3 as select * from tt2 join tt3 using (b,c) full join tt4 using (b)
--- !query 121 schema
+-- !query schema
 struct<>
--- !query 121 output
+-- !query output
 
 
 
--- !query 122
+-- !query
 DESC TABLE v1
--- !query 122 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 122 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
 ax                  	bigint
 
 
--- !query 123
+-- !query
 DESC TABLE v1a
--- !query 123 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 123 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
 ax                  	bigint
 
 
--- !query 124
+-- !query
 DESC TABLE v2
--- !query 124 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 124 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
@@ -1341,11 +1341,11 @@ ay                  	int
 q                   	int
 
 
--- !query 125
+-- !query
 DESC TABLE v2a
--- !query 125 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 125 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
@@ -1354,11 +1354,11 @@ ay                  	int
 q                   	int
 
 
--- !query 126
+-- !query
 DESC TABLE v3
--- !query 126 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 126 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
@@ -1367,49 +1367,49 @@ ay                  	int
 q                   	int
 
 
--- !query 127
+-- !query
 alter table tt2 add column d int
--- !query 127 schema
+-- !query schema
 struct<>
--- !query 127 output
+-- !query output
 
 
 
--- !query 128
+-- !query
 alter table tt2 add column e int
--- !query 128 schema
+-- !query schema
 struct<>
--- !query 128 output
+-- !query output
 
 
 
--- !query 129
+-- !query
 DESC TABLE v1
--- !query 129 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 129 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
 ax                  	bigint
 
 
--- !query 130
+-- !query
 DESC TABLE v1a
--- !query 130 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 130 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
 ax                  	bigint
 
 
--- !query 131
+-- !query
 DESC TABLE v2
--- !query 131 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 131 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
@@ -1418,11 +1418,11 @@ ay                  	int
 q                   	int
 
 
--- !query 132
+-- !query
 DESC TABLE v2a
--- !query 132 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 132 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
@@ -1431,11 +1431,11 @@ ay                  	int
 q                   	int
 
 
--- !query 133
+-- !query
 DESC TABLE v3
--- !query 133 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 133 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
@@ -1444,65 +1444,65 @@ ay                  	int
 q                   	int
 
 
--- !query 134
+-- !query
 drop table tt3
--- !query 134 schema
+-- !query schema
 struct<>
--- !query 134 output
+-- !query output
 
 
 
--- !query 135
+-- !query
 create table tt3 (ax bigint, b short, d decimal) using parquet
--- !query 135 schema
+-- !query schema
 struct<>
--- !query 135 output
+-- !query output
 
 
 
--- !query 136
+-- !query
 alter table tt3 add column c int
--- !query 136 schema
+-- !query schema
 struct<>
--- !query 136 output
+-- !query output
 
 
 
--- !query 137
+-- !query
 alter table tt3 add column e int
--- !query 137 schema
+-- !query schema
 struct<>
--- !query 137 output
+-- !query output
 
 
 
--- !query 138
+-- !query
 DESC TABLE v1
--- !query 138 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 138 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
 ax                  	bigint
 
 
--- !query 139
+-- !query
 DESC TABLE v1a
--- !query 139 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 139 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
 ax                  	bigint
 
 
--- !query 140
+-- !query
 DESC TABLE v2
--- !query 140 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 140 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
@@ -1511,11 +1511,11 @@ ay                  	int
 q                   	int
 
 
--- !query 141
+-- !query
 DESC TABLE v2a
--- !query 141 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 141 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
@@ -1524,11 +1524,11 @@ ay                  	int
 q                   	int
 
 
--- !query 142
+-- !query
 DESC TABLE v3
--- !query 142 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 142 output
+-- !query output
 b                   	int                 	                    
 c                   	int                 	                    
 a                   	int                 	                    
@@ -1537,111 +1537,111 @@ ay                  	int
 q                   	int
 
 
--- !query 143
+-- !query
 create table tt5 (a int, b int) using parquet
--- !query 143 schema
+-- !query schema
 struct<>
--- !query 143 output
+-- !query output
 
 
 
--- !query 144
+-- !query
 create table tt6 (c int, d int) using parquet
--- !query 144 schema
+-- !query schema
 struct<>
--- !query 144 output
+-- !query output
 
 
 
--- !query 145
+-- !query
 create view vv1 as select * from (tt5 cross join tt6) j(aa,bb,cc,dd)
--- !query 145 schema
+-- !query schema
 struct<>
--- !query 145 output
+-- !query output
 
 
 
--- !query 146
+-- !query
 DESC TABLE vv1
--- !query 146 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 146 output
+-- !query output
 aa                  	int                 	                    
 bb                  	int                 	                    
 cc                  	int                 	                    
 dd                  	int
 
 
--- !query 147
+-- !query
 alter table tt5 add column c int
--- !query 147 schema
+-- !query schema
 struct<>
--- !query 147 output
+-- !query output
 
 
 
--- !query 148
+-- !query
 DESC TABLE vv1
--- !query 148 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 148 output
+-- !query output
 aa                  	int                 	                    
 bb                  	int                 	                    
 cc                  	int                 	                    
 dd                  	int
 
 
--- !query 149
+-- !query
 alter table tt5 add column cc int
--- !query 149 schema
+-- !query schema
 struct<>
--- !query 149 output
+-- !query output
 
 
 
--- !query 150
+-- !query
 DESC TABLE vv1
--- !query 150 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 150 output
+-- !query output
 aa                  	int                 	                    
 bb                  	int                 	                    
 cc                  	int                 	                    
 dd                  	int
 
 
--- !query 151
+-- !query
 create table tt7 (x int, /* xx int, */ y int) using parquet
--- !query 151 schema
+-- !query schema
 struct<>
--- !query 151 output
+-- !query output
 
 
 
--- !query 152
+-- !query
 create table tt8 (x int, z int) using parquet
--- !query 152 schema
+-- !query schema
 struct<>
--- !query 152 output
+-- !query output
 
 
 
--- !query 153
+-- !query
 create view vv2 as
 select * from (values(1,2,3,4,5)) v(a,b,c,d,e)
 union all
 select * from tt7 full join tt8 using (x), tt8 tt8x
--- !query 153 schema
+-- !query schema
 struct<>
--- !query 153 output
+-- !query output
 
 
 
--- !query 154
+-- !query
 DESC TABLE vv2
--- !query 154 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 154 output
+-- !query output
 a                   	int                 	                    
 b                   	int                 	                    
 c                   	int                 	                    
@@ -1649,24 +1649,24 @@ d                   	int
 e                   	int
 
 
--- !query 155
+-- !query
 create view vv3 as
 select * from (values(1,2,3,4,5,6)) v(a,b,c,x,e,f)
 union all
 select * from
   tt7 full join tt8 using (x),
   tt7 tt7x full join tt8 tt8x using (x)
--- !query 155 schema
+-- !query schema
 struct<>
--- !query 155 output
+-- !query output
 
 
 
--- !query 156
+-- !query
 DESC TABLE vv3
--- !query 156 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 156 output
+-- !query output
 a                   	int                 	                    
 b                   	int                 	                    
 c                   	int                 	                    
@@ -1675,24 +1675,24 @@ e                   	int
 f                   	int
 
 
--- !query 157
+-- !query
 create view vv4 as
 select * from (values(1,2,3,4,5,6,7)) v(a,b,c,x,e,f,g)
 union all
 select * from
   tt7 full join tt8 using (x),
   tt7 tt7x full join tt8 tt8x using (x) full join tt8 tt8y using (x)
--- !query 157 schema
+-- !query schema
 struct<>
--- !query 157 output
+-- !query output
 
 
 
--- !query 158
+-- !query
 DESC TABLE vv4
--- !query 158 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 158 output
+-- !query output
 a                   	int                 	                    
 b                   	int                 	                    
 c                   	int                 	                    
@@ -1702,35 +1702,35 @@ f                   	int
 g                   	int
 
 
--- !query 159
+-- !query
 alter table tt7 add column zz int
--- !query 159 schema
+-- !query schema
 struct<>
--- !query 159 output
+-- !query output
 
 
 
--- !query 160
+-- !query
 alter table tt7 add column z int
--- !query 160 schema
+-- !query schema
 struct<>
--- !query 160 output
+-- !query output
 
 
 
--- !query 161
+-- !query
 alter table tt8 add column z2 int
--- !query 161 schema
+-- !query schema
 struct<>
--- !query 161 output
+-- !query output
 
 
 
--- !query 162
+-- !query
 DESC TABLE vv2
--- !query 162 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 162 output
+-- !query output
 a                   	int                 	                    
 b                   	int                 	                    
 c                   	int                 	                    
@@ -1738,11 +1738,11 @@ d                   	int
 e                   	int
 
 
--- !query 163
+-- !query
 DESC TABLE vv3
--- !query 163 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 163 output
+-- !query output
 a                   	int                 	                    
 b                   	int                 	                    
 c                   	int                 	                    
@@ -1751,11 +1751,11 @@ e                   	int
 f                   	int
 
 
--- !query 164
+-- !query
 DESC TABLE vv4
--- !query 164 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 164 output
+-- !query output
 a                   	int                 	                    
 b                   	int                 	                    
 c                   	int                 	                    
@@ -1765,38 +1765,38 @@ f                   	int
 g                   	int
 
 
--- !query 165
+-- !query
 create table tt7a (x date, /* xx int, */ y int) using parquet
--- !query 165 schema
+-- !query schema
 struct<>
--- !query 165 output
+-- !query output
 
 
 
--- !query 166
+-- !query
 create table tt8a (x timestamp, z int) using parquet
--- !query 166 schema
+-- !query schema
 struct<>
--- !query 166 output
+-- !query output
 
 
 
--- !query 167
+-- !query
 create view vv2a as
 select * from (values(now(),2,3,now(),5)) v(a,b,c,d,e)
 union all
 select * from tt7a left join tt8a using (x), tt8a tt8ax
--- !query 167 schema
+-- !query schema
 struct<>
--- !query 167 output
+-- !query output
 
 
 
--- !query 168
+-- !query
 DESC TABLE vv4
--- !query 168 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 168 output
+-- !query output
 a                   	int                 	                    
 b                   	int                 	                    
 c                   	int                 	                    
@@ -1806,11 +1806,11 @@ f                   	int
 g                   	int
 
 
--- !query 169
+-- !query
 DESC TABLE vv2a
--- !query 169 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 169 output
+-- !query output
 a                   	timestamp           	                    
 b                   	int                 	                    
 c                   	int                 	                    
@@ -1818,155 +1818,155 @@ d                   	timestamp
 e                   	int
 
 
--- !query 170
+-- !query
 create table tt9 (x int, xx int, y int) using parquet
--- !query 170 schema
+-- !query schema
 struct<>
--- !query 170 output
+-- !query output
 
 
 
--- !query 171
+-- !query
 create table tt10 (x int, z int) using parquet
--- !query 171 schema
+-- !query schema
 struct<>
--- !query 171 output
+-- !query output
 
 
 
--- !query 172
+-- !query
 create view vv5 as select x,y,z from tt9 join tt10 using(x)
--- !query 172 schema
+-- !query schema
 struct<>
--- !query 172 output
+-- !query output
 
 
 
--- !query 173
+-- !query
 DESC TABLE vv5
--- !query 173 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 173 output
+-- !query output
 x                   	int                 	                    
 y                   	int                 	                    
 z                   	int
 
 
--- !query 174
+-- !query
 DESC TABLE vv5
--- !query 174 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 174 output
+-- !query output
 x                   	int                 	                    
 y                   	int                 	                    
 z                   	int
 
 
--- !query 175
+-- !query
 create table tt11 (x int, y int) using parquet
--- !query 175 schema
+-- !query schema
 struct<>
--- !query 175 output
+-- !query output
 
 
 
--- !query 176
+-- !query
 create table tt12 (x int, z int) using parquet
--- !query 176 schema
+-- !query schema
 struct<>
--- !query 176 output
+-- !query output
 
 
 
--- !query 177
+-- !query
 create table tt13 (z int, q int) using parquet
--- !query 177 schema
+-- !query schema
 struct<>
--- !query 177 output
+-- !query output
 
 
 
--- !query 178
+-- !query
 create view vv6 as select x,y,z,q from
   (tt11 join tt12 using(x)) join tt13 using(z)
--- !query 178 schema
+-- !query schema
 struct<>
--- !query 178 output
+-- !query output
 
 
 
--- !query 179
+-- !query
 DESC TABLE vv6
--- !query 179 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 179 output
+-- !query output
 x                   	int                 	                    
 y                   	int                 	                    
 z                   	int                 	                    
 q                   	int
 
 
--- !query 180
+-- !query
 alter table tt11 add column z int
--- !query 180 schema
+-- !query schema
 struct<>
--- !query 180 output
+-- !query output
 
 
 
--- !query 181
+-- !query
 DESC TABLE vv6
--- !query 181 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 181 output
+-- !query output
 x                   	int                 	                    
 y                   	int                 	                    
 z                   	int                 	                    
 q                   	int
 
 
--- !query 182
+-- !query
 CREATE TABLE int8_tbl (q1 int, q2 int) USING parquet
--- !query 182 schema
+-- !query schema
 struct<>
--- !query 182 output
+-- !query output
 
 
 
--- !query 183
+-- !query
 create view tt18v as
   select * from int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy
   union all
   select * from int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxz
--- !query 183 schema
+-- !query schema
 struct<>
--- !query 183 output
+-- !query output
 
 
 
--- !query 184
+-- !query
 DESC TABLE tt18v
--- !query 184 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 184 output
+-- !query output
 q1                  	int                 	                    
 q2                  	int
 
 
--- !query 185
+-- !query
 create view tt21v as
 select * from tt5 natural inner join tt6
--- !query 185 schema
+-- !query schema
 struct<>
--- !query 185 output
+-- !query output
 
 
 
--- !query 186
+-- !query
 DESC TABLE tt21v
--- !query 186 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 186 output
+-- !query output
 c                   	int                 	                    
 a                   	int                 	                    
 b                   	int                 	                    
@@ -1974,20 +1974,20 @@ cc                  	int
 d                   	int
 
 
--- !query 187
+-- !query
 create view tt22v as
 select * from tt5 natural left join tt6
--- !query 187 schema
+-- !query schema
 struct<>
--- !query 187 output
+-- !query output
 
 
 
--- !query 188
+-- !query
 DESC TABLE tt22v
--- !query 188 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 188 output
+-- !query output
 c                   	int                 	                    
 a                   	int                 	                    
 b                   	int                 	                    
@@ -1995,53 +1995,53 @@ cc                  	int
 d                   	int
 
 
--- !query 189
+-- !query
 create view tt23v (col_a, col_b) as
 select q1 as other_name1, q2 as other_name2 from int8_tbl
 union
 select 42, 43
--- !query 189 schema
+-- !query schema
 struct<>
--- !query 189 output
+-- !query output
 
 
 
--- !query 190
+-- !query
 DESC TABLE tt23v
--- !query 190 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 190 output
+-- !query output
 col_a               	int                 	                    
 col_b               	int
 
 
--- !query 191
+-- !query
 DROP SCHEMA temp_view_test CASCADE
--- !query 191 schema
+-- !query schema
 struct<>
--- !query 191 output
+-- !query output
 
 
 
--- !query 192
+-- !query
 DROP SCHEMA testviewschm2 CASCADE
--- !query 192 schema
+-- !query schema
 struct<>
--- !query 192 output
+-- !query output
 
 
 
--- !query 193
+-- !query
 DROP VIEW temp_table
--- !query 193 schema
+-- !query schema
 struct<>
--- !query 193 output
+-- !query output
 
 
 
--- !query 194
+-- !query
 DROP VIEW tt
--- !query 194 schema
+-- !query schema
 struct<>
--- !query 194 output
+-- !query output
 

@@ -31,6 +31,7 @@ import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
@@ -41,7 +42,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 
-class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
+class FileBasedDataSourceSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   override def beforeAll(): Unit = {
@@ -716,21 +719,21 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           val df2FromFile = spark.read.orc(workDirPath + "/data2")
           val joinedDF = df1FromFile.join(df2FromFile, Seq("count"))
           if (compressionFactor == 0.5) {
-            val bJoinExec = joinedDF.queryExecution.executedPlan.collect {
+            val bJoinExec = collect(joinedDF.queryExecution.executedPlan) {
               case bJoin: BroadcastHashJoinExec => bJoin
             }
             assert(bJoinExec.nonEmpty)
-            val smJoinExec = joinedDF.queryExecution.executedPlan.collect {
+            val smJoinExec = collect(joinedDF.queryExecution.executedPlan) {
               case smJoin: SortMergeJoinExec => smJoin
             }
             assert(smJoinExec.isEmpty)
           } else {
             // compressionFactor is 1.0
-            val bJoinExec = joinedDF.queryExecution.executedPlan.collect {
+            val bJoinExec = collect(joinedDF.queryExecution.executedPlan) {
               case bJoin: BroadcastHashJoinExec => bJoin
             }
             assert(bJoinExec.isEmpty)
-            val smJoinExec = joinedDF.queryExecution.executedPlan.collect {
+            val smJoinExec = collect(joinedDF.queryExecution.executedPlan) {
               case smJoin: SortMergeJoinExec => smJoin
             }
             assert(smJoinExec.nonEmpty)
@@ -772,12 +775,48 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.nonEmpty)
+          assert(fileScan.get.dataFilters.nonEmpty)
           assert(fileScan.get.planInputPartitions().forall { partition =>
             partition.asInstanceOf[FilePartition].files.forall { file =>
               file.filePath.contains("p1=1") && file.filePath.contains("p2=2")
             }
           })
           checkAnswer(df, Row("b", 1, 2))
+        }
+      }
+    }
+  }
+
+  test("File source v2: support passing data filters to FileScan without partitionFilters") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      allFileBasedDataSources.foreach { format =>
+        withTempPath { dir =>
+          Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
+            .toDF("value", "p1", "p2")
+            .write
+            .format(format)
+            .partitionBy("p1", "p2")
+            .option("header", true)
+            .save(dir.getCanonicalPath)
+          val df = spark
+            .read
+            .format(format)
+            .option("header", true)
+            .load(dir.getCanonicalPath)
+            .where("value = 'a'")
+
+          val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
+            case f: Filter => f.condition
+          }
+          assert(filterCondition.isDefined)
+
+          val fileScan = df.queryExecution.executedPlan collectFirst {
+            case BatchScanExec(_, f: FileScan) => f
+          }
+          assert(fileScan.nonEmpty)
+          assert(fileScan.get.partitionFilters.isEmpty)
+          assert(fileScan.get.dataFilters.nonEmpty)
+          checkAnswer(df, Row("a", 1, 2))
         }
       }
     }
@@ -800,6 +839,46 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
             throw new AnalysisException("Can not match ParquetTable in the query.")
         }
         checkAnswer(df, Seq(0, 1, 2).map(Row(_)))
+      }
+    }
+  }
+
+  test("SPARK-31116: Select nested schema with case insensitive mode") {
+    // This test case failed at only Parquet. ORC is added for test coverage parity.
+    Seq("orc", "parquet").foreach { format =>
+      Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
+        withSQLConf(
+          SQLConf.CASE_SENSITIVE.key -> "false",
+          SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedSchemaPruningEnabled) {
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+
+            // Prepare values for testing nested parquet data
+            spark
+              .range(1L)
+              .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
+              .write
+              .format(format)
+              .save(path)
+
+            val exactSchema = "StructColumn struct<lowercase: LONG, camelCase: LONG>"
+
+            checkAnswer(spark.read.schema(exactSchema).format(format).load(path), Row(Row(0, 1)))
+
+            // In case insensitive manner, parquet's column cases are ignored
+            val innerColumnCaseInsensitiveSchema =
+              "StructColumn struct<Lowercase: LONG, camelcase: LONG>"
+            checkAnswer(
+              spark.read.schema(innerColumnCaseInsensitiveSchema).format(format).load(path),
+              Row(Row(0, 1)))
+
+            val rootColumnCaseInsensitiveSchema =
+              "structColumn struct<lowercase: LONG, camelCase: LONG>"
+            checkAnswer(
+              spark.read.schema(rootColumnCaseInsensitiveSchema).format(format).load(path),
+              Row(Row(0, 1)))
+          }
+        }
       }
     }
   }

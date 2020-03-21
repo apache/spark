@@ -26,6 +26,8 @@ import org.apache.spark.annotation.Evolving;
  * provide a method to merge these into a global Offset.
  *
  * These offsets must be serializable.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface PartitionOffset extends Serializable {

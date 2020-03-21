@@ -117,7 +117,5 @@ case class First(child: Expression, ignoreNullsExpr: Expression)
 
   override lazy val evaluateExpression: AttributeReference = first
 
-  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("first")
-
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 }

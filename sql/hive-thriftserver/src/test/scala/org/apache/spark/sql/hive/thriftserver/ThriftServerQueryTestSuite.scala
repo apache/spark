@@ -106,7 +106,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       // Read back the golden file.
       val expectedOutputs: Seq[QueryOutput] = {
         val goldenOutput = fileToString(new File(testCase.resultFile))
-        val segments = goldenOutput.split("-- !query.+\n")
+        val segments = goldenOutput.split("-- !query.*\n")
 
         // each query has 3 segments, plus the header
         assert(segments.size == outputs.size * 3 + 1,
@@ -336,7 +336,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       case t: Timestamp =>
         HiveResult.toHiveString((t, TimestampType))
       case d: java.math.BigDecimal =>
-        HiveResult.toHiveString((d, DecimalType.fromBigDecimal(d)))
+        HiveResult.toHiveString((d, DecimalType.fromDecimal(Decimal(d))))
       case bin: Array[Byte] =>
         HiveResult.toHiveString((bin, BinaryType))
       case other =>

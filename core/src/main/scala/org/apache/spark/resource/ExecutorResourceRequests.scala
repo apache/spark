@@ -17,7 +17,9 @@
 
 package org.apache.spark.resource
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile._
@@ -32,9 +34,9 @@ import org.apache.spark.resource.ResourceProfile._
  */
 private[spark] class ExecutorResourceRequests() extends Serializable {
 
-  private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
+  private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
-  def requests: Map[String, ExecutorResourceRequest] = _executorResources.toMap
+  def requests: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
 
   /**
    * Specify heap memory. The value specified will be converted to MiB.
@@ -44,8 +46,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def memory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(MEMORY, amountMiB)
-    _executorResources(MEMORY) = rr
+    val req = new ExecutorResourceRequest(MEMORY, amountMiB)
+    _executorResources.put(MEMORY, req)
     this
   }
 
@@ -57,8 +59,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def memoryOverhead(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(OVERHEAD_MEM, amountMiB)
-    _executorResources(OVERHEAD_MEM) = rr
+    val req = new ExecutorResourceRequest(OVERHEAD_MEM, amountMiB)
+    _executorResources.put(OVERHEAD_MEM, req)
     this
   }
 
@@ -70,8 +72,8 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def pysparkMemory(amount: String): this.type = {
     val amountMiB = JavaUtils.byteStringAsMb(amount)
-    val rr = new ExecutorResourceRequest(PYSPARK_MEM, amountMiB)
-    _executorResources(PYSPARK_MEM) = rr
+    val req = new ExecutorResourceRequest(PYSPARK_MEM, amountMiB)
+    _executorResources.put(PYSPARK_MEM, req)
     this
   }
 
@@ -81,15 +83,17 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    * @param amount Number of cores to allocate per Executor.
    */
   def cores(amount: Int): this.type = {
-    val t = new ExecutorResourceRequest(CORES, amount)
-    _executorResources(CORES) = t
+    val req = new ExecutorResourceRequest(CORES, amount)
+    _executorResources.put(CORES, req)
     this
   }
 
   /**
    *  Amount of a particular custom resource(GPU, FPGA, etc) to use. The resource names supported
    *  correspond to the regular Spark configs with the prefix removed. For instance, resources
-   *  like GPUs are resource.gpu (spark configs spark.executor.resource.gpu.*)
+   *  like GPUs are gpu (spark configs spark.executor.resource.gpu.*). If you pass in a resource
+   *  that the cluster manager doesn't support the result is undefined, it may error or may just
+   *  be ignored.
    *
    * @param resourceName Name of the resource.
    * @param amount amount of that resource per executor to use.
@@ -105,14 +109,9 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
       discoveryScript: String = "",
       vendor: String = ""): this.type = {
     // a bit weird but for Java api use empty string as meaning None because empty
-    // string is otherwise invalid for those paramters anyway
-    val eReq = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
-    _executorResources(resourceName) = eReq
-    this
-  }
-
-  def addRequest(ereq: ExecutorResourceRequest): this.type = {
-    _executorResources(ereq.resourceName) = ereq
+    // string is otherwise invalid for those parameters anyway
+    val req = new ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
+    _executorResources.put(resourceName, req)
     this
   }
 

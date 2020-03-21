@@ -17,11 +17,10 @@
 
 package org.apache.spark.ml.tree.impl
 
-import java.io.IOException
-
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
@@ -34,6 +33,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => O
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
@@ -111,7 +111,7 @@ private[spark] object RandomForest extends Logging with Serializable {
   def runBagged(
       baggedInput: RDD[BaggedPoint[TreePoint]],
       metadata: DecisionTreeMetadata,
-      splits: Array[Array[Split]],
+      bcSplits: Broadcast[Array[Array[Split]]],
       strategy: OldStrategy,
       numTrees: Int,
       featureSubsetStrategy: String,
@@ -121,6 +121,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
     timer.start("total")
+
+    val sc = baggedInput.sparkContext
 
     instr match {
       case Some(instrumentation) =>
@@ -154,16 +156,15 @@ private[spark] object RandomForest extends Logging with Serializable {
      * in lower levels).
      */
 
-    // Create an RDD of node Id cache.
-    // At first, all the rows belong to the root nodes (node Id == 1).
-    val nodeIdCache = if (strategy.useNodeIdCache) {
-      Some(NodeIdCache.init(
-        data = baggedInput,
-        numTrees = numTrees,
-        checkpointInterval = strategy.checkpointInterval,
-        initVal = 1))
-    } else {
-      None
+    var nodeIds: RDD[Array[Int]] = null
+    var nodeIdCheckpointer: PeriodicRDDCheckpointer[Array[Int]] = null
+    if (strategy.useNodeIdCache) {
+      // Create an RDD of node Id cache.
+      // At first, all the rows belong to the root nodes (node Id == 1).
+      nodeIds = baggedInput.map { _ => Array.fill(numTrees)(1) }
+      nodeIdCheckpointer = new PeriodicRDDCheckpointer[Array[Int]](
+        strategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
+      nodeIdCheckpointer.update(nodeIds)
     }
 
     /*
@@ -202,8 +203,14 @@ private[spark] object RandomForest extends Logging with Serializable {
 
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
-      RandomForest.findBestSplits(baggedInput, metadata, topNodesForGroup, nodesForGroup,
-        treeToNodeToIndexInfo, splits, nodeStack, timer, nodeIdCache)
+      val bestSplit = RandomForest.findBestSplits(baggedInput, metadata, topNodesForGroup,
+        nodesForGroup, treeToNodeToIndexInfo, bcSplits, nodeStack, timer, nodeIds,
+        outputBestSplits = strategy.useNodeIdCache)
+      if (strategy.useNodeIdCache) {
+        nodeIds = updateNodeIds(baggedInput, nodeIds, bcSplits, bestSplit)
+        nodeIdCheckpointer.update(nodeIds)
+      }
+
       timer.stop("findBestSplits")
     }
 
@@ -212,14 +219,10 @@ private[spark] object RandomForest extends Logging with Serializable {
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
-    // Delete any remaining checkpoints used for node Id cache.
-    if (nodeIdCache.nonEmpty) {
-      try {
-        nodeIdCache.get.deleteAllCheckpoints()
-      } catch {
-        case e: IOException =>
-          logWarning(s"delete all checkpoints failed. Error reason: ${e.getMessage}")
-      }
+    if (strategy.useNodeIdCache) {
+      // Delete any remaining checkpoints used for node Id cache.
+      nodeIdCheckpointer.unpersistDataSet()
+      nodeIdCheckpointer.deleteAllCheckpoints()
     }
 
     val numFeatures = metadata.numFeatures
@@ -287,18 +290,53 @@ private[spark] object RandomForest extends Logging with Serializable {
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, splits, metadata)
 
-    val withReplacement = numTrees > 1
-
+    val bcSplits = input.sparkContext.broadcast(splits)
     val baggedInput = BaggedPoint
-      .convertToBaggedRDD(treeInput, strategy.subsamplingRate, numTrees, withReplacement,
+      .convertToBaggedRDD(treeInput, strategy.subsamplingRate, numTrees, strategy.bootstrap,
         (tp: TreePoint) => tp.weight, seed = seed)
       .persist(StorageLevel.MEMORY_AND_DISK)
+      .setName("bagged tree points")
 
-    val trees = runBagged(baggedInput = baggedInput, metadata = metadata, splits = splits,
+    val trees = runBagged(baggedInput = baggedInput, metadata = metadata, bcSplits = bcSplits,
       strategy = strategy, numTrees = numTrees, featureSubsetStrategy = featureSubsetStrategy,
       seed = seed, instr = instr, prune = prune, parentUID = parentUID)
+
     baggedInput.unpersist()
+    bcSplits.destroy()
+
     trees
+  }
+
+  /**
+   * Update node indices by newly found splits.
+   */
+  private def updateNodeIds(
+      input: RDD[BaggedPoint[TreePoint]],
+      nodeIds: RDD[Array[Int]],
+      bcSplits: Broadcast[Array[Array[Split]]],
+      bestSplits: Array[Map[Int, Split]]): RDD[Array[Int]] = {
+    require(nodeIds != null && bestSplits != null)
+    input.zip(nodeIds).map { case (point, ids) =>
+      var treeId = 0
+      while (treeId < bestSplits.length) {
+        val bestSplitsInTree = bestSplits(treeId)
+        if (bestSplitsInTree != null) {
+          val nodeId = ids(treeId)
+          bestSplitsInTree.get(nodeId).foreach { bestSplit =>
+            val featureId = bestSplit.featureIndex
+            val bin = point.datum.binnedFeatures(featureId)
+            val newNodeId = if (bestSplit.shouldGoLeft(bin, bcSplits.value(featureId))) {
+              LearningNode.leftChildIndex(nodeId)
+            } else {
+              LearningNode.rightChildIndex(nodeId)
+            }
+            ids(treeId) = newNodeId
+          }
+        }
+        treeId += 1
+      }
+      ids
+    }
   }
 
   /**
@@ -414,14 +452,13 @@ private[spark] object RandomForest extends Logging with Serializable {
    * @param treeToNodeToIndexInfo Mapping: treeIndex --> nodeIndex --> nodeIndexInfo,
    *                              where nodeIndexInfo stores the index in the group and the
    *                              feature subsets (if using feature subsets).
-   * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
+   * @param bcSplits possible splits for all features, indexed (numFeatures)(numSplits)
    * @param nodeStack  Queue of nodes to split, with values (treeIndex, node).
    *                   Updated with new non-leaf nodes which are created.
-   * @param nodeIdCache Node Id cache containing an RDD of Array[Int] where
-   *                    each value in the array is the data point's node Id
-   *                    for a corresponding tree. This is used to prevent the need
-   *                    to pass the entire tree to the executors during
-   *                    the node stat aggregation phase.
+   * @param nodeIds an RDD of Array[Int] where each value in the array is the data
+   *                point's node Id for a corresponding tree. This is used to prevent
+   *                the need to pass the entire tree to the executors during the node
+   *                stat aggregation phase.
    */
   private[tree] def findBestSplits(
       input: RDD[BaggedPoint[TreePoint]],
@@ -429,10 +466,11 @@ private[spark] object RandomForest extends Logging with Serializable {
       topNodesForGroup: Map[Int, LearningNode],
       nodesForGroup: Map[Int, Array[LearningNode]],
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
-      splits: Array[Array[Split]],
+      bcSplits: Broadcast[Array[Array[Split]]],
       nodeStack: mutable.ListBuffer[(Int, LearningNode)],
       timer: TimeTracker = new TimeTracker,
-      nodeIdCache: Option[NodeIdCache] = None): Unit = {
+      nodeIds: RDD[Array[Int]] = null,
+      outputBestSplits: Boolean = false): Array[Map[Int, Split]] = {
 
     /*
      * The high-level descriptions of the best split optimizations are noted here.
@@ -456,6 +494,8 @@ private[spark] object RandomForest extends Logging with Serializable {
      * drastically reduce the communication overhead.
      */
 
+    val useNodeIdCache = nodeIds != null
+
     // numNodes:  Number of nodes in this group
     val numNodes = nodesForGroup.values.map(_.length).sum
     logDebug(s"numNodes = $numNodes")
@@ -464,7 +504,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     logDebug(s"isMulticlass = ${metadata.isMulticlass}")
     logDebug(s"isMulticlassWithCategoricalFeatures = " +
       s"${metadata.isMulticlassWithCategoricalFeatures}")
-    logDebug(s"using nodeIdCache = ${nodeIdCache.nonEmpty}")
+    logDebug(s"using nodeIdCache = $useNodeIdCache")
 
     /*
      * Performs a sequential aggregation over a partition for a particular tree and node.
@@ -482,7 +522,8 @@ private[spark] object RandomForest extends Logging with Serializable {
         treeIndex: Int,
         nodeInfo: NodeIndexInfo,
         agg: Array[DTStatsAggregator],
-        baggedPoint: BaggedPoint[TreePoint]): Unit = {
+        baggedPoint: BaggedPoint[TreePoint],
+        splits: Array[Array[Split]]): Unit = {
       if (nodeInfo != null) {
         val aggNodeIndex = nodeInfo.nodeIndexInGroup
         val featuresForNode = nodeInfo.featureSubset
@@ -512,11 +553,13 @@ private[spark] object RandomForest extends Logging with Serializable {
      */
     def binSeqOp(
         agg: Array[DTStatsAggregator],
-        baggedPoint: BaggedPoint[TreePoint]): Array[DTStatsAggregator] = {
+        baggedPoint: BaggedPoint[TreePoint],
+        splits: Array[Array[Split]]): Array[DTStatsAggregator] = {
       treeToNodeToIndexInfo.foreach { case (treeIndex, nodeIndexToInfo) =>
         val nodeIndex =
           topNodesForGroup(treeIndex).predictImpl(baggedPoint.datum.binnedFeatures, splits)
-        nodeBinSeqOp(treeIndex, nodeIndexToInfo.getOrElse(nodeIndex, null), agg, baggedPoint)
+        nodeBinSeqOp(treeIndex, nodeIndexToInfo.getOrElse(nodeIndex, null),
+          agg, baggedPoint, splits)
       }
       agg
     }
@@ -526,14 +569,15 @@ private[spark] object RandomForest extends Logging with Serializable {
      */
     def binSeqOpWithNodeIdCache(
         agg: Array[DTStatsAggregator],
-        dataPoint: (BaggedPoint[TreePoint], Array[Int])): Array[DTStatsAggregator] = {
+        dataPoint: (BaggedPoint[TreePoint], Array[Int]),
+        splits: Array[Array[Split]]): Array[DTStatsAggregator] = {
       treeToNodeToIndexInfo.foreach { case (treeIndex, nodeIndexToInfo) =>
         val baggedPoint = dataPoint._1
         val nodeIdCache = dataPoint._2
         val nodeIndex = nodeIdCache(treeIndex)
-        nodeBinSeqOp(treeIndex, nodeIndexToInfo.getOrElse(nodeIndex, null), agg, baggedPoint)
+        nodeBinSeqOp(treeIndex, nodeIndexToInfo.getOrElse(nodeIndex, null),
+          agg, baggedPoint, splits)
       }
-
       agg
     }
 
@@ -577,8 +621,9 @@ private[spark] object RandomForest extends Logging with Serializable {
     val nodeToFeatures = getNodeToFeatures(treeToNodeToIndexInfo)
     val nodeToFeaturesBc = input.sparkContext.broadcast(nodeToFeatures)
 
-    val partitionAggregates: RDD[(Int, DTStatsAggregator)] = if (nodeIdCache.nonEmpty) {
-      input.zip(nodeIdCache.get.nodeIdsForInstances).mapPartitions { points =>
+    val partitionAggregates = if (useNodeIdCache) {
+
+      input.zip(nodeIds).mapPartitions { points =>
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
         val nodeStatsAggregators = Array.tabulate(numNodes) { nodeIndex =>
@@ -589,7 +634,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         }
 
         // iterator all instances in current partition and update aggregate stats
-        points.foreach(binSeqOpWithNodeIdCache(nodeStatsAggregators, _))
+        points.foreach(binSeqOpWithNodeIdCache(nodeStatsAggregators, _, bcSplits.value))
 
         // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
@@ -607,7 +652,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         }
 
         // iterator all instances in current partition and update aggregate stats
-        points.foreach(binSeqOp(nodeStatsAggregators, _))
+        points.foreach(binSeqOp(nodeStatsAggregators, _, bcSplits.value))
 
         // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
@@ -623,19 +668,19 @@ private[spark] object RandomForest extends Logging with Serializable {
 
         // find best split for each node
         val (split: Split, stats: ImpurityStats) =
-          binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
+          binsToBestSplit(aggStats, bcSplits.value, featuresForNode, nodes(nodeIndex))
         (nodeIndex, (split, stats))
     }.collectAsMap()
     nodeToFeaturesBc.destroy()
 
     timer.stop("chooseSplits")
 
-    val nodeIdUpdaters = if (nodeIdCache.nonEmpty) {
-      Array.fill[mutable.Map[Int, NodeIndexUpdater]](
-        metadata.numTrees)(mutable.Map[Int, NodeIndexUpdater]())
+    val bestSplits = if (outputBestSplits) {
+      Array.ofDim[mutable.Map[Int, Split]](metadata.numTrees)
     } else {
       null
     }
+
     // Iterate over all nodes in this group.
     nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
       nodesForTree.foreach { node =>
@@ -663,11 +708,13 @@ private[spark] object RandomForest extends Logging with Serializable {
           node.rightChild = Some(LearningNode(LearningNode.rightChildIndex(nodeIndex),
             rightChildIsLeaf, ImpurityStats.getEmptyImpurityStats(stats.rightImpurityCalculator)))
 
-          if (nodeIdCache.nonEmpty) {
-            val nodeIndexUpdater = NodeIndexUpdater(
-              split = split,
-              nodeIndex = nodeIndex)
-            nodeIdUpdaters(treeIndex).put(nodeIndex, nodeIndexUpdater)
+          if (outputBestSplits) {
+            val bestSplitsInTree = bestSplits(treeIndex)
+            if (bestSplitsInTree == null) {
+              bestSplits(treeIndex) = mutable.Map[Int, Split](nodeIndex -> split)
+            } else {
+              bestSplitsInTree.update(nodeIndex, split)
+            }
           }
 
           // enqueue left child and right child if they are not leaves
@@ -686,9 +733,10 @@ private[spark] object RandomForest extends Logging with Serializable {
       }
     }
 
-    if (nodeIdCache.nonEmpty) {
-      // Update the cache if needed.
-      nodeIdCache.get.updateNodeIndices(input, nodeIdUpdaters, splits)
+    if (outputBestSplits) {
+      bestSplits.map { m => if (m == null) null else m.toMap }
+    } else {
+      null
     }
   }
 
@@ -777,7 +825,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     }
 
     val validFeatureSplits =
-      Range(0, binAggregates.metadata.numFeaturesPerNode).view.map { featureIndexIdx =>
+      Iterator.range(0, binAggregates.metadata.numFeaturesPerNode).map { featureIndexIdx =>
         featuresForNode.map(features => (featureIndexIdx, features(featureIndexIdx)))
           .getOrElse((featureIndexIdx, featureIndexIdx))
       }.withFilter { case (_, featureIndex) =>

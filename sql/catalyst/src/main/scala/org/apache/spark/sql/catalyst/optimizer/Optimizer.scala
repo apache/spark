@@ -53,7 +53,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       "PartitionPruning",
       "Extract Python UDFs")
 
-  protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
+  protected def fixedPoint =
+    FixedPoint(
+      SQLConf.get.optimizerMaxIterations,
+      maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
 
   /**
    * Defines the default rule batches in the Optimizer.
@@ -609,7 +612,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // prune unrequired nested fields
     case p @ Project(projectList, g: Generate) if SQLConf.get.nestedPruningOnExpressions &&
         NestedColumnAliasing.canPruneGenerator(g.generator) =>
-      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
+      val exprsToPrune = projectList ++ g.generator.children
+      NestedColumnAliasing.getAliasSubMap(exprsToPrune, g.qualifiedGeneratorOutput).map {
         case (nestedFieldToAlias, attrToAliases) =>
           val newGenerator = g.generator.transform {
             case f: ExtractValue if nestedFieldToAlias.contains(f) =>

@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.log4j.{AppenderSkeleton, Level}
-import org.apache.log4j.spi.LoggingEvent
+import org.apache.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -32,14 +29,6 @@ import org.apache.spark.sql.types.IntegerType
 
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
-
-  class MockAppender extends AppenderSkeleton {
-    val loggingEvents = new ArrayBuffer[LoggingEvent]()
-
-    override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
-    override def close(): Unit = {}
-    override def requiresLayout(): Boolean = false
-  }
 
   test("invalid hints should be ignored") {
     checkAnalysis(
@@ -234,7 +223,7 @@ class ResolveHintsSuite extends AnalysisTest {
   }
 
   test("log warnings for invalid hints") {
-    val logAppender = new MockAppender()
+    val logAppender = new LogAppender("invalid hints")
     withLogAppender(logAppender) {
       checkAnalysis(
         UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE")),
@@ -251,5 +240,53 @@ class ResolveHintsSuite extends AnalysisTest {
       Project(testRelation.output, UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE"))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
+  }
+
+  test("Supports multi-part table names for broadcast hint resolution") {
+    // local temp table (single-part identifier case)
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("table", "table2"),
+        table("TaBlE").join(table("TaBlE2"))),
+      Join(
+        ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+        ResolvedHint(testRelation2, HintInfo(strategy = Some(BROADCAST))),
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = false)
+
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("TaBlE", "table2"),
+        table("TaBlE").join(table("TaBlE2"))),
+      Join(
+        ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+        testRelation2,
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = true)
+
+    // global temp table (multi-part identifier case)
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("GlOBal_TeMP.table4", "table5"),
+        table("global_temp", "table4").join(table("global_temp", "table5"))),
+      Join(
+        ResolvedHint(testRelation4, HintInfo(strategy = Some(BROADCAST))),
+        ResolvedHint(testRelation5, HintInfo(strategy = Some(BROADCAST))),
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = false)
+
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("global_temp.TaBlE4", "table5"),
+        table("global_temp", "TaBlE4").join(table("global_temp", "TaBlE5"))),
+      Join(
+        ResolvedHint(testRelation4, HintInfo(strategy = Some(BROADCAST))),
+        testRelation5,
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = true)
   }
 }

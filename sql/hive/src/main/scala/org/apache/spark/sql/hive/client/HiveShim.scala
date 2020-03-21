@@ -157,10 +157,6 @@ private[client] sealed abstract class Shim {
 
   def setDatabaseOwnerName(db: Database, owner: String): Unit
 
-  def getDatabaseOwnerType(db: Database): String
-
-  def setDatabaseOwnerType(db: Database, ownerType: String): Unit
-
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
     require(Modifier.isStatic(method.getModifiers()),
@@ -467,10 +463,6 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getDatabaseOwnerName(db: Database): String = ""
 
   override def setDatabaseOwnerName(db: Database, owner: String): Unit = {}
-
-  override def getDatabaseOwnerType(db: Database): String = ""
-
-  override def setDatabaseOwnerType(db: Database, ownerType: String): Unit = {}
 }
 
 private[client] class Shim_v0_13 extends Shim_v0_12 {
@@ -518,17 +510,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       classOf[Database],
       "setOwnerName",
       classOf[String])
-
-  private lazy val getDatabaseOwnerTypeMethod =
-    findMethod(
-      classOf[Database],
-      "getOwnerType")
-
-  private lazy val setDatabaseOwnerTypeMethod =
-    findMethod(
-      classOf[Database],
-      "setOwnerType",
-      classOf[PrincipalType])
 
   override def setCurrentSessionState(state: SessionState): Unit =
     setCurrentSessionStateMethod.invoke(null, state)
@@ -854,15 +835,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
   override def setDatabaseOwnerName(db: Database, owner: String): Unit = {
     setDatabaseOwnerNameMethod.invoke(db, owner)
-  }
-
-  override def getDatabaseOwnerType(db: Database): String = {
-    Option(getDatabaseOwnerTypeMethod.invoke(db))
-      .map(_.asInstanceOf[PrincipalType].name()).getOrElse("")
-  }
-
-  override def setDatabaseOwnerType(db: Database, ownerType: String): Unit = {
-    setDatabaseOwnerTypeMethod.invoke(db, PrincipalType.valueOf(ownerType))
   }
 }
 

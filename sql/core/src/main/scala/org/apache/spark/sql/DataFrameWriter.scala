@@ -198,7 +198,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Buckets the output by the given columns. If specified, the output is laid out on the file
-   * system similar to Hive's bucketing scheme.
+   * system similar to Hive's bucketing scheme, but with a different bucket hash function
+   * and is not compatible with Hive's bucketing.
    *
    * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
    * 2.1.0.
@@ -257,21 +258,36 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val options = sessionOptions ++ extraOptions
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
+      def getTable: Table = {
+        // For file source, it's expensive to infer schema/partition at each write. Here we pass
+        // the schema of input query and the user-specified partitioning to `getTable`. If the
+        // query schema is not compatible with the existing data, the write can still success but
+        // following reads would fail.
+        if (provider.isInstanceOf[FileDataSourceV2]) {
+          provider.getTable(
+            df.schema.asNullable,
+            partitioningAsV2.toArray,
+            dsOptions.asCaseSensitiveMap())
+        } else {
+          DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema = None)
+        }
+      }
+
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      val catalogManager = df.sparkSession.sessionState.catalogManager
       mode match {
         case SaveMode.Append | SaveMode.Overwrite =>
-          val table = provider match {
+          val (table, catalog, ident) = provider match {
             case supportsExtract: SupportsCatalogOptions =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
-              val sessionState = df.sparkSession.sessionState
               val catalog = CatalogV2Util.getTableProviderCatalog(
-                supportsExtract, sessionState.catalogManager, dsOptions)
+                supportsExtract, catalogManager, dsOptions)
 
-              catalog.loadTable(ident)
-            case tableProvider: TableProvider =>
-              val t = tableProvider.getTable(dsOptions)
+              (catalog.loadTable(ident), Some(catalog), Some(ident))
+            case _: TableProvider =>
+              val t = getTable
               if (t.supports(BATCH_WRITE)) {
-                t
+                (t, None, None)
               } else {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
@@ -280,7 +296,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
           }
 
-          val relation = DataSourceV2Relation.create(table, dsOptions)
+          val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
@@ -299,9 +315,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           provider match {
             case supportsExtract: SupportsCatalogOptions =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
-              val sessionState = df.sparkSession.sessionState
               val catalog = CatalogV2Util.getTableProviderCatalog(
-                supportsExtract, sessionState.catalogManager, dsOptions)
+                supportsExtract, catalogManager, dsOptions)
 
               val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
 
@@ -315,8 +330,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                   extraOptions.toMap,
                   ignoreIfExists = createMode == SaveMode.Ignore)
               }
-            case tableProvider: TableProvider =>
-              if (tableProvider.getTable(dsOptions).supports(BATCH_WRITE)) {
+            case _: TableProvider =>
+              if (getTable.supports(BATCH_WRITE)) {
                 throw new AnalysisException(s"TableProvider implementation $source cannot be " +
                     s"written with $createMode mode, please use Append or Overwrite " +
                     "modes instead.")
@@ -419,7 +434,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case _: V1Table =>
         return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
-        DataSourceV2Relation.create(t)
+        DataSourceV2Relation.create(t, Some(catalog), Some(ident))
     }
 
     val command = mode match {
@@ -554,12 +569,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     val command = (mode, tableOpt) match {
-      case (_, Some(table: V1Table)) =>
+      case (_, Some(_: V1Table)) =>
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
-        AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan, extraOptions.toMap)
+        val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+        AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
         ReplaceTableAsSelect(
@@ -733,12 +749,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
-   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
+   * This applies to timestamp type.</li>
    * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
    * files. If it is not set, the UTF-8 charset will be used. </li>
    * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
@@ -854,12 +874,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
-   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
+   * This applies to timestamp type.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading
    * whitespaces from values being written should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `true`): a flag indicating defines whether or not
@@ -881,7 +905,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
     // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(session, qe, Some(name))(qe.toRdd)
+    SQLExecution.withNewExecutionId(qe, Some(name))(qe.toRdd)
   }
 
   private def lookupV2Provider(): Option[TableProvider] = {

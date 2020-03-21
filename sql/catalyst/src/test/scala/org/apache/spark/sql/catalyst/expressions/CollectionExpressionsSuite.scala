@@ -74,6 +74,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
       testSize(sizeOfNull = null)
     }
+    // size(null) should return null under ansi mode.
+    withSQLConf(
+      SQLConf.LEGACY_SIZE_OF_NULL.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      testSize(sizeOfNull = null)
+    }
   }
 
   test("MapKeys/MapValues") {
@@ -139,8 +145,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
-    // overlapping maps should remove duplicated map keys w.r.t. last win policy.
-    checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
+    checkExceptionInExpression[RuntimeException](
+      MapConcat(Seq(m0, m1)), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // overlapping maps should remove duplicated map keys w.r.t. last win policy.
+      checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
+    }
 
     // maps with no overlap
     checkEvaluation(MapConcat(Seq(m0, m2)),
@@ -272,8 +282,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(ai1), create_map(1 -> null, 2 -> 20, 3 -> null))
     checkEvaluation(MapFromEntries(ai2), Map.empty)
     checkEvaluation(MapFromEntries(ai3), null)
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
+
+    checkExceptionInExpression[RuntimeException](
+      MapFromEntries(ai4), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
+    }
     // Map key can't be null
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(ai5),
@@ -294,8 +309,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(as1), create_map("a" -> null, "b" -> "bb", "c" -> null))
     checkEvaluation(MapFromEntries(as2), Map.empty)
     checkEvaluation(MapFromEntries(as3), null)
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
+
+    checkExceptionInExpression[RuntimeException](
+      MapFromEntries(as4), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
+    }
     // Map key can't be null
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(as5),

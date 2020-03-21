@@ -21,7 +21,7 @@ import java.util.Arrays;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -36,8 +36,10 @@ import org.apache.spark.sql.types.DataType;
  *       deleteColumn("c")
  *     )
  * </pre>
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface TableChange {
 
   /**
@@ -298,7 +300,7 @@ public interface TableChange {
   interface ColumnPosition {
 
     static ColumnPosition first() {
-      return First.SINGLETON;
+      return First.INSTANCE;
     }
 
     static ColumnPosition after(String column) {
@@ -312,7 +314,7 @@ public interface TableChange {
    * be the first one within the struct.
    */
   final class First implements ColumnPosition {
-    private static final First SINGLETON = new First();
+    private static final First INSTANCE = new First();
 
     private First() {}
 

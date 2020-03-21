@@ -36,8 +36,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def defaultNumPreShufflePartitions: Int =
-    if (conf.adaptiveExecutionEnabled && conf.reducePostShufflePartitionsEnabled) {
-      conf.maxNumPostShufflePartitions
+    if (conf.adaptiveExecutionEnabled && conf.coalesceShufflePartitionsEnabled) {
+      conf.initialShufflePartitionNum
     } else {
       conf.numShufflePartitions
     }
@@ -55,8 +55,6 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         child
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
-      case (ShuffleExchangeExec(partitioning, child, _), distribution: OrderedDistribution) =>
-        ShuffleExchangeExec(distribution.createPartitioning(partitioning.numPartitions), child)
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(defaultNumPreShufflePartitions)
@@ -207,10 +205,11 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
           left, right)
 
-      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right) =>
+      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right, isPartial) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
-        SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition, left, right)
+        SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition,
+          left, right, isPartial)
 
       case other => other
     }

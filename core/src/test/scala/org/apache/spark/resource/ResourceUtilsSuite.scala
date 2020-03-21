@@ -19,14 +19,17 @@ package org.apache.spark.resource
 
 import java.io.File
 import java.nio.file.{Files => JavaFiles}
+import java.util.Optional
 
 import org.json4s.{DefaultFormats, Extraction}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.util.Utils
 
 class ResourceUtilsSuite extends SparkFunSuite
@@ -35,7 +38,7 @@ class ResourceUtilsSuite extends SparkFunSuite
   test("ResourceID") {
     val componentName = "spark.test"
     val resourceName = "p100"
-    val id = ResourceID(componentName, resourceName)
+    val id = new ResourceID(componentName, resourceName)
     val confPrefix = s"$componentName.resource.$resourceName."
     assert(id.confPrefix === confPrefix)
     assert(id.amountConf === s"${confPrefix}amount")
@@ -91,7 +94,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       // test one with amount 0 to make sure ignored
       val fooDiscovery = createTempScriptWithExpectedOutput(dir, "fooDiscoverScript",
         """{"name": "foo", "addresses": ["f1", "f2", "f3"]}""")
-      val fooId = ResourceID(SPARK_EXECUTOR_PREFIX, "foo")
+      val fooId = new ResourceID(SPARK_EXECUTOR_PREFIX, "foo")
       conf.set(fooId.amountConf, "0")
       conf.set(fooId.discoveryScriptConf, fooDiscovery)
 
@@ -128,11 +131,46 @@ class ResourceUtilsSuite extends SparkFunSuite
       assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
 
       val gpuDiscovery = createTempScriptWithExpectedOutput(
-        dir, "gpuDiscoveryScript", """{"name": "gpu", "addresses": ["0", "1"]}""")
+        dir, "gpuDiscoveryScript",
+        """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(EXECUTOR_GPU_ID.amountConf, "2")
       conf.set(EXECUTOR_GPU_ID.discoveryScriptConf, gpuDiscovery)
       val resourcesFromBoth = getOrDiscoverAllResources(
         conf, SPARK_EXECUTOR_PREFIX, Some(resourcesFile))
+      val expectedGpuInfo = new ResourceInformation(GPU, Array("0", "1"))
+      assert(resourcesFromBoth(FPGA) === expectedFpgaInfo)
+      assert(resourcesFromBoth(GPU) === expectedGpuInfo)
+    }
+  }
+
+  test("get from resources file and discover resource profile remaining") {
+    val conf = new SparkConf
+    val rpId = 1
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      implicit val formats = DefaultFormats
+      val fpgaAddrs = Seq("f1", "f2", "f3")
+      val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
+      val resourcesFile = createTempJsonFile(
+        dir, "resources", Extraction.decompose(Seq(fpgaAllocation)))
+      val resourcesFromFileOnly = getOrDiscoverAllResourcesForResourceProfile(
+        Some(resourcesFile),
+        SPARK_EXECUTOR_PREFIX,
+        ResourceProfile.getOrCreateDefaultProfile(conf),
+        conf)
+      val expectedFpgaInfo = new ResourceInformation(FPGA, fpgaAddrs.toArray)
+      assert(resourcesFromFileOnly(FPGA) === expectedFpgaInfo)
+
+      val gpuDiscovery = createTempScriptWithExpectedOutput(
+        dir, "gpuDiscoveryScript",
+        """{"name": "gpu", "addresses": ["0", "1"]}""")
+      val rpBuilder = new ResourceProfileBuilder()
+      val ereqs = new ExecutorResourceRequests().resource(GPU, 2, gpuDiscovery)
+      val treqs = new TaskResourceRequests().resource(GPU, 1)
+
+      val rp = rpBuilder.require(ereqs).require(treqs).build
+      val resourcesFromBoth = getOrDiscoverAllResourcesForResourceProfile(
+        Some(resourcesFile), SPARK_EXECUTOR_PREFIX, rp, conf)
       val expectedGpuInfo = new ResourceInformation(GPU, Array("0", "1"))
       assert(resourcesFromBoth(FPGA) === expectedFpgaInfo)
       assert(resourcesFromBoth(GPU) === expectedGpuInfo)
@@ -148,7 +186,7 @@ class ResourceUtilsSuite extends SparkFunSuite
 
     conf.set(DRIVER_FPGA_ID.amountConf, "2")
     val resourcesMap = listResourceIds(conf, SPARK_DRIVER_PREFIX)
-      .map{ rId => (rId.resourceName, 1)}.toMap
+      .map { rId => (rId.resourceName, 1) }.toMap
     assert(resourcesMap.size === 2, "should only have GPU for resource")
     assert(resourcesMap.get(GPU).nonEmpty, "should have GPU")
     assert(resourcesMap.get(FPGA).nonEmpty, "should have FPGA")
@@ -160,8 +198,8 @@ class ResourceUtilsSuite extends SparkFunSuite
     var request = parseResourceRequest(conf, DRIVER_GPU_ID)
     assert(request.id.resourceName === GPU, "should only have GPU for resource")
     assert(request.amount === 2, "GPU count should be 2")
-    assert(request.discoveryScript === None, "discovery script should be empty")
-    assert(request.vendor === None, "vendor should be empty")
+    assert(request.discoveryScript === Optional.empty(), "discovery script should be empty")
+    assert(request.vendor === Optional.empty(), "vendor should be empty")
 
     val vendor = "nvidia.com"
     val discoveryScript = "discoveryScriptGPU"
@@ -207,18 +245,40 @@ class ResourceUtilsSuite extends SparkFunSuite
       val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
         """{"name": "fpga", "addresses": ["0", "1"]}""")
       val request =
-        ResourceRequest(
+        new ResourceRequest(
           DRIVER_GPU_ID,
           2,
-          Some(gpuDiscovery),
-          None)
+          Optional.of(gpuDiscovery),
+          Optional.empty[String])
 
       val error = intercept[SparkException] {
-        discoverResource(request)
+        discoverResource(conf, request)
       }.getMessage()
 
       assert(error.contains(s"Error running the resource discovery script $gpuDiscovery: " +
         "script returned resource name fpga and we were expecting gpu"))
+    }
+  }
+
+  test("Resource discoverer with invalid class") {
+    val conf = new SparkConf()
+      .set(RESOURCES_DISCOVERY_PLUGIN, Seq("someinvalidclass"))
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "fpga", "addresses": ["0", "1"]}""")
+      val request =
+        new ResourceRequest(
+          DRIVER_GPU_ID,
+          2,
+          Optional.of(gpuDiscovery),
+          Optional.empty[String])
+
+      val error = intercept[ClassNotFoundException] {
+        discoverResource(conf, request)
+      }.getMessage()
+
+      assert(error.contains(s"someinvalidclass"))
     }
   }
 
@@ -230,14 +290,14 @@ class ResourceUtilsSuite extends SparkFunSuite
         """{"addresses": ["0", "1"]}""")
 
       val request =
-        ResourceRequest(
+        new ResourceRequest(
           EXECUTOR_GPU_ID,
           2,
-          Some(gpuDiscovery),
-          None)
+          Optional.of(gpuDiscovery),
+          Optional.empty[String])
 
       val error = intercept[SparkException] {
-        discoverResource(request)
+        discoverResource(conf, request)
       }.getMessage()
 
       assert(error.contains("Error parsing JSON into ResourceInformation"))
@@ -250,14 +310,14 @@ class ResourceUtilsSuite extends SparkFunSuite
       val file1 = new File(dir, "bogusfilepath")
       try {
         val request =
-          ResourceRequest(
+          new ResourceRequest(
             EXECUTOR_GPU_ID,
             2,
-            Some(file1.getPath()),
-            None)
+            Optional.of(file1.getPath()),
+            Optional.empty[String])
 
         val error = intercept[SparkException] {
-          discoverResource(request)
+          discoverResource(conf, request)
         }.getMessage()
 
         assert(error.contains("doesn't exist"))
@@ -268,10 +328,11 @@ class ResourceUtilsSuite extends SparkFunSuite
   }
 
   test("gpu's specified but not a discovery script") {
-    val request = ResourceRequest(EXECUTOR_GPU_ID, 2, None, None)
+    val request = new ResourceRequest(EXECUTOR_GPU_ID, 2, Optional.empty[String],
+      Optional.empty[String])
 
     val error = intercept[SparkException] {
-      discoverResource(request)
+      discoverResource(new SparkConf(), request)
     }.getMessage()
 
     assert(error.contains("User is expecting to use resource: gpu, but " +

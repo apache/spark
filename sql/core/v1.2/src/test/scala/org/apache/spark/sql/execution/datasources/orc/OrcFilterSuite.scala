@@ -25,12 +25,14 @@ import scala.collection.JavaConverters._
 
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -42,6 +44,11 @@ import org.apache.spark.sql.types._
  * - HiveOrcFilterSuite uses 'org.apache.hadoop.hive.ql.io.sarg' package.
  */
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
+
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   protected def checkFilterPredicate(
       df: DataFrame,

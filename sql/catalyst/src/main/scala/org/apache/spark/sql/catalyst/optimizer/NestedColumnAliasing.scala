@@ -104,10 +104,13 @@ object NestedColumnAliasing {
   /**
    * Return two maps in order to replace nested fields to aliases.
    *
+   * If `exclusiveAttrs` is given, any nested field accessors of these attributes
+   * won't be considered in nested fields aliasing.
+   *
    * 1. ExtractValue -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
-  def getAliasSubMap(exprList: Seq[Expression])
+  def getAliasSubMap(exprList: Seq[Expression], exclusiveAttrs: Seq[Attribute] = Seq.empty)
     : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = {
     val (nestedFieldReferences, otherRootReferences) =
       exprList.flatMap(collectRootReferenceAndExtractValue).partition {
@@ -115,8 +118,9 @@ object NestedColumnAliasing {
         case _ => false
       }
 
+    val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
     val aliasSub = nestedFieldReferences.asInstanceOf[Seq[ExtractValue]]
-      .filter(!_.references.subsetOf(AttributeSet(otherRootReferences)))
+      .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head)
       .flatMap { case (attr, nestedFields: Seq[ExtractValue]) =>
         // Each expression can contain multiple nested fields.
@@ -129,7 +133,9 @@ object NestedColumnAliasing {
         // If all nested fields of `attr` are used, we don't need to introduce new aliases.
         // By default, ColumnPruning rule uses `attr` already.
         if (nestedFieldToAlias.nonEmpty &&
-            nestedFieldToAlias.length < totalFieldNum(attr.dataType)) {
+            nestedFieldToAlias
+              .map { case (nestedField, _) => totalFieldNum(nestedField.dataType) }
+              .sum < totalFieldNum(attr.dataType)) {
           Some(attr.exprId -> nestedFieldToAlias)
         } else {
           None

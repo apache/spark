@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAl
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.connector.catalog.SupportsNamespaces.{PROP_OWNER_NAME, PROP_OWNER_TYPE}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -375,45 +375,29 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     }
   }
 
-  private def checkOwner(db: String, expectedOwnerName: String, expectedOwnerType: String): Unit = {
-    val df = sql(s"DESCRIBE DATABASE EXTENDED $db")
-    val owner = df.where("database_description_item='Owner Name'")
-      .collect().head.getString(1)
-    val typ = df.where("database_description_item='Owner Type'")
-      .collect().head.getString(1)
-    assert(owner === expectedOwnerName)
-    assert(typ === expectedOwnerType)
-  }
-
   test("Database Ownership") {
     val catalog = spark.sessionState.catalog
     try {
-      val db1 = "spark_29425_1"
-      val db2 = "spark_29425_2"
-      val owner = "spark_29425"
-      val currentUser = Utils.getCurrentUserName()
+      val db = "spark_29425_1"
+      sql(s"CREATE DATABASE $db")
+      assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
+        .where("database_description_item='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+      sql(s"ALTER DATABASE $db SET DBPROPERTIES('abc'='xyz')")
+      assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
+        .where("database_description_item='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+    } finally {
+      catalog.reset()
+    }
+  }
 
-      sql(s"CREATE DATABASE $db1")
-      checkOwner(db1, currentUser, "USER")
-      sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a')")
-      checkOwner(db1, currentUser, "USER")
-      val e = intercept[ParseException](sql(s"ALTER DATABASE $db1 SET DBPROPERTIES ('a'='a',"
-        + s"'ownerName'='$owner','ownerType'='XXX')"))
-      assert(e.getMessage.contains("ownerName"))
-      sql(s"ALTER DATABASE $db1 SET OWNER ROLE $owner")
-      checkOwner(db1, owner, "ROLE")
-
-      val e2 = intercept[ParseException](
-        sql(s"CREATE DATABASE $db2 WITH DBPROPERTIES('ownerName'='$owner')"))
-      assert(e2.getMessage.contains("ownerName"))
-      sql(s"CREATE DATABASE $db2")
-      checkOwner(db2, currentUser, "USER")
-      sql(s"ALTER DATABASE $db2 SET OWNER GROUP $owner")
-      checkOwner(db2, owner, "GROUP")
-      sql(s"ALTER DATABASE $db2 SET OWNER GROUP `$owner`")
-      checkOwner(db2, owner, "GROUP")
-      sql(s"ALTER DATABASE $db2 SET OWNER GROUP OWNER")
-      checkOwner(db2, "OWNER", "GROUP")
+  test("Table Ownership") {
+    val catalog = spark.sessionState.catalog
+    try {
+      sql(s"CREATE TABLE spark_30019(k int)")
+      assert(sql(s"DESCRIBE TABLE EXTENDED spark_30019").where("col_name='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
     } finally {
       catalog.reset()
     }
@@ -424,7 +408,6 @@ class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import testImplicits._
   val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
-  private val reversedProperties = Seq("ownerName", "ownerType")
 
   override def afterEach(): Unit = {
     try {
@@ -998,8 +981,8 @@ class HiveDDLSuite
     val expectedSerdePropsString =
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
-    assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assume(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
+    assert(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
+    assert(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
@@ -1159,7 +1142,7 @@ class HiveDDLSuite
       sql(s"CREATE DATABASE $dbName Location '${tmpDir.toURI.getPath.stripSuffix("/")}'")
       val db1 = catalog.getDatabaseMetadata(dbName)
       val dbPath = new URI(tmpDir.toURI.toString.stripSuffix("/"))
-      assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)) ===
+      assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER)) ===
         CatalogDatabase(dbName, "", dbPath, Map.empty))
       sql("USE db1")
 
@@ -1198,7 +1181,7 @@ class HiveDDLSuite
     val expectedDBLocation = s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
     val expectedDBUri = CatalogUtils.stringToURI(expectedDBLocation)
     val db1 = catalog.getDatabaseMetadata(dbName)
-    assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER_NAME, PROP_OWNER_TYPE)) ==
+    assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER)) ==
       CatalogDatabase(
       dbName,
       "",
@@ -1597,6 +1580,12 @@ class HiveDDLSuite
         "source table/view path should be different from target table path")
     }
 
+    if (DDLUtils.isHiveTable(targetTable)) {
+      assert(targetTable.tracksPartitionsInCatalog)
+    } else {
+      assert(targetTable.tracksPartitionsInCatalog == sourceTable.tracksPartitionsInCatalog)
+    }
+
     // The source table contents should not been seen in the target table.
     assert(spark.table(sourceTable.identifier).count() != 0, "the source table should be nonempty")
     assert(spark.table(targetTable.identifier).count() == 0, "the target table should be empty")
@@ -1746,7 +1735,7 @@ class HiveDDLSuite
     Seq("json", "parquet").foreach { format =>
       withTable("rectangles") {
         data.write.format(format).saveAsTable("rectangles")
-        assume(spark.table("rectangles").collect().nonEmpty,
+        assert(spark.table("rectangles").collect().nonEmpty,
           "bad test; table was empty to begin with")
 
         sql("TRUNCATE TABLE rectangles")
@@ -2739,6 +2728,21 @@ class HiveDDLSuite
         val table = catalog.getTableMetadata(TableIdentifier("s"))
         assert(table.provider === Some("hive"))
       }
+    }
+  }
+
+  test("SPARK-30785: create table like a partitioned table") {
+    val catalog = spark.sessionState.catalog
+    withTable("sc_part", "ta_part") {
+      sql("CREATE TABLE sc_part (key string, ts int) USING parquet PARTITIONED BY (ts)")
+      sql("CREATE TABLE ta_part like sc_part")
+      val sourceTable = catalog.getTableMetadata(TableIdentifier("sc_part", Some("default")))
+      val targetTable = catalog.getTableMetadata(TableIdentifier("ta_part", Some("default")))
+      assert(sourceTable.tracksPartitionsInCatalog)
+      assert(targetTable.tracksPartitionsInCatalog)
+      assert(targetTable.partitionColumnNames == Seq("ts"))
+      sql("ALTER TABLE ta_part ADD PARTITION (ts=10)") // no exception
+      checkAnswer(sql("SHOW PARTITIONS ta_part"), Row("ts=10") :: Nil)
     }
   }
 }

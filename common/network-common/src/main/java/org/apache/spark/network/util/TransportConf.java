@@ -108,8 +108,12 @@ public class TransportConf {
     return conf.getInt(SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY, 1);
   }
 
-  /** Requested maximum length of the queue of incoming connections. Default is 64. */
-  public int backLog() { return conf.getInt(SPARK_NETWORK_IO_BACKLOG_KEY, 64); }
+  /**
+   * Requested maximum length of the queue of incoming connections. If  &lt; 1,
+   * the default Netty value of {@link io.netty.util.NetUtil#SOMAXCONN} will be used.
+   * Default to -1.
+   */
+  public int backLog() { return conf.getInt(SPARK_NETWORK_IO_BACKLOG_KEY, -1); }
 
   /** Number of threads used in the server thread pool. Default to 0, which is 2x#cores. */
   public int serverThreads() { return conf.getInt(SPARK_NETWORK_IO_SERVERTHREADS_KEY, 0); }

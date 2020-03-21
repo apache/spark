@@ -64,7 +64,7 @@ case class CreateTableStatement(
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
-    provider: String,
+    provider: Option[String],
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
@@ -79,7 +79,7 @@ case class CreateTableAsSelectStatement(
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
-    provider: String,
+    provider: Option[String],
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
@@ -114,7 +114,7 @@ case class ReplaceTableStatement(
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
-    provider: String,
+    provider: Option[String],
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
@@ -129,7 +129,7 @@ case class ReplaceTableAsSelectStatement(
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
-    provider: String,
+    provider: Option[String],
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
@@ -153,6 +153,10 @@ case class QualifiedColType(
  * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
  */
 case class AlterTableAddColumnsStatement(
+    tableName: Seq[String],
+    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
+
+case class AlterTableReplaceColumnsStatement(
     tableName: Seq[String],
     columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
 
@@ -293,14 +297,6 @@ case class DropViewStatement(
     ifExists: Boolean) extends ParsedStatement
 
 /**
- * A DESCRIBE TABLE tbl_name statement, as parsed from SQL.
- */
-case class DescribeTableStatement(
-    tableName: Seq[String],
-    partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends ParsedStatement
-
-/**
  * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
  */
 case class DescribeColumnStatement(
@@ -397,7 +393,9 @@ case class LoadDataStatement(
 /**
  * A SHOW CREATE TABLE statement, as parsed from SQL.
  */
-case class ShowCreateTableStatement(tableName: Seq[String]) extends ParsedStatement
+case class ShowCreateTableStatement(
+    tableName: Seq[String],
+    asSerde: Boolean = false) extends ParsedStatement
 
 /**
  * A CACHE TABLE statement, as parsed from SQL
@@ -445,13 +443,6 @@ case class ShowColumnsStatement(
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
-
-/**
- * A SHOW TBLPROPERTIES statement, as parsed from SQL
- */
-case class ShowTablePropertiesStatement(
-    tableName: Seq[String],
-    propertyKey: Option[String]) extends ParsedStatement
 
 /**
  * A DESCRIBE FUNCTION statement, as parsed from SQL

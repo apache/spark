@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -608,16 +608,17 @@ object Expand {
    */
   private def buildBitmask(
     groupingSetAttrs: Seq[Attribute],
-    attrMap: Map[Attribute, Int]): Int = {
+    attrMap: Map[Attribute, Int]): Long = {
     val numAttributes = attrMap.size
-    val mask = (1 << numAttributes) - 1
+    assert(numAttributes <= GroupingID.dataType.defaultSize * 8)
+    val mask = if (numAttributes != 64) (1L << numAttributes) - 1 else 0xFFFFFFFFFFFFFFFFL
     // Calculate the attrbute masks of selected grouping set. For example, if we have GroupBy
     // attributes (a, b, c, d), grouping set (a, c) will produce the following sequence:
     // (15, 7, 13), whose binary form is (1111, 0111, 1101)
     val masks = (mask +: groupingSetAttrs.map(attrMap).map(index =>
       // 0 means that the column at the given index is a grouping column, 1 means it is not,
       // so we unset the bit in bitmap.
-      ~(1 << (numAttributes - 1 - index))
+      ~(1L << (numAttributes - 1 - index))
     ))
     // Reduce masks to generate an bitmask for the selected grouping set.
     masks.reduce(_ & _)
@@ -641,11 +642,14 @@ object Expand {
     child: LogicalPlan): Expand = {
     val attrMap = groupByAttrs.zipWithIndex.toMap
 
+    val hasDuplicateGroupingSets = groupingSetsAttrs.size !=
+      groupingSetsAttrs.map(_.map(_.exprId).toSet).distinct.size
+
     // Create an array of Projections for the child projection, and replace the projections'
     // expressions which equal GroupBy expressions with Literal(null), if those expressions
     // are not set for this grouping set.
-    val projections = groupingSetsAttrs.map { groupingSetAttrs =>
-      child.output ++ groupByAttrs.map { attr =>
+    val projections = groupingSetsAttrs.zipWithIndex.map { case (groupingSetAttrs, i) =>
+      val projAttrs = child.output ++ groupByAttrs.map { attr =>
         if (!groupingSetAttrs.contains(attr)) {
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
@@ -654,12 +658,30 @@ object Expand {
           attr
         }
       // groupingId is the last output, here we use the bit mask as the concrete value for it.
-      } :+ Literal.create(buildBitmask(groupingSetAttrs, attrMap), IntegerType)
+      } :+ {
+        val bitMask = buildBitmask(groupingSetAttrs, attrMap)
+        val dataType = GroupingID.dataType
+        Literal.create(if (dataType.sameType(IntegerType)) bitMask.toInt else bitMask, dataType)
+      }
+
+      if (hasDuplicateGroupingSets) {
+        // If `groupingSetsAttrs` has duplicate entries (e.g., GROUPING SETS ((key), (key))),
+        // we add one more virtual grouping attribute (`_gen_grouping_pos`) to avoid
+        // wrongly grouping rows with the same grouping ID.
+        projAttrs :+ Literal.create(i, IntegerType)
+      } else {
+        projAttrs
+      }
     }
 
     // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
     // grouping expression or null, so here we create new instance of it.
-    val output = child.output ++ groupByAttrs.map(_.newInstance) :+ gid
+    val output = if (hasDuplicateGroupingSets) {
+      val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
+      child.output ++ groupByAttrs.map(_.newInstance) :+ gid :+ gpos
+    } else {
+      child.output ++ groupByAttrs.map(_.newInstance) :+ gid
+    }
     Expand(projections, output, Project(child.output ++ groupByAliases, child))
   }
 }
@@ -833,18 +855,18 @@ case class Tail(limitExpr: Expression, child: LogicalPlan) extends OrderPreservi
 /**
  * Aliased subquery.
  *
- * @param name the alias identifier for this subquery.
+ * @param identifier the alias identifier for this subquery.
  * @param child the logical plan of this subquery.
  */
 case class SubqueryAlias(
-    name: AliasIdentifier,
+    identifier: AliasIdentifier,
     child: LogicalPlan)
   extends OrderPreservingUnaryNode {
 
-  def alias: String = name.identifier
+  def alias: String = identifier.name
 
   override def output: Seq[Attribute] = {
-    val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
+    val qualifierList = identifier.qualifier :+ alias
     child.output.map(_.withQualifier(qualifierList))
   }
   override def doCanonicalize(): LogicalPlan = child.canonicalized
@@ -861,7 +883,13 @@ object SubqueryAlias {
       identifier: String,
       database: String,
       child: LogicalPlan): SubqueryAlias = {
-    SubqueryAlias(AliasIdentifier(identifier, Some(database)), child)
+    SubqueryAlias(AliasIdentifier(identifier, Seq(database)), child)
+  }
+
+  def apply(
+      multipartIdentifier: Seq[String],
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(multipartIdentifier.last, multipartIdentifier.init), child)
   }
 }
 /**

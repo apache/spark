@@ -66,7 +66,6 @@ jobs:
         export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         mkdir -p ~/.m2
-        echo "<settings><mirrors><mirror><id>google-maven-central</id><name>GCS Maven Central mirror</name><url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url><mirrorOf>central</mirrorOf></mirror></mirrors></settings>" > ~/.m2/settings.xml
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -P${{ matrix.hive }} -Phive-thriftserver -P${{ matrix.hadoop }} -Phadoop-cloud -Djava.version=${{ matrix.java }} install
         rm -rf ~/.m2/repository/org/apache/spark
 
@@ -118,3 +117,40 @@ jobs:
       run: ./R/install-dev.sh
     - name: lint-r
       run: ./dev/lint-r
+
+  docs:
+    runs-on: ubuntu-latest
+    name: Generate documents
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions/cache@v1
+      with:
+        path: ~/.m2/repository
+        key: docs-maven-repo-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          docs-maven-repo-
+    - uses: actions/setup-java@v1
+      with:
+        java-version: '1.8'
+    - uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+        architecture: 'x64'
+    - uses: actions/setup-ruby@v1
+      with:
+        ruby-version: '2.7'
+    - name: Install R
+      run: |
+        echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/' | sudo tee -a /etc/apt/sources.list
+        curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xE298A3A825C0D65DFD57CBB651716619E084DAB9" | sudo apt-key add
+        sudo apt-get update
+        sudo apt-get install -y r-base r-base-dev libcurl4-openssl-dev pandoc
+    - name: Install packages
+      run: |
+        pip install sphinx mkdocs numpy
+        gem install jekyll jekyll-redirect-from rouge
+        sudo Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
+    - name: Run jekyll build
+      run: |
+        cd docs
+        jekyll build

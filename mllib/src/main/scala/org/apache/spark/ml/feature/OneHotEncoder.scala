@@ -289,6 +289,14 @@ class OneHotEncoderModel private[ml] (
 
   /** @group setParam */
   @Since("3.0.0")
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
   def setInputCols(values: Array[String]): this.type = set(inputCols, values)
 
   /** @group setParam */

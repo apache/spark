@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
 
@@ -27,6 +26,22 @@ import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateSto
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object AggUtils {
+
+  private def mayRemoveAggFilters(exprs: Seq[AggregateExpression]): Seq[AggregateExpression] = {
+    exprs.map { ae =>
+      if (ae.filter.isDefined) {
+        ae.mode match {
+          // Aggregate filters are applicable only in partial/complete modes;
+          // this method filters out them, otherwise.
+          case Partial | Complete => ae
+          case _ => ae.copy(filter = None)
+        }
+      } else {
+        ae
+      }
+    }
+  }
+
   private def createAggregate(
       requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
       groupingExpressions: Seq[NamedExpression] = Nil,
@@ -41,7 +56,7 @@ object AggUtils {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
-        aggregateExpressions = aggregateExpressions,
+        aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = initialInputBufferOffset,
         resultExpressions = resultExpressions,
@@ -54,7 +69,7 @@ object AggUtils {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           groupingExpressions = groupingExpressions,
-          aggregateExpressions = aggregateExpressions,
+          aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
           aggregateAttributes = aggregateAttributes,
           initialInputBufferOffset = initialInputBufferOffset,
           resultExpressions = resultExpressions,
@@ -63,7 +78,7 @@ object AggUtils {
         SortAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           groupingExpressions = groupingExpressions,
-          aggregateExpressions = aggregateExpressions,
+          aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
           aggregateAttributes = aggregateAttributes,
           initialInputBufferOffset = initialInputBufferOffset,
           resultExpressions = resultExpressions,

@@ -311,15 +311,13 @@ private[spark] object GradientBoostedTrees extends Logging {
     val validationTol = boostingStrategy.validationTol
     treeStrategy.algo = OldAlgo.Regression
     treeStrategy.impurity = OldVariance
+    require(!treeStrategy.bootstrap, "GradientBoostedTrees does not need bootstrap sampling")
     treeStrategy.assertValid()
 
     // Prepare periodic checkpointers
     // Note: this is checkpointing the unweighted training error
     val predErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-      treeStrategy.getCheckpointInterval, sc)
-    // Note: this is checkpointing the unweighted validation error
-    val validatePredErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-      treeStrategy.getCheckpointInterval, sc)
+      treeStrategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
 
     timer.stop("init")
 
@@ -346,15 +344,10 @@ private[spark] object GradientBoostedTrees extends Logging {
       retaggedInput, splits, metadata)
       .persist(StorageLevel.MEMORY_AND_DISK)
       .setName("binned tree points")
-    val validationTreePoints = if (validate) {
-      TreePoint.convertToTreeRDD(
-        validationInput.retag(classOf[Instance]), splits, metadata)
-        .persist(StorageLevel.MEMORY_AND_DISK)
-    } else sc.emptyRDD[TreePoint]
 
     val firstCounts = BaggedPoint
       .convertToBaggedRDD(treePoints, treeStrategy.subsamplingRate, numSubsamples = 1,
-        withReplacement = false, (tp: TreePoint) => tp.weight, seed = seed)
+        treeStrategy.bootstrap, (tp: TreePoint) => tp.weight, seed = seed)
       .map { bagged =>
         require(bagged.subsampleCounts.length == 1)
         require(bagged.sampleWeight == bagged.datum.weight)
@@ -369,7 +362,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     }
 
     val firstTreeModel = RandomForest.runBagged(baggedInput = firstBagged,
-      metadata = metadata, splits = splits, strategy = treeStrategy, numTrees = 1,
+      metadata = metadata, bcSplits = bcSplits, strategy = treeStrategy, numTrees = 1,
       featureSubsetStrategy = featureSubsetStrategy, seed = seed, instr = instr,
       parentUID = None)
       .head.asInstanceOf[DecisionTreeRegressionModel]
@@ -388,14 +381,24 @@ private[spark] object GradientBoostedTrees extends Logging {
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
 
-    var validatePredError = computeInitialPredictionAndError(
-      validationTreePoints, firstTreeWeight, firstTreeModel, loss, bcSplits)
-    if (validate) validatePredErrorCheckpointer.update(validatePredError)
-    var bestValidateError = if (validate) {
-      computeWeightedError(validationTreePoints, validatePredError)
-    } else {
-      0.0
+    var validationTreePoints: RDD[TreePoint] = null
+    var validatePredError: RDD[(Double, Double)] = null
+    var validatePredErrorCheckpointer: PeriodicRDDCheckpointer[(Double, Double)] = null
+    var bestValidateError = 0.0
+    if (validate) {
+      timer.start("init validation")
+      validationTreePoints = TreePoint.convertToTreeRDD(
+        validationInput.retag(classOf[Instance]), splits, metadata)
+        .persist(StorageLevel.MEMORY_AND_DISK)
+      validatePredError = computeInitialPredictionAndError(
+        validationTreePoints, firstTreeWeight, firstTreeModel, loss, bcSplits)
+      validatePredErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
+        treeStrategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
+      validatePredErrorCheckpointer.update(validatePredError)
+      bestValidateError = computeWeightedError(validationTreePoints, validatePredError)
+      timer.stop("init validation")
     }
+
     var bestM = 1
 
     var m = 1
@@ -409,7 +412,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       // (label: Double, count: Int)
       val labelWithCounts = BaggedPoint
         .convertToBaggedRDD(treePoints, treeStrategy.subsamplingRate, numSubsamples = 1,
-          withReplacement = false, (tp: TreePoint) => tp.weight, seed = seed + m)
+          treeStrategy.bootstrap, (tp: TreePoint) => tp.weight, seed = seed + m)
         .zip(predError)
         .map { case (bagged, (pred, _)) =>
           require(bagged.subsampleCounts.length == 1)
@@ -428,7 +431,7 @@ private[spark] object GradientBoostedTrees extends Logging {
         }
 
       val model = RandomForest.runBagged(baggedInput = bagged,
-        metadata = metadata, splits = splits, strategy = treeStrategy,
+        metadata = metadata, bcSplits = bcSplits, strategy = treeStrategy,
         numTrees = 1, featureSubsetStrategy = featureSubsetStrategy,
         seed = seed + m, instr = None, parentUID = None)
         .head.asInstanceOf[DecisionTreeRegressionModel]
@@ -476,13 +479,15 @@ private[spark] object GradientBoostedTrees extends Logging {
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
+    bcSplits.destroy()
+    treePoints.unpersist()
     predErrorCheckpointer.unpersistDataSet()
     predErrorCheckpointer.deleteAllCheckpoints()
-    validatePredErrorCheckpointer.unpersistDataSet()
-    validatePredErrorCheckpointer.deleteAllCheckpoints()
-    treePoints.unpersist()
-    if (validate) validationTreePoints.unpersist()
-    bcSplits.destroy()
+    if (validate) {
+      validationTreePoints.unpersist()
+      validatePredErrorCheckpointer.unpersistDataSet()
+      validatePredErrorCheckpointer.deleteAllCheckpoints()
+    }
 
     if (validate) {
       (baseLearners.slice(0, bestM), baseLearnerWeights.slice(0, bestM))

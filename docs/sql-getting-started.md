@@ -27,7 +27,7 @@ license: |
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
-The entry point into all functionality in Spark is the [`SparkSession`](api/scala/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder()`:
+The entry point into all functionality in Spark is the [`SparkSession`](api/scala/org/apache/spark/sql/SparkSession.html) class. To create a basic `SparkSession`, just use `SparkSession.builder()`:
 
 {% include_example init_session scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
@@ -104,7 +104,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 ## Untyped Dataset Operations (aka DataFrame Operations)
 
-DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.Dataset), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/SparkDataFrame.html).
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/SparkDataFrame.html).
 
 As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala and Java API. These operations are also referred as "untyped transformations" in contrast to "typed transformations" come with strongly typed Scala/Java Datasets.
 
@@ -114,9 +114,9 @@ Here we include some basic examples of structured data processing using Datasets
 <div data-lang="scala"  markdown="1">
 {% include_example untyped_ops scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 
-For a complete list of the types of operations that can be performed on a Dataset, refer to the [API Documentation](api/scala/index.html#org.apache.spark.sql.Dataset).
+For a complete list of the types of operations that can be performed on a Dataset, refer to the [API Documentation](api/scala/org/apache/spark/sql/Dataset.html).
 
-In addition to simple column references and expressions, Datasets also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/scala/index.html#org.apache.spark.sql.functions$).
+In addition to simple column references and expressions, Datasets also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/scala/org/apache/spark/sql/functions$.html).
 </div>
 
 <div data-lang="java" markdown="1">
@@ -222,7 +222,7 @@ SELECT * FROM global_temp.temp_view
 ## Creating Datasets
 
 Datasets are similar to RDDs, however, instead of using Java serialization or Kryo they use
-a specialized [Encoder](api/scala/index.html#org.apache.spark.sql.Encoder) to serialize the objects
+a specialized [Encoder](api/scala/org/apache/spark/sql/Encoder.html) to serialize the objects
 for processing or transmitting over the network. While both encoders and standard serialization are
 responsible for turning an object into bytes, encoders are code generated dynamically and use a format
 that allows Spark to perform many operations like filtering, sorting and hashing without deserializing
@@ -351,30 +351,16 @@ For example:
 
 ## Aggregations
 
-The [built-in DataFrames functions](api/scala/index.html#org.apache.spark.sql.functions$) provide common
+The [built-in DataFrames functions](api/scala/org/apache/spark/sql/functions$.html) provide common
 aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
 While those functions are designed for DataFrames, Spark SQL also has type-safe versions for some of them in
-[Scala](api/scala/index.html#org.apache.spark.sql.expressions.scalalang.typed$) and
+[Scala](api/scala/org/apache/spark/sql/expressions/scalalang/typed$.html) and
 [Java](api/java/org/apache/spark/sql/expressions/javalang/typed.html) to work with strongly typed Datasets.
 Moreover, users are not limited to the predefined aggregate functions and can create their own.
 
-### Untyped User-Defined Aggregate Functions
-Users have to extend the [UserDefinedAggregateFunction](api/scala/index.html#org.apache.spark.sql.expressions.UserDefinedAggregateFunction)
-abstract class to implement a custom untyped aggregate function. For example, a user-defined average
-can look like:
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% include_example untyped_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedUntypedAggregation.scala%}
-</div>
-<div data-lang="java"  markdown="1">
-{% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
-</div>
-</div>
-
 ### Type-Safe User-Defined Aggregate Functions
 
-User-defined aggregations for strongly typed Datasets revolve around the [Aggregator](api/scala/index.html#org.apache.spark.sql.expressions.Aggregator) abstract class.
+User-defined aggregations for strongly typed Datasets revolve around the [Aggregator](api/scala/org/apache/spark/sql/expressions/Aggregator.html) abstract class.
 For example, a type-safe user-defined average can look like:
 
 <div class="codetabs">
@@ -383,5 +369,18 @@ For example, a type-safe user-defined average can look like:
 </div>
 <div data-lang="java"  markdown="1">
 {% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
+</div>
+</div>
+
+### Untyped User-Defined Aggregate Functions
+Typed aggregations, as described above, may also be registered as untyped aggregating UDFs for use with DataFrames.
+For example, a user-defined average for untyped DataFrames can look like:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example untyped_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedUntypedAggregation.scala%}
+</div>
+<div data-lang="java"  markdown="1">
+{% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
 </div>
 </div>

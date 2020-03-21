@@ -36,6 +36,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
@@ -784,7 +785,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192)") {
-    val FAIL_REASON = s"has to be >= the task config: ${CPUS_PER_TASK.key}"
+    val FAIL_REASON = " has to be >= the number of cpus per task"
     Seq(
       ("local", 2, None),
       ("local[2]", 3, None),
@@ -841,7 +842,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .setAppName("test-cluster")
         .set(DRIVER_GPU_ID.amountConf, "3")
         .set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
-        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
 
@@ -864,9 +864,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount " +
-      "needs to be specified since a task requirement config: spark.task.resource.gpu.amount " +
-      "was specified"))
+    assert(error.contains("No executor resource configs were not specified for the following " +
+      "task configs: gpu"))
   }
 
   test("Test parsing resources executor config < task requirements") {
@@ -880,15 +879,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount = 1 " +
-      "has to be >= the requested amount in task resource config: " +
-      "spark.task.resource.gpu.amount = 2"))
+    assert(error.contains("The executor resource: gpu, amount: 1 needs to be >= the task " +
+      "resource request amount of 2.0"))
   }
 
   test("Parse resources executor config not the same multiple numbers of the task requirements") {
     val conf = new SparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
+    conf.set(RESOURCES_WARNING_TESTING, true)
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
 
@@ -897,9 +896,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }.getMessage()
 
     assert(error.contains(
-      "The configuration of resource: gpu (exec = 4, task = 2, runnable tasks = 2) will result " +
-      "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
-      "executor to: 1. Please adjust your configuration."))
+      "The configuration of resource: gpu (exec = 4, task = 2.0/1, runnable tasks = 2) will " +
+        "result in wasted resources due to resource cpus limiting the number of runnable " +
+        "tasks per executor to: 1. Please adjust your configuration."))
   }
 
   test("test resource scheduling under local-cluster mode") {
@@ -908,16 +907,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val discoveryScript = createTempScriptWithExpectedOutput(dir, "resourceDiscoveryScript",
-        """{"name": "gpu","addresses":["0", "1", "2", "3", "4", "5", "6", "7", "8"]}""")
+        """{"name": "gpu","addresses":["0", "1", "2"]}""")
 
       val conf = new SparkConf()
-        .setMaster("local-cluster[3, 3, 1024]")
+        .setMaster("local-cluster[3, 1, 1024]")
         .setAppName("test-cluster")
         .set(WORKER_GPU_ID.amountConf, "3")
         .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
         .set(TASK_GPU_ID.amountConf, "3")
         .set(EXECUTOR_GPU_ID.amountConf, "3")
-        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
 
@@ -929,7 +927,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         context.resources().get(GPU).get.addresses.iterator
       }
       val gpus = rdd.collect()
-      assert(gpus.sorted === Seq("0", "1", "2", "3", "4", "5", "6", "7", "8"))
+      assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
 
       eventually(timeout(10.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)

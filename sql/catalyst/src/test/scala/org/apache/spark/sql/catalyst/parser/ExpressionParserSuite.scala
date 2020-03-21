@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -524,6 +523,16 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("1.20E-38BD", "decimal can only support precision up to 38")
   }
 
+  test("SPARK-30252: Decimal should set zero scale rather than negative scale by default") {
+    assertEqual("123.0BD", Literal(Decimal(BigDecimal("123.0")), DecimalType(4, 1)))
+    assertEqual("123BD", Literal(Decimal(BigDecimal("123")), DecimalType(3, 0)))
+    assertEqual("123E10BD", Literal(Decimal(BigDecimal("123E10")), DecimalType(13, 0)))
+    assertEqual("123E+10BD", Literal(Decimal(BigDecimal("123E+10")), DecimalType(13, 0)))
+    assertEqual("123E-10BD", Literal(Decimal(BigDecimal("123E-10")), DecimalType(10, 10)))
+    assertEqual("1.23E10BD", Literal(Decimal(BigDecimal("1.23E10")), DecimalType(11, 0)))
+    assertEqual("-1.23E10BD", Literal(Decimal(BigDecimal("-1.23E10")), DecimalType(11, 0)))
+  }
+
   test("SPARK-29956: scientific decimal should be parsed as Decimal in legacy mode") {
     def testDecimal(value: String, parser: ParserInterface): Unit = {
       assertEqual(value, Literal(BigDecimal(value).underlying), parser)
@@ -671,13 +680,13 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(new CalendarInterval(
         0,
         0,
-        -13 * MICROS_PER_SECOND - 123 * MICROS_PER_MILLIS - 456)))
+        DateTimeTestUtils.secFrac(-13, -123, -456))))
     checkIntervals(
       "13.123456 second",
       Literal(new CalendarInterval(
         0,
         0,
-        13 * MICROS_PER_SECOND + 123 * MICROS_PER_MILLIS + 456)))
+        DateTimeTestUtils.secFrac(13, 123, 456))))
     checkIntervals("1.001 second",
       Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
 
@@ -685,7 +694,7 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
 
     // Year-Month intervals.
-    val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
+    val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0", "\t -1-2\t")
     yearMonthValues.foreach { value =>
       val result = Literal(IntervalUtils.fromYearMonthString(value))
       checkIntervals(s"'$value' year to month", result)
@@ -698,7 +707,8 @@ class ExpressionParserSuite extends AnalysisTest {
       "10 9:8:7.123456789",
       "1 0:0:0",
       "-1 0:0:0",
-      "1 0:0:1")
+      "1 0:0:1",
+      "\t 1 0:0:1 ")
     datTimeValues.foreach { value =>
       val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' day to second", result)
@@ -759,15 +769,6 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
-  }
-
-  test("Support respect nulls keywords for first_value and last_value") {
-    assertEqual("first_value(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
-    assertEqual("first_value(a respect nulls)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("first_value(a)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("last_value(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
-    assertEqual("last_value(a respect nulls)", Last('a, Literal(false)).toAggregateExpression())
-    assertEqual("last_value(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 
   test("timestamp literals") {

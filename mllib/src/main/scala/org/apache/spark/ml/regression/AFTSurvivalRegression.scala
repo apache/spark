@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -44,9 +44,8 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Params for accelerated failure time (AFT) regression.
  */
-private[regression] trait AFTSurvivalRegressionParams extends Params
-  with HasFeaturesCol with HasLabelCol with HasPredictionCol with HasMaxIter
-  with HasTol with HasFitIntercept with HasAggregationDepth with Logging {
+private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
+  with HasMaxIter with HasTol with HasFitIntercept with HasAggregationDepth with Logging {
 
   /**
    * Param for censor column name.
@@ -126,27 +125,15 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
  */
 @Since("1.6.0")
 class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: String)
-  extends Estimator[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams
-  with DefaultParamsWritable with Logging {
+  extends Regressor[Vector, AFTSurvivalRegression, AFTSurvivalRegressionModel]
+  with AFTSurvivalRegressionParams with DefaultParamsWritable with Logging {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("aftSurvReg"))
 
   /** @group setParam */
   @Since("1.6.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setLabelCol(value: String): this.type = set(labelCol, value)
-
-  /** @group setParam */
-  @Since("1.6.0")
   def setCensorCol(value: String): this.type = set(censorCol, value)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
   @Since("1.6.0")
@@ -207,9 +194,8 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       }
   }
 
-  @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
-    transformSchema(dataset.schema, logging = true)
+  override protected def train(
+      dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
     val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -281,7 +267,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val coefficients = Vectors.dense(rawCoefficients)
     val intercept = parameters(1)
     val scale = math.exp(parameters(0))
-    copyValues(new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale).setParent(this))
+    new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
   }
 
   @Since("1.6.0")
@@ -309,18 +295,11 @@ class AFTSurvivalRegressionModel private[ml] (
     @Since("2.0.0") val coefficients: Vector,
     @Since("1.6.0") val intercept: Double,
     @Since("1.6.0") val scale: Double)
-  extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with MLWritable {
+  extends RegressionModel[Vector, AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams
+  with MLWritable {
 
   @Since("3.0.0")
-  lazy val numFeatures: Int = coefficients.size
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+  override def numFeatures: Int = coefficients.size
 
   /** @group setParam */
   @Since("1.6.0")

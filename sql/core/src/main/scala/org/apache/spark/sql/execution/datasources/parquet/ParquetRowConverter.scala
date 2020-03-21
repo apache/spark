@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
-import java.util.TimeZone
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -33,8 +33,9 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -125,9 +126,12 @@ private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetToSparkSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
-    convertTz: Option[TimeZone],
+    convertTz: Option[ZoneId],
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
+
+  // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
+  private val rebaseDateTime = SQLConf.get.parquetRebaseDateTimeEnabled
 
   assert(
     parquetType.getFieldCount <= catalystType.length,
@@ -154,8 +158,6 @@ private[parquet] class ParquetRowConverter(
        |${catalystType.prettyJson}
      """.stripMargin)
 
-  private[this] val UTC = DateTimeUtils.TimeZoneUTC
-
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
    * converted filed values to the `ordinal`-th cell in `currentRow`.
@@ -180,8 +182,15 @@ private[parquet] class ParquetRowConverter(
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
+    // (SPARK-31116) Use case insensitive map if spark.sql.caseSensitive is false
+    // to prevent throwing IllegalArgumentException when searching catalyst type's field index
+    val catalystFieldNameToIndex = if (SQLConf.get.caseSensitiveAnalysis) {
+      catalystType.fieldNames.zipWithIndex.toMap
+    } else {
+      CaseInsensitiveMap(catalystType.fieldNames.zipWithIndex.toMap)
+    }
     parquetType.getFields.asScala.map { parquetField =>
-      val fieldIndex = catalystType.fieldIndex(parquetField.getName)
+      val fieldIndex = catalystFieldNameToIndex(parquetField.getName)
       val catalystField = catalystType(fieldIndex)
       // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
       newConverter(parquetField, catalystField.dataType, new RowUpdater(currentRow, fieldIndex))
@@ -265,16 +274,35 @@ private[parquet] class ParquetRowConverter(
         new ParquetStringConverter(updater)
 
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MICROS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            updater.setLong(value)
+        if (rebaseDateTime) {
+          new ParquetPrimitiveConverter(updater) {
+            override def addLong(value: Long): Unit = {
+              val rebased = DateTimeUtils.rebaseJulianToGregorianMicros(value)
+              updater.setLong(rebased)
+            }
+          }
+        } else {
+          new ParquetPrimitiveConverter(updater) {
+            override def addLong(value: Long): Unit = {
+              updater.setLong(value)
+            }
           }
         }
 
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            updater.setLong(DateTimeUtils.fromMillis(value))
+        if (rebaseDateTime) {
+          new ParquetPrimitiveConverter(updater) {
+            override def addLong(value: Long): Unit = {
+              val micros = DateTimeUtils.millisToMicros(value)
+              val rebased = DateTimeUtils.rebaseJulianToGregorianMicros(micros)
+              updater.setLong(rebased)
+            }
+          }
+        } else {
+          new ParquetPrimitiveConverter(updater) {
+            override def addLong(value: Long): Unit = {
+              updater.setLong(DateTimeUtils.millisToMicros(value))
+            }
           }
         }
 
@@ -292,16 +320,24 @@ private[parquet] class ParquetRowConverter(
             val timeOfDayNanos = buf.getLong
             val julianDay = buf.getInt
             val rawTime = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
-            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, UTC)).getOrElse(rawTime)
+            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, ZoneOffset.UTC))
+              .getOrElse(rawTime)
             updater.setLong(adjTime)
           }
         }
 
       case DateType =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addInt(value: Int): Unit = {
-            // DateType is not specialized in `SpecificMutableRow`, have to box it here.
-            updater.set(value.asInstanceOf[DateType#InternalType])
+        if (rebaseDateTime) {
+          new ParquetPrimitiveConverter(updater) {
+            override def addInt(value: Int): Unit = {
+              updater.set(DateTimeUtils.rebaseJulianToGregorianDays(value))
+            }
+          }
+        } else {
+          new ParquetPrimitiveConverter(updater) {
+            override def addInt(value: Int): Unit = {
+              updater.set(value)
+            }
           }
         }
 
@@ -591,7 +627,10 @@ private[parquet] class ParquetRowConverter(
       // The parquet map may contains null or duplicated map keys. When it happens, the behavior is
       // undefined.
       // TODO (SPARK-26174): disallow it with a config.
-      updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
+      updater.set(
+        new ArrayBasedMapData(
+          new GenericArrayData(currentKeys.toArray),
+          new GenericArrayData(currentValues.toArray)))
     }
 
     override def start(): Unit = {

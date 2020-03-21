@@ -61,9 +61,15 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   def partitionFilters: Seq[Expression]
 
   /**
-   * Create a new `FileScan` instance from the current one with different `partitionFilters`.
+   * Returns the data filters that can be use for file listing
    */
-  def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan
+  def dataFilters: Seq[Expression]
+
+  /**
+   * Create a new `FileScan` instance from the current one
+   * with different `partitionFilters` and `dataFilters`
+   */
+  def withFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan
 
   /**
    * If a file with `path` is unsplittable, return the unsplittable reason,
@@ -79,7 +85,8 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   override def equals(obj: Any): Boolean = obj match {
     case f: FileScan =>
       fileIndex == f.fileIndex && readSchema == f.readSchema
-        ExpressionSet(partitionFilters) == ExpressionSet(f.partitionFilters)
+        ExpressionSet(partitionFilters) == ExpressionSet(f.partitionFilters) &&
+        ExpressionSet(dataFilters) == ExpressionSet(f.dataFilters)
 
     case _ => false
   }
@@ -92,6 +99,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
     val metadata: Map[String, String] = Map(
       "ReadSchema" -> readDataSchema.catalogString,
       "PartitionFilters" -> seqToString(partitionFilters),
+      "DataFilters" -> seqToString(dataFilters),
       "Location" -> locationDesc)
     val metadataStr = metadata.toSeq.sorted.map {
       case (key, value) =>
@@ -103,7 +111,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   }
 
   protected def partitions: Seq[FilePartition] = {
-    val selectedPartitions = fileIndex.listFiles(partitionFilters, Seq.empty)
+    val selectedPartitions = fileIndex.listFiles(partitionFilters, dataFilters)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val partitionAttributes = fileIndex.partitionSchema.toAttributes
     val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap

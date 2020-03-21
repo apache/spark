@@ -31,12 +31,12 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
+import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here provides
@@ -652,6 +652,29 @@ object functions {
    * @since 1.3.0
    */
   def min(columnName: String): Column = min(Column(columnName))
+
+  /**
+   * Aggregate function: returns and array of the approximate percentile values
+   * of numeric column col at the given percentages.
+   *
+   * If percentage is an array, each value must be between 0.0 and 1.0.
+   * If it is a single floating point value, it must be between 0.0 and 1.0.
+   *
+   * The accuracy parameter is a positive numeric literal
+   * which controls approximation accuracy at the cost of memory.
+   * Higher value of accuracy yields better accuracy, 1.0/accuracy
+   * is the relative error of the approximation.
+   *
+   * @group agg_funcs
+   * @since 3.1.0
+   */
+  def percentile_approx(e: Column, percentage: Column, accuracy: Column): Column = {
+    withAggregateFunction {
+      new ApproximatePercentile(
+        e.expr, percentage.expr, accuracy.expr
+      )
+    }
+  }
 
   /**
    * Aggregate function: returns the skewness of the values in a group.
@@ -2460,25 +2483,25 @@ object functions {
   def soundex(e: Column): Column = withExpr { SoundEx(e.expr) }
 
   /**
-   * Splits str around matches of the given regex.
+   * Splits str around matches of the given pattern.
    *
    * @param str a string expression to split
-   * @param regex a string representing a regular expression. The regex string should be
-   *              a Java regular expression.
+   * @param pattern a string representing a regular expression. The regex string should be
+   *                a Java regular expression.
    *
    * @group string_funcs
    * @since 1.5.0
    */
-  def split(str: Column, regex: String): Column = withExpr {
-    StringSplit(str.expr, Literal(regex), Literal(-1))
+  def split(str: Column, pattern: String): Column = withExpr {
+    StringSplit(str.expr, Literal(pattern), Literal(-1))
   }
 
   /**
-   * Splits str around matches of the given regex.
+   * Splits str around matches of the given pattern.
    *
    * @param str a string expression to split
-   * @param regex a string representing a regular expression. The regex string should be
-   *              a Java regular expression.
+   * @param pattern a string representing a regular expression. The regex string should be
+   *                a Java regular expression.
    * @param limit an integer expression which controls the number of times the regex is applied.
    *        <ul>
    *          <li>limit greater than 0: The resulting array's length will not be more than limit,
@@ -2491,8 +2514,8 @@ object functions {
    * @group string_funcs
    * @since 3.0.0
    */
-  def split(str: Column, regex: String, limit: Int): Column = withExpr {
-    StringSplit(str.expr, Literal(regex), Literal(limit))
+  def split(str: Column, pattern: String, limit: Int): Column = withExpr {
+    StringSplit(str.expr, Literal(pattern), Literal(limit))
   }
 
   /**
@@ -2632,11 +2655,13 @@ object functions {
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
-   *                 can be cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
-   * @param format A pattern `dd.MM.uuuu` would return a string like `18.03.1993`
+   *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
    * @return A string, or null if `dateExpr` was a string that could not be cast to a timestamp
    * @note Use specialized functions like [[year]] whenever possible as they benefit from a
    * specialized implementation.
@@ -2873,7 +2898,7 @@ object functions {
   /**
    * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
    * representing the timestamp of that moment in the current system time zone in the
-   * uuuu-MM-dd HH:mm:ss format.
+   * yyyy-MM-dd HH:mm:ss format.
    *
    * @param ut A number of a type that is castable to a long, such as string or integer. Can be
    *           negative for timestamps before the unix epoch
@@ -2882,7 +2907,7 @@ object functions {
    * @since 1.5.0
    */
   def from_unixtime(ut: Column): Column = withExpr {
-    FromUnixTime(ut.expr, Literal("uuuu-MM-dd HH:mm:ss"))
+    FromUnixTime(ut.expr, Literal(TimestampFormatter.defaultPattern))
   }
 
   /**
@@ -2890,7 +2915,9 @@ object functions {
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param ut A number of a type that is castable to a long, such as string or integer. Can be
    *           negative for timestamps before the unix epoch
@@ -2914,30 +2941,32 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(): Column = withExpr {
-    UnixTimestamp(CurrentTimestamp(), Literal("uuuu-MM-dd HH:mm:ss"))
+    UnixTimestamp(CurrentTimestamp(), Literal(TimestampFormatter.defaultPattern))
   }
 
   /**
-   * Converts time string in format uuuu-MM-dd HH:mm:ss to Unix timestamp (in seconds),
+   * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
    * using the default timezone and the default locale.
    *
    * @param s A date, timestamp or string. If a string, the data must be in the
-   *          `uuuu-MM-dd HH:mm:ss` format
+   *          `yyyy-MM-dd HH:mm:ss` format
    * @return A long, or null if the input was a string not of the correct format
    * @group datetime_funcs
    * @since 1.5.0
    */
   def unix_timestamp(s: Column): Column = withExpr {
-    UnixTimestamp(s.expr, Literal("uuuu-MM-dd HH:mm:ss"))
+    UnixTimestamp(s.expr, Literal(TimestampFormatter.defaultPattern))
   }
 
   /**
    * Converts time string with given pattern to Unix timestamp (in seconds).
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a date, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @param p A date time pattern detailing the format of `s` when `s` is a string
    * @return A long, or null if `s` was a string that could not be cast to a date or `p` was
    *         an invalid format
@@ -2950,7 +2979,7 @@ object functions {
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   *          cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @return A timestamp, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
    * @since 2.2.0
@@ -2962,10 +2991,12 @@ object functions {
   /**
    * Converts time string with the given pattern to timestamp.
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @param fmt A date time pattern detailing the format of `s` when `s` is a string
    * @return A timestamp, or null if `s` was a string that could not be cast to a timestamp or
    *         `fmt` was an invalid format
@@ -2987,10 +3018,12 @@ object functions {
   /**
    * Converts the column into a `DateType` with a specified format
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param e   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a date, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   *            cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @param fmt A date time pattern detailing the format of `e` when `e`is a string
    * @return A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
    *         invalid format
@@ -3054,7 +3087,6 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     FromUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3066,7 +3098,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     FromUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3085,7 +3116,6 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3097,7 +3127,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
-  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     ToUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3413,8 +3442,14 @@ object functions {
   }
 
   /**
-   * Returns an array of elements after applying a tranformation to each element
+   * Returns an array of elements after applying a transformation to each element
    * in the input array.
+   * {{{
+   *   df.select(transform(col("i"), x => x + 1))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f col => transformed_col, the lambda function to transform the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3424,8 +3459,15 @@ object functions {
   }
 
   /**
-   * Returns an array of elements after applying a tranformation to each element
+   * Returns an array of elements after applying a transformation to each element
    * in the input array.
+   * {{{
+   *   df.select(transform(col("i"), (x, i) => x + i))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f (col, index) => transformed_col, the lambda function to filter the input column
+   *           given the index. Indices start at 0.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3436,6 +3478,12 @@ object functions {
 
   /**
    * Returns whether a predicate holds for one or more elements in the array.
+   * {{{
+   *   df.select(exists(col("i"), _ % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f col => predicate, the Boolean predicate to check the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3446,6 +3494,12 @@ object functions {
 
   /**
    * Returns whether a predicate holds for every element in the array.
+   * {{{
+   *   df.select(forall(col("i"), x => x % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f col => predicate, the Boolean predicate to check the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3456,6 +3510,12 @@ object functions {
 
   /**
    * Returns an array of elements for which a predicate holds in a given array.
+   * {{{
+   *   df.select(filter(col("s"), x => x % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f col => predicate, the Boolean predicate to filter the input column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3466,6 +3526,13 @@ object functions {
 
   /**
    * Returns an array of elements for which a predicate holds in a given array.
+   * {{{
+   *   df.select(filter(col("s"), (x, i) => i % 2 === 0))
+   * }}}
+   *
+   * @param column the input array column
+   * @param f (col, index) => predicate, the Boolean predicate to filter the input column
+   *           given the index. Indices start at 0.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3478,18 +3545,28 @@ object functions {
    * Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state. The final state is converted into the final result
    * by applying a finish function.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   * }}}
+   *
+   * @param expr the input array column
+   * @param initialValue the initial value
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
+   *              an input value to the combined_value
+   * @param finish combined_value => final_value, the lambda function to convert the combined value
+   *               of all inputs to final result
    *
    * @group collection_funcs
    * @since 3.0.0
    */
   def aggregate(
       expr: Column,
-      zero: Column,
+      initialValue: Column,
       merge: (Column, Column) => Column,
       finish: Column => Column): Column = withExpr {
     ArrayAggregate(
       expr.expr,
-      zero.expr,
+      initialValue.expr,
       createLambda(merge),
       createLambda(finish)
     )
@@ -3498,17 +3575,31 @@ object functions {
   /**
    * Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   * }}}
    *
+   * @param expr the input array column
+   * @param initialValue the initial value
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
+   *              an input value to the combined_value
    * @group collection_funcs
    * @since 3.0.0
    */
-  def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column): Column =
-    aggregate(expr, zero, merge, c => c)
+  def aggregate(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
+    aggregate(expr, initialValue, merge, c => c)
 
   /**
-   * Merge two given arrays, element-wise, into a signle array using a function.
+   * Merge two given arrays, element-wise, into a single array using a function.
    * If one array is shorter, nulls are appended at the end to match the length of the longer
    * array, before applying the function.
+   * {{{
+   *   df.select(zip_with(df1("val1"), df1("val2"), (x, y) => x + y))
+   * }}}
+   *
+   * @param left the left input array column
+   * @param right the right input array column
+   * @param f (lCol, rCol) => col, the lambda function to merge two input columns into one column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3520,6 +3611,12 @@ object functions {
   /**
    * Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new keys for the pairs.
+   * {{{
+   *   df.select(transform_keys(col("i"), (k, v) => k + v))
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f (key, value) => new_key, the lambda function to transform the key of input map column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3531,6 +3628,13 @@ object functions {
   /**
    * Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new values for the pairs.
+   * {{{
+   *   df.select(transform_values(col("i"), (k, v) => k + v))
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f (key, value) => new_value, the lambda function to transform the value of input map
+   *          column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3541,6 +3645,12 @@ object functions {
 
   /**
    * Returns a map whose key-value pairs satisfy a predicate.
+   * {{{
+   *   df.select(map_filter(col("m"), (k, v) => k * 10 === v))
+   * }}}
+   *
+   * @param expr the input map column
+   * @param f (key, value) => predicate, the Boolean predicate to filter the input map column
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3551,6 +3661,13 @@ object functions {
 
   /**
    * Merge two given maps, key-wise into a single map using a function.
+   * {{{
+   *   df.select(map_zip_with(df("m1"), df("m2"), (k, v1, v2) => k === v1 + v2))
+   * }}}
+   *
+   * @param left the left input map column
+   * @param right the right input map column
+   * @param f (key, value1, value2) => new_value, the lambda function to merge the map values
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3872,6 +3989,10 @@ object functions {
 
   /**
    * Returns length of array or map.
+   *
+   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+   * With the default settings, the function returns -1 for null input.
    *
    * @group collection_funcs
    * @since 1.5.0
@@ -4232,6 +4353,67 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator`
+   * so that it may be used with untyped Data Frames.
+   * {{{
+   *   val agg = // Aggregator[IN, BUF, OUT]
+   *
+   *   // declare a UDF based on agg
+   *   val aggUDF = udaf(agg)
+   *   val aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
+   *   spark.udf.register("myAggName", udaf(agg))
+   * }}}
+   *
+   * @tparam IN the aggregator input type
+   * @tparam BUF the aggregating buffer type
+   * @tparam OUT the finalized output type
+   *
+   * @param agg the typed Aggregator
+   *
+   * @return a UserDefinedFunction that can be used as an aggregating expression.
+   *
+   * @note The input encoder is inferred from the input type IN.
+   */
+  def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
+    udaf(agg, ExpressionEncoder[IN]())
+  }
+
+  /**
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator`
+   * so that it may be used with untyped Data Frames.
+   * {{{
+   *   Aggregator<IN, BUF, OUT> agg = // custom Aggregator
+   *   Encoder<IN> enc = // input encoder
+   *
+   *   // declare a UDF based on agg
+   *   UserDefinedFunction aggUDF = udaf(agg, enc)
+   *   DataFrame aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
+   *   spark.udf.register("myAggName", udaf(agg, enc))
+   * }}}
+   *
+   * @tparam IN the aggregator input type
+   * @tparam BUF the aggregating buffer type
+   * @tparam OUT the finalized output type
+   *
+   * @param agg the typed Aggregator
+   * @param inputEncoder a specific input encoder to use
+   *
+   * @return a UserDefinedFunction that can be used as an aggregating expression
+   *
+   * @note This overloading takes an explicit input encoder, to support UDAF
+   * declarations in Java.
+   */
+  def udaf[IN, BUF, OUT](
+      agg: Aggregator[IN, BUF, OUT],
+      inputEncoder: Encoder[IN]): UserDefinedFunction = {
+    UserDefinedAggregator(agg, inputEncoder)
+  }
+
+  /**
    * Defines a Scala closure of 0 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the Scala closure's
    * signature. By default the returned UDF is deterministic. To change it to
@@ -4587,7 +4769,19 @@ object functions {
    * @group udf_funcs
    * @since 2.0.0
    */
+  @deprecated("Untyped Scala UDF API is deprecated, please use typed Scala UDF API such as " +
+    "'def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction' instead.", "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
+      val errorMsg = "You're using untyped Scala UDF, which does not have the input type " +
+        "information. Spark may blindly pass null to the Scala closure with primitive-type " +
+        "argument, and the closure will see the default value of the Java type for the null " +
+        "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
+        "You could use typed Scala UDF APIs (e.g. `udf((x: Int) => x)`) to avoid this problem, " +
+        s"or set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with " +
+        s"caution."
+      throw new AnalysisException(errorMsg)
+    }
     SparkUserDefinedFunction(f, dataType, inputSchemas = Nil)
   }
 

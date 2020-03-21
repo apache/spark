@@ -27,29 +27,30 @@ class PandasMapOpsMixin(object):
     """
 
     @since(3.0)
-    def mapInPandas(self, udf):
+    def mapInPandas(self, func, schema):
         """
-        Maps an iterator of batches in the current :class:`DataFrame` using a Pandas user-defined
-        function and returns the result as a :class:`DataFrame`.
+        Maps an iterator of batches in the current :class:`DataFrame` using a Python native
+        function that takes and outputs a pandas DataFrame, and returns the result as a
+        :class:`DataFrame`.
 
-        The user-defined function should take an iterator of `pandas.DataFrame`\\s and return
+        The function should take an iterator of `pandas.DataFrame`\\s and return
         another iterator of `pandas.DataFrame`\\s. All columns are passed
-        together as an iterator of `pandas.DataFrame`\\s to the user-defined function and the
+        together as an iterator of `pandas.DataFrame`\\s to the function and the
         returned iterator of `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
         Each `pandas.DataFrame` size can be controlled by
         `spark.sql.execution.arrow.maxRecordsPerBatch`.
-        Its schema must match the returnType of the Pandas user-defined function.
 
-        :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
+        :param func: a Python native function that takes an iterator of `pandas.DataFrame`\\s, and
+            outputs an iterator of `pandas.DataFrame`\\s.
+        :param schema: the return type of the `func` in PySpark. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
-        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-        >>> df = spark.createDataFrame([(1, 21), (2, 30)],
-        ...                            ("id", "age"))  # doctest: +SKIP
-        >>> @pandas_udf(df.schema, PandasUDFType.MAP_ITER)  # doctest: +SKIP
-        ... def filter_func(batch_iter):
-        ...     for pdf in batch_iter:
+        >>> from pyspark.sql.functions import pandas_udf
+        >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+        >>> def filter_func(iterator):
+        ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
-        >>> df.mapInPandas(filter_func).show()  # doctest: +SKIP
+        >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
         +---+---+
         | id|age|
         +---+---+
@@ -58,17 +59,15 @@ class PandasMapOpsMixin(object):
 
         .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
+        .. note:: Experimental
         """
-        from pyspark.sql import Column, DataFrame
+        from pyspark.sql import DataFrame
+        from pyspark.sql.pandas.functions import pandas_udf
 
         assert isinstance(self, DataFrame)
 
-        # Columns are special because hasattr always return True
-        if isinstance(udf, Column) or not hasattr(udf, 'func') \
-                or udf.evalType != PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "MAP_ITER.")
-
+        udf = pandas_udf(
+            func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
         udf_column = udf(*[self[col] for col in self.columns])
         jdf = self._jdf.mapInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)

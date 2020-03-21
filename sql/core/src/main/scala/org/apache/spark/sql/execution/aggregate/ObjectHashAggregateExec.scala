@@ -67,7 +67,7 @@ case class ObjectHashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode {
+  extends BaseAggregateExec with AliasAwareOutputPartitioning {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -97,7 +97,7 @@ case class ObjectHashAggregateExec(
     }
   }
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numOutputRows = longMetric("numOutputRows")

@@ -21,7 +21,10 @@ import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpressi
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.read.{Scan, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.StructType
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] {
   import DataSourceV2Implicits._
@@ -54,7 +57,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
            |Output: ${output.mkString(", ")}
          """.stripMargin)
 
-      val scanRelation = DataSourceV2ScanRelation(relation.table, scan, output)
+      val wrappedScan = scan match {
+        case v1: V1Scan =>
+          val translated = filters.flatMap(DataSourceStrategy.translateFilter)
+          V1ScanWrapper(v1, translated, pushedFilters)
+        case _ => scan
+      }
+
+      val scanRelation = DataSourceV2ScanRelation(relation.table, wrappedScan, output)
 
       val projectionOverSchema = ProjectionOverSchema(output.toStructType)
       val projectionFunc = (expr: Expression) => expr transformDown {
@@ -76,4 +86,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
 
       withProjection
   }
+}
+
+// A wrapper for v1 scan to carry the translated filters and the handled ones. This is required by
+// the physical v1 scan node.
+case class V1ScanWrapper(
+    v1Scan: V1Scan,
+    translatedFilters: Seq[sources.Filter],
+    handledFilters: Seq[sources.Filter]) extends Scan {
+  override def readSchema(): StructType = v1Scan.readSchema()
 }

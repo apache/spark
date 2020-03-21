@@ -2,101 +2,101 @@
 -- Number of queries: 38
 
 
--- !query 0
+-- !query
 CREATE TABLE test_missing_target (a int, b int, c string, d string) using parquet
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 INSERT INTO test_missing_target VALUES (0, 1, 'XXXX', 'A')
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 INSERT INTO test_missing_target VALUES (1, 2, 'ABAB', 'b')
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 INSERT INTO test_missing_target VALUES (2, 2, 'ABAB', 'c')
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 INSERT INTO test_missing_target VALUES (3, 3, 'BBBB', 'D')
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 INSERT INTO test_missing_target VALUES (4, 3, 'BBBB', 'e')
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 INSERT INTO test_missing_target VALUES (5, 3, 'bbbb', 'F')
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 INSERT INTO test_missing_target VALUES (6, 4, 'cccc', 'g')
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 INSERT INTO test_missing_target VALUES (7, 4, 'cccc', 'h')
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 
 
 
--- !query 9
+-- !query
 INSERT INTO test_missing_target VALUES (8, 4, 'CCCC', 'I')
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 
 
 
--- !query 10
+-- !query
 INSERT INTO test_missing_target VALUES (9, 4, 'CCCC', 'j')
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 
 
 
--- !query 11
+-- !query
 SELECT udf(c), udf(count(*)) FROM test_missing_target GROUP BY
 udf(test_missing_target.c)
 ORDER BY udf(c)
--- !query 11 schema
-struct<CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
--- !query 11 output
+-- !query schema
+struct<CAST(udf(ansi_cast(c as string)) AS STRING):string,CAST(udf(ansi_cast(count(1) as string)) AS BIGINT):bigint>
+-- !query output
 ABAB	2
 BBBB	2
 CCCC	2
@@ -105,12 +105,12 @@ bbbb	1
 cccc	2
 
 
--- !query 12
+-- !query
 SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(test_missing_target.c)
 ORDER BY udf(c)
--- !query 12 schema
-struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
--- !query 12 output
+-- !query schema
+struct<CAST(udf(ansi_cast(count(1) as string)) AS BIGINT):bigint>
+-- !query output
 2
 2
 2
@@ -119,43 +119,43 @@ struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
 2
 
 
--- !query 13
+-- !query
 SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(b)
--- !query 13 schema
+-- !query schema
 struct<>
--- !query 13 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`b`' given input columns: [CAST(udf(cast(count(1) as string)) AS BIGINT)]; line 1 pos 75
+cannot resolve '`b`' given input columns: [CAST(udf(ansi_cast(count(1) as string)) AS BIGINT)]; line 1 pos 75
 
 
--- !query 14
+-- !query
 SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b)
--- !query 14 schema
-struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
--- !query 14 output
+-- !query schema
+struct<CAST(udf(ansi_cast(count(1) as string)) AS BIGINT):bigint>
+-- !query output
 1
 2
 3
 4
 
 
--- !query 15
+-- !query
 SELECT udf(test_missing_target.b), udf(count(*))
   FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b)
--- !query 15 schema
-struct<CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
--- !query 15 output
+-- !query schema
+struct<CAST(udf(ansi_cast(b as string)) AS INT):int,CAST(udf(ansi_cast(count(1) as string)) AS BIGINT):bigint>
+-- !query output
 1	1
 2	2
 3	3
 4	4
 
 
--- !query 16
+-- !query
 SELECT udf(c) FROM test_missing_target ORDER BY udf(a)
--- !query 16 schema
-struct<CAST(udf(cast(c as string)) AS STRING):string>
--- !query 16 output
+-- !query schema
+struct<CAST(udf(ansi_cast(c as string)) AS STRING):string>
+-- !query output
 XXXX
 ABAB
 ABAB
@@ -168,30 +168,30 @@ CCCC
 CCCC
 
 
--- !query 17
+-- !query
 SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b) desc
--- !query 17 schema
-struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
--- !query 17 output
+-- !query schema
+struct<CAST(udf(ansi_cast(count(1) as string)) AS BIGINT):bigint>
+-- !query output
 4
 3
 2
 1
 
 
--- !query 18
+-- !query
 SELECT udf(count(*)) FROM test_missing_target ORDER BY udf(1) desc
--- !query 18 schema
-struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
--- !query 18 output
+-- !query schema
+struct<CAST(udf(ansi_cast(count(1) as string)) AS BIGINT):bigint>
+-- !query output
 10
 
 
--- !query 19
+-- !query
 SELECT udf(c), udf(count(*)) FROM test_missing_target GROUP BY 1 ORDER BY 1
--- !query 19 schema
-struct<CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
--- !query 19 output
+-- !query schema
+struct<CAST(udf(ansi_cast(c as string)) AS STRING):string,CAST(udf(ansi_cast(count(1) as string)) AS BIGINT):bigint>
+-- !query output
 ABAB	2
 BBBB	2
 CCCC	2
@@ -200,32 +200,32 @@ bbbb	1
 cccc	2
 
 
--- !query 20
+-- !query
 SELECT udf(c), udf(count(*)) FROM test_missing_target GROUP BY 3
--- !query 20 schema
+-- !query schema
 struct<>
--- !query 20 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 GROUP BY position 3 is not in select list (valid range is [1, 2]); line 1 pos 63
 
 
--- !query 21
+-- !query
 SELECT udf(count(*)) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
 	GROUP BY udf(b) ORDER BY udf(b)
--- !query 21 schema
+-- !query schema
 struct<>
--- !query 21 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 14
 
 
--- !query 22
+-- !query
 SELECT udf(a), udf(a) FROM test_missing_target
 	ORDER BY udf(a)
--- !query 22 schema
-struct<CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(a as string)) AS INT):int>
--- !query 22 output
+-- !query schema
+struct<CAST(udf(ansi_cast(a as string)) AS INT):int,CAST(udf(ansi_cast(a as string)) AS INT):int>
+-- !query output
 0	0
 1	1
 2	2
@@ -238,12 +238,12 @@ struct<CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(a as string)) AS IN
 9	9
 
 
--- !query 23
+-- !query
 SELECT udf(udf(a)/2), udf(udf(a)/2) FROM test_missing_target
 	ORDER BY udf(udf(a)/2)
--- !query 23 schema
-struct<CAST(udf(cast((cast(cast(udf(cast(a as string)) as int) as double) / cast(2 as double)) as string)) AS DOUBLE):double,CAST(udf(cast((cast(cast(udf(cast(a as string)) as int) as double) / cast(2 as double)) as string)) AS DOUBLE):double>
--- !query 23 output
+-- !query schema
+struct<CAST(udf(ansi_cast((ansi_cast(ansi_cast(udf(ansi_cast(a as string)) as int) as double) / ansi_cast(2 as double)) as string)) AS DOUBLE):double,CAST(udf(ansi_cast((ansi_cast(ansi_cast(udf(ansi_cast(a as string)) as int) as double) / ansi_cast(2 as double)) as string)) AS DOUBLE):double>
+-- !query output
 0.0	0.0
 0.5	0.5
 1.0	1.0
@@ -256,12 +256,12 @@ struct<CAST(udf(cast((cast(cast(udf(cast(a as string)) as int) as double) / cast
 4.5	4.5
 
 
--- !query 24
+-- !query
 SELECT udf(a/2), udf(a/2) FROM test_missing_target
 	GROUP BY udf(a/2) ORDER BY udf(a/2)
--- !query 24 schema
-struct<CAST(udf(cast((cast(a as double) / cast(2 as double)) as string)) AS DOUBLE):double,CAST(udf(cast((cast(a as double) / cast(2 as double)) as string)) AS DOUBLE):double>
--- !query 24 output
+-- !query schema
+struct<CAST(udf(ansi_cast((ansi_cast(a as double) / ansi_cast(2 as double)) as string)) AS DOUBLE):double,CAST(udf(ansi_cast((ansi_cast(a as double) / ansi_cast(2 as double)) as string)) AS DOUBLE):double>
+-- !query output
 0.0	0.0
 0.5	0.5
 1.0	1.0
@@ -274,93 +274,93 @@ struct<CAST(udf(cast((cast(a as double) / cast(2 as double)) as string)) AS DOUB
 4.5	4.5
 
 
--- !query 25
+-- !query
 SELECT udf(x.b), udf(count(*)) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
 	GROUP BY udf(x.b) ORDER BY udf(x.b)
--- !query 25 schema
-struct<CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
--- !query 25 output
+-- !query schema
+struct<CAST(udf(ansi_cast(b as string)) AS INT):int,CAST(udf(ansi_cast(count(1) as string)) AS BIGINT):bigint>
+-- !query output
 1	1
 2	2
 3	3
 4	4
 
 
--- !query 26
+-- !query
 SELECT udf(count(*)) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
 	GROUP BY udf(x.b) ORDER BY udf(x.b)
--- !query 26 schema
-struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
--- !query 26 output
+-- !query schema
+struct<CAST(udf(ansi_cast(count(1) as string)) AS BIGINT):bigint>
+-- !query output
 1
 2
 3
 4
 
 
--- !query 27
+-- !query
 SELECT udf(a%2), udf(count(udf(b))) FROM test_missing_target
 GROUP BY udf(test_missing_target.a%2)
 ORDER BY udf(test_missing_target.a%2)
--- !query 27 schema
-struct<CAST(udf(cast((a % 2) as string)) AS INT):int,CAST(udf(cast(count(cast(udf(cast(b as string)) as int)) as string)) AS BIGINT):bigint>
--- !query 27 output
+-- !query schema
+struct<CAST(udf(ansi_cast((a % 2) as string)) AS INT):int,CAST(udf(ansi_cast(count(ansi_cast(udf(ansi_cast(b as string)) as int)) as string)) AS BIGINT):bigint>
+-- !query output
 0	5
 1	5
 
 
--- !query 28
+-- !query
 SELECT udf(count(c)) FROM test_missing_target
 GROUP BY udf(lower(test_missing_target.c))
 ORDER BY udf(lower(test_missing_target.c))
--- !query 28 schema
-struct<CAST(udf(cast(count(c) as string)) AS BIGINT):bigint>
--- !query 28 output
+-- !query schema
+struct<CAST(udf(ansi_cast(count(c) as string)) AS BIGINT):bigint>
+-- !query output
 2
 3
 4
 1
 
 
--- !query 29
+-- !query
 SELECT udf(count(udf(a))) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(b)
--- !query 29 schema
+-- !query schema
 struct<>
--- !query 29 output
+-- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`b`' given input columns: [CAST(udf(cast(count(cast(udf(cast(a as string)) as int)) as string)) AS BIGINT)]; line 1 pos 80
+cannot resolve '`b`' given input columns: [CAST(udf(ansi_cast(count(ansi_cast(udf(ansi_cast(a as string)) as int)) as string)) AS BIGINT)]; line 1 pos 80
 
 
--- !query 30
+-- !query
 SELECT udf(count(b)) FROM test_missing_target GROUP BY udf(b/2) ORDER BY udf(b/2)
--- !query 30 schema
-struct<CAST(udf(cast(count(b) as string)) AS BIGINT):bigint>
--- !query 30 output
+-- !query schema
+struct<CAST(udf(ansi_cast(count(b) as string)) AS BIGINT):bigint>
+-- !query output
 1
 2
 3
 4
 
 
--- !query 31
+-- !query
 SELECT udf(lower(test_missing_target.c)), udf(count(udf(c)))
   FROM test_missing_target GROUP BY udf(lower(c)) ORDER BY udf(lower(c))
--- !query 31 schema
-struct<CAST(udf(cast(lower(c) as string)) AS STRING):string,CAST(udf(cast(count(cast(udf(cast(c as string)) as string)) as string)) AS BIGINT):bigint>
--- !query 31 output
+-- !query schema
+struct<CAST(udf(ansi_cast(lower(c) as string)) AS STRING):string,CAST(udf(ansi_cast(count(ansi_cast(udf(ansi_cast(c as string)) as string)) as string)) AS BIGINT):bigint>
+-- !query output
 abab	2
 bbbb	3
 cccc	4
 xxxx	1
 
 
--- !query 32
+-- !query
 SELECT udf(a) FROM test_missing_target ORDER BY udf(upper(udf(d)))
--- !query 32 schema
-struct<CAST(udf(cast(a as string)) AS INT):int>
--- !query 32 output
+-- !query schema
+struct<CAST(udf(ansi_cast(a as string)) AS INT):int>
+-- !query output
 0
 1
 2
@@ -373,57 +373,57 @@ struct<CAST(udf(cast(a as string)) AS INT):int>
 9
 
 
--- !query 33
+-- !query
 SELECT udf(count(b)) FROM test_missing_target
 	GROUP BY udf((b + 1) / 2) ORDER BY udf((b + 1) / 2) desc
--- !query 33 schema
-struct<CAST(udf(cast(count(b) as string)) AS BIGINT):bigint>
--- !query 33 output
+-- !query schema
+struct<CAST(udf(ansi_cast(count(b) as string)) AS BIGINT):bigint>
+-- !query output
 4
 3
 2
 1
 
 
--- !query 34
+-- !query
 SELECT udf(count(udf(x.a))) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
 	GROUP BY udf(b/2) ORDER BY udf(b/2)
--- !query 34 schema
+-- !query schema
 struct<>
--- !query 34 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 14
 
 
--- !query 35
+-- !query
 SELECT udf(x.b/2), udf(count(udf(x.b))) FROM test_missing_target x,
 test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
 	GROUP BY udf(x.b/2) ORDER BY udf(x.b/2)
--- !query 35 schema
-struct<CAST(udf(cast((cast(b as double) / cast(2 as double)) as string)) AS DOUBLE):double,CAST(udf(cast(count(cast(udf(cast(b as string)) as int)) as string)) AS BIGINT):bigint>
--- !query 35 output
+-- !query schema
+struct<CAST(udf(ansi_cast((ansi_cast(b as double) / ansi_cast(2 as double)) as string)) AS DOUBLE):double,CAST(udf(ansi_cast(count(ansi_cast(udf(ansi_cast(b as string)) as int)) as string)) AS BIGINT):bigint>
+-- !query output
 0.5	1
 1.0	2
 1.5	3
 2.0	4
 
 
--- !query 36
+-- !query
 SELECT udf(count(udf(b))) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
 	GROUP BY udf(x.b/2)
--- !query 36 schema
+-- !query schema
 struct<>
--- !query 36 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Reference 'b' is ambiguous, could be: x.b, y.b.; line 1 pos 21
 
 
--- !query 37
+-- !query
 DROP TABLE test_missing_target
--- !query 37 schema
+-- !query schema
 struct<>
--- !query 37 output
+-- !query output
 

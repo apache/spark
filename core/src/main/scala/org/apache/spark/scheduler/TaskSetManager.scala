@@ -229,6 +229,8 @@ private[spark] class TaskSetManager(
       index: Int,
       resolveRacks: Boolean = true,
       speculatable: Boolean = false): Unit = {
+    // A zombie TaskSetManager may reach here while handling failed task.
+    if (isZombie) return
     val pendingTaskSetToAddTo = if (speculatable) pendingSpeculatableTasks else pendingTasks
     for (loc <- tasks(index).preferredLocations) {
       loc match {
@@ -945,7 +947,10 @@ private[spark] class TaskSetManager(
         && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (successful(index) && !killedByOtherAttempt.contains(tid)) {
+        // We may have a running task whose partition has been marked as successful,
+        // this partition has another task completed in another stage attempt.
+        // We treat it as a running task and will call handleFailedTask later.
+        if (successful(index) && !info.running && !killedByOtherAttempt.contains(tid)) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
@@ -1078,7 +1083,15 @@ private[spark] class TaskSetManager(
     levels.toArray
   }
 
+  def executorDecommission(execId: String): Unit = {
+    recomputeLocality()
+    // Future consideration: if an executor is decommissioned it may make sense to add the current
+    // tasks to the spec exec queue.
+  }
+
   def recomputeLocality(): Unit = {
+    // A zombie TaskSetManager may reach here while executorLost happens
+    if (isZombie) return
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)

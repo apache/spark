@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 /**
  * Parameters for Decision Tree-based algorithms.
  *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait DecisionTreeParams extends PredictorParams
   with HasCheckpointInterval with HasSeed with HasWeightCol {
@@ -47,6 +47,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * (default = "")
    * @group param
    */
+  @Since("3.0.0")
   final val leafCol: Param[String] =
     new Param[String](this, "leafCol", "Leaf indices column name. " +
       "Predicted leaf index of each instance in each tree by preorder")
@@ -139,9 +140,11 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group setParam */
+  @Since("3.0.0")
   final def setLeafCol(value: String): this.type = set(leafCol, value)
 
   /** @group getParam */
+  @Since("3.0.0")
   final def getLeafCol: String = $(leafCol)
 
   /** @group getParam */
@@ -317,7 +320,7 @@ private[spark] object TreeEnsembleParams {
 /**
  * Parameters for Decision Tree-based ensemble algorithms.
  *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
@@ -449,6 +452,20 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /** @group getParam */
   final def getNumTrees: Int = $(numTrees)
+
+  /**
+   * Whether bootstrap samples are used when building trees.
+   * @group expertParam
+   */
+  @Since("3.0.0")
+  final val bootstrap: BooleanParam = new BooleanParam(this, "bootstrap",
+    "Whether bootstrap samples are used when building trees.")
+
+  setDefault(bootstrap -> true)
+
+  /** @group getParam */
+  @Since("3.0.0")
+  final def getBootstrap: Boolean = $(bootstrap)
 }
 
 private[ml] trait RandomForestClassifierParams
@@ -460,7 +477,7 @@ private[ml] trait RandomForestRegressorParams
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
  *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize
   with HasValidationIndicatorCol {

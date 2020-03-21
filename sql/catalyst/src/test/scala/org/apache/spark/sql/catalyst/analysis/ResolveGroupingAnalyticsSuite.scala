@@ -33,9 +33,9 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
   lazy val unresolved_a = UnresolvedAttribute("a")
   lazy val unresolved_b = UnresolvedAttribute("b")
   lazy val unresolved_c = UnresolvedAttribute("c")
-  lazy val gid = 'spark_grouping_id.int.withNullability(false)
-  lazy val hive_gid = 'grouping__id.int.withNullability(false)
-  lazy val grouping_a = Cast(ShiftRight(gid, 1) & 1, ByteType, Option(TimeZone.getDefault().getID))
+  lazy val gid = 'spark_grouping_id.long.withNullability(false)
+  lazy val hive_gid = 'grouping__id.long.withNullability(false)
+  lazy val grouping_a = Cast(ShiftRight(gid, 1) & 1L, ByteType, Option(TimeZone.getDefault().getID))
   lazy val nulInt = Literal(null, IntegerType)
   lazy val nulStr = Literal(null, StringType)
   lazy val r1 = LocalRelation(a, b, c)
@@ -72,7 +72,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))))
     val expected = Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
       Expand(
-        Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
+        Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L), Seq(a, b, c, a, b, 0L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan, expected)
@@ -98,7 +98,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))))
     val expected = Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
       Expand(
-        Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
+        Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L), Seq(a, b, c, a, b, 0L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan, expected)
@@ -125,8 +125,8 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)
     val expected = Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
       Expand(
-        Seq(Seq(a, b, c, a, b, 0), Seq(a, b, c, a, nulStr, 1),
-          Seq(a, b, c, nulInt, b, 2), Seq(a, b, c, nulInt, nulStr, 3)),
+        Seq(Seq(a, b, c, a, b, 0L), Seq(a, b, c, a, nulStr, 1L),
+          Seq(a, b, c, nulInt, b, 2L), Seq(a, b, c, nulInt, nulStr, 3L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan, expected)
@@ -134,7 +134,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val originalPlan2 = Aggregate(Seq(Cube(Seq())), Seq(UnresolvedAlias(count(unresolved_c))), r1)
     val expected2 = Aggregate(Seq(gid), Seq(count(c).as("count(c)")),
       Expand(
-        Seq(Seq(a, b, c, 0)),
+        Seq(Seq(a, b, c, 0L)),
         Seq(a, b, c, gid),
         Project(Seq(a, b, c), r1)))
     checkAnalysis(originalPlan2, expected2)
@@ -145,7 +145,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)
     val expected = Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
       Expand(
-        Seq(Seq(a, b, c, a, b, 0), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, nulInt, nulStr, 3)),
+        Seq(Seq(a, b, c, a, b, 0L), Seq(a, b, c, a, nulStr, 1L), Seq(a, b, c, nulInt, nulStr, 3L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan, expected)
@@ -153,7 +153,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val originalPlan2 = Aggregate(Seq(Rollup(Seq())), Seq(UnresolvedAlias(count(unresolved_c))), r1)
     val expected2 = Aggregate(Seq(gid), Seq(count(c).as("count(c)")),
       Expand(
-        Seq(Seq(a, b, c, 0)),
+        Seq(Seq(a, b, c, 0L)),
         Seq(a, b, c, gid),
         Project(Seq(a, b, c), r1)))
     checkAnalysis(originalPlan2, expected2)
@@ -168,7 +168,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val expected = Aggregate(Seq(a, b, gid),
       Seq(a, b, count(c).as("count(c)"), grouping_a.as("grouping(a)")),
       Expand(
-        Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
+        Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L), Seq(a, b, c, a, b, 0L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan, expected)
@@ -180,8 +180,8 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val expected2 = Aggregate(Seq(a, b, gid),
       Seq(a, b, count(c).as("count(c)"), grouping_a.as("grouping(a)")),
       Expand(
-        Seq(Seq(a, b, c, a, b, 0), Seq(a, b, c, a, nulStr, 1),
-          Seq(a, b, c, nulInt, b, 2), Seq(a, b, c, nulInt, nulStr, 3)),
+        Seq(Seq(a, b, c, a, b, 0L), Seq(a, b, c, a, nulStr, 1L),
+          Seq(a, b, c, nulInt, b, 2L), Seq(a, b, c, nulInt, nulStr, 3L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan2, expected2)
@@ -193,7 +193,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val expected3 = Aggregate(Seq(a, b, gid),
       Seq(a, b, count(c).as("count(c)"), grouping_a.as("grouping(a)")),
       Expand(
-        Seq(Seq(a, b, c, a, b, 0), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, nulInt, nulStr, 3)),
+        Seq(Seq(a, b, c, a, b, 0L), Seq(a, b, c, a, nulStr, 1L), Seq(a, b, c, nulInt, nulStr, 3L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan3, expected3)
@@ -208,7 +208,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val expected = Aggregate(Seq(a, b, gid),
       Seq(a, b, count(c).as("count(c)"), gid.as("grouping_id(a, b)")),
       Expand(
-        Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
+        Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L), Seq(a, b, c, a, b, 0L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan, expected)
@@ -220,8 +220,8 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val expected2 = Aggregate(Seq(a, b, gid),
       Seq(a, b, count(c).as("count(c)"), gid.as("grouping_id(a, b)")),
       Expand(
-        Seq(Seq(a, b, c, a, b, 0), Seq(a, b, c, a, nulStr, 1),
-          Seq(a, b, c, nulInt, b, 2), Seq(a, b, c, nulInt, nulStr, 3)),
+        Seq(Seq(a, b, c, a, b, 0L), Seq(a, b, c, a, nulStr, 1L),
+          Seq(a, b, c, nulInt, b, 2L), Seq(a, b, c, nulInt, nulStr, 3L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan2, expected2)
@@ -233,7 +233,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val expected3 = Aggregate(Seq(a, b, gid),
       Seq(a, b, count(c).as("count(c)"), gid.as("grouping_id(a, b)")),
       Expand(
-        Seq(Seq(a, b, c, a, b, 0), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, nulInt, nulStr, 3)),
+        Seq(Seq(a, b, c, a, b, 0L), Seq(a, b, c, a, nulStr, 1L), Seq(a, b, c, nulInt, nulStr, 3L)),
         Seq(a, b, c, a, b, gid),
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan3, expected3)
@@ -249,7 +249,8 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Aggregate(Seq(a, b, gid),
         Seq(a, b, gid),
         Expand(
-          Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
+          Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L),
+            Seq(a, b, c, a, b, 0L)),
           Seq(a, b, c, a, b, gid),
           Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))))
     checkAnalysis(originalPlan, expected)
@@ -260,14 +261,15 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"))
 
     // Filter with GroupingID
-    val originalPlan3 = Filter(GroupingID(Seq(unresolved_a, unresolved_b)) === 1,
+    val originalPlan3 = Filter(GroupingID(Seq(unresolved_a, unresolved_b)) === 1L,
       GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b), r1, Seq(unresolved_a, unresolved_b)))
-    val expected3 = Project(Seq(a, b), Filter(gid === 1,
+    val expected3 = Project(Seq(a, b), Filter(gid === 1L,
       Aggregate(Seq(a, b, gid),
         Seq(a, b, gid),
         Expand(
-          Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
+          Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L),
+            Seq(a, b, c, a, b, 0L)),
           Seq(a, b, c, a, b, gid),
           Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))))
     checkAnalysis(originalPlan3, expected3)
@@ -289,7 +291,8 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Aggregate(Seq(a, b, gid),
         Seq(a, b, grouping_a.as("aggOrder")),
         Expand(
-          Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
+          Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L),
+            Seq(a, b, c, a, b, 0L)),
           Seq(a, b, c, a, b, gid),
           Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))))
     checkAnalysis(originalPlan, expected)
@@ -305,11 +308,12 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b), r1, Seq(unresolved_a, unresolved_b)))
     val expected3 = Project(Seq(a, b), Sort(
-      Seq(SortOrder('aggOrder.int.withNullability(false), Ascending)), true,
+      Seq(SortOrder('aggOrder.long.withNullability(false), Ascending)), true,
       Aggregate(Seq(a, b, gid),
         Seq(a, b, gid.as("aggOrder")),
         Expand(
-          Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
+          Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L),
+            Seq(a, b, c, a, b, 0L)),
           Seq(a, b, c, a, b, gid),
           Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))))
     checkAnalysis(originalPlan3, expected3)

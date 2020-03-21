@@ -222,33 +222,24 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
   }
 
-  test("to_json - key types of map don't matter") {
-    // interval type is invalid for converting to JSON. However, the keys of a map are treated
-    // as strings, so its type doesn't matter.
-    val df = Seq(Tuple1(Tuple1("-3 month 7 hours"))).toDF("a")
-      .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
-    checkAnswer(
-      df.select(to_json($"c")),
-      Row("""{"col1":{"-3 months 7 hours":"a"}}""") :: Nil)
-  }
-
-  test("to_json unsupported type") {
+  test("to_json - interval support") {
     val baseDf = Seq(Tuple1(Tuple1("-3 month 7 hours"))).toDF("a")
     val df = baseDf.select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
-    val e = intercept[AnalysisException]{
-      // Unsupported type throws an exception
-      df.select(to_json($"c")).collect()
-    }
-    assert(e.getMessage.contains(
-      "Unable to convert column a of type interval to JSON."))
+    checkAnswer(
+      df.select(to_json($"c")),
+      Row("""{"a":"-3 months 7 hours"}""") :: Nil)
 
-    // interval type is invalid for converting to JSON. We can't use it as value type of a map.
+    val df1 = baseDf
+      .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
+    checkAnswer(
+      df1.select(to_json($"c")),
+      Row("""{"col1":{"-3 months 7 hours":"a"}}""") :: Nil)
+
     val df2 = baseDf
       .select(struct(map(lit("a"), $"a._1".cast(CalendarIntervalType)).as("col1")).as("c"))
-    val e2 = intercept[AnalysisException] {
-      df2.select(to_json($"c")).collect()
-    }
-    assert(e2.getMessage.contains("Unable to convert column col1 of type interval to JSON"))
+    checkAnswer(
+      df2.select(to_json($"c")),
+      Row("""{"col1":{"a":"-3 months 7 hours"}}""") :: Nil)
   }
 
   test("roundtrip in to_json and from_json - struct") {
@@ -322,7 +313,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val errMsg1 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 1)")
     }
-    assert(errMsg1.getMessage.startsWith("Schema should be specified in DDL format as a string"))
+    assert(errMsg1.getMessage.startsWith("The expression '1' is not a valid schema string"))
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
@@ -662,4 +653,61 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(json_tuple_result === len)
     }
   }
+
+  test("support foldable schema by from_json") {
+    val options = Map[String, String]().asJava
+    val schema = regexp_replace(lit("dpt_org_id INT, dpt_org_city STRING"), "dpt_org_", "")
+    checkAnswer(
+      Seq("""{"id":1,"city":"Moscow"}""").toDS().select(from_json($"value", schema, options)),
+      Row(Row(1, "Moscow")))
+
+    val errMsg = intercept[AnalysisException] {
+      Seq(("""{"i":1}""", "i int")).toDF("json", "schema")
+        .select(from_json($"json", $"schema", options)).collect()
+    }.getMessage
+    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+  }
+
+  test("schema_of_json - infers the schema of foldable JSON string") {
+    val input = regexp_replace(lit("""{"item_id": 1, "item_price": 0.1}"""), "item_", "")
+    checkAnswer(
+      spark.range(1).select(schema_of_json(input)),
+      Seq(Row("struct<id:bigint,price:double>")))
+  }
+
+  test("SPARK-31065: schema_of_json - null and empty strings as strings") {
+    Seq("""{"id": null}""", """{"id": ""}""").foreach { input =>
+      checkAnswer(
+        spark.range(1).select(schema_of_json(input)),
+        Seq(Row("struct<id:string>")))
+    }
+  }
+
+  test("SPARK-31065: schema_of_json - 'dropFieldIfAllNull' option") {
+    val options = Map("dropFieldIfAllNull" -> "true")
+    // Structs
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""{"id": "a", "drop": {"drop": null}}"""),
+          options.asJava)),
+      Seq(Row("struct<id:string>")))
+
+    // Array of structs
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""[{"id": "a", "drop": {"drop": null}}]"""),
+          options.asJava)),
+      Seq(Row("array<struct<id:string>>")))
+
+    // Other types are not affected.
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""null"""),
+          options.asJava)),
+      Seq(Row("string")))
+  }
+
 }

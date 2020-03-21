@@ -36,7 +36,8 @@ case class TextScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,
-    partitionFilters: Seq[Expression] = Seq.empty)
+    partitionFilters: Seq[Expression] = Seq.empty,
+    dataFilters: Seq[Expression] = Seq.empty)
   extends TextBasedFileScan(sparkSession, options) {
 
   private val optionsAsScala = options.asScala.toMap
@@ -70,8 +71,9 @@ case class TextScan(
       readPartitionSchema, textOptions)
   }
 
-  override def withPartitionFilters(partitionFilters: Seq[Expression]): FileScan =
-    this.copy(partitionFilters = partitionFilters)
+  override def withFilters(
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
+    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
 
   override def equals(obj: Any): Boolean = obj match {
     case t: TextScan => super.equals(t) && options == t.options

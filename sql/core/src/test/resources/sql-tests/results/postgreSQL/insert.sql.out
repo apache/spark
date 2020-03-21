@@ -2,70 +2,70 @@
 -- Number of queries: 9
 
 
--- !query 0
+-- !query
 create table inserttest (col1 int, col2 int /* NOT NULL */, col3 string /* default 'testing' */) using parquet
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 insert into inserttest  values (NULL, 3, 'testing')
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 insert into inserttest values (NULL, 5, 'testing')
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 insert into inserttest values (NULL, 5, 'test')
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 insert into inserttest values (NULL, 7, 'testing')
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 select * from inserttest
--- !query 5 schema
+-- !query schema
 struct<col1:int,col2:int,col3:string>
--- !query 5 output
+-- !query output
 NULL	3	testing
 NULL	5	test
 NULL	5	testing
 NULL	7	testing
 
 
--- !query 6
+-- !query
 insert into inserttest values(30, 50, repeat('x', 10000))
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 select col1, col2, char_length(col3) from inserttest
--- !query 7 schema
-struct<col1:int,col2:int,length(col3):int>
--- !query 7 output
+-- !query schema
+struct<col1:int,col2:int,char_length(col3):int>
+-- !query output
 30	50	10000
 NULL	3	7
 NULL	5	4
@@ -73,9 +73,9 @@ NULL	5	7
 NULL	7	7
 
 
--- !query 8
+-- !query
 drop table inserttest
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 

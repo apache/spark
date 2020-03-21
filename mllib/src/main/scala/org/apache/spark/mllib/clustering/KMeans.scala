@@ -225,7 +225,7 @@ class KMeans private (
     }
 
     val zippedData = data.zip(norms).map { case ((v, w), norm) =>
-      (new VectorWithNorm(v, norm), w)
+      new VectorWithNorm(v, norm, w)
     }
 
     if (data.getStorageLevel == StorageLevel.NONE) {
@@ -241,7 +241,7 @@ class KMeans private (
    * Implementation of K-Means algorithm.
    */
   private def runAlgorithmWithWeight(
-      data: RDD[(VectorWithNorm, Double)],
+      data: RDD[VectorWithNorm],
       instr: Option[Instrumentation]): KMeansModel = {
 
     val sc = data.sparkContext
@@ -250,16 +250,14 @@ class KMeans private (
 
     val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
-    val dataVectorWithNorm = data.map(d => d._1)
-
     val centers = initialModel match {
       case Some(kMeansCenters) =>
         kMeansCenters.clusterCenters.map(new VectorWithNorm(_))
       case None =>
         if (initializationMode == KMeans.RANDOM) {
-          initRandom(dataVectorWithNorm)
+          initRandom(data)
         } else {
-          initKMeansParallel(dataVectorWithNorm, distanceMeasureInstance)
+          initKMeansParallel(data, distanceMeasureInstance)
         }
     }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
@@ -279,7 +277,7 @@ class KMeans private (
       val bcCenters = sc.broadcast(centers)
 
       // Find the new centers
-      val collected = data.mapPartitions { pointsAndWeights =>
+      val collected = data.mapPartitions { points =>
         val thisCenters = bcCenters.value
         val dims = thisCenters.head.vector.size
 
@@ -290,11 +288,11 @@ class KMeans private (
         //     sample1 * weight1/clusterWeightSum + sample2 * weight2/clusterWeightSum + ...
         val clusterWeightSum = Array.ofDim[Double](thisCenters.length)
 
-        pointsAndWeights.foreach { case (point, weight) =>
+        points.foreach { point =>
           val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
-          costAccum.add(cost * weight)
-          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter), weight)
-          clusterWeightSum(bestCenter) += weight
+          costAccum.add(cost * point.weight)
+          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter))
+          clusterWeightSum(bestCenter) += point.weight
         }
 
         clusterWeightSum.indices.filter(clusterWeightSum(_) > 0)
@@ -511,13 +509,15 @@ object KMeans {
 /**
  * A vector with its norm for fast distance computation.
  */
-private[clustering] class VectorWithNorm(val vector: Vector, val norm: Double)
-    extends Serializable {
+private[clustering] class VectorWithNorm(
+    val vector: Vector,
+    val norm: Double,
+    val weight: Double = 1.0) extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
 
   def this(array: Array[Double]) = this(Vectors.dense(array))
 
   /** Converts the vector to a dense vector. */
-  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
+  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm, weight)
 }

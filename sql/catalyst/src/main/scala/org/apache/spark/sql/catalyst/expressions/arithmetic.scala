@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
@@ -395,7 +395,7 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2`. It returns NULL if an operand is NULL or `expr2` is 0. The result is casted to long if spark.sql.legacy.integralDivide.returnBigint is true, otherwise the data type of the operands is returned.",
+  usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2`. It returns NULL if an operand is NULL or `expr2` is 0. The result is casted to long.",
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
@@ -403,26 +403,17 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
-case class IntegralDivide(left: Expression, right: Expression) extends DivModLike {
+case class IntegralDivide(
+    left: Expression,
+    right: Expression) extends DivModLike {
 
   override def inputType: AbstractDataType = TypeCollection(IntegralType, DecimalType)
 
-  override def dataType: DataType = if (SQLConf.get.integralDivideReturnLong) {
-    LongType
-  } else {
-    left.dataType
-  }
+  override def dataType: DataType = LongType
 
   override def symbol: String = "/"
   override def decimalMethod: String = "quot"
-  override def decimalToDataTypeCodeGen(decimalResult: String): String = {
-    if (SQLConf.get.integralDivideReturnLong) {
-      s"$decimalResult.toLong()"
-    } else {
-      decimalResult
-    }
-  }
-
+  override def decimalToDataTypeCodeGen(decimalResult: String): String = s"$decimalResult.toLong()"
   override def sqlOperator: String = "div"
 
   private lazy val div: (Any, Any) => Any = {
@@ -432,23 +423,23 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
       case d: DecimalType =>
         d.asIntegral.asInstanceOf[Integral[Any]]
     }
-    val divide = integral.quot _
-    if (SQLConf.get.integralDivideReturnLong) {
-      val toLong = integral.asInstanceOf[Integral[Any]].toLong _
-      (x, y) => {
-        val res = divide(x, y)
-        if (res == null) {
-          null
-        } else {
-          toLong(res)
-        }
+    (x, y) => {
+      val res = integral.quot(x, y)
+      if (res == null) {
+        null
+      } else {
+        integral.asInstanceOf[Integral[Any]].toLong(res)
       }
-    } else {
-      divide
     }
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
+}
+
+object IntegralDivide {
+  def apply(left: Expression, right: Expression): IntegralDivide = {
+    new IntegralDivide(left, right)
+  }
 }
 
 @ExpressionDescription(
@@ -466,6 +457,18 @@ case class Remainder(left: Expression, right: Expression) extends DivModLike {
 
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
+  override def toString: String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(sqlOperator) match {
+      case operator if operator == sqlOperator => s"($left $sqlOperator $right)"
+      case funcName => s"$funcName($left, $right)"
+    }
+  }
+  override def sql: String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(sqlOperator) match {
+      case operator if operator == sqlOperator => s"(${left.sql} $sqlOperator ${right.sql})"
+      case funcName => s"$funcName(${left.sql}, ${right.sql})"
+    }
+  }
 
   private lazy val mod: (Any, Any) => Any = dataType match {
     // special cases to make float/double primitive types faster

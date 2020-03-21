@@ -254,6 +254,98 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { iterator.next() }
   }
 
+  test("Hit maxBytesInFlight limitation before maxBlocksInFlightPerAddress") {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+
+    val remoteBmId1 = BlockManagerId("test-remote-client-1", "test-remote-host1", 1)
+    val remoteBmId2 = BlockManagerId("test-remote-client-2", "test-remote-host2", 2)
+    val blockId1 = ShuffleBlockId(0, 1, 0)
+    val blockId2 = ShuffleBlockId(1, 1, 0)
+    val blocksByAddress = Seq(
+      (remoteBmId1, Seq((blockId1, 1000L, 0))),
+      (remoteBmId2, Seq((blockId2, 1000L, 0)))).toIterator
+    val transfer = createMockTransfer(Map(
+      blockId1 -> createMockManagedBuffer(1000),
+      blockId2 -> createMockManagedBuffer(1000)))
+    val taskContext = TaskContext.empty()
+    val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      (_, in) => in,
+      1000L, // allow 1 FetchRequests at most at the same time
+      Int.MaxValue,
+      Int.MaxValue, // set maxBlocksInFlightPerAddress to Int.MaxValue
+      Int.MaxValue,
+      true,
+      false,
+      metrics,
+      false)
+    // After initialize() we'll have 2 FetchRequests and each is 1000 bytes. So only the
+    // first FetchRequests can be sent, and the second one will hit maxBytesInFlight so
+    // it won't be sent.
+    verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any())
+    assert(iterator.hasNext)
+    // next() will trigger off sending deferred request
+    iterator.next()
+    // the second FetchRequest should be sent at this time
+    verify(transfer, times(2)).fetchBlocks(any(), any(), any(), any(), any(), any())
+    assert(iterator.hasNext)
+    iterator.next()
+    assert(!iterator.hasNext)
+  }
+
+  test("Hit maxBlocksInFlightPerAddress limitation before maxBytesInFlight") {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+
+    val remoteBmId = BlockManagerId("test-remote-client-1", "test-remote-host", 2)
+    val blockId1 = ShuffleBlockId(0, 1, 0)
+    val blockId2 = ShuffleBlockId(0, 2, 0)
+    val blockId3 = ShuffleBlockId(0, 3, 0)
+    val blocksByAddress = Seq((remoteBmId,
+      Seq((blockId1, 1000L, 0), (blockId2, 1000L, 0), (blockId3, 1000L, 0)))).toIterator
+    val transfer = createMockTransfer(Map(
+      blockId1 -> createMockManagedBuffer(),
+      blockId2 -> createMockManagedBuffer(),
+      blockId3 -> createMockManagedBuffer()))
+    val taskContext = TaskContext.empty()
+    val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      (_, in) => in,
+      Int.MaxValue, // set maxBytesInFlight to Int.MaxValue
+      Int.MaxValue,
+      2, // set maxBlocksInFlightPerAddress to 2
+      Int.MaxValue,
+      true,
+      false,
+      metrics,
+      false)
+    // After initialize(), we'll have 2 FetchRequests that one has 2 blocks inside and another one
+    // has only one block. So only the first FetchRequest can be sent. The second FetchRequest will
+    // hit maxBlocksInFlightPerAddress so it won't be sent.
+    verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any())
+    // the first request packaged 2 blocks, so we also need to
+    // call next() for 2 times to exhaust the iterator.
+    assert(iterator.hasNext)
+    iterator.next()
+    assert(iterator.hasNext)
+    iterator.next()
+    verify(transfer, times(2)).fetchBlocks(any(), any(), any(), any(), any(), any())
+    assert(iterator.hasNext)
+    iterator.next()
+    assert(!iterator.hasNext)
+  }
+
   test("fetch continuous blocks in batch successful 3 local + 4 host local + 2 remote reads") {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-local-host", 1)
@@ -341,25 +433,28 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs().size === 1)
   }
 
-  test("fetch continuous blocks in batch respects maxBlocksInFlightPerAddress") {
+  test("fetch continuous blocks in batch should respect maxBytesInFlight") {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-local-host", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
 
     // Make sure remote blocks would return the merged block
-    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
-    val remoteBlocks = Seq[BlockId](
-      ShuffleBlockId(0, 3, 0),
-      ShuffleBlockId(0, 3, 1),
-      ShuffleBlockId(0, 3, 2),
-      ShuffleBlockId(0, 3, 3))
+    val remoteBmId1 = BlockManagerId("test-client-1", "test-client-1", 1)
+    val remoteBmId2 = BlockManagerId("test-client-2", "test-client-2", 2)
+    val remoteBlocks1 = (0 until 15).map(ShuffleBlockId(0, 3, _))
+    val remoteBlocks2 = Seq[BlockId](ShuffleBlockId(0, 4, 0), ShuffleBlockId(0, 4, 1))
     val mergedRemoteBlocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockBatchId(0, 3, 0, 4) -> createMockManagedBuffer())
+      ShuffleBlockBatchId(0, 3, 0, 3) -> createMockManagedBuffer(),
+      ShuffleBlockBatchId(0, 3, 3, 6) -> createMockManagedBuffer(),
+      ShuffleBlockBatchId(0, 3, 6, 9) -> createMockManagedBuffer(),
+      ShuffleBlockBatchId(0, 3, 9, 12) -> createMockManagedBuffer(),
+      ShuffleBlockBatchId(0, 3, 12, 15) -> createMockManagedBuffer(),
+      ShuffleBlockBatchId(0, 4, 0, 2) -> createMockManagedBuffer())
     val transfer = createMockTransfer(mergedRemoteBlocks)
 
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
-      (remoteBmId, remoteBlocks.map(blockId => (blockId, 1L, 1)))
-    ).toIterator
+      (remoteBmId1, remoteBlocks1.map(blockId => (blockId, 100L, 1))),
+      (remoteBmId2, remoteBlocks2.map(blockId => (blockId, 100L, 1)))).toIterator
 
     val taskContext = TaskContext.empty()
     val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
@@ -369,21 +464,87 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blockManager,
       blocksByAddress,
       (_, in) => in,
-      48 * 1024 * 1024,
+      1500,
       Int.MaxValue,
-      1,
+      Int.MaxValue,
       Int.MaxValue,
       true,
       false,
       metrics,
       true)
 
-    assert(iterator.hasNext)
-    val (blockId, inputStream) = iterator.next()
+    var numResults = 0
+    // After initialize(), there will be 6 FetchRequests. And each of the first 5 requests
+    // includes 1 merged block which is merged from 3 shuffle blocks. The last request has 1 merged
+    // block which merged from 2 shuffle blocks. So, only the first 5 requests(5 * 3 * 100 >= 1500)
+    // can be sent. The 6th FetchRequest will hit maxBlocksInFlightPerAddress so it won't
+    // be sent.
+    verify(transfer, times(5)).fetchBlocks(any(), any(), any(), any(), any(), any())
+    while (iterator.hasNext) {
+      val (blockId, inputStream) = iterator.next()
+      // Make sure we release buffers when a wrapped input stream is closed.
+      val mockBuf = mergedRemoteBlocks(blockId)
+      verifyBufferRelease(mockBuf, inputStream)
+      numResults += 1
+    }
+    // The 6th request will be sent after next() is called.
+    verify(transfer, times(6)).fetchBlocks(any(), any(), any(), any(), any(), any())
+    assert(numResults == 6)
+  }
+
+  test("fetch continuous blocks in batch should respect maxBlocksInFlightPerAddress") {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+
+    // Make sure remote blocks would return the merged block
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 1)
+    val remoteBlocks = Seq(
+      ShuffleBlockId(0, 3, 0),
+      ShuffleBlockId(0, 3, 1),
+      ShuffleBlockId(0, 4, 0),
+      ShuffleBlockId(0, 4, 1),
+      ShuffleBlockId(0, 5, 0))
+    val mergedRemoteBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockBatchId(0, 3, 0, 2) -> createMockManagedBuffer(),
+      ShuffleBlockBatchId(0, 4, 0, 2) -> createMockManagedBuffer(),
+      ShuffleBlockBatchId(0, 5, 0, 1) -> createMockManagedBuffer())
+
+    val transfer = createMockTransfer(mergedRemoteBlocks)
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
+      (remoteBmId, remoteBlocks.map(blockId => (blockId, 100L, 1)))).toIterator
+    val taskContext = TaskContext.empty()
+    val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      (_, in) => in,
+      Int.MaxValue,
+      Int.MaxValue,
+      2,
+      Int.MaxValue,
+      true,
+      false,
+      metrics,
+      true)
+    var numResults = 0
+    // After initialize(), there will be 2 FetchRequests. First one has 2 merged blocks and each
+    // of them is merged from 2 shuffle blocks, second one has 1 merged block which is merged from
+    // 1 shuffle block. So only the first FetchRequest can be sent. The second FetchRequest will
+    // hit maxBlocksInFlightPerAddress so it won't be sent.
     verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any())
-    // Make sure we release buffers when a wrapped input stream is closed.
-    val mockBuf = mergedRemoteBlocks(blockId)
-    verifyBufferRelease(mockBuf, inputStream)
+    while (iterator.hasNext) {
+      val (blockId, inputStream) = iterator.next()
+      // Make sure we release buffers when a wrapped input stream is closed.
+      val mockBuf = mergedRemoteBlocks(blockId)
+      verifyBufferRelease(mockBuf, inputStream)
+      numResults += 1
+    }
+    // The second request will be sent after next() is called.
+    verify(transfer, times(2)).fetchBlocks(any(), any(), any(), any(), any(), any())
+    assert(numResults == 3)
   }
 
   test("release current unexhausted buffer in case the task completes early") {

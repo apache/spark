@@ -598,10 +598,10 @@ class SparkSession(SparkConversionMixin):
         if has_pandas and isinstance(data, pandas.DataFrame):
             # Create a DataFrame from pandas DataFrame.
             return super(SparkSession, self).createDataFrame(
-                data, schema, verifySchema, samplingRatio)
-        return self._create_dataframe(data, schema, verifySchema, samplingRatio)
+                data, schema, samplingRatio, verifySchema)
+        return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
-    def _create_dataframe(self, data, schema, verifySchema, samplingRatio):
+    def _create_dataframe(self, data, schema, samplingRatio, verifySchema):
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
@@ -699,12 +699,14 @@ class SparkSession(SparkConversionMixin):
     def stop(self):
         """Stop the underlying :class:`SparkContext`.
         """
+        from pyspark.sql.context import SQLContext
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         self._jvm.SparkSession.clearDefaultSession()
         self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
+        SQLContext._instantiatedContext = None
 
     @since(2.0)
     def __enter__(self):

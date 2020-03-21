@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.text.SimpleDateFormat
 import java.time.{LocalDate, ZoneId}
-import java.util.Locale
+import java.util.{Date, Locale}
 
-import DateTimeUtils.{convertSpecialDate, localDateToDays}
+import org.apache.commons.lang3.time.FastDateFormat
+
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
@@ -30,16 +35,24 @@ sealed trait DateFormatter extends Serializable {
 class Iso8601DateFormatter(
     pattern: String,
     zoneId: ZoneId,
-    locale: Locale) extends DateFormatter with DateTimeFormatterHelper {
+    locale: Locale,
+    legacyFormat: LegacyDateFormats.LegacyDateFormat)
+  extends DateFormatter with DateTimeFormatterHelper {
 
   @transient
   private lazy val formatter = getOrCreateFormatter(pattern, locale)
 
+  @transient
+  private lazy val legacyFormatter = DateFormatter.getLegacyFormatter(
+    pattern, zoneId, locale, legacyFormat)
+
   override def parse(s: String): Int = {
     val specialDate = convertSpecialDate(s.trim, zoneId)
     specialDate.getOrElse {
-      val localDate = LocalDate.parse(s, formatter)
-      localDateToDays(localDate)
+      try {
+        val localDate = LocalDate.parse(s, formatter)
+        localDateToDays(localDate)
+      } catch checkDiffResult(s, legacyFormatter.parse)
     }
   }
 
@@ -48,17 +61,81 @@ class Iso8601DateFormatter(
   }
 }
 
+trait LegacyDateFormatter extends DateFormatter {
+  def parseToDate(s: String): Date
+  def formatDate(d: Date): String
+
+  override def parse(s: String): Int = {
+    val micros = DateTimeUtils.millisToMicros(parseToDate(s).getTime)
+    DateTimeUtils.microsToDays(micros)
+  }
+
+  override def format(days: Int): String = {
+    val date = DateTimeUtils.toJavaDate(days)
+    formatDate(date)
+  }
+}
+
+class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
+  @transient
+  private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
+  override def parseToDate(s: String): Date = fdf.parse(s)
+  override def formatDate(d: Date): String = fdf.format(d)
+}
+
+class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
+  @transient
+  private lazy val sdf = new SimpleDateFormat(pattern, locale)
+  override def parseToDate(s: String): Date = sdf.parse(s)
+  override def formatDate(d: Date): String = sdf.format(d)
+}
+
 object DateFormatter {
-  val defaultPattern: String = "uuuu-MM-dd"
+  import LegacyDateFormats._
+
   val defaultLocale: Locale = Locale.US
 
-  def apply(format: String, zoneId: ZoneId, locale: Locale): DateFormatter = {
-    new Iso8601DateFormatter(format, zoneId, locale)
+  val defaultPattern: String = "yyyy-MM-dd"
+
+  private def getFormatter(
+      format: Option[String],
+      zoneId: ZoneId,
+      locale: Locale = defaultLocale,
+      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): DateFormatter = {
+    val pattern = format.getOrElse(defaultPattern)
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+      getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
+    } else {
+      new Iso8601DateFormatter(pattern, zoneId, locale, legacyFormat)
+    }
+  }
+
+  def getLegacyFormatter(
+      pattern: String,
+      zoneId: ZoneId,
+      locale: Locale,
+      legacyFormat: LegacyDateFormat): DateFormatter = {
+    legacyFormat match {
+      case FAST_DATE_FORMAT =>
+        new LegacyFastDateFormatter(pattern, locale)
+      case SIMPLE_DATE_FORMAT | LENIENT_SIMPLE_DATE_FORMAT =>
+        new LegacySimpleDateFormatter(pattern, locale)
+    }
+  }
+
+  def apply(
+      format: String,
+      zoneId: ZoneId,
+      locale: Locale,
+      legacyFormat: LegacyDateFormat): DateFormatter = {
+    getFormatter(Some(format), zoneId, locale, legacyFormat)
   }
 
   def apply(format: String, zoneId: ZoneId): DateFormatter = {
-    apply(format, zoneId, defaultLocale)
+    getFormatter(Some(format), zoneId)
   }
 
-  def apply(zoneId: ZoneId): DateFormatter = apply(defaultPattern, zoneId)
+  def apply(zoneId: ZoneId): DateFormatter = {
+    getFormatter(None, zoneId)
+  }
 }

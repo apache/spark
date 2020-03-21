@@ -2,58 +2,58 @@
 UDF with mixed input types
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int/string to string:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to string wholestage off            242            308          94          0.4        2416.5       1.0X
-long/nullable int/string to string wholestage on            141            179          25          0.7        1410.3       1.7X
+long/nullable int/string to string wholestage off            250            327         108          0.4        2500.6       1.0X
+long/nullable int/string to string wholestage on            142            157          16          0.7        1421.2       1.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int/string to option:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to option wholestage off             91             97           9          1.1         908.1       1.0X
-long/nullable int/string to option wholestage on             77             91          12          1.3         774.4       1.2X
+long/nullable int/string to option wholestage off            124            125           2          0.8        1237.8       1.0X
+long/nullable int/string to option wholestage on             73             93          27          1.4         730.1       1.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int/string to primitive:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to primitive wholestage off             68             75           9          1.5         684.7       1.0X
-long/nullable int/string to primitive wholestage on             62             64           3          1.6         619.8       1.1X
+long/nullable int/string to primitive wholestage off             66             69           4          1.5         658.8       1.0X
+long/nullable int/string to primitive wholestage on             61             67          11          1.6         611.7       1.1X
 
 
 ================================================================================================
 UDF with primitive types
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int to string:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int to string wholestage off             67             68           0          1.5         672.2       1.0X
-long/nullable int to string wholestage on             66             72          11          1.5         660.5       1.0X
+long/nullable int to string wholestage off             66             67           0          1.5         663.9       1.0X
+long/nullable int to string wholestage on             66             68           2          1.5         664.6       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int to option:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int to option wholestage off             53             57           5          1.9         528.1       1.0X
-long/nullable int to option wholestage on             41             44           4          2.4         410.2       1.3X
+long/nullable int to option wholestage off             40             42           3          2.5         402.6       1.0X
+long/nullable int to option wholestage on             40             42           2          2.5         401.3       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 long/nullable int to primitive:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-long/nullable int to primitive wholestage off             46             48           4          2.2         459.1       1.0X
-long/nullable int to primitive wholestage on             40             40           0          2.5         398.0       1.2X
+long/nullable int to primitive wholestage off             38             39           0          2.6         384.8       1.0X
+long/nullable int to primitive wholestage on             39             45           5          2.5         392.6       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 UDF identity overhead:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Baseline                                             53             58           4          1.9         525.6       1.0X
-With identity UDF                                    38             38           0          2.7         376.3       1.4X
+Baseline                                             32             33           1          3.1         320.8       1.0X
+With identity UDF                                    37             40           6          2.7         369.1       0.9X
 
 
