@@ -318,7 +318,7 @@ NULL	a	NULL
 -- !query
 SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY cate, val
 -- !query schema
-struct<>
+struct<val:int,cate:string,row_number() OVER (PARTITION BY cate ORDER BY cate ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
 -- !query output
 1	a	2
 1	a	3
