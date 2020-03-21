@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -1421,17 +1421,42 @@ class TypeCoercionSuite extends AnalysisTest {
       In(Cast(Literal("a"), StringType),
         Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
-    Seq(true, false).foreach { followBinaryComparison =>
-      val converted = if (followBinaryComparison) {
+    Seq(true, false).foreach { follow =>
+      val decimalCase = if (follow) {
         In(Cast(Decimal(3.13), DoubleType),
           Seq(Cast(Literal("1"), DoubleType), Cast(Literal(2), DoubleType)))
       } else {
         In(Cast(Decimal(3.13), StringType),
           Seq(Cast(Literal("1"), StringType), Cast(Literal(2), StringType)))
       }
-      withSQLConf(SQLConf.LEGACY_IN_PREDICATE_FOLLOW_BINARY_COMPARISON_TYPE_COERCION.key ->
-        followBinaryComparison.toString) {
-        ruleTest(inConversion, In(Literal(Decimal(3.13)), Seq(Literal("1"), Literal(2))), converted)
+      val dateCase = if (follow) {
+        In(Cast(Literal(Date.valueOf("2017-03-01")), DateType),
+          Seq(Cast(Literal("2017-03-01"), DateType)))
+      } else {
+        In(Cast(Literal(Date.valueOf("2017-03-01")), StringType),
+          Seq(Cast(Literal("2017-03-01"), StringType)))
+      }
+      val timestampCase = if (follow) {
+        In(Cast(Literal(new Timestamp(0)), TimestampType),
+          Seq(Cast(Literal("1"), TimestampType), Cast(Literal(2), TimestampType)))
+      } else {
+        In(Cast(Literal(new Timestamp(0)), StringType),
+          Seq(Cast(Literal("1"), StringType), Cast(Literal(2), StringType)))
+      }
+      withSQLConf(
+        SQLConf.LEGACY_IN_PREDICATE_FOLLOW_BINARY_COMPARISON_TYPE_COERCION.key -> s"$follow") {
+        ruleTest(
+          inConversion,
+          In(Literal(Decimal(3.13)), Seq(Literal("1"), Literal(2))),
+          decimalCase)
+        ruleTest(
+          inConversion,
+          In(Literal(Date.valueOf("2017-03-01")), Seq(Literal("2017-03-01"))),
+          dateCase)
+        ruleTest(
+          inConversion,
+          In(Literal(new Timestamp(0)), Seq(Literal("1"), Literal(2))),
+          timestampCase)
       }
     }
   }
