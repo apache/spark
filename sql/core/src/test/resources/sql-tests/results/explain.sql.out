@@ -879,7 +879,7 @@ Execute CreateViewCommand (1)
 Output: []
       
 (2) CreateViewCommand 
-Arguments: `explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView
+Arguments: `default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView
       
 (3) UnresolvedRelation 
 Arguments: [explain_temp1]

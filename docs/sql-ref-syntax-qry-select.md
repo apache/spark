@@ -1,7 +1,7 @@
 ---
 layout: global
 title: SELECT
-displayTitle: SELECT 
+displayTitle: SELECT
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,39 +19,43 @@ license: |
   limitations under the License.
 ---
 Spark supports a `SELECT` statement and conforms to the ANSI SQL standard. Queries are
-used to retrieve result sets from one or more tables. The following section 
+used to retrieve result sets from one or more tables. The following section
 describes the overall query syntax and the sub-sections cover different constructs
-of a query along with examples. 
+of a query along with examples.
 
 ### Syntax
 {% highlight sql %}
 [ WITH with_query [ , ... ] ]
+select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_statement, ... ]
+[ ORDER BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
+[ SORT BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
+[ CLUSTER BY { expression [ , ...] } ]
+[ DISTRIBUTE BY { expression [, ...] } ]
+[ WINDOW { named_window [ , WINDOW named_window, ... ] } ]
+[ LIMIT { ALL | expression } ]
+{% endhighlight %}
+
+While `select_statement` is defined as
+{% highlight sql %}
 SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
   FROM { from_item [ , ...] }
   [ WHERE boolean_expression ]
   [ GROUP BY expression [ , ...] ]
   [ HAVING boolean_expression ]
-  [ ORDER BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
-  [ SORT  BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
-  [ CLUSTER BY { expression [ , ...] } ]
-  [ DISTRIBUTE BY { expression [, ...] } ]
-  { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select ]
-  [ WINDOW { named_window [ , WINDOW named_window, ... ] } ]
-  [ LIMIT { ALL | expression } ]
 {% endhighlight %}
 
 ### Parameters
 <dl>
   <dt><code><em>with_query</em></code></dt>
   <dd>
-    Specifies the common table expressions (CTEs) before the main <code>SELECT</code> query block.
-    These table expressions are allowed to be referenced later in the main query. This is useful to abstract
-    out repeated subquery blocks in the main query and improves readability of the query.
+    Specifies the common table expressions (CTEs) before the main query block.
+    These table expressions are allowed to be referenced later in the FROM clause. This is useful to abstract
+    out repeated subquery blocks in the FROM clause and improves readability of the query.
   </dd>
   <dt><code><em>hints</em></code></dt>
   <dd>
     Hints can be specified to help spark optimizer make better planning decisions. Currently spark supports hints
-    that influence selection of join strategies and repartitioning of the data. 
+    that influence selection of join strategies and repartitioning of the data.
   </dd>
   <dt><code><em>ALL</em></code></dt>
   <dd>
@@ -77,7 +81,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
       <li>Join relation</li>
       <li>Table valued function</li>
       <li>Inlined table</li>
-      <li>Subquery</li>    
+      <li>Subquery</li>
     </ol>
   </dd>
   <dt><code><em>WHERE</em></code></dt>
@@ -87,12 +91,13 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
   <dt><code><em>GROUP BY</em></code></dt>
   <dd>
     Specifies the expressions that are used to group the rows. This is used in conjunction with aggregate functions
-    (MIN, MAX, COUNT, SUM, AVG) to group rows based on the grouping expressions.
+    (MIN, MAX, COUNT, SUM, AVG, etc.) to group rows based on the grouping expressions and aggregate values in each group.
   </dd>
   <dt><code><em>HAVING</em></code></dt>
   <dd>
     Specifies the predicates by which the rows produced by GROUP BY are filtered. The HAVING clause is used to
-    filter rows after the grouping is performed.
+    filter rows after the grouping is performed. If HAVING is specified without GROUP BY, it indicates a GROUP BY
+    without grouping expressions (global aggregate).
   </dd>
   <dt><code><em>ORDER BY</em></code></dt>
   <dd>
@@ -108,17 +113,17 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
   <dt><code><em>CLUSTER BY</em></code></dt>
   <dd>
     Specifies a set of expressions that is used to repartition and sort the rows. Using this clause has
-    the same effect of using <code>DISTRIBUTE BY</code> and <code>SORT BY</code> together. 
+    the same effect of using <code>DISTRIBUTE BY</code> and <code>SORT BY</code> together.
   </dd>
   <dt><code><em>DISTRIBUTE BY</em></code></dt>
   <dd>
-    Specifies a set of expressions by which the result rows are repartitioned. This parameter is mutually 
-    exclusive with <code>ORDER BY</code> and <code>CLUSTER BY</code> and can not be specified together. 
+    Specifies a set of expressions by which the result rows are repartitioned. This parameter is mutually
+    exclusive with <code>ORDER BY</code> and <code>CLUSTER BY</code> and can not be specified together.
   </dd>
   <dt><code><em>LIMIT</em></code></dt>
   <dd>
-    Specifies the maximum number of rows that can be returned by a statement or subquery. This clause 
-    is mostly used in the conjunction with <code>ORDER BY</code> to produce a deterministic result. 
+    Specifies the maximum number of rows that can be returned by a statement or subquery. This clause
+    is mostly used in the conjunction with <code>ORDER BY</code> to produce a deterministic result.
   </dd>
   <dt><code><em>boolean_expression</em></code></dt>
   <dd>
@@ -130,7 +135,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
   </dd>
   <dt><code><em>named_window</em></code></dt>
   <dd>
-    Specifies aliases for one or more source window specifications. The source window specifications can 
+    Specifies aliases for one or more source window specifications. The source window specifications can
     be referenced in the widow definitions in the query.
   </dd>
 </dl>

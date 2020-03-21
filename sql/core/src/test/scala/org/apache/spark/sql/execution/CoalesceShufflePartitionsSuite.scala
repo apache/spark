@@ -23,12 +23,13 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive._
-import org.apache.spark.sql.execution.adaptive.CoalescedShuffleReaderExec
+import org.apache.spark.sql.execution.adaptive.CoalesceShufflePartitions.COALESCED_SHUFFLE_READER_DESCRIPTION
+import org.apache.spark.sql.execution.adaptive.CustomShuffleReaderExec
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
-class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAll {
+class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private var originalActiveSparkSession: Option[SparkSession] = _
   private var originalInstantiatedSparkSession: Option[SparkSession] = _
@@ -64,17 +65,17 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         .setAppName("test")
         .set(UI_ENABLED, false)
         .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
-        .set(SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key, "5")
+        .set(SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key, "5")
         .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
         .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
         .set(
-          SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key,
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key,
           targetPostShuffleInputSize.toString)
     minNumPostShufflePartitions match {
       case Some(numPartitions) =>
-        sparkConf.set(SQLConf.SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS.key, numPartitions.toString)
+        sparkConf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, numPartitions.toString)
       case None =>
-        sparkConf.set(SQLConf.SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS.key, "1")
+        sparkConf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "1")
     }
 
     val spark = SparkSession.builder()
@@ -107,7 +108,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = agg.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader: CoalescedShuffleReaderExec => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 1)
         minNumPostShufflePartitions match {
@@ -154,7 +155,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader: CoalescedShuffleReaderExec => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 2)
         minNumPostShufflePartitions match {
@@ -206,7 +207,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader: CoalescedShuffleReaderExec => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 2)
         minNumPostShufflePartitions match {
@@ -258,7 +259,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
         val shuffleReaders = finalPlan.collect {
-          case reader: CoalescedShuffleReaderExec => reader
+          case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
         }
         assert(shuffleReaders.length === 2)
         minNumPostShufflePartitions match {
@@ -301,7 +302,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
           val finalPlan = join.queryExecution.executedPlan
             .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
           val shuffleReaders = finalPlan.collect {
-            case reader: CoalescedShuffleReaderExec => reader
+            case r @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => r
           }
           assert(shuffleReaders.length === 0)
         } finally {
@@ -329,7 +330,10 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       assert(finalPlan.collect {
         case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
       }.length == 2)
-      assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 3)
+      assert(
+        finalPlan.collect {
+          case p @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => p
+        }.length == 3)
 
 
       // test case 2: a query stage has 2 parent stages.
@@ -377,7 +381,10 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         Seq(0, 1, 2).map(i => Row(i)))
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 0)
+      assert(
+        finalPlan.collect {
+          case p @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => p
+        }.isEmpty)
     }
     withSparkSession(test, 200, None)
   }
@@ -395,7 +402,10 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       // As the pre-shuffle partition number are different, we will skip reducing
       // the shuffle partition numbers.
-      assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 0)
+      assert(
+        finalPlan.collect {
+          case p @ CustomShuffleReaderExec(_, _, COALESCED_SHUFFLE_READER_DESCRIPTION) => p
+        }.isEmpty)
     }
     withSparkSession(test, 100, None)
   }

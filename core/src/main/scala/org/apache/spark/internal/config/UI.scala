@@ -25,31 +25,37 @@ private[spark] object UI {
 
   val UI_SHOW_CONSOLE_PROGRESS = ConfigBuilder("spark.ui.showConsoleProgress")
     .doc("When true, show the progress bar in the console.")
+    .version("1.2.1")
     .booleanConf
     .createWithDefault(false)
 
   val UI_CONSOLE_PROGRESS_UPDATE_INTERVAL =
     ConfigBuilder("spark.ui.consoleProgress.update.interval")
+      .version("2.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(200)
 
   val UI_ENABLED = ConfigBuilder("spark.ui.enabled")
     .doc("Whether to run the web UI for the Spark application.")
+    .version("1.1.1")
     .booleanConf
     .createWithDefault(true)
 
   val UI_PORT = ConfigBuilder("spark.ui.port")
     .doc("Port for your application's dashboard, which shows memory and workload data.")
+    .version("0.7.0")
     .intConf
     .createWithDefault(4040)
 
   val UI_FILTERS = ConfigBuilder("spark.ui.filters")
     .doc("Comma separated list of filter class names to apply to the Spark Web UI.")
+    .version("1.0.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val UI_ALLOW_FRAMING_FROM = ConfigBuilder("spark.ui.allowFramingFrom")
+    .version("1.6.0")
     .stringConf
     .createOptional
 
@@ -61,6 +67,7 @@ private[spark] object UI {
       "through spark master/proxy public URL. This setting affects all the workers and " +
       "application UIs running in the cluster and must be set on all the workers, drivers " +
       " and masters.")
+    .version("2.1.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -69,15 +76,18 @@ private[spark] object UI {
       "in front of Spark Master. This is useful when running proxy for authentication e.g. " +
       "OAuth proxy. Make sure this is a complete URL including scheme (http/https) and port to " +
       "reach your proxy.")
+    .version("2.1.0")
     .stringConf
     .createOptional
 
   val UI_KILL_ENABLED = ConfigBuilder("spark.ui.killEnabled")
     .doc("Allows jobs and stages to be killed from the web UI.")
+    .version("1.0.0")
     .booleanConf
     .createWithDefault(true)
 
   val UI_THREAD_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
+    .version("1.2.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -85,73 +95,88 @@ private[spark] object UI {
     .internal()
     .doc("Expose executor metrics at /metrics/executors/prometheus. " +
       "For master/worker/driver metrics, you need to configure `conf/metrics.properties`.")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
 
   val UI_X_XSS_PROTECTION = ConfigBuilder("spark.ui.xXssProtection")
     .doc("Value for HTTP X-XSS-Protection response header")
+    .version("2.3.0")
     .stringConf
     .createWithDefaultString("1; mode=block")
 
   val UI_X_CONTENT_TYPE_OPTIONS = ConfigBuilder("spark.ui.xContentTypeOptions.enabled")
     .doc("Set to 'true' for setting X-Content-Type-Options HTTP response header to 'nosniff'")
+    .version("2.3.0")
     .booleanConf
     .createWithDefault(true)
 
   val UI_STRICT_TRANSPORT_SECURITY = ConfigBuilder("spark.ui.strictTransportSecurity")
     .doc("Value for HTTP Strict Transport Security Response Header")
+    .version("2.3.0")
     .stringConf
     .createOptional
 
   val UI_REQUEST_HEADER_SIZE = ConfigBuilder("spark.ui.requestHeaderSize")
     .doc("Value for HTTP request header size in bytes.")
+    .version("2.2.3")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("8k")
 
   val UI_TIMELINE_TASKS_MAXIMUM = ConfigBuilder("spark.ui.timeline.tasks.maximum")
+    .version("1.4.0")
     .intConf
     .createWithDefault(1000)
 
   val ACLS_ENABLE = ConfigBuilder("spark.acls.enable")
+    .version("1.1.0")
     .booleanConf
     .createWithDefault(false)
 
   val UI_VIEW_ACLS = ConfigBuilder("spark.ui.view.acls")
+    .version("1.0.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val UI_VIEW_ACLS_GROUPS = ConfigBuilder("spark.ui.view.acls.groups")
+    .version("2.0.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val ADMIN_ACLS = ConfigBuilder("spark.admin.acls")
+    .version("1.1.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val ADMIN_ACLS_GROUPS = ConfigBuilder("spark.admin.acls.groups")
+    .version("2.0.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val MODIFY_ACLS = ConfigBuilder("spark.modify.acls")
+    .version("1.1.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val MODIFY_ACLS_GROUPS = ConfigBuilder("spark.modify.acls.groups")
+    .version("2.0.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val USER_GROUPS_MAPPING = ConfigBuilder("spark.user.groups.mapping")
+    .version("2.0.0")
     .stringConf
     .createWithDefault("org.apache.spark.security.ShellBasedGroupsMappingProvider")
 
   val PROXY_REDIRECT_URI = ConfigBuilder("spark.ui.proxyRedirectUri")
     .doc("Proxy address to use when responding with HTTP redirects.")
+    .version("3.0.0")
     .stringConf
     .createOptional
 
@@ -163,6 +188,7 @@ private[spark] object UI {
       "This configuration replaces original log urls in event log, which will be also effective " +
       "when accessing the application on history server. The new log urls must be permanent, " +
       "otherwise you might have dead link for executor log urls.")
+    .version("3.0.0")
     .stringConf
     .createOptional
 }

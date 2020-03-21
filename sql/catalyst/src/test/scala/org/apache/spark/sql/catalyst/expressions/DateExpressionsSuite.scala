@@ -21,10 +21,9 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
@@ -48,7 +47,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def toMillis(timestamp: String): Long = {
     val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
-    TimeUnit.MICROSECONDS.toMillis(tf.parse(timestamp))
+    DateTimeUtils.microsToMillis(tf.parse(timestamp))
   }
   val date = "2015-04-08 13:10:15"
   val d = new Date(toMillis(date))
@@ -56,9 +55,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val ts = new Timestamp(toMillis(time))
 
   test("datetime function current_date") {
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis(), ZoneOffset.UTC)
+    val d0 = DateTimeUtils.currentDate(ZoneOffset.UTC)
     val cd = CurrentDate(gmtId).eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis(), ZoneOffset.UTC)
+    val d1 = DateTimeUtils.currentDate(ZoneOffset.UTC)
     assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
 
     val cdjst = CurrentDate(jstId).eval(EmptyRow).asInstanceOf[Int]
@@ -242,8 +241,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("DateFormat") {
-    Seq(false, true).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         checkEvaluation(
           DateFormatClass(Literal.create(null, TimestampType), Literal("y"), gmtId),
           null)
@@ -711,8 +710,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("from_unixtime") {
-    Seq(false, true).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val fmt1 = "yyyy-MM-dd HH:mm:ss"
         val sdf1 = new SimpleDateFormat(fmt1, Locale.US)
         val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
@@ -759,8 +758,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("unix_timestamp") {
-    Seq(false, true).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
         val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
@@ -788,15 +787,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               1000L)
             checkEvaluation(
               UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
-              MILLISECONDS.toSeconds(
-                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+              MICROSECONDS.toSeconds(
+                DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
             checkEvaluation(
               UnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))),
                 Literal(fmt2), timeZoneId),
               -1000L)
             checkEvaluation(UnixTimestamp(
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-              MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+              MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
             val t1 = UnixTimestamp(
               CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
@@ -814,8 +813,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               null)
             checkEvaluation(
               UnixTimestamp(Literal(date1), Literal.create(null, StringType), timeZoneId),
-              MILLISECONDS.toSeconds(
-                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+              MICROSECONDS.toSeconds(
+                DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
             checkEvaluation(
               UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
           }
@@ -825,8 +824,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("to_unix_timestamp") {
-    Seq(false, true).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val fmt1 = "yyyy-MM-dd HH:mm:ss"
         val sdf1 = new SimpleDateFormat(fmt1, Locale.US)
         val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
@@ -852,8 +851,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               1000L)
             checkEvaluation(
               ToUnixTimestamp(Literal(date1), Literal(fmt1), timeZoneId),
-              MILLISECONDS.toSeconds(
-                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+              MICROSECONDS.toSeconds(
+                DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
             checkEvaluation(
               ToUnixTimestamp(
                 Literal(sdf2.format(new Timestamp(-1000000))),
@@ -861,7 +860,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               -1000L)
             checkEvaluation(ToUnixTimestamp(
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
-              MILLISECONDS.toSeconds(DateTimeUtils.daysToMillis(
+              MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
             val t1 = ToUnixTimestamp(
               CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
@@ -876,8 +875,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               null)
             checkEvaluation(ToUnixTimestamp(
               Literal(date1), Literal.create(null, StringType), timeZoneId),
-              MILLISECONDS.toSeconds(
-                DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+              MICROSECONDS.toSeconds(
+                DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
             checkEvaluation(
               ToUnixTimestamp(
                 Literal("2015-07-24"),
@@ -1164,5 +1163,26 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal(LocalDate.of(10000, 1, 1)),
         Literal(LocalDate.of(1, 1, 1))),
       IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
+  }
+
+  test("to_timestamp exception mode") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
+      checkEvaluation(
+        GetTimestamp(
+          Literal("2020-01-27T20:06:11.847-0800"),
+          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), 1580184371847000L)
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
+      checkEvaluation(
+        GetTimestamp(
+          Literal("2020-01-27T20:06:11.847-0800"),
+          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), null)
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
+      checkExceptionInExpression[SparkUpgradeException](
+        GetTimestamp(
+          Literal("2020-01-27T20:06:11.847-0800"),
+          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), "Fail to parse")
+    }
   }
 }

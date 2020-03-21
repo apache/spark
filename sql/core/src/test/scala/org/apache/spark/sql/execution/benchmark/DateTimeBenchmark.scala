@@ -119,7 +119,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       run(n, "to timestamp str", timestampStrExpr)
       run(n, "to_timestamp", s"to_timestamp($timestampStrExpr, $pattern)")
       run(n, "to_unix_timestamp", s"to_unix_timestamp($timestampStrExpr, $pattern)")
-      val dateStrExpr = "concat('2019-01-', cast(mod(id, 25) as string))"
+      val dateStrExpr = "concat('2019-01-', lpad(mod(id, 25), 2, '0'))"
       run(n, "to date str", dateStrExpr)
       run(n, "to_date", s"to_date($dateStrExpr, 'yyyy-MM-dd')")
     }

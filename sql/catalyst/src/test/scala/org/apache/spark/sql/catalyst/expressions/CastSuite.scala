@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.util.{Calendar, TimeZone}
-import java.util.concurrent.TimeUnit._
 
 import scala.collection.parallel.immutable.ParVector
 
@@ -272,13 +271,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        MILLISECONDS.toMicros(c.getTimeInMillis))
+        millisToMicros(c.getTimeInMillis))
       c = Calendar.getInstance(TimeZoneGMT)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        MILLISECONDS.toMicros(c.getTimeInMillis))
+        millisToMicros(c.getTimeInMillis))
     }
 
     val gmtId = Option("GMT")
@@ -1288,6 +1287,8 @@ class AnsiCastSuite extends CastSuiteBase {
         cast("123-string", dataType), "invalid input")
       checkExceptionInExpression[NumberFormatException](
         cast("2020-07-19", dataType), "invalid input")
+      checkExceptionInExpression[NumberFormatException](
+        cast("1.23", dataType), "invalid input")
     }
 
     Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>

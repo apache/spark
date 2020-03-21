@@ -49,12 +49,19 @@ class OptimizerLoggingSuite extends PlanTest {
       case event => Seq(
         "Applying Rule",
         "Result of Batch",
-        "has no effect").exists(event.getRenderedMessage().contains)
+        "has no effect",
+        "Metrics of Executed Rules").exists(event.getRenderedMessage().contains)
     }
     val logMessages = events.map(_.getRenderedMessage)
     assert(expectedRulesOrBatches.forall
     (ruleOrBatch => logMessages.exists(_.contains(ruleOrBatch))))
     assert(events.forall(_.getLevel == expectedLevel))
+    val expectedMetrics = Seq(
+      "Total number of runs: 7",
+      "Total time:",
+      "Total number of effective runs: 3",
+      "Total time of effective runs:")
+    assert(expectedMetrics.forall(metrics => logMessages.exists(_.contains(metrics))))
   }
 
   test("test log level") {

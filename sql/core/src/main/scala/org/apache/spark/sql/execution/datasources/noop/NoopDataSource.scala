@@ -61,6 +61,7 @@ private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsTruncate
 private[noop] object NoopBatchWrite extends BatchWrite {
   override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory =
     NoopWriterFactory
+  override def useCommitCoordinator(): Boolean = false
   override def commit(messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
 }

@@ -141,7 +141,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val summary =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           <li>
             <strong>Total Time Across All Tasks: </strong>
             {UIUtils.formatDuration(stageData.executorRunTime)}
@@ -412,7 +412,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <form id={s"form-event-timeline-page"}
                 method="get"
                 action=""
-                class="form-inline pull-right"
+                class="form-inline float-right justify-content-end"
                 style="margin-bottom: 0px;">
             <label>Tasks: {totalTasks}. {totalPages} Pages. Jump to</label>
             <input type="hidden" name="id" value={stageId.toString} />
@@ -420,17 +420,18 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
             <input type="text"
                    name="task.eventTimelinePageNumber"
                    id={s"form-event-timeline-page-no"}
-                   value={page.toString} class="span1" />
+                   value={page.toString}
+                   class="col-1 form-control" />
 
             <label>. Show </label>
             <input type="text"
                    id={s"form-event-timeline-page-size"}
                    name="task.eventTimelinePageSize"
                    value={pageSize.toString}
-                   class="span1" />
+                   class="col-1 form-control" />
             <label>items in a page.</label>
 
-            <button type="submit" class="btn">Go</button>
+            <button type="submit" class="btn btn-spark">Go</button>
           </form>
         </div>
       </div>
@@ -492,7 +493,7 @@ private[ui] class TaskPagedTable(
   override def tableId: String = "task-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped table-head-clickable"
+    "table table-bordered table-sm table-striped table-head-clickable"
 
   override def pageSizeFormField: String = "task.pageSize"
 
@@ -749,7 +750,7 @@ private[spark] object ApiHelper {
   val HEADER_SHUFFLE_READ_TIME = "Shuffle Read Blocked Time"
   val HEADER_SHUFFLE_TOTAL_READS = "Shuffle Read Size / Records"
   val HEADER_SHUFFLE_REMOTE_READS = "Shuffle Remote Reads"
-  val HEADER_SHUFFLE_WRITE_TIME = "Write Time"
+  val HEADER_SHUFFLE_WRITE_TIME = "Shuffle Write Time"
   val HEADER_SHUFFLE_WRITE_SIZE = "Shuffle Write Size / Records"
   val HEADER_MEM_SPILL = "Spill (Memory)"
   val HEADER_DISK_SPILL = "Spill (Disk)"

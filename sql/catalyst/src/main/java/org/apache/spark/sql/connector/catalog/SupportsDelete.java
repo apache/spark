@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.Filter;
 
 /**
@@ -26,7 +26,7 @@ import org.apache.spark.sql.sources.Filter;
  *
  * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface SupportsDelete {
   /**
    * Delete data from a data source table that matches filter expressions.
