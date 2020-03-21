@@ -112,11 +112,7 @@ case class CreateViewCommand(
     if (viewType == LocalTempView) {
       if (replace && catalog.getTempView(name.table).isDefined) {
         logInfo(s"Try to uncache ${name.quotedString} before replacing.")
-        try {
-          sparkSession.catalog.uncacheTable(name.quotedString)
-        } catch {
-          case NonFatal(e) => log.warn(e.toString, e)
-        }
+        CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
@@ -125,11 +121,7 @@ case class CreateViewCommand(
         val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
         val globalTempView = TableIdentifier(name.table, Option(db))
         logInfo(s"Try to uncache ${globalTempView.quotedString} before replacing.")
-        try {
-          sparkSession.catalog.uncacheTable(globalTempView.quotedString)
-        } catch {
-          case NonFatal(e) => log.warn(e.toString, e)
-        }
+        CommandUtils.uncacheTableOrView(sparkSession, globalTempView.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createGlobalTempView(name.table, aliasedPlan, overrideIfExists = replace)
@@ -147,11 +139,7 @@ case class CreateViewCommand(
 
         // uncache the cached data before replacing an exists view
         logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
-        try {
-          sparkSession.catalog.uncacheTable(viewIdent.quotedString)
-        } catch {
-          case NonFatal(e) => log.warn(e.toString, e)
-        }
+        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
         // Nothing we need to retain from the old view, so just drop and create a new one
