@@ -2610,6 +2610,7 @@ Spark subsystems.
     <a href="streaming-kafka-0-10-integration.html">Kafka Integration guide</a>
     for more details.
   </td>
+  <td>1.3.0</td>
 </tr>
 <tr>
     <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
@@ -2618,6 +2619,7 @@ Spark subsystems.
       Minimum rate (number of records per second) at which data will be read from each Kafka
       partition when using the new Kafka direct stream API.
     </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.ui.retainedBatches</code></td>
