@@ -203,7 +203,7 @@ case class AlterTableRenameCommand(
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
       if (wasCached) {
-        CommandUtils.uncacheTableOrView(sparkSession, newName.unquotedString)
+        sparkSession.catalog.cacheTable(newName.unquotedString)
       }
     }
     Seq.empty[Row]
