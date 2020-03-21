@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 
@@ -127,34 +127,36 @@ class FValueSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test FValue selector: numTopFeatures") {
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
-    val model = selector.fit(dataset)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test F Value selector: percentile") {
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("percentile").setPercentile(0.17)
-    val model = selector.fit(dataset)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test F Value selector: fpr") {
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("fpr").setFpr(0.01)
-    val model = selector.fit(dataset)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test F Value selector: fdr") {
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("fdr").setFdr(0.03)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test F Value selector: fwe") {
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("fwe").setFwe(0.03)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test FValue selector with sparse vector") {
@@ -169,8 +171,8 @@ class FValueSelectorSuite extends MLTest with DefaultReadWriteTest {
 
     val selector = new FValueSelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
-    val model = selector.fit(df)
-    testSelector(selector, df)
+    val model = testSelector(selector, df)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("read/write") {
