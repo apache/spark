@@ -46,6 +46,7 @@ class SparkPlanner(
       Window ::
       JoinSelection ::
       InMemoryScans ::
+      Scripts ::
       BasicOperators :: Nil)
 
   /**

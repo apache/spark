@@ -32,11 +32,12 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.execution.script.{HiveScriptIOSchema, HiveScriptTransformationExec}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StringType
 
-class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with TestHiveSingleton
+class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with TestHiveSingleton
   with BeforeAndAfterEach {
   import spark.implicits._
 
@@ -83,7 +84,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new ScriptTransformationExec(
+      (child: SparkPlan) => new HiveScriptTransformationExec(
         input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
@@ -100,7 +101,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new ScriptTransformationExec(
+      (child: SparkPlan) => new HiveScriptTransformationExec(
         input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
@@ -118,7 +119,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) => new ScriptTransformationExec(
+        (child: SparkPlan) => new HiveScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
@@ -139,7 +140,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) => new ScriptTransformationExec(
+        (child: SparkPlan) => new HiveScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
@@ -160,7 +161,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
 
     val e = intercept[SparkException] {
       val plan =
-        new ScriptTransformationExec(
+        new HiveScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
@@ -181,7 +182,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
 
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new ScriptTransformationExec(
+      (child: SparkPlan) => new HiveScriptTransformationExec(
         input = Seq(rowsDf.col("name").expr),
         script = "cat",
         output = Seq(AttributeReference("name", StringType)()),

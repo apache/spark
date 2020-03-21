@@ -22,7 +22,7 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Strategy, _}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.hive.execution.script.{HiveScriptIOSchema, HiveScriptTransformationExec}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 
@@ -237,11 +238,11 @@ private[hive] trait HiveStrategies {
 
   val sparkSession: SparkSession
 
-  object Scripts extends Strategy {
+  object HiveScripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ScriptTransformation(input, script, output, child, ioschema) =>
         val hiveIoSchema = HiveScriptIOSchema(ioschema)
-        ScriptTransformationExec(input, script, output, planLater(child), hiveIoSchema) :: Nil
+        HiveScriptTransformationExec(input, script, output, planLater(child), hiveIoSchema) :: Nil
       case _ => Nil
     }
   }
