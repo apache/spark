@@ -45,7 +45,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
         .withName("test-local-pv")
       .endMetadata()
       .withNewSpec()
-        .withCapacity(Map("storage" -> new QuantityBuilder().withAmount("1Gi").build()).asJava)
+        .withCapacity(Map("storage" -> new Quantity("1Gi")).asJava)
         .withAccessModes("ReadWriteOnce")
         .withPersistentVolumeReclaimPolicy("Retain")
         .withStorageClassName("test-local-storage")
@@ -56,7 +56,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
                 .withMatchExpressions(new NodeSelectorRequirementBuilder()
                   .withKey("kubernetes.io/hostname")
                   .withOperator("In")
-                  .withValues("minikube").build()).build())
+                  .withValues("minikube", "docker-for-desktop", "docker-desktop").build()).build())
             .endRequired()
           .endNodeAffinity()
       .endSpec()
@@ -71,8 +71,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
         .withAccessModes("ReadWriteOnce")
         .withStorageClassName("test-local-storage")
         .withResources(new ResourceRequirementsBuilder()
-        .withRequests(Map("storage" -> new QuantityBuilder()
-          .withAmount("1Gi").build()).asJava).build())
+          .withRequests(Map("storage" -> new Quantity("1Gi")).asJava).build())
       .endSpec()
 
     kubernetesTestComponents

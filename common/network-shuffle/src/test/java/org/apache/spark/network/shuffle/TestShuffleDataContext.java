@@ -28,6 +28,7 @@ import com.google.common.io.Files;
 
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
+import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,9 +77,9 @@ public class TestShuffleDataContext {
 
     try {
       dataStream = new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
       indexStream = new DataOutputStream(new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
 
       long offset = 0;
       indexStream.writeLong(offset);
@@ -121,10 +122,11 @@ public class TestShuffleDataContext {
 
   private void insertFile(String filename, byte[] block) throws IOException {
     OutputStream dataStream = null;
-    File file = ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename);
-    assert(!file.exists()) : "this test file has been already generated";
+    File file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename);
+    Assert.assertFalse("this test file has been already generated", file.exists());
     try {
-      dataStream = new FileOutputStream(file);
+      dataStream = new FileOutputStream(
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename));
       dataStream.write(block);
     } finally {
       Closeables.close(dataStream, false);

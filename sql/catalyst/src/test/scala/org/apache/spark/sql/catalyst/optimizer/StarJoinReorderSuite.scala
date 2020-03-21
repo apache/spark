@@ -52,7 +52,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     val batches =
       Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,

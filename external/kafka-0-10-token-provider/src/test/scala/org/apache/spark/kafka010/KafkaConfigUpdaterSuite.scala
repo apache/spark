@@ -17,8 +17,13 @@
 
 package org.apache.spark.kafka010
 
+import java.{util => ju}
+
+import scala.collection.JavaConverters._
+
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
+import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_PLAINTEXT
 
 import org.apache.spark.SparkFunSuite
 
@@ -62,17 +67,6 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
   }
 
   test("setAuthenticationConfigIfNeeded with global security should not set values") {
-    val params = Map.empty[String, String]
-    setGlobalKafkaClientConfig()
-
-    val updatedParams = KafkaConfigUpdater(testModule, params)
-      .setAuthenticationConfigIfNeeded()
-      .build()
-
-    assert(updatedParams.size() === 0)
-  }
-
-  test("setAuthenticationConfigIfNeeded with token should set values") {
     val params = Map(
       CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
     )
@@ -81,17 +75,56 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
         s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
       )
     )
-    addTokenToUGI(tokenService1)
+    setGlobalKafkaClientConfig()
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
       .setAuthenticationConfigIfNeeded()
       .build()
 
-    assert(updatedParams.size() === 3)
+    assert(updatedParams.asScala === params)
+  }
+
+  test("setAuthenticationConfigIfNeeded with token should set values") {
+    val params = Map(
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
+    )
+    testWithTokenSetValues(params) { updatedParams =>
+      assert(updatedParams.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG) ===
+        KafkaTokenSparkConf.DEFAULT_SECURITY_PROTOCOL_CONFIG)
+    }
+  }
+
+  test("setAuthenticationConfigIfNeeded with token should not override user-defined protocol") {
+    val overrideProtocolName = SASL_PLAINTEXT.name
+    val params = Map(
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers,
+      CommonClientConfigs.SECURITY_PROTOCOL_CONFIG -> overrideProtocolName
+    )
+    testWithTokenSetValues(params) { updatedParams =>
+      assert(updatedParams.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG) ===
+        overrideProtocolName)
+    }
+  }
+
+  def testWithTokenSetValues(params: Map[String, String])
+      (validate: (ju.Map[String, Object]) => Unit): Unit = {
+    setSparkEnv(
+      Map(
+        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
+      )
+    )
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+
+    val updatedParams = KafkaConfigUpdater(testModule, params)
+      .setAuthenticationConfigIfNeeded()
+      .build()
+
+    assert(updatedParams.size() === 4)
     assert(updatedParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG) === bootStrapServers)
     assert(updatedParams.containsKey(SaslConfigs.SASL_JAAS_CONFIG))
     assert(updatedParams.get(SaslConfigs.SASL_MECHANISM) ===
       KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM)
+    validate(updatedParams)
   }
 
   test("setAuthenticationConfigIfNeeded with invalid mechanism should throw exception") {
@@ -104,7 +137,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
         s"spark.kafka.clusters.$identifier1.sasl.token.mechanism" -> "intentionally_invalid"
       )
     )
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
 
     val e = intercept[IllegalArgumentException] {
       KafkaConfigUpdater(testModule, params)

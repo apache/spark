@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
@@ -60,9 +60,9 @@ object SQLExecution {
    * we can connect them with an execution.
    */
   def withNewExecutionId[T](
-      sparkSession: SparkSession,
       queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = {
+      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
+    val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
@@ -85,7 +85,7 @@ object SQLExecution {
         }.getOrElse(callSite.shortForm)
 
       withSQLConfPropagated(sparkSession) {
-        var ex: Option[Exception] = None
+        var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
         try {
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
@@ -99,7 +99,7 @@ object SQLExecution {
             time = System.currentTimeMillis()))
           body
         } catch {
-          case e: Exception =>
+          case e: Throwable =>
             ex = Some(e)
             throw e
         } finally {
@@ -163,5 +163,31 @@ object SQLExecution {
         sc.setLocalProperty(key, value)
       }
     }
+  }
+
+  /**
+   * Wrap passed function to ensure necessary thread-local variables like
+   * SparkContext local properties are forwarded to execution thread
+   */
+  def withThreadLocalCaptured[T](
+      sparkSession: SparkSession, exec: ExecutorService) (body: => T): JFuture[T] = {
+    val activeSession = sparkSession
+    val sc = sparkSession.sparkContext
+    val localProps = Utils.cloneProperties(sc.getLocalProperties)
+    exec.submit(() => {
+      val originalSession = SparkSession.getActiveSession
+      val originalLocalProps = sc.getLocalProperties
+      SparkSession.setActiveSession(activeSession)
+      sc.setLocalProperties(localProps)
+      val res = body
+      // reset active session and local props.
+      sc.setLocalProperties(originalLocalProps)
+      if (originalSession.nonEmpty) {
+        SparkSession.setActiveSession(originalSession.get)
+      } else {
+        SparkSession.clearActiveSession()
+      }
+      res
+    })
   }
 }

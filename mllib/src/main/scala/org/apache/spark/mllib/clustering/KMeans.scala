@@ -209,39 +209,38 @@ class KMeans private (
    */
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
-    run(data, None)
+    val instances: RDD[(Vector, Double)] = data.map {
+      case (point) => (point, 1.0)
+    }
+    runWithWeight(instances, None)
   }
 
-  private[spark] def run(
-      data: RDD[Vector],
+  private[spark] def runWithWeight(
+      data: RDD[(Vector, Double)],
       instr: Option[Instrumentation]): KMeansModel = {
 
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data is not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
-
     // Compute squared norms and cache them.
-    val norms = data.map(Vectors.norm(_, 2.0))
-    norms.persist()
-    val zippedData = data.zip(norms).map { case (v, norm) =>
-      new VectorWithNorm(v, norm)
+    val norms = data.map { case (v, _) =>
+      Vectors.norm(v, 2.0)
     }
-    val model = runAlgorithm(zippedData, instr)
-    norms.unpersist()
 
-    // Warn at the end of the run as well, for increased visibility.
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data was not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
+    val zippedData = data.zip(norms).map { case ((v, w), norm) =>
+      new VectorWithNorm(v, norm, w)
     }
+
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      zippedData.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+    val model = runAlgorithmWithWeight(zippedData, instr)
+    zippedData.unpersist()
+
     model
   }
 
   /**
    * Implementation of K-Means algorithm.
    */
-  private def runAlgorithm(
+  private def runAlgorithmWithWeight(
       data: RDD[VectorWithNorm],
       instr: Option[Instrumentation]): KMeansModel = {
 
@@ -283,27 +282,33 @@ class KMeans private (
         val dims = thisCenters.head.vector.size
 
         val sums = Array.fill(thisCenters.length)(Vectors.zeros(dims))
-        val counts = Array.fill(thisCenters.length)(0L)
+
+        // clusterWeightSum is needed to calculate cluster center
+        // cluster center =
+        //     sample1 * weight1/clusterWeightSum + sample2 * weight2/clusterWeightSum + ...
+        val clusterWeightSum = Array.ofDim[Double](thisCenters.length)
 
         points.foreach { point =>
           val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
-          costAccum.add(cost)
+          costAccum.add(cost * point.weight)
           distanceMeasureInstance.updateClusterSum(point, sums(bestCenter))
-          counts(bestCenter) += 1
+          clusterWeightSum(bestCenter) += point.weight
         }
 
-        counts.indices.filter(counts(_) > 0).map(j => (j, (sums(j), counts(j)))).iterator
-      }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
-        axpy(1.0, sum2, sum1)
-        (sum1, count1 + count2)
+        clusterWeightSum.indices.filter(clusterWeightSum(_) > 0)
+          .map(j => (j, (sums(j), clusterWeightSum(j)))).iterator
+      }.reduceByKey { (sumweight1, sumweight2) =>
+        axpy(1.0, sumweight2._1, sumweight1._1)
+        (sumweight1._1, sumweight1._2 + sumweight2._2)
       }.collectAsMap()
 
       if (iteration == 0) {
-        instr.foreach(_.logNumExamples(collected.values.map(_._2).sum))
+        instr.foreach(_.logNumExamples(costAccum.count))
+        instr.foreach(_.logSumOfWeights(collected.values.map(_._2).sum))
       }
 
-      val newCenters = collected.mapValues { case (sum, count) =>
-        distanceMeasureInstance.centroid(sum, count)
+      val newCenters = collected.mapValues { case (sum, weightSum) =>
+        distanceMeasureInstance.centroid(sum, weightSum)
       }
 
       bcCenters.destroy()
@@ -480,58 +485,6 @@ object KMeans {
   }
 
   /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data Training points as an `RDD` of `Vector` types.
-   * @param k Number of clusters to create.
-   * @param maxIterations Maximum number of iterations allowed.
-   * @param runs This param has no effect since Spark 2.0.0.
-   * @param initializationMode The initialization algorithm. This can either be "random" or
-   *                           "k-means||". (default: "k-means||")
-   * @param seed Random seed for cluster initialization. Default is to generate seed based
-   *             on system time.
-   */
-  @Since("1.3.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String,
-      seed: Long): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setInitializationMode(initializationMode)
-      .setSeed(seed)
-      .run(data)
-  }
-
-  /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data Training points as an `RDD` of `Vector` types.
-   * @param k Number of clusters to create.
-   * @param maxIterations Maximum number of iterations allowed.
-   * @param runs This param has no effect since Spark 2.0.0.
-   * @param initializationMode The initialization algorithm. This can either be "random" or
-   *                           "k-means||". (default: "k-means||")
-   */
-  @Since("0.8.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setInitializationMode(initializationMode)
-      .run(data)
-  }
-
-  /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
    */
   @Since("0.8.0")
@@ -539,21 +492,6 @@ object KMeans {
       data: RDD[Vector],
       k: Int,
       maxIterations: Int): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .run(data)
-  }
-
-  /**
-   * Trains a k-means model using specified parameters and the default values for unspecified.
-   */
-  @Since("0.8.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .run(data)
@@ -571,13 +509,15 @@ object KMeans {
 /**
  * A vector with its norm for fast distance computation.
  */
-private[clustering] class VectorWithNorm(val vector: Vector, val norm: Double)
-    extends Serializable {
+private[clustering] class VectorWithNorm(
+    val vector: Vector,
+    val norm: Double,
+    val weight: Double = 1.0) extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
 
   def this(array: Array[Double]) = this(Vectors.dense(array))
 
   /** Converts the vector to a dense vector. */
-  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
+  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm, weight)
 }

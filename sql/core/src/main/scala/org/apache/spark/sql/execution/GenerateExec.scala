@@ -68,7 +68,7 @@ case class GenerateExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override def producedAttributes: AttributeSet = AttributeSet(output)
+  override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 

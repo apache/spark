@@ -28,10 +28,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
-import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -72,7 +73,11 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @return the registered UDAF.
    *
    * @since 1.5.0
+   * @deprecated this method and the use of UserDefinedAggregateFunction are deprecated.
+   * Aggregator[IN, BUF, OUT] should now be registered as a UDF via the functions.udaf(agg) method.
    */
+  @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
+    " via the functions.udaf(agg) method.", "3.0.0")
   def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
     def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf)
     functionRegistry.createOrReplaceTempFunction(name, builder)
@@ -101,9 +106,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.2.0
    */
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
-    def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
-    functionRegistry.createOrReplaceTempFunction(name, builder)
-    udf
+    udf match {
+      case udaf: UserDefinedAggregator[_, _, _] =>
+        def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
+        functionRegistry.createOrReplaceTempFunction(name, builder)
+        udf
+      case _ =>
+        def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
+        functionRegistry.createOrReplaceTempFunction(name, builder)
+        udf
+    }
   }
 
   // scalastyle:off line.size.limit
@@ -142,16 +154,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
       val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
       val version = if (i == 0) "2.3.0" else "1.3.0"
-      val funcCall = if (i == 0) "() => func" else "func"
+      val funcCall = if (i == 0) s"() => f$anyCast.call($anyParams)" else s"f$anyCast.call($anyParams)"
       println(s"""
         |/**
         | * Register a deterministic Java UDF$i instance as user-defined function (UDF).
         | * @since $version
         | */
         |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType): Unit = {
-        |  val func = f$anyCast.call($anyParams)
+        |  val func = $funcCall
         |  def builder(e: Seq[Expression]) = if (e.length == $i) {
-        |    ScalaUDF($funcCall, returnType, e, e.map(_ => false), udfName = Some(name))
+        |    ScalaUDF(func, returnType, e, e.map(_ => false), udfName = Some(name))
         |  } else {
         |    throw new AnalysisException("Invalid number of arguments for function " + name +
         |      ". Expected: $i; Found: " + e.length)
@@ -717,9 +729,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.3.0
    */
   def register(name: String, f: UDF0[_], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF0[Any]].call()
+    val func = () => f.asInstanceOf[UDF0[Any]].call()
     def builder(e: Seq[Expression]) = if (e.length == 0) {
-      ScalaUDF(() => func, returnType, e, e.map(_ => false), udfName = Some(name))
+      ScalaUDF(func, returnType, e, e.map(_ => false), udfName = Some(name))
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 0; Found: " + e.length)

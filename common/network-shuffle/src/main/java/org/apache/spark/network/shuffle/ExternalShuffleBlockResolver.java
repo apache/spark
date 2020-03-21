@@ -24,14 +24,16 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.apache.commons.lang3.tuple.Pair;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -166,21 +168,34 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId). We make assumptions
-   * about how the hash and sort based shuffles store their data.
+   * Obtains a FileSegmentManagedBuffer from a single block (shuffleId, mapId, reduceId).
    */
   public ManagedBuffer getBlockData(
       String appId,
       String execId,
       int shuffleId,
-      int mapId,
+      long mapId,
       int reduceId) {
+    return getContinuousBlocksData(appId, execId, shuffleId, mapId, reduceId, reduceId + 1);
+  }
+
+  /**
+   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, [startReduceId, endReduceId)).
+   * We make assumptions about how the hash and sort based shuffles store their data.
+   */
+  public ManagedBuffer getContinuousBlocksData(
+      String appId,
+      String execId,
+      int shuffleId,
+      long mapId,
+      int startReduceId,
+      int endReduceId) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
-    return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
+    return getSortBasedShuffleBlockData(executor, shuffleId, mapId, startReduceId, endReduceId);
   }
 
   public ManagedBuffer getRddBlockData(
@@ -297,16 +312,17 @@ public class ExternalShuffleBlockResolver {
    * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
-    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) {
-    File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
+    ExecutorShuffleInfo executor, int shuffleId, long mapId, int startReduceId, int endReduceId) {
+    File indexFile = ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 
     try {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
-      ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId);
+      ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(
+        startReduceId, endReduceId);
       return new FileSegmentManagedBuffer(
         conf,
-        getFile(executor.localDirs, executor.subDirsPerLocalDir,
+        ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         shuffleIndexRecord.getOffset(),
         shuffleIndexRecord.getLength());
@@ -317,7 +333,7 @@ public class ExternalShuffleBlockResolver {
 
   public ManagedBuffer getDiskPersistedRddBlockData(
       ExecutorShuffleInfo executor, int rddId, int splitIndex) {
-    File file = getFile(executor.localDirs, executor.subDirsPerLocalDir,
+    File file = ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "rdd_" + rddId + "_" + splitIndex);
     long fileLength = file.length();
     ManagedBuffer res = null;
@@ -325,19 +341,6 @@ public class ExternalShuffleBlockResolver {
       res = new FileSegmentManagedBuffer(conf, file, 0, fileLength);
     }
     return res;
-  }
-
-  /**
-   * Hashes a filename into the corresponding local directory, in a manner consistent with
-   * Spark's DiskBlockManager.getFile().
-   */
-  @VisibleForTesting
-  static File getFile(String[] localDirs, int subDirsPerLocalDir, String filename) {
-    int hash = JavaUtils.nonNegativeHash(filename);
-    String localDir = localDirs[hash % localDirs.length];
-    int subDirId = (hash / localDirs.length) % subDirsPerLocalDir;
-    return new File(createNormalizedInternedPathname(
-        localDir, String.format("%02x", subDirId), filename));
   }
 
   void close() {
@@ -350,28 +353,6 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
-  /**
-   * This method is needed to avoid the situation when multiple File instances for the
-   * same pathname "foo/bar" are created, each with a separate copy of the "foo/bar" String.
-   * According to measurements, in some scenarios such duplicate strings may waste a lot
-   * of memory (~ 10% of the heap). To avoid that, we intern the pathname, and before that
-   * we make sure that it's in a normalized form (contains no "//", "///" etc.) Otherwise,
-   * the internal code in java.io.File would normalize it later, creating a new "foo/bar"
-   * String copy. Unfortunately, we cannot just reuse the normalization code that java.io.File
-   * uses, since it is in the package-private class java.io.FileSystem.
-   */
-  @VisibleForTesting
-  static String createNormalizedInternedPathname(String dir1, String dir2, String fname) {
-    String pathname = dir1 + File.separator + dir2 + File.separator + fname;
-    Matcher m = MULTIPLE_SEPARATORS.matcher(pathname);
-    pathname = m.replaceAll("/");
-    // A single trailing slash needs to be taken care of separately
-    if (pathname.length() > 1 && pathname.endsWith("/")) {
-      pathname = pathname.substring(0, pathname.length() - 1);
-    }
-    return pathname.intern();
-  }
-
   public int removeBlocks(String appId, String execId, String[] blockIds) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
@@ -380,7 +361,8 @@ public class ExternalShuffleBlockResolver {
     }
     int numRemovedBlocks = 0;
     for (String blockId : blockIds) {
-      File file = getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
+      File file =
+        ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
       if (file.delete()) {
         numRemovedBlocks++;
       } else {
@@ -388,6 +370,19 @@ public class ExternalShuffleBlockResolver {
       }
     }
     return numRemovedBlocks;
+  }
+
+  public Map<String, String[]> getLocalDirs(String appId, String[] execIds) {
+    return Arrays.stream(execIds)
+      .map(exec -> {
+        ExecutorShuffleInfo info = executors.get(new AppExecId(appId, exec));
+        if (info == null) {
+          throw new RuntimeException(
+            String.format("Executor is not registered (appId=%s, execId=%s)", appId, exec));
+        }
+        return Pair.of(exec, info.localDirs);
+      })
+      .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */
@@ -407,19 +402,19 @@ public class ExternalShuffleBlockResolver {
       if (o == null || getClass() != o.getClass()) return false;
 
       AppExecId appExecId = (AppExecId) o;
-      return Objects.equal(appId, appExecId.appId) && Objects.equal(execId, appExecId.execId);
+      return Objects.equals(appId, appExecId.appId) && Objects.equals(execId, appExecId.execId);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(appId, execId);
+      return Objects.hash(appId, execId);
     }
 
     @Override
     public String toString() {
-      return Objects.toStringHelper(this)
-        .add("appId", appId)
-        .add("execId", execId)
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+        .append("appId", appId)
+        .append("execId", execId)
         .toString();
     }
   }

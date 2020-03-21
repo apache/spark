@@ -659,11 +659,11 @@ class NaiveBayes(object):
         Train a Naive Bayes model given an RDD of (label, features)
         vectors.
 
-        This is the Multinomial NB (U{http://tinyurl.com/lsdw6p}) which
+        This is the `Multinomial NB <http://tinyurl.com/lsdw6p>`_ which
         can handle all kinds of discrete data.  For example, by
         converting documents into TF-IDF vectors, it can be used for
         document classification. By making every vector a 0-1 vector,
-        it can also be used as Bernoulli NB (U{http://tinyurl.com/p7c96j6}).
+        it can also be used as `Bernoulli NB <http://tinyurl.com/p7c96j6>`_.
         The input feature values must be nonnegative.
 
         :param data:

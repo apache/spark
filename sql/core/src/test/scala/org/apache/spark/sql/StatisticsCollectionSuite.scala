@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
 /**
  * End-to-end suite testing statistics collection and use on both entire table and columns.
  */
-class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSQLContext {
+class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSparkSession {
   import testImplicits._
 
   test("estimates the size of a limit 0 on outer join") {
@@ -646,6 +646,23 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
           val stats = checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
           assert(stats.get.sizeInBytes === tableLocationSize - stagingFileSize - metadataFileSize)
+        }
+      }
+    }
+  }
+
+  Seq(true, false).foreach { caseSensitive =>
+    test(s"SPARK-30903: Fail fast on duplicate columns when analyze columns " +
+      s"- caseSensitive=$caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val table = "test_table"
+        withTable(table) {
+          sql(s"CREATE TABLE $table (value string, name string) USING PARQUET")
+          val dupCol = if (caseSensitive) "value" else "VaLuE"
+          val errorMsg = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
+          }.getMessage
+          assert(errorMsg.contains("Found duplicate column(s)"))
         }
       }
     }

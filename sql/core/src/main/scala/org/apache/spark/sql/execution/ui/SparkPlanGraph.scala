@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
 
@@ -78,7 +78,7 @@ object SparkPlanGraph {
       subgraph: SparkPlanGraphCluster,
       exchanges: mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]): Unit = {
     planInfo.nodeName match {
-      case "WholeStageCodegen" =>
+      case name if name.startsWith("WholeStageCodegen") =>
         val metrics = planInfo.metrics.map { metric =>
           SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
         }
@@ -96,6 +96,15 @@ object SparkPlanGraph {
       case "InputAdapter" =>
         buildSparkPlanGraphNode(
           planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+      case "BroadcastQueryStage" | "ShuffleQueryStage" =>
+        if (exchanges.contains(planInfo.children.head)) {
+          // Point to the re-used exchange
+          val node = exchanges(planInfo.children.head)
+          edges += SparkPlanGraphEdge(node.id, parent.id)
+        } else {
+          buildSparkPlanGraphNode(
+            planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+        }
       case "Subquery" if subgraph != null =>
         // Subquery should not be included in WholeStageCodegen
         buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
@@ -166,9 +175,12 @@ private[ui] class SparkPlanGraphNode(
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
       builder ++= "\n \n"
       builder ++= values.mkString("\n")
+      s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
+    } else {
+      // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
+      // so that there won't be gaps between an edge and a small node.
+      s"""  $id [labelType="html" label="<br><b>$name</b><br><br>"];"""
     }
-
-    s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
   }
 }
 
@@ -188,8 +200,8 @@ private[ui] class SparkPlanGraphCluster(
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
       val id = duration(0).accumulatorId
-      if (metricsValue.contains(duration(0).accumulatorId)) {
-        name + "\n\n" + metricsValue(id)
+      if (metricsValue.contains(id)) {
+        name + "\n \n" + duration(0).name + ": " + metricsValue(id)
       } else {
         name
       }

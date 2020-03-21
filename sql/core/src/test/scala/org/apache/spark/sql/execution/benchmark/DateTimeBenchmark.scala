@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.benchmark
 import java.sql.Timestamp
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Synthetic benchmark for date and timestamp functions.
@@ -36,7 +35,9 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object DateTimeBenchmark extends SqlBasedBenchmark {
   private def doBenchmark(cardinality: Int, exprs: String*): Unit = {
-    spark.range(cardinality).selectExpr(exprs: _*).write.format("noop").save()
+    spark.range(cardinality)
+      .selectExpr(exprs: _*)
+      .noop()
   }
 
   private def run(cardinality: Int, name: String, exprs: String*): Unit = {
@@ -89,11 +90,9 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       run(N, "from_unixtime", "from_unixtime(id, 'yyyy-MM-dd HH:mm:ss.SSSSSS')")
     }
     runBenchmark("Convert timestamps") {
-      withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-        val timestampExpr = "cast(id as timestamp)"
-        run(N, "from_utc_timestamp", s"from_utc_timestamp($timestampExpr, 'CET')")
-        run(N, "to_utc_timestamp", s"to_utc_timestamp($timestampExpr, 'CET')")
-      }
+      val timestampExpr = "cast(id as timestamp)"
+      run(N, "from_utc_timestamp", s"from_utc_timestamp($timestampExpr, 'CET')")
+      run(N, "to_utc_timestamp", s"to_utc_timestamp($timestampExpr, 'CET')")
     }
     runBenchmark("Intervals") {
       val (start, end) = ("cast(id as timestamp)", "cast((id+8640000) as timestamp)")
@@ -120,7 +119,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       run(n, "to timestamp str", timestampStrExpr)
       run(n, "to_timestamp", s"to_timestamp($timestampStrExpr, $pattern)")
       run(n, "to_unix_timestamp", s"to_unix_timestamp($timestampStrExpr, $pattern)")
-      val dateStrExpr = "concat('2019-01-', cast(mod(id, 25) as string))"
+      val dateStrExpr = "concat('2019-01-', lpad(mod(id, 25), 2, '0'))"
       run(n, "to date str", dateStrExpr)
       run(n, "to_date", s"to_date($dateStrExpr, 'yyyy-MM-dd')")
     }
@@ -132,7 +131,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("From java.sql.Timestamp", numIters) { _ =>
         spark.range(rowsNum)
           .map(millis => new Timestamp(millis))
-          .write.format("noop").save()
+          .noop()
       }
       benchmark.addCase("Collect longs", numIters) { _ =>
         spark.range(0, rowsNum, 1, 1)

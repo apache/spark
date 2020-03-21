@@ -21,17 +21,20 @@ import org.scalatest.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
  * Window function testing for DataFrame API.
  */
-class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
+class DataFrameWindowFunctionsSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper{
 
   import testImplicits._
 
@@ -412,6 +415,42 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         Row("b", 2, 4, 8)))
   }
 
+  test("window function with aggregator") {
+    val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
+      def zero: Long = 0L
+      def reduce(b: Long, a: (Long, Long)): Long = b + (a._1 * a._2)
+      def merge(b1: Long, b2: Long): Long = b1 + b2
+      def finish(r: Long): Long = r
+      def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+      def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    })
+
+    val df = Seq(
+      ("a", 1, 1),
+      ("a", 1, 5),
+      ("a", 2, 10),
+      ("a", 2, -1),
+      ("b", 4, 7),
+      ("b", 3, 8),
+      ("b", 2, 4))
+      .toDF("key", "a", "b")
+    val window = Window.partitionBy($"key").orderBy($"a").rangeBetween(Long.MinValue, 0L)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"a",
+        $"b",
+        agg($"a", $"b").over(window)),
+      Seq(
+        Row("a", 1, 1, 6),
+        Row("a", 1, 5, 6),
+        Row("a", 2, 10, 24),
+        Row("a", 2, -1, 24),
+        Row("b", 4, 7, 60),
+        Row("b", 3, 8, 32),
+        Row("b", 2, 4, 8)))
+  }
+
   test("null inputs") {
     val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2))
       .toDF("key", "value")
@@ -633,20 +672,20 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       assert(thrownException.message.contains("window functions inside WHERE and HAVING clauses"))
     }
 
-    checkAnalysisError(testData2.select('a).where(rank().over(Window.orderBy('b)) === 1))
-    checkAnalysisError(testData2.where('b === 2 && rank().over(Window.orderBy('b)) === 1))
+    checkAnalysisError(testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1))
+    checkAnalysisError(testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(avg('b).as("avgb"))
-        .where('a > 'avgb && rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(avg($"b").as("avgb"))
+        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where(rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where(rank().over(Window.orderBy($"a")) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where('sumb === 5 && rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1))
 
     checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"))
     checkAnalysisError(sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"))
@@ -680,7 +719,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
           .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1"))
 
         val expectedNumExchanges = if (transposeWindowEnabled) 1 else 2
-        val actualNumExchanges = select.queryExecution.executedPlan.collect {
+        val actualNumExchanges = stripAQEPlan(select.queryExecution.executedPlan).collect {
           case e: Exchange => e
         }.length
         assert(actualNumExchanges == expectedNumExchanges)
@@ -697,13 +736,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("NaN and -0.0 in window partition keys") {
-    import java.lang.Float.floatToRawIntBits
-    import java.lang.Double.doubleToRawLongBits
-
-    // 0.0/0.0 and NaN are different values.
-    assert(floatToRawIntBits(0.0f/0.0f) != floatToRawIntBits(Float.NaN))
-    assert(doubleToRawLongBits(0.0/0.0) != doubleToRawLongBits(Double.NaN))
-
     val df = Seq(
       (Float.NaN, Double.NaN),
       (0.0f/0.0f, 0.0/0.0),

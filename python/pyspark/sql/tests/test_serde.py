@@ -128,13 +128,13 @@ class SerdeTests(ReusedSQLTestCase):
 
     def test_int_array_serialization(self):
         # Note that this test seems dependent on parallelism.
-        # This issue is because internal object map in Pyrolite is not cleared after op code
-        # STOP. If we use protocol 4 to pickle Python objects, op code MEMOIZE will store
-        # objects in the map. We need to clear up it to make sure next unpickling works on
-        # clear map.
         data = self.spark.sparkContext.parallelize([[1, 2, 3, 4]] * 100, numSlices=12)
         df = self.spark.createDataFrame(data, "array<integer>")
         self.assertEqual(len(list(filter(lambda r: None in r.value, df.collect()))), 0)
+
+    def test_bytes_as_binary_type(self):
+        df = self.spark.createDataFrame([[b"abcd"]], "col binary")
+        self.assertEqual(df.first().col, bytearray(b'abcd'))
 
 
 if __name__ == "__main__":
@@ -143,7 +143,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

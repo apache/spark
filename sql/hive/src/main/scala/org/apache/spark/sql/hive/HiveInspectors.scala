@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.lang.reflect.{ParameterizedType, Type, WildcardType}
-import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
 
@@ -305,12 +304,17 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => getByteWritable(o))
       case _: ByteObjectInspector =>
         withNullSafe(o => o.asInstanceOf[java.lang.Byte])
-      case _: JavaHiveVarcharObjectInspector =>
+        // To spark HiveVarchar and HiveChar are same as string
+      case _: HiveVarcharObjectInspector if x.preferWritable() =>
+        withNullSafe(o => getStringWritable(o))
+      case _: HiveVarcharObjectInspector =>
         withNullSafe { o =>
             val s = o.asInstanceOf[UTF8String].toString
             new HiveVarchar(s, s.length)
         }
-      case _: JavaHiveCharObjectInspector =>
+      case _: HiveCharObjectInspector if x.preferWritable() =>
+        withNullSafe(o => getStringWritable(o))
+      case _: HiveCharObjectInspector =>
         withNullSafe { o =>
             val s = o.asInstanceOf[UTF8String].toString
             new HiveChar(s, s.length)
@@ -461,7 +465,7 @@ private[hive] trait HiveInspectors {
         _ => constant
       case poi: WritableConstantTimestampObjectInspector =>
         val t = poi.getWritableConstantValue
-        val constant = SECONDS.toMicros(t.getSeconds) + NANOSECONDS.toMicros(t.getNanos)
+        val constant = DateTimeUtils.fromJavaTimestamp(t.getTimestamp)
         _ => constant
       case poi: WritableConstantIntObjectInspector =>
         val constant = poi.getWritableConstantValue.get()
@@ -613,7 +617,7 @@ private[hive] trait HiveInspectors {
         case x: DateObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              DateTimeUtils.fromJavaDate(x.getPrimitiveWritableObject(data).get())
+              new DaysWritable(x.getPrimitiveWritableObject(data)).gregorianDays
             } else {
               null
             }
@@ -629,8 +633,7 @@ private[hive] trait HiveInspectors {
         case x: TimestampObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              val t = x.getPrimitiveWritableObject(data)
-              SECONDS.toMicros(t.getSeconds) + NANOSECONDS.toMicros(t.getNanos)
+              DateTimeUtils.fromJavaTimestamp(x.getPrimitiveWritableObject(data).getTimestamp)
             } else {
               null
             }
@@ -787,6 +790,9 @@ private[hive] trait HiveInspectors {
       ObjectInspectorFactory.getStandardStructObjectInspector(
         java.util.Arrays.asList(fields.map(f => f.name) : _*),
         java.util.Arrays.asList(fields.map(f => toInspector(f.dataType)) : _*))
+    case _: UserDefinedType[_] =>
+      val sqlType = dataType.asInstanceOf[UserDefinedType[_]].sqlType
+      toInspector(sqlType)
   }
 
   /**
@@ -847,6 +853,10 @@ private[hive] trait HiveInspectors {
 
         ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, jmap)
       }
+    case Literal(_, dt: StructType) =>
+      toInspector(dt)
+    case Literal(_, dt: UserDefinedType[_]) =>
+      toInspector(dt.sqlType)
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")
     // ideally, we don't test the foldable here(but in optimizer), however, some of the
@@ -999,8 +1009,12 @@ private[hive] trait HiveInspectors {
       new hadoopIo.BytesWritable(value.asInstanceOf[Array[Byte]])
     }
 
-  private def getDateWritable(value: Any): hiveIo.DateWritable =
-    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Int])
+  private def getDateWritable(value: Any): DaysWritable =
+    if (value == null) {
+      null
+    } else {
+      new DaysWritable(value.asInstanceOf[Int])
+    }
 
   private def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
     if (value == null) {

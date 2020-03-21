@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.sql.{Date, Timestamp}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -47,7 +48,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -66,7 +67,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
     new WriteContext(schema, new java.util.HashMap[String, String]())
   }
 
-  override def write(record: Group) {
+  override def write(record: Group): Unit = {
     groupWriter.write(record)
   }
 }
@@ -74,7 +75,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
+class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession {
   import testImplicits._
 
   /**
@@ -204,6 +205,42 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  testStandardAndLegacyModes("array of struct") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Seq(
+          Tuple1(s"1st_val_$i"),
+          Tuple1(s"2nd_val_$i")
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map(struct => Row(struct.productIterator.toSeq: _*)))
+      })
+    }
+  }
+
+  testStandardAndLegacyModes("array of nested struct") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Seq(
+          Tuple1(
+            Tuple1(s"1st_val_$i")),
+          Tuple1(
+            Tuple1(s"2nd_val_$i"))
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map { case Tuple1(Tuple1(str)) => Row(Row(str))})
+      })
+    }
+  }
+
   testStandardAndLegacyModes("nested struct with array of array as field") {
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
     withParquetDataFrame(data) { df =>
@@ -214,9 +251,34 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  testStandardAndLegacyModes("nested map with struct as value type") {
-    val data = (1 to 4).map(i => Tuple1(Map(i -> ((i, s"val_$i")))))
+  testStandardAndLegacyModes("nested map with struct as key type") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Map(
+          (i, s"kA_$i") -> s"vA_$i",
+          (i, s"kB_$i") -> s"vB_$i"
+        )
+      )
+    }
     withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(m) =>
+        Row(m.map { case (k, v) => Row(k.productIterator.toSeq: _*) -> v })
+      })
+    }
+  }
+
+  testStandardAndLegacyModes("nested map with struct as value type") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Map(
+          s"kA_$i" -> ((i, s"vA_$i")),
+          s"kB_$i" -> ((i, s"vB_$i"))
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })
@@ -475,7 +537,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       val extraOptions = Map(
         SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
-        "spark.sql.parquet.output.committer.class" ->
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
           classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
       )
       withTempPath { dir =>
@@ -505,7 +567,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       // Using a output committer that always fail when committing a task, so that both
       // `commitTask()` and `abortTask()` are invoked.
       val extraOptions = Map[String, String](
-        "spark.sql.parquet.output.committer.class" ->
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
           classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
       )
 
@@ -816,6 +878,71 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       m.close()
 
       assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
+    }
+  }
+
+  test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+          checkAnswer(
+            readResourceParquetFile("test-data/before_1582_date_v2_4.snappy.parquet"),
+            Row(java.sql.Date.valueOf("1001-01-01")))
+          checkAnswer(readResourceParquetFile(
+            "test-data/before_1582_timestamp_micros_v2_4.snappy.parquet"),
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+          checkAnswer(readResourceParquetFile(
+            "test-data/before_1582_timestamp_millis_v2_4.snappy.parquet"),
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123")))
+        }
+        checkAnswer(readResourceParquetFile(
+          "test-data/before_1582_timestamp_int96_v2_4.snappy.parquet"),
+          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+      }
+    }
+  }
+
+  test("SPARK-31159: rebasing timestamps in write") {
+    Seq(
+      ("TIMESTAMP_MILLIS", "1001-01-01 01:02:03.123", "1001-01-07 01:09:05.123"),
+      ("TIMESTAMP_MICROS", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456"),
+      ("INT96", "1001-01-01 01:02:03.123456", "1001-01-01 01:02:03.123456")
+    ).foreach { case (outType, tsStr, nonRebased) =>
+      withClue(s"output type $outType") {
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
+          withTempPath { dir =>
+            val path = dir.getAbsolutePath
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+              Seq(tsStr).toDF("tsS")
+                .select($"tsS".cast("timestamp").as("ts"))
+                .write
+                .parquet(path)
+
+              checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(tsStr)))
+            }
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
+              checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(nonRebased)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-31159: rebasing dates in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+        Seq("1001-01-01").toDF("dateS")
+          .select($"dateS".cast("date").as("date"))
+          .write
+          .parquet(path)
+
+        checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-01")))
+      }
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
+        checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-07")))
+      }
     }
   }
 }

@@ -96,6 +96,16 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(clusterConfig.tokenMechanism === tokenMechanism)
   }
 
+  test("getClusterConfig should return specified kafka params") {
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", authBootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.kafka.customKey", "customValue")
+
+    val clusterConfig = KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1)
+    assert(clusterConfig.identifier === identifier1)
+    assert(clusterConfig.authBootstrapServers === authBootStrapServers)
+    assert(clusterConfig.specifiedKafkaParams === Map("customKey" -> "customValue"))
+  }
+
   test("getAllClusterConfigs should return empty list when nothing configured") {
     assert(KafkaTokenSparkConf.getAllClusterConfigs(sparkConf).isEmpty)
   }

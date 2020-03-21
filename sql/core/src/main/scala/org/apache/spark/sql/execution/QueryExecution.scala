@@ -18,20 +18,26 @@
 package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
+import java.util.UUID
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.StringUtils.{PlanStringConcat, StringConcat}
+import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
+import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
 
 /**
@@ -57,32 +63,36 @@ class QueryExecution(
     }
   }
 
-  lazy val analyzed: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.ANALYSIS) {
-    SparkSession.setActiveSession(sparkSession)
+  lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
+    // We can't clone `logical` here, which will reset the `_analyzed` flag.
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
-  lazy val withCachedData: LogicalPlan = {
+  lazy val withCachedData: LogicalPlan = sparkSession.withActive {
     assertAnalyzed()
     assertSupported()
-    sparkSession.sharedState.cacheManager.useCachedData(analyzed)
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
+    sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
   }
 
-  lazy val optimizedPlan: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.OPTIMIZATION) {
-    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData, tracker)
+  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
+    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
   }
 
-  lazy val sparkPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
-    SparkSession.setActiveSession(sparkSession)
-    // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
-    //       but we will implement to choose the best plan.
-    planner.plan(ReturnAnswer(optimizedPlan)).next()
+  lazy val sparkPlan: SparkPlan = executePhase(QueryPlanningTracker.PLANNING) {
+    // Clone the logical plan here, in case the planner rules change the states of the logical plan.
+    QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
-    prepareForExecution(sparkPlan)
+  lazy val executedPlan: SparkPlan = executePhase(QueryPlanningTracker.PLANNING) {
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
+    QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
   }
 
   /**
@@ -95,30 +105,66 @@ class QueryExecution(
    * Given QueryExecution is not a public class, end users are discouraged to use this: please
    * use `Dataset.rdd` instead where conversion will be applied.
    */
-  lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
+  lazy val toRdd: RDD[InternalRow] = new SQLExecutionRDD(
+    executedPlan.execute(), sparkSession.sessionState.conf)
 
-  /**
-   * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
-   * row format conversions as needed.
-   */
-  protected def prepareForExecution(plan: SparkPlan): SparkPlan = {
-    preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+  /** Get the metrics observed during the execution of the query plan. */
+  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
+
+  protected def preparations: Seq[Rule[SparkPlan]] = {
+    QueryExecution.preparations(sparkSession)
   }
 
-  /** A sequence of rules that will be applied in order to the physical plan before execution. */
-  protected def preparations: Seq[Rule[SparkPlan]] = Seq(
-    PlanSubqueries(sparkSession),
-    EnsureRequirements(sparkSession.sessionState.conf),
-    CollapseCodegenStages(sparkSession.sessionState.conf),
-    ReuseExchange(sparkSession.sessionState.conf),
-    ReuseSubquery(sparkSession.sessionState.conf))
+  private def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
+    tracker.measurePhase(phase)(block)
+  }
 
-  def simpleString: String = withRedaction {
+  def simpleString: String = simpleString(false)
+
+  def simpleString(formatted: Boolean): String = withRedaction {
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
+    if (formatted) {
+      try {
+        ExplainUtils.processPlan(executedPlan, concat.append)
+      } catch {
+        case e: AnalysisException => concat.append(e.toString)
+        case e: IllegalArgumentException => concat.append(e.toString)
+      }
+    } else {
+      QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
+    }
     concat.append("\n")
     concat.toString
+  }
+
+  def explainString(mode: ExplainMode): String = {
+    val queryExecution = if (logical.isStreaming) {
+      // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
+      // output mode does not matter since there is no `Sink`.
+      new IncrementalExecution(
+        sparkSession, logical, OutputMode.Append(), "<unknown>",
+        UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
+    } else {
+      this
+    }
+
+    mode match {
+      case SimpleMode =>
+        queryExecution.simpleString
+      case ExtendedMode =>
+        queryExecution.toString
+      case CodegenMode =>
+        try {
+          org.apache.spark.sql.execution.debug.codegenString(queryExecution.executedPlan)
+        } catch {
+          case e: AnalysisException => e.toString
+        }
+      case CostMode =>
+        queryExecution.stringWithStats
+      case FormattedMode =>
+        queryExecution.simpleString(formatted = true)
+    }
   }
 
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
@@ -126,19 +172,20 @@ class QueryExecution(
     append("== Parsed Logical Plan ==\n")
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
     append("\n== Analyzed Logical Plan ==\n")
-    val analyzedOutput = try {
-      truncatedString(
-        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+    try {
+      append(
+        truncatedString(
+          analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+      )
+      append("\n")
+      QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
+      append("\n== Optimized Logical Plan ==\n")
+      QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
+      append("\n== Physical Plan ==\n")
+      QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
     } catch {
-      case e: AnalysisException => e.toString
+      case e: AnalysisException => append(e.toString)
     }
-    append(analyzedOutput)
-    append("\n")
-    QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
-    append("\n== Optimized Logical Plan ==\n")
-    QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
-    append("\n== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
   }
 
   override def toString: String = withRedaction {
@@ -152,8 +199,11 @@ class QueryExecution(
     val maxFields = SQLConf.get.maxToStringFields
 
     // trigger to compute stats for logical plans
-    optimizedPlan.stats
-
+    try {
+      optimizedPlan.stats
+    } catch {
+      case e: AnalysisException => concat.append(e.toString + "\n")
+    }
     // only show optimized logical plan and physical plan
     concat.append("== Optimized Logical Plan ==\n")
     QueryPlan.append(optimizedPlan, concat.append, verbose = true, addSuffix = true, maxFields)
@@ -190,7 +240,7 @@ class QueryExecution(
      *
      * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
      */
-    def codegenToSeq(): Seq[(String, String)] = {
+    def codegenToSeq(): Seq[(String, String, ByteCodeStats)] = {
       org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
     }
 
@@ -213,6 +263,89 @@ class QueryExecution(
       } finally {
         writer.close()
       }
+    }
+  }
+}
+
+object QueryExecution {
+  /**
+   * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
+   * These rules will make sure subqueries are planned, make use the data partitioning and ordering
+   * are correct, insert whole stage code gen, and try to reduce the work done by reusing exchanges
+   * and subqueries.
+   */
+  private[execution] def preparations(sparkSession: SparkSession): Seq[Rule[SparkPlan]] = {
+
+    val sparkSessionWithAqeOff = getOrCloneSessionWithAqeOff(sparkSession)
+
+    Seq(
+      // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
+      // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
+      InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession)),
+      // If the following rules apply, it means the main query is not AQE-ed, so we make sure the
+      // subqueries are not AQE-ed either.
+      PlanDynamicPruningFilters(sparkSessionWithAqeOff),
+      PlanSubqueries(sparkSessionWithAqeOff),
+      EnsureRequirements(sparkSession.sessionState.conf),
+      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
+        sparkSession.sessionState.columnarRules),
+      CollapseCodegenStages(sparkSession.sessionState.conf),
+      ReuseExchange(sparkSession.sessionState.conf),
+      ReuseSubquery(sparkSession.sessionState.conf)
+    )
+  }
+
+  /**
+   * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
+   * row format conversions as needed.
+   */
+  private[execution] def prepareForExecution(
+      preparations: Seq[Rule[SparkPlan]],
+      plan: SparkPlan): SparkPlan = {
+    preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+  }
+
+  /**
+   * Transform a [[LogicalPlan]] into a [[SparkPlan]].
+   *
+   * Note that the returned physical plan still needs to be prepared for execution.
+   */
+  def createSparkPlan(
+      sparkSession: SparkSession,
+      planner: SparkPlanner,
+      plan: LogicalPlan): SparkPlan = {
+    // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
+    //       but we will implement to choose the best plan.
+    planner.plan(ReturnAnswer(plan)).next()
+  }
+
+  /**
+   * Prepare the [[SparkPlan]] for execution.
+   */
+  def prepareExecutedPlan(spark: SparkSession, plan: SparkPlan): SparkPlan = {
+    prepareForExecution(preparations(spark), plan)
+  }
+
+  /**
+   * Transform the subquery's [[LogicalPlan]] into a [[SparkPlan]] and prepare the resulting
+   * [[SparkPlan]] for execution.
+   */
+  def prepareExecutedPlan(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
+    val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone())
+    prepareExecutedPlan(spark, sparkPlan)
+  }
+
+  /**
+   * Returns a cloned [[SparkSession]] with adaptive execution disabled, or the original
+   * [[SparkSession]] if its adaptive execution is already disabled.
+   */
+  def getOrCloneSessionWithAqeOff[T](session: SparkSession): SparkSession = {
+    if (!session.sessionState.conf.adaptiveExecutionEnabled) {
+      session
+    } else {
+      val newSession = session.cloneSession()
+      newSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+      newSession
     }
   }
 }

@@ -95,7 +95,7 @@ class MLUtils(object):
                             which leads to inconsistent feature
                             dimensions.
         :param minPartitions: min number of partitions
-        @return: labeled data stored as an RDD of LabeledPoint
+        :return: labeled data stored as an RDD of LabeledPoint
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
@@ -156,7 +156,7 @@ class MLUtils(object):
         :param path: file or directory path in any Hadoop-supported file
                      system URI
         :param minPartitions: min number of partitions
-        @return: labeled data stored as an RDD of LabeledPoint
+        :return: labeled data stored as an RDD of LabeledPoint
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils

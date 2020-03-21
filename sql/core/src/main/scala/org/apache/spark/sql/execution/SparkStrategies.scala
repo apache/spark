@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -69,7 +70,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case ReturnAnswer(rootPlan) => rootPlan
         case _ => plan
       }
-      p.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, logicalPlan)
+      p.setLogicalLink(logicalPlan)
       p
     }
   }
@@ -88,6 +89,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit, planLater(child)) :: Nil
+        case Tail(IntegerLiteral(limit), child) =>
+          CollectTailExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
       }
       case Limit(IntegerLiteral(limit), Sort(order, true, child))
@@ -290,7 +293,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastHashJoin(canBroadcast(left), canBroadcast(right))
+          createBroadcastHashJoin(
+            canBroadcast(left) && !hint.leftHint.exists(_.strategy.contains(NO_BROADCAST_HASH)),
+            canBroadcast(right) && !hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH)))
             .orElse {
               if (!conf.preferSortMergeJoin) {
                 createShuffleHashJoin(
@@ -419,7 +424,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
-        aggregate.AggUtils.planStreamingAggregation(
+        AggUtils.planStreamingAggregation(
           normalizedGroupingExpressions,
           aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
@@ -446,21 +451,35 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Used to plan the streaming global limit operator for streams in append mode.
    * We need to check for either a direct Limit or a Limit wrapped in a ReturnAnswer operator,
    * following the example of the SpecialLimits Strategy above.
-   * Streams with limit in Append mode use the stateful StreamingGlobalLimitExec.
-   * Streams with limit in Complete mode use the stateless CollectLimitExec operator.
-   * Limit is unsupported for streams in Update mode.
    */
   case class StreamingGlobalLimitStrategy(outputMode: OutputMode) extends Strategy {
-    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ReturnAnswer(rootPlan) => rootPlan match {
-        case Limit(IntegerLiteral(limit), child)
-            if plan.isStreaming && outputMode == InternalOutputModes.Append =>
-          StreamingGlobalLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
-        case _ => Nil
+
+    private def generatesStreamingAppends(plan: LogicalPlan): Boolean = {
+
+      /** Ensures that this plan does not have a streaming aggregate in it. */
+      def hasNoStreamingAgg: Boolean = {
+        plan.collectFirst { case a: Aggregate if a.isStreaming => a }.isEmpty
       }
-      case Limit(IntegerLiteral(limit), child)
-          if plan.isStreaming && outputMode == InternalOutputModes.Append =>
-        StreamingGlobalLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
+
+      // The following cases of limits on a streaming plan has to be executed with a stateful
+      // streaming plan.
+      // 1. When the query is in append mode (that is, all logical plan operate on appended data).
+      // 2. When the plan does not contain any streaming aggregate (that is, plan has only
+      //    operators that operate on appended data). This must be executed with a stateful
+      //    streaming plan even if the query is in complete mode because of a later streaming
+      //    aggregation (e.g., `streamingDf.limit(5).groupBy().count()`).
+      plan.isStreaming && (
+        outputMode == InternalOutputModes.Append ||
+        outputMode == InternalOutputModes.Complete && hasNoStreamingAgg)
+    }
+
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ReturnAnswer(Limit(IntegerLiteral(limit), child)) if generatesStreamingAppends(child) =>
+        StreamingGlobalLimitExec(limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
+
+      case Limit(IntegerLiteral(limit), child) if generatesStreamingAppends(child) =>
+        StreamingGlobalLimitExec(limit, StreamingLocalLimitExec(limit, planLater(child))) :: Nil
+
       case _ => Nil
     }
   }
@@ -471,8 +490,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, _)
           if left.isStreaming && right.isStreaming =>
 
-          new StreamingSymmetricHashJoinExec(
-            leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          val stateVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
+          new StreamingSymmetricHashJoinExec(leftKeys, rightKeys, joinType, condition,
+            stateVersion, planLater(left), planLater(right)) :: Nil
 
         case Join(left, right, _, _, _) if left.isStreaming && right.isStreaming =>
           throw new AnalysisException(
@@ -513,13 +533,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val aggregateOperator =
           if (functionsWithDistinct.isEmpty) {
-            aggregate.AggUtils.planAggregateWithoutDistinct(
+            AggUtils.planAggregateWithoutDistinct(
               normalizedGroupingExpressions,
               aggregateExpressions,
               resultExpressions,
               planLater(child))
           } else {
-            aggregate.AggUtils.planAggregateWithOneDistinct(
+            AggUtils.planAggregateWithOneDistinct(
               normalizedGroupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
@@ -564,7 +584,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  protected lazy val singleRowRdd = sparkContext.parallelize(Seq(InternalRow()), 1)
+  protected lazy val singleRowRdd = session.sparkContext.parallelize(Seq(InternalRow()), 1)
 
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -620,8 +640,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ArrowEvalPython(udfs, output, child) =>
-        ArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
+      case ArrowEvalPython(udfs, output, child, evalType) =>
+        ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
       case BatchEvalPython(udfs, output, child) =>
         BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case _ =>
@@ -679,6 +699,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           f, p, b, is, ot, planLater(child)) :: Nil
       case logical.FlatMapGroupsInPandas(grouping, func, output, child) =>
         execution.python.FlatMapGroupsInPandasExec(grouping, func, output, planLater(child)) :: Nil
+      case logical.FlatMapCoGroupsInPandas(leftGroup, rightGroup, func, output, left, right) =>
+        execution.python.FlatMapCoGroupsInPandasExec(
+          leftGroup, rightGroup, func, output, planLater(left), planLater(right)) :: Nil
+      case logical.MapInPandas(func, output, child) =>
+        execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
       case logical.AppendColumns(f, _, _, in, out, child) =>
@@ -698,7 +723,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
-          ShuffleExchangeExec(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
+          ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
+            planLater(child), canChangeNumPartitions = false) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -731,10 +757,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child)) :: Nil
+        exchange.ShuffleExchangeExec(
+          r.partitioning, planLater(r.child), canChangeNumPartitions = false) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
+      case _: UpdateTable =>
+        throw new UnsupportedOperationException(s"UPDATE TABLE is not supported temporarily.")
+      case _: MergeIntoTable =>
+        throw new UnsupportedOperationException(s"MERGE INTO TABLE is not supported temporarily.")
+      case logical.CollectMetrics(name, metrics, child) =>
+        execution.CollectMetricsExec(name, metrics, planLater(child)) :: Nil
       case _ => Nil
     }
   }

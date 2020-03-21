@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 object NestedColumnAliasing {
 
   def unapply(plan: LogicalPlan)
-    : Option[(Map[GetStructField, Alias], Map[ExprId, Seq[Alias]])] = plan match {
+    : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = plan match {
     case Project(projectList, child)
         if SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
       getAliasSubMap(projectList)
@@ -43,7 +43,7 @@ object NestedColumnAliasing {
    */
   def replaceToAliases(
       plan: LogicalPlan,
-      nestedFieldToAlias: Map[GetStructField, Alias],
+      nestedFieldToAlias: Map[ExtractValue, Alias],
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = plan match {
     case Project(projectList, child) =>
       Project(
@@ -54,11 +54,11 @@ object NestedColumnAliasing {
   /**
    * Return a replaced project list.
    */
-  private def getNewProjectList(
+  def getNewProjectList(
       projectList: Seq[NamedExpression],
-      nestedFieldToAlias: Map[GetStructField, Alias]): Seq[NamedExpression] = {
+      nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
     projectList.map(_.transform {
-      case f: GetStructField if nestedFieldToAlias.contains(f) =>
+      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
         nestedFieldToAlias(f).toAttribute
     }.asInstanceOf[NamedExpression])
   }
@@ -66,7 +66,7 @@ object NestedColumnAliasing {
   /**
    * Return a plan with new children replaced with aliases.
    */
-  private def replaceChildrenWithAliases(
+  def replaceChildrenWithAliases(
       plan: LogicalPlan,
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
     plan.withNewChildren(plan.children.map { plan =>
@@ -86,32 +86,43 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Return root references that are individually accessed as a whole, and `GetStructField`s.
+   * Return root references that are individually accessed as a whole, and `GetStructField`s
+   * or `GetArrayStructField`s which on top of other `ExtractValue`s or special expressions.
+   * Check `SelectedField` to see which expressions should be listed here.
    */
-  private def collectRootReferenceAndGetStructField(e: Expression): Seq[Expression] = e match {
-    case _: AttributeReference | _: GetStructField => Seq(e)
-    case es if es.children.nonEmpty => es.children.flatMap(collectRootReferenceAndGetStructField)
+  private def collectRootReferenceAndExtractValue(e: Expression): Seq[Expression] = e match {
+    case _: AttributeReference => Seq(e)
+    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) => Seq(e)
+    case GetArrayStructFields(_: MapValues |
+                              _: MapKeys |
+                              _: ExtractValue |
+                              _: AttributeReference, _, _, _, _) => Seq(e)
+    case es if es.children.nonEmpty => es.children.flatMap(collectRootReferenceAndExtractValue)
     case _ => Seq.empty
   }
 
   /**
    * Return two maps in order to replace nested fields to aliases.
    *
-   * 1. GetStructField -> Alias: A new alias is created for each nested field.
+   * If `exclusiveAttrs` is given, any nested field accessors of these attributes
+   * won't be considered in nested fields aliasing.
+   *
+   * 1. ExtractValue -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
-  private def getAliasSubMap(projectList: Seq[NamedExpression])
-    : Option[(Map[GetStructField, Alias], Map[ExprId, Seq[Alias]])] = {
+  def getAliasSubMap(exprList: Seq[Expression], exclusiveAttrs: Seq[Attribute] = Seq.empty)
+    : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = {
     val (nestedFieldReferences, otherRootReferences) =
-      projectList.flatMap(collectRootReferenceAndGetStructField).partition {
-        case _: GetStructField => true
+      exprList.flatMap(collectRootReferenceAndExtractValue).partition {
+        case _: ExtractValue => true
         case _ => false
       }
 
-    val aliasSub = nestedFieldReferences.asInstanceOf[Seq[GetStructField]]
-      .filter(!_.references.subsetOf(AttributeSet(otherRootReferences)))
+    val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
+    val aliasSub = nestedFieldReferences.asInstanceOf[Seq[ExtractValue]]
+      .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head)
-      .flatMap { case (attr, nestedFields: Seq[GetStructField]) =>
+      .flatMap { case (attr, nestedFields: Seq[ExtractValue]) =>
         // Each expression can contain multiple nested fields.
         // Note that we keep the original names to deliver to parquet in a case-sensitive way.
         val nestedFieldToAlias = nestedFields.distinct.map { f =>
@@ -122,7 +133,9 @@ object NestedColumnAliasing {
         // If all nested fields of `attr` are used, we don't need to introduce new aliases.
         // By default, ColumnPruning rule uses `attr` already.
         if (nestedFieldToAlias.nonEmpty &&
-            nestedFieldToAlias.length < totalFieldNum(attr.dataType)) {
+            nestedFieldToAlias
+              .map { case (nestedField, _) => totalFieldNum(nestedField.dataType) }
+              .sum < totalFieldNum(attr.dataType)) {
           Some(attr.exprId -> nestedFieldToAlias)
         } else {
           None
@@ -147,5 +160,16 @@ object NestedColumnAliasing {
     case ArrayType(elementType, _) => totalFieldNum(elementType)
     case MapType(keyType, valueType, _) => totalFieldNum(keyType) + totalFieldNum(valueType)
     case _ => 1 // UDT and others
+  }
+
+  /**
+   * This is a while-list for pruning nested fields at `Generator`.
+   */
+  def canPruneGenerator(g: Generator): Boolean = g match {
+    case _: Explode => true
+    case _: Stack => true
+    case _: PosExplode => true
+    case _: Inline => true
+    case _ => false
   }
 }

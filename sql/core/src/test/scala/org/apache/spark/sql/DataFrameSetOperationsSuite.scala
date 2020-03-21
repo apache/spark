@@ -22,11 +22,11 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
 
-class DataFrameSetOperationsSuite extends QueryTest with SharedSQLContext {
+class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("except") {
@@ -307,7 +307,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSQLContext {
 
     val union = df1.union(df2)
     checkAnswer(
-      union.filter('i < rand(7) * 10),
+      union.filter($"i" < rand(7) * 10),
       expected(union)
     )
     checkAnswer(
@@ -321,13 +321,13 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSQLContext {
 
     val intersect = df1.intersect(df2)
     checkAnswer(
-      intersect.filter('i < rand(7) * 10),
+      intersect.filter($"i" < rand(7) * 10),
       expected(intersect)
     )
 
     val except = df1.except(df2)
     checkAnswer(
-      except.filter('i < rand(7) * 10),
+      except.filter($"i" < rand(7) * 10),
       expected(except)
     )
   }
@@ -375,7 +375,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSQLContext {
       case j: Union if j.children.size == 5 => j }.size === 1)
 
     checkAnswer(
-      unionDF.agg(avg('key), max('key), min('key), sum('key)),
+      unionDF.agg(avg("key"), max("key"), min("key"), sum("key")),
       Row(50.5, 100, 1, 25250) :: Nil
     )
 

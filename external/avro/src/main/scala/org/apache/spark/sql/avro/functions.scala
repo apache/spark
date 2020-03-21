@@ -45,9 +45,11 @@ object functions {
   }
 
   /**
-   * Converts a binary column of avro format into its corresponding catalyst value. The specified
-   * schema must match the read data, otherwise the behavior is undefined: it may fail or return
-   * arbitrary result.
+   * Converts a binary column of Avro format into its corresponding catalyst value.
+   * The specified schema must match actual schema of the read data, otherwise the behavior
+   * is undefined: it may fail or return arbitrary result.
+   * To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
+   * set via the option avroSchema.
    *
    * @param data the binary column.
    * @param jsonFormatSchema the avro schema in JSON string format.
@@ -72,6 +74,19 @@ object functions {
    */
   @Experimental
   def to_avro(data: Column): Column = {
-    new Column(CatalystDataToAvro(data.expr))
+    new Column(CatalystDataToAvro(data.expr, None))
+  }
+
+  /**
+   * Converts a column into binary of avro format.
+   *
+   * @param data the data column.
+   * @param jsonFormatSchema user-specified output avro schema in JSON string format.
+   *
+   * @since 3.0.0
+   */
+  @Experimental
+  def to_avro(data: Column, jsonFormatSchema: String): Column = {
+    new Column(CatalystDataToAvro(data.expr, Some(jsonFormatSchema)))
   }
 }

@@ -29,7 +29,7 @@ import org.apache.spark.network.TransportContext
 import org.apache.spark.network.crypto.AuthServerBootstrap
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
-import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
+import org.apache.spark.network.shuffle.ExternalBlockHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -73,28 +73,28 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   }
 
   /** Get blockhandler  */
-  def getBlockHandler: ExternalShuffleBlockHandler = {
+  def getBlockHandler: ExternalBlockHandler = {
     blockHandler
   }
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
-  protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
+  protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
-      new ExternalShuffleBlockHandler(conf, findRegisteredExecutorsDBFile(registeredExecutorsDB))
+      new ExternalBlockHandler(conf, findRegisteredExecutorsDBFile(registeredExecutorsDB))
     } else {
-      new ExternalShuffleBlockHandler(conf, null)
+      new ExternalBlockHandler(conf, null)
     }
   }
 
   /** Starts the external shuffle service if the user has configured us to. */
-  def startIfEnabled() {
+  def startIfEnabled(): Unit = {
     if (enabled) {
       start()
     }
   }
 
   /** Start the external shuffle service */
-  def start() {
+  def start(): Unit = {
     require(server == null, "Shuffle server already started")
     val authEnabled = securityManager.isAuthenticationEnabled()
     logInfo(s"Starting shuffle service on port $port (auth enabled = $authEnabled)")
@@ -125,7 +125,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     blockHandler.executorRemoved(executorId, appId)
   }
 
-  def stop() {
+  def stop(): Unit = {
     if (server != null) {
       server.close()
       server = null

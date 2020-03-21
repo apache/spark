@@ -185,7 +185,7 @@ You can optionally configure the cluster further by setting environment variable
 SPARK_MASTER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
@@ -242,13 +242,42 @@ SPARK_MASTER_OPTS supports the following system properties:
     Number of seconds after which the standalone deploy master considers a worker lost if it
     receives no heartbeats.
   </td>
+  <td>0.6.2</td>
+</tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.amount</code></td>
+  <td>(none)</td>
+  <td>
+    Amount of a particular resource to use on the worker.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resource discovery script, which is used to find a particular resource while worker starting up.
+    And the output of the script should be formatted like the <code>ResourceInformation</code> class.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.resourcesFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resources file which is used to find various resources while worker starting up.
+    The content of resources file should be formatted like <code>
+    [{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]</code>.
+    If a particular resource is not found in the resources file, the discovery script would be used to
+    find that resource. If the discovery script also does not find the resources, the worker will fail
+    to start up.
+  </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
 SPARK_WORKER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
@@ -257,6 +286,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
     This should be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.interval</code></td>
@@ -265,6 +295,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     Controls the interval, in seconds, at which the worker cleans up old application work dirs
     on the local machine.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.appDataTtl</code></td>
@@ -275,6 +306,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.enabled</code></td>
@@ -306,8 +338,21 @@ SPARK_WORKER_OPTS supports the following system properties:
     Spark caches the uncompressed file size of compressed log files. This property controls the cache
     size.
   </td>
+  <td>2.0.2</td>
 </tr>
 </table>
+
+# Resource Allocation and Configuration Overview
+
+Please make sure to have read the Custom Resource Scheduling and Configuration Overview section on the [configuration page](configuration.html). This section only talks about the Spark Standalone specific aspects of resource scheduling.
+
+Spark Standalone has 2 parts, the first is configuring the resources for the Worker, the second is the resource allocation for a specific application.
+
+The user must configure the Workers to have a set of resources available so that it can assign them out to Executors. The <code>spark.worker.resource.{resourceName}.amount</code> is used to control the amount of each resource the worker has allocated. The user must also specify either <code>spark.worker.resourcesFile</code> or <code>spark.worker.resource.{resourceName}.discoveryScript</code> to specify how the Worker discovers the resources its assigned. See the descriptions above for each of those to see which method works best for your setup.
+
+The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesfile</code> or <code>spark.driver.resource.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers, please make sure the resources file or discovery script only returns resources that do not conflict with other Drivers running on the same node.
+
+Note, the user does not need to specify a discovery script when submitting an application as the Worker will start each Executor with the resources it allocates to it.
 
 # Connecting an Application to the Cluster
 
@@ -389,7 +434,7 @@ In addition, detailed log output for each job is also written to the work direct
 
 # Running Alongside Hadoop
 
-You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use a hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
+You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use an hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
 
 
 # Configuring Ports for Network Security

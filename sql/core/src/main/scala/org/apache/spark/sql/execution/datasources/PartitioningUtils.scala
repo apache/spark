@@ -130,8 +130,11 @@ object PartitioningUtils {
       Map.empty[String, String]
     }
 
-    val dateFormatter = DateFormatter()
-    val timestampFormatter = TimestampFormatter(timestampPartitionPattern, zoneId)
+    val dateFormatter = DateFormatter(zoneId)
+    val timestampFormatter = TimestampFormatter(
+      timestampPartitionPattern,
+      zoneId,
+      needVarLengthSecondFraction = true)
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
       parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,
@@ -492,7 +495,7 @@ object PartitioningUtils {
       // We need to check that we can cast the raw string since we later can use Cast to get
       // the partition values with the right DataType (see
       // org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex.inferPartitioning)
-      val dateValue = Cast(Literal(raw), DateType).eval()
+      val dateValue = Cast(Literal(raw), DateType, Some(zoneId.getId)).eval()
       // Disallow DateType if the cast returned null
       require(dateValue != null)
       Literal.create(dateValue, DateType)

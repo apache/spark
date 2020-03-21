@@ -37,7 +37,7 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
     case p if !p.resolved => p
     // Skip leaf node, as it has no child and no need to update nullability.
     case p: LeafNode => p
-    case p: LogicalPlan =>
+    case p: LogicalPlan if p.childrenResolved =>
       val nullabilities = p.children.flatMap(c => c.output).groupBy(_.exprId).map {
         // If there are multiple Attributes having the same ExprId, we need to resolve
         // the conflict of nullable field. We do not really expect this to happen.

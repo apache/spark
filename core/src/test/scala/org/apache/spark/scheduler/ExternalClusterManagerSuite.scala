@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.Map
+
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -65,9 +67,9 @@ private class DummyExternalClusterManager extends ExternalClusterManager {
 
 private class DummySchedulerBackend extends SchedulerBackend {
   var initialized = false
-  def start() {}
-  def stop() {}
-  def reviveOffers() {}
+  def start(): Unit = {}
+  def stop(): Unit = {}
+  def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
   def maxNumConcurrentTasks(): Int = 0
 }
@@ -87,6 +89,7 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {}
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
+  override def executorDecommission(executorId: String): Unit = {}
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
   override def applicationAttemptId(): Option[String] = None
@@ -94,5 +97,5 @@ private class DummyTaskScheduler extends TaskScheduler {
       execId: String,
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId,
-      executorMetrics: ExecutorMetrics): Boolean = true
+      executorMetrics: Map[(Int, Int), ExecutorMetrics]): Boolean = true
 }

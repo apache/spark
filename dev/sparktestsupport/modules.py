@@ -329,6 +329,7 @@ pyspark_core = Module(
         "pyspark.tests.test_join",
         "pyspark.tests.test_profiler",
         "pyspark.tests.test_rdd",
+        "pyspark.tests.test_rddbarrier",
         "pyspark.tests.test_readwrite",
         "pyspark.tests.test_serializers",
         "pyspark.tests.test_shuffle",
@@ -361,8 +362,14 @@ pyspark_sql = Module(
         "pyspark.sql.udf",
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
+        "pyspark.sql.pandas.conversion",
+        "pyspark.sql.pandas.map_ops",
+        "pyspark.sql.pandas.group_ops",
+        "pyspark.sql.pandas.types",
+        "pyspark.sql.pandas.serializers",
+        "pyspark.sql.pandas.typehints",
+        "pyspark.sql.pandas.utils",
         # unittests
-        "pyspark.sql.tests.test_appsubmit",
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
@@ -372,10 +379,13 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_datasources",
         "pyspark.sql.tests.test_functions",
         "pyspark.sql.tests.test_group",
+        "pyspark.sql.tests.test_pandas_cogrouped_map",
+        "pyspark.sql.tests.test_pandas_grouped_map",
+        "pyspark.sql.tests.test_pandas_map",
         "pyspark.sql.tests.test_pandas_udf",
         "pyspark.sql.tests.test_pandas_udf_grouped_agg",
-        "pyspark.sql.tests.test_pandas_udf_grouped_map",
         "pyspark.sql.tests.test_pandas_udf_scalar",
+        "pyspark.sql.tests.test_pandas_udf_typehints",
         "pyspark.sql.tests.test_pandas_udf_window",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
@@ -459,6 +469,7 @@ pyspark_ml = Module(
         "pyspark.ml.evaluation",
         "pyspark.ml.feature",
         "pyspark.ml.fpm",
+        "pyspark.ml.functions",
         "pyspark.ml.image",
         "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",
@@ -546,6 +557,13 @@ kubernetes = Module(
     sbt_test_goals=["kubernetes/test"]
 )
 
+hadoop_cloud = Module(
+    name="hadoop-cloud",
+    dependencies=[],
+    source_file_regexes=["hadoop-cloud"],
+    build_profile_flags=["-Phadoop-cloud"],
+    sbt_test_goals=["hadoop-cloud/test"]
+)
 
 spark_ganglia_lgpl = Module(
     name="spark-ganglia-lgpl",

@@ -105,7 +105,8 @@ case class AggregateInPandasExec(
       StructField(s"_$i", dt)
     })
 
-    inputRDD.mapPartitionsInternal { iter =>
+    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
       val prunedProj = UnsafeProjection.create(allInputs, child.output)
 
       val grouped = if (groupingExpressions.isEmpty) {
@@ -151,6 +152,6 @@ case class AggregateInPandasExec(
         val joinedRow = joined(leftRow, aggOutputRow)
         resultProj(joinedRow)
       }
-    }
+    }}
   }
 }

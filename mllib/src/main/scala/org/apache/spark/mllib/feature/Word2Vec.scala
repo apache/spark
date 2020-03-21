@@ -46,7 +46,7 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 private case class VocabWord(
   var word: String,
-  var cn: Int,
+  var cn: Long,
   var point: Array[Int],
   var code: Array[Int],
   var codeLen: Int
@@ -195,7 +195,7 @@ class Word2Vec extends Serializable with Logging {
         new Array[Int](MAX_CODE_LENGTH),
         0))
       .collect()
-      .sortWith((a, b) => a.cn > b.cn)
+      .sortBy(_.cn)(Ordering[Long].reverse)
 
     vocabSize = vocab.length
     require(vocabSize > 0, "The vocabulary size should be > 0. You may need to check " +
@@ -233,7 +233,7 @@ class Word2Vec extends Serializable with Logging {
       a += 1
     }
     while (a < 2 * vocabSize) {
-      count(a) = 1e9.toInt
+      count(a) = Long.MaxValue
       a += 1
     }
     var pos1 = vocabSize - 1
@@ -268,6 +268,8 @@ class Word2Vec extends Serializable with Logging {
         min2i = pos2
         pos2 += 1
       }
+      assert(count(min1i) < Long.MaxValue)
+      assert(count(min2i) < Long.MaxValue)
       count(vocabSize + a) = count(min1i) + count(min2i)
       parentNode(min1i) = vocabSize + a
       parentNode(min2i) = vocabSize + a
@@ -437,9 +439,20 @@ class Word2Vec extends Serializable with Logging {
           }
         }.flatten
       }
-      val synAgg = partial.reduceByKey { case (v1, v2) =>
-          blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
-          v1
+      // SPARK-24666: do normalization for aggregating weights from partitions.
+      // Original Word2Vec either single-thread or multi-thread which do Hogwild-style aggregation.
+      // Our approach needs to do extra normalization, otherwise adding weights continuously may
+      // cause overflow on float and lead to infinity/-infinity weights.
+      val synAgg = partial.mapPartitions { iter =>
+        iter.map { case (id, vec) =>
+          (id, (vec, 1))
+        }
+      }.reduceByKey { (vc1, vc2) =>
+        blas.saxpy(vectorSize, 1.0f, vc2._1, 1, vc1._1, 1)
+        (vc1._1, vc1._2 + vc2._2)
+      }.map { case (id, (vec, count)) =>
+        blas.sscal(vectorSize, 1.0f / count, vec, 1)
+        (id, vec)
       }.collect()
       var i = 0
       while (i < synAgg.length) {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import java.util.UUID
 import java.util.concurrent._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
 /**
@@ -43,8 +44,9 @@ import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
+  import BroadcastExchangeExec._
 
-  private val runId: UUID = UUID.randomUUID
+  private[sql] val runId: UUID = UUID.randomUUID
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -59,17 +61,22 @@ case class BroadcastExchangeExec(
   }
 
   @transient
+  private lazy val promise = Promise[broadcast.Broadcast[Any]]()
+
+  /**
+   * For registering callbacks on `relationFuture`.
+   * Note that calling this field will not start the execution of broadcast job.
+   */
+  @transient
+  lazy val completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]] = promise.future
+
+  @transient
   private val timeout: Long = SQLConf.get.broadcastTimeout
 
   @transient
-  private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
-    // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    val task = new Callable[broadcast.Broadcast[Any]]() {
-      override def call(): broadcast.Broadcast[Any] = {
-        // This will run in another thread. Set the execution id so that we can connect these jobs
-        // with the correct execution.
-        SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+  private[sql] lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
+    SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
+      sqlContext.sparkSession, BroadcastExchangeExec.executionContext) {
           try {
             // Setup a job group here so later it may get cancelled by groupId if necessary.
             sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
@@ -77,9 +84,9 @@ case class BroadcastExchangeExec(
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
-            if (numRows >= 512000000) {
+            if (numRows >= MAX_BROADCAST_TABLE_ROWS) {
               throw new SparkException(
-                s"Cannot broadcast the table with 512 million or more rows: $numRows rows")
+                s"Cannot broadcast the table over $MAX_BROADCAST_TABLE_ROWS rows: $numRows rows")
             }
 
             val beforeBuild = System.nanoTime()
@@ -99,7 +106,7 @@ case class BroadcastExchangeExec(
             }
 
             longMetric("dataSize") += dataSize
-            if (dataSize >= (8L << 30)) {
+            if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
               throw new SparkException(
                 s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
             }
@@ -111,27 +118,32 @@ case class BroadcastExchangeExec(
             val broadcasted = sparkContext.broadcast(relation)
             longMetric("broadcastTime") += NANOSECONDS.toMillis(
               System.nanoTime() - beforeBroadcast)
-
+            val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
             SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+            promise.success(broadcasted)
             broadcasted
           } catch {
             // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
             // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
             // will catch this exception and re-throw the wrapped fatal throwable.
             case oe: OutOfMemoryError =>
-              throw new SparkFatalException(
+              val ex = new SparkFatalException(
                 new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
                   "worker nodes. As a workaround, you can either disable broadcast by setting " +
                   s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
                   s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
                   .initCause(oe.getCause))
+              promise.failure(ex)
+              throw ex
             case e if !NonFatal(e) =>
-              throw new SparkFatalException(e)
+              val ex = new SparkFatalException(e)
+              promise.failure(ex)
+              throw ex
+            case e: Throwable =>
+              promise.failure(e)
+              throw e
           }
-        }
-      }
     }
-    BroadcastExchangeExec.executionContext.submit[broadcast.Broadcast[Any]](task)
   }
 
   override protected def doPrepare(): Unit = {
@@ -163,6 +175,13 @@ case class BroadcastExchangeExec(
 }
 
 object BroadcastExchangeExec {
+  // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
+  // and only 70% of the slots can be used before growing in HashedRelation,
+  // here the limitation should not be over 341 million.
+  val MAX_BROADCAST_TABLE_ROWS = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
+
+  val MAX_BROADCAST_TABLE_BYTES = 8L << 30
+
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange",
         SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)))

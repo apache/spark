@@ -67,7 +67,7 @@ public class ExternalShuffleIntegrationSuite {
   // Executor 0 is sort-based
   static TestShuffleDataContext dataContext0;
 
-  static ExternalShuffleBlockHandler handler;
+  static ExternalBlockHandler handler;
   static TransportServer server;
   static TransportConf conf;
   static TransportContext transportContext;
@@ -109,7 +109,7 @@ public class ExternalShuffleIntegrationSuite {
     config.put("spark.shuffle.io.maxRetries", "0");
     config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "true");
     conf = new TransportConf("shuffle", new MapConfigProvider(config));
-    handler = new ExternalShuffleBlockHandler(
+    handler = new ExternalBlockHandler(
       new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, null) {
         @Override
@@ -170,13 +170,14 @@ public class ExternalShuffleIntegrationSuite {
       TransportConf clientConf,
       int port) throws Exception {
     final FetchResult res = new FetchResult();
-    res.successBlocks = Collections.synchronizedSet(new HashSet<String>());
-    res.failedBlocks = Collections.synchronizedSet(new HashSet<String>());
-    res.buffers = Collections.synchronizedList(new LinkedList<ManagedBuffer>());
+    res.successBlocks = Collections.synchronizedSet(new HashSet<>());
+    res.failedBlocks = Collections.synchronizedSet(new HashSet<>());
+    res.buffers = Collections.synchronizedList(new LinkedList<>());
 
     final Semaphore requestsRemaining = new Semaphore(0);
 
-    try (ExternalShuffleClient client = new ExternalShuffleClient(clientConf, null, false, 5000)) {
+    try (ExternalBlockStoreClient client = new ExternalBlockStoreClient(
+        clientConf, null, false, 5000)) {
       client.init(APP_ID);
       client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
         new BlockFetchingListener() {
@@ -271,7 +272,7 @@ public class ExternalShuffleIntegrationSuite {
     String validBlockIdToRemove = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_VALID_BLOCK_TO_RM;
     String missingBlockIdToRemove = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_MISSING_BLOCK_TO_RM;
 
-    try (ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, 5000)) {
+    try (ExternalBlockStoreClient client = new ExternalBlockStoreClient(conf, null, false, 5000)) {
       client.init(APP_ID);
       Future<Integer> numRemovedBlocks = client.removeBlocks(
         TestUtils.getLocalHost(),
@@ -331,7 +332,7 @@ public class ExternalShuffleIntegrationSuite {
 
   private static void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
       throws IOException, InterruptedException {
-    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, 5000);
+    ExternalBlockStoreClient client = new ExternalBlockStoreClient(conf, null, false, 5000);
     client.init(APP_ID);
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
       executorId, executorInfo);

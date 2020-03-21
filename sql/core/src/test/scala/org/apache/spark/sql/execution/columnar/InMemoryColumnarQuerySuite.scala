@@ -24,21 +24,21 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, FilterExec, InputAdapter, LocalTableScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel._
 import org.apache.spark.util.Utils
 
-class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
+class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   setupTestData()
 
-  private def cachePrimitiveTest(data: DataFrame, dataType: String) {
+  private def cachePrimitiveTest(data: DataFrame, dataType: String): Unit = {
     data.createOrReplaceTempView(s"testData$dataType")
     val storageLevel = MEMORY_ONLY
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
@@ -437,7 +437,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-20356: pruned InMemoryTableScanExec should have correct ordering and partitioning") {
-    withSQLConf("spark.sql.shuffle.partitions" -> "200") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
       val df1 = Seq(("a", 1), ("b", 1), ("c", 2)).toDF("item", "group")
       val df2 = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("item", "id")
       val df3 = df1.join(df2, Seq("item")).select($"id", $"group".as("item")).distinct()
@@ -486,15 +486,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val df2 = df1.where("y = 3")
 
     val planBeforeFilter = df2.queryExecution.executedPlan.collect {
-      case f: FilterExec => f.child
+      case FilterExec(_, c: ColumnarToRowExec) => c.child
+      case WholeStageCodegenExec(FilterExec(_, ColumnarToRowExec(i: InputAdapter))) => i.child
     }
     assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 
-    val execPlan = if (codegenEnabled == "true") {
-      WholeStageCodegenExec(planBeforeFilter.head)(codegenStageId = 0)
-    } else {
-      planBeforeFilter.head
-    }
+    val execPlan = planBeforeFilter.head
     assert(execPlan.executeCollectPublic().length == 0)
   }
 
@@ -510,7 +507,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
         SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "orc",
-        SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempPath { workDir =>
           withTable("table1") {
             val workDirPath = workDir.getAbsolutePath
@@ -521,7 +518,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
               case plan: InMemoryRelation => plan
             }.head
             // InMemoryRelation's stats is file size before the underlying RDD is materialized
-            assert(inMemoryRelation.computeStats().sizeInBytes === 486)
+            assert(inMemoryRelation.computeStats().sizeInBytes === getLocalDirSize(workDir))
 
             // InMemoryRelation's stats is updated after materializing RDD
             dfFromFile.collect()
@@ -534,7 +531,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
             // Even CBO enabled, InMemoryRelation's stats keeps as the file size before table's
             // stats is calculated
-            assert(inMemoryRelation2.computeStats().sizeInBytes === 486)
+            assert(inMemoryRelation2.computeStats().sizeInBytes === getLocalDirSize(workDir))
 
             // InMemoryRelation's stats should be updated after calculating stats of the table
             // clear cache to simulate a fresh environment

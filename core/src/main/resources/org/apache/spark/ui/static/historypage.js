@@ -104,7 +104,7 @@ $(document).ready(function() {
     });
 
     var historySummary = $("#history-summary");
-    var searchString = historySummary["context"]["location"]["search"];
+    var searchString = window.location.search;
     var requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
@@ -177,6 +177,7 @@ $(document).ready(function() {
             {name: 'eventLog'},
           ],
           "autoWidth": false,
+          "deferRender": true
         };
 
         if (hasMultipleAttempts) {

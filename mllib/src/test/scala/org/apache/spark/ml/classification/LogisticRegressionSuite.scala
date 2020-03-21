@@ -21,6 +21,8 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
@@ -28,6 +30,7 @@ import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix, Vector, Vectors}
 import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
+import org.apache.spark.ml.stat.MultiClassSummarizer
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
@@ -153,8 +156,14 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(!lr.isDefined(lr.weightCol))
     assert(lr.getFitIntercept)
     assert(lr.getStandardization)
+
     val model = lr.fit(smallBinaryDataset)
-    model.transform(smallBinaryDataset)
+    val transformed = model.transform(smallBinaryDataset)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
+
+    transformed
       .select("label", "probability", "prediction", "rawPrediction")
       .collect()
     assert(model.getThreshold === 0.5)
@@ -504,9 +513,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val blor = new LogisticRegression().setFamily("binomial")
     val blorModel = blor.fit(smallBinaryDataset)
     testPredictionModelSinglePrediction(blorModel, smallBinaryDataset)
+    testClassificationModelSingleRawPrediction(blorModel, smallBinaryDataset)
+    testProbClassificationModelSingleProbPrediction(blorModel, smallBinaryDataset)
     val mlor = new LogisticRegression().setFamily("multinomial")
     val mlorModel = mlor.fit(smallMultinomialDataset)
     testPredictionModelSinglePrediction(mlorModel, smallMultinomialDataset)
+    testClassificationModelSingleRawPrediction(mlorModel, smallMultinomialDataset)
+    testProbClassificationModelSingleProbPrediction(mlorModel, smallMultinomialDataset)
   }
 
   test("coefficients and intercept methods") {
@@ -576,72 +589,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
         assert(raw2 === Vectors.dense(-1.0, -2.0, -3.0))
         assert(prob2 ~== Vectors.dense(0.66524096, 0.24472847, 0.09003057) relTol eps)
     }
-  }
-
-  test("MultiClassSummarizer") {
-    val summarizer1 = (new MultiClassSummarizer)
-      .add(0.0).add(3.0).add(4.0).add(3.0).add(6.0)
-    assert(summarizer1.histogram === Array[Double](1, 0, 0, 2, 1, 0, 1))
-    assert(summarizer1.countInvalid === 0)
-    assert(summarizer1.numClasses === 7)
-
-    val summarizer2 = (new MultiClassSummarizer)
-      .add(1.0).add(5.0).add(3.0).add(0.0).add(4.0).add(1.0)
-    assert(summarizer2.histogram === Array[Double](1, 2, 0, 1, 1, 1))
-    assert(summarizer2.countInvalid === 0)
-    assert(summarizer2.numClasses === 6)
-
-    val summarizer3 = (new MultiClassSummarizer)
-      .add(0.0).add(1.3).add(5.2).add(2.5).add(2.0).add(4.0).add(4.0).add(4.0).add(1.0)
-    assert(summarizer3.histogram === Array[Double](1, 1, 1, 0, 3))
-    assert(summarizer3.countInvalid === 3)
-    assert(summarizer3.numClasses === 5)
-
-    val summarizer4 = (new MultiClassSummarizer)
-      .add(3.1).add(4.3).add(2.0).add(1.0).add(3.0)
-    assert(summarizer4.histogram === Array[Double](0, 1, 1, 1))
-    assert(summarizer4.countInvalid === 2)
-    assert(summarizer4.numClasses === 4)
-
-    val summarizer5 = new MultiClassSummarizer
-    assert(summarizer5.histogram.isEmpty)
-    assert(summarizer5.numClasses === 0)
-
-    // small map merges large one
-    val summarizerA = summarizer1.merge(summarizer2)
-    assert(summarizerA.hashCode() === summarizer2.hashCode())
-    assert(summarizerA.histogram === Array[Double](2, 2, 0, 3, 2, 1, 1))
-    assert(summarizerA.countInvalid === 0)
-    assert(summarizerA.numClasses === 7)
-
-    // large map merges small one
-    val summarizerB = summarizer3.merge(summarizer4)
-    assert(summarizerB.hashCode() === summarizer3.hashCode())
-    assert(summarizerB.histogram === Array[Double](1, 2, 2, 1, 3))
-    assert(summarizerB.countInvalid === 5)
-    assert(summarizerB.numClasses === 5)
-  }
-
-  test("MultiClassSummarizer with weighted samples") {
-    val summarizer1 = (new MultiClassSummarizer)
-      .add(label = 0.0, weight = 0.2).add(3.0, 0.8).add(4.0, 3.2).add(3.0, 1.3).add(6.0, 3.1)
-    assert(Vectors.dense(summarizer1.histogram) ~==
-      Vectors.dense(Array(0.2, 0, 0, 2.1, 3.2, 0, 3.1)) absTol 1E-10)
-    assert(summarizer1.countInvalid === 0)
-    assert(summarizer1.numClasses === 7)
-
-    val summarizer2 = (new MultiClassSummarizer)
-      .add(1.0, 1.1).add(5.0, 2.3).add(3.0).add(0.0).add(4.0).add(1.0).add(2, 0.0)
-    assert(Vectors.dense(summarizer2.histogram) ~==
-      Vectors.dense(Array[Double](1.0, 2.1, 0.0, 1, 1, 2.3)) absTol 1E-10)
-    assert(summarizer2.countInvalid === 0)
-    assert(summarizer2.numClasses === 6)
-
-    val summarizer = summarizer1.merge(summarizer2)
-    assert(Vectors.dense(summarizer.histogram) ~==
-      Vectors.dense(Array(1.2, 2.1, 0.0, 3.1, 4.2, 2.3, 3.1)) absTol 1E-10)
-    assert(summarizer.countInvalid === 0)
-    assert(summarizer.numClasses === 7)
   }
 
   test("binary logistic regression with intercept without regularization") {
@@ -1344,7 +1291,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
          b_k' = b_k - \mean(b_k)
        }}}
      */
-    val rawInterceptsTheory = histogram.map(c => math.log(c + 1)) // add 1 for smoothing
+    val rawInterceptsTheory = histogram.map(math.log1p) // add 1 for smoothing
     val rawMean = rawInterceptsTheory.sum / rawInterceptsTheory.length
     val interceptsTheory = Vectors.dense(rawInterceptsTheory.map(_ - rawMean))
     val coefficientsTheory = new DenseMatrix(numClasses, numFeatures,
@@ -1425,8 +1372,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("multinomial logistic regression with zero variance (SPARK-21681)") {
-    val sqlContext = multinomialDatasetWithZeroVar.sqlContext
-    import sqlContext.implicits._
     val mlr = new LogisticRegression().setFamily("multinomial").setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(true).setWeightCol("weight")
 
@@ -2769,7 +2714,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
   test("toString") {
     val model = new LogisticRegressionModel("logReg", Vectors.dense(0.1, 0.2, 0.3), 0.0)
-    val expected = "LogisticRegressionModel: uid = logReg, numClasses = 2, numFeatures = 3"
+    val expected = "LogisticRegressionModel: uid=logReg, numClasses=2, numFeatures=3"
     assert(model.toString === expected)
   }
 }

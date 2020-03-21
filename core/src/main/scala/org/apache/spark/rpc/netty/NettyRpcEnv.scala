@@ -204,7 +204,8 @@ private[netty] class NettyRpcEnv(
     clientFactory.createClient(address.host, address.port)
   }
 
-  private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): Future[T] = {
+  private[netty] def askAbortable[T: ClassTag](
+      message: RequestMessage, timeout: RpcTimeout): AbortableRpcFuture[T] = {
     val promise = Promise[Any]()
     val remoteAddr = message.receiver.address
 
@@ -225,6 +226,10 @@ private[netty] class NettyRpcEnv(
         }
     }
 
+    def onAbort(reason: String): Unit = {
+      onFailure(new RpcAbortException(reason))
+    }
+
     try {
       if (remoteAddr == address) {
         val p = Promise[Any]()
@@ -240,6 +245,7 @@ private[netty] class NettyRpcEnv(
         postToOutbox(message.receiver, rpcMessage)
         promise.future.failed.foreach {
           case _: TimeoutException => rpcMessage.onTimeout()
+          case _: RpcAbortException => rpcMessage.onAbort()
           case _ =>
         }(ThreadUtils.sameThread)
       }
@@ -257,7 +263,14 @@ private[netty] class NettyRpcEnv(
       case NonFatal(e) =>
         onFailure(e)
     }
-    promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
+
+    new AbortableRpcFuture[T](
+      promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread),
+      onAbort)
+  }
+
+  private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): Future[T] = {
+    askAbortable(message, timeout).toFuture
   }
 
   private[netty] def serialize(content: Any): ByteBuffer = {
@@ -528,8 +541,13 @@ private[netty] class NettyRpcEndpointRef(
 
   override def name: String = endpointAddress.name
 
+  override def askAbortable[T: ClassTag](
+      message: Any, timeout: RpcTimeout): AbortableRpcFuture[T] = {
+    nettyEnv.askAbortable(new RequestMessage(nettyEnv.address, this, message), timeout)
+  }
+
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
-    nettyEnv.ask(new RequestMessage(nettyEnv.address, this, message), timeout)
+    askAbortable(message, timeout).toFuture
   }
 
   override def send(message: Any): Unit = {

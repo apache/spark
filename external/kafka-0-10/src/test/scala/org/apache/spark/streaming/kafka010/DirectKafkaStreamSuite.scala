@@ -18,8 +18,9 @@
 package org.apache.spark.streaming.kafka010
 
 import java.io.File
-import java.lang.{ Long => JLong }
-import java.util.{ Arrays, HashMap => JHashMap, Map => JMap, UUID }
+import java.lang.{Long => JLong}
+import java.util.{Arrays, HashMap => JHashMap, Map => JMap, UUID}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
@@ -30,13 +31,12 @@ import scala.util.Random
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
+import org.apache.spark.streaming.{LocalStreamingContext, Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
@@ -44,8 +44,7 @@ import org.apache.spark.util.Utils
 
 class DirectKafkaStreamSuite
   extends SparkFunSuite
-  with BeforeAndAfter
-  with BeforeAndAfterAll
+  with LocalStreamingContext
   with Eventually
   with Logging {
   val sparkConf = new SparkConf()
@@ -55,18 +54,17 @@ class DirectKafkaStreamSuite
     // Otherwise the poll timeout defaults to 2 minutes and causes test cases to run longer.
     .set("spark.streaming.kafka.consumer.poll.ms", "10000")
 
-  private var ssc: StreamingContext = _
   private var testDir: File = _
 
   private var kafkaTestUtils: KafkaTestUtils = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       if (kafkaTestUtils != null) {
         kafkaTestUtils.teardown()
@@ -77,12 +75,13 @@ class DirectKafkaStreamSuite
     }
   }
 
-  after {
-    if (ssc != null) {
-      ssc.stop(stopSparkContext = true)
-    }
-    if (testDir != null) {
-      Utils.deleteRecursively(testDir)
+  override def afterEach(): Unit = {
+    try {
+      if (testDir != null) {
+        Utils.deleteRecursively(testDir)
+      }
+    } finally {
+      super.afterEach()
     }
   }
 
@@ -341,7 +340,7 @@ class DirectKafkaStreamSuite
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
 
     // Send data to Kafka
-    def sendData(data: Seq[Int]) {
+    def sendData(data: Seq[Int]): Unit = {
       val strings = data.map { _.toString}
       kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1}.toMap)
     }
@@ -430,10 +429,10 @@ class DirectKafkaStreamSuite
     )
 
     val collectedData = new ConcurrentLinkedQueue[String]()
-    val committed = new JHashMap[TopicPartition, OffsetAndMetadata]()
+    val committed = new ConcurrentHashMap[TopicPartition, OffsetAndMetadata]()
 
     // Send data to Kafka and wait for it to be received
-    def sendDataAndWaitForReceive(data: Seq[Int]) {
+    def sendDataAndWaitForReceive(data: Seq[Int]): Unit = {
       val strings = data.map { _.toString}
       kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1}.toMap)
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
@@ -458,6 +457,7 @@ class DirectKafkaStreamSuite
               logError("commit failed", e)
             } else {
               committed.putAll(m)
+              logDebug(s"commit succeeded: $m")
             }
           })
       }
@@ -467,8 +467,10 @@ class DirectKafkaStreamSuite
     for (i <- (1 to 10).grouped(4)) {
       sendDataAndWaitForReceive(i)
     }
+    eventually(timeout(10.seconds), interval(50.milliseconds)) {
+      assert(!committed.isEmpty)
+    }
     ssc.stop()
-    assert(! committed.isEmpty)
     val consumer = new KafkaConsumer[String, String](kafkaParams)
     consumer.subscribe(Arrays.asList(topic))
     consumer.poll(0)

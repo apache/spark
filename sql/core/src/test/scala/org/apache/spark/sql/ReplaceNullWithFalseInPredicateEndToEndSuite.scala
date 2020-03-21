@@ -20,10 +20,11 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, Literal}
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{lit, when}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.BooleanType
 
-class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with SharedSQLContext {
+class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("SPARK-25860: Replace Literal(null, _) with FalseLiteral whenever possible") {
@@ -94,9 +95,11 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
       val df2 = spark.table("t2")
 
       // ArrayExists
-      val q1 = df1.selectExpr("EXISTS(a, e -> IF(e is null, null, true))")
-      checkAnswer(q1, Row(true) :: Nil)
-      assertNoLiteralNullInPlan(q1)
+      withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "false") {
+        val q1 = df1.selectExpr("EXISTS(a, e -> IF(e is null, null, true))")
+        checkAnswer(q1, Row(true) :: Nil)
+        assertNoLiteralNullInPlan(q1)
+      }
 
       // ArrayFilter
       val q2 = df1.selectExpr("FILTER(a, e -> IF(e is null, null, true))")

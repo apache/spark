@@ -24,6 +24,7 @@ import com.fasterxml.jackson.core._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
 /**
@@ -80,8 +81,14 @@ private[sql] class JacksonGenerator(
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
-    options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    needVarLengthSecondFraction = false)
+  private val dateFormatter = DateFormatter(
+    options.dateFormat,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT)
 
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
@@ -129,6 +136,10 @@ private[sql] class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         val dateString = dateFormatter.format(row.getInt(ordinal))
         gen.writeString(dateString)
+
+    case CalendarIntervalType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeString(row.getInterval(ordinal).toString)
 
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>
@@ -181,6 +192,9 @@ private[sql] class JacksonGenerator(
       if (!row.isNullAt(i)) {
         gen.writeFieldName(field.name)
         fieldWriters(i).apply(row, i)
+      } else if (!options.ignoreNullFields) {
+        gen.writeFieldName(field.name)
+        gen.writeNull()
       }
       i += 1
     }

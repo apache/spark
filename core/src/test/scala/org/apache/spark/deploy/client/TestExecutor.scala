@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.client
 
 private[spark] object TestExecutor {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // scalastyle:off println
     println("Hello world!")
     // scalastyle:on println

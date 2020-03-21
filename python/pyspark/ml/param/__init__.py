@@ -76,8 +76,6 @@ class Param(object):
 
 class TypeConverters(object):
     """
-    .. note:: DeveloperApi
-
     Factory methods for common type conversion functions for `Param.typeConverter`.
 
     .. versionadded:: 2.0.0
@@ -133,6 +131,16 @@ class TypeConverters(object):
             if all(map(lambda v: TypeConverters._is_numeric(v), value)):
                 return [float(v) for v in value]
         raise TypeError("Could not convert %s to list of floats" % value)
+
+    @staticmethod
+    def toListListFloat(value):
+        """
+        Convert a value to list of list of floats, if possible.
+        """
+        if TypeConverters._can_convert_to_list(value):
+            value = TypeConverters.toList(value)
+            return [TypeConverters.toListFloat(v) for v in value]
+        raise TypeError("Could not convert %s to list of list of floats" % value)
 
     @staticmethod
     def toListInt(value):
@@ -442,7 +450,7 @@ class Params(Identifiable):
             self._paramMap[p] = value
         return self
 
-    def _clear(self, param):
+    def clear(self, param):
         """
         Clears a param from the param map if it has been explicitly set.
         """
@@ -474,8 +482,16 @@ class Params(Identifiable):
         :return: the target instance with param values copied
         """
         paramMap = self._paramMap.copy()
-        if extra is not None:
-            paramMap.update(extra)
+        if isinstance(extra, dict):
+            for param, value in extra.items():
+                if isinstance(param, Param):
+                    paramMap[param] = value
+                else:
+                    raise TypeError("Expecting a valid instance of Param, but received: {}"
+                                    .format(param))
+        elif extra is not None:
+            raise TypeError("Expecting a dict, but received an object of type {}."
+                            .format(type(extra)))
         for param in self.params:
             # copy default params
             if param in self._defaultParamMap and to.hasParam(param.name):

@@ -27,7 +27,7 @@ Structured Streaming is a scalable and fault-tolerant stream processing engine b
 
 Internally, by default, Structured Streaming queries are processed using a *micro-batch processing* engine, which processes data streams as a series of small batch jobs thereby achieving end-to-end latencies as low as 100 milliseconds and exactly-once fault-tolerance guarantees. However, since Spark 2.3, we have introduced a new low-latency processing mode called **Continuous Processing**, which can achieve end-to-end latencies as low as 1 millisecond with at-least-once guarantees. Without changing the Dataset/DataFrame operations in your queries, you will be able to choose the mode based on your application requirements. 
 
-In this guide, we are going to walk you through the programming model and the APIs. We are going to explain the concepts mostly using the default micro-batch processing model, and then [later](#continuous-processing-experimental) discuss Continuous Processing model. First, let's start with a simple example of a Structured Streaming query - a streaming word count.
+In this guide, we are going to walk you through the programming model and the APIs. We are going to explain the concepts mostly using the default micro-batch processing model, and then [later](#continuous-processing) discuss Continuous Processing model. First, let's start with a simple example of a Structured Streaming query - a streaming word count.
 
 # Quick Example
 Let’s say you want to maintain a running word count of text data received from a data server listening on a TCP socket. Let’s see how you can express this using Structured Streaming. You can see the full code in
@@ -498,20 +498,20 @@ to track the read position in the stream. The engine uses checkpointing and writ
 
 # API using Datasets and DataFrames
 Since Spark 2.0, DataFrames and Datasets can represent static, bounded data, as well as streaming, unbounded data. Similar to static Datasets/DataFrames, you can use the common entry point `SparkSession`
-([Scala](api/scala/index.html#org.apache.spark.sql.SparkSession)/[Java](api/java/org/apache/spark/sql/SparkSession.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.SparkSession)/[R](api/R/sparkR.session.html) docs)
+([Scala](api/scala/org/apache/spark/sql/SparkSession.html)/[Java](api/java/org/apache/spark/sql/SparkSession.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.SparkSession)/[R](api/R/sparkR.session.html) docs)
 to create streaming DataFrames/Datasets from streaming sources, and apply the same operations on them as static DataFrames/Datasets. If you are not familiar with Datasets/DataFrames, you are strongly advised to familiarize yourself with them using the
 [DataFrame/Dataset Programming Guide](sql-programming-guide.html).
 
 ## Creating streaming DataFrames and streaming Datasets
 Streaming DataFrames can be created through the `DataStreamReader` interface
-([Scala](api/scala/index.html#org.apache.spark.sql.streaming.DataStreamReader)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamReader.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader) docs)
+([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamReader.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamReader.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader) docs)
 returned by `SparkSession.readStream()`. In [R](api/R/read.stream.html), with the `read.stream()` method. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
 
 #### Input Sources
 There are a few built-in sources.
 
   - **File source** - Reads files written in a directory as a stream of data. Files will be processed in the order of file modification time. If `latestFirst` is set, order will be reversed. Supported file formats are text, CSV, JSON, ORC, Parquet. See the docs of the DataStreamReader interface for a more up-to-date list, and supported options for each file format. Note that the files must be atomically placed in the given directory, which in most file systems, can be achieved by file move operations.
-  - **Kafka source** - Reads data from Kafka. It's compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-0-10-integration.html) for more details.
+  - **Kafka source** - Reads data from Kafka. It's compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-integration.html) for more details.
 
   - **Socket source (for testing)** - Reads UTF8 text data from a socket connection. The listening server socket is at the driver. Note that this should be used only for testing as this does not provide end-to-end fault-tolerance guarantees. 
 
@@ -546,9 +546,18 @@ Here are the details of all the sources in Spark.
         "s3://a/dataset.txt"<br/>
         "s3n://a/b/dataset.txt"<br/>
         "s3a://a/b/c/dataset.txt"<br/>
+        <code>cleanSource</code>: option to clean up completed files after processing.<br/>
+        Available options are "archive", "delete", "off". If the option is not provided, the default value is "off".<br/>
+        When "archive" is provided, additional option <code>sourceArchiveDir</code> must be provided as well. The value of "sourceArchiveDir" must not match with source pattern in depth (the number of directories from the root directory), where the depth is minimum of depth on both paths. This will ensure archived files are never included as new source files.<br/>
+        For example, suppose you provide '/hello?/spark/*' as source pattern, '/hello1/spark/archive/dir' cannot be used as the value of "sourceArchiveDir", as '/hello?/spark/*' and '/hello1/spark/archive' will be matched. '/hello1/spark' cannot be also used as the value of "sourceArchiveDir", as '/hello?/spark' and '/hello1/spark' will be matched. '/archived/here' would be OK as it doesn't match.<br/>
+        Spark will move source files respecting their own path. For example, if the path of source file is <code>/a/b/dataset.txt</code> and the path of archive directory is <code>/archived/here</code>, file will be moved to <code>/archived/here/a/b/dataset.txt</code>.<br/>
+        NOTE: Both archiving (via moving) or deleting completed files will introduce overhead (slow down, even if it's happening in separate thread) in each micro-batch, so you need to understand the cost for each operation in your file system before enabling this option. On the other hand, enabling this option will reduce the cost to list source files which can be an expensive operation.<br/>
+        Number of threads used in completed file cleaner can be configured with<code>spark.sql.streaming.fileSource.cleaner.numThreads</code> (default: 1).<br/>
+        NOTE 2: The source path should not be used from multiple sources or queries when enabling this option. Similarly, you must ensure the source path doesn't match to any files in output directory of file stream sink.<br/>
+        NOTE 3: Both delete and move actions are best effort. Failing to delete or move files will not fail the streaming query. Spark may not clean up some source files in some circumstances - e.g. the application doesn't shut down gracefully, too many files are queued to clean up.
         <br/><br/>
         For file-format-specific options, see the related methods in <code>DataStreamReader</code>
-        (<a href="api/scala/index.html#org.apache.spark.sql.streaming.DataStreamReader">Scala</a>/<a href="api/java/org/apache/spark/sql/streaming/DataStreamReader.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader">Python</a>/<a
+        (<a href="api/scala/org/apache/spark/sql/streaming/DataStreamReader.html">Scala</a>/<a href="api/java/org/apache/spark/sql/streaming/DataStreamReader.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader">Python</a>/<a
         href="api/R/read.stream.html">R</a>).
         E.g. for "parquet" format options see <code>DataStreamReader.parquet()</code>.
         <br/><br/>
@@ -582,7 +591,7 @@ Here are the details of all the sources in Spark.
   <tr>
     <td><b>Kafka Source</b></td>
     <td>
-        See the <a href="structured-streaming-kafka-0-10-integration.html">Kafka Integration Guide</a>.
+        See the <a href="structured-streaming-kafka-integration.html">Kafka Integration Guide</a>.
     </td>
     <td>Yes</td>
     <td></td>
@@ -973,8 +982,8 @@ Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp
 Dataset<Row> windowedCounts = words
     .withWatermark("timestamp", "10 minutes")
     .groupBy(
-        functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
-        words.col("word"))
+        window(col("timestamp"), "10 minutes", "5 minutes"),
+        col("word"))
     .count();
 {% endhighlight %}
 
@@ -1496,15 +1505,14 @@ Additional details on supported joins:
 
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
-- As of Spark 2.3, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
+- As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 
-- As of Spark 2.3, you cannot use other non-map-like operations before joins. Here are a few examples of
+- As of Spark 2.4, you cannot use other non-map-like operations before joins. Here are a few examples of
   what cannot be used.
 
   - Cannot use streaming aggregations before joins.
 
   - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode before joins.
-
 
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
@@ -1583,10 +1591,18 @@ be tolerated for stateful operations. You specify these thresholds using
 ``withWatermarks("eventTime", delay)`` on each of the input streams. For example, consider
 a query with stream-stream joins between `inputStream1` and `inputStream2`.
     
-  inputStream1.withWatermark("eventTime1", "1 hour")
-    .join(
-      inputStream2.withWatermark("eventTime2", "2 hours"),
-      joinCondition)
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+inputStream1.withWatermark("eventTime1", "1 hour")
+  .join(
+    inputStream2.withWatermark("eventTime2", "2 hours"),
+    joinCondition)
+{% endhighlight %}
+
+</div>
+</div>
 
 While executing the query, Structured Streaming individually tracks the maximum
 event time seen in each input stream, calculates watermarks based on the corresponding delay,
@@ -1606,7 +1622,9 @@ However, as a side effect, data from the slower streams will be aggressively dro
 this configuration judiciously.
 
 ### Arbitrary Stateful Operations
-Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
+Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/org/apache/spark/sql/streaming/GroupState.html)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
+
+Though Spark cannot check and force it, the state function should be implemented with respect to the semantics of the output mode. For example, in Update mode Spark doesn't expect that the state function will emit rows which are older than current watermark plus allowed late record delay, whereas in Append mode the state function can emit these rows.
 
 ### Unsupported Operations
 There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
@@ -1639,9 +1657,29 @@ For example, sorting on the input stream is not supported, as it requires keepin
 track of all the data received in the stream. This is therefore fundamentally hard to execute 
 efficiently.
 
+### Limitation of global watermark
+
+In Append mode, if a stateful operation emits rows older than current watermark plus allowed late record delay,
+they will be "late rows" in downstream stateful operations (as Spark uses global watermark). Note that these rows may be discarded.
+This is a limitation of a global watermark, and it could potentially cause a correctness issue.
+
+Spark will check the logical plan of query and log a warning when Spark detects such a pattern.
+
+Any of the stateful operation(s) after any of below stateful operations can have this issue:
+
+* streaming aggregation in Append mode
+* stream-stream outer join
+* `mapGroupsWithState` and `flatMapGroupsWithState` in Append mode (depending on the implementation of the state function)
+
+As Spark cannot check the state function of `mapGroupsWithState`/`flatMapGroupsWithState`, Spark assumes that the state function
+emits late rows if the operator uses Append mode.
+
+There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
+end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
+
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
-([Scala](api/scala/index.html#org.apache.spark.sql.streaming.DataStreamWriter)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamWriter) docs)
+([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamWriter) docs)
 returned through `Dataset.writeStream()`. You will have to specify one or more of the following in this interface.
 
 - *Details of the output sink:* Data format, location, etc.
@@ -1688,7 +1726,7 @@ Here is the compatibility matrix.
     <td style="vertical-align: middle;">Append, Update, Complete</td>
     <td>
         Append mode uses watermark to drop old aggregation state. But the output of a 
-        windowed aggregation is delayed the late threshold specified in `withWatermark()` as by
+        windowed aggregation is delayed the late threshold specified in <code>withWatermark()</code> as by
         the modes semantics, rows can be added to the Result Table only once after they are 
         finalized (i.e. after watermark is crossed). See the
         <a href="#handling-late-data-and-watermarking">Late Data</a> section for more details.
@@ -1825,7 +1863,7 @@ Here are the details of all the sinks in Spark.
         <code>path</code>: path to the output directory, must be specified.
         <br/><br/>
         For file-format-specific options, see the related methods in DataFrameWriter
-        (<a href="api/scala/index.html#org.apache.spark.sql.DataFrameWriter">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.DataFrameWriter">Python</a>/<a
+        (<a href="api/scala/org/apache/spark/sql/DataFrameWriter.html">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.DataFrameWriter">Python</a>/<a
         href="api/R/write.stream.html">R</a>).
         E.g. for "parquet" format options see <code>DataFrameWriter.parquet()</code>
     </td>
@@ -1835,7 +1873,7 @@ Here are the details of all the sinks in Spark.
   <tr>
     <td><b>Kafka Sink</b></td>
     <td>Append, Update, Complete</td>
-    <td>See the <a href="structured-streaming-kafka-0-10-integration.html">Kafka Integration Guide</a></td>
+    <td>See the <a href="structured-streaming-kafka-integration.html">Kafka Integration Guide</a></td>
     <td>Yes (at-least-once)</td>
     <td>More details in the <a href="structured-streaming-kafka-integration.html">Kafka Integration Guide</a></td>
   </tr>
@@ -1843,7 +1881,7 @@ Here are the details of all the sinks in Spark.
     <td><b>Foreach Sink</b></td>
     <td>Append, Update, Complete</td>
     <td>None</td>
-    <td>Depends on ForeachWriter implementation</td>
+    <td>Yes (at-least-once)</td>
     <td>More details in the <a href="#using-foreach-and-foreachbatch">next section</a></td>
   </tr>
   <tr>
@@ -2067,7 +2105,7 @@ streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
 
 {% highlight java %}
 streamingDatasetOfString.writeStream().foreachBatch(
-  new VoidFunction2<Dataset<String>, Long> {
+  new VoidFunction2<Dataset<String>, Long>() {
     public void call(Dataset<String> dataset, Long batchId) {
       // Transform and write batchDF
     }    
@@ -2137,7 +2175,7 @@ Since Spark 2.4, `foreach` is available in Scala, Java and Python.
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
-In Scala, you have to extend the class `ForeachWriter` ([docs](api/scala/index.html#org.apache.spark.sql.ForeachWriter)).
+In Scala, you have to extend the class `ForeachWriter` ([docs](api/scala/org/apache/spark/sql/ForeachWriter.html)).
 
 {% highlight scala %}
 streamingDatasetOfString.writeStream.foreach(
@@ -2164,7 +2202,7 @@ streamingDatasetOfString.writeStream.foreach(
 In Java, you have to extend the class `ForeachWriter` ([docs](api/java/org/apache/spark/sql/ForeachWriter.html)).
 {% highlight java %}
 streamingDatasetOfString.writeStream().foreach(
-  new ForeachWriter[String] {
+  new ForeachWriter<String>() {
 
     @Override public boolean open(long partitionId, long version) {
       // Open connection
@@ -2190,34 +2228,34 @@ The function offers a simple way to express your processing logic but does not a
 deduplicate generated data when failures cause reprocessing of some input data. 
 For that situation you must specify the processing logic in an object.
 
-1. The function takes a row as input.
+- First, the function takes a row as input.
 
-  {% highlight python %}
-      def process_row(row):
-          # Write row to storage
-          pass
-      
-      query = streamingDF.writeStream.foreach(process_row).start()  
-  {% endhighlight %}
+{% highlight python %}
+def process_row(row):
+    # Write row to storage
+    pass
 
-2. The object has a process method and optional open and close methods: 
+query = streamingDF.writeStream.foreach(process_row).start()  
+{% endhighlight %}
 
-  {% highlight python %}
-      class ForeachWriter:
-          def open(self, partition_id, epoch_id):
-              # Open connection. This method is optional in Python.
-              pass
+- Second, the object has a process method and optional open and close methods:
+
+{% highlight python %}
+class ForeachWriter:
+    def open(self, partition_id, epoch_id):
+        # Open connection. This method is optional in Python.
+        pass
+
+    def process(self, row):
+        # Write row to connection. This method is NOT optional in Python.
+        pass
+
+    def close(self, error):
+        # Close the connection. This method in optional in Python.
+        pass
       
-          def process(self, row):
-              # Write row to connection. This method is NOT optional in Python.
-              pass
-      
-          def close(self, error):
-              # Close the connection. This method in optional in Python.
-              pass
-      
-      query = streamingDF.writeStream.foreach(ForeachWriter()).start()
-  {% endhighlight %}
+query = streamingDF.writeStream.foreach(ForeachWriter()).start()
+{% endhighlight %}
 
 </div>
 <div data-lang="r"  markdown="1">
@@ -2251,13 +2289,11 @@ When the streaming query is started, Spark calls the function or the object’s 
 
 - The close() method (if it exists) is called if an open() method exists and returns successfully (irrespective of the return value), except if the JVM or Python process crashes in the middle.
 
-- **Note:** The partitionId and epochId in the open() method can be used to deduplicate generated data 
-  when failures cause reprocessing of some input data. This depends on the execution mode of the query. 
-  If the streaming query is being executed in the micro-batch mode, then every partition represented 
-  by a unique tuple (partition_id, epoch_id) is guaranteed to have the same data. 
-  Hence, (partition_id, epoch_id) can be used to deduplicate and/or transactionally commit 
-  data and achieve exactly-once guarantees. However, if the streaming query is being executed 
-  in the continuous mode, then this guarantee does not hold and therefore should not be used for deduplication.
+- **Note:** Spark does not guarantee same output for (partitionId, epochId), so deduplication
+  cannot be achieved with (partitionId, epochId). e.g. source provides different number of
+  partitions for some reasons, Spark optimization changes number of partitions, etc.
+  See [SPARK-28650](https://issues.apache.org/jira/browse/SPARK-28650) for more details.
+  If you need deduplication on output, try out `foreachBatch` instead.
 
 #### Triggers
 The trigger settings of a streaming query define the timing of streaming data processing, whether
@@ -2297,7 +2333,7 @@ Here are the different kinds of triggers that are supported.
   <tr>
     <td><b>One-time micro-batch</b></td>
     <td>
-        The query will execute *only one* micro-batch to process all the available data and then
+        The query will execute <strong>only one</strong> micro-batch to process all the available data and then
         stop on its own. This is useful in scenarios you want to periodically spin up a cluster,
         process everything that is available since the last period, and then shutdown the
         cluster. In some case, this may lead to significant cost savings.
@@ -2307,7 +2343,7 @@ Here are the different kinds of triggers that are supported.
     <td><b>Continuous with fixed checkpoint interval</b><br/><i>(experimental)</i></td>
     <td>
         The query will be executed in the new low-latency, continuous processing mode. Read more
-        about this in the <a href="#continuous-processing-experimental">Continuous Processing section</a> below.
+        about this in the <a href="#continuous-processing">Continuous Processing section</a> below.
     </td>
   </tr>
 </table>
@@ -2528,7 +2564,7 @@ lastProgress(query)       # the most recent progress update of this streaming qu
 </div>
 
 You can start any number of queries in a single SparkSession. They will all be running concurrently sharing the cluster resources. You can use `sparkSession.streams()` to get the `StreamingQueryManager`
-([Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryManager)/[Java](api/java/org/apache/spark/sql/streaming/StreamingQueryManager.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.StreamingQueryManager) docs)
+([Scala](api/scala/org/apache/spark/sql/streaming/StreamingQueryManager.html)/[Java](api/java/org/apache/spark/sql/streaming/StreamingQueryManager.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.StreamingQueryManager) docs)
 that can be used to manage the currently active queries.
 
 <div class="codetabs">
@@ -2588,7 +2624,7 @@ There are multiple ways to monitor active streaming queries. You can either push
 You can directly get the current status and metrics of an active query using 
 `streamingQuery.lastProgress()` and `streamingQuery.status()`. 
 `lastProgress()` returns a `StreamingQueryProgress` object 
-in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryProgress) 
+in [Scala](api/scala/org/apache/spark/sql/streaming/StreamingQueryProgress.html) 
 and [Java](api/java/org/apache/spark/sql/streaming/StreamingQueryProgress.html)
 and a dictionary with the same fields in Python. It has all the information about
 the progress made in the last trigger of the stream - what data was processed, 
@@ -2596,7 +2632,7 @@ what were the processing rates, latencies, etc. There is also
 `streamingQuery.recentProgress` which returns an array of last few progresses.  
 
 In addition, `streamingQuery.status()` returns a `StreamingQueryStatus` object 
-in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryStatus) 
+in [Scala](api/scala/org/apache/spark/sql/streaming/StreamingQueryStatus.html) 
 and [Java](api/java/org/apache/spark/sql/streaming/StreamingQueryStatus.html)
 and a dictionary with the same fields in Python. It gives information about
 what the query is immediately doing - is a trigger active, is data being processed, etc.
@@ -2817,7 +2853,7 @@ Will print something like the following.
 
 You can also asynchronously monitor all queries associated with a
 `SparkSession` by attaching a `StreamingQueryListener`
-([Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryListener)/[Java](api/java/org/apache/spark/sql/streaming/StreamingQueryListener.html) docs).
+([Scala](api/scala/org/apache/spark/sql/streaming/StreamingQueryListener.html)/[Java](api/java/org/apache/spark/sql/streaming/StreamingQueryListener.html) docs).
 Once you attach your custom `StreamingQueryListener` object with
 `sparkSession.streams.attachListener()`, you will get callbacks when a query is started and
 stopped and when there is progress made in an active query. Here is an example,
@@ -3049,12 +3085,6 @@ import org.apache.spark.sql.streaming.Trigger
 
 spark
   .readStream
-  .format("rate")
-  .option("rowsPerSecond", "10")
-  .option("")
-
-spark
-  .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
@@ -3112,7 +3142,7 @@ A checkpoint interval of 1 second means that the continuous processing engine wi
 ## Supported Queries
 {:.no_toc}
 
-As of Spark 2.3, only the following type of queries are supported in the continuous processing mode.
+As of Spark 2.4, only the following type of queries are supported in the continuous processing mode.
 
 - *Operations*: Only map-like Dataset/DataFrame operations are supported in continuous mode, that is, only projections (`select`, `map`, `flatMap`, `mapPartitions`, etc.) and selections (`where`, `filter`, etc.).
   + All SQL functions are supported except aggregation functions (since aggregations are not yet supported), `current_timestamp()` and `current_date()` (deterministic computations using time is challenging).

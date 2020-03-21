@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.util.Locale
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.ErrorMsg
@@ -24,7 +26,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
@@ -186,13 +188,18 @@ case class InsertIntoHiveTable(
     }
 
     val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
-      query.resolve(name :: Nil, sparkSession.sessionState.analyzer.resolver).getOrElse {
+      val attr = query.resolve(name :: Nil, sparkSession.sessionState.analyzer.resolver).getOrElse {
         throw new AnalysisException(
           s"Unable to resolve $name given [${query.output.map(_.name).mkString(", ")}]")
       }.asInstanceOf[Attribute]
+      // SPARK-28054: Hive metastore is not case preserving and keeps partition columns
+      // with lower cased names. Hive will validate the column names in the partition directories
+      // during `loadDynamicPartitions`. Spark needs to write partition directories with lower-cased
+      // column names in order to make `loadDynamicPartitions` work.
+      attr.withName(name.toLowerCase(Locale.ROOT))
     }
 
-    saveAsHiveFile(
+    val writtenParts = saveAsHiveFile(
       sparkSession = sparkSession,
       plan = child,
       hadoopConf = hadoopConf,
@@ -202,6 +209,42 @@ case class InsertIntoHiveTable(
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
+        if (overwrite && table.tableType == CatalogTableType.EXTERNAL) {
+          // SPARK-29295: When insert overwrite to a Hive external table partition, if the
+          // partition does not exist, Hive will not check if the external partition directory
+          // exists or not before copying files. So if users drop the partition, and then do
+          // insert overwrite to the same partition, the partition will have both old and new
+          // data. We construct partition path. If the path exists, we delete it manually.
+          writtenParts.foreach { partPath =>
+            val dpMap = partPath.split("/").map { part =>
+              val splitPart = part.split("=")
+              assert(splitPart.size == 2, s"Invalid written partition path: $part")
+              ExternalCatalogUtils.unescapePathName(splitPart(0)) ->
+                ExternalCatalogUtils.unescapePathName(splitPart(1))
+            }.toMap
+
+            val updatedPartitionSpec = partition.map {
+              case (key, Some(value)) => key -> value
+              case (key, None) if dpMap.contains(key) => key -> dpMap(key)
+              case (key, _) =>
+                throw new SparkException(s"Dynamic partition key $key is not among " +
+                  "written partition paths.")
+            }
+            val partitionColumnNames = table.partitionColumnNames
+            val tablePath = new Path(table.location)
+            val partitionPath = ExternalCatalogUtils.generatePartitionPath(updatedPartitionSpec,
+              partitionColumnNames, tablePath)
+
+            val fs = partitionPath.getFileSystem(hadoopConf)
+            if (fs.exists(partitionPath)) {
+              if (!fs.delete(partitionPath, true)) {
+                throw new RuntimeException(
+                  "Cannot remove partition directory '" + partitionPath.toString)
+              }
+            }
+          }
+        }
+
         externalCatalog.loadDynamicPartitions(
           db = table.database,
           table = table.identifier.table,
@@ -223,18 +266,32 @@ case class InsertIntoHiveTable(
         var doHiveOverwrite = overwrite
 
         if (oldPart.isEmpty || !ifPartitionNotExists) {
+          // SPARK-29295: When insert overwrite to a Hive external table partition, if the
+          // partition does not exist, Hive will not check if the external partition directory
+          // exists or not before copying files. So if users drop the partition, and then do
+          // insert overwrite to the same partition, the partition will have both old and new
+          // data. We construct partition path. If the path exists, we delete it manually.
+          val partitionPath = if (oldPart.isEmpty && overwrite
+              && table.tableType == CatalogTableType.EXTERNAL) {
+            val partitionColumnNames = table.partitionColumnNames
+            val tablePath = new Path(table.location)
+            Some(ExternalCatalogUtils.generatePartitionPath(partitionSpec,
+              partitionColumnNames, tablePath))
+          } else {
+            oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
+          }
+
           // SPARK-18107: Insert overwrite runs much slower than hive-client.
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
           // version and we may not want to catch up new Hive version every time. We delete the
           // Hive partition first and then load data file into the Hive partition.
-          if (oldPart.nonEmpty && overwrite) {
-            oldPart.get.storage.locationUri.foreach { uri =>
-              val partitionPath = new Path(uri)
-              val fs = partitionPath.getFileSystem(hadoopConf)
-              if (fs.exists(partitionPath)) {
-                if (!fs.delete(partitionPath, true)) {
+          if (partitionPath.nonEmpty && overwrite) {
+            partitionPath.foreach { path =>
+              val fs = path.getFileSystem(hadoopConf)
+              if (fs.exists(path)) {
+                if (!fs.delete(path, true)) {
                   throw new RuntimeException(
-                    "Cannot remove partition directory '" + partitionPath.toString)
+                    "Cannot remove partition directory '" + path.toString)
                 }
                 // Don't let Hive do overwrite operation since it is slower.
                 doHiveOverwrite = false

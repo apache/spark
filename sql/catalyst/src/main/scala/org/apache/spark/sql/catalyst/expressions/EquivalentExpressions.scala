@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 
@@ -72,7 +73,10 @@ class EquivalentExpressions {
     val skip = expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
-      expr.find(_.isInstanceOf[LambdaVariable]).isDefined
+      expr.find(_.isInstanceOf[LambdaVariable]).isDefined ||
+      // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
+      // can cause error like NPE.
+      (expr.isInstanceOf[PlanExpression[_]] && TaskContext.get != null)
 
     // There are some special expressions that we should not recurse into all of its children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)

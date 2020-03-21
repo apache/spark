@@ -67,7 +67,8 @@ trait ObjectConsumer extends UnaryNode {
   assert(child.output.length == 1)
 
   // This operator always need all columns of its child, even it doesn't reference to.
-  override def references: AttributeSet = child.outputSet
+  @transient
+  override lazy val references: AttributeSet = child.outputSet
 
   def inputObjAttr: Attribute = child.output.head
 }
@@ -174,7 +175,8 @@ case class MapPartitionsInRWithArrow(
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   // This operator always need all columns of its child, even it doesn't reference to.
-  override def references: AttributeSet = child.outputSet
+  @transient
+  override lazy val references: AttributeSet = child.outputSet
 
   override protected def stringArgs: Iterator[Any] = Iterator(
     inputSchema, StructType.fromAttributes(output), child)
@@ -528,7 +530,8 @@ case class FlatMapGroupsInRWithArrow(
     groupingAttributes: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   // This operator always need all columns of its child, even it doesn't reference to.
-  override def references: AttributeSet = child.outputSet
+  @transient
+  override lazy val references: AttributeSet = child.outputSet
 
   override protected def stringArgs: Iterator[Any] = Iterator(
     inputSchema, StructType.fromAttributes(output), keyDeserializer, groupingAttributes, child)

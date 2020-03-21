@@ -31,7 +31,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
+import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -164,7 +164,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = {
-    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sc)
+    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sparkSession)
     saveImpl(path)
   }
 
@@ -301,8 +301,6 @@ trait GeneralMLWritable extends MLWritable {
 }
 
 /**
- * :: DeveloperApi ::
- *
  * Helper trait for making simple `Params` types writable.  If a `Params` class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
  * a default implementation of writing saved instances of the class.
@@ -311,7 +309,6 @@ trait GeneralMLWritable extends MLWritable {
  *
  * @see `DefaultParamsReadable`, the counterpart to this trait
  */
-@DeveloperApi
 trait DefaultParamsWritable extends MLWritable { self: Params =>
 
   override def write: MLWriter = new DefaultParamsWriter(this)
@@ -360,8 +357,6 @@ trait MLReadable[T] {
 
 
 /**
- * :: DeveloperApi ::
- *
  * Helper trait for making simple `Params` types readable.  If a `Params` class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
  * a default implementation of reading saved instances of the class.
@@ -371,7 +366,6 @@ trait MLReadable[T] {
  * @tparam T ML instance type
  * @see `DefaultParamsWritable`, the counterpart to this trait
  */
-@DeveloperApi
 trait DefaultParamsReadable[T] extends MLReadable[T] {
 
   override def read: MLReader[T] = new DefaultParamsReader[T]
@@ -673,8 +667,8 @@ private[ml] object MetaAlgorithmReadWrite {
 
 private[ml] class FileSystemOverwrite extends Logging {
 
-  def handleOverwrite(path: String, shouldOverwrite: Boolean, sc: SparkContext): Unit = {
-    val hadoopConf = sc.hadoopConfiguration
+  def handleOverwrite(path: String, shouldOverwrite: Boolean, session: SparkSession): Unit = {
+    val hadoopConf = session.sessionState.newHadoopConf()
     val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.Locale
+
 import org.apache.spark.util.Utils
 
 
@@ -42,6 +44,7 @@ object StaticSQLConf {
   val GLOBAL_TEMP_DATABASE = buildStaticConf("spark.sql.globalTempDatabase")
     .internal()
     .stringConf
+    .transform(_.toLowerCase(Locale.ROOT))
     .createWithDefault("global_temp")
 
   // This is used to control when we will split a schema's JSON string to multiple pieces
@@ -142,8 +145,16 @@ object StaticSQLConf {
         "cause longer waiting for other broadcasting. Also, increasing parallelism may " +
         "cause memory problem.")
       .intConf
-      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in [0,128].")
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
       .createWithDefault(128)
+
+  val SUBQUERY_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.subquery.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to execute the subquery.")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
+      .createWithDefault(16)
 
   val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
     .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
@@ -158,4 +169,37 @@ object StaticSQLConf {
         "defaults, dropping any overrides in its parent SparkSession.")
       .booleanConf
       .createWithDefault(false)
+
+  val DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED =
+    buildStaticConf("spark.sql.defaultUrlStreamHandlerFactory.enabled")
+      .doc(
+        "When true, register Hadoop's FsUrlStreamHandlerFactory to support " +
+        "ADD JAR against HDFS locations. " +
+        "It should be disabled when a different stream protocol handler should be registered " +
+        "to support a particular protocol type, or if Hadoop's FsUrlStreamHandlerFactory " +
+        "conflicts with other protocol types such as `http` or `https`. See also SPARK-25694 " +
+        "and HADOOP-14598.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_UI_ENABLED =
+    buildStaticConf("spark.sql.streaming.ui.enabled")
+      .doc("Whether to run the Structured Streaming Web UI for the Spark application when the " +
+        "Spark Web UI is enabled.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_UI_RETAINED_PROGRESS_UPDATES =
+    buildStaticConf("spark.sql.streaming.ui.retainedProgressUpdates")
+      .doc("The number of progress updates to retain for a streaming query for Structured " +
+        "Streaming UI.")
+      .intConf
+      .createWithDefault(100)
+
+  val STREAMING_UI_RETAINED_QUERIES =
+    buildStaticConf("spark.sql.streaming.ui.retainedQueries")
+      .doc("The number of inactive queries to retain for Structured Streaming UI.")
+      .intConf
+      .createWithDefault(100)
 }

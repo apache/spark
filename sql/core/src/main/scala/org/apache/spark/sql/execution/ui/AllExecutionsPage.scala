@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.ui
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
@@ -118,7 +119,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       </script>
     val summary: NodeSeq =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           {
             if (running.nonEmpty) {
               <li>
@@ -245,11 +246,11 @@ private[ui] class ExecutionPagedTable(
   override def tableId: String = s"$executionTag-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
+    "table table-bordered table-sm table-striped " +
       "table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$executionTag.sort=$encodedSortColumn" +
@@ -263,7 +264,7 @@ private[ui] class ExecutionPagedTable(
   override def pageNumberFormField: String = s"$executionTag.page"
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     s"$parameterPath&$executionTag.sort=$encodedSortColumn&$executionTag.desc=$desc#$tableHeaderId"
   }
 
@@ -300,7 +301,7 @@ private[ui] class ExecutionPagedTable(
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
-              s"&$executionTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&$executionTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&$executionTag.desc=${!desc}" +
               s"&$executionTag.pageSize=$pageSize" +
               s"#$tableHeaderId")
@@ -317,13 +318,21 @@ private[ui] class ExecutionPagedTable(
           if (sortable) {
             val headerLink = Unparsed(
               parameterPath +
-                s"&$executionTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+                s"&$executionTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
                 s"&$executionTag.pageSize=$pageSize" +
                 s"#$tableHeaderId")
 
             <th>
               <a href={headerLink}>
-                {header}
+                {if (header == "Duration") {
+                  <span data-toggle="tooltip" data-placement="top"
+                    title="Time from query submission to completion
+                    (or if still executing, time since submission)">
+                    {header}
+                  </span>
+                } else {
+                  {header}
+                }}
               </a>
             </th>
           } else {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import scala.collection.JavaConverters._
 
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
@@ -59,8 +59,9 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
 /**
  * A physical plan that evaluates a [[PythonUDF]].
  */
-case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
-  extends EvalPythonExec(udfs, resultAttrs, child) {
+case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan,
+    evalType: Int)
+  extends EvalPythonExec {
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
@@ -80,7 +81,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
 
     val columnarBatchIter = new ArrowPythonRunner(
       funcs,
-      PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      evalType,
       argOffsets,
       schema,
       sessionLocalTimeZone,

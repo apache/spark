@@ -34,7 +34,7 @@ class JoinOptimizationSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(100),
         CombineFilters,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         BooleanSimplification,
         ReorderJoin,
         PushPredicateThroughJoin,
@@ -52,7 +52,8 @@ class JoinOptimizationSuite extends PlanTest {
     val y = testRelation1.subquery('y)
     val z = testRelation.subquery('z)
 
-    def testExtract(plan: LogicalPlan, expected: Option[(Seq[LogicalPlan], Seq[Expression])]) {
+    def testExtract(plan: LogicalPlan,
+        expected: Option[(Seq[LogicalPlan], Seq[Expression])]): Unit = {
       val expectedNoCross = expected map {
         seq_pair => {
           val plans = seq_pair._1
@@ -63,8 +64,8 @@ class JoinOptimizationSuite extends PlanTest {
       testExtractCheckCross(plan, expectedNoCross)
     }
 
-    def testExtractCheckCross
-        (plan: LogicalPlan, expected: Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]) {
+    def testExtractCheckCross(plan: LogicalPlan,
+        expected: Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]): Unit = {
       assert(
         ExtractFiltersAndInnerJoins.unapply(plan) === expected.map(e => (e._1, e._2)))
     }

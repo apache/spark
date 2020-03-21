@@ -23,7 +23,7 @@ import org.apache.spark.ml.feature.QuantileDiscretizer
 import org.apache.spark.sql.SparkSession
 
 object QuantileDiscretizerExample {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder
       .appName("QuantileDiscretizerExample")

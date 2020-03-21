@@ -56,3 +56,22 @@ SELECT HEX(CAST(-123L AS binary));
 DESC FUNCTION boolean;
 DESC FUNCTION EXTENDED boolean;
 -- TODO: migrate all cast tests here.
+
+-- cast string to interval and interval to string
+SELECT CAST('interval 3 month 1 hour' AS interval);
+SELECT CAST(interval 3 month 1 hour AS string);
+
+-- trim string before cast to numeric
+select cast(' 1' as tinyint);
+select cast(' 1\t' as tinyint);
+select cast(' 1' as smallint);
+select cast(' 1' as INT);
+select cast(' 1' as bigint);
+select cast(' 1' as float);
+select cast(' 1 ' as DOUBLE);
+select cast('1.0 ' as DEC);
+
+-- trim string before cast to boolean
+select cast('\t\t true \n\r ' as boolean);
+select cast('\t\n false \t\r' as boolean);
+select cast('\t\n xyz \t\r' as boolean);

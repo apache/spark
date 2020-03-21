@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
+import java.net.URI
 import java.sql.Timestamp
 
 import com.google.common.io.{ByteStreams, Closeables}
@@ -100,7 +101,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
     val maxLength = sparkSession.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH)
 
     file: PartitionedFile => {
-      val path = new Path(file.filePath)
+      val path = new Path(new URI(file.filePath))
       val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
       val status = fs.getFileStatus(path)
       if (filterFuncs.forall(_.apply(status))) {
@@ -110,7 +111,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
           case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
           case (LENGTH, i) => writer.write(i, status.getLen)
           case (MODIFICATION_TIME, i) =>
-            writer.write(i, DateTimeUtils.fromMillis(status.getModificationTime))
+            writer.write(i, DateTimeUtils.millisToMicros(status.getModificationTime))
           case (CONTENT, i) =>
             if (status.getLen > maxLength) {
               throw new SparkException(

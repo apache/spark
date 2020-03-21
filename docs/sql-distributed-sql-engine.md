@@ -29,7 +29,7 @@ without the need to write any code.
 ## Running the Thrift JDBC/ODBC server
 
 The Thrift JDBC/ODBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
-in Hive 1.2.1. You can test the JDBC server with the beeline script that comes with either Spark or Hive 1.2.1.
+in built-in Hive. You can test the JDBC server with the beeline script that comes with either Spark or compatible Hive.
 
 To start the JDBC/ODBC server, run the following in the Spark directory:
 
@@ -85,6 +85,8 @@ To test, use beeline to connect to the JDBC/ODBC server in http mode with:
 
     beeline> !connect jdbc:hive2://<host>:<port>/<database>?hive.server2.transport.mode=http;hive.server2.thrift.http.path=<http_endpoint>
 
+If you closed a session and do CTAS, you must set `fs.%s.impl.disable.cache` to true in `hive-site.xml`.
+See more details in [[SPARK-21067]](https://issues.apache.org/jira/browse/SPARK-21067).
 
 ## Running the Spark SQL CLI
 

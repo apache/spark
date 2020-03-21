@@ -38,7 +38,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def booleanLogicTest(
     name: String,
     op: (Expression, Expression) => Expression,
-    truthTable: Seq[(Any, Any, Any)]) {
+    truthTable: Seq[(Any, Any, Any)]): Unit = {
     test(s"3VL $name") {
       truthTable.foreach {
         case (l, r, answer) =>
@@ -510,7 +510,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Interpreted Predicate should initialize nondeterministic expressions") {
-    val interpreted = InterpretedPredicate.create(LessThan(Rand(7), Literal(1.0)))
+    val interpreted = Predicate.create(LessThan(Rand(7), Literal(1.0)))
     interpreted.initialize(0)
     assert(interpreted.eval(new UnsafeRow()))
   }
@@ -520,5 +520,22 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expression = CatalystSqlParser.parseExpression("id=1 or id=2").toString()
     val expected = "(('id = 1) OR ('id = 2))"
     assert(expression == expected)
+  }
+
+  test("isunknown and isnotunknown") {
+    val row0 = create_row(null)
+
+    checkEvaluation(IsUnknown(Literal.create(null, BooleanType)), true, row0)
+    checkEvaluation(IsNotUnknown(Literal.create(null, BooleanType)), false, row0)
+    IsUnknown(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
+  }
+
+  test("SPARK-29100: InSet with empty input set") {
+    val row = create_row(1)
+    val inSet = InSet(BoundReference(0, IntegerType, true), Set.empty)
+    checkEvaluation(inSet, false, row)
   }
 }

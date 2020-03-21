@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class LeftSemiPushdownSuite extends PlanTest {
 
@@ -35,7 +34,7 @@ class LeftSemiPushdownSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
         CombineFilters,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
         BooleanSimplification,

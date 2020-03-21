@@ -21,7 +21,7 @@ import unittest
 
 import numpy as np
 
-from pyspark.ml.classification import DecisionTreeClassifier, LogisticRegression, \
+from pyspark.ml.classification import FMClassifier, LogisticRegression, \
     MultilayerPerceptronClassifier, OneVsRest
 from pyspark.ml.clustering import DistributedLDAModel, KMeans, LocalLDAModel, LDA, LDAModel
 from pyspark.ml.fpm import FPGrowth
@@ -86,7 +86,7 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         expected_rawPrediction = [-11.6081922998, -8.15827998691, 22.17757045]
         self.assertTrue(result.prediction, expected_prediction)
         self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
-        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1E-4))
+        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1))
 
 
 class OneVsRestTests(SparkSessionTestCase):
@@ -140,7 +140,7 @@ class OneVsRestTests(SparkSessionTestCase):
         ovr = OneVsRest(classifier=lr, weightCol="weight")
         self.assertIsNotNone(ovr.fit(df))
         # classifier doesn't inherit hasWeightCol
-        dt = DecisionTreeClassifier()
+        dt = FMClassifier()
         ovr2 = OneVsRest(classifier=dt, weightCol="weight")
         self.assertIsNotNone(ovr2.fit(df))
 
@@ -334,7 +334,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

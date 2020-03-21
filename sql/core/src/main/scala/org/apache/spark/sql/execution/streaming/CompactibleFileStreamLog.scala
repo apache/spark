@@ -145,7 +145,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = parseVersion(lines.next(), metadataLogVersion)
+    validateVersion(lines.next(), metadataLogVersion)
     lines.map(Serialization.read[T]).toArray
   }
 
@@ -161,6 +161,16 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     }
     batchAdded
   }
+
+  /**
+   * CompactibleFileStreamLog maintains logs by itself, and manual purging might break internal
+   * state, specifically which latest compaction batch is purged.
+   *
+   * To simplify the situation, this method just throws UnsupportedOperationException regardless
+   * of given parameter, and let CompactibleFileStreamLog handles purging by itself.
+   */
+  override def purge(thresholdBatchId: Long): Unit = throw new UnsupportedOperationException(
+    s"Cannot purge as it might break internal state.")
 
   /**
    * Compacts all logs before `batchId` plus the provided `logs`, and writes them into the

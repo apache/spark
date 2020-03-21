@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TestTableCatalog}
-import org.apache.spark.sql.catalog.v2.expressions.LogicalExpressions
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode}
+import org.apache.spark.sql.connector.InMemoryTableCatalog
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.expressions.{Expressions, LogicalExpressions}
 import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -31,7 +32,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val plan = CreateTableAsSelect(
       catalog,
       Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "does_not_exist") :: Nil,
+      Expressions.bucket(4, "does_not_exist") :: Nil,
       TestRelation2,
       Map.empty,
       Map.empty,
@@ -47,7 +48,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val plan = CreateTableAsSelect(
       catalog,
       Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "does_not_exist.z") :: Nil,
+      Expressions.bucket(4, "does_not_exist.z") :: Nil,
       TestRelation2,
       Map.empty,
       Map.empty,
@@ -63,7 +64,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val plan = CreateTableAsSelect(
       catalog,
       Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "point.z") :: Nil,
+      Expressions.bucket(4, "point.z") :: Nil,
       TestRelation2,
       Map.empty,
       Map.empty,
@@ -79,7 +80,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val plan = CreateTableAsSelect(
       catalog,
       Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "does_not_exist", "point.z") :: Nil,
+      Expressions.bucket(4, "does_not_exist", "point.z") :: Nil,
       TestRelation2,
       Map.empty,
       Map.empty,
@@ -96,7 +97,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val plan = CreateTableAsSelect(
       catalog,
       Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "id") :: Nil,
+      Expressions.bucket(4, "id") :: Nil,
       TestRelation2,
       Map.empty,
       Map.empty,
@@ -109,7 +110,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val plan = CreateTableAsSelect(
       catalog,
       Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "point.x") :: Nil,
+      Expressions.bucket(4, "point.x") :: Nil,
       TestRelation2,
       Map.empty,
       Map.empty,
@@ -122,7 +123,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val plan = CreateTableAsSelect(
       catalog,
       Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "point") :: Nil,
+      Expressions.bucket(4, "point") :: Nil,
       TestRelation2,
       Map.empty,
       Map.empty,
@@ -132,9 +133,9 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 }
 
-private object CreateTablePartitioningValidationSuite {
+private[sql] object CreateTablePartitioningValidationSuite {
   val catalog: TableCatalog = {
-    val cat = new TestTableCatalog()
+    val cat = new InMemoryTableCatalog()
     cat.initialize("test", CaseInsensitiveStringMap.empty())
     cat
   }
@@ -145,7 +146,7 @@ private object CreateTablePartitioningValidationSuite {
       .add("point", new StructType().add("x", DoubleType).add("y", DoubleType))
 }
 
-private case object TestRelation2 extends LeafNode with NamedRelation {
+private[sql] case object TestRelation2 extends LeafNode with NamedRelation {
   override def name: String = "source_relation"
   override def output: Seq[AttributeReference] =
     CreateTablePartitioningValidationSuite.schema.toAttributes

@@ -61,7 +61,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
     try {
       context.sparkContext.setJobDescription(command)
       val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
-      hiveResponse = SQLExecution.withNewExecutionId(context.sparkSession, execution) {
+      hiveResponse = SQLExecution.withNewExecutionId(execution) {
         hiveResultString(execution.executedPlan)
       }
       tableSchema = getResultSetSchema(execution)
@@ -94,7 +94,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
 
   override def getSchema: Schema = tableSchema
 
-  override def destroy() {
+  override def destroy(): Unit = {
     super.destroy()
     hiveResponse = null
     tableSchema = null

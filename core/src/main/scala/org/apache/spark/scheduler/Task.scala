@@ -26,6 +26,7 @@ import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.InputFileBlockHolder
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util._
 
 /**
@@ -103,6 +104,7 @@ private[spark] abstract class Task[T](
       taskContext
     }
 
+    InputFileBlockHolder.initialize()
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
@@ -223,7 +225,7 @@ private[spark] abstract class Task[T](
    * be called multiple times.
    * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
-  def kill(interruptThread: Boolean, reason: String) {
+  def kill(interruptThread: Boolean, reason: String): Unit = {
     require(reason != null)
     _reasonIfKilled = reason
     if (context != null) {

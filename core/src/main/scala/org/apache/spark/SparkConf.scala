@@ -416,14 +416,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /**
-   * Get all parameters that start with `prefix` and end with 'suffix'
-   */
-  def getAllWithPrefixAndSuffix(prefix: String, suffix: String): Array[(String, String)] = {
-    getAll.filter { case (k, v) => k.startsWith(prefix) && k.endsWith(suffix) }
-      .map { case (k, v) => (k.substring(prefix.length, (k.length - suffix.length)), v) }
-  }
-
-  /**
    * Get a parameter as an integer, falling back to a default if not set
    * @throws NumberFormatException If the value cannot be interpreted as an integer
    */
@@ -507,20 +499,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
   }
 
-  /**
-   * Get task resource requirements.
-   */
-  private[spark] def getTaskResourceRequirements(): Map[String, Int] = {
-    getAllWithPrefix(SPARK_TASK_RESOURCE_PREFIX)
-      .withFilter { case (k, v) => k.endsWith(SPARK_RESOURCE_AMOUNT_SUFFIX)}
-      .map { case (k, v) => (k.dropRight(SPARK_RESOURCE_AMOUNT_SUFFIX.length), v.toInt)}.toMap
-  }
 
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
    * idempotent - may mutate this conf object to convert deprecated settings to supported ones.
    */
-  private[spark] def validateSettings() {
+  private[spark] def validateSettings(): Unit = {
     if (contains("spark.local.dir")) {
       val msg = "Note that spark.local.dir will be overridden by the value set by " +
         "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone/kubernetes and LOCAL_DIRS" +
@@ -561,23 +545,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       val value = getDouble(key, 0.5)
       if (value > 1 || value < 0) {
         throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
-      }
-    }
-
-    if (contains("spark.master") && get("spark.master").startsWith("yarn-")) {
-      val warning = s"spark.master ${get("spark.master")} is deprecated in Spark 2.0+, please " +
-        "instead use \"yarn\" with specified deploy mode."
-
-      get("spark.master") match {
-        case "yarn-cluster" =>
-          logWarning(warning)
-          set("spark.master", "yarn")
-          set(SUBMIT_DEPLOY_MODE, "cluster")
-        case "yarn-client" =>
-          logWarning(warning)
-          set("spark.master", "yarn")
-          set(SUBMIT_DEPLOY_MODE, "client")
-        case _ => // Any other unexpected master will be checked when creating scheduler backend.
       }
     }
 
@@ -652,7 +619,9 @@ private[spark] object SparkConf extends Logging {
         "Not used anymore. Please use spark.shuffle.service.index.cache.size"),
       DeprecatedConfig("spark.yarn.credentials.file.retention.count", "2.4.0", "Not used anymore."),
       DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore."),
-      DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available.")
+      DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available."),
+      DeprecatedConfig("spark.executor.plugins", "3.0.0",
+        "Feature replaced with new plugin API. See Monitoring documentation.")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -715,7 +684,8 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
     MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
-      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3"),
+      AlternateConfig("spark.maxRemoteBlockSizeFetchToMem", "3.0")),
     LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
       AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
     DRIVER_MEMORY_OVERHEAD.key -> Seq(
@@ -802,35 +772,6 @@ private[spark] object SparkConf extends Logging {
         s"The configuration key $key is not supported anymore " +
           s"because Spark doesn't use Akka since 2.0")
     }
-  }
-
-  /**
-   * A function to help parsing configs with multiple parts where the base and
-   * suffix could be one of many options. For instance configs like:
-   * spark.executor.resource.{resourceName}.{count/addresses}
-   * This function takes an Array of configs you got from the
-   * getAllWithPrefix function, selects only those that end with the suffix
-   * passed in and returns just the base part of the config before the first
-   * '.' and its value.
-   */
-  def getConfigsWithSuffix(
-      configs: Array[(String, String)],
-      suffix: String
-      ): Array[(String, String)] = {
-    configs.filter { case (rConf, _) => rConf.endsWith(suffix)}.
-      map { case (k, v) => (k.split('.').head, v) }
-  }
-
-  /**
-   * A function to help parsing configs with multiple parts where the base and
-   * suffix could be one of many options. For instance configs like:
-   * spark.executor.resource.{resourceName}.{count/addresses}
-   * This function takes an Array of configs you got from the
-   * getAllWithPrefix function and returns the base part of the config
-   * before the first '.'.
-   */
-  def getBaseOfConfigs(configs: Array[(String, String)]): Set[String] = {
-    configs.map { case (k, _) => k.split('.').head }.toSet
   }
 
   /**

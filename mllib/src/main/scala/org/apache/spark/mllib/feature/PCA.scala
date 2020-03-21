@@ -46,9 +46,11 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       s"source vector size $numFeatures must be no less than k=$k")
 
     val mat = if (numFeatures > 65535) {
-      val meanVector = Statistics.colStats(sources).mean.asBreeze
-      val meanCentredRdd = sources.map { rowVector =>
-        Vectors.fromBreeze(rowVector.asBreeze - meanVector)
+      val summary = Statistics.colStats(sources.map((_, 1.0)), Seq("mean"))
+      val mean = Vectors.fromML(summary.mean)
+      val meanCentredRdd = sources.map { row =>
+        BLAS.axpy(-1, mean, row)
+        row
       }
       new RowMatrix(meanCentredRdd)
     } else {
@@ -111,18 +113,7 @@ class PCAModel private[spark] (
    */
   @Since("1.4.0")
   override def transform(vector: Vector): Vector = {
-    vector match {
-      case dv: DenseVector =>
-        pc.transpose.multiply(dv)
-      case SparseVector(size, indices, values) =>
-        /* SparseVector -> single row SparseMatrix */
-        val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
-        val projection = sm.multiply(pc)
-        Vectors.dense(projection.values)
-      case _ =>
-        throw new IllegalArgumentException("Unsupported vector format. Expected " +
-          s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
-    }
+    pc.transpose.multiply(vector)
   }
 }
 

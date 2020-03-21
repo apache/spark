@@ -26,12 +26,10 @@ import scala.util.control.NonFatal
 import com.spotify.docker.client._
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.DockerUtils
 
 abstract class DatabaseOnDocker {
@@ -64,14 +62,18 @@ abstract class DatabaseOnDocker {
    * Optional process to run when container starts
    */
   def getStartupProcessName: Option[String]
+
+  /**
+   * Optional step before container starts
+   */
+  def beforeContainerStart(
+      hostConfigBuilder: HostConfig.Builder,
+      containerConfigBuilder: ContainerConfig.Builder): Unit = {}
 }
 
-abstract class DockerJDBCIntegrationSuite
-  extends SparkFunSuite
-  with BeforeAndAfterAll
-  with Eventually
-  with SharedSQLContext {
+abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventually {
 
+  protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
 
   private var docker: DockerClient = _
@@ -105,24 +107,23 @@ abstract class DockerJDBCIntegrationSuite
         sock.close()
         port
       }
-      val dockerIp = DockerUtils.getDockerIp()
-      val hostConfig: HostConfig = HostConfig.builder()
+      val hostConfigBuilder = HostConfig.builder()
         .networkMode("bridge")
         .ipcMode(if (db.usesIpc) "host" else "")
         .portBindings(
           Map(s"${db.jdbcPort}/tcp" -> List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
-        .build()
       // Create the database container:
       val containerConfigBuilder = ContainerConfig.builder()
         .image(db.imageName)
         .networkDisabled(false)
         .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
-        .hostConfig(hostConfig)
         .exposedPorts(s"${db.jdbcPort}/tcp")
       if(db.getStartupProcessName.isDefined) {
         containerConfigBuilder
         .cmd(db.getStartupProcessName.get)
       }
+      db.beforeContainerStart(hostConfigBuilder, containerConfigBuilder)
+      containerConfigBuilder.hostConfig(hostConfigBuilder.build())
       val config = containerConfigBuilder.build()
       // Create the database container:
       containerId = docker.createContainer(config).id

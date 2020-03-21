@@ -122,7 +122,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   /**
    * Print usage and exit JVM with the given exit code.
    */
-  def printUsageAndExit(exitCode: Int) {
+  def printUsageAndExit(exitCode: Int): Unit = {
     // scalastyle:off println
     System.err.println(
       "Usage: Worker [options] <master>\n" +

@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class PrunedScanSource extends RelationProvider {
@@ -53,7 +53,7 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sparkSession: Spa
   }
 }
 
-class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
+class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
   protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
@@ -115,6 +115,10 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
   testPruning("SELECT b, b FROM oneToTenPruned", "b")
   testPruning("SELECT a FROM oneToTenPruned", "a")
   testPruning("SELECT b FROM oneToTenPruned", "b")
+  testPruning("SELECT a, rand() FROM oneToTenPruned WHERE a > 5", "a")
+  testPruning("SELECT a FROM oneToTenPruned WHERE rand() > 0.5", "a")
+  testPruning("SELECT a, rand() FROM oneToTenPruned WHERE rand() > 0.5", "a")
+  testPruning("SELECT a, rand() FROM oneToTenPruned WHERE b > 5", "a", "b")
 
   def testPruning(sqlString: String, expectedColumns: String*): Unit = {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
