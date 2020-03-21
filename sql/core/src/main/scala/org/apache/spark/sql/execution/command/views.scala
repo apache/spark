@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
