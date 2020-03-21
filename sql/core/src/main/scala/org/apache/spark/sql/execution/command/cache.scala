@@ -73,7 +73,7 @@ case class UncacheTableCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val tableId = tableIdent.quotedString
     if (!ifExists || sparkSession.catalog.tableExists(tableId)) {
-      CommandUtils.uncacheTableOrView(sparkSession, tableId)
+      sparkSession.catalog.uncacheTable(tableId)
     }
     Seq.empty[Row]
   }
