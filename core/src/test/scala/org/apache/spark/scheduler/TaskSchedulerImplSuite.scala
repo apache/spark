@@ -241,21 +241,26 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("SPARK-18886 - partial offers (isAllFreeResources = false) reset timer before " +
     "any resources have been rejected") {
     val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
     val taskScheduler = setupTaskScheduler(clock)
-    val advanceAmount = 2000
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
 
-    // by default, new partial resource (isAllFreeResources = false) offers reset timer
-    // if the resource is accepted
+    // Advancing clock increases locality level to NODE_LOCAL.
     clock.advance(advanceAmount)
+
+    // If there hasn't yet been any full resource offers,
+    // partial resource (isAllFreeResources = false) offers reset delay scheduling
+    // if this and previous offers were accepted.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = false)
       .flatten.length === 1)
 
-    // would advance to NODE_LOCAL locality if timer wasn't reset above
-    // Verifying this node local task is not accepted
-    clock.advance(advanceAmount)
+    // This NODE_LOCAL task should not be accepted.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec2", "host1", 1)),
@@ -266,20 +271,24 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("SPARK-18886 - delay scheduling timer is reset when it accepts all resources offered when" +
     "isAllFreeResources = true") {
     val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
     val taskScheduler = setupTaskScheduler(clock)
-    val advanceAmount = 2000
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
 
-    // timer is reset when tsm accepts all free resources offered to it
+    // Advancing clock increases locality level to NODE_LOCAL.
     clock.advance(advanceAmount)
+
+    // If there are no rejects on an all resource offer, delay scheduling is reset.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = true)
       .flatten.length === 1)
 
-    // would advance to NODE_LOCAL locality if timer wasn't reset above
-    // Verifying this node local task is not accepted
-    clock.advance(advanceAmount)
+    // This NODE_LOCAL task should not be accepted.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec2", "host1", 1)),
@@ -291,30 +300,47 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     "time if last full resource offer (isAllResources = true) was accepted as well as any " +
     "following partial resource offers") {
     val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
     val taskScheduler = setupTaskScheduler(clock)
-    val advanceAmount = 2000
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
 
+    // PROCESS_LOCAL full resource offer is accepted.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = true)
       .flatten.length === 1)
 
+    // Advancing clock increases locality level to NODE_LOCAL.
     clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted.
+    // Since all offers have been accepted since the last full resource offer
+    // (this one and the previous one), delay scheduling is reset.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = false)
       .flatten.length === 1)
 
+    // Advancing clock increases locality level to NODE_LOCAL
     clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted
+    // Since all offers have been accepted since the last full resource offer
+    // (one previous full offer, one previous partial offer, and this partial offer),
+    // delay scheduling is reset.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = false)
       .flatten.length === 1)
 
-    clock.advance(advanceAmount)
+    // This NODE_LOCAL task should not be accepted.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec2", "host1", 1)),
@@ -330,27 +356,35 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("SPARK-18886 - partial resource offers (isAllFreeResources = false) do not reset " +
     "time if any offer was rejected since last full offer was fully accepted") {
     val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
     val taskScheduler = setupTaskScheduler(clock)
-    val advanceAmount = 2000
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
 
-    // case 1 from test description above
+    // case 1 from test description above.
+    // NODE_LOCAL full resource offer is rejected, so delay scheduling is not reset.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec2", "host1", 1)),
         isAllFreeResources = true)
       .flatten.isEmpty)
 
+    // Advancing clock increases locality level to NODE_LOCAL
     clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted,
+    // but because preceding full resource offer was rejected, delay scheduling is not reset.
+    // Locality level remains at NODE_LOCAL.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = false)
       .flatten.length === 1)
 
-    // Even though we launched a local task above, we still utilize non-local exec2
+    // Even though we launched a local task above, we still utilize non-local exec2.
     // This is the behavior change to fix SPARK-18886.
-    // Locality level is NODE_LOCAL after this clock advance
-    clock.advance(advanceAmount)
+    // Locality level remains NODE_LOCAL after this clock advance.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec2", "host1", 1)),
@@ -358,32 +392,38 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       .flatten.length === 1)
 
 
-    // case 2 from test description above
-    // Reset timer and locality level to PROCESS_LOCAL
-    clock.advance(advanceAmount)
+    // case 2 from test description above.
+    // PROCESS_LOCAL full resource offer is accepted, resetting delay scheduling.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = true)
       .flatten.length === 1)
 
-    // partial resource has rejected offer
+    // Partial resource offer: NODE_LOCAL exec 2 is rejected, PROCESS_LOCAL exec1 is accepted.
+    // Since there were rejects, delay scheduling is not reset, and follow up partial offers
+    // will not reset delay scheduling, even if they are accepted.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec2", "host1", 1), WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = false)
       .flatten.size === 1)
 
-    // This does not reset timer since last partial resource offer was rejected
+    // Advancing clock increases locality level to NODE_LOCAL
     clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted, but does not reset delay scheduling
+    // as described above.
+    // Locality level remains at NODE_LOCAL.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec1", "host1", 1)),
         isAllFreeResources = false)
       .flatten.length === 1)
 
-    // Locality level is NODE_LOCAL after this clock advance
-    clock.advance(advanceAmount)
+    // NODE_LOCAL partial resource offer is accepted,
+    // verifying locality level was not reset to PROCESS_LOCAL by above offer.
     assert(taskScheduler
       .resourceOffers(
         IndexedSeq(WorkerOffer("exec2", "host1", 1)),
