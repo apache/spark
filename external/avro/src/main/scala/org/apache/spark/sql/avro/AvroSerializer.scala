@@ -152,9 +152,9 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
           case null | _: TimestampMillis if rebaseDateTime => (getter, ordinal) =>
             val micros = getter.getLong(ordinal)
             val rebasedMicros = DateTimeUtils.rebaseGregorianToJulianMicros(micros)
-            DateTimeUtils.fromMillis(rebasedMicros)
+            DateTimeUtils.toMillis(rebasedMicros)
           case null | _: TimestampMillis => (getter, ordinal) =>
-            DateTimeUtils.fromMillis(getter.getLong(ordinal))
+            DateTimeUtils.toMillis(getter.getLong(ordinal))
           case _: TimestampMicros if rebaseDateTime => (getter, ordinal) =>
             DateTimeUtils.rebaseGregorianToJulianMicros(getter.getLong(ordinal))
           case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
