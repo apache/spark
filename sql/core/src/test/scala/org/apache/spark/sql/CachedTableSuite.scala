@@ -1123,7 +1123,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-30494 avoid duplicated cached RDD when replace an existing view") {
+  test("SPARK-30494 Fix the leak of cached data when replace an existing view") {
     withTempView("tempView") {
       spark.catalog.clearCache()
       sql("create or replace temporary view tempView as select 1")
@@ -1133,7 +1133,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isEmpty)
       sql("cache table tempView")
       assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1, 2")).isDefined)
-      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isEmpty)
     }
 
     withGlobalTempView("tempGlobalTempView") {
@@ -1145,7 +1144,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isEmpty)
       sql("cache table global_temp.tempGlobalTempView")
       assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1, 2")).isDefined)
-      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isEmpty)
     }
 
     withView("view1") {
@@ -1155,13 +1153,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       sql("create or replace view view1 as select 1, 2")
       sql("cache table view1")
       // the cached plan of persisted view likes below,
-      // so we cannot use the same assertion of temp view.
+      // we cannot use the same assertion of temp view.
       // SubqueryAlias
       //    |
       //    + View
       //        |
       //        + Project[1 AS 1]
       spark.sharedState.cacheManager.uncacheQuery(spark.table("view1"), cascade = false)
+      // make sure there is no cached data leak
       assert(spark.sharedState.cacheManager.isEmpty)
     }
   }

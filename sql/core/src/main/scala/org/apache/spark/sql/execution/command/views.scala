@@ -110,7 +110,7 @@ case class CreateViewCommand(
 
     if (viewType == LocalTempView) {
       if (replace && catalog.getTempView(name.table).isDefined) {
-        logInfo(s"Try to uncache ${name.quotedString} before replacing.")
+        logDebug(s"Try to uncache ${name.quotedString} before replacing.")
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
@@ -119,7 +119,7 @@ case class CreateViewCommand(
       if (replace && catalog.getGlobalTempView(name.table).isDefined) {
         val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
         val globalTempView = TableIdentifier(name.table, Option(db))
-        logInfo(s"Try to uncache ${globalTempView.quotedString} before replacing.")
+        logDebug(s"Try to uncache ${globalTempView.quotedString} before replacing.")
         CommandUtils.uncacheTableOrView(sparkSession, globalTempView.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
@@ -137,7 +137,7 @@ case class CreateViewCommand(
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
         // uncache the cached data before replacing an exists view
-        logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
+        logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
         CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
