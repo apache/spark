@@ -96,7 +96,7 @@ function preprocessGraphLayout(g) {
     } else {
       firstSearator = "<span class='stageId-and-taskId-metrics'>";
       secondSeparator = "</span>";
-      splitter = "<br>"
+      splitter = "<br>";
     }
 
     node.label.split(splitter).forEach(function(text, i) {
