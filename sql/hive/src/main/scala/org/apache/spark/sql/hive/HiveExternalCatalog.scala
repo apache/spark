@@ -863,9 +863,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def listViews(db: String, pattern: String): Seq[String] = withClient {
     requireDbExists(db)
-    val tableNames = client.listTables(db, pattern)
-    val views = client.getTablesByName(db, tableNames).filter(_.tableType == CatalogTableType.VIEW)
-    views.map(_.identifier.table)
+    client.listTablesByType(db, pattern, CatalogTableType.VIEW)
   }
 
   override def loadTable(
