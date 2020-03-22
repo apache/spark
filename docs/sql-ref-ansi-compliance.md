@@ -21,7 +21,7 @@ license: |
 
 Since Spark 3.0, Spark SQL introduces two experimental options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
 
-When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, and SQL parsing).
+When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, SQL functions and SQL parsing).
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
 
@@ -139,6 +139,11 @@ SELECT * FROM t;
   +---+
 
 {% endhighlight %}
+
+### SQL Functions
+
+The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
+  - `size`: This function returns null for null input under ANSI mode.
 
 ### SQL Keywords
 

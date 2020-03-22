@@ -627,7 +627,7 @@ struct<>
 -- !query
 SELECT substr(f1, 99995) from toasttest
 -- !query schema
-struct<substring(f1, 99995, 2147483647):string>
+struct<substr(f1, 99995, 2147483647):string>
 -- !query output
 567890
 567890
@@ -638,7 +638,7 @@ struct<substring(f1, 99995, 2147483647):string>
 -- !query
 SELECT substr(f1, 99995, 10) from toasttest
 -- !query schema
-struct<substring(f1, 99995, 10):string>
+struct<substr(f1, 99995, 10):string>
 -- !query output
 567890
 567890

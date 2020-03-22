@@ -74,6 +74,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
       testSize(sizeOfNull = null)
     }
+    // size(null) should return null under ansi mode.
+    withSQLConf(
+      SQLConf.LEGACY_SIZE_OF_NULL.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      testSize(sizeOfNull = null)
+    }
   }
 
   test("MapKeys/MapValues") {

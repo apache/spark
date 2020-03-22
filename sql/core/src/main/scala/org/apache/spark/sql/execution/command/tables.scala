@@ -508,8 +508,8 @@ case class TruncateTableCommand(
           var optPermission: Option[FsPermission] = None
           var optAcls: Option[java.util.List[AclEntry]] = None
           if (!ignorePermissionAcl) {
-            val fileStatus = fs.getFileStatus(path)
             try {
+              val fileStatus = fs.getFileStatus(path)
               optPermission = Some(fileStatus.getPermission())
             } catch {
               case NonFatal(_) => // do nothing

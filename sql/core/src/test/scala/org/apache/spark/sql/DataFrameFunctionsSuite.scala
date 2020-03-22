@@ -490,6 +490,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
       testSizeOfArray(sizeOfNull = null)
     }
+    // size(null) should return null under ansi mode.
+    withSQLConf(
+      SQLConf.LEGACY_SIZE_OF_NULL.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      testSizeOfArray(sizeOfNull = null)
+    }
   }
 
   test("dataframe arrays_zip function") {
@@ -567,6 +573,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("map size function") {
     withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSizeOfMap(sizeOfNull = null)
+    }
+    // size(null) should return null under ansi mode.
+    withSQLConf(
+      SQLConf.LEGACY_SIZE_OF_NULL.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "true") {
       testSizeOfMap(sizeOfNull = null)
     }
   }
