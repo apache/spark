@@ -92,7 +92,11 @@ object DateTimeUtils {
     val localDate = LocalDate
       .of(date.getYear + 1900, date.getMonth + 1, 1)
       .`with`(ChronoField.ERA, era)
-      .plusDays(date.getDate - 1)
+      // Add days separately to convert dates existed in Julian calendar but not
+      // in Proleptic Gregorian calendar. For example, 1000-02-29 is valid date
+      // in Julian calendar because 1000 is a leap year but 1000 is not a leap
+      // year in Proleptic Gregorian calendar. And 1000-02-29 doesn't exist in it.
+      .plusDays(date.getDate - 1) // Returns the next valid date after `date.getDate - 1` days
     localDateToDays(localDate)
   }
 
@@ -121,7 +125,11 @@ object DateTimeUtils {
       t.getYear + 1900, t.getMonth + 1, 1,
       t.getHours, t.getMinutes, t.getSeconds, t.getNanos)
       .`with`(ChronoField.ERA, era)
-      .plusDays(t.getDate - 1)
+      // Add days separately to convert dates existed in Julian calendar but not
+      // in Proleptic Gregorian calendar. For example, 1000-02-29 is valid date
+      // in Julian calendar because 1000 is a leap year but 1000 is not a leap
+      // year in Proleptic Gregorian calendar. And 1000-02-29 doesn't exist in it.
+      .plusDays(t.getDate - 1) // Returns the next valid date after `date.getDate - 1` days
     instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
   }
 
