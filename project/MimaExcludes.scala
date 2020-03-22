@@ -40,8 +40,12 @@ object MimaExcludes {
     // private constructor
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this"),
     // [SPARK-31127] Implement abstract Selector
+    // org.apache.spark.ml.feature.ChiSqSelectorModel type hierarchy change
+    // before: class ChiSqSelector extends Estimator with ChiSqSelectorParams
+    // after: class ChiSqSelector extends PSelector
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelector"),
+    // method fit result type change. before: ChiSqSelectorModel  after: ChiSqSelectorModel
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.ChiSqSelector.fit")
   )
 
