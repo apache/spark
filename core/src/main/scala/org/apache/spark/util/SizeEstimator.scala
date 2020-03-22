@@ -21,7 +21,6 @@ import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.runtime.ScalaRunTime
 
@@ -315,7 +314,7 @@ object SizeEstimator extends Logging {
    * */
   private def visitKVDataArray(
       data: Array[AnyRef],
-      keyPositions: mutable.BitSet,
+      keyPositions: java.util.BitSet,
       totalValueElements: Int,
       state: SearchState): Unit = {
     val length = data.length
@@ -328,17 +327,17 @@ object SizeEstimator extends Logging {
         state.enqueue(e)
       }
     } else {
-      val rand1 = new Random(42)
-      val rand2 = new Random(63)
+      val rand = new Random(42)
+      val drawn = new OpenHashSet[Int](2 * ARRAY_SAMPLE_SIZE)
       val (numKeys1, keySize1, numValueElements1, valueSize1) =
-        sampleKVDataArray(data, keyPositions, state, rand1, length)
+        sampleKVDataArray(data, keyPositions, state, rand, drawn, length)
       val (numKeys2, keySize2, numValueElements2, valueSize2) =
-        sampleKVDataArray(data, keyPositions, state, rand2, length)
+        sampleKVDataArray(data, keyPositions, state, rand, drawn, length)
       val (_, keySizeForMax, numKeysForMin, keySizeForMin) = if (keySize1 > keySize2) {
         (numKeys1, keySize1, numKeys2, keySize2)
       } else (numKeys2, keySize2, numKeys1, keySize1)
-      val keySize = keySizeForMax +
-        keySizeForMin * ((keyPositions.size - numKeysForMin) / numKeysForMin)
+      val keySize = keySizeForMax + (keySizeForMin *
+          ((keyPositions.cardinality() - numKeysForMin).toDouble / numKeysForMin)).toLong
       state.size += keySize
 
       val (_, valueSizeForMax, numValueElementsForMin, valueSizeForMin) =
@@ -348,44 +347,28 @@ object SizeEstimator extends Logging {
           (numValueElements2, valueSize2, numValueElements1, valueSize1)
         }
 
-      val valueSize = valueSizeForMax +
-        valueSizeForMin * (totalValueElements - numValueElementsForMin) / numValueElementsForMin
+      val valueSize = valueSizeForMax + (valueSizeForMin *
+        (totalValueElements - numValueElementsForMin).toDouble / numValueElementsForMin).toLong
       state.size += valueSize
     }
   }
 
   private def sampleKVDataArray(
       data: Array[AnyRef],
-      keyPositions: mutable.BitSet,
+      keyPositions: java.util.BitSet,
       state: SearchState,
       rand: Random,
+      drawn: OpenHashSet[Int],
       length: Int): (Int, Long, Int, Long) = {
-    val drawn = new mutable.HashSet[Int]
-    // Due to the keyPosition is not a continuous sequence and it's not indexible, here we use
-    // reservoir sampling algorithm
-    val iter = keyPositions.iterator
-    var index = 0
-    val chosen = new Array[Int](ARRAY_SAMPLE_SIZE)
-    for (e <- iter) {
-      if (drawn.size < ARRAY_SAMPLE_SIZE) {
-        drawn.add(e)
-        chosen(index) = e
-      } else {
-        val s = rand.nextInt(index + 1)
-        if (s < ARRAY_SAMPLE_SIZE) {
-          drawn.remove(chosen(s))
-          drawn.add(e)
-          chosen(s) = e
-        }
-      }
-      index += 1
-    }
-    assert(drawn.size == math.min(ARRAY_SAMPLE_SIZE, keyPositions.size))
     var sampleKeySize = 0L
     var sampleKeys = 0
     var sampleValueSize = 0L
     var sampleValueElements = 0
-    for (pos <- drawn.iterator) {
+    for (i <- 0 until ARRAY_SAMPLE_SIZE) {
+      var pos = 0
+      do {
+        pos = rand.nextInt(length)
+      } while (drawn.contains(pos) || !keyPositions.get(pos))
       val key = ScalaRunTime.array_apply(data, pos)
       val value = ScalaRunTime.array_apply(data, pos + 1)
       sampleKeySize += SizeEstimator.estimate(key.asInstanceOf[AnyRef], state.visited)

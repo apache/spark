@@ -247,7 +247,7 @@ class SizeEstimatorSuite
       CompactBuffer[DummyString](v)
     }
 
-    val keyNums = Array.fill(10)(1000) ++ Array.fill(10000)(1)
+    val keyNums = Array.fill(100)(1000) ++ Array.fill(100000)(1)
     for (i <- keyNums.indices) {
       val key = Random.nextString(100)
       val valueBuffer = new CompactBuffer[DummyString]

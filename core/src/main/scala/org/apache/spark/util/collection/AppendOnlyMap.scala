@@ -19,7 +19,6 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
-import scala.collection.mutable
 import scala.reflect.{classTag, ClassTag}
 
 import com.google.common.hash.Hashing
@@ -65,7 +64,7 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
   private var nullValue: V = null.asInstanceOf[V]
 
   // Use to track key positions, the size is small enough for most cases.
-  private var keyPositions = new mutable.BitSet(capacity)
+  private val keyPositions = new java.util.BitSet()
 
   // Tracks the total number of elements in the values, mainly used to do estimation for container
   // value type like CompactBuffer[_] and Array[CompactBuffer[_]]
@@ -123,7 +122,7 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
       if (curKey.eq(null)) {
         data(2 * pos) = k
         data(2 * pos + 1) = value.asInstanceOf[AnyRef]
-        keyPositions += 2 * pos
+        keyPositions.set(2 * pos)
         totalValueElements += 1
         incrementSize()  // Since we added a new key
         return
@@ -162,7 +161,7 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
         data(2 * pos) = k
         data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
         incrementSize()
-        keyPositions += 2 * pos
+        keyPositions.set(2 * pos)
         totalValueElements += 1
         return newValue
       } else if (k.eq(curKey) || k.equals(curKey)) {
@@ -227,7 +226,7 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
     }
   }
 
-  def getKeyPositions(): mutable.BitSet = {
+  def getKeyPositions(): java.util.BitSet = {
     keyPositions
   }
 
@@ -261,7 +260,7 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
           if (curKey.eq(null)) {
             newData(2 * newPos) = key
             newData(2 * newPos + 1) = value
-            keyPositions += 2 * newPos
+            keyPositions.set(2 * newPos)
             keepGoing = false
           } else {
             val delta = i
