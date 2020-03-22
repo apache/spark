@@ -346,6 +346,15 @@ case class ShowTableStatement(
   extends ParsedStatement
 
 /**
+ * A SHOW VIEWS statement, as parsed from SQL.
+ */
+case class ShowViewsStatement(
+    namespace: LogicalPlan,
+    pattern: Option[String]) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
+
+/**
  * A CREATE NAMESPACE statement, as parsed from SQL.
  */
 case class CreateNamespaceStatement(

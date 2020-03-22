@@ -860,7 +860,7 @@ case class ShowTablesCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Since we need to return a Seq of rows, we will call getTables directly
+    // Since we need to return a Seq of rows, we will call listTables directly
     // instead of calling tables in sparkSession.
     val catalog = sparkSession.sessionState.catalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)

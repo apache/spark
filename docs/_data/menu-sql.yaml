@@ -207,6 +207,8 @@
                   url: sql-ref-syntax-aux-show-partitions.html
                 - text: SHOW CREATE TABLE
                   url: sql-ref-syntax-aux-show-create-table.html
+                - text: SHOW VIEWS
+                  url: sql-ref-syntax-aux-show-views.html
             - text: CONFIGURATION MANAGEMENT
               url: sql-ref-syntax-aux-conf-mgmt.html
               subitems:

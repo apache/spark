@@ -89,7 +89,7 @@ SHOW TABLES FROM default LIKE 'sam*';
   +-----------+------------+--------------+--+
   
 -- List all tables matching the pattern `sam*|suj`
-SHOW TABLES  LIKE 'sam*|suj';
+SHOW TABLES LIKE 'sam*|suj';
   +-----------+------------+--------------+--+
   | database  | tableName  | isTemporary  |
   +-----------+------------+--------------+--+

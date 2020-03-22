@@ -909,6 +909,14 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
 
+  test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+    val exception = intercept[AnalysisException] {
+      runShowTablesSql("SHOW VIEWS FROM a.b", Seq(), expectV2Catalog = false, isShowView = true)
+    }
+
+    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+  }
+
   test("ShowTables: using v2 catalog with empty namespace") {
     spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
     runShowTablesSql("SHOW TABLES FROM testcat", Seq(Row("", "table")))
@@ -954,15 +962,17 @@ class DataSourceV2SQLSuite
   private def runShowTablesSql(
       sqlText: String,
       expected: Seq[Row],
-      expectV2Catalog: Boolean = true): Unit = {
+      expectV2Catalog: Boolean = true,
+      isShowView: Boolean = false): Unit = {
+    val colName = if (isShowView) "viewName" else "tableName"
     val schema = if (expectV2Catalog) {
       new StructType()
         .add("namespace", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
+        .add(colName, StringType, nullable = false)
     } else {
       new StructType()
         .add("database", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
+        .add(colName, StringType, nullable = false)
         .add("isTemporary", BooleanType, nullable = false)
     }
 

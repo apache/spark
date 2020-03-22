@@ -23,11 +23,11 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunction, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.internal.StaticSQLConf
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -292,6 +292,41 @@ case class AlterViewAsCommand(
       viewText = Some(originalText))
 
     session.sessionState.catalog.alterTable(updatedViewMeta)
+  }
+}
+
+/**
+ * A command for users to get views in the given database.
+ * If a databaseName is not given, the current database will be used.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW VIEWS [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+ * }}}
+ */
+case class ShowViewsCommand(
+    databaseName: Option[String],
+    tableIdentifierPattern: Option[String]) extends RunnableCommand {
+
+  // The result of SHOW VIEWS has three basic columns: database, viewName and isTemporary.
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("database", StringType, nullable = false)(),
+    AttributeReference("viewName", StringType, nullable = false)(),
+    AttributeReference("isTemporary", BooleanType, nullable = false)())
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
+
+    // Show the information of views.
+    val views = tableIdentifierPattern.map(catalog.listViews(db, _))
+      .getOrElse(catalog.listViews(db, "*"))
+    views.map { tableIdent =>
+      val database = tableIdent.database.getOrElse("")
+      val tableName = tableIdent.table
+      val isTemp = catalog.isTemporaryTable(tableIdent)
+
+      Row(database, tableName, isTemp)
+    }
   }
 }
 
