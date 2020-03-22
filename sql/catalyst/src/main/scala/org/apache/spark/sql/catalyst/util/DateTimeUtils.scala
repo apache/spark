@@ -95,24 +95,20 @@ object DateTimeUtils {
    * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    if (date.getTime < GREGORIAN_CUTOVER_MILLIS) {
-      val era = if (date.before(julianCommonEraStart)) 0 else 1
-      val localDate = date.toLocalDate.`with`(ChronoField.ERA, era)
-      localDateToDays(localDate)
-    } else {
-      microsToDays(millisToMicros(date.getTime))
-    }
+    val era = if (date.before(julianCommonEraStart)) 0 else 1
+    val localDate = LocalDate
+      .of(date.getYear + 1900, date.getMonth + 1, 1)
+      .`with`(ChronoField.ERA, era)
+      .plusDays(date.getDate - 1)
+    Math.toIntExact(localDate.toEpochDay)
   }
 
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    if (daysSinceEpoch < GREGORIAN_CUTOVER_DAY) {
-      Date.valueOf(LocalDate.ofEpochDay(daysSinceEpoch))
-    } else {
-      new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
-    }
+    val localDate = LocalDate.ofEpochDay(daysSinceEpoch)
+    new Date(localDate.getYear - 1900, localDate.getMonthValue - 1, localDate.getDayOfMonth)
   }
 
   /**
