@@ -592,7 +592,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           intercept[AnalysisException] {
             sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION 'file:$tempLocation/c1'")
             // with existed path
-            sql(s"CREATE TABLE ctas2 LOCATION 'file:$tempLocation/c1' AS SELECT key k, value FROM src ORDER BY k, value")
+            sql(s"CREATE TABLE ctas2 LOCATION 'file:$tempLocation/c1' " +
+              s"AS SELECT key k, value FROM src ORDER BY k, value")
           }
         }
       }
