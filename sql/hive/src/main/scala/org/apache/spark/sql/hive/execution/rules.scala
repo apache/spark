@@ -33,23 +33,21 @@ object HiveRules {
 
     override def apply(plan: LogicalPlan): Unit = {
       plan.foreach {
-        case CreateHiveTableAsSelectCommand(tableDesc, _, _, _) => {
+        case CreateHiveTableAsSelectCommand(tableDesc, _, _, _) =>
           val location = tableDesc.storage.locationUri
           if (location.isDefined) {
             val path = new Path(location.get)
             val fs = FileSystem.get(location.get, SparkContext.getActive.get.hadoopConfiguration)
             if (fs.exists(path)) {
               if (fs.isDirectory(path)) {
-                failAnalysis("Creating table as select with a existed location of directory is not allowed, " +
-                  "please check the path and try again")
+                failAnalysis("Creating table as select with a existed location of directory" +
+                  "is not allowed, please check the path and try again")
               } else {
-                failAnalysis("Creating table as select with a existed location of file is not allowed, " +
-                  "please check the path and try again")
+                failAnalysis("Creating table as select with a existed location of file" +
+                  "is not allowed, please check the path and try again")
               }
             }
           }
-        }
-
         case _ => // OK
       }
     }
