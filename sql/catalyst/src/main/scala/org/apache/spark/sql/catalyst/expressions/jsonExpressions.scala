@@ -25,7 +25,6 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -878,7 +877,7 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * json_object - A JSON object is required as argument. `Null` is returned, if an invalid JSON
-          string is given. `Analysis Exception` is thrown, if null string or JSON array is given.
+          string is given. `Runtime Exception` is thrown, if null string or JSON array is given.
   """,
   examples = """
     Examples:
@@ -896,10 +895,9 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 
-  private lazy val json = child.eval().asInstanceOf[UTF8String]
-
   override def eval(input: InternalRow): Any = {
     try {
+      lazy val json = child.eval(input).asInstanceOf[UTF8String]
       Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
         parser => getJsonKeys(parser, input)
       }
@@ -912,12 +910,12 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
     var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
     // this handles `NULL` case
     if (parser.nextToken() == null) {
-      throw new AnalysisException(s"$prettyName expect a JSON object but nothing is provided.")
+      throw new RuntimeException(s"$prettyName expect a JSON object but nothing is provided.")
     }
 
-    // when a JSON array is found, throw an analysis exception
+    // when a JSON array is found, throw a runtime exception
     if (parser.currentToken() == JsonToken.START_ARRAY) {
-      throw new AnalysisException(s"$prettyName can only be called on JSON object.")
+      throw new RuntimeException(s"$prettyName can only be called on JSON object.")
     }
 
     // traverse until the end of input and ensure it returns valid key

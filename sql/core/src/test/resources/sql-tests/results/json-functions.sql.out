@@ -368,7 +368,6 @@ select json_array_length(2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-<<<<<<< HEAD
 cannot resolve 'json_array_length(2)' due to data type mismatch: argument 1 requires string type, however, '2' is of int type.; line 1 pos 7
 
 
@@ -449,7 +448,8 @@ select json_object_keys('')
 -- !query schema
 struct<json_object_keys():int>
 -- !query output
-json_object_keys expect a JSON object but nothing is provided.;
+java.lang.RuntimeException
+json_object_keys expect a JSON object but nothing is provided.
 
 
 -- !query
@@ -529,8 +529,8 @@ select json_object_keys('[1, 2, 3]')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-json_object_keys can only be called on JSON object.;
+java.lang.RuntimeException
+json_object_keys can only be called on JSON object.
 
 
 -- !query
