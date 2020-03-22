@@ -48,11 +48,6 @@ object DateTimeUtils {
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
   final val GREGORIAN_CUTOVER_DAY = LocalDate.of(1582, 10, 15).toEpochDay
-  final val GREGORIAN_CUTOVER_MICROS = instantToMicros(
-    LocalDateTime.of(1582, 10, 15, 0, 0, 0)
-      .atOffset(ZoneOffset.UTC)
-      .toInstant)
-  final val GREGORIAN_CUTOVER_MILLIS = microsToMillis(GREGORIAN_CUTOVER_MICROS)
 
   final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
 
@@ -115,26 +110,21 @@ object DateTimeUtils {
    * Returns a java.sql.Timestamp from number of micros since epoch.
    */
   def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
-    if (us < GREGORIAN_CUTOVER_MICROS) {
-      val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
-      Timestamp.valueOf(ldt)
-    } else {
-      Timestamp.from(microsToInstant(us))
-    }
+    val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
+    Timestamp.valueOf(ldt)
   }
 
   /**
    * Returns the number of micros since epoch from java.sql.Timestamp.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
-    if (t.getTime < GREGORIAN_CUTOVER_MILLIS) {
-      val era = if (t.before(julianCommonEraStart)) 0 else 1
-      val localDateTime = t.toLocalDateTime.`with`(ChronoField.ERA, era)
-      val instant = ZonedDateTime.of(localDateTime, ZoneId.systemDefault()).toInstant
-      instantToMicros(instant)
-    } else {
-      instantToMicros(t.toInstant)
-    }
+    val era = if (t.before(julianCommonEraStart)) 0 else 1
+    val localDateTime = LocalDateTime.of(
+      t.getYear + 1900, t.getMonth + 1, 1,
+      t.getHours, t.getMinutes, t.getSeconds, t.getNanos)
+      .`with`(ChronoField.ERA, era)
+      .plusDays(t.getDate - 1)
+    instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
   }
 
   /**
