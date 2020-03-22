@@ -3096,8 +3096,6 @@ class SQLConf extends Serializable with Logging {
   def hiveThriftServerSingleSession: Boolean =
     getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
 
-  def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
-
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
