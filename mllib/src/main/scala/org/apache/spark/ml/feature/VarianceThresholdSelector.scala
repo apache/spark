@@ -17,28 +17,22 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable.ArrayBuilder
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml._
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 /**
  * Params for [[VarianceThresholdSelector]] and [[VarianceThresholdSelectorModel]].
  */
-private[feature] trait VarianceThresholdSelectorParams extends Params
-  with HasFeaturesCol with HasOutputCol {
+private[feature] trait VarianceThresholdSelectorParams extends SelectorParams {
 
   /**
    * Param for variance threshold. Features with a variance not greater than this threshold
@@ -65,8 +59,8 @@ private[feature] trait VarianceThresholdSelectorParams extends Params
  */
 @Since("3.1.0")
 final class VarianceThresholdSelector @Since("3.1.0")(@Since("3.1.0") override val uid: String)
-  extends Estimator[VarianceThresholdSelectorModel] with VarianceThresholdSelectorParams
-with DefaultParamsWritable {
+  extends Selector[VarianceThresholdSelectorModel] with VarianceThresholdSelectorParams
+    with DefaultParamsWritable {
 
   @Since("3.1.0")
   def this() = this(Identifiable.randomUID("VarianceThresholdSelector"))
@@ -77,15 +71,16 @@ with DefaultParamsWritable {
 
   /** @group setParam */
   @Since("3.1.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+  override def setFeaturesCol(value: String): this.type = super.setFeaturesCol(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setOutputCol(value: String): this.type = set(outputCol, value)
+  override def setOutputCol(value: String): this.type = super.setOutputCol(value)
 
-  @Since("3.1.0")
-  override def fit(dataset: Dataset[_]): VarianceThresholdSelectorModel = {
-    transformSchema(dataset.schema, logging = true)
+  /**
+   * get the indices of the selected features
+   */
+  protected[this] override def getSelectionIndices(dataset: Dataset[_]): Array[Int] = {
 
     val Row(maxs: Vector, mins: Vector, variances: Vector) = dataset
       .select(Summarizer.metrics("max", "min", "variance").summary(col($(featuresCol)))
@@ -94,12 +89,21 @@ with DefaultParamsWritable {
       .first()
 
     val numFeatures = maxs.size
-    val indices = Array.tabulate(numFeatures) { i =>
+    Array.tabulate(numFeatures) { i =>
       // Use peak-to-peak to avoid numeric precision issues for constant features
       (i, if (maxs(i) == mins(i)) 0.0 else variances(i))
     }.filter(_._2 > getVarianceThreshold).map(_._1)
-    copyValues(new VarianceThresholdSelectorModel(uid, indices.sorted)
-      .setParent(this))
+  }
+
+  /**
+   * Create a new instance of concrete SelectorModel.
+   * @param indices The indices of the selected features
+   * @return A new SelectorModel instance
+   */
+  protected[this] def createSelectorModel(
+      uid: String,
+      indices: Array[Int]): VarianceThresholdSelectorModel = {
+    new VarianceThresholdSelectorModel(uid, indices)
   }
 
   @Since("3.1.0")
@@ -125,67 +129,17 @@ object VarianceThresholdSelector extends DefaultParamsReadable[VarianceThreshold
 @Since("3.1.0")
 class VarianceThresholdSelectorModel private[ml](
     @Since("3.1.0") override val uid: String,
-    @Since("3.1.0") val selectedFeatures: Array[Int])
-  extends Model[VarianceThresholdSelectorModel] with VarianceThresholdSelectorParams
-    with MLWritable {
-
-  if (selectedFeatures.length >= 2) {
-    require(selectedFeatures.sliding(2).forall(l => l(0) < l(1)),
-      "Index should be strictly increasing.")
-  }
+    @Since("3.1.0") override val selectedFeatures: Array[Int])
+  extends SelectorModel[VarianceThresholdSelectorModel] (uid, selectedFeatures)
+    with VarianceThresholdSelectorParams with MLWritable {
 
   /** @group setParam */
   @Since("3.1.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+  override def setFeaturesCol(value: String): this.type = super.setFeaturesCol(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  @Since("3.1.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    val outputSchema = transformSchema(dataset.schema, logging = true)
-
-    val newSize = selectedFeatures.length
-    val func = { vector: Vector =>
-      vector match {
-        case SparseVector(_, indices, values) =>
-          val (newIndices, newValues) = compressSparse(indices, values)
-          Vectors.sparse(newSize, newIndices, newValues)
-        case DenseVector(values) =>
-          Vectors.dense(selectedFeatures.map(values))
-        case other =>
-          throw new UnsupportedOperationException(
-            s"Only sparse and dense vectors are supported but got ${other.getClass}.")
-      }
-    }
-
-    val transformer = udf(func)
-    dataset.withColumn($(outputCol), transformer(col($(featuresCol))),
-      outputSchema($(outputCol)).metadata)
-  }
-
-  @Since("3.1.0")
-  override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    val newField = prepOutputField(schema)
-    SchemaUtils.appendColumn(schema, newField)
-  }
-
-  /**
-   * Prepare the output column field, including per-feature metadata.
-   */
-  private def prepOutputField(schema: StructType): StructField = {
-    val selector = selectedFeatures.toSet
-    val origAttrGroup = AttributeGroup.fromStructField(schema($(featuresCol)))
-    val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
-      origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
-    } else {
-      Array.fill[Attribute](selector.size)(NominalAttribute.defaultAttr)
-    }
-    val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
-    newAttributeGroup.toStructField()
-  }
+  override def setOutputCol(value: String): this.type = super.setOutputCol(value)
 
   @Since("3.1.0")
   override def copy(extra: ParamMap): VarianceThresholdSelectorModel = {
@@ -201,33 +155,6 @@ class VarianceThresholdSelectorModel private[ml](
   @Since("3.1.0")
   override def toString: String = {
     s"VarianceThresholdSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
-  }
-
-  private[spark] def compressSparse(
-      indices: Array[Int],
-      values: Array[Double]): (Array[Int], Array[Double]) = {
-    val newValues = new ArrayBuilder.ofDouble
-    val newIndices = new ArrayBuilder.ofInt
-    var i = 0
-    var j = 0
-    while (i < indices.length && j < selectedFeatures.length) {
-      val indicesIdx = indices(i)
-      val filterIndicesIdx = selectedFeatures(j)
-      if (indicesIdx == filterIndicesIdx) {
-        newIndices += j
-        newValues += values(i)
-        j += 1
-        i += 1
-      } else {
-        if (indicesIdx > filterIndicesIdx) {
-          j += 1
-        } else {
-          i += 1
-        }
-      }
-    }
-    // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
-    (newIndices.result(), newValues.result())
   }
 }
 
