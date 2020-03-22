@@ -306,7 +306,7 @@ SELECT last(ten) OVER (PARTITION BY four), ten, four FROM
 (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s
 ORDER BY four, ten
 -- !query schema
-struct<last(ten, false) OVER (PARTITION BY four ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int,ten:int,four:int>
+struct<last(ten, false) OVER (PARTITION BY four ORDER BY four ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,ten:int,four:int>
 -- !query output
 4	0	0
 4	0	0
@@ -341,8 +341,7 @@ struct<ten:int,two:int,gsum:bigint,wsum:bigint>
 -- !query
 SELECT count(*) OVER (PARTITION BY four), four FROM (SELECT * FROM tenk1 WHERE two = 1)s WHERE unique2 < 10
 -- !query schema
-struct<count(1) OVER (PARTITION BY four ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,four:int>
--- !query output
+struct<count(1) OVER (PARTITION BY four ORDER BY four ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint,four:int>-- !query output
 2	3
 2	3
 4	1
@@ -422,7 +421,7 @@ struct<ten:int,two:int,gsum:bigint,wsum:bigint>
 -- !query
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s
 -- !query schema
-struct<count(1) OVER (PARTITION BY four ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint>
+struct<count(1) OVER (PARTITION BY four ORDER BY four ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
 -- !query output
 
 
