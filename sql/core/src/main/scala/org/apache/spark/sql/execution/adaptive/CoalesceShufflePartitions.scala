@@ -74,8 +74,6 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
           .getOrElse(session.sparkContext.defaultParallelism)
         val partitionSpecs = ShufflePartitionsUtil.coalescePartitions(
           validMetrics.toArray,
-          firstPartitionIndex = 0,
-          lastPartitionIndex = distinctNumPreShufflePartitions.head,
           advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
           minNumPartitions = minPartitionNum)
         // This transformation adds new nodes, so we must use `transformUp` here.

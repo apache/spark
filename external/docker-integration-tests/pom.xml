@@ -50,6 +50,7 @@
       <groupId>com.spotify</groupId>
       <artifactId>docker-client</artifactId>
       <scope>test</scope>
+      <classifier>shaded</classifier>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>

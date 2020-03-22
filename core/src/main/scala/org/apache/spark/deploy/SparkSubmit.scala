@@ -773,6 +773,10 @@ private[spark] class SparkSubmit extends Logging {
           childArgs += ("--arg", arg)
         }
       }
+      // Pass the proxyUser to the k8s app so it is possible to add it to the driver args
+      if (args.proxyUser != null) {
+        childArgs += ("--proxy-user", args.proxyUser)
+      }
     }
 
     // Load any properties specified through --conf and the default properties file

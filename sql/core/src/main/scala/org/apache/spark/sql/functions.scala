@@ -654,6 +654,29 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
+   * Aggregate function: returns and array of the approximate percentile values
+   * of numeric column col at the given percentages.
+   *
+   * If percentage is an array, each value must be between 0.0 and 1.0.
+   * If it is a single floating point value, it must be between 0.0 and 1.0.
+   *
+   * The accuracy parameter is a positive numeric literal
+   * which controls approximation accuracy at the cost of memory.
+   * Higher value of accuracy yields better accuracy, 1.0/accuracy
+   * is the relative error of the approximation.
+   *
+   * @group agg_funcs
+   * @since 3.1.0
+   */
+  def percentile_approx(e: Column, percentage: Column, accuracy: Column): Column = {
+    withAggregateFunction {
+      new ApproximatePercentile(
+        e.expr, percentage.expr, accuracy.expr
+      )
+    }
+  }
+
+  /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs
@@ -2632,7 +2655,9 @@ object functions {
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
    *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -2890,7 +2915,9 @@ object functions {
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param ut A number of a type that is castable to a long, such as string or integer. Can be
    *           negative for timestamps before the unix epoch
@@ -2934,7 +2961,9 @@ object functions {
   /**
    * Converts time string with given pattern to Unix timestamp (in seconds).
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
    *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -2962,7 +2991,9 @@ object functions {
   /**
    * Converts time string with the given pattern to timestamp.
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
    *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -2987,7 +3018,9 @@ object functions {
   /**
    * Converts the column into a `DateType` with a specified format
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param e   A date, timestamp or string. If a string, the data must be in a format that can be
    *            cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -3956,6 +3989,10 @@ object functions {
 
   /**
    * Returns length of array or map.
+   *
+   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+   * With the default settings, the function returns -1 for null input.
    *
    * @group collection_funcs
    * @since 1.5.0

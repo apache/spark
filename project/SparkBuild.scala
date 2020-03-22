@@ -88,7 +88,8 @@ object SparkBuild extends PomBuild {
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
   override val profiles = {
-    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES")
+      .orElse(Properties.propOrNone("sbt.maven.profiles")) match {
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
@@ -479,7 +480,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
-    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextSuite"
+    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextSuite",
+    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"

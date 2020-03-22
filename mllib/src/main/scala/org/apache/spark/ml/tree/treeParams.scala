@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 /**
  * Parameters for Decision Tree-based algorithms.
  *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait DecisionTreeParams extends PredictorParams
   with HasCheckpointInterval with HasSeed with HasWeightCol {
@@ -320,7 +320,7 @@ private[spark] object TreeEnsembleParams {
 /**
  * Parameters for Decision Tree-based ensemble algorithms.
  *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
@@ -477,7 +477,7 @@ private[ml] trait RandomForestRegressorParams
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
  *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize
   with HasValidationIndicatorCol {

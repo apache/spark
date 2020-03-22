@@ -420,7 +420,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             context.asInstanceOf[BarrierTaskContext].barrier()
             result = BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS
           case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
-            val messages: ArrayBuffer[String] = context.asInstanceOf[BarrierTaskContext].allGather(
+            val messages: Array[String] = context.asInstanceOf[BarrierTaskContext].allGather(
               message
             )
             result = compact(render(JArray(
