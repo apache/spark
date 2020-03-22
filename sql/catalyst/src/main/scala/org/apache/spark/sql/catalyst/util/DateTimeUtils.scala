@@ -113,7 +113,7 @@ object DateTimeUtils {
   }
 
   /**
-   * The oposite to `fromJavaDate` method which converts a number of days to an
+   * The opposite to `fromJavaDate` method which converts a number of days to an
    * instance of `java.sql.Date`. It builds a local date in Proleptic Gregorian
    * calendar, extracts date fields `year`, `month`, `day`, and creates a local
    * date in the hybrid calendar (Julian + Gregorian calendars) from the fields.
@@ -123,7 +123,7 @@ object DateTimeUtils {
    * in the target calender.
    *
    * @param daysSinceEpoch The number of days since 1970-01-01.
-   * @return A java.sql.Date from number of days since epoch.
+   * @return A `java.sql.Date` from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
     val localDate = LocalDate.ofEpochDay(daysSinceEpoch)
@@ -131,7 +131,20 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns a java.sql.Timestamp from number of micros since epoch.
+   * Converts microseconds since the epoch to an instance of `java.sql.Timestamp`
+   * via creating a local timestamp at the system time zone in Proleptic Gregorian
+   * calendar, extracting date and time fields like `year` and `hours`, and forming
+   * new timestamp in the hybrid calendar from the extracted fields.
+   *
+   * The conversion is based on the JVM system time zone because the `java.sql.Timestamp`
+   * uses the time zone internally.
+   *
+   * The method performs the conversion via local timestamp fields to have the same date-time
+   * representation as `year`, `month`, `day`, ..., `seconds` in the original calendar
+   * and in the target calendar.
+   *
+   * @param us The number of microseconds since 1970-01-01T00:00:00.000000Z.
+   * @return A `java.sql.Timestamp` from number of micros since epoch.
    */
   def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
     val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
@@ -139,7 +152,23 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the number of micros since epoch from java.sql.Timestamp.
+   * Converts an instance of `java.sql.Timestamp` to the number of microseconds since
+   * 1970-01-01T00:00:00.000000Z. It extracts date-time fields from the input, builds
+   * a local timestamp in Proleptic Gregorian calendar from the fields, and binds
+   * the timestamp to the system time zone. The resulted instant is converted to
+   * microseconds since the epoch.
+   *
+   * The conversion is performed via the system time zone because it is used internally
+   * in `java.sql.Timestamp` while extracting date-time fields.
+   *
+   * The goal of the function is to have the same local date-time in the original calendar
+   * - the hybrid calendar (Julian + Gregorian) and in the target calendar which is
+   * Proleptic Gregorian calendar, see SPARK-26651.
+   *
+   * @param t It represents a specific instant in time based on
+   *          the hybrid calendar which combines Julian and
+   *          Gregorian calendars.
+   * @return The number of micros since epoch from `java.sql.Timestamp`.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
     val era = if (t.before(julianCommonEraStart)) 0 else 1
