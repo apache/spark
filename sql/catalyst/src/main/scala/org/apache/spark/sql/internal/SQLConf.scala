@@ -2684,11 +2684,205 @@ class SQLConf extends Serializable with Logging {
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
+  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def adaptiveExecutionLogLevel: String = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
+
+  def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
+
+  def initialShufflePartitionNum: Int =
+    getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(numShufflePartitions)
+
+  def fetchShuffleBlocksInBatch: Boolean = getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH)
+
+  def nonEmptyPartitionRatioForBroadcastJoin: Double =
+    getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
+
+  def subexpressionEliminationEnabled: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
+
+  def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
+
+  def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+
+  def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
+
+  def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
+
+  def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
+
+  def partitionColumnTypeInferenceEnabled: Boolean =
+    getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
+
+  def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+
+  def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
+
+  def fileCommitProtocolClass: String = getConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS)
+
+  def parallelPartitionDiscoveryThreshold: Int =
+    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
+
+  def parallelPartitionDiscoveryParallelism: Int =
+    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
+
+  def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
+
+  def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
+
+  def partitionOverwriteMode: PartitionOverwriteMode.Value =
+    PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+
+  def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
+
+  def isParquetSchemaRespectSummaries: Boolean = getConf(PARQUET_SCHEMA_RESPECT_SUMMARIES)
+
+  def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
+
+  def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
+
+  def isParquetINT96TimestampConversion: Boolean = getConf(PARQUET_INT96_TIMESTAMP_CONVERSION)
+
+  def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
+    ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
+  }
+
+  def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+
+  def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
+
+  def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
+
+  def parquetFilterPushDownTimestamp: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED)
+
+  def parquetFilterPushDownDecimal: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED)
+
+  def parquetFilterPushDownStringStartWith: Boolean =
+    getConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+
+  def parquetFilterPushDownInFilterThreshold: Int =
+    getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
+
+  def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
+
+  def parquetOutputCommitterClass: String = getConf(PARQUET_OUTPUT_COMMITTER_CLASS)
+
+  def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
+
+  def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
+
+  def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
+
+  def orcCompressionCodec: String = getConf(ORC_COMPRESSION)
+
+  def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
+
+  def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+
+  def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+
+  def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
+
+  def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
+
+  def broadcastTimeout: Long = {
+    val timeoutValue = getConf(BROADCAST_TIMEOUT)
+    if (timeoutValue < 0) Long.MaxValue else timeoutValue
+  }
+
+  def convertCTAS: Boolean = getConf(CONVERT_CTAS)
+
+  def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
+
+  def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
+
+  def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
+
+  def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
+
+  def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
+    getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
+
+  def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+
+  def dataFramePivotMaxValues: Int = getConf(DATAFRAME_PIVOT_MAX_VALUES)
+
+  def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
+
+  def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  def wholeStageUseIdInClassName: Boolean = getConf(WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME)
+
+  def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
+
+  def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
+
+  def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
+
+  def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
+
+  def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+
+  def methodSplitThreshold: Int = getConf(CODEGEN_METHOD_SPLIT_THRESHOLD)
+
+  def wholeStageSplitConsumeFuncByOperator: Boolean =
+    getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
+
+  def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
+
+  def enableVectorizedHashMap: Boolean = getConf(ENABLE_VECTORIZED_HASH_MAP)
+
+  def codegenSplitAggregateFunc: Boolean = getConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC)
+
+  def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
+  def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
+
+  def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
+
+  def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
+
+  def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
+
+  def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
+
+  def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
+
+  def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
+
+  def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
+
+  def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
+
+  def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
+
+  def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
+
+  def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
+
+  def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
+
+  def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
+
+  def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
+
+  def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
+
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
+
+  def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
+
+  def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
@@ -2720,120 +2914,165 @@ class SQLConf extends Serializable with Logging {
 
   def streamingProgressRetention: Int = getConf(STREAMING_PROGRESS_RETENTION)
 
-  def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
+  def continuousStreamingEpochBacklogQueueSize: Int =
+    getConf(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE)
 
-  def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
+  def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
-  def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
+  def continuousStreamingExecutorPollIntervalMs: Long =
+    getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
-  def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
+  def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 
-  def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
+  def disabledV2StreamingMicroBatchReaders: String =
+    getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
-  def orcCompressionCodec: String = getConf(ORC_COMPRESSION)
+  def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
-  def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
+  def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
-  def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+  def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
-  def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+  def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
-  def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
+  def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES)
 
-  def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
+  def parallelFileListingInStatsComputation: Boolean =
+    getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
 
-  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+  def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
-  def adaptiveExecutionLogLevel: String = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
+  def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
-  def fetchShuffleBlocksInBatch: Boolean = getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH)
+  def histogramEnabled: Boolean = getConf(HISTOGRAM_ENABLED)
 
-  def nonEmptyPartitionRatioForBroadcastJoin: Double =
-    getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
+  def histogramNumBins: Int = getConf(HISTOGRAM_NUM_BINS)
 
-  def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
+  def percentileAccuracy: Int = getConf(PERCENTILE_ACCURACY)
 
-  def initialShufflePartitionNum: Int =
-    getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(numShufflePartitions)
+  def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
 
-  def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
+  def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
-  def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
+  def planStatsEnabled: Boolean = getConf(SQLConf.PLAN_STATS_ENABLED)
 
-  def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
+  def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
-  def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
+  def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
-  def parquetFilterPushDownTimestamp: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED)
+  def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
 
-  def parquetFilterPushDownDecimal: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED)
+  def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
 
-  def parquetFilterPushDownStringStartWith: Boolean =
-    getConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+  def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
-  def parquetFilterPushDownInFilterThreshold: Int =
-    getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
+  def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
 
-  def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+  def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
-  def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
+  def windowExecBufferInMemoryThreshold: Int = getConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
-  def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
+  def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
-  def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+  def sortMergeJoinExecBufferInMemoryThreshold: Int =
+    getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
-  def wholeStageUseIdInClassName: Boolean = getConf(WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME)
+  def sortMergeJoinExecBufferSpillThreshold: Int =
+    getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD)
 
-  def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
+  def cartesianProductExecBufferInMemoryThreshold: Int =
+    getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
-  def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
+  def cartesianProductExecBufferSpillThreshold: Int =
+    getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
 
-  def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
+  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
-  def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
+  def pandasGroupedMapAssignColumnsByName: Boolean =
+    getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
-  def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+  def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
-  def methodSplitThreshold: Int = getConf(CODEGEN_METHOD_SPLIT_THRESHOLD)
+  def legacySizeOfNull: Boolean = {
+    // size(null) should return null under ansi mode.
+    getConf(SQLConf.LEGACY_SIZE_OF_NULL) && !getConf(ANSI_ENABLED)
+  }
 
-  def wholeStageSplitConsumeFuncByOperator: Boolean =
-    getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
+  def replaceDatabricksSparkAvroEnabled: Boolean =
+    getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)
 
-  def tableRelationCacheSize: Int =
-    getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
+  def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
-  def codegenCacheMaxEntries: Int = getConf(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES)
+  def exponentLiteralAsDecimalEnabled: Boolean =
+    getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
 
-  def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
+  def allowNegativeScaleOfDecimalEnabled: Boolean =
+    getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
-  def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
+  def createHiveTableByDefaultEnabled: Boolean =
+    getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
 
-  def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
+  def nameNonStructGroupingKeyAsValue: Boolean =
+    getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
-  def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+  def setCommandRejectsSparkCoreConfs: Boolean =
+    getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
-  def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+  def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
-  def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
-
-  def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
-
-  def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
-
-  def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
-
-  def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
-
-  def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
+  def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
+    LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
+  }
 
   def addSingleFileInAddFile: Boolean = getConf(LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE)
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
 
-  def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
-    LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
-  }
+  def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def parquetRebaseDateTimeEnabled: Boolean = getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME)
+
+  def avroRebaseDateTimeEnabled: Boolean = getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME)
+
+  def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
+
+  def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
+
+  def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
+
+  def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
+
+  def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
+    StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
+
+  def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
+
+  def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
+
+  def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
+
+  def replEagerEvalMaxNumRows: Int = getConf(SQLConf.REPL_EAGER_EVAL_MAX_NUM_ROWS)
+
+  def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
+
+  def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
+
+  def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
+
+  def truncateTableIgnorePermissionAcl: Boolean =
+    getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
+
+  def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+
+  def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
+
+  def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
+
+  def tableRelationCacheSize: Int =
+    getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
+
+  def codegenCacheMaxEntries: Int = getConf(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -2852,249 +3091,12 @@ class SQLConf extends Serializable with Logging {
    */
   def hintErrorHandler: HintErrorHandler = HintErrorLogger
 
-  def subexpressionEliminationEnabled: Boolean =
-    getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
-
-  def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
-
-  def isParquetSchemaRespectSummaries: Boolean = getConf(PARQUET_SCHEMA_RESPECT_SUMMARIES)
-
-  def parquetOutputCommitterClass: String = getConf(PARQUET_OUTPUT_COMMITTER_CLASS)
-
-  def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
-
-  def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
-
-  def isParquetINT96TimestampConversion: Boolean = getConf(PARQUET_INT96_TIMESTAMP_CONVERSION)
-
-  def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
-    ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
-  }
-
-  def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
-
-  def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
-
-  def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
-
-  def broadcastTimeout: Long = {
-    val timeoutValue = getConf(BROADCAST_TIMEOUT)
-    if (timeoutValue < 0) Long.MaxValue else timeoutValue
-  }
-
-  def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
-
-  def convertCTAS: Boolean = getConf(CONVERT_CTAS)
-
-  def partitionColumnTypeInferenceEnabled: Boolean =
-    getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
-
-  def fileCommitProtocolClass: String = getConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS)
-
-  def parallelPartitionDiscoveryThreshold: Int =
-    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
-
-  def parallelPartitionDiscoveryParallelism: Int =
-    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
-
-  def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
-
-  def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
-
-  def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
-    getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
-
-  def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
-
-  def dataFramePivotMaxValues: Int = getConf(DATAFRAME_PIVOT_MAX_VALUES)
-
-  def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
-
-  def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
-
-  def enableVectorizedHashMap: Boolean = getConf(ENABLE_VECTORIZED_HASH_MAP)
-
-  def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
-
-  def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
-
-  def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
-
   def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
 
   def hiveThriftServerSingleSession: Boolean =
     getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
 
-  def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
-
-  def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
-
-  def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
-
-  def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
-
-  def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
-
-  def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
-
-  def parallelFileListingInStatsComputation: Boolean =
-    getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
-
-  def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
-
-  def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES)
-
-  def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
-
-  def histogramEnabled: Boolean = getConf(HISTOGRAM_ENABLED)
-
-  def histogramNumBins: Int = getConf(HISTOGRAM_NUM_BINS)
-
-  def percentileAccuracy: Int = getConf(PERCENTILE_ACCURACY)
-
-  def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
-
-  def planStatsEnabled: Boolean = getConf(SQLConf.PLAN_STATS_ENABLED)
-
-  def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
-
-  def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
-
-  def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
-
-  def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
-
-  def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
-
-  def windowExecBufferInMemoryThreshold: Int = getConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
-
-  def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
-
-  def sortMergeJoinExecBufferInMemoryThreshold: Int =
-    getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
-
-  def sortMergeJoinExecBufferSpillThreshold: Int =
-    getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD)
-
-  def cartesianProductExecBufferInMemoryThreshold: Int =
-    getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
-
-  def cartesianProductExecBufferSpillThreshold: Int =
-    getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
-
-  def codegenSplitAggregateFunc: Boolean = getConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC)
-
-  def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
-
-  def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
-
-  def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
-
-  def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
-
-  def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
-
-  def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
-
-  def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
-
-  def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
-
-  def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
-
-  def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
-
-  def pandasGroupedMapAssignColumnsByName: Boolean =
-    getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
-
-  def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
-
-  def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
-
-  def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
-
-  def continuousStreamingEpochBacklogQueueSize: Int =
-    getConf(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE)
-
-  def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
-
-  def continuousStreamingExecutorPollIntervalMs: Long =
-    getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
-
-  def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
-
-  def disabledV2StreamingMicroBatchReaders: String =
-    getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
-
-  def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
-
-  def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
-
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
-
-  def partitionOverwriteMode: PartitionOverwriteMode.Value =
-    PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
-
-  def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
-    StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
-
-  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
-
-  def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
-
-  def legacySizeOfNull: Boolean = {
-    // size(null) should return null under ansi mode.
-    getConf(SQLConf.LEGACY_SIZE_OF_NULL) && !getConf(ANSI_ENABLED)
-  }
-
-  def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
-
-  def replEagerEvalMaxNumRows: Int = getConf(SQLConf.REPL_EAGER_EVAL_MAX_NUM_ROWS)
-
-  def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
-
-  def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
-
-  def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
-
-  def replaceDatabricksSparkAvroEnabled: Boolean =
-    getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)
-
-  def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
-
-  def exponentLiteralAsDecimalEnabled: Boolean =
-    getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
-
-  def allowNegativeScaleOfDecimalEnabled: Boolean =
-    getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
-
-  def createHiveTableByDefaultEnabled: Boolean =
-    getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
-
-  def truncateTableIgnorePermissionAcl: Boolean =
-    getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
-
-  def nameNonStructGroupingKeyAsValue: Boolean =
-    getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
-
-  def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
-
-  def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
-
-  def setCommandRejectsSparkCoreConfs: Boolean =
-    getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
-
-  def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
-
-  def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
-
-  def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
-
-  def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
-
-  def parquetRebaseDateTimeEnabled: Boolean = getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME)
-
-  def avroRebaseDateTimeEnabled: Boolean = getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME)
 
   /** ********************** SQLConf functionality methods ************ */
 
