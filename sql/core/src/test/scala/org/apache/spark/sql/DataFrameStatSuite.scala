@@ -126,14 +126,27 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
   }
 
-  test("SPARK-30532 pearson correlation to understand fully-qualified column name") {
+  test("SPARK-30532 stat functions to understand fully-qualified column name") {
     val df1 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table1")
     val df2 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table2")
     val dfx = df2.crossJoin(df1)
 
     assert(dfx.stat.corr("table1.num", "table2.num") != 0.0)
+    assert(dfx.stat.cov("table1.num", "table2.num") != 0.0)
+    assert(dfx.stat.approxQuantile("table1.num", Array(0.1), 0.0).length == 1)
+    assert(dfx.stat.approxQuantile("table2.num", Array(0.1), 0.0).length == 1)
+    assert(dfx.stat.freqItems(Array("table1.num", "table2.num")).collect()(0).length == 2)
 
     // this should throw "Reference 'num' is ambiguous"
+    intercept[AnalysisException] {
+      dfx.stat.freqItems(Array("num"))
+    }
+    intercept[AnalysisException] {
+      dfx.stat.approxQuantile("num", Array(0.1), 0.0)
+    }
+    intercept[AnalysisException] {
+      dfx.stat.cov("num", "num")
+    }
     intercept[AnalysisException] {
       dfx.stat.corr("num", "num")
     }
@@ -150,18 +163,6 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     val decimalData = Seq.tabulate(6)(i => (BigDecimal(i % 3), BigDecimal(i % 2))).toDF("a", "b")
     val decimalRes = decimalData.stat.cov("a", "b")
     assert(math.abs(decimalRes) < 1e-12)
-  }
-
-  test("SPARK-30532: covariance to understand fully-qualified column names") {
-    val df1 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table1")
-    val df2 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table2")
-    val dfx = df2.crossJoin(df1)
-
-    assert(dfx.stat.cov("table1.num", "table2.num") != 0.0)
-
-    intercept[AnalysisException] {
-      dfx.stat.cov("num", "num")
-    }
   }
 
   test("approximate quantile") {
@@ -293,20 +294,6 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     assert(res(1) > 2200000000.0)
   }
 
-  test("SPARK-30532 approxQuantile to understand fully-qualified column name") {
-    val df1 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table1")
-    val df2 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table2")
-    val dfx = df2.crossJoin(df1)
-
-    assert(dfx.stat.approxQuantile("table1.num", Array(0.1), 0.0).length == 1)
-    assert(dfx.stat.approxQuantile("table2.num", Array(0.1), 0.0).length == 1)
-
-    // this should throw "Reference 'num' is ambiguous"
-    intercept[AnalysisException] {
-      dfx.stat.approxQuantile("num", Array(0.1), 0.0)
-    }
-  }
-
   test("crosstab") {
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
       val rng = new Random()
@@ -427,18 +414,6 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
 
     assert(resultRow.get(0).asInstanceOf[Seq[String]].toSet == Set("1", "2", "3"))
     assert(resultRow.get(1).asInstanceOf[Seq[String]].toSet == Set("a", "b", null))
-  }
-
-  test("SPARK-30532: freqItems to understand fully-qualified column name") {
-    val df1 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table1")
-    val df2 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table2")
-    val dfx = df2.crossJoin(df1)
-
-    assert(dfx.stat.freqItems(Array("table1.num", "table2.num")).collect()(0).length == 2)
-
-    intercept[AnalysisException] {
-      dfx.stat.freqItems(Array("num"))
-    }
   }
 
   test("sampleBy") {
