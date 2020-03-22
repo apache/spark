@@ -202,7 +202,6 @@ private[ml] abstract class PSelector[T <: PSelectorModel[T]]
             .sortBy { case (res, _) => res.pValue }
             .take(getNumTopFeatures)
         }
-
       case "percentile" =>
         testResult
           .sortBy { case (res, _) => res.pValue }
