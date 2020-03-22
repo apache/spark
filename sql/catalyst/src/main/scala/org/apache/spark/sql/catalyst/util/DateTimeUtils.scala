@@ -100,7 +100,7 @@ object DateTimeUtils {
       .of(date.getYear + 1900, date.getMonth + 1, 1)
       .`with`(ChronoField.ERA, era)
       .plusDays(date.getDate - 1)
-    Math.toIntExact(localDate.toEpochDay)
+    localDateToDays(localDate)
   }
 
   /**
