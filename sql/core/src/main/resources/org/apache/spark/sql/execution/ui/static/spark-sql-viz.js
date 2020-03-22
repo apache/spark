@@ -212,7 +212,6 @@ function postprocessForAdditionalMetrics() {
   });
   var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") == "true";
   $("#stageId-and-taskId-checkbox").prop("checked", isChecked);
-  $(".stageId-and-taskId-metrics").hide();
   onClickAdditionalMetricsCheckbox(checkboxNode);
 }
 
@@ -223,9 +222,9 @@ function onClickAdditionalMetricsCheckbox(checkboxNode) {
   var additionalMetrics = $(".stageId-and-taskId-metrics");
   var isChecked = checkboxNode.prop("checked");
   if (isChecked) {
-      additionalMetrics.show();
+    additionalMetrics.show();
   } else {
-      additionalMetrics.hide();
+    additionalMetrics.hide();
   }
   window.localStorage.setItem("stageId-and-taskId-checked", isChecked);
 }
