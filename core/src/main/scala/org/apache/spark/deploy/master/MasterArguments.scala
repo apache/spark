@@ -94,7 +94,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) exte
   /**
    * Print usage and exit JVM with the given exit code.
    */
-  private def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int): Unit = {
     // scalastyle:off println
     System.err.println(
       "Usage: Master [options]\n" +

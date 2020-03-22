@@ -132,6 +132,10 @@ class SerdeTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data, "array<integer>")
         self.assertEqual(len(list(filter(lambda r: None in r.value, df.collect()))), 0)
 
+    def test_bytes_as_binary_type(self):
+        df = self.spark.createDataFrame([[b"abcd"]], "col binary")
+        self.assertEqual(df.first().col, bytearray(b'abcd'))
+
 
 if __name__ == "__main__":
     import unittest

@@ -38,7 +38,7 @@ class RandomRDDsSuite extends SparkFunSuite with MLlibTestSparkContext with Seri
       expectedNumPartitions: Int,
       expectedMean: Double,
       expectedStddev: Double,
-      epsilon: Double = 0.01) {
+      epsilon: Double = 0.01): Unit = {
     val stats = rdd.stats()
     assert(expectedSize === stats.count)
     assert(expectedNumPartitions === rdd.partitions.size)
@@ -53,7 +53,7 @@ class RandomRDDsSuite extends SparkFunSuite with MLlibTestSparkContext with Seri
       expectedNumPartitions: Int,
       expectedMean: Double,
       expectedStddev: Double,
-      epsilon: Double = 0.01) {
+      epsilon: Double = 0.01): Unit = {
     assert(expectedNumPartitions === rdd.partitions.size)
     val values = new ArrayBuffer[Double]()
     rdd.collect.foreach { vector => {

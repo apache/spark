@@ -20,11 +20,12 @@ license: |
 ---
 
 ### Description
-`CACHE TABLE` statement caches contents of a table or output of a query with the given storage level. This reduces scanning of the original files in future queries.
+`CACHE TABLE` statement caches contents of a table or output of a query with the given storage level. If a query is cached, then a temp view will be created for this query.
+This reduces scanning of the original files in future queries. 
 
 ### Syntax
 {% highlight sql %}
-CACHE [ LAZY ] TABLE table_name
+CACHE [ LAZY ] TABLE table_identifier
     [ OPTIONS ( 'storageLevel' [ = ] value ) ] [ [ AS ] query ]
 {% endhighlight %}
 
@@ -35,8 +36,14 @@ CACHE [ LAZY ] TABLE table_name
 </dl>
 
 <dl>
-  <dt><code><em>table_name</em></code></dt>
-  <dd>The name of the table to be cached.</dd>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies the table or view name to be cached. The table or view name may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
 </dl>
 
 <dl>
@@ -80,4 +87,5 @@ CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testDat
 ### Related Statements
   * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
   * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
+  * [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)
 

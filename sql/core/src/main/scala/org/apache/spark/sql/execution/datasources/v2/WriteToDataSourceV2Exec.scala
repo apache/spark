@@ -26,16 +26,15 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
-import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, TableCatalog}
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
-import org.apache.spark.sql.sources.v2.{StagedTable, SupportsWrite}
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
 
@@ -69,12 +68,12 @@ case class CreateTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends V2TableWriteExec with SupportsV1Write {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       if (ifNotExists) {
-        return sparkContext.parallelize(Seq.empty, 1)
+        return Nil
       }
 
       throw new TableAlreadyExistsException(ident)
@@ -85,9 +84,11 @@ case class CreateTableAsSelectExec(
       catalog.createTable(
         ident, schema, partitioning.toArray, properties.asJava) match {
         case table: SupportsWrite =>
-          val writeBuilder = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(schema)
-            .withQueryId(UUID.randomUUID().toString)
+          val info = LogicalWriteInfoImpl(
+            queryId = UUID.randomUUID().toString,
+            schema,
+            writeOptions)
+          val writeBuilder = table.newWriteBuilder(info)
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
@@ -124,10 +125,10 @@ case class AtomicCreateTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends AtomicTableWriteExec {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       if (ifNotExists) {
-        return sparkContext.parallelize(Seq.empty, 1)
+        return Nil
       }
 
       throw new TableAlreadyExistsException(ident)
@@ -158,9 +159,9 @@ case class ReplaceTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     orCreate: Boolean) extends V2TableWriteExec with SupportsV1Write {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
     // RTAS if the catalog does not support atomic operations.
     //
@@ -180,9 +181,11 @@ case class ReplaceTableAsSelectExec(
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       createdTable match {
         case table: SupportsWrite =>
-          val writeBuilder = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(schema)
-            .withQueryId(UUID.randomUUID().toString)
+          val info = LogicalWriteInfoImpl(
+            queryId = UUID.randomUUID().toString,
+            schema,
+            writeOptions)
+          val writeBuilder = table.newWriteBuilder(info)
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
@@ -222,7 +225,7 @@ case class AtomicReplaceTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     orCreate: Boolean) extends AtomicTableWriteExec {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     val schema = query.schema.asNullable
     val staged = if (orCreate) {
       catalog.stageCreateOrReplace(
@@ -252,7 +255,7 @@ case class AppendDataExec(
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     writeWithV2(newWriteBuilder().buildForBatch())
   }
 }
@@ -277,7 +280,7 @@ case class OverwriteByExpressionExec(
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
   }
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
         writeWithV2(builder.truncate().buildForBatch())
@@ -305,7 +308,7 @@ case class OverwritePartitionsDynamicExec(
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     newWriteBuilder() match {
       case builder: SupportsDynamicOverwrite =>
         writeWithV2(builder.overwriteDynamicPartitions().buildForBatch())
@@ -322,7 +325,7 @@ case class WriteToDataSourceV2Exec(
 
   def writeOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     writeWithV2(batchWrite)
   }
 }
@@ -336,16 +339,18 @@ trait BatchWriteHelper {
   def writeOptions: CaseInsensitiveStringMap
 
   def newWriteBuilder(): WriteBuilder = {
-    table.newWriteBuilder(writeOptions)
-      .withInputDataSchema(query.schema)
-      .withQueryId(UUID.randomUUID().toString)
+    val info = LogicalWriteInfoImpl(
+      queryId = UUID.randomUUID().toString,
+      query.schema,
+      writeOptions)
+    table.newWriteBuilder(info)
   }
 }
 
 /**
  * The base physical plan for writing data into data source v2.
  */
-trait V2TableWriteExec extends UnaryExecNode {
+trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
   def query: SparkPlan
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
@@ -353,18 +358,21 @@ trait V2TableWriteExec extends UnaryExecNode {
   override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
-  protected def writeWithV2(batchWrite: BatchWrite): RDD[InternalRow] = {
-    val writerFactory = batchWrite.createBatchWriterFactory()
-    val useCommitCoordinator = batchWrite.useCommitCoordinator
-    val rdd = query.execute()
-    // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
-    // partition rdd to make sure we at least set up one write task to write the metadata.
-    val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
-      sparkContext.parallelize(Array.empty[InternalRow], 1)
-    } else {
-      rdd
+  protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
+    val rdd: RDD[InternalRow] = {
+      val tempRdd = query.execute()
+      // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
+      // partition rdd to make sure we at least set up one write task to write the metadata.
+      if (tempRdd.partitions.length == 0) {
+        sparkContext.parallelize(Array.empty[InternalRow], 1)
+      } else {
+        tempRdd
+      }
     }
-    val messages = new Array[WriterCommitMessage](rddWithNonEmptyPartitions.partitions.length)
+    val writerFactory = batchWrite.createBatchWriterFactory(
+      PhysicalWriteInfoImpl(rdd.getNumPartitions))
+    val useCommitCoordinator = batchWrite.useCommitCoordinator
+    val messages = new Array[WriterCommitMessage](rdd.partitions.length)
     val totalNumRowsAccumulator = new LongAccumulator()
 
     logInfo(s"Start processing data source write support: $batchWrite. " +
@@ -372,10 +380,10 @@ trait V2TableWriteExec extends UnaryExecNode {
 
     try {
       sparkContext.runJob(
-        rddWithNonEmptyPartitions,
+        rdd,
         (context: TaskContext, iter: Iterator[InternalRow]) =>
           DataWritingSparkTask.run(writerFactory, context, iter, useCommitCoordinator),
-        rddWithNonEmptyPartitions.partitions.indices,
+        rdd.partitions.indices,
         (index, result: DataWritingSparkTaskResult) => {
           val commitMessage = result.writerCommitMessage
           messages(index) = commitMessage
@@ -407,7 +415,7 @@ trait V2TableWriteExec extends UnaryExecNode {
         }
     }
 
-    sparkContext.emptyRDD
+    Nil
   }
 }
 
@@ -465,23 +473,27 @@ object DataWritingSparkTask extends Logging {
       dataWriter.abort()
       logError(s"Aborted commit for partition $partId (task $taskId, attempt $attemptId, " +
             s"stage $stageId.$stageAttempt)")
+    }, finallyBlock = {
+      dataWriter.close()
     })
   }
 }
 
 private[v2] trait AtomicTableWriteExec extends V2TableWriteExec with SupportsV1Write {
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
   protected def writeToStagedTable(
       stagedTable: StagedTable,
       writeOptions: CaseInsensitiveStringMap,
-      ident: Identifier): RDD[InternalRow] = {
+      ident: Identifier): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       stagedTable match {
         case table: SupportsWrite =>
-          val writeBuilder = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(query.schema)
-            .withQueryId(UUID.randomUUID().toString)
+          val info = LogicalWriteInfoImpl(
+            queryId = UUID.randomUUID().toString,
+            query.schema,
+            writeOptions)
+          val writeBuilder = table.newWriteBuilder(info)
 
           val writtenRows = writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())

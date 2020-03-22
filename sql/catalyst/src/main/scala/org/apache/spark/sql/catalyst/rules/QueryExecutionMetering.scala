@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.google.common.util.concurrent.AtomicLongMap
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 
 case class QueryExecutionMetering() {
   private val timeMap = AtomicLongMap.create[String]()
@@ -37,12 +37,24 @@ case class QueryExecutionMetering() {
     timeEffectiveRunsMap.clear()
   }
 
+  def getMetrics(): QueryExecutionMetrics = {
+    QueryExecutionMetrics(totalTime, totalNumRuns, totalNumEffectiveRuns, totalEffectiveTime)
+  }
+
   def totalTime: Long = {
     timeMap.sum()
   }
 
   def totalNumRuns: Long = {
     numRunsMap.sum()
+  }
+
+  def totalNumEffectiveRuns: Long = {
+    numEffectiveRunsMap.sum()
+  }
+
+  def totalEffectiveTime: Long = {
+    timeEffectiveRunsMap.sum()
   }
 
   def incExecutionTimeBy(ruleName: String, delta: Long): Unit = {
@@ -93,5 +105,20 @@ case class QueryExecutionMetering() {
        |$colRuleName $colRunTime $colNumRuns
        |$ruleMetrics
      """.stripMargin
+  }
+}
+
+case class QueryExecutionMetrics(
+    time: Long,
+    numRuns: Long,
+    numEffectiveRuns: Long,
+    timeEffective: Long) {
+
+  def -(metrics: QueryExecutionMetrics): QueryExecutionMetrics = {
+    QueryExecutionMetrics(
+      this.time - metrics.time,
+      this.numRuns - metrics.numRuns,
+      this.numEffectiveRuns - metrics.numEffectiveRuns,
+      this.timeEffective - metrics.timeEffective)
   }
 }

@@ -23,11 +23,12 @@ import java.net.{URI, URL}
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 import java.util.{ServiceLoader, UUID}
+import java.util.jar.JarInputStream
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.util.{Properties, Try}
+import scala.util.{Failure, Properties, Success, Try}
 
 import org.apache.commons.io.FilenameUtils
 import org.apache.commons.lang3.StringUtils
@@ -437,6 +438,32 @@ private[spark] class SparkSubmit extends Logging {
       }.orNull
     }
 
+    // At this point, we have attempted to download all remote resources.
+    // Now we try to resolve the main class if our primary resource is a JAR.
+    if (args.mainClass == null && !args.isPython && !args.isR) {
+      try {
+        val uri = new URI(
+          Option(localPrimaryResource).getOrElse(args.primaryResource)
+        )
+        val fs = FileSystem.get(uri, hadoopConf)
+
+        Utils.tryWithResource(new JarInputStream(fs.open(new Path(uri)))) { jar =>
+          args.mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
+        }
+      } catch {
+        case e: Throwable =>
+          error(
+            s"Failed to get main class in JAR with error '${e.getMessage}'. " +
+            " Please specify one with --class."
+          )
+      }
+
+      if (args.mainClass == null) {
+        // If we still can't figure out the main class at this point, blow up.
+        error("No main class set in JAR; please specify one with --class.")
+      }
+    }
+
     // If we're running a python app, set the main class to our specific python runner
     if (args.isPython && deployMode == CLIENT) {
       if (args.primaryResource == PYSPARK_SHELL) {
@@ -746,6 +773,10 @@ private[spark] class SparkSubmit extends Logging {
           childArgs += ("--arg", arg)
         }
       }
+      // Pass the proxyUser to the k8s app so it is possible to add it to the driver args
+      if (args.proxyUser != null) {
+        childArgs += ("--proxy-user", args.proxyUser)
+      }
     }
 
     // Load any properties specified through --conf and the default properties file
@@ -1028,7 +1059,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Return whether the given primary resource requires running R.
    */
   private[deploy] def isR(res: String): Boolean = {
-    res != null && res.endsWith(".R") || res == SPARKR_SHELL
+    res != null && (res.endsWith(".R") || res.endsWith(".r")) || res == SPARKR_SHELL
   }
 
   private[deploy] def isInternal(res: String): Boolean = {

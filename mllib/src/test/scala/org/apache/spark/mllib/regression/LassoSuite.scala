@@ -33,7 +33,7 @@ private object LassoSuite {
 
 class LassoSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]): Unit = {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       // A prediction is off if the prediction is more than 0.5 away from expected value.
       math.abs(prediction - expected.label) > 0.5

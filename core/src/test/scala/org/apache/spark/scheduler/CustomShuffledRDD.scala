@@ -111,7 +111,7 @@ class CustomShuffledRDD[K, V, C](
       .asInstanceOf[Iterator[(K, C)]]
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     dependency = null
   }

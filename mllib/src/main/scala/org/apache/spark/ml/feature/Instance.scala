@@ -26,7 +26,7 @@ import org.apache.spark.ml.linalg.Vector
  * @param weight The weight of this instance.
  * @param features The vector of features for this data point.
  */
-private[ml] case class Instance(label: Double, weight: Double, features: Vector)
+private[spark] case class Instance(label: Double, weight: Double, features: Vector)
 
 /**
  * Case class that represents an instance of data point with

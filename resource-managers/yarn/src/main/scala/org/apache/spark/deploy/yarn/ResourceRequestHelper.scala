@@ -40,8 +40,10 @@ import org.apache.spark.util.{CausedBy, Utils}
 private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
+  private val RESOURCE_NOT_FOUND = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
   val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
   val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
+  @volatile private var numResourceErrors: Int = 0
 
   private[yarn] def getYarnResourcesAndAmounts(
       sparkConf: SparkConf,
@@ -76,7 +78,7 @@ private object ResourceRequestHelper extends Logging {
   ): Map[String, String] = {
     Map(GPU -> YARN_GPU_RESOURCE_CONFIG, FPGA -> YARN_FPGA_RESOURCE_CONFIG).map {
       case (rName, yarnName) =>
-        (yarnName -> sparkConf.get(ResourceID(confPrefix, rName).amountConf, "0"))
+        (yarnName -> sparkConf.get(new ResourceID(confPrefix, rName).amountConf, "0"))
     }.filter { case (_, count) => count.toLong > 0 }
   }
 
@@ -108,13 +110,13 @@ private object ResourceRequestHelper extends Logging {
       (AM_CORES.key, YARN_AM_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
-      (ResourceID(SPARK_EXECUTOR_PREFIX, "fpga").amountConf,
+      (new ResourceID(SPARK_EXECUTOR_PREFIX, "fpga").amountConf,
         s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${YARN_FPGA_RESOURCE_CONFIG}"),
-      (ResourceID(SPARK_DRIVER_PREFIX, "fpga").amountConf,
+      (new ResourceID(SPARK_DRIVER_PREFIX, "fpga").amountConf,
         s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${YARN_FPGA_RESOURCE_CONFIG}"),
-      (ResourceID(SPARK_EXECUTOR_PREFIX, "gpu").amountConf,
+      (new ResourceID(SPARK_EXECUTOR_PREFIX, "gpu").amountConf,
         s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${YARN_GPU_RESOURCE_CONFIG}"),
-      (ResourceID(SPARK_DRIVER_PREFIX, "gpu").amountConf,
+      (new ResourceID(SPARK_DRIVER_PREFIX, "gpu").amountConf,
         s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${YARN_GPU_RESOURCE_CONFIG}"))
 
     val errorMessage = new mutable.StringBuilder()
@@ -185,7 +187,24 @@ private object ResourceRequestHelper extends Logging {
               s"does not match pattern $AMOUNT_AND_UNIT_REGEX.")
         case CausedBy(e: IllegalArgumentException) =>
           throw new IllegalArgumentException(s"Invalid request for $name: ${e.getMessage}")
-        case e: InvocationTargetException if e.getCause != null => throw e.getCause
+        case e: InvocationTargetException =>
+          if (e.getCause != null) {
+            if (Try(Utils.classForName(RESOURCE_NOT_FOUND)).isSuccess) {
+              if (e.getCause().getClass().getName().equals(RESOURCE_NOT_FOUND)) {
+                // warn a couple times and then stop so we don't spam the logs
+                if (numResourceErrors < 2) {
+                  logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
+                    s"has to handle properly discovering and isolating the resource! Error: " +
+                    s"${e.getCause().getMessage}")
+                  numResourceErrors += 1
+                }
+              } else {
+                throw e.getCause
+              }
+            } else {
+              throw e.getCause
+            }
+          }
       }
     }
   }
@@ -206,6 +225,17 @@ private object ResourceRequestHelper extends Logging {
         resInfoNewInstanceMethod.invoke(null, resourceName, amount.asInstanceOf[JLong])
       }
     resourceInformation
+  }
+
+  def isYarnCustomResourcesNonEmpty(resource: Resource): Boolean = {
+    try {
+      // Use reflection as this uses APIs only available in Hadoop 3
+      val getResourcesMethod = resource.getClass().getMethod("getResources")
+      val resources = getResourcesMethod.invoke(resource).asInstanceOf[Array[Any]]
+      if (resources.nonEmpty) true else false
+    } catch {
+      case  _: NoSuchMethodException => false
+    }
   }
 
   /**

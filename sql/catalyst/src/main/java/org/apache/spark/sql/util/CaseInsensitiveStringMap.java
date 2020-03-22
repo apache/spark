@@ -36,6 +36,8 @@ import java.util.Set;
  * <p>
  * Methods that return keys in this map, like {@link #entrySet()} and {@link #keySet()}, return
  * keys converted to lower case. This map doesn't allow null key.
+ *
+ * @since 3.0.0
  */
 @Experimental
 public class CaseInsensitiveStringMap implements Map<String, String> {

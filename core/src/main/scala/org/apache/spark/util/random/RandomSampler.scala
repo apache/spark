@@ -201,7 +201,7 @@ class PoissonSampler[T](
   private val rng = new PoissonDistribution(if (fraction > 0.0) fraction else 1.0)
   private val rngGap = RandomSampler.newDefaultRNG
 
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     rng.reseedRandomGenerator(seed)
     rngGap.setSeed(seed)
   }

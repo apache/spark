@@ -51,7 +51,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    *
    * @param shardId assigned by the KCL to this particular RecordProcessor.
    */
-  override def initialize(shardId: String) {
+  override def initialize(shardId: String): Unit = {
     this.shardId = shardId
     logInfo(s"Initialized workerId $workerId with shardId $shardId")
   }
@@ -65,7 +65,8 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    * @param checkpointer used to update Kinesis when this batch has been processed/stored
    *   in the DStream
    */
-  override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
+  override def processRecords(batch: List[Record],
+      checkpointer: IRecordProcessorCheckpointer): Unit = {
     if (!receiver.isStopped()) {
       try {
         // Limit the number of processed records from Kinesis stream. This is because the KCL cannot

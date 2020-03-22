@@ -16,6 +16,7 @@
 #
 import os
 import random
+import shutil
 import stat
 import sys
 import tempfile
@@ -24,6 +25,9 @@ import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
 from pyspark.testing.utils import PySparkTestCase, SPARK_HOME
+
+if sys.version_info[0] >= 3:
+    xrange = range
 
 
 class TaskContextTests(PySparkTestCase):
@@ -131,6 +135,26 @@ class TaskContextTests(PySparkTestCase):
         times = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
         self.assertTrue(max(times) - min(times) < 1)
 
+    def test_all_gather(self):
+        """
+        Verify that BarrierTaskContext.allGather() performs global sync among all barrier tasks
+        within a stage and passes messages properly.
+        """
+        rdd = self.sc.parallelize(range(10), 4)
+
+        def f(iterator):
+            yield sum(iterator)
+
+        def context_barrier(x):
+            tc = BarrierTaskContext.get()
+            time.sleep(random.randint(1, 10))
+            out = tc.allGather(str(tc.partitionId()))
+            pids = [int(e) for e in out]
+            return pids
+
+        pids = rdd.barrier().mapPartitions(f).map(context_barrier).collect()[0]
+        self.assertEqual(pids, [0, 1, 2, 3])
+
     def test_barrier_infos(self):
         """
         Verify that BarrierTaskContext.getTaskInfos() returns a list of all task infos in the
@@ -145,6 +169,49 @@ class TaskContextTests(PySparkTestCase):
                                                        .getTaskInfos()).collect()
         self.assertTrue(len(taskInfos) == 4)
         self.assertTrue(len(taskInfos[0]) == 4)
+
+    def test_context_get(self):
+        """
+        Verify that TaskContext.get() works both in or not in a barrier stage.
+        """
+        rdd = self.sc.parallelize(range(10), 4)
+
+        def f(iterator):
+            taskContext = TaskContext.get()
+            if isinstance(taskContext, BarrierTaskContext):
+                yield taskContext.partitionId() + 1
+            elif isinstance(taskContext, TaskContext):
+                yield taskContext.partitionId() + 2
+            else:
+                yield -1
+
+        # for normal stage
+        result1 = rdd.mapPartitions(f).collect()
+        self.assertTrue(result1 == [2, 3, 4, 5])
+        # for barrier stage
+        result2 = rdd.barrier().mapPartitions(f).collect()
+        self.assertTrue(result2 == [1, 2, 3, 4])
+
+    def test_barrier_context_get(self):
+        """
+        Verify that BarrierTaskContext.get() should only works in a barrier stage.
+        """
+        rdd = self.sc.parallelize(range(10), 4)
+
+        def f(iterator):
+            try:
+                taskContext = BarrierTaskContext.get()
+            except Exception:
+                yield -1
+            else:
+                yield taskContext.partitionId()
+
+        # for normal stage
+        result1 = rdd.mapPartitions(f).collect()
+        self.assertTrue(result1 == [-1, -1, -1, -1])
+        # for barrier stage
+        result2 = rdd.barrier().mapPartitions(f).collect()
+        self.assertTrue(result2 == [0, 1, 2, 3])
 
 
 class TaskContextTestsWithWorkerReuse(unittest.TestCase):
@@ -181,6 +248,45 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         for pid in pids:
             self.assertTrue(pid in worker_pids)
 
+    def test_task_context_correct_with_python_worker_reuse(self):
+        """Verify the task context correct when reused python worker"""
+        # start a normal job first to start all workers and get all worker pids
+        worker_pids = self.sc.parallelize(xrange(2), 2).map(lambda x: os.getpid()).collect()
+        # the worker will reuse in this barrier job
+        rdd = self.sc.parallelize(xrange(10), 2)
+
+        def context(iterator):
+            tp = TaskContext.get().partitionId()
+            try:
+                bp = BarrierTaskContext.get().partitionId()
+            except Exception:
+                bp = -1
+
+            yield (tp, bp, os.getpid())
+
+        # normal stage after normal stage
+        normal_result = rdd.mapPartitions(context).collect()
+        tps, bps, pids = zip(*normal_result)
+        print(tps)
+        self.assertTrue(tps == (0, 1))
+        self.assertTrue(bps == (-1, -1))
+        for pid in pids:
+            self.assertTrue(pid in worker_pids)
+        # barrier stage after normal stage
+        barrier_result = rdd.barrier().mapPartitions(context).collect()
+        tps, bps, pids = zip(*barrier_result)
+        self.assertTrue(tps == (0, 1))
+        self.assertTrue(bps == (0, 1))
+        for pid in pids:
+            self.assertTrue(pid in worker_pids)
+        # normal stage after barrier stage
+        normal_result2 = rdd.mapPartitions(context).collect()
+        tps, bps, pids = zip(*normal_result2)
+        self.assertTrue(tps == (0, 1))
+        self.assertTrue(bps == (-1, -1))
+        for pid in pids:
+            self.assertTrue(pid in worker_pids)
+
     def tearDown(self):
         self.sc.stop()
 
@@ -192,6 +298,9 @@ class TaskContextTestsWithResources(unittest.TestCase):
         self.tempFile = tempfile.NamedTemporaryFile(delete=False)
         self.tempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
         self.tempFile.close()
+        # create temporary directory for Worker resources coordination
+        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(self.tempdir.name)
         os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
                  stat.S_IROTH | stat.S_IXOTH)
         conf = SparkConf().set("spark.test.home", SPARK_HOME)

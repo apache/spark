@@ -22,17 +22,18 @@ import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
+import com.google.common.cache.CacheBuilder
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
@@ -111,6 +112,47 @@ private[spark] class ByteBufferBlockData(
     }
   }
 
+}
+
+private[spark] class HostLocalDirManager(
+    futureExecutionContext: ExecutionContext,
+    cacheSize: Int,
+    externalBlockStoreClient: ExternalBlockStoreClient,
+    host: String,
+    externalShuffleServicePort: Int) extends Logging {
+
+  private val executorIdToLocalDirsCache =
+    CacheBuilder
+      .newBuilder()
+      .maximumSize(cacheSize)
+      .build[String, Array[String]]()
+
+  private[spark] def getCachedHostLocalDirs()
+      : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
+    import scala.collection.JavaConverters._
+    return executorIdToLocalDirsCache.asMap().asScala
+  }
+
+  private[spark] def getHostLocalDirs(
+      executorIds: Array[String])(
+      callback: Try[java.util.Map[String, Array[String]]] => Unit): Unit = {
+    val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
+    externalBlockStoreClient.getHostLocalDirs(
+      host,
+      externalShuffleServicePort,
+      executorIds,
+      hostLocalDirsCompletable)
+    hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
+      if (hostLocalDirs != null) {
+        callback(Success(hostLocalDirs))
+        executorIdToLocalDirsCache.synchronized {
+          executorIdToLocalDirsCache.putAll(hostLocalDirs)
+        }
+      } else {
+        callback(Failure(throwable))
+      }
+    }
+  }
 }
 
 /**
@@ -205,6 +247,8 @@ private[spark] class BlockManager(
   private[storage] val remoteBlockTempFileManager =
     new BlockManager.RemoteBlockDownloadFileManager(this)
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
+
+  var hostLocalDirManager: Option[HostLocalDirManager] = None
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -433,6 +477,21 @@ private[spark] class BlockManager(
       registerWithExternalShuffleServer()
     }
 
+    hostLocalDirManager =
+      if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
+          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+        externalBlockStoreClient.map { blockStoreClient =>
+          new HostLocalDirManager(
+            futureExecutionContext,
+            conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
+            blockStoreClient,
+            blockManagerId.host,
+            externalShuffleServicePort)
+        }
+      } else {
+        None
+      }
+
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
 
@@ -446,7 +505,7 @@ private[spark] class BlockManager(
     }
   }
 
-  private def registerWithExternalShuffleServer() {
+  private def registerWithExternalShuffleServer(): Unit = {
     logInfo("Registering executor with local external shuffle service.")
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirsString,
@@ -542,13 +601,19 @@ private[spark] class BlockManager(
     }
   }
 
+  override def getHostLocalShuffleData(
+      blockId: BlockId,
+      dirs: Array[String]): ManagedBuffer = {
+    shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
+  }
+
   /**
    * Interface to get local block data. Throws an exception if the block cannot be found or
    * cannot be read successfully.
    */
-  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+  override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+      shuffleManager.shuffleBlockResolver.getBlockData(blockId)
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -601,7 +666,11 @@ private[spark] class BlockManager(
         // stream.
         channel.close()
         val blockSize = channel.getCount
-        TempFileBasedBlockStoreUpdater(blockId, level, classTag, tmpFile, blockSize).save()
+        val blockStored = TempFileBasedBlockStoreUpdater(
+          blockId, level, classTag, tmpFile, blockSize).save()
+        if (!blockStored) {
+          throw new Exception(s"Failure while trying to store block $blockId on $blockManagerId.")
+        }
       }
 
       override def onFailure(streamId: String, cause: Throwable): Unit = {
@@ -853,7 +922,6 @@ private[spark] class BlockManager(
    * @param bufferTransformer this transformer expected to open the file if the block is backed by a
    *                          file by this it is guaranteed the whole content can be loaded
    * @tparam T result type
-   * @return
    */
   private[spark] def getRemoteBlock[T](
       blockId: BlockId,
@@ -1725,15 +1793,23 @@ private[spark] class BlockManager(
    * lock on the block.
    */
   private def removeBlockInternal(blockId: BlockId, tellMaster: Boolean): Unit = {
+    val blockStatus = if (tellMaster) {
+      val blockInfo = blockInfoManager.assertBlockIsLockedForWriting(blockId)
+      Some(getCurrentBlockStatus(blockId, blockInfo))
+    } else None
+
     // Removals are idempotent in disk store and memory store. At worst, we get a warning.
     val removedFromMemory = memoryStore.remove(blockId)
     val removedFromDisk = diskStore.remove(blockId)
     if (!removedFromMemory && !removedFromDisk) {
       logWarning(s"Block $blockId could not be removed as it was not found on disk or in memory")
     }
+
     blockInfoManager.removeBlock(blockId)
     if (tellMaster) {
-      reportBlockStatus(blockId, BlockStatus.empty)
+      // Only update storage level from the captured block status before deleting, so that
+      // memory size and disk size are being kept for calculating delta.
+      reportBlockStatus(blockId, blockStatus.get.copy(storageLevel = StorageLevel.NONE))
     }
   }
 
@@ -1831,7 +1907,7 @@ private[spark] object BlockManager {
     private val POLL_TIMEOUT = 1000
     @volatile private var stopped = false
 
-    private val cleaningThread = new Thread() { override def run() { keepCleaning() } }
+    private val cleaningThread = new Thread() { override def run(): Unit = { keepCleaning() } }
     cleaningThread.setDaemon(true)
     cleaningThread.setName("RemoteBlock-temp-file-clean-thread")
     cleaningThread.start()

@@ -140,4 +140,15 @@ private[thriftserver] class SparkSQLOperationManager()
     logDebug(s"Created GetFunctionsOperation with session=$parentSession.")
     operation
   }
+
+  override def newGetTypeInfoOperation(
+       parentSession: HiveSession): GetTypeInfoOperation = synchronized {
+    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+      " initialized or had already closed.")
+    val operation = new SparkGetTypeInfoOperation(sqlContext, parentSession)
+    handleToOperation.put(operation.getHandle, operation)
+    logDebug(s"Created GetTypeInfoOperation with session=$parentSession.")
+    operation
+  }
 }

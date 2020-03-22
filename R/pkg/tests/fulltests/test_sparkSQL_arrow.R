@@ -101,7 +101,7 @@ test_that("dapply() Arrow optimization", {
   tryCatch({
     ret <- dapply(df,
     function(rdf) {
-      stopifnot(class(rdf) == "data.frame")
+      stopifnot(is.data.frame(rdf))
       rdf
     },
     schema(df))
@@ -115,7 +115,7 @@ test_that("dapply() Arrow optimization", {
   tryCatch({
     ret <- dapply(df,
                   function(rdf) {
-                    stopifnot(class(rdf) == "data.frame")
+                    stopifnot(is.data.frame(rdf))
                     # mtcars' hp is more then 50.
                     stopifnot(all(rdf$hp > 50))
                     rdf
@@ -199,7 +199,7 @@ test_that("gapply() Arrow optimization", {
                    if (length(key) > 0) {
                      stopifnot(is.numeric(key[[1]]))
                    }
-                   stopifnot(class(grouped) == "data.frame")
+                   stopifnot(is.data.frame(grouped))
                    grouped
                  },
                  schema(df))
@@ -217,7 +217,7 @@ test_that("gapply() Arrow optimization", {
                    if (length(key) > 0) {
                      stopifnot(is.numeric(key[[1]]))
                    }
-                   stopifnot(class(grouped) == "data.frame")
+                   stopifnot(is.data.frame(grouped))
                    stopifnot(length(colnames(grouped)) == 11)
                    # mtcars' hp is more then 50.
                    stopifnot(all(grouped$hp > 50))

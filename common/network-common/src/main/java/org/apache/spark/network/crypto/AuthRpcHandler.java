@@ -125,6 +125,7 @@ class AuthRpcHandler extends RpcHandler {
       response.encode(responseData);
       callback.onSuccess(responseData.nioBuffer());
       engine.sessionCipher().addToChannel(channel);
+      client.setClientId(challenge.appId);
     } catch (Exception e) {
       // This is a fatal error: authentication has failed. Close the channel explicitly.
       LOG.debug("Authentication failed for client {}, closing channel.", channel.remoteAddress());

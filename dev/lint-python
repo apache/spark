@@ -16,9 +16,6 @@
 # limitations under the License.
 #
 # define test binaries + versions
-PYDOCSTYLE_BUILD="pydocstyle"
-MINIMUM_PYDOCSTYLE="3.0.0"
-
 FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.5.0"
 
@@ -26,6 +23,19 @@ PYCODESTYLE_BUILD="pycodestyle"
 MINIMUM_PYCODESTYLE="2.4.0"
 
 SPHINX_BUILD="sphinx-build"
+
+PYTHON_EXECUTABLE="python3"
+
+function satisfies_min_version {
+    local provided_version="$1"
+    local expected_version="$2"
+    echo "$(
+        "$PYTHON_EXECUTABLE" << EOM
+from setuptools.extern.packaging import version
+print(version.parse('$provided_version') >= version.parse('$expected_version'))
+EOM
+    )"
+}
 
 function compile_python_test {
     local COMPILE_STATUS=
@@ -36,9 +46,9 @@ function compile_python_test {
         exit 1;
     fi
 
-    # compileall: https://docs.python.org/2/library/compileall.html
+    # compileall: https://docs.python.org/3/library/compileall.html
     echo "starting python compilation test..."
-    COMPILE_REPORT=$( (python -B -mcompileall -q -l $1) 2>&1)
+    COMPILE_REPORT=$( ("$PYTHON_EXECUTABLE" -B -mcompileall -q -l -x "[/\\\\][.]git" $1) 2>&1)
     COMPILE_STATUS=$?
 
     if [ $COMPILE_STATUS -ne 0 ]; then
@@ -56,7 +66,7 @@ function pycodestyle_test {
     local PYCODESTYLE_STATUS=
     local PYCODESTYLE_REPORT=
     local RUN_LOCAL_PYCODESTYLE=
-    local VERSION=
+    local PYCODESTYLE_VERSION=
     local EXPECTED_PYCODESTYLE=
     local PYCODESTYLE_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-$MINIMUM_PYCODESTYLE.py"
     local PYCODESTYLE_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$MINIMUM_PYCODESTYLE/pycodestyle.py"
@@ -69,11 +79,8 @@ function pycodestyle_test {
     # check for locally installed pycodestyle & version
     RUN_LOCAL_PYCODESTYLE="False"
     if hash "$PYCODESTYLE_BUILD" 2> /dev/null; then
-        VERSION=$( $PYCODESTYLE_BUILD --version 2> /dev/null)
-        EXPECTED_PYCODESTYLE=$( (python -c 'from distutils.version import LooseVersion;
-                                print(LooseVersion("""'${VERSION[0]}'""") >= LooseVersion("""'$MINIMUM_PYCODESTYLE'"""))')\
-                                2> /dev/null)
-
+        PYCODESTYLE_VERSION="$($PYCODESTYLE_BUILD --version)"
+        EXPECTED_PYCODESTYLE="$(satisfies_min_version $PYCODESTYLE_VERSION $MINIMUM_PYCODESTYLE)"
         if [ "$EXPECTED_PYCODESTYLE" == "True" ]; then
             RUN_LOCAL_PYCODESTYLE="True"
         fi
@@ -96,7 +103,7 @@ function pycodestyle_test {
         fi
 
         echo "starting pycodestyle test..."
-        PYCODESTYLE_REPORT=$( (python "$PYCODESTYLE_SCRIPT_PATH" --config=dev/tox.ini $1) 2>&1)
+        PYCODESTYLE_REPORT=$( ("$PYTHON_EXECUTABLE" "$PYCODESTYLE_SCRIPT_PATH" --config=dev/tox.ini $1) 2>&1)
         PYCODESTYLE_STATUS=$?
     else
         # we have the right version installed, so run locally
@@ -117,7 +124,6 @@ function pycodestyle_test {
 
 function flake8_test {
     local FLAKE8_VERSION=
-    local VERSION=
     local EXPECTED_FLAKE8=
     local FLAKE8_REPORT=
     local FLAKE8_STATUS=
@@ -128,11 +134,9 @@ function flake8_test {
         exit 1
     fi
 
-    FLAKE8_VERSION="$($FLAKE8_BUILD --version  2> /dev/null)"
-    VERSION=($FLAKE8_VERSION)
-    EXPECTED_FLAKE8=$( (python -c 'from distutils.version import LooseVersion;
-                       print(LooseVersion("""'${VERSION[0]}'""") >= LooseVersion("""'$MINIMUM_FLAKE8'"""))') \
-                       2> /dev/null)
+    _FLAKE8_VERSION=($($FLAKE8_BUILD --version))
+    FLAKE8_VERSION="${_FLAKE8_VERSION[0]}"
+    EXPECTED_FLAKE8="$(satisfies_min_version $FLAKE8_VERSION $MINIMUM_FLAKE8)"
 
     if [[ "$EXPECTED_FLAKE8" == "False" ]]; then
         echo "\
@@ -154,50 +158,6 @@ flake8 checks failed."
         exit "$FLAKE8_STATUS"
     else
         echo "flake8 checks passed."
-        echo
-    fi
-}
-
-function pydocstyle_test {
-    local PYDOCSTYLE_REPORT=
-    local PYDOCSTYLE_STATUS=
-    local PYDOCSTYLE_VERSION=
-    local EXPECTED_PYDOCSTYLE=
-
-    # Exclude auto-generated configuration file.
-    local DOC_PATHS_TO_CHECK="$( cd "${SPARK_ROOT_DIR}" && find . -name "*.py" | grep -vF 'functions.py' )"
-
-    # Check python document style, skip check if pydocstyle is not installed.
-    if ! hash "$PYDOCSTYLE_BUILD" 2> /dev/null; then
-        echo "The pydocstyle command was not found. Skipping pydocstyle checks for now."
-        echo
-        return
-    fi
-
-    PYDOCSTYLE_VERSION="$($PYDOCSTYLEBUILD --version 2> /dev/null)"
-    EXPECTED_PYDOCSTYLE=$(python -c 'from distutils.version import LooseVersion; \
-                             print(LooseVersion("""'$PYDOCSTYLE_VERSION'""") >= LooseVersion("""'$MINIMUM_PYDOCSTYLE'"""))' \
-                             2> /dev/null)
-
-    if [[ "$EXPECTED_PYDOCSTYLE" == "False" ]]; then
-        echo "\
-The minimum version of pydocstyle needs to be $MINIMUM_PYDOCSTYLE.
-Your current version is $PYDOCSTYLE_VERSION.
-Skipping pydocstyle checks for now."
-        echo
-        return
-    fi
-
-    echo "starting $PYDOCSTYLE_BUILD test..."
-    PYDOCSTYLE_REPORT=$( ($PYDOCSTYLE_BUILD --config=dev/tox.ini $DOC_PATHS_TO_CHECK) 2>&1)
-    PYDOCSTYLE_STATUS=$?
-
-    if [ "$PYDOCSTYLE_STATUS" -ne 0 ]; then
-        echo "pydocstyle checks failed:"
-        echo "$PYDOCSTYLE_REPORT"
-        exit "$PYDOCSTYLE_STATUS"
-    else
-        echo "pydocstyle checks passed."
         echo
     fi
 }
@@ -247,7 +207,6 @@ PYTHON_SOURCE="$(find . -name "*.py")"
 compile_python_test "$PYTHON_SOURCE"
 pycodestyle_test "$PYTHON_SOURCE"
 flake8_test
-pydocstyle_test
 sphinx_test
 
 echo

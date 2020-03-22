@@ -348,7 +348,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
-    if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".R")) {
+    if (!appArgs.isEmpty() && (appArgs.get(0).endsWith(".R") || appArgs.get(0).endsWith(".r"))) {
       System.err.println(
         "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
         "Use ./bin/spark-submit <R file>");
@@ -390,9 +390,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
     String userDeployMode = firstNonEmpty(deployMode, userProps.get(SparkLauncher.DEPLOY_MODE));
     // Default master is "local[*]", so assume client mode in that case
-    return userMaster == null ||
-      "client".equals(userDeployMode) ||
-      (!userMaster.equals("yarn") && userDeployMode == null);
+    return userMaster == null || userDeployMode == null || "client".equals(userDeployMode);
   }
 
   /**

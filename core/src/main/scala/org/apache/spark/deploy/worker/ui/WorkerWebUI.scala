@@ -43,7 +43,7 @@ class WorkerWebUI(
   initialize()
 
   /** Initialize all components of the server. */
-  def initialize() {
+  def initialize(): Unit = {
     val logPage = new LogPage(this)
     attachPage(logPage)
     attachPage(new WorkerPage(this))

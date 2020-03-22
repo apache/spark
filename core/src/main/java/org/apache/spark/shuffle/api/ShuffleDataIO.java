@@ -46,4 +46,10 @@ public interface ShuffleDataIO {
    * are only invoked on the executors.
    */
   ShuffleExecutorComponents executor();
+
+  /**
+   * Called once on driver process to bootstrap the shuffle metadata modules that
+   * are maintained by the driver.
+   */
+  ShuffleDriverComponents driver();
 }

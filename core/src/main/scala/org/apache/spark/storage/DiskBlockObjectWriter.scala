@@ -150,7 +150,7 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Commits any remaining partial writes and closes resources.
    */
-  override def close() {
+  override def close(): Unit = {
     if (initialized) {
       Utils.tryWithSafeFinally {
         commitAndGet()
@@ -240,7 +240,7 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Writes a key-value pair.
    */
-  override def write(key: Any, value: Any) {
+  override def write(key: Any, value: Any): Unit = {
     if (!streamOpen) {
       open()
     }
@@ -276,14 +276,14 @@ private[spark] class DiskBlockObjectWriter(
    * Report the number of bytes written in this writer's shuffle write metrics.
    * Note that this is only valid before the underlying streams are closed.
    */
-  private def updateBytesWritten() {
+  private def updateBytesWritten(): Unit = {
     val pos = channel.position()
     writeMetrics.incBytesWritten(pos - reportedPosition)
     reportedPosition = pos
   }
 
   // For testing
-  private[spark] override def flush() {
+  private[spark] override def flush(): Unit = {
     objOut.flush()
     bs.flush()
   }

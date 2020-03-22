@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.File
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark._
@@ -26,13 +27,18 @@ import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 
 class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
-  test("global sync by barrier() call") {
+  def initLocalClusterSparkContext(): Unit = {
     val conf = new SparkConf()
       // Init local cluster here so each barrier task runs in a separated process, thus `barrier()`
       // call is actually useful.
       .setMaster("local-cluster[4, 1, 1024]")
       .setAppName("test-cluster")
+      .set(TEST_NO_STAGE_RETRY, true)
     sc = new SparkContext(conf)
+  }
+
+  test("global sync by barrier() call") {
+    initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -47,11 +53,84 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(times.max - times.min <= 1000)
   }
 
-  test("support multiple barrier() call within a single task") {
+  test("share messages with allGather() call") {
     val conf = new SparkConf()
       .setMaster("local-cluster[4, 1, 1024]")
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
+    val rdd = sc.makeRDD(1 to 10, 4)
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
+      // Sleep for a random time before global sync.
+      Thread.sleep(Random.nextInt(1000))
+      // Pass partitionId message in
+      val message: String = context.partitionId().toString
+      val messages: Array[String] = context.allGather(message)
+      messages.toList.iterator
+    }
+    // Take a sorted list of all the partitionId messages
+    val messages = rdd2.collect().head
+    // All the task partitionIds are shared
+    for((x, i) <- messages.view.zipWithIndex) assert(x.toString == i.toString)
+  }
+
+  test("throw exception if we attempt to synchronize with different blocking calls") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[4, 1, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+    val rdd = sc.makeRDD(1 to 10, 4)
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
+      val partitionId = context.partitionId
+      if (partitionId == 0) {
+        context.barrier()
+      } else {
+        context.allGather(partitionId.toString)
+      }
+      Seq(null).iterator
+    }
+    val error = intercept[SparkException] {
+      rdd2.collect()
+    }.getMessage
+    assert(
+      error.contains("does not match the current synchronized requestMethod") ||
+      error.contains("not properly killed")
+    )
+  }
+
+  test("successively sync with allGather and barrier") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[4, 1, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+    val rdd = sc.makeRDD(1 to 10, 4)
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
+      // Sleep for a random time before global sync.
+      Thread.sleep(Random.nextInt(1000))
+      context.barrier()
+      val time1 = System.currentTimeMillis()
+      // Sleep for a random time before global sync.
+      Thread.sleep(Random.nextInt(1000))
+      // Pass partitionId message in
+      val message = context.partitionId().toString
+      val messages = context.allGather(message)
+      val time2 = System.currentTimeMillis()
+      Seq((time1, time2)).iterator
+    }
+    val times = rdd2.collect()
+    // All the tasks shall finish the first round of global sync within a short time slot.
+    val times1 = times.map(_._1)
+    assert(times1.max - times1.min <= 1000)
+
+    // All the tasks shall finish the second round of global sync within a short time slot.
+    val times2 = times.map(_._2)
+    assert(times2.max - times2.min <= 1000)
+  }
+
+  test("support multiple barrier() call within a single task") {
+    initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -77,12 +156,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("throw exception on barrier() call timeout") {
-    val conf = new SparkConf()
-      .set("spark.barrier.sync.timeout", "1")
-      .set(TEST_NO_STAGE_RETRY, true)
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    initLocalClusterSparkContext()
+    sc.conf.set("spark.barrier.sync.timeout", "1")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -102,12 +177,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("throw exception if barrier() call doesn't happen on every task") {
-    val conf = new SparkConf()
-      .set("spark.barrier.sync.timeout", "1")
-      .set(TEST_NO_STAGE_RETRY, true)
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    initLocalClusterSparkContext()
+    sc.conf.set("spark.barrier.sync.timeout", "1")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -125,12 +196,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("throw exception if the number of barrier() calls are not the same on every task") {
-    val conf = new SparkConf()
-      .set("spark.barrier.sync.timeout", "1")
-      .set(TEST_NO_STAGE_RETRY, true)
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    initLocalClusterSparkContext()
+    sc.conf.set("spark.barrier.sync.timeout", "1")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -156,10 +223,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(error.contains("within 1 second(s)"))
   }
 
-
-  def testBarrierTaskKilled(sc: SparkContext, interruptOnCancel: Boolean): Unit = {
-    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
-
+  def testBarrierTaskKilled(interruptOnKill: Boolean): Unit = {
     withTempDir { dir =>
       val killedFlagFile = "barrier.task.killed"
       val rdd = sc.makeRDD(Seq(0, 1), 2)
@@ -181,12 +245,15 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
       val listener = new SparkListener {
         override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-          new Thread {
-            override def run: Unit = {
-              Thread.sleep(1000)
-              sc.killTaskAttempt(taskStart.taskInfo.taskId, interruptThread = false)
-            }
-          }.start()
+          val partitionId = taskStart.taskInfo.index
+          if (partitionId == 0) {
+            new Thread {
+              override def run: Unit = {
+                Thread.sleep(1000)
+                sc.killTaskAttempt(taskStart.taskInfo.taskId, interruptThread = interruptOnKill)
+              }
+            }.start()
+          }
         }
       }
       sc.addSparkListener(listener)
@@ -201,15 +268,13 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("barrier task killed") {
-    val conf = new SparkConf()
-      .set("spark.barrier.sync.timeout", "1")
-      .set(TEST_NO_STAGE_RETRY, true)
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+  test("barrier task killed, no interrupt") {
+    initLocalClusterSparkContext()
+    testBarrierTaskKilled(interruptOnKill = false)
+  }
 
-    testBarrierTaskKilled(sc, true)
-    testBarrierTaskKilled(sc, false)
+  test("barrier task killed, interrupt") {
+    initLocalClusterSparkContext()
+    testBarrierTaskKilled(interruptOnKill = true)
   }
 }

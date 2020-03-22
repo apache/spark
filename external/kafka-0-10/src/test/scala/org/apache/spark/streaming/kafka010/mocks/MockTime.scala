@@ -45,9 +45,9 @@ private[kafka010] class MockTime(@volatile private var currentMs: Long) extends 
   override def nanoseconds: Long =
     TimeUnit.NANOSECONDS.convert(currentMs, TimeUnit.MILLISECONDS)
 
-  override def sleep(ms: Long) {
+  override def sleep(ms: Long): Unit = {
     this.currentMs += ms
-    scheduler.tick()
+    scheduler.tick(ms, TimeUnit.MILLISECONDS)
   }
 
   override def waitObject(obj: Any, condition: Supplier[lang.Boolean], timeoutMs: Long): Unit =

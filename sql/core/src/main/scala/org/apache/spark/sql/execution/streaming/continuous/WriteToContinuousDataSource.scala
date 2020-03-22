@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
+import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 
 /**
  * The logical plan for writing data in a continuous stream.

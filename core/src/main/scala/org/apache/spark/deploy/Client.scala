@@ -219,7 +219,7 @@ private class ClientEndpoint(
  * Executable utility for starting and terminating drivers inside of a standalone cluster.
  */
 object Client {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // scalastyle:off println
     if (!sys.props.contains("SPARK_SUBMIT")) {
       println("WARNING: This client is deprecated and will be removed in a future version of Spark")

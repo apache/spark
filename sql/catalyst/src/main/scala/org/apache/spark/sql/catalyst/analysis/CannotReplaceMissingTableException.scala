@@ -19,7 +19,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.connector.catalog.Identifier
 
 class CannotReplaceMissingTableException(
     tableIdentifier: Identifier,

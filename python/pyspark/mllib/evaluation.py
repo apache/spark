@@ -20,7 +20,7 @@ import sys
 from pyspark import since
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.sql import SQLContext
-from pyspark.sql.types import StructField, StructType, DoubleType
+from pyspark.sql.types import ArrayType, StructField, StructType, DoubleType
 
 __all__ = ['BinaryClassificationMetrics', 'RegressionMetrics',
            'MulticlassMetrics', 'RankingMetrics']
@@ -182,7 +182,8 @@ class MulticlassMetrics(JavaModelWrapper):
     """
     Evaluator for multiclass classification.
 
-    :param predictionAndLabels: an RDD of prediction, label and optional weight.
+    :param predictionAndLabels: an RDD of prediction, label, optional weight
+     and optional probability.
 
     >>> predictionAndLabels = sc.parallelize([(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)])
@@ -239,6 +240,12 @@ class MulticlassMetrics(JavaModelWrapper):
     0.66...
     >>> metrics.weightedFMeasure(2.0)
     0.65...
+    >>> predictionAndLabelsWithProbabilities = sc.parallelize([
+    ...      (1.0, 1.0, 1.0, [0.1, 0.8, 0.1]), (0.0, 2.0, 1.0, [0.9, 0.05, 0.05]),
+    ...      (0.0, 0.0, 1.0, [0.8, 0.2, 0.0]), (1.0, 1.0, 1.0, [0.3, 0.65, 0.05])])
+    >>> metrics = MulticlassMetrics(predictionAndLabelsWithProbabilities)
+    >>> metrics.logLoss()
+    0.9682...
 
     .. versionadded:: 1.4.0
     """
@@ -250,8 +257,10 @@ class MulticlassMetrics(JavaModelWrapper):
         schema = StructType([
             StructField("prediction", DoubleType(), nullable=False),
             StructField("label", DoubleType(), nullable=False)])
-        if numCol == 3:
+        if numCol >= 3:
             schema.add("weight", DoubleType(), False)
+        if numCol == 4:
+            schema.add("probability", ArrayType(DoubleType(), False), False)
         df = sql_ctx.createDataFrame(predictionAndLabels, schema)
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MulticlassMetrics
         java_model = java_class(df._jdf)
@@ -355,6 +364,13 @@ class MulticlassMetrics(JavaModelWrapper):
             return self.call("weightedFMeasure")
         else:
             return self.call("weightedFMeasure", beta)
+
+    @since('3.0.0')
+    def logLoss(self, eps=1e-15):
+        """
+        Returns weighted logLoss.
+        """
+        return self.call("logLoss", eps)
 
 
 class RankingMetrics(JavaModelWrapper):

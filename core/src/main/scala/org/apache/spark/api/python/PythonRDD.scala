@@ -24,6 +24,7 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -179,15 +180,22 @@ private[spark] object PythonRDD extends Logging {
    *         data collected from this job, the secret for authentication, and a socket auth
    *         server object that can be used to join the JVM serving thread in Python.
    */
-  def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
+  def toLocalIteratorAndServe[T](rdd: RDD[T], prefetchPartitions: Boolean = false): Array[Any] = {
     val handleFunc = (sock: Socket) => {
       val out = new DataOutputStream(sock.getOutputStream)
       val in = new DataInputStream(sock.getInputStream)
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Collects a partition on each iteration
         val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
-          rdd.sparkContext.runJob(rdd, (iter: Iterator[Any]) => iter.toArray, Seq(i)).head
+          var result: Array[Any] = null
+          rdd.sparkContext.submitJob(
+            rdd,
+            (iter: Iterator[Any]) => iter.toArray,
+            Seq(i), // The partition we are evaluating
+            (_, res: Array[Any]) => result = res,
+            result)
         }
+        val prefetchIter = collectPartitionIter.buffered
 
         // Write data until iteration is complete, client stops iteration, or error occurs
         var complete = false
@@ -196,10 +204,15 @@ private[spark] object PythonRDD extends Logging {
           // Read request for data, value of zero will stop iteration or non-zero to continue
           if (in.readInt() == 0) {
             complete = true
-          } else if (collectPartitionIter.hasNext) {
+          } else if (prefetchIter.hasNext) {
 
             // Client requested more data, attempt to collect the next partition
-            val partitionArray = collectPartitionIter.next()
+            val partitionFuture = prefetchIter.next()
+            // Cause the next job to be submitted if prefetchPartitions is enabled.
+            if (prefetchPartitions) {
+              prefetchIter.headOption
+            }
+            val partitionArray = ThreadUtils.awaitResult(partitionFuture, Duration.Inf)
 
             // Send response there is a partition to read
             out.writeInt(1)
@@ -245,7 +258,7 @@ private[spark] object PythonRDD extends Logging {
     new PythonBroadcast(path)
   }
 
-  def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
+  def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream): Unit = {
 
     def write(obj: Any): Unit = obj match {
       case null =>
@@ -431,7 +444,7 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  def writeUTF(str: String, dataOut: DataOutputStream) {
+  def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
     val bytes = str.getBytes(StandardCharsets.UTF_8)
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)

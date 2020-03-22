@@ -132,7 +132,7 @@ object InterpretedUnsafeProjection {
       dt: DataType,
       nullable: Boolean): (SpecializedGetters, Int) => Unit = {
 
-    // Create the the basic writer.
+    // Create the basic writer.
     val unsafeWriter: (SpecializedGetters, Int) => Unit = dt match {
       case BooleanType =>
         (v, i) => writer.write(i, v.getBoolean(i))

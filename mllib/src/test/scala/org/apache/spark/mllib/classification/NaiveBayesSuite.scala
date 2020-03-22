@@ -91,7 +91,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import NaiveBayes.{Multinomial, Bernoulli}
 
-  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]): Unit = {
     val numOfPredictions = predictions.zip(input).count {
       case (prediction, expected) =>
         prediction != expected.label

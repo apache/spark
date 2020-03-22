@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object SerializerBuildHelper {
 
-  private def nullOnOverflow: Boolean = SQLConf.get.decimalOperationsNullOnOverflow
+  private def nullOnOverflow: Boolean = !SQLConf.get.ansiEnabled
 
   def createSerializerForBoolean(inputObject: Expression): Expression = {
     Invoke(inputObject, "booleanValue", BooleanType)
@@ -187,8 +187,12 @@ object SerializerBuildHelper {
     val nonNullOutput = CreateNamedStruct(fields.flatMap { case(fieldName, fieldExpr) =>
       argumentsForFieldSerializer(fieldName, fieldExpr)
     })
-    val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
-    expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
+    if (inputObject.nullable) {
+      val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
+      expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
+    } else {
+      nonNullOutput
+    }
   }
 
   def createSerializerForUserDefinedType(

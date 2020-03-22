@@ -63,6 +63,15 @@ class InducedErrorEstimator(Estimator, HasInducedError):
         return model
 
 
+class ParamGridBuilderTests(SparkSessionTestCase):
+
+    def test_addGrid(self):
+        with self.assertRaises(TypeError):
+            grid = (ParamGridBuilder()
+                    .addGrid("must be an instance of Param", ["not", "string"])
+                    .build())
+
+
 class CrossValidatorTests(SparkSessionTestCase):
 
     def test_copy(self):

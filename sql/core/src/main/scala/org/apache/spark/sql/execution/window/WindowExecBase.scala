@@ -26,11 +26,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
-abstract class WindowExecBase(
-    windowExpression: Seq[NamedExpression],
-    partitionSpec: Seq[Expression],
-    orderSpec: Seq[SortOrder],
-    child: SparkPlan) extends UnaryExecNode {
+trait WindowExecBase extends UnaryExecNode {
+  def windowExpression: Seq[NamedExpression]
+  def partitionSpec: Seq[Expression]
+  def orderSpec: Seq[SortOrder]
 
   /**
    * Create the resulting projection.
@@ -73,7 +72,7 @@ abstract class WindowExecBase(
         RowBoundOrdering(offset)
 
       case (RangeFrame, CurrentRow) =>
-        val ordering = newOrdering(orderSpec, child.output)
+        val ordering = RowOrdering.create(orderSpec, child.output)
         RangeBoundOrdering(ordering, IdentityProjection, IdentityProjection)
 
       case (RangeFrame, offset: Expression) if orderSpec.size == 1 =>
@@ -82,7 +81,7 @@ abstract class WindowExecBase(
         val expr = sortExpr.child
 
         // Create the projection which returns the current 'value'.
-        val current = newMutableProjection(expr :: Nil, child.output)
+        val current = MutableProjection.create(expr :: Nil, child.output)
 
         // Flip the sign of the offset when processing the order is descending
         val boundOffset = sortExpr.direction match {
@@ -97,13 +96,13 @@ abstract class WindowExecBase(
             TimeAdd(expr, boundOffset, Some(timeZone))
           case (a, b) if a == b => Add(expr, boundOffset)
         }
-        val bound = newMutableProjection(boundExpr :: Nil, child.output)
+        val bound = MutableProjection.create(boundExpr :: Nil, child.output)
 
         // Construct the ordering. This is used to compare the result of current value projection
         // to the result of bound value projection. This is done manually because we want to use
         // Code Generation (if it is enabled).
         val boundSortExprs = sortExpr.copy(BoundReference(0, expr.dataType, expr.nullable)) :: Nil
-        val ordering = newOrdering(boundSortExprs, Nil)
+        val ordering = RowOrdering.create(boundSortExprs, Nil)
         RangeBoundOrdering(ordering, current, bound)
 
       case (RangeFrame, _) =>
@@ -114,7 +113,7 @@ abstract class WindowExecBase(
 
   /**
    * Collection containing an entry for each window frame to process. Each entry contains a frame's
-   * [[WindowExpression]]s and factory function for the WindowFrameFunction.
+   * [[WindowExpression]]s and factory function for the [[WindowFrameFunction]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
     type FrameKey = (String, FrameType, Expression, Expression)
@@ -136,7 +135,7 @@ abstract class WindowExecBase(
         case e @ WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
-            case AggregateExpression(f, _, _, _) => collect("AGGREGATE", frame, e, f)
+            case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)
@@ -167,10 +166,10 @@ abstract class WindowExecBase(
             ordinal,
             child.output,
             (expressions, schema) =>
-              newMutableProjection(expressions, schema, subexpressionEliminationEnabled))
+              MutableProjection.create(expressions, schema))
         }
 
-        // Create the factory
+        // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
           // Offset Frame
           case ("OFFSET", _, IntegerLiteral(offset), _) =>
@@ -182,7 +181,7 @@ abstract class WindowExecBase(
                 functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
-                  newMutableProjection(expressions, schema, subexpressionEliminationEnabled),
+                  MutableProjection.create(expressions, schema),
                 offset)
 
           // Entire Partition Frame.
@@ -223,7 +222,7 @@ abstract class WindowExecBase(
         // Keep track of the number of expressions. This is a side-effect in a map...
         numExpressions += expressions.size
 
-        // Create the Frame Expression - Factory pair.
+        // Create the Window Expression - Frame Factory pair.
         (expressions, factory)
     }
   }

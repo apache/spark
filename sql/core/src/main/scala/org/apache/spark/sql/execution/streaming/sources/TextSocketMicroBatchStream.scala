@@ -28,9 +28,9 @@ import scala.collection.mutable.ListBuffer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.execution.streaming.LongOffset
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -85,7 +85,7 @@ class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
             TextSocketMicroBatchStream.this.synchronized {
               val newData = (
                 UTF8String.fromString(line),
-                DateTimeUtils.fromMillis(Calendar.getInstance().getTimeInMillis)
+                DateTimeUtils.millisToMicros(Calendar.getInstance().getTimeInMillis)
               )
               currentOffset += 1
               batches.append(newData)

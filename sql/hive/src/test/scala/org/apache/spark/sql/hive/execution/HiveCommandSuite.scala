@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
@@ -57,7 +58,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |STORED AS PARQUET
         |TBLPROPERTIES('prop1Key'="prop1Val", '`prop2Key`'="prop2Val")
       """.stripMargin)
-    sql("CREATE TABLE parquet_tab3(col1 int, `col 2` int)")
+    sql("CREATE TABLE parquet_tab3(col1 int, `col 2` int) USING hive")
     sql("CREATE TABLE parquet_tab4 (price int, qty int) partitioned by (year int, month int)")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 1) SELECT 1, 1")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 2) SELECT 2, 2")
@@ -129,10 +130,10 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show tblproperties for datasource table - errors") {
-    val message1 = intercept[NoSuchTableException] {
+    val message = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message1.contains("Table or view 'badtable' not found in database 'default'"))
+    assert(message.contains("Table not found: badtable"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
@@ -146,7 +147,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("prop2Val"))
   }
 
-  test("show tblproperties for spark temporary table - empty row") {
+  test("show tblproperties for spark temporary table - AnalysisException is thrown") {
     withTempView("parquet_temp") {
       sql(
         """
@@ -154,8 +155,10 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
          |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
 
-      // An empty sequence of row is returned for session temporary table.
-      checkAnswer(sql("SHOW TBLPROPERTIES parquet_temp"), Nil)
+      val message = intercept[AnalysisException] {
+        sql("SHOW TBLPROPERTIES parquet_temp")
+      }.getMessage
+      assert(message.contains("parquet_temp is a temp view not table"))
     }
   }
 
@@ -289,7 +292,29 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       }
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
-        sql("SELECT * FROM non_part_table").collect())
+        sql("SELECT * FROM non_part_table"))
+    }
+  }
+
+  test("SPARK-28084 case insensitive names of static partitioning in INSERT commands") {
+    withTable("part_table") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql("CREATE TABLE part_table (price int, qty int) partitioned by (year int, month int)")
+        sql("INSERT INTO part_table PARTITION(YEar = 2015, month = 1) SELECT 1, 1")
+        checkAnswer(sql("SELECT * FROM part_table"), Row(1, 1, 2015, 1))
+      }
+    }
+  }
+
+  test("SPARK-28084 case insensitive names of dynamic partitioning in INSERT commands") {
+    withTable("part_table") {
+      withSQLConf(
+        SQLConf.CASE_SENSITIVE.key -> "false",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql("CREATE TABLE part_table (price int) partitioned by (year int)")
+        sql("INSERT INTO part_table PARTITION(YEar) SELECT 1, 2019")
+        checkAnswer(sql("SELECT * FROM part_table"), Row(1, 2019))
+      }
     }
   }
 

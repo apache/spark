@@ -407,11 +407,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (seed != null) gmmAlg.setSeed(seed)
 
-    try {
-      new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK)))
-    } finally {
-      data.rdd.unpersist()
-    }
+    new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd))
   }
 
   /**
@@ -1311,7 +1307,7 @@ private[spark] abstract class SerDeBase {
       }
     }
 
-    private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler)
+    private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit
   }
 
   def dumps(obj: AnyRef): Array[Byte] = {

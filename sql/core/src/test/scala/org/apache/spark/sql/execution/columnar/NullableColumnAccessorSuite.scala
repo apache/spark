@@ -44,7 +44,8 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
     NULL, BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,
     STRING, BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
     STRUCT(StructType(StructField("a", StringType) :: Nil)),
-    ARRAY(ArrayType(IntegerType)), MAP(MapType(IntegerType, StringType)))
+    ARRAY(ArrayType(IntegerType)), MAP(MapType(IntegerType, StringType)),
+    CALENDAR_INTERVAL)
     .foreach {
     testNullableColumnAccessor(_)
   }
