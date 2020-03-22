@@ -95,8 +95,6 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       PreWriteCheck +:
         PreReadCheck +:
         CTASWriteChecker +:
-        V2WriteSupportCheck +:
-        V2StreamingScanSupportCheck +:
         TableCapabilityCheck +:
         CommandCheck(conf) +:
         customCheckRules
