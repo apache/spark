@@ -1221,6 +1221,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many finished executions the Spark UI and status APIs remember before garbage collecting.
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.ui.retainedBatches</code></td>
