@@ -54,7 +54,7 @@ private[sql] trait ScriptTransformBase extends UnaryExecNode {
 
 
   protected def checkFailureAndPropagate(
-      writerThread: ScriptTransformationWriterBase,
+      writerThread: ScriptTransformationWriterThreadBase,
       cause: Throwable = null,
       proc: Process,
       stderrBuffer: CircularBuffer): Unit = {
@@ -73,7 +73,7 @@ private[sql] trait ScriptTransformBase extends UnaryExecNode {
   }
 }
 
-private[sql] abstract class ScriptTransformationWriterBase(
+private[sql] abstract class ScriptTransformationWriterThreadBase(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
     outputStream: OutputStream,

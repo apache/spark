@@ -149,7 +149,7 @@ private class ScriptTransformationWriterThread(
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
     conf: Configuration)
-  extends ScriptTransformationWriterBase(
+  extends ScriptTransformationWriterThreadBase(
       iter,
       inputSchema,
       outputStream,

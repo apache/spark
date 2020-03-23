@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.script.{ScriptTransformationWriterBase, ScriptTransformBase, ScriptTransformIOSchema}
+import org.apache.spark.sql.execution.script.{ScriptTransformationWriterThreadBase, ScriptTransformBase, ScriptTransformIOSchema}
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types.DataType
@@ -225,7 +225,7 @@ private class HiveScriptTransformationWriterThread(
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
     conf: Configuration)
-  extends ScriptTransformationWriterBase(
+  extends ScriptTransformationWriterThreadBase(
       iter,
       inputSchema,
       outputStream,
