@@ -1066,6 +1066,35 @@ trait ShowCreateTableCommandBase {
   protected def concatByMultiLines(iter: Iterable[String]): String = {
     iter.mkString("(\n  ", ",\n  ", ")\n")
   }
+
+  protected def showViewDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    if (metadata.schema.nonEmpty) {
+      val viewColumns = metadata.schema.map { f =>
+        val comment = f.getComment()
+          .map(escapeSingleQuotedString)
+          .map(" COMMENT '" + _ + "'")
+
+        // view columns shouldn't have data type info
+        s"${quoteIdentifier(f.name)}${comment.getOrElse("")}"
+      }
+      builder ++= concatByMultiLines(viewColumns)
+    }
+  }
+
+  protected def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val viewProps = metadata.properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
+    if (viewProps.nonEmpty) {
+      val props = viewProps.map { case (key, value) =>
+        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+      }
+
+      builder ++= s"TBLPROPERTIES ${concatByMultiLines(props)}"
+    }
+  }
+
+  protected def showViewText(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    builder ++= metadata.viewText.mkString("AS ", "", "\n")
+  }
 }
 
 /**
@@ -1109,10 +1138,6 @@ case class ShowCreateTableCommand(table: TableIdentifier)
           )
         }
 
-        if (tableMetadata.tableType == VIEW) {
-          throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE")
-        }
-
         if ("true".equalsIgnoreCase(tableMetadata.properties.getOrElse("transactional", "false"))) {
           throw new AnalysisException(
             "SHOW CREATE TABLE doesn't support transactional Hive table. " +
@@ -1120,10 +1145,30 @@ case class ShowCreateTableCommand(table: TableIdentifier)
               "to show Hive DDL instead.")
         }
 
-        convertTableMetadata(tableMetadata)
+        if (tableMetadata.tableType == VIEW) {
+          tableMetadata
+        } else {
+          convertTableMetadata(tableMetadata)
+        }
       }
 
-      val stmt = showCreateDataSourceTable(metadata)
+      val builder = StringBuilder.newBuilder
+
+      val stmt = if (tableMetadata.tableType == VIEW) {
+        builder ++= s"CREATE VIEW ${table.quotedString} "
+
+        showViewDataColumns(metadata, builder)
+        showTableComment(metadata, builder)
+        showViewProperties(metadata, builder)
+        showViewText(metadata, builder)
+
+        builder.toString()
+      } else {
+        builder ++= s"CREATE TABLE ${table.quotedString} "
+
+        showCreateDataSourceTable(metadata, builder)
+        builder.toString()
+      }
 
       Seq(Row(stmt))
     }
@@ -1203,18 +1248,13 @@ case class ShowCreateTableCommand(table: TableIdentifier)
     }
   }
 
-  private def showCreateDataSourceTable(metadata: CatalogTable): String = {
-    val builder = StringBuilder.newBuilder
-
-    builder ++= s"CREATE TABLE ${table.quotedString} "
+  private def showCreateDataSourceTable(metadata: CatalogTable, builder: StringBuilder): Unit = {
     showDataSourceTableDataColumns(metadata, builder)
     showDataSourceTableOptions(metadata, builder)
     showDataSourceTableNonDataColumns(metadata, builder)
     showTableComment(metadata, builder)
     showTableLocation(metadata, builder)
     showTableProperties(metadata, builder)
-
-    builder.toString()
   }
 }
 
@@ -1270,7 +1310,7 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
           s"Unknown table type is found at showCreateHiveTable: $t")
     }
 
-    builder ++= s"CREATE$tableTypeString ${table.quotedString}"
+    builder ++= s"CREATE$tableTypeString ${table.quotedString} "
 
     if (metadata.tableType == VIEW) {
       showViewDataColumns(metadata, builder)
@@ -1287,35 +1327,6 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
     }
 
     builder.toString()
-  }
-
-  private def showViewDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    if (metadata.schema.nonEmpty) {
-      val viewColumns = metadata.schema.map { f =>
-        val comment = f.getComment()
-          .map(escapeSingleQuotedString)
-          .map(" COMMENT '" + _ + "'")
-
-        // view columns shouldn't have data type info
-        s"${quoteIdentifier(f.name)}${comment.getOrElse("")}"
-      }
-      builder ++= concatByMultiLines(viewColumns)
-    }
-  }
-
-  private def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val viewProps = metadata.properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
-    if (viewProps.nonEmpty) {
-      val props = viewProps.map { case (key, value) =>
-        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
-      }
-
-      builder ++= s"TBLPROPERTIES ${concatByMultiLines(props)}"
-    }
-  }
-
-  private def showViewText(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    builder ++= metadata.viewText.mkString("AS ", "", "\n")
   }
 
   private def showHiveTableHeader(metadata: CatalogTable, builder: StringBuilder): Unit = {
