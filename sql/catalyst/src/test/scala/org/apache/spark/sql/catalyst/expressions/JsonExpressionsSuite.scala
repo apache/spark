@@ -813,7 +813,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       checkEvaluation(LengthOfJsonArray(Literal(not_a_json_array)), null)
     }.getCause
 
-    assert(exception.isInstanceOf[AnalysisException])
+    assert(exception.isInstanceOf[IllegalArgumentException])
     assert(exception.getMessage.contains("can only be called on JSON array"))
   }
 }

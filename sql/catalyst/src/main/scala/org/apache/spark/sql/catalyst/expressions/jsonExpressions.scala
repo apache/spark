@@ -24,7 +24,6 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -805,8 +804,8 @@ case class SchemaOfJson(
   usage = "_FUNC_(jsonArray) - Returns the number of elements in outer JSON array.",
   arguments = """
     Arguments:
-      * jsonArray - A JSON array is required as argument. An Exception is thrown if any
-          other valid JSON strings are passed. `NULL` is returned in case of invalid JSON.
+      * jsonArray - A JSON array. An Exception is thrown if any other valid JSON strings are passed.
+          `NULL` is returned in case of invalid JSON.
   """,
   examples = """
     Examples:
@@ -847,13 +846,13 @@ case class LengthOfJsonArray(child: Expression)
     var length: Int = 0;
     // Only JSON array are supported for this function.
     if (parser.currentToken != JsonToken.START_ARRAY) {
-      throw new AnalysisException(s"$prettyName can only be called on JSON array.")
+      throw new IllegalArgumentException(s"$prettyName can only be called on JSON array.")
     }
     // Keep traversing until the end of JSON array
     while(parser.nextToken() != JsonToken.END_ARRAY) {
       // Null indicates end of input.
       if (parser.currentToken == null) {
-        throw new AnalysisException("Please provide a valid JSON array.")
+        throw new IllegalArgumentException("Please provide a valid JSON array.")
       }
       length += 1
       // skip all the child of inner object or array

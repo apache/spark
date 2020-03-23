@@ -399,7 +399,7 @@ select json_array_length('{"key":"not a json array"}')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+java.lang.IllegalArgumentException
 json_array_length can only be called on JSON array.;
 
 
