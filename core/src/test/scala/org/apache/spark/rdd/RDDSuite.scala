@@ -1296,7 +1296,7 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
       val fileSplit =
         partition.asInstanceOf[HadoopPartition].inputSplit.value.asInstanceOf[FileSplit]
       val splitSize = fileSplit.getLength
-      if (currentSum + splitSize < 10) {
+      if (currentSum + splitSize < maxSize) {
         addPartition(partition, splitSize)
       } else {
         if (currentGroup.partitions.isEmpty) {
