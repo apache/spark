@@ -769,8 +769,8 @@ object CollapseProject extends Rule[LogicalPlan] {
   }
 
   private def buildCleanedProjectList(
-    upper: Seq[NamedExpression],
-    lower: Seq[NamedExpression]): Seq[NamedExpression] = {
+      upper: Seq[NamedExpression],
+      lower: Seq[NamedExpression]): Seq[NamedExpression] = {
     // Create a map of Aliases to their values from the lower projection.
     // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
     val aliases = collectAliases(lower)
