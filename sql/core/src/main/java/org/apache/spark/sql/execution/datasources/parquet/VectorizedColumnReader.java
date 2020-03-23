@@ -462,15 +462,22 @@ public class VectorizedColumnReader {
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       }
     } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
-      for (int i = 0; i < num; i++) {
-        if (defColumn.readInteger() == maxDefLevel) {
-          long micros = DateTimeUtils.millisToMicros(dataColumn.readLong());
-          if (rebaseDateTime) {
-            micros = DateTimeUtils.rebaseJulianToGregorianMicros(micros);
+      if (rebaseDateTime) {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            long micros = DateTimeUtils.millisToMicros(dataColumn.readLong());
+            column.putLong(rowId + i, DateTimeUtils.rebaseJulianToGregorianMicros(micros));
+          } else {
+            column.putNull(rowId + i);
           }
-          column.putLong(rowId + i, micros);
-        } else {
-          column.putNull(rowId + i);
+        }
+      } else {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            column.putLong(rowId + i, DateTimeUtils.millisToMicros(dataColumn.readLong()));
+          } else {
+            column.putNull(rowId + i);
+          }
         }
       }
     } else {
