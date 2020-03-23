@@ -89,7 +89,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         // expected number of shuffle partitions. However, if it's smaller than
         // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
         // expected number of shuffle partitions.
-        math.max(nonShuffleChildrenNumPartitions.max, conf.numShufflePartitions)
+        math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
       } else {
         childrenNumPartitions.max
       }

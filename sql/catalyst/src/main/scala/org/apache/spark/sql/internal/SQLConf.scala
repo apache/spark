@@ -2701,11 +2701,13 @@ class SQLConf extends Serializable with Logging {
 
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
+  def defaultNumShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
+
   def numShufflePartitions: Int = {
     if (adaptiveExecutionEnabled && coalesceShufflePartitionsEnabled) {
-      getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(getConf(SHUFFLE_PARTITIONS))
+      getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(defaultNumShufflePartitions)
     } else {
-      getConf(SHUFFLE_PARTITIONS)
+      defaultNumShufflePartitions
     }
   }
 
