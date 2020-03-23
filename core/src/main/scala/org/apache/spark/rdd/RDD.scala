@@ -1703,7 +1703,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * :: Experimental ::
-   * Marks an RDD and it's ancestors non-persisted ancestors as no longer needed.
+   * Marks an RDD's shuffles and it's ancestors non-persisted ancestors as no longer needed.
    * This cleans up shuffle files aggressively to allow nodes to be terminated.
    * If you are uncertain of what you are doing please do not use this feature.
    * Additional techniques for mitigating orphaned shuffle files:
