@@ -145,22 +145,30 @@ class ANOVATestSuite
   }
 
   test("test DataFrame with sparse vector") {
-    val df = spark.createDataFrame(Seq(
-      (3, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0)))),
-      (1, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0)))),
-      (3, Vectors.sparse(6, Array((1, 9.0), (2, 3.0), (4, 5.0), (5, 5.0)))),
-      (2, Vectors.dense(Array(0.0, 9.0, 8.0, 5.0, 6.0, 4.0))),
-      (2, Vectors.dense(Array(8.0, 9.0, 6.0, 5.0, 4.0, 4.0))),
-      (3, Vectors.dense(Array(8.0, 9.0, 6.0, 4.0, 0.0, 0.0)))
-    )).toDF("label", "features")
+    val data = Seq(
+      (3, Vectors.dense(Array(6.0, 7.0, 0.0, 7.0, 6.0, 0.0, 0.0))),
+      (1, Vectors.dense(Array(0.0, 9.0, 6.0, 0.0, 5.0, 9.0, 0.0))),
+      (3, Vectors.dense(Array(0.0, 9.0, 3.0, 0.0, 5.0, 5.0, 0.0))),
+      (2, Vectors.dense(Array(0.0, 9.0, 8.0, 5.0, 6.0, 4.0, 0.0))),
+      (2, Vectors.dense(Array(8.0, 9.0, 6.0, 5.0, 4.0, 4.0, 0.0))),
+      (3, Vectors.dense(Array(8.0, 9.0, 6.0, 4.0, 0.0, 0.0, 0.0))))
 
-    val anovaResult = ANOVATest.test(df, "features", "label")
-    val (pValues: Vector, fValues: Vector) =
-      anovaResult.select("pValues", "fValues")
-        .as[(Vector, Vector)].head()
-    assert(pValues ~== Vectors.dense(0.71554175, 0.71554175, 0.34278574, 0.45824059, 0.84633632,
-      0.15673368) relTol 1e-6)
-    assert(fValues ~== Vectors.dense(0.375, 0.375, 1.5625, 1.02364865, 0.17647059,
-      3.66) relTol 1e-6)
+    val df1 = spark.createDataFrame(data.map(t => (t._1, t._2.toDense)))
+      .toDF("label", "features")
+    val df2 = spark.createDataFrame(data.map(t => (t._1, t._2.toSparse)))
+      .toDF("label", "features")
+    val df3 = spark.createDataFrame(data.map(t => (t._1, t._2.compressed)))
+      .toDF("label", "features")
+
+    Seq(df1, df2, df3).foreach { df =>
+      val anovaResult = ANOVATest.test(df, "features", "label")
+      val (pValues: Vector, fValues: Vector) =
+        anovaResult.select("pValues", "fValues")
+          .as[(Vector, Vector)].head()
+      assert(pValues ~== Vectors.dense(0.71554175, 0.71554175, 0.34278574, 0.45824059, 0.84633632,
+        0.15673368, Double.NaN) relTol 1e-6)
+      assert(fValues ~== Vectors.dense(0.375, 0.375, 1.5625, 1.02364865, 0.17647059,
+        3.66, Double.NaN) relTol 1e-6)
+    }
   }
 }
