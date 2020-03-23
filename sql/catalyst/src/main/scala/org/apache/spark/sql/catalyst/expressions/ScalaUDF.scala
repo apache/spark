@@ -59,8 +59,9 @@ case class ScalaUDF(
   /**
    * The analyzer should be aware of Scala primitive types so as to make the
    * UDF return null if there is any null input value of these types. On the
-   * other hand, Java UDFs can only have boxed types, thus this parameter will
-   * always be all false.
+   * other hand, Java UDFs can only have boxed types, thus this will return
+   * Nil(has same effect with all false) and analyzer will skip null-handling
+   * on them.
    */
   def inputPrimitives: Seq[Boolean] = {
     inputEncoders.map { encoderOpt =>
