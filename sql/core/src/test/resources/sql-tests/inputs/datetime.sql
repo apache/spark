@@ -68,10 +68,12 @@ select date_sub(timestamp'2011-11-11', 1);
 select date_sub(null, 1);
 select date_sub(date'2011-11-11', null);
 select date'2011-11-11' + 1E1;
+select date'2011-11-11' + '1';
 select null + date '2001-09-28';
 select date '2001-09-28' + 7Y;
 select 7S + date '2001-09-28';
 select date '2001-10-01' - 7;
+select date '2001-10-01' - '7';
 select date '2001-09-28' + null;
 select date '2001-09-28' - null;
 
