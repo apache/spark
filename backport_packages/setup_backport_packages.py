@@ -155,6 +155,12 @@ def change_import_paths_to_deprecated():
         """Check if select is exactly [airflow, . , models]"""
         return len([ch for ch in node.children[1].leaves()]) == 3
 
+    def remove_super_init_call(node: LN, capture: Capture, filename: Filename) -> None:
+        for ch in node.post_order():
+            if isinstance(ch, Leaf) and ch.value == "super":
+                if any(c.value for c in ch.parent.post_order() if isinstance(c, Leaf)):
+                    ch.parent.remove()
+
     changes = [
         ("airflow.operators.bash", "airflow.operators.bash_operator"),
         ("airflow.operators.python", "airflow.operators.python_operator"),
@@ -202,6 +208,9 @@ def change_import_paths_to_deprecated():
     files = r"bigquery\.py|mlengine\.py"  # noqa
     qry.select_module("airflow.models").is_filename(include=files).filter(pure_airflow_models_filter).rename(
         "airflow.models.baseoperator")
+
+    # Fix super().__init__() call in hooks
+    qry.select_subclass("BaseHook").modify(remove_super_init_call)
 
     qry.execute(write=True, silent=False, interactive=False)
 
