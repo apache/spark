@@ -86,7 +86,7 @@ private[sql] abstract class ScriptTransformationWriterBase(
   /** Contains the exception thrown while writing the parent iterator to the external process. */
   def exception: Option[Throwable] = Option(_exception)
 
-  def processRows(): Unit
+  protected def processRows(): Unit
 
   override def run(): Unit = Utils.logUncaughtExceptions {
     TaskContext.setTaskContext(taskContext)

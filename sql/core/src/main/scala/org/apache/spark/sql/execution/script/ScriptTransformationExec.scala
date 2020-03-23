@@ -191,7 +191,7 @@ private class ScriptTransformationWriterThread(
   protected val lineDelimiter = ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
   protected val fieldDelimiter = ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD")
 
-  protected override def processRows(): Unit = {
+  override def processRows(): Unit = {
     val len = inputSchema.length
     iter.foreach { row =>
       val data = if (len == 0) {
