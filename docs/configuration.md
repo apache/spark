@@ -361,6 +361,7 @@ of the most common options to set are:
     Which means to launch driver program locally ("client")
     or remotely ("cluster") on one of the nodes inside the cluster.
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.log.callerContext</code></td>
@@ -575,6 +576,7 @@ Apart from these, the following properties are also available, and may be useful
     Sets the number of latest rolling log files that are going to be retained by the system.
     Older log files will be deleted. Disabled by default.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.enableCompression</code></td>
@@ -583,6 +585,7 @@ Apart from these, the following properties are also available, and may be useful
     Enable executor log compression. If it is enabled, the rolled executor logs will be compressed.
     Disabled by default.
   </td>
+  <td>2.0.2</td>
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
@@ -592,6 +595,7 @@ Apart from these, the following properties are also available, and may be useful
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.strategy</code></td>
@@ -603,6 +607,7 @@ Apart from these, the following properties are also available, and may be useful
     For "size", use <code>spark.executor.logs.rolling.maxSize</code> to set
     the maximum file size for rolling.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.time.interval</code></td>
@@ -613,6 +618,7 @@ Apart from these, the following properties are also available, and may be useful
     any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.executor.userClassPathFirst</code></td>
@@ -692,6 +698,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma-separated list of files to be placed in the working directory of each executor. Globs are allowed.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.submit.pyFiles</code></td>
@@ -699,6 +706,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps. Globs are allowed.
   </td>
+  <td>1.0.1</td>
 </tr>
 <tr>
   <td><code>spark.jars</code></td>
@@ -706,6 +714,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma-separated list of jars to include on the driver and executor classpaths. Globs are allowed.
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.jars.packages</code></td>
@@ -778,7 +787,7 @@ Apart from these, the following properties are also available, and may be useful
 ### Shuffle Behavior
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.reducer.maxSizeInFlight</code></td>
   <td>48m</td>
@@ -788,6 +797,7 @@ Apart from these, the following properties are also available, and may be useful
     represents a fixed memory overhead per reduce task, so keep it small unless you have a
     large amount of memory.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.reducer.maxReqsInFlight</code></td>
@@ -798,6 +808,7 @@ Apart from these, the following properties are also available, and may be useful
     of inbound connections to one or more nodes, causing the workers to fail under load.
     By allowing it to limit the number of fetch requests, this scenario can be mitigated.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.reducer.maxBlocksInFlightPerAddress</code></td>
@@ -998,6 +1009,7 @@ Apart from these, the following properties are also available, and may be useful
     The codec to compress logged events. If this is not given,
     <code>spark.io.compression.codec</code> will be used.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.eventLog.erasureCoding.enabled</code></td>
@@ -1277,6 +1289,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether to compress broadcast variables before sending them. Generally a good idea.
     Compression will use <code>spark.io.compression.codec</code>.
   </td>
+  <td>0.6.0</td>
 </tr>
 <tr>
   <td><code>spark.checkpoint.compress</code></td>
@@ -1300,6 +1313,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>org.apache.spark.io.SnappyCompressionCodec</code>,
     and <code>org.apache.spark.io.ZStdCompressionCodec</code>.
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.io.compression.lz4.blockSize</code></td>
@@ -1309,6 +1323,7 @@ Apart from these, the following properties are also available, and may be useful
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
     Default unit is bytes, unless otherwise specified.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.io.compression.snappy.blockSize</code></td>
@@ -1318,6 +1333,7 @@ Apart from these, the following properties are also available, and may be useful
     Lowering this block size will also lower shuffle memory usage when Snappy is used.
     Default unit is bytes, unless otherwise specified.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.io.compression.zstd.level</code></td>
@@ -1326,6 +1342,7 @@ Apart from these, the following properties are also available, and may be useful
     Compression level for Zstd compression codec. Increasing the compression level will result in better
     compression at the expense of more CPU and memory.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.io.compression.zstd.bufferSize</code></td>
@@ -1335,6 +1352,7 @@ Apart from these, the following properties are also available, and may be useful
     is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
     might increase the compression cost because of excessive JNI call overhead.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kryo.classesToRegister</code></td>
@@ -1344,7 +1362,7 @@ Apart from these, the following properties are also available, and may be useful
     with Kryo.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
-  <th>1.2.0</th>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.kryo.referenceTracking</code></td>
@@ -1355,7 +1373,7 @@ Apart from these, the following properties are also available, and may be useful
     copies of the same object. Can be disabled to improve performance if you know this is not the
     case.
   </td>
-  <th>0.8.0</th>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.kryo.registrationRequired</code></td>
@@ -1367,7 +1385,7 @@ Apart from these, the following properties are also available, and may be useful
     significant performance overhead, so enabling this option can enforce strictly that a
     user has not omitted classes from registration.
   </td>
-  <th>1.1.0</th>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kryo.registrator</code></td>
@@ -1381,7 +1399,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
-  <th>0.5.0</th>
+  <td>0.5.0</td>
 </tr>
 <tr>
   <td><code>spark.kryo.unsafe</code></td>
@@ -1390,7 +1408,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether to use unsafe based Kryo serializer. Can be
     substantially faster by using Unsafe Based IO.
   </td>
-  <th>2.1.0</th>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kryoserializer.buffer.max</code></td>
@@ -1400,7 +1418,7 @@ Apart from these, the following properties are also available, and may be useful
     This must be larger than any object you attempt to serialize and must be less than 2048m.
     Increase this if you get a "buffer limit exceeded" exception inside Kryo.
   </td>
-  <th>1.4.0</th>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kryoserializer.buffer</code></td>
@@ -1410,7 +1428,7 @@ Apart from these, the following properties are also available, and may be useful
     Note that there will be one buffer <i>per core</i> on each worker. This buffer will grow up to
     <code>spark.kryoserializer.buffer.max</code> if needed.
   </td>
-  <th>1.4.0</th>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.rdd.compress</code></td>
@@ -1422,6 +1440,7 @@ Apart from these, the following properties are also available, and may be useful
     Can save substantial space at the cost of some extra CPU time.
     Compression will use <code>spark.io.compression.codec</code>.
   </td>
+  <td>0.6.0</td>
 </tr>
 <tr>
   <td><code>spark.serializer</code></td>
@@ -1437,6 +1456,7 @@ Apart from these, the following properties are also available, and may be useful
     <a href="api/scala/org/apache/spark/serializer/Serializer.html">
     <code>org.apache.spark.Serializer</code></a>.
   </td>
+  <td>0.5.0</td>
 </tr>
 <tr>
   <td><code>spark.serializer.objectStreamReset</code></td>
@@ -1448,13 +1468,14 @@ Apart from these, the following properties are also available, and may be useful
     objects to be collected. To turn off this periodic reset set it to -1.
     By default it will reset the serializer every 100 objects.
   </td>
+  <td>1.0.0</td>
 </tr>
 </table>
 
 ### Memory Management
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.memory.fraction</code></td>
   <td>0.6</td>
@@ -1521,6 +1542,7 @@ Apart from these, the following properties are also available, and may be useful
     on the driver, this may happen very occasionally or not at all. Not cleaning at all may
     lead to executors running out of disk space after a while.
   </td>
+  <td>1.6.0</td>
 </tr>
 <tr>
   <td><code>spark.cleaner.referenceTracking</code></td>
@@ -1528,6 +1550,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Enables or disables context cleaning.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.cleaner.referenceTracking.blocking</code></td>
@@ -1536,6 +1559,7 @@ Apart from these, the following properties are also available, and may be useful
     Controls whether the cleaning thread should block on cleanup tasks (other than shuffle, which is controlled by
     <code>spark.cleaner.referenceTracking.blocking.shuffle</code> Spark property).
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.cleaner.referenceTracking.blocking.shuffle</code></td>
@@ -1543,6 +1567,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Controls whether the cleaning thread should block on shuffle cleanup tasks.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.cleaner.referenceTracking.cleanCheckpoints</code></td>
@@ -1550,13 +1575,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Controls whether to clean checkpoint files if the reference is out of scope.
   </td>
+  <td>1.4.0</td>
 </tr>
 </table>
 
 ### Execution Behavior
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.broadcast.blockSize</code></td>
   <td>4m</td>
@@ -1565,6 +1591,7 @@ Apart from these, the following properties are also available, and may be useful
     specified. Too large a value decreases parallelism during broadcast (makes it slower); however, 
     if it is too small, <code>BlockManager</code> might take a performance hit.
   </td>
+  <td>0.5.0</td>
 </tr>
 <tr>
   <td><code>spark.broadcast.checksum</code></td>
@@ -1574,6 +1601,7 @@ Apart from these, the following properties are also available, and may be useful
     help detect corrupted blocks, at the cost of computing and sending a little more data. It's possible
     to disable it if the network has other mechanisms to guarantee data won't be corrupted during broadcast.
   </td>
+  <td>2.1.1</td>
 </tr>
 <tr>
   <td><code>spark.executor.cores</code></td>
@@ -1904,14 +1932,14 @@ Apart from these, the following properties are also available, and may be useful
     For users who enabled external shuffle service, this feature can only work when
     external shuffle service is at least 2.3.0.
   </td>
-  <td></td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
 ### Scheduling
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.cores.max</code></td>
   <td>(not set)</td>
@@ -1945,6 +1973,7 @@ Apart from these, the following properties are also available, and may be useful
     Customize the locality wait for node locality. For example, you can set this to 0 to skip
     node locality and search immediately for rack locality (if your cluster has rack information).
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.locality.wait.process</code></td>
@@ -1953,6 +1982,7 @@ Apart from these, the following properties are also available, and may be useful
     Customize the locality wait for process locality. This affects tasks that attempt to access
     cached data in a particular executor process.
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.locality.wait.rack</code></td>
@@ -1960,6 +1990,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Customize the locality wait for rack locality.
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.maxRegisteredResourcesWaitingTime</code></td>
@@ -1967,6 +1998,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Maximum amount of time to wait for resources to register before scheduling begins.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
@@ -1980,6 +2012,7 @@ Apart from these, the following properties are also available, and may be useful
     the maximum amount of time it will wait before scheduling begins is controlled by config
     <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code>.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.mode</code></td>
@@ -1990,6 +2023,7 @@ Apart from these, the following properties are also available, and may be useful
     to use fair sharing instead of queueing jobs one after another. Useful for
     multi-user services.
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.revive.interval</code></td>
@@ -1997,6 +2031,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The interval length for the scheduler to revive the worker resource offers to run tasks.
   </td>
+  <td>0.8.1</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
@@ -2062,6 +2097,7 @@ Apart from these, the following properties are also available, and may be useful
     The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
     TaskSet which is unschedulable because of being completely blacklisted.
   </td>
+  <td>2.4.1</td>
 </tr>
 <tr>
   <td><code>spark.blacklist.enabled</code></td>
@@ -2172,6 +2208,7 @@ Apart from these, the following properties are also available, and may be useful
     If set to "true", performs speculative execution of tasks. This means if one or more tasks are
     running slowly in a stage, they will be re-launched.
   </td>
+  <td>0.6.0</td>
 </tr>
 <tr>
   <td><code>spark.speculation.interval</code></td>
@@ -2179,6 +2216,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How often Spark will check for tasks to speculate.
   </td>
+  <td>0.6.0</td>
 </tr>
 <tr>
   <td><code>spark.speculation.multiplier</code></td>
@@ -2186,6 +2224,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many times slower a task is than the median to be considered for speculation.
   </td>
+  <td>0.6.0</td>
 </tr>
 <tr>
   <td><code>spark.speculation.quantile</code></td>
@@ -2193,6 +2232,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
+  <td>0.6.0</td>
 </tr>
 <tr>
   <td><code>spark.speculation.task.duration.threshold</code></td>
@@ -2207,6 +2247,7 @@ Apart from these, the following properties are also available, and may be useful
     the conf values of spark.executor.cores and spark.task.cpus minimum 1.
     Default unit is bytes, unless otherwise specified.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.task.cpus</code></td>
@@ -2300,7 +2341,7 @@ Apart from these, the following properties are also available, and may be useful
 ### Barrier Execution Mode
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.barrier.sync.timeout</code></td>
   <td>365d</td>
@@ -2310,6 +2351,7 @@ Apart from these, the following properties are also available, and may be useful
     configured time, throw a SparkException to fail all the tasks. The default value is set
     to 31536000(3600 * 24 * 365) so the <code>barrier()</code> call shall wait for one year.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.interval</code></td>
@@ -2324,6 +2366,7 @@ Apart from these, the following properties are also available, and may be useful
     config only applies to jobs that contain one or more barrier stages, we won't perform
     the check on non-barrier jobs.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures</code></td>
@@ -2338,13 +2381,14 @@ Apart from these, the following properties are also available, and may be useful
     applies to jobs that contain one or more barrier stages, we won't perform the check on
     non-barrier jobs.
   </td>
+  <td>2.4.0</td>
 </tr>
 </table>
 
 ### Dynamic Allocation
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.dynamicAllocation.enabled</code></td>
   <td>false</td>
@@ -2529,7 +2573,7 @@ Spark subsystems.
 ### Spark Streaming
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.streaming.backpressure.enabled</code></td>
   <td>false</td>
@@ -2542,6 +2586,7 @@ Spark subsystems.
     <code>spark.streaming.receiver.maxRate</code> and <code>spark.streaming.kafka.maxRatePerPartition</code>
     if they are set (see below).
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.backpressure.initialRate</code></td>
@@ -2550,6 +2595,7 @@ Spark subsystems.
     This is the initial maximum receiving rate at which each receiver will receive data for the
     first batch when the backpressure mechanism is enabled.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.blockInterval</code></td>
@@ -2560,6 +2606,7 @@ Spark subsystems.
     <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
      tuning</a> section in the Spark Streaming programming guide for more details.
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.receiver.maxRate</code></td>
@@ -2571,6 +2618,7 @@ Spark subsystems.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
     in the Spark Streaming programming guide for mode details.
   </td>
+  <td>1.0.2</td>
 </tr>
 <tr>
   <td><code>spark.streaming.receiver.writeAheadLog.enable</code></td>
@@ -2581,6 +2629,7 @@ Spark subsystems.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
     in the Spark Streaming programming guide for more details.
   </td>
+  <td>1.2.1</td>
 </tr>
 <tr>
   <td><code>spark.streaming.unpersist</code></td>
@@ -2592,6 +2641,7 @@ Spark subsystems.
     streaming application as they will not be cleared automatically. But it comes at the cost of
     higher memory usage in Spark.
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.stopGracefullyOnShutdown</code></td>
@@ -2600,6 +2650,7 @@ Spark subsystems.
     If <code>true</code>, Spark shuts down the <code>StreamingContext</code> gracefully on JVM
     shutdown rather than immediately.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.kafka.maxRatePerPartition</code></td>
@@ -2612,12 +2663,12 @@ Spark subsystems.
   </td>
 </tr>
 <tr>
-    <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
-    <td>1</td>
-    <td>
-      Minimum rate (number of records per second) at which data will be read from each Kafka
-      partition when using the new Kafka direct stream API.
-    </td>
+  <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
+  <td>1</td>
+  <td>
+    Minimum rate (number of records per second) at which data will be read from each Kafka
+    partition when using the new Kafka direct stream API.
+  </td>
 </tr>
 <tr>
   <td><code>spark.streaming.ui.retainedBatches</code></td>
@@ -2625,6 +2676,7 @@ Spark subsystems.
   <td>
     How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.driver.writeAheadLog.closeFileAfterWrite</code></td>
@@ -2634,6 +2686,7 @@ Spark subsystems.
     when you want to use S3 (or any file system that does not support flushing) for the metadata WAL
     on the driver.
   </td>
+  <td>1.6.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.receiver.writeAheadLog.closeFileAfterWrite</code></td>
@@ -2643,6 +2696,7 @@ Spark subsystems.
     when you want to use S3 (or any file system that does not support flushing) for the data WAL
     on the receivers.
   </td>
+  <td>1.6.0</td>
 </tr>
 </table>
 
