@@ -1703,6 +1703,39 @@ abstract class RDD[T: ClassTag](
 
   /**
    * :: Experimental ::
+   * Marks an RDD and it's ancestors non-persisted ancestors as no longer needed.
+   * This cleans up shuffle files aggressively to allow nodes to be terminated.
+   * If you are uncertain of what you are doing please do not use this feature.
+   * Additional techniques for mitigating orphaned shuffle files:
+   *   * Tuning the driver GC to be more aggressive so the regular context cleaner is triggered
+   *   * Setting an appropriate TTL for shuffle files to be auto cleaned
+   */
+  @Experimental
+  @DeveloperApi
+  @Since("3.1.0")
+  def cleanShuffleDependencies(blocking: Boolean = false): Unit = {
+    sc.cleaner.foreach { cleaner =>
+      /**
+       * Clean the shuffles & all of its parents.
+       */
+      def cleanEagerly(dep: Dependency[_]): Unit = {
+        if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
+          val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
+          cleaner.doCleanupShuffle(shuffleId, blocking)
+        }
+        val rdd = dep.rdd
+        val rddDeps = rdd.dependencies
+        if (rdd.getStorageLevel == StorageLevel.NONE && rddDeps != null) {
+          rddDeps.foreach(cleanEagerly)
+        }
+      }
+      dependencies.foreach(cleanEagerly)
+    }
+  }
+
+
+  /**
+   * :: Experimental ::
    * Marks the current stage as a barrier stage, where Spark must launch all tasks together.
    * In case of a task failure, instead of only restarting the failed task, Spark will abort the
    * entire stage and re-launch all tasks for this stage.

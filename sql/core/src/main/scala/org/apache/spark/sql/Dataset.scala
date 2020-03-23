@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
@@ -648,6 +648,39 @@ class Dataset[T] private[sql](
    * @since 2.1.0
    */
   def checkpoint(eager: Boolean): Dataset[T] = checkpoint(eager = eager, reliableCheckpoint = true)
+
+  /**
+   * :: Experimental ::
+   * Marks an Dataframe's shuffles and it's ancestors non-persisted ancestors as no longer needed.
+   * This cleans up shuffle files aggressively to allow nodes to be terminated.
+   * If you are uncertain of what you are doing please do not use this feature.
+   * Additional techniques for mitigating orphaned shuffle files:
+   *   * Tuning the driver GC to be more aggressive so the regular context cleaner is triggered
+   *   * Setting an appropriate TTL for shuffle files to be auto cleaned
+   *
+   * @since("3.1.0")
+   */
+  @Experimental
+  @DeveloperApi
+  def cleanShuffleDependencies(blocking: Boolean = false): Unit = {
+    sc.cleaner.foreach { cleaner =>
+      /**
+       * Clean the shuffles & all of its parents.
+       */
+      def cleanEagerly(dep: Dependency[_]): Unit = {
+        if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
+          val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
+          cleaner.doCleanupShuffle(shuffleId, blocking)
+        }
+        val rdd = dep.rdd
+        val rddDeps = rdd.dependencies
+        if (rdd.getStorageLevel == StorageLevel.NONE && rddDeps != null) {
+          rddDeps.foreach(cleanEagerly)
+        }
+      }
+      dependencies.foreach(cleanEagerly)
+    }
+  }
 
   /**
    * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be
