@@ -448,7 +448,7 @@ select json_object_keys('')
 -- !query schema
 struct<json_object_keys():int>
 -- !query output
-java.lang.RuntimeException
+java.lang.IllegalArgumentException
 json_object_keys expect a JSON object but nothing is provided.
 
 
@@ -529,7 +529,7 @@ select json_object_keys('[1, 2, 3]')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
+java.lang.IllegalArgumentException
 json_object_keys can only be called on JSON object.
 
 
