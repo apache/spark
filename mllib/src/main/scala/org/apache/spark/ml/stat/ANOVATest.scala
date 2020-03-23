@@ -148,7 +148,9 @@ object ANOVATest {
           (sum1 + sum2, sumOfSq1 + sumOfSq2, sums1)
       }
     ).mapValues { case (sum, sumOfSq, sums) =>
-      if (counts.contains(0.0)) { sums.update(0.0, 0.0) }
+      counts.keysIterator.foreach { label =>
+        if (!sums.contains(label)) sums.update(label, 0.0)
+      }
       computeANOVA(sum, sumOfSq, sums.toMap, counts)
     }.collectAsMap()
 
