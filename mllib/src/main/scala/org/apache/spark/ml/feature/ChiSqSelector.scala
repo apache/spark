@@ -106,6 +106,10 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
     new ChiSqSelectorModel(uid, indices)
   }
 
+  override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
+     super.fit(dataset)
+  }
+
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = super.transformSchema(schema)
 

@@ -106,6 +106,10 @@ final class VarianceThresholdSelector @Since("3.1.0")(@Since("3.1.0") override v
     new VarianceThresholdSelectorModel(uid, indices)
   }
 
+  override def fit(dataset: Dataset[_]): VarianceThresholdSelectorModel = {
+    super.fit(dataset)
+  }
+
   @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)

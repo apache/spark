@@ -106,6 +106,10 @@ final class FValueSelector @Since("3.1.0") (@Since("3.1.0") override val uid: St
     new FValueSelectorModel(uid, indices)
   }
 
+  override def fit(dataset: Dataset[_]): FValueSelectorModel = {
+    super.fit(dataset)
+  }
+
   @Since("3.1.0")
   override def copy(extra: ParamMap): this.type = defaultCopy(extra)
 }

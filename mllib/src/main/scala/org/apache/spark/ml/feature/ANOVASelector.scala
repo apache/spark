@@ -106,6 +106,10 @@ final class ANOVASelector @Since("3.1.0")(@Since("3.1.0") override val uid: Stri
     new ANOVASelectorModel(uid, indices)
   }
 
+  override def fit(dataset: Dataset[_]): ANOVASelectorModel = {
+    super.fit(dataset)
+  }
+
   @Since("3.1.0")
   override def copy(extra: ParamMap): this.type = defaultCopy(extra)
 }
