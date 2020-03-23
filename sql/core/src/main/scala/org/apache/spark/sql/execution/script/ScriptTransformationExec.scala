@@ -135,7 +135,7 @@ case class ScriptTransformationExec(
         }
         val prevLine = curLine
         curLine = reader.readLine()
-        if (!ioschema.schemaLess) {
+        if (!ioschema.isSchemaLess) {
           new GenericInternalRow(
             prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
               .map(CatalystTypeConverters.convertToCatalyst))
