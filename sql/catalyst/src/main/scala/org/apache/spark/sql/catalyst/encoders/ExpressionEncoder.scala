@@ -60,19 +60,6 @@ object ExpressionEncoder {
       ClassTag[T](cls))
   }
 
-  /**
-   * Unlike apply(), this method return None instead of throwing exception
-   * when there's no encoder found for the type `T`. This's mainly used for
-   * typed Scala UDF to workaround 'Any' type.
-   */
-  def applyOption[T : TypeTag](): Option[ExpressionEncoder[T]] = {
-    try {
-      Option(ExpressionEncoder[T]())
-    } catch {
-      case _: Exception => None
-    }
-  }
-
   // TODO: improve error message for java bean encoder.
   def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {
     val schema = JavaTypeInference.inferDataType(beanClass)._1
