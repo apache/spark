@@ -97,7 +97,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
           |c22 map<int,char(10)>,
           |c23 struct<a:int,b:int>,
           |c24 struct<c:varchar(10),d:int>
-          |)
+          |) USING hive
         """.stripMargin)
 
       val schema = hiveClient.getTable("default", "t").schema
