@@ -876,8 +876,8 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   usage = "_FUNC_(json_object) - returns all the keys of outer JSON object.",
   arguments = """
     Arguments:
-      * json_object - A JSON object is required as argument. `Null` is returned, if an invalid JSON
-          string is given. `Runtime Exception` is thrown, if null string or JSON array is given.
+      * json_object - A JSON object. If it is an invalid string, the function returns null.
+          If it is a JSON array or null, a runtime exception will be thrown.
   """,
   examples = """
     Examples:
@@ -897,7 +897,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
 
   override def eval(input: InternalRow): Any = {
     try {
-      lazy val json = child.eval(input).asInstanceOf[UTF8String]
+      val json = child.eval(input).asInstanceOf[UTF8String]
       Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
         parser => getJsonKeys(parser, input)
       }
@@ -910,12 +910,13 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
     var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
     // this handles `NULL` case
     if (parser.nextToken() == null) {
-      throw new RuntimeException(s"$prettyName expect a JSON object but nothing is provided.")
+      throw new IllegalArgumentException(
+        s"$prettyName expect a JSON object but nothing is provided.")
     }
 
     // when a JSON array is found, throw a runtime exception
     if (parser.currentToken() == JsonToken.START_ARRAY) {
-      throw new RuntimeException(s"$prettyName can only be called on JSON object.")
+      throw new IllegalArgumentException(s"$prettyName can only be called on JSON object.")
     }
 
     // traverse until the end of input and ensure it returns valid key

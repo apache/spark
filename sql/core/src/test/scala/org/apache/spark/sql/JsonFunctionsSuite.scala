@@ -711,8 +711,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("json_object_keys") {
-    val df = Seq("""{"a": 1, "b": 2, "c": 3}""".stripMargin)
-      .toDF("json")
+    val df = Seq("""{"a": 1, "b": 2, "c": 3}""".stripMargin).toDF("json")
     val dfKeys = df.selectExpr("json_object_keys(json)")
     checkAnswer(dfKeys, Row(Array("a", "b", "c")))
   }
