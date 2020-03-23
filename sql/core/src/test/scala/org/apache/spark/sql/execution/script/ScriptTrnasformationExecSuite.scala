@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.script
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterEach
@@ -86,23 +86,6 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedSparkSession
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("cat with LazySimpleSerDe") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-
-    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    checkAnswer(
-      rowsDf,
-      (child: SparkPlan) => new ScriptTransformationExec(
-        input = Seq(rowsDf.col("a").expr),
-        script = "cat",
-        output = Seq(AttributeReference("a", StringType)()),
-        child = child,
-        ioschema = noSerdeIOSchema
-      ),
-      rowsDf.collect())
-    assert(uncaughtExceptionHandler.exception.isEmpty)
-  }
-
   test("script transformation should not swallow errors from upstream operators (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
@@ -124,26 +107,6 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedSparkSession
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("script transformation should not swallow errors from upstream operators (with serde)") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-
-    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    val e = intercept[TestFailedException] {
-      checkAnswer(
-        rowsDf,
-        (child: SparkPlan) => new ScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
-          script = "cat",
-          output = Seq(AttributeReference("a", StringType)()),
-          child = ExceptionInjectingOperator(child),
-          ioschema = noSerdeIOSchema
-        ),
-        rowsDf.collect())
-    }
-    assert(e.getMessage().contains("intentional exception"))
-    // Before SPARK-25158, uncaughtExceptionHandler will catch IllegalArgumentException
-    assert(uncaughtExceptionHandler.exception.isEmpty)
-  }
 
   test("SPARK-14400 script transformation should fail for bad script command") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
@@ -190,22 +153,20 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedSparkSession
 
     withTempView("v") {
       val df = Seq(
-        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
-        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
-        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
-      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
+        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1), Date.valueOf("2015-05-21")),
+        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2), Date.valueOf("2015-05-22")),
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3), Date.valueOf("2015-05-23"))
+      ).toDF("a", "b", "c", "d", "e", "f") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
       val query = sql(
         s"""
            |SELECT
-           |TRANSFORM(a, b, c, d, e)
-           |USING 'python $scriptFilePath' AS (a, b, c, d, e)
+           |TRANSFORM(a, b, c, d, e, f)
+           |USING 'python $scriptFilePath' AS (a, b, c, d, e, f)
            |FROM v
         """.stripMargin)
 
-      // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
-      // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
       val decimalToString: Column => Column = c => c.cast("string")
 
       checkAnswer(query, identity, df.select(
@@ -213,7 +174,8 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedSparkSession
         'b.cast("string"),
         'c.cast("string"),
         decimalToString('d),
-        'e.cast("string")).collect())
+        'e.cast("string"),
+        'f.cast("string")).collect())
     }
   }
 }

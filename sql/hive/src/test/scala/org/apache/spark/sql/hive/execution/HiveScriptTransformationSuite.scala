@@ -41,7 +41,7 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
   with BeforeAndAfterEach {
   import spark.implicits._
 
-  private val noSerdeIOSchema = HiveScriptIOSchema(
+  private val noSerdeIOSchema = new HiveScriptIOSchema(
     inputRowFormat = Seq.empty,
     outputRowFormat = Seq.empty,
     inputSerdeClass = None,
@@ -53,9 +53,16 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
     schemaLess = false
   )
 
-  private val serdeIOSchema = noSerdeIOSchema.copy(
+  private val serdeIOSchema = new HiveScriptIOSchema(
+    inputRowFormat = Seq.empty,
+    outputRowFormat = Seq.empty,
     inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
-    outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
+    outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
+    inputSerdeProps = Seq.empty,
+    outputSerdeProps = Seq.empty,
+    recordReaderClass = None,
+    recordWriterClass = None,
+    schemaLess = false
   )
 
   private var defaultUncaughtExceptionHandler: Thread.UncaughtExceptionHandler = _

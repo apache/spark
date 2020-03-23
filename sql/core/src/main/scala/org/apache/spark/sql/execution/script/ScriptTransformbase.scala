@@ -53,8 +53,8 @@ private[sql] trait ScriptTransformBase extends UnaryExecNode {
       hadoopConf: Configuration) : Iterator[InternalRow]
 
 
-  private def checkFailureAndPropagate(
-      writerThread: ScriptTransformationWriterThread,
+  protected def checkFailureAndPropagate(
+      writerThread: ScriptTransformationWriterBase,
       cause: Throwable = null,
       proc: Process,
       stderrBuffer: CircularBuffer): Unit = {

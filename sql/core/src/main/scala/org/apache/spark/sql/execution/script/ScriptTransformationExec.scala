@@ -19,21 +19,23 @@ package org.apache.spark.sql.execution.script
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.sql.Date
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
+import org.apache.spark.sql.types.{DataType, DateType, TimestampType}
+import org.apache.spark.util.{CircularBuffer, RedirectThread}
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -48,13 +50,13 @@ case class ScriptTransformationExec(
     output: Seq[Attribute],
     child: SparkPlan,
     ioschema: ScriptTransformIOSchema)
-  extends UnaryExecNode {
+  extends ScriptTransformBase {
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  def processIterator(inputIterator: Iterator[InternalRow], hadoopConf: Configuration)
+  override def processIterator(inputIterator: Iterator[InternalRow], hadoopConf: Configuration)
   : Iterator[InternalRow] = {
     val cmd = List("/bin/bash", "-c", script)
     val builder = new ProcessBuilder(cmd.asJava)
@@ -94,27 +96,12 @@ case class ScriptTransformationExec(
       var curLine: String = null
       val mutableRow = new SpecificInternalRow(output.map(_.dataType))
 
-      private def checkFailureAndPropagate(cause: Throwable = null): Unit = {
-        if (writerThread.exception.isDefined) {
-          throw writerThread.exception.get
-        }
-
-        if (!proc.isAlive) {
-          val exitCode = proc.exitValue()
-          if (exitCode != 0) {
-            logError(stderrBuffer.toString) // log the stderr circular buffer
-            throw new SparkException(s"Subprocess exited with status $exitCode. " +
-              s"Error: ${stderrBuffer.toString}", cause)
-          }
-        }
-      }
-
       override def hasNext: Boolean = {
         try {
           if (curLine == null) {
             curLine = reader.readLine()
             if (curLine == null) {
-              checkFailureAndPropagate()
+              checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
               return false
             }
           }
@@ -123,7 +110,7 @@ case class ScriptTransformationExec(
           case NonFatal(e) =>
             // If this exception is due to abrupt / unclean termination of `proc`,
             // then detect it and propagate a better exception message for end users
-            checkFailureAndPropagate(e)
+            checkFailureAndPropagate(writerThread, e, proc, stderrBuffer)
 
             throw e
         }
@@ -150,21 +137,6 @@ case class ScriptTransformationExec(
     writerThread.start()
 
     outputIterator
-  }
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    val broadcastedHadoopConf =
-      new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
-
-    child.execute().mapPartitions { iter =>
-      if (iter.hasNext) {
-        val proj = UnsafeProjection.create(schema)
-        processIterator(iter, broadcastedHadoopConf.value).map(proj)
-      } else {
-        // If the input iterator has no rows then do not launch the external script.
-        Iterator.empty
-      }
-    }
   }
 }
 
@@ -202,7 +174,20 @@ private class ScriptTransformationWriterThread(
         var i = 1
         while (i < len) {
           sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-          sb.append(row.get(i, inputSchema(i)))
+          val columnType = inputSchema(i)
+          val fieldValue = row.get(i, columnType)
+          val fieldStringValue = columnType match {
+            case _: DateType =>
+              val dateFormatter = DateFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
+              dateFormatter.format(fieldValue.asInstanceOf[Int])
+            case _: TimestampType =>
+              DateTimeUtils.timestampToString(
+                TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId),
+                fieldValue.asInstanceOf[SQLTimestamp])
+            case _ =>
+              fieldValue.toString
+          }
+          sb.append(fieldStringValue)
           i += 1
         }
         sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
@@ -240,7 +225,7 @@ private[sql] class ScriptTransformIOSchema (
     outputSerdeProps: Seq[(String, String)],
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
-    schemaLess: Boolean) {
+    schemaLess: Boolean) extends Serializable {
 
   protected val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\t"),

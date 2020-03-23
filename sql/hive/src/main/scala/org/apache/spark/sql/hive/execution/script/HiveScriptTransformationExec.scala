@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.script.{ScriptTransformationWriterBase, Sc
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -129,28 +129,13 @@ case class HiveScriptTransformationExec(
       @transient
       lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
 
-      private def checkFailureAndPropagate(cause: Throwable = null): Unit = {
-        if (writerThread.exception.isDefined) {
-          throw writerThread.exception.get
-        }
-
-        if (!proc.isAlive) {
-          val exitCode = proc.exitValue()
-          if (exitCode != 0) {
-            logError(stderrBuffer.toString) // log the stderr circular buffer
-            throw new SparkException(s"Subprocess exited with status $exitCode. " +
-              s"Error: ${stderrBuffer.toString}", cause)
-          }
-        }
-      }
-
       override def hasNext: Boolean = {
         try {
           if (outputSerde == null) {
             if (curLine == null) {
               curLine = reader.readLine()
               if (curLine == null) {
-                checkFailureAndPropagate()
+                checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
                 return false
               }
             }
@@ -159,7 +144,7 @@ case class HiveScriptTransformationExec(
 
             if (scriptOutputReader != null) {
               if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
-                checkFailureAndPropagate()
+                checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
                 return false
               }
             } else {
@@ -172,7 +157,7 @@ case class HiveScriptTransformationExec(
                   // there can be a lag between EOF being written out and the process
                   // being terminated. So explicitly waiting for the process to be done.
                   proc.waitFor()
-                  checkFailureAndPropagate()
+                  checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
                   return false
               }
             }
@@ -183,7 +168,7 @@ case class HiveScriptTransformationExec(
           case NonFatal(e) =>
             // If this exception is due to abrupt / unclean termination of `proc`,
             // then detect it and propagate a better exception message for end users
-            checkFailureAndPropagate(e)
+            checkFailureAndPropagate(writerThread, e, proc, stderrBuffer)
 
             throw e
         }
@@ -196,7 +181,7 @@ case class HiveScriptTransformationExec(
         if (outputSerde == null) {
           val prevLine = curLine
           curLine = reader.readLine()
-          if (!ioschema.schemaLess) {
+          if (!ioschema.isSchemaLess) {
             new GenericInternalRow(
               prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
                 .map(CatalystTypeConverters.convertToCatalyst))
@@ -292,7 +277,7 @@ private class HiveScriptTransformationWriterThread(
         if (scriptInputWriter != null) {
           scriptInputWriter.write(writable)
         } else {
-          prepareWritable(writable, ioschema.outputSerdeProps).write(dataOutputStream)
+          prepareWritable(writable, ioschema.outputSerdeProperties).write(dataOutputStream)
         }
       }
     }
@@ -301,7 +286,7 @@ private class HiveScriptTransformationWriterThread(
 
 object HiveScriptIOSchema {
   def apply(input: ScriptInputOutputSchema): HiveScriptIOSchema = {
-    HiveScriptIOSchema(
+    new HiveScriptIOSchema(
       input.inputRowFormat,
       input.outputRowFormat,
       input.inputSerdeClass,
@@ -317,7 +302,7 @@ object HiveScriptIOSchema {
 /**
  * The wrapper class of Hive input and output schema properties
  */
-case class HiveScriptIOSchema (
+private[hive] class HiveScriptIOSchema (
     inputRowFormat: Seq[(String, String)],
     outputRowFormat: Seq[(String, String)],
     inputSerdeClass: Option[String],
@@ -409,5 +394,8 @@ case class HiveScriptIOSchema (
       instance.initialize(outputStream, conf)
       instance
     }
+
   }
+
+  def outputSerdeProperties: Seq[(String, String)] = outputSerdeProps
 }
