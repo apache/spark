@@ -77,7 +77,8 @@ object Cast {
         resolvableNullability(fn || forceNullable(fromType, toType), tn)
 
     case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
-      canCast(fromKey, toKey) && canCastMapKeyNullSafe(fromKey, toKey) &&
+      canCast(fromKey, toKey) &&
+        (!forceNullable(fromKey, toKey)) &&
         canCast(fromValue, toValue) &&
         resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
 
@@ -95,11 +96,6 @@ object Cast {
       true
 
     case _ => false
-  }
-
-  def canCastMapKeyNullSafe(fromType: DataType, toType: DataType): Boolean = {
-    // If the original map key type is NullType, it's OK as the map must be empty.
-    fromType == NullType || !forceNullable(fromType, toType)
   }
 
   /**
@@ -210,8 +206,15 @@ object Cast {
     case _ => false  // overflow
   }
 
+  /**
+   * Returns `true` iff it should change the nullability of this type in map type,
+   * array type, expressions such as cast, etc.
+   *
+   * Note that you should take the nullability context into account.
+   * For example, it should not force to nullable type when null type in array
+   * type is non-nullable which means an empty array of null type.
+   */
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (NullType, _) => true
     case (_, _) if from == to => false
 
     case (StringType, BinaryType) => false

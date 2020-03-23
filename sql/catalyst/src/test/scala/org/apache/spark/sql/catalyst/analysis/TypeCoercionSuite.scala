@@ -497,6 +497,23 @@ class TypeCoercionSuite extends AnalysisTest {
         .add("null", IntegerType, nullable = false),
       Some(new StructType()
         .add("null", IntegerType, nullable = true)))
+
+    widenTest(
+      ArrayType(NullType, containsNull = false),
+      ArrayType(IntegerType, containsNull = false),
+      Some(ArrayType(IntegerType, containsNull = false)))
+
+    widenTest(MapType(NullType, NullType, false),
+      MapType(IntegerType, StringType, false),
+      Some(MapType(IntegerType, StringType, false)))
+
+    widenTest(
+      new StructType()
+        .add("null", NullType, nullable = false),
+      new StructType()
+        .add("null", IntegerType, nullable = false),
+      Some(new StructType()
+        .add("null", IntegerType, nullable = false)))
   }
 
   test("wider common type for decimal and array") {

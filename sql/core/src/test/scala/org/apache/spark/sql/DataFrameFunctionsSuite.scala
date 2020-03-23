@@ -1532,6 +1532,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e.getMessage.contains("string, binary or array"))
   }
 
+  test("SPARK-31227: Non-nullable null type should not coerce to nullable type in concat") {
+    val actual = spark.range(1).selectExpr("concat(array(), array(1)) as arr")
+    val expected = spark.range(1).selectExpr("array(1) as arr")
+    checkAnswer(actual, expected)
+    assert(actual.schema === expected.schema)
+  }
+
   test("flatten function") {
     // Test cases with a primitive type
     val intDF = Seq(
