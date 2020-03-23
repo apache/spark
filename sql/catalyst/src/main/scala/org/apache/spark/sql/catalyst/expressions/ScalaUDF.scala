@@ -54,8 +54,6 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  private lazy val resolvedEnc = mutable.HashMap[Int, ExpressionEncoder[_]]()
-
   override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
 
   /**
@@ -111,7 +109,7 @@ case class ScalaUDF(
     } else {
       val encoder = inputEncoders(i)
       if (encoder.isDefined && encoder.get.isSerializedAsStructForTopLevel) {
-        val enc = resolvedEnc.getOrElseUpdate(i, encoder.get.resolveAndBind())
+        val enc = encoder.get.resolveAndBind()
         row: Any => enc.fromRow(row.asInstanceOf[InternalRow])
       } else {
         CatalystTypeConverters.createToScalaConverter(dataType)
