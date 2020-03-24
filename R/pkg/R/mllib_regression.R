@@ -550,8 +550,9 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
 #' Linear Regression Model
 #'
 #' \code{spark.lm} fits a linear regression model against a SparkDataFrame.
-#' Users can call \code{predict} to make
-#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#' Users can call \code{summary} to print a summary of the fitted model,
+#' \code{predict} to make predictions on new data,
+#' and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
@@ -564,8 +565,8 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
 #' @param standardization whether to standardize the training features before fitting the model.
 #' @param weightCol weight column name.
 #' @param aggregationDepth suggested depth for treeAggregate (>= 2).
-#' @param loss the loss function to be optimized. Supported options: "squaredError" and "huber"
-#' @param epsilon the shape parameter to control the amount of robustnes
+#' @param loss the loss function to be optimized. Supported options: "squaredError" and "huber".
+#' @param epsilon the shape parameter to control the amount of robustness.
 #' @param solver The solver algorithm for optimization.
 #'        Supported options: "l-bfgs", "normal" and "auto".
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
@@ -587,10 +588,7 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
 #' df <- read.df("data/mllib/sample_linear_regression_data.txt", source = "libsvm")
 #'
 #' # fit Linear Regression Model
-#' model <- spark.lm(
-#'            df, label ~ features,
-#'            regParam = 0.01, maxIter = 10, fitLinear = TRUE
-#'          )
+#' model <- spark.lm(df, label ~ features, regParam = 0.01, maxIter = 1)
 #'
 #' # get the summary of the model
 #' summary(model)
@@ -620,6 +618,12 @@ setMethod("spark.lm", signature(data = "SparkDataFrame", formula = "formula"),
             solver <- match.arg(solver)
             loss <- match.arg(loss)
             stringIndexerOrderType <- match.arg(stringIndexerOrderType)
+
+            if (!is.null(weightCol) && weightCol == "") {
+              weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
+            }
 
             jobj <- callJStatic("org.apache.spark.ml.r.LinearRegressionWrapper",
                                 "fit",
@@ -665,7 +669,7 @@ setMethod("summary", signature(object = "LinearRegressionModel"),
 #  Predicted values based on an LinearRegressionModel model
 
 #' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns the predicted values based on an LinearRegressionModel.
+#' @return \code{predict} returns the predicted values based on a LinearRegressionModel.
 #'
 #' @rdname spark.lm
 #' @aliases predict,LinearRegressionModel,SparkDataFrame-method

@@ -30,7 +30,6 @@ df <- read.df("data/mllib/sample_linear_regression_data.txt", source = "libsvm")
 training <- df
 test <- df
 
-
 # Fit a linear regression model
 model <- spark.lm(training, label ~ features, regParam = 0.3, elasticNetParam = 0.8)
 

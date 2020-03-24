@@ -57,7 +57,6 @@ private[r] class LinearRegressionWrapper private (
       .drop(linearRegressionModel.getFeaturesCol)
   }
 
-
   override def write: MLWriter = new LinearRegressionWrapper.LinearRegressionWrapperWriter(this)
 }
 
@@ -110,7 +109,6 @@ private[r] object LinearRegressionWrapper
     if (weightCol != null) {
       lm.setWeightCol(weightCol)
     }
-
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, lm))
