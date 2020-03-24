@@ -114,7 +114,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // Only difference between #oldVersionExternalTempPath and Hive 2.3.0's is HIVE-7090
     // HIVE-7090 added user_name/session_id on top of 'hive.exec.scratchdir'
     // Here it uses session_path unless it's emtpy, otherwise uses scratchDir
-    val sessionPath = Option(sessionScratchDir).filterNot(_.isEmpty).getOrElse(scratchDir)
+    val sessionPath = if (!sessionScratchDir.isEmpty) sessionScratchDir else scratchDir
     logDebug(s"session path '${sessionPath.toString}' is used")
 
     val mrScratchDir = oldVersionExternalTempPath(new Path(sessionPath), hadoopConf, sessionPath)
@@ -162,12 +162,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     val hiveVersion = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.version
     val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
-
-    // Hive sets session_path as HDFS_SESSION_PATH_KEY(_hive.hdfs.session.path) in hive config
-    val sessionScratchDir = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
-      .client.getConf("_hive.hdfs.session.path", "")
     logDebug(s"path '${path.toString}', staging dir '$stagingDir', " +
-      s"scratch dir '$scratchDir', session scratch dir '$sessionScratchDir' are used")
+      s"scratch dir '$scratchDir' are used")
 
     if (hiveVersionsUsingOldExternalTempPath.contains(hiveVersion)) {
       oldVersionExternalTempPath(path, hadoopConf, scratchDir)
@@ -175,6 +171,10 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       // HIVE-14270: Write temporary data to HDFS when doing inserts on tables located on S3
       // Copied from Context.java#getTempDirForPath of Hive 2.3
       if (isBlobStoragePath(path) && !useBlobStorageAsScratchDir) {
+        // Hive sets session_path as HDFS_SESSION_PATH_KEY(_hive.hdfs.session.path) in hive config
+        val sessionScratchDir = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+          .client.getConf("_hive.hdfs.session.path", "")
+        logDebug(s"session scratch dir '$sessionScratchDir' is used")
         getMRTmpPath(hadoopConf, sessionScratchDir, scratchDir)
       } else {
         newVersionExternalTempPath(path, hadoopConf, stagingDir)

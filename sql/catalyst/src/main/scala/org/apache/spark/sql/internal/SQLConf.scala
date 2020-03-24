@@ -761,7 +761,9 @@ object SQLConf {
   val HIVE_BLOBSTORE_USE_BLOBSTORE_AS_SCRATCHDIR =
     buildConf("spark.sql.hive.blobstore.use.blobstore.as.scratchdir")
       .doc("Enable the use of scratch directories directly on blob storage systems " +
-        "(it may cause performance penalties). ")
+        "(it may cause performance penalties). " +
+        "If you disable this parameter, Spark writes the data first in scratch dir, " +
+        "and move it to blobstore because moving it on blobstore is expensive.")
       .booleanConf
       .createWithDefault(true)
 
