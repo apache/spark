@@ -490,7 +490,7 @@ object SQLConf {
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionFactor")
       .doc("A partition is considered as skewed if its size is larger than this factor " +
         "multiplying the median partition size and also larger than " +
-        s"'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
+        "'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The skew factor must be positive.")
@@ -499,7 +499,7 @@ object SQLConf {
   val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes")
       .doc("A partition is considered as skewed if its size in bytes is larger than this " +
-        s"threshold and also larger than 'spark.sql.adaptive.skewJoin.skewedPartitionFactor' " +
+        s"threshold and also larger than ${SKEW_JOIN_SKEWED_PARTITION_FACTOR.key} " +
         "multiplying the median partition size.")
       .version("3.0.0")
       .bytesConf(ByteUnit.BYTE)
