@@ -477,7 +477,8 @@ class TypeCoercionSuite extends AnalysisTest {
       MapType(IntegerType, StringType, valueContainsNull = false),
       Some(MapType(IntegerType, StringType, valueContainsNull = true)))
 
-    widenTest(MapType(NullType, NullType, true),
+    widenTest(
+      MapType(NullType, NullType, true),
       MapType(IntegerType, StringType, false),
       Some(MapType(IntegerType, StringType, true)))
 
