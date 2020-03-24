@@ -35,7 +35,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.utcTz
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -675,7 +675,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     val results = spark.read
       .format("csv")
       .options(options)
-      .option("timeZone", utcTz.getId)
+      .option("timeZone", UTC.getId)
       .schema(customSchema)
       .load(testFile(datesFile))
       .select("date")
@@ -943,7 +943,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
   }
 
   test("Write dates correctly in ISO8601 format by default") {
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> utcTz.getId) {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> UTC.getId) {
       withTempDir { dir =>
         val customSchema = new StructType(Array(StructField("date", DateType, true)))
         val iso8601datesPath = s"${dir.getCanonicalPath}/iso8601dates.csv"
@@ -1081,7 +1081,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .format("csv")
         .option("header", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, utcTz.getId)
+        .option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1103,7 +1103,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .option("header", "true")
         .option("inferSchema", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, utcTz.getId)
+        .option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
         .load(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)

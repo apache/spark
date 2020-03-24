@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.utcTz
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -878,7 +878,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Sequence of dates") {
-    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone(utcTz)) {
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone(UTC)) {
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2018-01-01")),
         Literal(Date.valueOf("2018-01-05")),

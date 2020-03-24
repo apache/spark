@@ -29,24 +29,24 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
  */
 object DateTimeTestUtils {
 
-  val cestTz = getZoneId("+02:00")
-  val cetTz = getZoneId("+01:00")
-  val jstTz = getZoneId("+09:00")
-  val laTz = getZoneId("America/Los_Angeles")
-  val mitTz = getZoneId("-09:30")
-  val pstTz = getZoneId("-08:00")
-  val utcTz = getZoneId("+00:00")
+  val CEST = getZoneId("+02:00")
+  val CET = getZoneId("+01:00")
+  val JST = getZoneId("+09:00")
+  val LA = getZoneId("America/Los_Angeles")
+  val MIT = getZoneId("-09:30")
+  val PST = getZoneId("-08:00")
+  val UTC = getZoneId("+00:00")
 
-  val utcTzOpt = Option(utcTz.getId)
+  val utcTzOpt = Option(UTC.getId)
 
   val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
 
   val outstandingTimezonesIds: Seq[String] = Seq(
-    utcTz.getId,
-    pstTz.getId,
-    cetTz.getId,
+    UTC.getId,
+    PST.getId,
+    CET.getId,
     "Africa/Dakar",
-    laTz.getId,
+    LA.getId,
     "Antarctica/Vostok",
     "Asia/Hong_Kong",
     "Europe/Amsterdam")

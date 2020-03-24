@@ -24,7 +24,7 @@ import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{cestTz, laTz, utcTz}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -762,12 +762,12 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
     ).toDF("a", "b")
     checkAnswer(
-      df.select(from_utc_timestamp(col("a"), laTz.getId)),
+      df.select(from_utc_timestamp(col("a"), LA.getId)),
       Seq(
         Row(Timestamp.valueOf("2015-07-23 17:00:00")),
         Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
     checkAnswer(
-      df.select(from_utc_timestamp(col("b"), laTz.getId)),
+      df.select(from_utc_timestamp(col("b"), LA.getId)),
       Seq(
         Row(Timestamp.valueOf("2015-07-23 17:00:00")),
         Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
@@ -775,8 +775,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("from_utc_timestamp with column zone") {
     val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", cestTz.getId),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", laTz.getId)
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", CEST.getId),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", LA.getId)
     ).toDF("a", "b", "c")
     checkAnswer(
       df.select(from_utc_timestamp(col("a"), col("c"))),
@@ -805,12 +805,12 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
     ).toDF("a", "b")
     checkAnswer(
-      df.select(to_utc_timestamp(col("a"), laTz.getId)),
+      df.select(to_utc_timestamp(col("a"), LA.getId)),
       Seq(
         Row(Timestamp.valueOf("2015-07-24 07:00:00")),
         Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
     checkAnswer(
-      df.select(to_utc_timestamp(col("b"), laTz.getId)),
+      df.select(to_utc_timestamp(col("b"), LA.getId)),
       Seq(
         Row(Timestamp.valueOf("2015-07-24 07:00:00")),
         Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
@@ -818,8 +818,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("to_utc_timestamp with column zone") {
     val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", laTz.getId),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", cestTz.getId)
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", LA.getId),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", CEST.getId)
     ).toDF("a", "b", "c")
     checkAnswer(
       df.select(to_utc_timestamp(col("a"), col("c"))),
@@ -850,8 +850,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-30752: convert time zones on a daylight saving day") {
-    val systemTz = laTz.getId
-    val sessionTz = utcTz.getId
+    val systemTz = LA.getId
+    val sessionTz = UTC.getId
     val fromTz = "Asia/Hong_Kong"
     val fromTs = "2019-11-03T12:00:00" // daylight saving date in America/Los_Angeles
     val utsTs = "2019-11-03T04:00:00"

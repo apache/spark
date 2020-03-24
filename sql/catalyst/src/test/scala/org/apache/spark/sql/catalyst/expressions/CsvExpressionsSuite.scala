@@ -27,7 +27,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{pstTz, utcTzOpt}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, utcTzOpt}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -84,7 +84,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     // which means the string represents the timestamp string in the timezone regardless of
     // the timeZoneId parameter.
     checkEvaluation(
-      CsvToStructs(schema, Map.empty, Literal(csvData1), Option(pstTz.getId)),
+      CsvToStructs(schema, Map.empty, Literal(csvData1), Option(PST.getId)),
       InternalRow(c.getTimeInMillis * 1000L)
     )
 
@@ -191,7 +191,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
 
     checkEvaluation(StructsToCsv(Map.empty, struct, utcTzOpt), "2016-01-01T00:00:00.000Z")
     checkEvaluation(
-      StructsToCsv(Map.empty, struct, Option(pstTz.getId)), "2015-12-31T16:00:00.000-08:00")
+      StructsToCsv(Map.empty, struct, Option(PST.getId)), "2015-12-31T16:00:00.000-08:00")
 
     checkEvaluation(
       StructsToCsv(
@@ -204,7 +204,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     checkEvaluation(
       StructsToCsv(
         Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
-          DateTimeUtils.TIMEZONE_OPTION -> pstTz.getId),
+          DateTimeUtils.TIMEZONE_OPTION -> PST.getId),
         struct,
         utcTzOpt),
       "2015-12-31T16:00:00"

@@ -37,11 +37,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   import IntegralLiteralTestUtils._
 
-  private val pstTzOpt = Option(pstTz.getId)
-  private val jstTzOpt = Option(jstTz.getId)
+  private val pstTzOpt = Option(PST.getId)
+  private val jstTzOpt = Option(JST.getId)
 
   def toMillis(timestamp: String): Long = {
-    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", utcTz)
+    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC)
     DateTimeUtils.microsToMillis(tf.parse(timestamp))
   }
   val date = "2015-04-08 13:10:15"
@@ -50,9 +50,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val ts = new Timestamp(toMillis(time))
 
   test("datetime function current_date") {
-    val d0 = DateTimeUtils.currentDate(utcTz)
+    val d0 = DateTimeUtils.currentDate(UTC)
     val cd = CurrentDate(utcTzOpt).eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.currentDate(utcTz)
+    val d1 = DateTimeUtils.currentDate(UTC)
     assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
 
     val cdjst = CurrentDate(jstTzOpt).eval(EmptyRow).asInstanceOf[Int]
@@ -641,7 +641,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected)
     }
 
-    withDefaultTimeZone(TimeZone.getTimeZone(utcTz)) {
+    withDefaultTimeZone(TimeZone.getTimeZone(UTC)) {
       val inputDate = Timestamp.valueOf("2015-07-22 05:30:06")
 
       Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
@@ -760,9 +760,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZone.getTimeZone(utcTz))
+        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
 
-        withDefaultTimeZone(TimeZone.getTimeZone(utcTz)) {
+        withDefaultTimeZone(TimeZone.getTimeZone(UTC)) {
           for (tz <- outstandingTimezones) {
             val timeZoneId = Option(tz.getID)
             sdf1.setTimeZone(tz)
@@ -827,9 +827,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZone.getTimeZone(utcTz))
+        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
 
-        withDefaultTimeZone(TimeZone.getTimeZone(utcTz)) {
+        withDefaultTimeZone(TimeZone.getTimeZone(UTC)) {
           for (tz <- outstandingTimezones) {
             val timeZoneId = Option(tz.getID)
             sdf1.setTimeZone(tz)
@@ -919,9 +919,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    test("2015-07-24 00:00:00", laTz.getId, "2015-07-24 07:00:00")
-    test("2015-01-24 00:00:00", laTz.getId, "2015-01-24 08:00:00")
-    test(null, utcTz.getId, null)
+    test("2015-07-24 00:00:00", LA.getId, "2015-07-24 07:00:00")
+    test("2015-01-24 00:00:00", LA.getId, "2015-01-24 08:00:00")
+    test(null, UTC.getId, null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
   }
@@ -950,9 +950,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    test("2015-07-24 00:00:00", laTz.getId, "2015-07-23 17:00:00")
-    test("2015-01-24 00:00:00", laTz.getId, "2015-01-23 16:00:00")
-    test(null, utcTz.getId, null)
+    test("2015-07-24 00:00:00", LA.getId, "2015-07-23 17:00:00")
+    test("2015-01-24 00:00:00", LA.getId, "2015-01-23 16:00:00")
+    test(null, UTC.getId, null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
   }

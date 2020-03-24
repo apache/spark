@@ -27,7 +27,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{pstTz, utcTz, utcTzOpt}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, utcTzOpt}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -501,7 +501,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("t", TimestampType) :: Nil)
 
     val jsonData1 = """{"t": "2016-01-01T00:00:00.123Z"}"""
-    var c = Calendar.getInstance(TimeZone.getTimeZone(utcTz))
+    var c = Calendar.getInstance(TimeZone.getTimeZone(UTC))
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 123)
     checkEvaluation(
@@ -512,7 +512,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     // which means the string represents the timestamp string in the timezone regardless of
     // the timeZoneId parameter.
     checkEvaluation(
-      JsonToStructs(schema, Map.empty, Literal(jsonData1), Option(pstTz.getId)),
+      JsonToStructs(schema, Map.empty, Literal(jsonData1), Option(PST.getId)),
       InternalRow(c.getTimeInMillis * 1000L)
     )
 
@@ -596,7 +596,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("to_json with timestamp") {
     val schema = StructType(StructField("t", TimestampType) :: Nil)
-    val c = Calendar.getInstance(TimeZone.getTimeZone(utcTz))
+    val c = Calendar.getInstance(TimeZone.getTimeZone(UTC))
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     val struct = Literal.create(create_row(c.getTimeInMillis * 1000L), schema)
@@ -606,7 +606,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       """{"t":"2016-01-01T00:00:00.000Z"}"""
     )
     checkEvaluation(
-      StructsToJson(Map.empty, struct, Option(pstTz.getId)),
+      StructsToJson(Map.empty, struct, Option(PST.getId)),
       """{"t":"2015-12-31T16:00:00.000-08:00"}"""
     )
 
@@ -621,7 +621,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     checkEvaluation(
       StructsToJson(
         Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
-          DateTimeUtils.TIMEZONE_OPTION -> pstTz.getId),
+          DateTimeUtils.TIMEZONE_OPTION -> PST.getId),
         struct,
         utcTzOpt),
       """{"t":"2015-12-31T16:00:00"}"""
