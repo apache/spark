@@ -25,6 +25,7 @@ import org.scalatest.Matchers
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{cetTz, pstTz, utcTz}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -33,9 +34,9 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("parsing timestamps using time zones") {
     val localDate = "2018-12-02T10:11:12.001234"
     val expectedMicros = Map(
-      "UTC" -> 1543745472001234L,
-      "PST" -> 1543774272001234L,
-      "CET" -> 1543741872001234L,
+      utcTz.getId -> 1543745472001234L,
+      pstTz.getId -> 1543774272001234L,
+      cetTz.getId -> 1543741872001234L,
       "Africa/Dakar" -> 1543745472001234L,
       "America/Los_Angeles" -> 1543774272001234L,
       "Antarctica/Vostok" -> 1543723872001234L,
@@ -54,9 +55,9 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("format timestamps using time zones") {
     val microsSinceEpoch = 1543745472001234L
     val expectedTimestamp = Map(
-      "UTC" -> "2018-12-02T10:11:12.001234",
-      "PST" -> "2018-12-02T02:11:12.001234",
-      "CET" -> "2018-12-02T11:11:12.001234",
+      utcTz.getId -> "2018-12-02T10:11:12.001234",
+      pstTz.getId -> "2018-12-02T02:11:12.001234",
+      cetTz.getId -> "2018-12-02T11:11:12.001234",
       "Africa/Dakar" -> "2018-12-02T10:11:12.001234",
       "America/Los_Angeles" -> "2018-12-02T02:11:12.001234",
       "Antarctica/Vostok" -> "2018-12-02T16:11:12.001234",
@@ -251,7 +252,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     }
 
     // "yyyy" with "G" can't parse negative year or year 0000.
-    val formatter2 = TimestampFormatter("G yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC, true)
+    val formatter2 = TimestampFormatter("G yyyy-MM-dd HH:mm:ss", utcTz, true)
     assertParsingError(formatter2.parse("BC -1234-02-22 02:22:22"))
     assertParsingError(formatter2.parse("AC 0000-02-22 02:22:22"))
 
