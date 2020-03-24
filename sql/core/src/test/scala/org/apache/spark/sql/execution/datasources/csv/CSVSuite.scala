@@ -35,6 +35,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.utcTz
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -674,7 +675,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     val results = spark.read
       .format("csv")
       .options(options)
-      .option("timeZone", "UTC")
+      .option("timeZone", utcTz.getId)
       .schema(customSchema)
       .load(testFile(datesFile))
       .select("date")
@@ -942,7 +943,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
   }
 
   test("Write dates correctly in ISO8601 format by default") {
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> utcTz.getId) {
       withTempDir { dir =>
         val customSchema = new StructType(Array(StructField("date", DateType, true)))
         val iso8601datesPath = s"${dir.getCanonicalPath}/iso8601dates.csv"

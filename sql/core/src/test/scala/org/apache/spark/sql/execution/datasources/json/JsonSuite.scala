@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
-import java.time.{LocalDate, LocalDateTime, ZoneId}
+import java.time.LocalDate
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -33,6 +33,7 @@ import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.utcTz
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -2595,12 +2596,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       timestampsWithFormat.write
         .format("json")
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+        .option(DateTimeUtils.TIMEZONE_OPTION, utcTz.getId)
         .save(timestampsWithFormatPath)
 
       val readBack = spark.read
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+        .option(DateTimeUtils.TIMEZONE_OPTION, utcTz.getId)
         .json(timestampsWithFormatPath)
 
       assert(readBack.schema === customSchema)
