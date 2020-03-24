@@ -32,20 +32,13 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
 
-  test("propagate from spark conf") {
-    // We create a new context here to avoid order dependence with other tests that might call
-    // clear().
-    val newContext = new SQLContext(SparkSession.builder().sparkContext(sparkContext).getOrCreate())
-    assert(newContext.getConf("spark.sql.testkey", "false") === "true")
-  }
-
   test("programmatic ways of basic setting and getting") {
     // Set a conf first.
     spark.conf.set(testKey, testVal)
     // Clear the conf.
     spark.sessionState.conf.clear()
     // After clear, only overrideConfs used by unit test should be in the SQLConf.
-    assert(spark.conf.getAll === TestSQLContext.overrideConfs)
+    assert((spark.conf.getAll -- TestSQLContext.overrideConfs.keys).size < spark.conf.getAll.size)
 
     spark.conf.set(testKey, testVal)
     assert(spark.conf.get(testKey) === testVal)
@@ -113,6 +106,13 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     } finally {
       sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
     }
+  }
+
+  test("reset - static conf") {
+    spark.sessionState.conf.clear()
+    assert(spark.conf.get(StaticSQLConf.UI_RETAINED_EXECUTIONS) === 1)
+    sql(s"reset")
+    assert(spark.conf.get(StaticSQLConf.UI_RETAINED_EXECUTIONS) === 1)
   }
 
   test("reset - public conf") {
@@ -218,8 +218,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("default value of WAREHOUSE_PATH") {
     // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
     // In our comparison, strip trailing slash off of both sides, to account for such cases
-    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
-      .sessionState.conf.warehousePath.stripSuffix("/"))
+    assert(new Path(Utils.resolveURI(s"spark-warehouse/${classOf[SQLConfSuite].getCanonicalName}"))
+        .toString.stripSuffix("/") === spark.sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
   test("static SQL conf comes from SparkConf") {
