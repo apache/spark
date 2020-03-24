@@ -219,13 +219,11 @@ public class TransportContext implements Closeable {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
     boolean separateChunkFetchRequest = conf.separateChunkFetchRequest();
-    ChunkFetchRequestHandler chunkFetchRequestHandler;
+    ChunkFetchRequestHandler chunkFetchRequestHandler = null;
     if (!separateChunkFetchRequest) {
       chunkFetchRequestHandler = new ChunkFetchRequestHandler(
         client, rpcHandler.getStreamManager(),
         conf.maxChunksBeingTransferred(), false /* syncModeEnabled */);
-    } else {
-      chunkFetchRequestHandler = null;
     }
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
       rpcHandler, conf.maxChunksBeingTransferred(), chunkFetchRequestHandler);
