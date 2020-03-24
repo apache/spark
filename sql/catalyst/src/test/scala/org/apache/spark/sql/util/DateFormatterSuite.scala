@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.util
 
-import java.time.{LocalDate, ZoneOffset}
+import java.time.{DateTimeException, LocalDate, ZoneOffset}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, localDateToDays}
@@ -113,5 +113,27 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
       assert(formatter.parse("today ") === today)
       assert(formatter.parse("tomorrow UTC") === today + 1)
     }
+  }
+
+  test("SPARK-30958: parse date with negative year") {
+    val formatter1 = DateFormatter("yyyy-MM-dd", ZoneOffset.UTC)
+    assert(formatter1.parse("-1234-02-22") === localDateToDays(LocalDate.of(-1234, 2, 22)))
+
+    def assertParsingError(f: => Unit): Unit = {
+      intercept[Exception](f) match {
+        case e: SparkUpgradeException =>
+          assert(e.getCause.isInstanceOf[DateTimeException])
+        case e =>
+          assert(e.isInstanceOf[DateTimeException])
+      }
+    }
+
+    // "yyyy" with "G" can't parse negative year or year 0000.
+    val formatter2 = DateFormatter("G yyyy-MM-dd", ZoneOffset.UTC)
+    assertParsingError(formatter2.parse("BC -1234-02-22"))
+    assertParsingError(formatter2.parse("AD 0000-02-22"))
+
+    assert(formatter2.parse("BC 1234-02-22") === localDateToDays(LocalDate.of(-1233, 2, 22)))
+    assert(formatter2.parse("AD 1234-02-22") === localDateToDays(LocalDate.of(1234, 2, 22)))
   }
 }

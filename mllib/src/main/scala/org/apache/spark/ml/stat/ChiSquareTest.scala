@@ -23,8 +23,9 @@ import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.DoubleType
 
 
 /**
@@ -70,9 +71,32 @@ object ChiSquareTest {
     val rdd = dataset.select(col(labelCol).cast("double"), col(featuresCol)).as[(Double, Vector)]
       .rdd.map { case (label, features) => OldLabeledPoint(label, OldVectors.fromML(features)) }
     val testResults = OldStatistics.chiSqTest(rdd)
-    val pValues: Vector = Vectors.dense(testResults.map(_.pValue))
-    val degreesOfFreedom: Array[Int] = testResults.map(_.degreesOfFreedom)
-    val statistics: Vector = Vectors.dense(testResults.map(_.statistic))
+    val pValues = Vectors.dense(testResults.map(_.pValue))
+    val degreesOfFreedom = testResults.map(_.degreesOfFreedom)
+    val statistics = Vectors.dense(testResults.map(_.statistic))
     spark.createDataFrame(Seq(ChiSquareResult(pValues, degreesOfFreedom, statistics)))
+  }
+
+  /**
+   * @param dataset  DataFrame of categorical labels and categorical features.
+   *                 Real-valued features will be treated as categorical for each distinct value.
+   * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
+   * @param labelCol  Name of label column in dataset, of any numerical type
+   * @return Array containing the SelectionTestResult for every feature against the label.
+   */
+  @Since("3.1.0")
+  def testChiSquare(
+      dataset: Dataset[_],
+      featuresCol: String,
+      labelCol: String): Array[SelectionTestResult] = {
+
+    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
+    SchemaUtils.checkNumericType(dataset.schema, labelCol)
+    val input = dataset.select(col(labelCol).cast(DoubleType), col(featuresCol)).rdd
+      .map { case Row(label: Double, features: Vector) =>
+        OldLabeledPoint(label, OldVectors.fromML(features))
+      }
+    val chiTestResult = OldStatistics.chiSqTest(input)
+    chiTestResult.map(r => new ChiSqTestResult(r.pValue, r.degreesOfFreedom, r.statistic))
   }
 }

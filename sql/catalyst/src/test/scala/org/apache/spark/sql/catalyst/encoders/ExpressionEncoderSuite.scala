@@ -107,6 +107,8 @@ class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
   }
 }
 
+case class Bar(i: Any)
+case class Foo(i: Bar) extends AnyVal
 case class PrimitiveValueClass(wrapped: Int) extends AnyVal
 case class ReferenceValueClass(wrapped: ReferenceValueClass.Container) extends AnyVal
 object ReferenceValueClass {
@@ -310,6 +312,13 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Option.empty[String], "empty option of string")
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
+
+  test("AnyVal class with Any fields") {
+    val exception = intercept[UnsupportedOperationException](implicitly[ExpressionEncoder[Foo]])
+    val errorMsg = exception.getMessage
+    assert(errorMsg.contains("root class: \"org.apache.spark.sql.catalyst.encoders.Foo\""))
+    assert(errorMsg.contains("No Encoder found for Any"))
+  }
 
   test("nullable of encoder schema") {
     def checkNullable[T: ExpressionEncoder](nullable: Boolean*): Unit = {

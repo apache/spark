@@ -77,21 +77,21 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
   //       partition start indices based on block size to avoid data skew.
   private def getPartitionSpecs(
       shuffleStage: ShuffleQueryStageExec,
-      advisoryParallelism: Option[Int]): Array[ShufflePartitionSpec] = {
+      advisoryParallelism: Option[Int]): Seq[ShufflePartitionSpec] = {
     val shuffleDep = shuffleStage.shuffle.shuffleDependency
     val numReducers = shuffleDep.partitioner.numPartitions
     val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
     val numMappers = shuffleDep.rdd.getNumPartitions
     val splitPoints = if (numMappers == 0) {
-      Array.empty
+      Seq.empty
     } else {
-      equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers)).toArray
+      equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers))
     }
     (0 until numMappers).flatMap { mapIndex =>
       (splitPoints :+ numReducers).sliding(2).map {
-        case Array(start, end) => PartialMapperPartitionSpec(mapIndex, start, end)
+        case Seq(start, end) => PartialMapperPartitionSpec(mapIndex, start, end)
       }
-    }.toArray
+    }
   }
 
   /**

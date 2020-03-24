@@ -24,12 +24,12 @@ import java.util.stream.Stream;
 
 import com.google.common.base.Preconditions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  *  An {@link Identifier} implementation.
  */
-@Experimental
+@Evolving
 class IdentifierImpl implements Identifier {
 
   private String[] namespace;

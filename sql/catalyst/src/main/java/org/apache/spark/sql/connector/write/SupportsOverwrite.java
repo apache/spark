@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.write;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.AlwaysTrue$;
 import org.apache.spark.sql.sources.Filter;
 
@@ -28,6 +29,7 @@ import org.apache.spark.sql.sources.Filter;
  *
  * @since 3.0.0
  */
+@Evolving
 public interface SupportsOverwrite extends WriteBuilder, SupportsTruncate {
   /**
    * Configures a write to replace data matching the filters with data committed in the write.

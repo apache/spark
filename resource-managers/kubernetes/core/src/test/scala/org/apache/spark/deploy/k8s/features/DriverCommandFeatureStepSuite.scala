@@ -76,14 +76,64 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       mainResource, "5", "7", "9"))
   }
 
+  test("SPARK-25355: java resource args with proxy-user") {
+    val mainResource = "local:/main.jar"
+    val spec = applyFeatureStep(
+      JavaMainAppResource(Some(mainResource)),
+      appArgs = Array("5", "7"),
+      proxyUser = Some("test.user"))
+    assert(spec.pod.container.getArgs.asScala === List(
+      "driver",
+      "--proxy-user", "test.user",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", KubernetesTestConf.MAIN_CLASS,
+      mainResource, "5", "7"))
+  }
+
+  test("SPARK-25355: python resource args with proxy-user") {
+    val mainResource = "local:/main.py"
+    val sparkConf = new SparkConf(false)
+      .set(PYSPARK_MAJOR_PYTHON_VERSION, "2")
+    val spec = applyFeatureStep(
+      PythonMainAppResource(mainResource),
+      conf = sparkConf,
+      appArgs = Array("5", "7", "9"),
+      proxyUser = Some("test.user"))
+
+    assert(spec.pod.container.getArgs.asScala === List(
+      "driver",
+      "--proxy-user", "test.user",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", KubernetesTestConf.MAIN_CLASS,
+      mainResource, "5", "7", "9"))
+  }
+
+  test("SPARK-25355: R resource args with proxy-user") {
+    val mainResource = "local:/main.R"
+
+    val spec = applyFeatureStep(
+      RMainAppResource(mainResource),
+      appArgs = Array("5", "7", "9"),
+      proxyUser = Some("test.user"))
+
+    assert(spec.pod.container.getArgs.asScala === List(
+      "driver",
+      "--proxy-user", "test.user",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", KubernetesTestConf.MAIN_CLASS,
+      mainResource, "5", "7", "9"))
+  }
+
   private def applyFeatureStep(
       resource: MainAppResource,
       conf: SparkConf = new SparkConf(false),
-      appArgs: Array[String] = Array()): KubernetesDriverSpec = {
+      appArgs: Array[String] = Array(),
+      proxyUser: Option[String] = None): KubernetesDriverSpec = {
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = conf,
       mainAppResource = resource,
-      appArgs = appArgs)
+      appArgs = appArgs,
+      proxyUser = proxyUser)
     val step = new DriverCommandFeatureStep(kubernetesConf)
     val pod = step.configurePod(SparkPod.initialPod())
     val props = step.getAdditionalPodSystemProperties()

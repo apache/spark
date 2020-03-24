@@ -432,8 +432,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
       sortBy(_.batchTime.milliseconds).reverse
 
     val activeBatchesContent = {
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <span id="activeBatches" class="collapse-aggregated-activeBatches collapse-table"
                 onClick="collapseTable('collapse-aggregated-activeBatches',
                 'aggregated-activeBatches')">
@@ -450,8 +450,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     }
 
     val completedBatchesContent = {
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
                 onClick="collapseTable('collapse-aggregated-completedBatches',
                 'aggregated-completedBatches')">
