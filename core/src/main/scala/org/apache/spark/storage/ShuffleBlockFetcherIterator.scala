@@ -297,13 +297,13 @@ final class ShuffleBlockFetcherIterator(
       if (address.executorId == blockManager.blockManagerId.executorId) {
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
-          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)).to[ArrayBuffer])
+          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)))
         localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
         localBlockBytes += mergedBlockInfos.map(_.size).sum
       } else if (hostLocalDirReadingEnabled && address.host == blockManager.blockManagerId.host) {
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
-          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)).to[ArrayBuffer])
+          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)))
         val blocksForAddress =
           mergedBlockInfos.map(info => (info.blockId, info.size, info.mapIndex))
         hostLocalBlocksByExecutor += address -> blocksForAddress
@@ -327,7 +327,7 @@ final class ShuffleBlockFetcherIterator(
     collectedRemoteRequests
   }
 
-  def createFetchRequest(
+  private def createFetchRequest(
       blocks: Seq[FetchBlockInfo],
       address: BlockManagerId,
       curRequestSize: Long): FetchRequest = {
@@ -336,8 +336,8 @@ final class ShuffleBlockFetcherIterator(
     FetchRequest(address, blocks)
   }
 
-  def createFetchRequests(
-      curBlocks: ArrayBuffer[FetchBlockInfo],
+  private def createFetchRequests(
+      curBlocks: Seq[FetchBlockInfo],
       address: BlockManagerId,
       curRequestSize: Long,
       isLast: Boolean,
@@ -403,7 +403,7 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def mergeContinuousShuffleBlockIdsIfNeeded(
-      blocks: ArrayBuffer[FetchBlockInfo]): ArrayBuffer[FetchBlockInfo] = {
+      blocks: Seq[FetchBlockInfo]): ArrayBuffer[FetchBlockInfo] = {
     val result = if (doBatchFetch) {
       var curBlocks = new ArrayBuffer[FetchBlockInfo]
       val mergedBlockInfo = new ArrayBuffer[FetchBlockInfo]
@@ -462,7 +462,7 @@ final class ShuffleBlockFetcherIterator(
       }
       mergedBlockInfo
     } else {
-      blocks
+      blocks.to[ArrayBuffer]
     }
     // update metrics
     numBlocksToFetch += result.size
