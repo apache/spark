@@ -37,7 +37,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   import IntegralLiteralTestUtils._
 
-  private val utcTzOpt = Option(utcTz.getId)
   private val pstTzOpt = Option(pstTz.getId)
   private val jstTzOpt = Option(jstTz.getId)
 

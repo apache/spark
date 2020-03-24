@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.utcTz
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -1167,7 +1168,7 @@ class DataFrameSuite extends QueryTest
                            |""".stripMargin
     assert(df.showString(1, truncate = 0) === expectedAnswer)
 
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> utcTz.getId) {
 
       val expectedAnswer = """+----------+-------------------+
                              ||d         |ts                 |
@@ -1188,7 +1189,7 @@ class DataFrameSuite extends QueryTest
                          " ts  | 2016-12-01 00:00:00 \n"
     assert(df.showString(1, truncate = 0, vertical = true) === expectedAnswer)
 
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> utcTz.getId) {
 
       val expectedAnswer = "-RECORD 0------------------\n" +
                            " d   | 2016-12-01          \n" +

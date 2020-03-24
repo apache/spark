@@ -27,14 +27,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{pstTz, utcTz}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{pstTz, utcTzOpt}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
   val badCsv = "\u0000\u0000\u0000A\u0001AAA"
-
-  private val utcTzOpt = Option(utcTz.getId)
 
   test("from_csv") {
     val csvData = "1"

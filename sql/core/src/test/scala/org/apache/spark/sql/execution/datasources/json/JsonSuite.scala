@@ -1330,7 +1330,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
   test("SPARK-6245 JsonInferSchema.infer on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val options = new JSONOptions(Map.empty[String, String], "GMT")
+    val options = new JSONOptions(Map.empty[String, String], utcTz.getId)
     val emptySchema = new JsonInferSchema(options).infer(
       empty.rdd,
       CreateJacksonParser.string)
@@ -1357,7 +1357,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val options = new JSONOptions(Map.empty[String, String], "GMT")
+    val options = new JSONOptions(Map.empty[String, String], utcTz.getId)
     val emptySchema = new JsonInferSchema(options).infer(
       emptyRecords.rdd,
       CreateJacksonParser.string)
@@ -1731,7 +1731,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       timestampsWithFormat.write
         .format("json")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, utcTz.getId)
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1749,7 +1749,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val readBack = spark.read
         .schema(customSchema)
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, utcTz.getId)
         .json(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)

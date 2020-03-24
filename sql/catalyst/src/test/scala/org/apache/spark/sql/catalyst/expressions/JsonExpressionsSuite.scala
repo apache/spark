@@ -27,7 +27,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{pstTz, utcTz}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{pstTz, utcTz, utcTzOpt}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -395,8 +395,6 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         Nil),
       InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("1")))
   }
-
-  val utcTzOpt = Option(utcTz.getId)
 
   test("from_json") {
     val jsonData = """{"a": 1}"""
