@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
-import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.sql.util.SchemaUtils
 
 
@@ -142,9 +143,19 @@ case class CreateViewCommand(
 
     val catalog = sparkSession.sessionState.catalog
     if (viewType == LocalTempView) {
+      if (replace && catalog.getTempView(name.table).isDefined) {
+        logDebug(s"Try to uncache ${name.quotedString} before replacing.")
+        CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
+      }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
+      if (replace && catalog.getGlobalTempView(name.table).isDefined) {
+        val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+        val globalTempView = TableIdentifier(name.table, Option(db))
+        logDebug(s"Try to uncache ${globalTempView.quotedString} before replacing.")
+        CommandUtils.uncacheTableOrView(sparkSession, globalTempView.quotedString)
+      }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createGlobalTempView(name.table, aliasedPlan, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
@@ -158,6 +169,10 @@ case class CreateViewCommand(
         // Detect cyclic view reference on CREATE OR REPLACE VIEW.
         val viewIdent = tableMetadata.identifier
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
+
+        // uncache the cached data before replacing an exists view
+        logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
+        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
         // Nothing we need to retain from the old view, so just drop and create a new one
