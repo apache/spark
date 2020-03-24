@@ -163,7 +163,7 @@ object DateTimeUtils {
    *          Gregorian calendars.
    * @return The number of micros since epoch from `java.sql.Timestamp`.
    */
-  def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
+  def fromJavaTimestamp(t: Timestamp): Long = {
     val era = if (t.before(julianCommonEraStart)) 0 else 1
     val localDateTime = LocalDateTime.of(
       t.getYear + 1900, t.getMonth + 1, 1,
