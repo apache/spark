@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -49,20 +49,18 @@ SORT BY { expression [ sort_direction | nulls_sort_order ] [ , ... ] }
   </dd>
   <dt><code><em>nulls_sort_order</em></code></dt>
   <dd>
-    Optionally specifies whether NULL values are returned before/after non-NULL values, based on the 
-    sort direction. In Spark, NULL values are considered to be lower than any non-NULL values by default.
-    Therefore the ordering of NULL values depend on the sort direction. If <code>null_sort_order</code> is
-    not specified, then NULLs sort first if sort order is <code>ASC</code> and NULLS sort last if 
-    sort order is <code>DESC</code>.<br><br>
+    Optionally specifies whether NULL values are returned before/after non-NULL values. If
+    <code>null_sort_order</code> is not specified, then NULLs sort first if sort order is
+    <code>ASC</code> and NULLS sort last if sort order is <code>DESC</code>.<br><br>
     <ol>
-      <li> If <code>NULLS FIRST</code> (the default) is specified, then NULL values are returned first 
+      <li> If <code>NULLS FIRST</code> is specified, then NULL values are returned first
            regardless of the sort order.</li>
       <li>If <code>NULLS LAST</code> is specified, then NULL values are returned last regardless of
            the sort order. </li>
     </ol><br>
     <b>Syntax:</b>
     <code>
-       [ NULLS { FIRST | LAST } ] 
+       [ NULLS { FIRST | LAST } ]
     </code>
   </dd>
 </dl>
@@ -71,15 +69,15 @@ SORT BY { expression [ sort_direction | nulls_sort_order ] [ , ... ] }
 {% highlight sql %}
 CREATE TABLE person (zip_code INT, name STRING, age INT);
 INSERT INTO person VALUES
-    (94588, 'Zen Hui', 50), 
-    (94588, 'Dan Li', 18), 
+    (94588, 'Zen Hui', 50),
+    (94588, 'Dan Li', 18),
     (94588, 'Anil K', 27),
     (94588, 'John V', NULL),
     (94511, 'David K', 42),
     (94511, 'Aryan B.', 18),
     (94511, 'Lalit B.', NULL);
 
--- Use `REPARTITION` hint to partition the data by `zip_code` to 
+-- Use `REPARTITION` hint to partition the data by `zip_code` to
 -- examine the `SORT BY` behavior. This is used in rest of the
 -- examples.
 
@@ -128,9 +126,9 @@ SELECT /*+ REPARTITION(zip_code) */ age, name, zip_code FROM person SORT BY age 
   |null|Lalit B.|94511   |
   +----+--------+--------+
 
--- Sort rows by age within each partition in descending manner.
+-- Sort rows by age within each partition in descending manner, which defaults to NULL LAST.
 SELECT /*+ REPARTITION(zip_code) */ age, name, zip_code FROM person SORT BY age DESC;
- 
+
   +----+--------+--------+
   |age |name    |zip_code|
   +----+--------+--------+
@@ -143,7 +141,7 @@ SELECT /*+ REPARTITION(zip_code) */ age, name, zip_code FROM person SORT BY age 
   |null|Lalit B.|94511   |
   +----+--------+--------+
 
--- Sort rows by age within each partition in ascending manner keeping null values to be first.
+-- Sort rows by age within each partition in descending manner keeping null values to be first.
 SELECT /*+ REPARTITION(zip_code) */ age, name, zip_code FROM person SORT BY age DESC NULLS FIRST;
 
   +----+--------+--------+

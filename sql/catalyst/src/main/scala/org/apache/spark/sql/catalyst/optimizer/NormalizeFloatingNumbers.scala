@@ -114,11 +114,11 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case CreateNamedStruct(children) =>
       CreateNamedStruct(children.map(normalize))
 
-    case CreateArray(children) =>
-      CreateArray(children.map(normalize))
+    case CreateArray(children, useStringTypeWhenEmpty) =>
+      CreateArray(children.map(normalize), useStringTypeWhenEmpty)
 
-    case CreateMap(children) =>
-      CreateMap(children.map(normalize))
+    case CreateMap(children, useStringTypeWhenEmpty) =>
+      CreateMap(children.map(normalize), useStringTypeWhenEmpty)
 
     case _ if expr.dataType == FloatType || expr.dataType == DoubleType =>
       KnownFloatingPointNormalized(NormalizeNaNAndZero(expr))

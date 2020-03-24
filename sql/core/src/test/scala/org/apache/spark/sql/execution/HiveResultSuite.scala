@@ -23,7 +23,7 @@ class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
 
   test("date formatting in hive result") {
-    val dates = Seq("2018-12-28", "1582-10-13", "1582-10-14", "1582-10-15")
+    val dates = Seq("2018-12-28", "1582-10-03", "1582-10-04", "1582-10-15")
     val df = dates.toDF("a").selectExpr("cast(a as date) as b")
     val executedPlan1 = df.queryExecution.executedPlan
     val result = HiveResult.hiveResultString(executedPlan1)
@@ -36,8 +36,8 @@ class HiveResultSuite extends SharedSparkSession {
   test("timestamp formatting in hive result") {
     val timestamps = Seq(
       "2018-12-28 01:02:03",
-      "1582-10-13 01:02:03",
-      "1582-10-14 01:02:03",
+      "1582-10-03 01:02:03",
+      "1582-10-04 01:02:03",
       "1582-10-15 01:02:03")
     val df = timestamps.toDF("a").selectExpr("cast(a as timestamp) as b")
     val executedPlan1 = df.queryExecution.executedPlan

@@ -44,7 +44,9 @@ object IntervalBenchmark extends SqlBasedBenchmark {
       spark
         .range(0, cardinality, 1, 1)
         .select(exprs: _*)
-        .noop()
+        .queryExecution
+        .toRdd
+        .foreach(_ => ())
     }
   }
 

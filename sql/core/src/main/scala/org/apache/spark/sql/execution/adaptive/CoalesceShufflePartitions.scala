@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.MapOutputStatistics
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -26,8 +27,9 @@ import org.apache.spark.sql.internal.SQLConf
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-case class CoalesceShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
+case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPlan] {
   import CoalesceShufflePartitions._
+  private def conf = session.sessionState.conf
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
@@ -66,12 +68,14 @@ case class CoalesceShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
       if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
-        val partitionSpecs = ShufflePartitionsCoalescer.coalescePartitions(
+        // We fall back to Spark default parallelism if the minimum number of coalesced partitions
+        // is not set, so to avoid perf regressions compared to no coalescing.
+        val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+          .getOrElse(session.sparkContext.defaultParallelism)
+        val partitionSpecs = ShufflePartitionsUtil.coalescePartitions(
           validMetrics.toArray,
-          firstPartitionIndex = 0,
-          lastPartitionIndex = distinctNumPreShufflePartitions.head,
           advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
-          minNumPartitions = conf.minShufflePartitionNum)
+          minNumPartitions = minPartitionNum)
         // This transformation adds new nodes, so we must use `transformUp` here.
         val stageIds = shuffleStages.map(_.id).toSet
         plan.transformUp {

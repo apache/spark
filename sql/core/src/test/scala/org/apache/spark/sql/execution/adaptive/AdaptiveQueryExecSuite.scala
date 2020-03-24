@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.adaptive
 import java.io.File
 import java.net.URI
 
+import org.apache.log4j.Level
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
@@ -112,9 +114,13 @@ class AdaptiveQueryExecSuite
 
     val numLocalReaders = collect(plan) {
       case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
-    }.length
-
-    assert(numShuffles === (numLocalReaders + numShufflesWithoutLocalReader))
+    }
+    numLocalReaders.foreach { r =>
+      val rdd = r.execute()
+      val parts = rdd.partitions
+      assert(parts.forall(rdd.preferredLocations(_).nonEmpty))
+    }
+    assert(numShuffles === (numLocalReaders.length + numShufflesWithoutLocalReader))
   }
 
   test("Change merge join to broadcast join") {
@@ -639,11 +645,11 @@ class AdaptiveQueryExecSuite
         //              into 2 splits and right side is divided into 4 splits, so
         //              2 x 4 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 3 splits, so
-        //              3 sub-partitions.
+        // Partition 4: only left side is skewed, and divide into 2 splits, so
+        //              2 sub-partitions.
         // So total (8 + 1 + 3) partitions.
         val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        checkSkewJoin(innerSmj, 8 + 1 + 3)
+        checkSkewJoin(innerSmj, 8 + 1 + 2)
 
         // skewed left outer join optimization
         val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
@@ -653,11 +659,11 @@ class AdaptiveQueryExecSuite
         // Partition 0: both left and right sides are skewed, but left join can't split right side,
         //              so only left side is divided into 2 splits, and thus 2 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 3 splits, so
-        //              3 sub-partitions.
-        // So total (2 + 1 + 3) partitions.
+        // Partition 4: only left side is skewed, and divide into 2 splits, so
+        //              2 sub-partitions.
+        // So total (2 + 1 + 2) partitions.
         val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
-        checkSkewJoin(leftSmj, 2 + 1 + 3)
+        checkSkewJoin(leftSmj, 2 + 1 + 2)
 
         // skewed right outer join optimization
         val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
@@ -728,6 +734,51 @@ class AdaptiveQueryExecSuite
       .exists(msg => msg.getRenderedMessage.contains(
         s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is" +
         s" enabled but is not supported for")))
+  }
+
+  test("test log level") {
+    def verifyLog(expectedLevel: Level): Unit = {
+      val logAppender = new LogAppender("adaptive execution")
+      withLogAppender(
+        logAppender,
+        loggerName = Some(AdaptiveSparkPlanExec.getClass.getName.dropRight(1)),
+        level = Some(Level.TRACE)) {
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+          sql("SELECT * FROM testData join testData2 ON key = a where value = '1'").collect()
+        }
+      }
+      Seq("Plan changed", "Final plan").foreach { msg =>
+        assert(
+          logAppender.loggingEvents.exists { event =>
+            event.getRenderedMessage.contains(msg) && event.getLevel == expectedLevel
+          })
+      }
+    }
+
+    // Verify default log level
+    verifyLog(Level.DEBUG)
+
+    // Verify custom log level
+    val levels = Seq(
+      "TRACE" -> Level.TRACE,
+      "trace" -> Level.TRACE,
+      "DEBUG" -> Level.DEBUG,
+      "debug" -> Level.DEBUG,
+      "INFO" -> Level.INFO,
+      "info" -> Level.INFO,
+      "WARN" -> Level.WARN,
+      "warn" -> Level.WARN,
+      "ERROR" -> Level.ERROR,
+      "error" -> Level.ERROR,
+      "deBUG" -> Level.DEBUG)
+
+    levels.foreach { level =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_LOG_LEVEL.key -> level._1) {
+        verifyLog(level._2)
+      }
+    }
   }
 }
 

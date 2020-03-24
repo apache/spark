@@ -41,7 +41,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SecurityUtils, Utils}
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
 private[spark] object KafkaTokenUtil extends Logging {
@@ -190,8 +190,8 @@ private[spark] object KafkaTokenUtil extends Logging {
       kerberosServiceName: String): String = {
     val params =
       s"""
-      |${getKrb5LoginModuleName} required
-      | debug=${isGlobalKrbDebugEnabled()}
+      |${SecurityUtils.getKrb5LoginModuleName} required
+      | debug=${SecurityUtils.isGlobalKrbDebugEnabled()}
       | useKeyTab=true
       | serviceName="$kerberosServiceName"
       | keyTab="$keyTab"
@@ -204,35 +204,13 @@ private[spark] object KafkaTokenUtil extends Logging {
   private def getTicketCacheJaasParams(clusterConf: KafkaTokenClusterConf): String = {
     val params =
       s"""
-      |${getKrb5LoginModuleName} required
-      | debug=${isGlobalKrbDebugEnabled()}
+      |${SecurityUtils.getKrb5LoginModuleName} required
+      | debug=${SecurityUtils.isGlobalKrbDebugEnabled()}
       | useTicketCache=true
       | serviceName="${clusterConf.kerberosServiceName}";
       """.stripMargin.replace("\n", "").trim
     logDebug(s"Krb ticket cache JAAS params: $params")
     params
-  }
-
-  /**
-   * Krb5LoginModule package vary in different JVMs.
-   * Please see Hadoop UserGroupInformation for further details.
-   */
-  def getKrb5LoginModuleName(): String = {
-    if (System.getProperty("java.vendor").contains("IBM")) {
-      "com.ibm.security.auth.module.Krb5LoginModule"
-    } else {
-      "com.sun.security.auth.module.Krb5LoginModule"
-    }
-  }
-
-  private def isGlobalKrbDebugEnabled(): Boolean = {
-    if (System.getProperty("java.vendor").contains("IBM")) {
-      val debug = System.getenv("com.ibm.security.krb5.Krb5Debug")
-      debug != null && debug.equalsIgnoreCase("all")
-    } else {
-      val debug = System.getenv("sun.security.krb5.debug")
-      debug != null && debug.equalsIgnoreCase("true")
-    }
   }
 
   private def printToken(token: DelegationToken): Unit = {

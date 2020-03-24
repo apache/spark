@@ -175,7 +175,7 @@ dotNET	63000
 SELECT course, SUM(earnings) AS sum, GROUPING_ID(course, earnings) FROM courseSales
 GROUP BY course, earnings GROUPING SETS((), (course), (course, earnings)) ORDER BY course, sum
 -- !query schema
-struct<course:string,sum:bigint,grouping_id(course, earnings):int>
+struct<course:string,sum:bigint,grouping_id(course, earnings):bigint>
 -- !query output
 NULL	113000	3
 Java	20000	0
@@ -191,7 +191,7 @@ dotNET	63000	1
 SELECT course, year, GROUPING(course), GROUPING(year), GROUPING_ID(course, year) FROM courseSales
 GROUP BY CUBE(course, year)
 -- !query schema
-struct<course:string,year:int,grouping(course):tinyint,grouping(year):tinyint,grouping_id(course, year):int>
+struct<course:string,year:int,grouping(course):tinyint,grouping(year):tinyint,grouping_id(course, year):bigint>
 -- !query output
 Java	2012	0	0	0
 Java	2013	0	0	0
@@ -225,7 +225,7 @@ grouping_id() can only be used with GroupingSets/Cube/Rollup;
 -- !query
 SELECT course, year, grouping__id FROM courseSales GROUP BY CUBE(course, year) ORDER BY grouping__id, course, year
 -- !query schema
-struct<course:string,year:int,grouping__id:int>
+struct<course:string,year:int,grouping__id:bigint>
 -- !query output
 Java	2012	0
 Java	2013	0
@@ -300,7 +300,7 @@ NULL	NULL	1	1
 SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY CUBE(course, year)
 ORDER BY GROUPING(course), GROUPING(year), course, year
 -- !query schema
-struct<course:string,year:int,grouping_id(course, year):int>
+struct<course:string,year:int,grouping_id(course, year):bigint>
 -- !query output
 Java	2012	0
 Java	2013	0
