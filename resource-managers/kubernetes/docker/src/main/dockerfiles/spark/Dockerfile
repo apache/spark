@@ -27,7 +27,8 @@ ARG spark_uid=185
 # of the Spark distribution. E.g.:
 # docker build -t spark:latest -f kubernetes/dockerfiles/spark/Dockerfile .
 
-COPY kubernetes/dockerfiles/spark/sources.list /etc/apt/sources.list
+RUN echo 'deb https://deb.debian.org/debian buster main' >/etc/apt/sources.list && \
+    echo 'deb-src https://deb.debian.org/debian buster main' >>/etc/apt/sources.list
 
 RUN set -ex && \
     apt-get update && \
@@ -51,7 +52,7 @@ COPY kubernetes/dockerfiles/spark/decom.sh /opt/
 COPY examples /opt/spark/examples
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
-    
+
 ENV SPARK_HOME /opt/spark
 
 WORKDIR /opt/spark/work-dir
