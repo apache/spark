@@ -295,8 +295,8 @@ class Analyzer(
           case (CalendarIntervalType, CalendarIntervalType) => a
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
-          case (DateType, _) => DateAdd(l, r)
-          case (_, DateType) => DateAdd(r, l)
+          case (DateType, dt) if dt != StringType => DateAdd(l, r)
+          case (dt, DateType) if dt != StringType => DateAdd(r, l)
           case _ => a
         }
         case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
@@ -305,7 +305,7 @@ class Analyzer(
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
-          case (DateType, _) => DateSub(l, r)
+          case (DateType, dt) if dt != StringType => DateSub(l, r)
           case _ => s
         }
         case m @ Multiply(l, r) if m.childrenResolved => (l.dataType, r.dataType) match {
