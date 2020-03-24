@@ -400,7 +400,7 @@ select json_array_length('{"key":"not a json array"}')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-json_array_length can only be called on JSON array.;
+json_array_length can only be called on JSON array.
 
 
 -- !query
