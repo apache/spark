@@ -103,21 +103,22 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       System.exit(2)
     }
 
+    // We do not propagate metastore options to the execution copy of hive.
+    // If the same property is configured by spark.hadoop.xxx, we will override it and
+    // obey settings from command-line properties
     val cmdProperties = dummySessionState.cmdProperties.entrySet().asScala.map { e =>
       (e.getKey.toString, e.getValue.toString)
-    }.toMap.filterKeys(_ != "javax.jdo.option.ConnectionURL").map { case (k, v) =>
-      // We do not propagate metastore options to the execution copy of hive.
-      // If the same property is configured by spark.hadoop.xxx, we ignore it and
-      // obey settings from spark properties
-      (k, sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + k, v))
-    }.filterKeys(_ != "hive.metastore.warehouse.dir")
+    }.toMap.filterKeys(_ != "javax.jdo.option.ConnectionURL")
 
-    // For hadoop and hive settings, the priority order is: (descending)
-    // spark.hive.xxx -> spark.hadoop.xxx -> --hiveconf xxx(cmdProperties) -> xxx from hive-site.xml
+    // For hadoop and hive settings, the priority order is:
+    // --hiveconf xxx(cmdProperties) > spark.hive.xxx > spark.hadoop.xxx > xxx from hive-site.xml
+    sys.props ++= cmdProperties.map {case (k, v) => SPARK_HADOOP_PROP_PREFIX + k -> v}
+
     val sparkConf = new SparkConf(loadDefaults = true)
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
-    SharedState.loadHiveConfFile(sparkConf, hadoopConf)
     val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
+
+    SharedState.loadHiveConfFile(sparkConf, hadoopConf)
 
     val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
 
@@ -185,7 +186,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(dummySessionState)
 
-    cmdProperties.foreach { case (k, v) =>
+    cmdProperties.filterKeys(_ != "hive.metastore.warehouse.dir").foreach { case (k, v) =>
       SparkSQLEnv.sqlContext.setConf(k, v)
     }
 

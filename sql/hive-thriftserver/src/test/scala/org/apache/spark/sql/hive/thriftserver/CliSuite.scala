@@ -77,25 +77,29 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   def runCliWithin(
       timeout: FiniteDuration,
       extraArgs: Seq[String] = Seq.empty,
-      errorResponses: Seq[String] = Seq("Error:"))(
+      errorResponses: Seq[String] = Seq("Error:"),
+      metastore: File = metastorePath,
+      maybeWarehouse: Option[File] = Some(warehousePath))(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
     // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
     val queriesString = queries.map(_ + "\n").mkString
 
+    val warehouseConf =
+      maybeWarehouse.map(dir => s"--hiveconf ${ConfVars.METASTOREWAREHOUSE}=$dir").getOrElse("")
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
-      val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
+      val jdbcUrl = s"jdbc:derby:;databaseName=$metastore;create=true"
       s"""$cliScript
          |  --master local
          |  --driver-java-options -Dderby.system.durability=test
          |  --conf spark.ui.enabled=false
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
-         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
          |  --hiveconf conf1=conftest
          |  --hiveconf conf2=1
+         |  $warehouseConf
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
@@ -332,7 +336,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     val tmpDir = Utils.createTempDir(namePrefix = "SPARK-21451")
     runCliWithin(
       1.minute,
-      Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$tmpDir"))(
+      Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$tmpDir"),
+      maybeWarehouse = None)(
       "set spark.sql.warehouse.dir;" -> tmpDir.getAbsolutePath)
     tmpDir.delete()
   }
