@@ -19,13 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.io.{DataInput, DataOutput, IOException}
 import java.sql.Date
-import java.time.LocalDate
-import java.util.Calendar
 
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.WritableUtils
 
-import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 /**
  * The class accepts/returns days in Gregorian calendar and rebase them
@@ -82,17 +80,7 @@ private[hive] object DaysWritable {
   // The code below converts -141714 to -141704.
   def rebaseGregorianToJulianDays(daysSinceEpoch: Int): Int = {
     if (daysSinceEpoch < DateTimeUtils.GREGORIAN_CUTOVER_DAY) {
-      val millis = Math.multiplyExact(daysSinceEpoch, DateTimeConstants.MILLIS_PER_DAY)
-      val utcCal = new Calendar.Builder()
-        .setCalendarType("gregory")
-        .setTimeZone(DateTimeUtils.TimeZoneUTC)
-        .setInstant(millis)
-        .build()
-      val localDate = LocalDate.of(
-        utcCal.get(Calendar.YEAR),
-        utcCal.get(Calendar.MONTH) + 1,
-        utcCal.get(Calendar.DAY_OF_MONTH))
-      Math.toIntExact(localDate.toEpochDay)
+      DateTimeUtils.rebaseGregorianToJulianDays(daysSinceEpoch)
     } else {
       daysSinceEpoch
     }
@@ -100,13 +88,7 @@ private[hive] object DaysWritable {
 
   def rebaseJulianToGregorianDays(daysSinceEpoch: Int): Int = {
     if (daysSinceEpoch < JULIAN_CUTOVER_DAY) {
-      val localDate = LocalDate.ofEpochDay(daysSinceEpoch)
-      val utcCal = new Calendar.Builder()
-        .setCalendarType("gregory")
-        .setTimeZone(DateTimeUtils.TimeZoneUTC)
-        .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
-        .build()
-      Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, DateTimeConstants.MILLIS_PER_DAY))
+      DateTimeUtils.rebaseJulianToGregorianDays(daysSinceEpoch)
     } else {
       daysSinceEpoch
     }
