@@ -341,9 +341,9 @@ final class ShuffleBlockFetcherIterator(
       address: BlockManagerId,
       curRequestSize: Long,
       isLast: Boolean,
-      collectedRemoteRequests: ArrayBuffer[FetchRequest]): ArrayBuffer[FetchBlockInfo] = {
+      collectedRemoteRequests: ArrayBuffer[FetchRequest]): Seq[FetchBlockInfo] = {
     val mergedBlocks = mergeContinuousShuffleBlockIdsIfNeeded(curBlocks)
-    var retBlocks = new ArrayBuffer[FetchBlockInfo]
+    var retBlocks = Seq.empty[FetchBlockInfo]
     if (mergedBlocks.length <= maxBlocksInFlightPerAddress) {
       collectedRemoteRequests += createFetchRequest(mergedBlocks, address, curRequestSize)
     } else {
@@ -378,14 +378,14 @@ final class ShuffleBlockFetcherIterator(
       val mayExceedsMaxBlocks = !doBatchFetch && curBlocks.size >= maxBlocksInFlightPerAddress
       if (curRequestSize >= targetRemoteRequestSize || mayExceedsMaxBlocks) {
         curBlocks = createFetchRequests(curBlocks, address, curRequestSize, isLast = false,
-          collectedRemoteRequests)
+          collectedRemoteRequests).to[ArrayBuffer]
         curRequestSize = curBlocks.map(_.size).sum
       }
     }
     // Add in the final request
     if (curBlocks.nonEmpty) {
       curBlocks = createFetchRequests(curBlocks, address, curRequestSize, isLast = true,
-        collectedRemoteRequests)
+        collectedRemoteRequests).to[ArrayBuffer]
       curRequestSize = curBlocks.map(_.size).sum
     }
   }
@@ -403,7 +403,7 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def mergeContinuousShuffleBlockIdsIfNeeded(
-      blocks: Seq[FetchBlockInfo]): ArrayBuffer[FetchBlockInfo] = {
+      blocks: Seq[FetchBlockInfo]): Seq[FetchBlockInfo] = {
     val result = if (doBatchFetch) {
       var curBlocks = new ArrayBuffer[FetchBlockInfo]
       val mergedBlockInfo = new ArrayBuffer[FetchBlockInfo]
@@ -462,7 +462,7 @@ final class ShuffleBlockFetcherIterator(
       }
       mergedBlockInfo
     } else {
-      blocks.to[ArrayBuffer]
+      blocks
     }
     // update metrics
     numBlocksToFetch += result.size
