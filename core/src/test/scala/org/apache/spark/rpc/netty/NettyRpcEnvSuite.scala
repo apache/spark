@@ -35,7 +35,6 @@ import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
 
-
 class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 
   private implicit val signaler: Signaler = ThreadSignaler
@@ -45,8 +44,15 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
       name: String,
       port: Int,
       clientMode: Boolean = false): RpcEnv = {
-    val config = RpcEnvConfig(conf, "test", "localhost", "localhost", port,
-      new SecurityManager(conf), 0, clientMode)
+    val config = RpcEnvConfig(
+      conf,
+      "test",
+      "localhost",
+      "localhost",
+      port,
+      new SecurityManager(conf),
+      0,
+      clientMode)
     new NettyRpcEnvFactory().create(config)
   }
 
@@ -58,18 +64,19 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     val mockedClient = mock[TransportClient]
     when(mockedClient.sendRpc(any[ByteBuffer], any[RpcResponseCallback]))
       .thenAnswer(new Answer[Long]() {
-      override def answer(invocation: InvocationOnMock): Long = {
-        Thread.sleep(2000)
-        1000
-      }
-    })
+        override def answer(invocation: InvocationOnMock): Long = {
+          Thread.sleep(2000)
+          1000
+        }
+      })
     val channel = mock[Channel]
     val socketAddr = mock[SocketAddress]
     when(socketAddr.toString).thenReturn("mocked socket")
     when(channel.remoteAddress()).thenReturn(socketAddr)
     when(mockedClient.getChannel).thenReturn(channel)
     when(receiver.client).thenReturn(mockedClient)
-    val answer = nettyEnv.ask(new RequestMessage(nettyEnv.address, receiver, "message"),
+    val answer = nettyEnv.ask(
+      new RequestMessage(nettyEnv.address, receiver, "message"),
       RpcTimeout(nettyEnv.conf, Seq("spark.rpc.askTimeout", "spark.network.timeout"), "1s"))
     val thrown = intercept[Exception] {
       ThreadUtils.awaitResult(answer, 2 second)
@@ -89,8 +96,15 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 
   test("advertise address different from bind address") {
     val sparkConf = new SparkConf()
-    val config = RpcEnvConfig(sparkConf, "test", "localhost", "example.com", 0,
-      new SecurityManager(sparkConf), 0, false)
+    val config = RpcEnvConfig(
+      sparkConf,
+      "test",
+      "localhost",
+      "example.com",
+      0,
+      new SecurityManager(sparkConf),
+      0,
+      false)
     val env = new NettyRpcEnvFactory().create(config)
     try {
       assert(env.address.hostPort.startsWith("example.com:"))
@@ -113,19 +127,13 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     val receiver = new NettyRpcEndpointRef(nettyEnv.conf, receiverAddress, nettyEnv)
 
     val msg = new RequestMessage(senderAddress, receiver, "foo")
-    assertRequestMessageEquals(
-      msg,
-      RequestMessage(nettyEnv, client, msg.serialize(nettyEnv)))
+    assertRequestMessageEquals(msg, RequestMessage(nettyEnv, client, msg.serialize(nettyEnv)))
 
     val msg2 = new RequestMessage(null, receiver, "foo")
-    assertRequestMessageEquals(
-      msg2,
-      RequestMessage(nettyEnv, client, msg2.serialize(nettyEnv)))
+    assertRequestMessageEquals(msg2, RequestMessage(nettyEnv, client, msg2.serialize(nettyEnv)))
 
     val msg3 = new RequestMessage(senderAddress, receiver, null)
-    assertRequestMessageEquals(
-      msg3,
-      RequestMessage(nettyEnv, client, msg3.serialize(nettyEnv)))
+    assertRequestMessageEquals(msg3, RequestMessage(nettyEnv, client, msg3.serialize(nettyEnv)))
   }
 
   test("StackOverflowError should be sent back and Dispatcher should survive") {
