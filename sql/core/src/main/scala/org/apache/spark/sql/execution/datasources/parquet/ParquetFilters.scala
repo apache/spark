@@ -49,8 +49,9 @@ class ParquetFilters(
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean) {
   // A map which contains parquet field name and data type, if predicate push down applies.
-  // The keys are the column names. For nested column, `dot` will be used as a separator.
-  // For column name that contains `dot`, backquote will be used.
+  //
+  // Each key in `nameToParquetField` represents a column; `dots` are used as separators for
+  // nested columns. If any part of the names contains `dots`, it is quoted to avoid confusion.
   // See `org.apache.spark.sql.connector.catalog.quote` for implementation details.
   private val nameToParquetField : Map[String, ParquetPrimitiveField] = {
     // Recursively traverse the parquet schema to get primitive fields that can be pushed-down.

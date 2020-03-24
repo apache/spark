@@ -76,11 +76,6 @@ sealed abstract class Filter {
 @Stable
 case class EqualTo(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -96,11 +91,6 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
 @Stable
 case class EqualNullSafe(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -115,11 +105,6 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -134,11 +119,6 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -153,11 +133,6 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -172,11 +147,6 @@ case class LessThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -207,11 +177,6 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
   }
 
   override def references: Array[String] = Array(attribute) ++ values.flatMap(findReferences)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -225,11 +190,6 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
 @Stable
 case class IsNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -243,11 +203,6 @@ case class IsNull(attribute: String) extends Filter {
 @Stable
 case class IsNotNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -292,11 +247,6 @@ case class Not(child: Filter) extends Filter {
 @Stable
 case class StringStartsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -311,11 +261,6 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
 @Stable
 case class StringEndsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**
@@ -330,11 +275,6 @@ case class StringEndsWith(attribute: String, value: String) extends Filter {
 @Stable
 case class StringContains(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-
-  /**
-   * A column name as an array of string multi-identifier
-   */
-  val fieldNames: Array[String] = parseColumnPath(attribute).toArray
 }
 
 /**

@@ -37,7 +37,6 @@ class FiltersSuite extends SparkFunSuite {
   test("EqualTo references") { withFieldNames { (name, fieldNames) =>
     assert(EqualTo(name, "1").references.toSeq == Seq(name))
     assert(EqualTo(name, "1").V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(EqualTo(name, "1").fieldNames.toSeq == fieldNames.toSeq)
 
     assert(EqualTo(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
     assert(EqualTo("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
@@ -51,7 +50,6 @@ class FiltersSuite extends SparkFunSuite {
   test("EqualNullSafe references") { withFieldNames { (name, fieldNames) =>
     assert(EqualNullSafe(name, "1").references.toSeq == Seq(name))
     assert(EqualNullSafe(name, "1").V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(EqualNullSafe(name, "1").fieldNames.toSeq == fieldNames.toSeq)
 
     assert(EqualNullSafe(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
     assert(EqualNullSafe("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
@@ -65,7 +63,6 @@ class FiltersSuite extends SparkFunSuite {
   test("GreaterThan references") { withFieldNames { (name, fieldNames) =>
     assert(GreaterThan(name, "1").references.toSeq == Seq(name))
     assert(GreaterThan(name, "1").V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(GreaterThan(name, "1").fieldNames.toSeq == fieldNames.toSeq)
 
     assert(GreaterThan(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
     assert(GreaterThan("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
@@ -79,7 +76,6 @@ class FiltersSuite extends SparkFunSuite {
   test("GreaterThanOrEqual references") { withFieldNames { (name, fieldNames) =>
     assert(GreaterThanOrEqual(name, "1").references.toSeq == Seq(name))
     assert(GreaterThanOrEqual(name, "1").V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(GreaterThanOrEqual(name, "1").fieldNames.toSeq == fieldNames.toSeq)
 
     assert(GreaterThanOrEqual(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
     assert(GreaterThanOrEqual("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
@@ -93,7 +89,6 @@ class FiltersSuite extends SparkFunSuite {
   test("LessThan references") { withFieldNames { (name, fieldNames) =>
     assert(LessThan(name, "1").references.toSeq == Seq(name))
     assert(LessThan(name, "1").V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(LessThan(name, "1").fieldNames.toSeq == fieldNames.toSeq)
 
     assert(LessThan("a", EqualTo("b", "2")).references.toSeq == Seq("a", "b"))
   }}
@@ -101,7 +96,6 @@ class FiltersSuite extends SparkFunSuite {
   test("LessThanOrEqual references") { withFieldNames { (name, fieldNames) =>
     assert(LessThanOrEqual(name, "1").references.toSeq == Seq(name))
     assert(LessThanOrEqual(name, "1").V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(LessThanOrEqual(name, "1").fieldNames.toSeq == fieldNames.toSeq)
 
     assert(LessThanOrEqual(name, EqualTo("b", "2")).references.toSeq == Seq(name, "b"))
     assert(LessThanOrEqual("b", EqualTo(name, "2")).references.toSeq == Seq("b", name))
@@ -115,7 +109,6 @@ class FiltersSuite extends SparkFunSuite {
   test("In references") { withFieldNames { (name, fieldNames) =>
     assert(In(name, Array("1")).references.toSeq == Seq(name))
     assert(In(name, Array("1")).V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(In(name, Array("1")).fieldNames.toSeq == fieldNames.toSeq)
 
     assert(In(name, Array("1", EqualTo("b", "2"))).references.toSeq == Seq(name, "b"))
     assert(In("b", Array("1", EqualTo(name, "2"))).references.toSeq == Seq("b", name))
@@ -129,13 +122,11 @@ class FiltersSuite extends SparkFunSuite {
   test("IsNull references") { withFieldNames { (name, fieldNames) =>
     assert(IsNull(name).references.toSeq == Seq(name))
     assert(IsNull(name).V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(IsNull(name).fieldNames.toSeq == fieldNames.toSeq)
   }}
 
   test("IsNotNull references") { withFieldNames { (name, fieldNames) =>
     assert(IsNotNull(name).references.toSeq == Seq(name))
     assert(IsNull(name).V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(IsNull(name).fieldNames.toSeq == fieldNames.toSeq)
   }}
 
   test("And references") { withFieldNames { (name, fieldNames) =>
@@ -161,18 +152,15 @@ class FiltersSuite extends SparkFunSuite {
   test("StringStartsWith references") { withFieldNames { (name, fieldNames) =>
     assert(StringStartsWith(name, "str").references.toSeq == Seq(name))
     assert(StringStartsWith(name, "str").V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(StringStartsWith(name, "str").fieldNames.toSeq == fieldNames.toSeq)
   }}
 
   test("StringEndsWith references") { withFieldNames { (name, fieldNames) =>
     assert(StringEndsWith(name, "str").references.toSeq == Seq(name))
     assert(StringEndsWith(name, "str").V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(StringEndsWith(name, "str").fieldNames.toSeq == fieldNames.toSeq)
   }}
 
   test("StringContains references") { withFieldNames { (name, fieldNames) =>
     assert(StringContains(name, "str").references.toSeq == Seq(name))
     assert(StringContains(name, "str").V2references.toSeq.map(_.toSeq) == Seq(fieldNames.toSeq))
-    assert(StringContains(name, "str").fieldNames.toSeq == fieldNames.toSeq)
   }}
 }
