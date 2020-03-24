@@ -50,7 +50,7 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     new NettyRpcEnvFactory().create(config)
   }
 
-  test("Send message to clientMode RpcEnv with timeout") {
+  test("SPARK-31233: Send message to clientMode RpcEnv with timeout") {
     val nettyEnv = env.asInstanceOf[NettyRpcEnv]
     val receiver = mock[NettyRpcEndpointRef]
     when(receiver.address).thenReturn(null)
