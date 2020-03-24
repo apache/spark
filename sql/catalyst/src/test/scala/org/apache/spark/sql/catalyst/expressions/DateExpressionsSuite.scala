@@ -37,8 +37,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   import IntegralLiteralTestUtils._
 
-  private val pstTzOpt = Option(PST.getId)
-  private val jstTzOpt = Option(JST.getId)
+  private val PST_OPT = Option(PST.getId)
+  private val JST_OPT = Option(JST.getId)
 
   def toMillis(timestamp: String): Long = {
     val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC)
@@ -51,12 +51,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("datetime function current_date") {
     val d0 = DateTimeUtils.currentDate(UTC)
-    val cd = CurrentDate(utcTzOpt).eval(EmptyRow).asInstanceOf[Int]
+    val cd = CurrentDate(UTC_OPT).eval(EmptyRow).asInstanceOf[Int]
     val d1 = DateTimeUtils.currentDate(UTC)
     assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
 
-    val cdjst = CurrentDate(jstTzOpt).eval(EmptyRow).asInstanceOf[Int]
-    val cdpst = CurrentDate(pstTzOpt).eval(EmptyRow).asInstanceOf[Int]
+    val cdjst = CurrentDate(JST_OPT).eval(EmptyRow).asInstanceOf[Int]
+    val cdpst = CurrentDate(PST_OPT).eval(EmptyRow).asInstanceOf[Int]
     assert(cdpst <= cd && cd <= cdjst)
   }
 
@@ -88,8 +88,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Year") {
     checkEvaluation(Year(Literal.create(null, DateType)), null)
     checkEvaluation(Year(Literal(d)), 2015)
-    checkEvaluation(Year(Cast(Literal(date), DateType, utcTzOpt)), 2015)
-    checkEvaluation(Year(Cast(Literal(ts), DateType, utcTzOpt)), 2013)
+    checkEvaluation(Year(Cast(Literal(date), DateType, UTC_OPT)), 2015)
+    checkEvaluation(Year(Cast(Literal(ts), DateType, UTC_OPT)), 2013)
 
     val c = Calendar.getInstance()
     (2000 to 2002).foreach { y =>
@@ -110,8 +110,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Quarter") {
     checkEvaluation(Quarter(Literal.create(null, DateType)), null)
     checkEvaluation(Quarter(Literal(d)), 2)
-    checkEvaluation(Quarter(Cast(Literal(date), DateType, utcTzOpt)), 2)
-    checkEvaluation(Quarter(Cast(Literal(ts), DateType, utcTzOpt)), 4)
+    checkEvaluation(Quarter(Cast(Literal(date), DateType, UTC_OPT)), 2)
+    checkEvaluation(Quarter(Cast(Literal(ts), DateType, UTC_OPT)), 4)
 
     val c = Calendar.getInstance()
     (2003 to 2004).foreach { y =>
@@ -133,8 +133,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Month") {
     checkEvaluation(Month(Literal.create(null, DateType)), null)
     checkEvaluation(Month(Literal(d)), 4)
-    checkEvaluation(Month(Cast(Literal(date), DateType, utcTzOpt)), 4)
-    checkEvaluation(Month(Cast(Literal(ts), DateType, utcTzOpt)), 11)
+    checkEvaluation(Month(Cast(Literal(date), DateType, UTC_OPT)), 4)
+    checkEvaluation(Month(Cast(Literal(ts), DateType, UTC_OPT)), 11)
 
     checkEvaluation(Month(Cast(Literal("1582-04-28 13:10:15"), DateType)), 4)
     checkEvaluation(Month(Cast(Literal("1582-10-04 13:10:15"), DateType)), 10)
@@ -158,8 +158,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(DayOfMonth(Cast(Literal("2000-02-29"), DateType)), 29)
     checkEvaluation(DayOfMonth(Literal.create(null, DateType)), null)
     checkEvaluation(DayOfMonth(Literal(d)), 8)
-    checkEvaluation(DayOfMonth(Cast(Literal(date), DateType, utcTzOpt)), 8)
-    checkEvaluation(DayOfMonth(Cast(Literal(ts), DateType, utcTzOpt)), 8)
+    checkEvaluation(DayOfMonth(Cast(Literal(date), DateType, UTC_OPT)), 8)
+    checkEvaluation(DayOfMonth(Cast(Literal(ts), DateType, UTC_OPT)), 8)
 
     checkEvaluation(DayOfMonth(Cast(Literal("1582-04-28 13:10:15"), DateType)), 28)
     checkEvaluation(DayOfMonth(Cast(Literal("1582-10-15 13:10:15"), DateType)), 15)
@@ -178,11 +178,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Seconds") {
-    assert(Second(Literal.create(null, DateType), utcTzOpt).resolved === false)
-    assert(Second(Cast(Literal(d), TimestampType, utcTzOpt), utcTzOpt).resolved )
-    checkEvaluation(Second(Cast(Literal(d), TimestampType, utcTzOpt), utcTzOpt), 0)
-    checkEvaluation(Second(Cast(Literal(date), TimestampType, utcTzOpt), utcTzOpt), 15)
-    checkEvaluation(Second(Literal(ts), utcTzOpt), 15)
+    assert(Second(Literal.create(null, DateType), UTC_OPT).resolved === false)
+    assert(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT).resolved )
+    checkEvaluation(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
+    checkEvaluation(Second(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 15)
+    checkEvaluation(Second(Literal(ts), UTC_OPT), 15)
 
     val c = Calendar.getInstance()
     for (tz <- outstandingTimezones) {
@@ -202,10 +202,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("DayOfWeek") {
     checkEvaluation(DayOfWeek(Literal.create(null, DateType)), null)
     checkEvaluation(DayOfWeek(Literal(d)), Calendar.WEDNESDAY)
-    checkEvaluation(DayOfWeek(Cast(Literal(date), DateType, utcTzOpt)),
+    checkEvaluation(DayOfWeek(Cast(Literal(date), DateType, UTC_OPT)),
       Calendar.WEDNESDAY)
-    checkEvaluation(DayOfWeek(Cast(Literal(ts), DateType, utcTzOpt)), Calendar.FRIDAY)
-    checkEvaluation(DayOfWeek(Cast(Literal("2011-05-06"), DateType, utcTzOpt)), Calendar.FRIDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal(ts), DateType, UTC_OPT)), Calendar.FRIDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), Calendar.FRIDAY)
     checkEvaluation(DayOfWeek(Literal(new Date(toMillis("2017-05-27 13:10:15")))),
       Calendar.SATURDAY)
     checkEvaluation(DayOfWeek(Literal(new Date(toMillis("1582-10-15 13:10:15")))),
@@ -216,9 +216,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("WeekDay") {
     checkEvaluation(WeekDay(Literal.create(null, DateType)), null)
     checkEvaluation(WeekDay(Literal(d)), 2)
-    checkEvaluation(WeekDay(Cast(Literal(date), DateType, utcTzOpt)), 2)
-    checkEvaluation(WeekDay(Cast(Literal(ts), DateType, utcTzOpt)), 4)
-    checkEvaluation(WeekDay(Cast(Literal("2011-05-06"), DateType, utcTzOpt)), 4)
+    checkEvaluation(WeekDay(Cast(Literal(date), DateType, UTC_OPT)), 2)
+    checkEvaluation(WeekDay(Cast(Literal(ts), DateType, UTC_OPT)), 4)
+    checkEvaluation(WeekDay(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), 4)
     checkEvaluation(WeekDay(Literal(new Date(toMillis("2017-05-27 13:10:15")))), 5)
     checkEvaluation(WeekDay(Literal(new Date(toMillis("1582-10-15 13:10:15")))), 4)
     checkConsistencyBetweenInterpretedAndCodegen(WeekDay, DateType)
@@ -227,11 +227,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("WeekOfYear") {
     checkEvaluation(WeekOfYear(Literal.create(null, DateType)), null)
     checkEvaluation(WeekOfYear(Literal(d)), 15)
-    checkEvaluation(WeekOfYear(Cast(Literal(date), DateType, utcTzOpt)), 15)
-    checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, utcTzOpt)), 45)
-    checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType, utcTzOpt)), 18)
-    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-15 13:10:15"), DateType, utcTzOpt)), 41)
-    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-04 13:10:15"), DateType, utcTzOpt)), 40)
+    checkEvaluation(WeekOfYear(Cast(Literal(date), DateType, UTC_OPT)), 15)
+    checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, UTC_OPT)), 45)
+    checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), 18)
+    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-15 13:10:15"), DateType, UTC_OPT)), 41)
+    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-04 13:10:15"), DateType, UTC_OPT)), 40)
     checkConsistencyBetweenInterpretedAndCodegen(WeekOfYear, DateType)
   }
 
@@ -239,38 +239,38 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         checkEvaluation(
-          DateFormatClass(Literal.create(null, TimestampType), Literal("y"), utcTzOpt),
+          DateFormatClass(Literal.create(null, TimestampType), Literal("y"), UTC_OPT),
           null)
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, utcTzOpt),
-          Literal.create(null, StringType), utcTzOpt), null)
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, UTC_OPT),
+          Literal.create(null, StringType), UTC_OPT), null)
 
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, utcTzOpt),
-          Literal("y"), utcTzOpt), "2015")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), utcTzOpt), "2013")
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, utcTzOpt),
-          Literal("H"), utcTzOpt), "0")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), utcTzOpt), "13")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, UTC_OPT),
+          Literal("y"), UTC_OPT), "2015")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), UTC_OPT), "2013")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, UTC_OPT),
+          Literal("H"), UTC_OPT), "0")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), UTC_OPT), "13")
 
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, pstTzOpt),
-          Literal("y"), pstTzOpt), "2015")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), pstTzOpt), "2013")
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, pstTzOpt),
-          Literal("H"), pstTzOpt), "0")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), pstTzOpt), "5")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, PST_OPT),
+          Literal("y"), PST_OPT), "2015")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), PST_OPT), "2013")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, PST_OPT),
+          Literal("H"), PST_OPT), "0")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), PST_OPT), "5")
 
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstTzOpt),
-          Literal("y"), jstTzOpt), "2015")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), jstTzOpt), "2013")
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstTzOpt),
-          Literal("H"), jstTzOpt), "0")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), jstTzOpt), "22")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, JST_OPT),
+          Literal("y"), JST_OPT), "2015")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), JST_OPT), "2013")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, JST_OPT),
+          Literal("H"), JST_OPT), "0")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), JST_OPT), "22")
 
         // SPARK-28072 The codegen path should work
         checkEvaluation(
           expression = DateFormatClass(
             BoundReference(ordinal = 0, dataType = TimestampType, nullable = true),
             BoundReference(ordinal = 1, dataType = StringType, nullable = true),
-            jstTzOpt),
+            JST_OPT),
           expected = "22",
           inputRow = InternalRow(DateTimeUtils.fromJavaTimestamp(ts), UTF8String.fromString("H")))
       }
@@ -278,11 +278,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Hour") {
-    assert(Hour(Literal.create(null, DateType), utcTzOpt).resolved === false)
-    assert(Hour(Literal(ts), utcTzOpt).resolved)
-    checkEvaluation(Hour(Cast(Literal(d), TimestampType, utcTzOpt), utcTzOpt), 0)
-    checkEvaluation(Hour(Cast(Literal(date), TimestampType, utcTzOpt), utcTzOpt), 13)
-    checkEvaluation(Hour(Literal(ts), utcTzOpt), 13)
+    assert(Hour(Literal.create(null, DateType), UTC_OPT).resolved === false)
+    assert(Hour(Literal(ts), UTC_OPT).resolved)
+    checkEvaluation(Hour(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
+    checkEvaluation(Hour(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 13)
+    checkEvaluation(Hour(Literal(ts), UTC_OPT), 13)
 
     val c = Calendar.getInstance()
     for (tz <- outstandingTimezones) {
@@ -304,12 +304,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Minute") {
-    assert(Minute(Literal.create(null, DateType), utcTzOpt).resolved === false)
-    assert(Minute(Literal(ts), utcTzOpt).resolved)
-    checkEvaluation(Minute(Cast(Literal(d), TimestampType, utcTzOpt), utcTzOpt), 0)
+    assert(Minute(Literal.create(null, DateType), UTC_OPT).resolved === false)
+    assert(Minute(Literal(ts), UTC_OPT).resolved)
+    checkEvaluation(Minute(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
     checkEvaluation(
-      Minute(Cast(Literal(date), TimestampType, utcTzOpt), utcTzOpt), 10)
-    checkEvaluation(Minute(Literal(ts), utcTzOpt), 10)
+      Minute(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 10)
+    checkEvaluation(Minute(Literal(ts), UTC_OPT), 10)
 
     val c = Calendar.getInstance()
     for (tz <- outstandingTimezones) {

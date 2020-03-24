@@ -49,7 +49,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   protected def checkNullCast(from: DataType, to: DataType): Unit = {
-    checkEvaluation(cast(Literal.create(null, from), to, utcTzOpt), null)
+    checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
   }
 
   test("null cast") {
@@ -281,22 +281,22 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkEvaluation(cast("abdef", StringType), "abdef")
-    checkEvaluation(cast("abdef", TimestampType, utcTzOpt), null)
+    checkEvaluation(cast("abdef", TimestampType, UTC_OPT), null)
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
-    checkEvaluation(cast(cast(nts, TimestampType, utcTzOpt), StringType, utcTzOpt), nts)
+    checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
-      cast(cast(ts, StringType, utcTzOpt), TimestampType, utcTzOpt),
+      cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
       DateTimeUtils.fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(
-      cast(cast(cast(nts, TimestampType, utcTzOpt), DateType, utcTzOpt), StringType),
+      cast(cast(cast(nts, TimestampType, UTC_OPT), DateType, UTC_OPT), StringType),
       sd)
     checkEvaluation(
-      cast(cast(cast(ts, DateType, utcTzOpt), TimestampType, utcTzOpt), StringType, utcTzOpt),
+      cast(cast(cast(ts, DateType, UTC_OPT), TimestampType, UTC_OPT), StringType, UTC_OPT),
       zts)
 
     checkEvaluation(cast(cast("abdef", BinaryType), StringType), "abdef")
@@ -309,7 +309,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       5.toShort)
     checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", TimestampType, utcTzOpt), ByteType),
+      cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       null)
     checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
@@ -361,7 +361,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(d, StringType), "1970-01-01")
 
     checkEvaluation(
-      cast(cast(d, TimestampType, utcTzOpt), StringType, utcTzOpt),
+      cast(cast(d, TimestampType, UTC_OPT), StringType, UTC_OPT),
       "1970-01-01 00:00:00")
   }
 

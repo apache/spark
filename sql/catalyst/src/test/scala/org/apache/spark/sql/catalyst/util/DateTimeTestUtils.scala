@@ -37,7 +37,7 @@ object DateTimeTestUtils {
   val PST = getZoneId("-08:00")
   val UTC = getZoneId("+00:00")
 
-  val utcTzOpt = Option(UTC.getId)
+  val UTC_OPT = Option(UTC.getId)
 
   val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
 
