@@ -32,6 +32,13 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
 
+  test("propagate from spark conf") {
+    // We create a new context here to avoid order dependence with other tests that might call
+    // clear().
+    val newContext = new SQLContext(SparkSession.builder().sparkContext(sparkContext).getOrCreate())
+    assert(newContext.getConf("spark.sql.testkey", "false") === "true")
+  }
+
   test("programmatic ways of basic setting and getting") {
     // Set a conf first.
     spark.conf.set(testKey, testVal)
