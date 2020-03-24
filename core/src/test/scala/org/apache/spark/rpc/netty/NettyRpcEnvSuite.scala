@@ -17,16 +17,24 @@
 
 package org.apache.spark.rpc.netty
 
+import java.net.SocketAddress
+import java.nio.ByteBuffer
 import java.util.concurrent.ExecutionException
 
-import scala.concurrent.duration._
-
+import io.netty.channel.Channel
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatestplus.mockito.MockitoSugar
+import scala.concurrent.duration._
 
 import org.apache.spark._
-import org.apache.spark.network.client.TransportClient
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.rpc._
+import org.apache.spark.util.ThreadUtils
+
 
 class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 
@@ -40,6 +48,34 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     val config = RpcEnvConfig(conf, "test", "localhost", "localhost", port,
       new SecurityManager(conf), 0, clientMode)
     new NettyRpcEnvFactory().create(config)
+  }
+
+  test("Send message to clientMode RpcEnv with timeout") {
+    val nettyEnv = env.asInstanceOf[NettyRpcEnv]
+    val receiver = mock[NettyRpcEndpointRef]
+    when(receiver.address).thenReturn(null)
+    when(receiver.name).thenReturn("mocked")
+    val mockedClient = mock[TransportClient]
+    when(mockedClient.sendRpc(any[ByteBuffer], any[RpcResponseCallback]))
+      .thenAnswer(new Answer[Long]() {
+      override def answer(invocation: InvocationOnMock): Long = {
+        Thread.sleep(2000)
+        1000
+      }
+    })
+    val channel = mock[Channel]
+    val socketAddr = mock[SocketAddress]
+    when(socketAddr.toString).thenReturn("mocked socket")
+    when(channel.remoteAddress()).thenReturn(socketAddr)
+    when(mockedClient.getChannel).thenReturn(channel)
+    when(receiver.client).thenReturn(mockedClient)
+    val answer = nettyEnv.ask(new RequestMessage(nettyEnv.address, receiver, "message"),
+      RpcTimeout(nettyEnv.conf, Seq("spark.rpc.askTimeout", "spark.network.timeout"), "1s"))
+    val thrown = intercept[Exception] {
+      ThreadUtils.awaitResult(answer, 2 second)
+    }
+    assert(thrown.getClass.equals(classOf[RpcTimeoutException]))
+    assert(thrown.getMessage.contains("Cannot receive any reply from mocked socket in 1 second"))
   }
 
   test("non-existent endpoint") {
