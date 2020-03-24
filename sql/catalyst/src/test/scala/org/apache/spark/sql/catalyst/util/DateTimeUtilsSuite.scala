@@ -88,13 +88,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("SPARK-6785: java date conversion before and after epoch") {
-    def format(d: Date): String = {
-      TimestampFormatter("yyyy-MM-dd", defaultTimeZone().toZoneId)
-        .format(millisToMicros(d.getTime))
-    }
     def checkFromToJavaDate(d1: Date): Unit = {
       val d2 = toJavaDate(fromJavaDate(d1))
-      assert(format(d2) === format(d1))
+      assert(d2.toString === d1.toString)
     }
 
     val df1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
@@ -500,17 +496,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
 
-    withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
+    val tz = "America/Los_Angeles"
+    withDefaultTimeZone(TimeZone.getTimeZone(tz)) {
       // Daylight Saving Time
-      test("2016-03-13 01:59:59", "PST", "2016-03-13 09:59:59.0")
-      // 2016-03-13 02:00:00 PST does not exists
-      test("2016-03-13 02:00:00", "PST", "2016-03-13 10:00:00.0")
-      test("2016-03-13 03:00:00", "PST", "2016-03-13 10:00:00.0")
-      test("2016-11-06 00:59:59", "PST", "2016-11-06 07:59:59.0")
-      // 2016-11-06 01:00:00 PST could be 2016-11-06 08:00:00 UTC or 2016-11-06 09:00:00 UTC
-      test("2016-11-06 01:00:00", "PST", "2016-11-06 09:00:00.0")
-      test("2016-11-06 01:59:59", "PST", "2016-11-06 09:59:59.0")
-      test("2016-11-06 02:00:00", "PST", "2016-11-06 10:00:00.0")
+      test("2016-03-13 01:59:59", tz, "2016-03-13 09:59:59.0")
+      test("2016-03-13 02:00:00", tz, "2016-03-13 10:00:00.0")
+      test("2016-03-13 03:00:00", tz, "2016-03-13 10:00:00.0")
+      test("2016-11-06 00:59:59", tz, "2016-11-06 07:59:59.0")
+      test("2016-11-06 01:00:00", tz, "2016-11-06 08:00:00.0")
+      test("2016-11-06 01:59:59", tz, "2016-11-06 08:59:59.0")
+      test("2016-11-06 02:00:00", tz, "2016-11-06 10:00:00.0")
     }
   }
 
