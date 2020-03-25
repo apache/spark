@@ -115,11 +115,19 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("reset - static conf") {
-    spark.sessionState.conf.clear()
-    assert(spark.conf.get(StaticSQLConf.UI_RETAINED_EXECUTIONS) === 1)
+  test("reset - static and spark conf") {
+    val conf = spark.sessionState.conf.getAllConfs
+    val appName = conf.get("spark.app.name")
+    val driverHost = conf.get("spark.driver.host")
+    val master = conf.get("spark.master")
+    val warehouseDir = conf.get("spark.sql.warehouse.dir")
+    // ensure the conf here is not default value, and will not be reset to default value
+    assert(warehouseDir.get.contains(this.getClass.getCanonicalName))
     sql(s"reset")
-    assert(spark.conf.get(StaticSQLConf.UI_RETAINED_EXECUTIONS) === 1)
+    assert(conf.get("spark.app.name") === appName)
+    assert(conf.get("spark.driver.host") === driverHost)
+    assert(conf.get("spark.master") === master)
+    assert(conf.get("spark.sql.warehouse.dir") === warehouseDir)
   }
 
   test("reset - public conf") {

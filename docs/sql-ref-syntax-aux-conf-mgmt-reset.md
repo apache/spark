@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-Reset all the properties specific to the current session to their default values. After RESET command, executing SET command will output empty.
+Reset any properties specific to the current session which were set via the [SET](sql-ref-syntax-aux-conf-mgmt-set.html) command to their default values.
 
 ### Syntax
 {% highlight sql %}
