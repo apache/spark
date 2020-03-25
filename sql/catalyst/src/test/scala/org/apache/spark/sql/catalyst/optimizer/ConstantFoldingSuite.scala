@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -159,11 +160,13 @@ class ConstantFoldingSuite extends PlanTest {
     val normalFunc = (x: Int) => x + 41
     val exceptionFunc = (x: Int) => x / 0
 
+    val intEncoder = Option(ExpressionEncoder[Int]())
+
     val foldableUdf = ScalaUDF(
       function = normalFunc,
       dataType = IntegerType,
       children = Seq(Literal(1)),
-      inputPrimitives = Seq(true),
+      inputEncoders = Seq(intEncoder),
       udfName = None,
       nullable = false,
       udfDeterministic = true)
@@ -172,7 +175,7 @@ class ConstantFoldingSuite extends PlanTest {
       function = normalFunc,
       dataType = IntegerType,
       children = Seq[Expression]('a),
-      inputPrimitives = Seq(true),
+      inputEncoders = Seq(intEncoder),
       udfName = None,
       nullable = false,
       udfDeterministic = true)
@@ -181,7 +184,7 @@ class ConstantFoldingSuite extends PlanTest {
       function = exceptionFunc,
       dataType = IntegerType,
       children = Seq(Literal(1)),
-      inputPrimitives = Seq(true),
+      inputEncoders = Seq(intEncoder),
       udfName = None,
       nullable = false,
       udfDeterministic = true) // intentionally mis-declaring as deterministic
