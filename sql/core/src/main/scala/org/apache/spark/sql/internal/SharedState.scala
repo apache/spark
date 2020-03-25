@@ -22,6 +22,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -29,7 +30,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
@@ -235,11 +235,12 @@ object SharedState extends Logging {
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
       logInfo(s"loading hive config file: $configFile")
-      // this call actually will override existing configurations from hive-site.xml
-      hadoopConf.addResource(configFile)
+      val hadoopConfTemp = new Configuration()
+      hadoopConfTemp.addResource(configFile)
+      hadoopConfTemp.asScala.foreach { entry =>
+        hadoopConf.setIfUnset(entry.getKey, entry.getValue)
+      }
     }
-    // We need to restore the setting like spark.hadoop(hive).*
-    SparkHadoopUtil.appendS3AndSparkHadoopHiveConfigurations(sparkConf, hadoopConf)
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkConf.remove(hiveWarehouseKey)
     // Set the Hive metastore warehouse path to the one we use
