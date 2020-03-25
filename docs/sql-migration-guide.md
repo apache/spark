@@ -111,7 +111,7 @@ license: |
 
   - Since Spark 3.0, `SHOW CREATE TABLE` will always return Spark DDL, even when the given table is a Hive serde table. For generating Hive DDL, please use `SHOW CREATE TABLE AS SERDE` command instead.
 
-  - Since Spark 3.0, columns of CHAR type is not allowed in non-Hive-Serde tables, and CREATE/ALTER TABLE commands will fail if CHAR type is detected. Please use STRING type instead. In Spark version 2.4 and earlier, CHAR type is treated as STRING type and the length parameter is simply ignored.
+  - Since Spark 3.0, column of CHAR type is not allowed in non-Hive-Serde tables, and CREATE/ALTER TABLE commands will fail if CHAR type is detected. Please use STRING type instead. In Spark version 2.4 and earlier, CHAR type is treated as STRING type and the length parameter is simply ignored.
 
 ### UDFs and Built-in Functions
 
