@@ -230,7 +230,7 @@ object SharedState extends Logging {
    */
   def loadHiveConfFile(
       sparkConf: SparkConf,
-      hadoopConf: Configuration): Boolean = {
+      hadoopConf: Configuration): Unit = {
     val hiveWarehouseKey = "hive.metastore.warehouse.dir"
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {

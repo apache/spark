@@ -103,12 +103,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       System.exit(2)
     }
 
-    // We do not propagate metastore options to the execution copy of hive.
     // If the same property is configured by spark.hadoop.xxx, we will override it and
     // obey settings from command-line properties
     val cmdProperties = dummySessionState.cmdProperties.entrySet().asScala.map { e =>
       (e.getKey.toString, e.getValue.toString)
-    }.toMap.filterKeys(_ != "javax.jdo.option.ConnectionURL")
+    }.toMap.filterKeys { key =>
+      // We do not propagate metastore options to the execution copy of hive.
+      key != "javax.jdo.option.ConnectionURL"
+    }
 
     // For hadoop and hive settings, the priority order is:
     // --hiveconf xxx(cmdProperties) > spark.hive.xxx > spark.hadoop.xxx > xxx from hive-site.xml
@@ -186,6 +188,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(dummySessionState)
 
+    // The warehouse has been adjusted. We do not propagate the original value to SQLConf.
     cmdProperties.filterKeys(_ != "hive.metastore.warehouse.dir").foreach { case (k, v) =>
       SparkSQLEnv.sqlContext.setConf(k, v)
     }
