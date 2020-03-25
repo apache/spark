@@ -547,7 +547,6 @@ class DataFrameTests(ReusedSQLTestCase):
             self.assertEquals(types.iloc[0], np.int32)
             self.assertEquals(types.iloc[1], np.int32)
 
-
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_to_pandas_required_pandas_not_found(self):
         with QuietTest(self.sc):

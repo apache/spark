@@ -135,7 +135,7 @@ class PandasConversionMixin(object):
         dtype = [None] * len(self.schema)
         for fieldIdx in range(len(self.schema)):
             field = self.schema[fieldIdx]
-            pandas_col = pdf.iloc[:,fieldIdx]
+            pandas_col = pdf.iloc[:, fieldIdx]
 
             pandas_type = PandasConversionMixin._to_corrected_pandas_type(field.dataType)
             # SPARK-21766: if an integer field is nullable and has null values, it can be
@@ -156,10 +156,10 @@ class PandasConversionMixin(object):
         for index in range(len(dtype)):
             t = dtype[index]
             if t is not None:
-                series = pdf.iloc[:,index].astype(t, copy=False)
+                series = pdf.iloc[:, index].astype(t, copy=False)
             else:
-                series = pdf.iloc[:,index]
-            df.insert(index, self.schema[index].name, series, allow_duplicates = True)
+                series = pdf.iloc[:, index]
+            df.insert(index, self.schema[index].name, series, allow_duplicates=True)
 
         pdf = df
 
