@@ -245,8 +245,7 @@ object SharedState extends Logging {
     sparkConf.remove(hiveWarehouseKey)
     // Set the Hive metastore warehouse path to the one we use
     val hiveWarehouseDir = hadoopConf.get(hiveWarehouseKey)
-    val isWarehouseInSparkConf = sparkConf.contains(WAREHOUSE_PATH.key)
-    val warehousePath = if (hiveWarehouseDir != null && !isWarehouseInSparkConf) {
+    val warehousePath = if (hiveWarehouseDir != null && !sparkConf.contains(WAREHOUSE_PATH.key)) {
       // If hive.metastore.warehouse.dir is set and spark.sql.warehouse.dir is not set,
       // we will respect the value of hive.metastore.warehouse.dir.
       sparkConf.set(WAREHOUSE_PATH.key, hiveWarehouseDir)
@@ -265,6 +264,5 @@ object SharedState extends Logging {
       sparkWarehouseDir
     }
     logInfo(s"Warehouse path is '$warehousePath'.")
-    isWarehouseInSparkConf
   }
 }
