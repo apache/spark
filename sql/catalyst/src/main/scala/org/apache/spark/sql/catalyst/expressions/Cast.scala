@@ -272,7 +272,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
+  override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
   protected def ansiEnabled: Boolean
 
