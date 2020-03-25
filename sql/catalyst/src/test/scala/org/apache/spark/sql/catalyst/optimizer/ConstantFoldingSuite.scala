@@ -155,6 +155,57 @@ class ConstantFoldingSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("Constant folding test: deterministic Scala UDFs") {
+    val normalFunc = (x: Int) => x + 41
+    val exceptionFunc = (x: Int) => x / 0
+
+    val foldableUdf = ScalaUDF(
+      function = normalFunc,
+      dataType = IntegerType,
+      children = Seq(Literal(1)),
+      inputPrimitives = Seq(true),
+      udfName = None,
+      nullable = false,
+      udfDeterministic = true)
+
+    val deterministicUnfoldableUdf = ScalaUDF(
+      function = normalFunc,
+      dataType = IntegerType,
+      children = Seq[Expression]('a),
+      inputPrimitives = Seq(true),
+      udfName = None,
+      nullable = false,
+      udfDeterministic = true)
+
+    val exceptionUdf = ScalaUDF(
+      function = exceptionFunc,
+      dataType = IntegerType,
+      children = Seq(Literal(1)),
+      inputPrimitives = Seq(true),
+      udfName = None,
+      nullable = false,
+      udfDeterministic = true) // intentionally mis-declaring as deterministic
+
+    val originalQuery =
+      testRelation
+        .select(
+          foldableUdf as Symbol("c1"),
+          deterministicUnfoldableUdf as Symbol("c2"),
+          exceptionUdf as Symbol("c3"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(
+          Literal(42) as Symbol("c1"),
+          deterministicUnfoldableUdf as Symbol("c2"),
+          exceptionUdf as Symbol("c3"))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("Constant folding test: expressions have nonfoldable functions") {
     val originalQuery =
       testRelation

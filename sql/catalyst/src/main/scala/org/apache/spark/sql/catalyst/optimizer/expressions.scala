@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
+import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -50,8 +51,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
 
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+
+      // Fold ScalaUDFs if they're deterministic and all arguments are foldable.
+      // Watch out for potentially exception-throwing UDFs: some Scala UDFs may have been
+      // mis-declared as being deterministic, but throws exceptions at runtime. Do not optimize
+      // them, so that they can throw the exception at the expected timing.
+      case udf: ScalaUDF if maybeFoldable(udf) => Try(udf.eval(EmptyRow)) match {
+        case Success(v) => Literal.create(v, udf.dataType)
+        case Failure(_) => udf  // defer any exception throwing to execution phase
+      }
     }
   }
+
+  private def maybeFoldable(udf: ScalaUDF): Boolean =
+    udf.deterministic && udf.children.forall(_.foldable)
 }
 
 /**
