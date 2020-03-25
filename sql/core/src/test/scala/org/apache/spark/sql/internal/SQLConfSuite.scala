@@ -115,7 +115,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("reset - static and spark conf") {
+  test("reset will not change static sql configs and spark core configs") {
     val conf = spark.sparkContext.getConf.getAll.toMap
     val appName = conf.get("spark.app.name")
     val driverHost = conf.get("spark.driver.host")
