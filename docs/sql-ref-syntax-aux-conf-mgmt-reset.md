@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-Reset any runtime properties specific to the current session which were set via the [SET](sql-ref-syntax-aux-conf-mgmt-set.html) command to their default values.
+Reset any runtime configurations specific to the current session which were set via the [SET](sql-ref-syntax-aux-conf-mgmt-set.html) command to their default values.
 
 ### Syntax
 {% highlight sql %}
