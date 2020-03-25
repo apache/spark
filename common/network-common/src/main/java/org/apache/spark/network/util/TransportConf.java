@@ -18,7 +18,6 @@
 package org.apache.spark.network.util;
 
 import java.util.Locale;
-import java.util.NoSuchElementException;
 import java.util.Properties;
 
 import com.google.common.primitives.Ints;
@@ -352,12 +351,7 @@ public class TransportConf {
    * by the config `spark.shuffle.server.chunkFetchHandlerThreadsPercent` is set or not.
    */
   public boolean separateChunkFetchRequest() {
-    try {
-      conf.get("spark.shuffle.server.chunkFetchHandlerThreadsPercent");
-      return true;
-    } catch (NoSuchElementException e) {
-      return false;
-    }
+    return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0) > 0;
   }
 
   /**
