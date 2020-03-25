@@ -45,7 +45,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // Clear the conf.
     spark.sessionState.conf.clear()
     // After clear, only overrideConfs used by unit test should be in the SQLConf.
-    assert((spark.conf.getAll -- TestSQLContext.overrideConfs.keys).size < spark.conf.getAll.size)
+    assert(spark.conf.getAll === TestSQLContext.overrideConfs)
 
     spark.conf.set(testKey, testVal)
     assert(spark.conf.get(testKey) === testVal)
@@ -233,8 +233,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("default value of WAREHOUSE_PATH") {
     // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
     // In our comparison, strip trailing slash off of both sides, to account for such cases
-    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") ===
-      spark.sessionState.conf.warehousePath.stripSuffix("/"))
+    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
+      .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
   test("static SQL conf comes from SparkConf") {

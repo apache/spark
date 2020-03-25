@@ -1021,29 +1021,34 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SET commands semantics using sql()") {
+    spark.sessionState.conf.clear()
     val testKey = "test.key.0"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    TestSQLContext.overrideConfs.foreach { case (k, _) =>
-      assert(sql("SET").where(s"key ='$k'").collect().head.get(1) ===
-        TestSQLContext.overrideConfs(k))
+    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size)
+    sql("SET").collect().foreach { row =>
+      val key = row.getString(0)
+      val value = row.getString(1)
+      assert(TestSQLContext.overrideConfs.contains(key),
+        s"$key should exist in SQLConf.")
+      assert(TestSQLContext.overrideConfs(key) === value,
+        s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
     }
-
-    val originalConfs = sql("SET").collect()
+      val overrideConfs = sql("SET").collect()
 
     // "set key=val"
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),
-      originalConfs ++ Seq(Row(testKey, testVal))
+      overrideConfs ++ Seq(Row(testKey, testVal))
     )
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
-      originalConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal))
+      overrideConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal))
     )
 
     // "set key"
