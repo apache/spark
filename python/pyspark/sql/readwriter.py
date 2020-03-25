@@ -255,7 +255,7 @@ class DataFrameReader(OptionUtils):
 
         .. _partition discovery:
           https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
-        .. _datetime pattern:  https://spark.apache.org//docs/latest/sql-ref-datetime-pattern.html
+        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
