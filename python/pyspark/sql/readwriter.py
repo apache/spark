@@ -491,8 +491,6 @@ class DataFrameReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
-        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
-
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
@@ -866,8 +864,6 @@ class DataFrameWriter(OptionUtils):
         :param ignoreNullFields: Whether to ignore null fields when generating JSON objects.
                         If None is set, it uses the default value, ``true``.
 
-        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
-
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -981,8 +977,6 @@ class DataFrameWriter(OptionUtils):
                            the default value, ``""``.
         :param lineSep: defines the line separator that should be used for writing. If None is
                         set, it uses the default value, ``\\n``. Maximum length is 1 character.
-
-        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
