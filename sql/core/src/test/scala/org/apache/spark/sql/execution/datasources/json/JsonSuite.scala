@@ -33,7 +33,6 @@ import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -1330,7 +1329,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
   test("SPARK-6245 JsonInferSchema.infer on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val options = new JSONOptions(Map.empty[String, String], UTC.getId)
+    val options = new JSONOptions(Map.empty[String, String], "UTC")
     val emptySchema = new JsonInferSchema(options).infer(
       empty.rdd,
       CreateJacksonParser.string)
@@ -1357,7 +1356,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val options = new JSONOptions(Map.empty[String, String], UTC.getId)
+    val options = new JSONOptions(Map.empty[String, String], "UTC")
     val emptySchema = new JsonInferSchema(options).infer(
       emptyRecords.rdd,
       CreateJacksonParser.string)
@@ -1731,7 +1730,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       timestampsWithFormat.write
         .format("json")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1749,7 +1748,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val readBack = spark.read
         .schema(customSchema)
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .json(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)
@@ -2596,12 +2595,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       timestampsWithFormat.write
         .format("json")
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
-        .option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .save(timestampsWithFormatPath)
 
       val readBack = spark.read
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
-        .option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .json(timestampsWithFormatPath)
 
       assert(readBack.schema === customSchema)

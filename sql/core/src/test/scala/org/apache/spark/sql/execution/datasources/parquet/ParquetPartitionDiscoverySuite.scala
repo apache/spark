@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
@@ -89,7 +88,7 @@ abstract class ParquetPartitionDiscoverySuite
     check("1990-02-24 12:00:30",
       Literal.create(Timestamp.valueOf("1990-02-24 12:00:30"), TimestampType))
 
-    val c = Calendar.getInstance(TimeZone.getTimeZone(UTC.getId))
+    val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.set(1990, 1, 24, 12, 0, 30)
     c.set(Calendar.MILLISECOND, 0)
     check("1990-02-24 12:00:30",
@@ -693,10 +692,10 @@ abstract class ParquetPartitionDiscoverySuite
     }
 
     withTempPath { dir =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(dir.toString).select(fields: _*), row)
     }
   }
@@ -735,10 +734,10 @@ abstract class ParquetPartitionDiscoverySuite
     }
 
     withTempPath { dir =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name))
-      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, UTC.getId)
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(dir.toString).select(fields: _*), row)
     }
   }

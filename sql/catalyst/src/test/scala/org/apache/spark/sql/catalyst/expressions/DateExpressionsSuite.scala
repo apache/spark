@@ -921,7 +921,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     test("2015-07-24 00:00:00", LA.getId, "2015-07-24 07:00:00")
     test("2015-01-24 00:00:00", LA.getId, "2015-01-24 08:00:00")
-    test(null, UTC.getId, null)
+    test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
   }
@@ -952,7 +952,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     test("2015-07-24 00:00:00", LA.getId, "2015-07-23 17:00:00")
     test("2015-01-24 00:00:00", LA.getId, "2015-01-23 16:00:00")
-    test(null, UTC.getId, null)
+    test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
   }

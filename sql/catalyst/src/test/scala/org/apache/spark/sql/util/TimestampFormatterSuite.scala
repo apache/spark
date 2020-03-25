@@ -34,7 +34,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("parsing timestamps using time zones") {
     val localDate = "2018-12-02T10:11:12.001234"
     val expectedMicros = Map(
-      UTC.getId -> 1543745472001234L,
+      "UTC" -> 1543745472001234L,
       PST.getId -> 1543774272001234L,
       CET.getId -> 1543741872001234L,
       "Africa/Dakar" -> 1543745472001234L,
@@ -55,7 +55,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("format timestamps using time zones") {
     val microsSinceEpoch = 1543745472001234L
     val expectedTimestamp = Map(
-      UTC.getId -> "2018-12-02T10:11:12.001234",
+      "UTC" -> "2018-12-02T10:11:12.001234",
       PST.getId -> "2018-12-02T02:11:12.001234",
       CET.getId -> "2018-12-02T11:11:12.001234",
       "Africa/Dakar" -> "2018-12-02T10:11:12.001234",

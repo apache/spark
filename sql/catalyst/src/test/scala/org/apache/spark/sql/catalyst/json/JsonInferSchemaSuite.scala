@@ -19,14 +19,13 @@ package org.apache.spark.sql.catalyst.json
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
   def checkType(options: Map[String, String], json: String, dt: DataType): Unit = {
-    val jsonOptions = new JSONOptions(options, UTC.getId, "")
+    val jsonOptions = new JSONOptions(options, "UTC", "")
     val inferSchema = new JsonInferSchema(jsonOptions)
     val factory = jsonOptions.buildJsonFactory()
     val parser = CreateJacksonParser.string(factory, json)

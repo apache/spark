@@ -24,7 +24,7 @@ import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA, UTC}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -851,7 +851,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-30752: convert time zones on a daylight saving day") {
     val systemTz = LA.getId
-    val sessionTz = UTC.getId
+    val sessionTz = "UTC"
     val fromTz = "Asia/Hong_Kong"
     val fromTs = "2019-11-03T12:00:00" // daylight saving date in America/Los_Angeles
     val utsTs = "2019-11-03T04:00:00"
