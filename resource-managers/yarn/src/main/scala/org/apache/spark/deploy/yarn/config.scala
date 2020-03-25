@@ -111,6 +111,12 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val APPLICATION_TYPE = ConfigBuilder("spark.yarn.applicationType")
+    .doc("Type of this application," +
+      "it separates different categories of applications like SPARK-SQL and SPARK-STREAMING")
+    .stringConf
+    .createWithDefault("SPARK")
+
   /* File distribution. */
 
   private[spark] val SPARK_ARCHIVE = ConfigBuilder("spark.yarn.archive")
