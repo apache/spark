@@ -132,8 +132,11 @@ class PandasConversionMixin(object):
         # Below is toPandas without Arrow optimization.
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
-        dtype = {}
-        for field in self.schema:
+        dtype = [None] * len(self.schema)
+        for fieldIdx in range(len(self.schema)):
+            field = self.schema[fieldIdx]
+            pandas_col = pdf.iloc[:,fieldIdx]
+
             pandas_type = PandasConversionMixin._to_corrected_pandas_type(field.dataType)
             # SPARK-21766: if an integer field is nullable and has null values, it can be
             # inferred by pandas as float column. Once we convert the column with NaN back
@@ -141,16 +144,24 @@ class PandasConversionMixin(object):
             # float type, not the corrected type from the schema in this case.
             if pandas_type is not None and \
                 not(isinstance(field.dataType, IntegralType) and field.nullable and
-                    pdf[field.name].isnull().any()):
-                dtype[field.name] = pandas_type
+                    pandas_col.isnull().any()):
+                dtype[fieldIdx] = pandas_type
             # Ensure we fall back to nullable numpy types, even when whole column is null:
-            if isinstance(field.dataType, IntegralType) and pdf[field.name].isnull().any():
-                dtype[field.name] = np.float64
-            if isinstance(field.dataType, BooleanType) and pdf[field.name].isnull().any():
-                dtype[field.name] = np.object
+            if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
+                dtype[fieldIdx] = np.float64
+            if isinstance(field.dataType, BooleanType) and pandas_col.isnull().any():
+                dtype[fieldIdx] = np.object
 
-        for f, t in dtype.items():
-            pdf[f] = pdf[f].astype(t, copy=False)
+        df = pd.DataFrame()
+        for index in range(len(dtype)):
+            t = dtype[index]
+            if t is not None:
+                series = pdf.iloc[:,index].astype(t, copy=False)
+            else:
+                series = pdf.iloc[:,index]
+            df.insert(index, self.schema[index].name, series, allow_duplicates = True)
+
+        pdf = df
 
         if timezone is None:
             return pdf
