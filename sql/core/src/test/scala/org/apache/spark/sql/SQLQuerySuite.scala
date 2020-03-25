@@ -1031,12 +1031,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     sql("SET").collect().foreach { row =>
       val key = row.getString(0)
       val value = row.getString(1)
-      assert(TestSQLContext.overrideConfs.contains(key),
+      assert(
+        TestSQLContext.overrideConfs.contains(key),
         s"$key should exist in SQLConf.")
-      assert(TestSQLContext.overrideConfs(key) === value,
+      assert(
+        TestSQLContext.overrideConfs(key) === value,
         s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
     }
-      val overrideConfs = sql("SET").collect()
+    val overrideConfs = sql("SET").collect()
 
     // "set key=val"
     sql(s"SET $testKey=$testVal")
