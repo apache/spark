@@ -148,7 +148,9 @@ object ANOVATest {
           (sum1 + sum2, sumOfSq1 + sumOfSq2, sums1)
       }
     ).mapValues { case (sum, sumOfSq, sums) =>
+      val counts = bcCounts.value
       counts.keysIterator.foreach { label =>
+        // adjust sums if all related feature values are 0 for some label
         if (!sums.contains(label)) sums.update(label, 0.0)
       }
       computeANOVA(sum, sumOfSq, sums.toMap, counts)
