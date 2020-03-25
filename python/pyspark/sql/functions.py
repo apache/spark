@@ -975,7 +975,7 @@ def date_format(date, format):
     A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
     pattern letters of `datetime pattern`_. can be used.
 
-    .. _datetime pattern: /docs/latest/sql-ref-datetime-pattern.html
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
     .. note:: Use when ever possible specialized functions like `year`. These benefit from a
         specialized implementation.
 
