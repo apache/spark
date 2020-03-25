@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.execution.datasources
 
 import java.io.{DataInput, DataOutput, IOException}
 import java.sql.Date
@@ -35,11 +35,12 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{rebaseGregorianToJulian
  * @param julianDays The number of days since the epoch 1970-01-01 in
  *                   Julian calendar.
  */
-private[hive] class DaysWritable(
+class DaysWritable(
     var gregorianDays: Int,
     var julianDays: Int)
   extends DateWritable {
 
+  def this() = this(0, 0)
   def this(gregorianDays: Int) =
     this(gregorianDays, rebaseGregorianToJulianDays(gregorianDays))
   def this(dateWritable: DateWritable) = {
@@ -54,6 +55,11 @@ private[hive] class DaysWritable(
 
   override def getDays: Int = julianDays
   override def get(): Date = new Date(DateWritable.daysToMillis(julianDays))
+
+  override def set(d: Int): Unit = {
+    gregorianDays = d
+    julianDays = rebaseGregorianToJulianDays(d)
+  }
 
   @throws[IOException]
   override def write(out: DataOutput): Unit = {
