@@ -163,7 +163,7 @@ object SetCommand {
 
 /**
  * This command is for resetting SQLConf to the default values. Any configurations that were set
- * via [[SetCommand]] will get reset to default value Command that runs
+ * via [[SetCommand]] will get reset to default value. Command that runs
  * {{{
  *   reset;
  * }}}

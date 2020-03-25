@@ -1029,7 +1029,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     TestSQLContext.overrideConfs.foreach { case (k, _) =>
       assert(sql("SET").where(s"key ='$k'").collect().head.get(1) ===
         TestSQLContext.overrideConfs(k))
-
     }
 
     val originalConfs = sql("SET").collect()
