@@ -253,8 +253,8 @@ class DataFrameReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
-        .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
-        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+        .. _partition discovery: /docs/latest/sql-data-sources-parquet.html#partition-discovery
+        .. _datetime pattern: /docs/latest/sql-ref-datetime-pattern.html
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
