@@ -23,7 +23,7 @@ import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
 import org.apache.spark.metrics.source.Source
 
 /**
- * Expose executor metrics from [[ExecutorMetricsType]] using the Dropwizard metrics system.
+ * Expose executor metrics from [[ExecutorMetricType]] using the Dropwizard metrics system.
  *
  * Metrics related to the memory system can be expensive to gather, therefore
  * we implement some optimizations:
