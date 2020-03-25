@@ -215,6 +215,7 @@ object Cast {
    * type is non-nullable which means an empty array of null type.
    */
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (NullType, _) => false // empty array or map case
     case (_, _) if from == to => false
 
     case (StringType, BinaryType) => false
