@@ -1480,7 +1480,7 @@ class DDLParserSuite extends AnalysisTest {
       AnalyzeColumnStatement(Seq("a", "b", "c"), None, allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      "mismatched input 'key' expecting <EOF>")
+      "mismatched input 'key' expecting {<EOF>, ';'}")
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL",
       "missing 'COLUMNS' at '<EOF>'")
   }
