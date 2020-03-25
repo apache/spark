@@ -65,7 +65,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * Create ORC filter as a SearchArgument instance.
    */
   def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = quotedDataTypeMap(schema)
+    val dataTypeMap = schema.map(f => quoteIfNeeded(f.name) -> f.dataType).toMap
     // Combines all convertible filters using `And` to produce a single conjunction
     // TODO (SPARK-25557): ORC doesn't support nested predicate pushdown, so they are removed.
     val newFilters = filters.filter(!_.containsNestedColumn)

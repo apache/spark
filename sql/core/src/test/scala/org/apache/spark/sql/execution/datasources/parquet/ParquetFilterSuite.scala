@@ -62,12 +62,6 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
 
-  case class ColA[T](a: Option[T])
-
-  case class ColB[T](b: Option[T])
-
-  case class ColC[T](c: Option[T])
-
   protected def createParquetFilters(
       schema: MessageType,
       caseSensitive: Option[Boolean] = None): ParquetFilters =
@@ -127,6 +121,42 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
+  /**
+   * Takes single level `inputDF` dataframe to generate multi-level nested
+   * dataframes as new test data.
+   */
+  private def withNestedDataFrame(inputDF: DataFrame)
+      (testCases: (DataFrame, String, Any => Any) => Unit): Unit = {
+    val df = inputDF.toDF("temp")
+    Seq(
+      (
+        df.withColumnRenamed("temp", "a"),
+        "a", // zero nesting
+        (x: Any) => x),
+      (
+        df.withColumn("a", struct(df("temp") as "b")).drop("temp"),
+        "a.b", // one level nesting
+        (x: Any) => Row(x)),
+      (
+        df.withColumn("a", struct(struct(df("temp") as "c") as "b")).drop("temp"),
+        "a.b.c", // two level nesting
+        (x: Any) => Row(Row(x))
+      ),
+      (
+        df.withColumnRenamed("temp", "a.b"),
+        "`a.b`", // zero nesting with column name containing `dots`
+        (x: Any) => x
+      ),
+      (
+        df.withColumn("a.b", struct(df("temp") as "c.d") ).drop("temp"),
+        "`a.b`.`c.d`", // one level nesting with column names containing `dots`
+        (x: Any) => Row(x)
+      )
+    ).foreach { case (df, pushDownColName, resultTransFun) =>
+      testCases(df, pushDownColName, resultTransFun)
+    }
+  }
+
   private def testTimestampPushdown(data: Seq[Timestamp]): Unit = {
     assert(data.size === 4)
     val ts1 = data.head
@@ -134,47 +164,37 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     val ts3 = data(2)
     val ts4 = data(3)
 
-    Seq(
-      (
-        spark.createDataFrame(data.map(x => ColA(Some(x)))),
-        "a", // zero nesting
-        (x: Any) => x),
-      (
-        spark.createDataFrame(data.map(x => ColA(Some(ColB(Some(x)))))),
-        "a.b", // one level nesting
-        (x: Any) => Row(x)),
-      (
-        spark.createDataFrame(data.map(x => ColA(Some(ColB(Some(ColC(Some(x)))))))),
-        "a.b.c", // two level nesting
-        (x: Any) => Row(Row(x)))
-    ).foreach { case (i, pushDownColName, resultFun) => withParquetDataFrame(i) { implicit df =>
-      val tsAttr = df(pushDownColName).expr
-      checkFilterPredicate(tsAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
-      checkFilterPredicate(tsAttr.isNotNull, classOf[NotEq[_]],
-        data.map(i => Row.apply(resultFun(i))))
+    import testImplicits._
+    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
+      withParquetDataFrame(df) { implicit df =>
+        val tsAttr = df(pushDownColName).expr
+        checkFilterPredicate(tsAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+        checkFilterPredicate(tsAttr.isNotNull, classOf[NotEq[_]],
+          data.map(i => Row.apply(resultFun(i))))
 
-      checkFilterPredicate(tsAttr === ts1, classOf[Eq[_]], resultFun(ts1))
-      checkFilterPredicate(tsAttr <=> ts1, classOf[Eq[_]], resultFun(ts1))
-      checkFilterPredicate(tsAttr =!= ts1, classOf[NotEq[_]],
-        Seq(ts2, ts3, ts4).map(i => Row.apply(resultFun(i))))
+        checkFilterPredicate(tsAttr === ts1, classOf[Eq[_]], resultFun(ts1))
+        checkFilterPredicate(tsAttr <=> ts1, classOf[Eq[_]], resultFun(ts1))
+        checkFilterPredicate(tsAttr =!= ts1, classOf[NotEq[_]],
+          Seq(ts2, ts3, ts4).map(i => Row.apply(resultFun(i))))
 
-      checkFilterPredicate(tsAttr < ts2, classOf[Lt[_]], resultFun(ts1))
-      checkFilterPredicate(tsAttr > ts1, classOf[Gt[_]],
-        Seq(ts2, ts3, ts4).map(i => Row.apply(resultFun(i))))
-      checkFilterPredicate(tsAttr <= ts1, classOf[LtEq[_]], resultFun(ts1))
-      checkFilterPredicate(tsAttr >= ts4, classOf[GtEq[_]], resultFun(ts4))
+        checkFilterPredicate(tsAttr < ts2, classOf[Lt[_]], resultFun(ts1))
+        checkFilterPredicate(tsAttr > ts1, classOf[Gt[_]],
+          Seq(ts2, ts3, ts4).map(i => Row.apply(resultFun(i))))
+        checkFilterPredicate(tsAttr <= ts1, classOf[LtEq[_]], resultFun(ts1))
+        checkFilterPredicate(tsAttr >= ts4, classOf[GtEq[_]], resultFun(ts4))
 
-      checkFilterPredicate(Literal(ts1) === tsAttr, classOf[Eq[_]], resultFun(ts1))
-      checkFilterPredicate(Literal(ts1) <=> tsAttr, classOf[Eq[_]], resultFun(ts1))
-      checkFilterPredicate(Literal(ts2) > tsAttr, classOf[Lt[_]], resultFun(ts1))
-      checkFilterPredicate(Literal(ts3) < tsAttr, classOf[Gt[_]], resultFun(ts4))
-      checkFilterPredicate(Literal(ts1) >= tsAttr, classOf[LtEq[_]], resultFun(ts1))
-      checkFilterPredicate(Literal(ts4) <= tsAttr, classOf[GtEq[_]], resultFun(ts4))
+        checkFilterPredicate(Literal(ts1) === tsAttr, classOf[Eq[_]], resultFun(ts1))
+        checkFilterPredicate(Literal(ts1) <=> tsAttr, classOf[Eq[_]], resultFun(ts1))
+        checkFilterPredicate(Literal(ts2) > tsAttr, classOf[Lt[_]], resultFun(ts1))
+        checkFilterPredicate(Literal(ts3) < tsAttr, classOf[Gt[_]], resultFun(ts4))
+        checkFilterPredicate(Literal(ts1) >= tsAttr, classOf[LtEq[_]], resultFun(ts1))
+        checkFilterPredicate(Literal(ts4) <= tsAttr, classOf[GtEq[_]], resultFun(ts4))
 
-      checkFilterPredicate(!(tsAttr < ts4), classOf[GtEq[_]], resultFun(ts4))
-      checkFilterPredicate(tsAttr < ts2 || tsAttr > ts3, classOf[Operators.Or],
-        Seq(Row(resultFun(ts1)), Row(resultFun(ts4))))
-    }}
+        checkFilterPredicate(!(tsAttr < ts4), classOf[GtEq[_]], resultFun(ts4))
+        checkFilterPredicate(tsAttr < ts2 || tsAttr > ts3, classOf[Operators.Or],
+          Seq(Row(resultFun(ts1)), Row(resultFun(ts4))))
+      }
+    }
   }
 
   // This function tests that exactly go through the `canDrop` and `inverseCanDrop`.
@@ -204,57 +224,52 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   test("filter pushdown - boolean") {
     val data = true :: false :: Nil
-    Seq(
-      (
-        spark.sqlContext.createDataFrame(data.map(x => ColA(Option(x)))),
-        "a", // zero nesting
-        (x: Any) => x),
-      (
-        spark.sqlContext.createDataFrame(data.map(x => ColA(Option(ColB(Option(x)))))),
-        "a.b", // one level nesting
-        (x: Any) => Row(x)),
-      (
-        spark.sqlContext.createDataFrame(
-          data.map(x => ColA(Option(ColB(Option(ColC(Option(x)))))))),
-        "a.b.c", // two level nesting
-        (x: Any) => Row(Row(x)))
-    ).foreach { case (i, pushDownColName, resultFun) => withParquetDataFrame(i) { implicit df =>
-      val booleanAttr = df(pushDownColName).expr
-      checkFilterPredicate(booleanAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
-      checkFilterPredicate(booleanAttr.isNotNull, classOf[NotEq[_]],
-        Seq(Row(resultFun(true)), Row(resultFun(false))))
+    import testImplicits._
+    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
+      withParquetDataFrame(df) { implicit df =>
+        val booleanAttr = df(pushDownColName).expr
+        checkFilterPredicate(booleanAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+        checkFilterPredicate(booleanAttr.isNotNull, classOf[NotEq[_]],
+          Seq(Row(resultFun(true)), Row(resultFun(false))))
 
-      checkFilterPredicate(booleanAttr === true, classOf[Eq[_]], resultFun(true))
-      checkFilterPredicate(booleanAttr <=> true, classOf[Eq[_]], resultFun(true))
-      checkFilterPredicate(booleanAttr =!= true, classOf[NotEq[_]], resultFun(false))
+        checkFilterPredicate(booleanAttr === true, classOf[Eq[_]], resultFun(true))
+        checkFilterPredicate(booleanAttr <=> true, classOf[Eq[_]], resultFun(true))
+        checkFilterPredicate(booleanAttr =!= true, classOf[NotEq[_]], resultFun(false))
+      }
     }
-  }}
+  }
 
   test("filter pushdown - tinyint") {
-    withParquetDataFrame(toDF((1 to 4).map(i => Tuple1(Option(i.toByte))))) { implicit df =>
-      assert(df.schema.head.dataType === ByteType)
-      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
+    val df = toDF((1 to 4).map(i => Tuple1(Option(i.toByte))))
+    withNestedDataFrame(df) { case (df, pushDownColName, resultFun) =>
+      withParquetDataFrame(df) { implicit df =>
+        val tinyIntAttr = df(pushDownColName).expr
+        assert(df(pushDownColName).expr.dataType === ByteType)
+        checkFilterPredicate(tinyIntAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+        checkFilterPredicate(tinyIntAttr.isNotNull, classOf[NotEq[_]],
+          (1 to 4).map(i => Row.apply(resultFun(i))))
 
-      checkFilterPredicate('_1 === 1.toByte, classOf[Eq[_]], 1)
-      checkFilterPredicate('_1 <=> 1.toByte, classOf[Eq[_]], 1)
-      checkFilterPredicate('_1 =!= 1.toByte, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
+        checkFilterPredicate(tinyIntAttr === 1.toByte, classOf[Eq[_]], resultFun(1))
+        checkFilterPredicate(tinyIntAttr <=> 1.toByte, classOf[Eq[_]], resultFun(1))
+        checkFilterPredicate(tinyIntAttr =!= 1.toByte, classOf[NotEq[_]],
+          (2 to 4).map(i => Row.apply(resultFun(i))))
 
-      checkFilterPredicate('_1 < 2.toByte, classOf[Lt[_]], 1)
-      checkFilterPredicate('_1 > 3.toByte, classOf[Gt[_]], 4)
-      checkFilterPredicate('_1 <= 1.toByte, classOf[LtEq[_]], 1)
-      checkFilterPredicate('_1 >= 4.toByte, classOf[GtEq[_]], 4)
+        checkFilterPredicate(tinyIntAttr < 2.toByte, classOf[Lt[_]], resultFun(1))
+        checkFilterPredicate(tinyIntAttr > 3.toByte, classOf[Gt[_]], resultFun(4))
+        checkFilterPredicate(tinyIntAttr <= 1.toByte, classOf[LtEq[_]], resultFun(1))
+        checkFilterPredicate(tinyIntAttr >= 4.toByte, classOf[GtEq[_]], resultFun(4))
 
-      checkFilterPredicate(Literal(1.toByte) === '_1, classOf[Eq[_]], 1)
-      checkFilterPredicate(Literal(1.toByte) <=> '_1, classOf[Eq[_]], 1)
-      checkFilterPredicate(Literal(2.toByte) > '_1, classOf[Lt[_]], 1)
-      checkFilterPredicate(Literal(3.toByte) < '_1, classOf[Gt[_]], 4)
-      checkFilterPredicate(Literal(1.toByte) >= '_1, classOf[LtEq[_]], 1)
-      checkFilterPredicate(Literal(4.toByte) <= '_1, classOf[GtEq[_]], 4)
+        checkFilterPredicate(Literal(1.toByte) === tinyIntAttr, classOf[Eq[_]], resultFun(1))
+        checkFilterPredicate(Literal(1.toByte) <=> tinyIntAttr, classOf[Eq[_]], resultFun(1))
+        checkFilterPredicate(Literal(2.toByte) > tinyIntAttr, classOf[Lt[_]], resultFun(1))
+        checkFilterPredicate(Literal(3.toByte) < tinyIntAttr, classOf[Gt[_]], resultFun(4))
+        checkFilterPredicate(Literal(1.toByte) >= tinyIntAttr, classOf[LtEq[_]], resultFun(1))
+        checkFilterPredicate(Literal(4.toByte) <= tinyIntAttr, classOf[GtEq[_]], resultFun(4))
 
-      checkFilterPredicate(!('_1 < 4.toByte), classOf[GtEq[_]], 4)
-      checkFilterPredicate('_1 < 2.toByte || '_1 > 3.toByte,
-        classOf[Operators.Or], Seq(Row(1), Row(4)))
+        checkFilterPredicate(!(tinyIntAttr < 4.toByte), classOf[GtEq[_]], resultFun(4))
+        checkFilterPredicate(tinyIntAttr < 2.toByte || tinyIntAttr > 3.toByte,
+          classOf[Operators.Or], Seq(Row(resultFun(1)), Row(resultFun(4))))
+      }
     }
   }
 
