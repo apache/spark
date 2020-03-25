@@ -23,7 +23,7 @@ import java.net.URI
 import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{QueryTest, SparkSession}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.OptimizeLocalShuffleReader.LOCAL_SHUFFLE_READER_DESCRIPTION
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
@@ -778,15 +778,6 @@ class AdaptiveQueryExecSuite
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_LOG_LEVEL.key -> level._1) {
         verifyLog(level._2)
       }
-    }
-  }
-
-  test("SPARK-31242: clone SparkSession should respect sessionInitWithConfigDefaults") {
-    // Note, only the conf set in SharedSparkSessionBase would cause problem before the fix.
-    withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
-      val cloned = spark.cloneSession()
-      SparkSession.setActiveSession(cloned)
-      assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
     }
   }
 }
