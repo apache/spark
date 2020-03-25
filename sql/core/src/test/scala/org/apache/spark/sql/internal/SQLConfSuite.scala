@@ -116,12 +116,12 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("reset - static and spark conf") {
-    val conf = spark.sessionState.conf.getAllConfs
+    val conf = spark.sparkContext.getConf.getAll.toMap
     val appName = conf.get("spark.app.name")
     val driverHost = conf.get("spark.driver.host")
     val master = conf.get("spark.master")
     val warehouseDir = conf.get("spark.sql.warehouse.dir")
-    // ensure the conf here is not default value, and will not be reset to default value
+    // ensure the conf here is not default value, and will not be reset to default value later
     assert(warehouseDir.get.contains(this.getClass.getCanonicalName))
     sql(s"reset")
     assert(conf.get("spark.app.name") === appName)
@@ -233,8 +233,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("default value of WAREHOUSE_PATH") {
     // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
     // In our comparison, strip trailing slash off of both sides, to account for such cases
-    assert(new Path(Utils.resolveURI(s"spark-warehouse/${classOf[SQLConfSuite].getCanonicalName}"))
-        .toString.stripSuffix("/") === spark.sessionState.conf.warehousePath.stripSuffix("/"))
+    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") ===
+      spark.sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
   test("static SQL conf comes from SparkConf") {

@@ -3258,9 +3258,7 @@ class SQLConf extends Serializable with Logging {
   }
 
   def clear(): Unit = {
-    val reserved = settings.asScala.filterKeys(staticConfKeys.contains).toMap
     settings.clear()
-    settings.putAll(reserved.asJava)
   }
 
   override def clone(): SQLConf = {
