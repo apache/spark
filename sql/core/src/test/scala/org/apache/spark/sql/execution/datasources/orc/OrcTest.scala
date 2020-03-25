@@ -133,4 +133,9 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
         throw new AnalysisException("Can not match OrcTable in the query.")
     }
   }
+
+  protected def readResourceOrcFile(name: String): DataFrame = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(name)
+    spark.read.orc(url.toString)
+  }
 }
