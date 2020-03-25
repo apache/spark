@@ -207,12 +207,9 @@ object Cast {
   }
 
   /**
-   * Returns `true` iff it should change the nullability of this type in map type,
-   * array type, expressions such as cast, etc.
-   *
-   * Note that you should take the nullability context into account.
-   * For example, it should not force to nullable type when null type in array
-   * type is non-nullable which means an empty array of null type.
+   * Returns `true` if casting non-nullable values from `from` type to `to` type
+   * may return null. Note that the caller side should take care of input nullability
+   * first and only call this method if the input is not nullable.
    */
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
     case (NullType, _) => false // empty array or map case
