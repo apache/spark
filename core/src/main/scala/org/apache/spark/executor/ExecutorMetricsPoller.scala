@@ -45,7 +45,6 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  *
  * @param memoryManager the memory manager used by the executor.
  * @param pollingInterval the polling interval in milliseconds.
- * @param executorMetricsSource the source of Executor Metrics using Dropwizard metrics system
  */
 private[spark] class ExecutorMetricsPoller(
     memoryManager: MemoryManager,
