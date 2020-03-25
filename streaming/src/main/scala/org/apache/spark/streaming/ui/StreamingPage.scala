@@ -80,9 +80,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val resources = generateLoadResources(request)
+    val onClickTimelineFunc = generateOnClickTimelineFunction()
     val basicInfo = generateBasicInfo()
     val content = resources ++
-      basicInfo ++
+      onClickTimelineFunc ++ basicInfo ++
       listener.synchronized {
         generateStatTable() ++
           generateBatchListTables()
@@ -99,6 +100,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
       <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
     // scalastyle:on
+  }
+
+  /** Generate html that will set onClickTimeline declared in streaming-page.js */
+  private def generateOnClickTimelineFunction(): Seq[Node] = {
+    val js = "onClickTimeline = getOnClickTimelineFunction();"
+    <script>{Unparsed(js)}</script>
   }
 
   /** Generate basic information of the streaming program */
