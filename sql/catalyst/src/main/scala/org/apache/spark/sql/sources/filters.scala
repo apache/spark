@@ -52,7 +52,7 @@ sealed abstract class Filter {
    * @return each element is a column name as an array of string multi-identifier
    * @since 3.0.0
    */
-  def V2references: Array[Array[String]] = {
+  def v2references: Array[Array[String]] = {
     this.references.map(parseColumnPath(_).toArray)
   }
 
@@ -60,7 +60,7 @@ sealed abstract class Filter {
    * If any of the references of this filter contains nested column
    */
   private[sql] def containsNestedColumn: Boolean = {
-    this.V2references.exists(_.length > 1)
+    this.v2references.exists(_.length > 1)
   }
 }
 
