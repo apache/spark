@@ -21,7 +21,7 @@ import org.apache.commons.math3.distribution.FDistribution
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.util.collection.OpenHashMap
@@ -57,11 +57,10 @@ object ANOVATest {
   def test(dataset: DataFrame, featuresCol: String, labelCol: String): DataFrame = {
     val spark = dataset.sparkSession
     val testResults = testClassification(dataset, featuresCol, labelCol)
-    val pValues: Vector = Vectors.dense(testResults.map(_.pValue))
-    val degreesOfFreedom: Array[Long] = testResults.map(_.degreesOfFreedom)
-    val fValues: Vector = Vectors.dense(testResults.map(_.statistic))
-    spark.createDataFrame(
-      Seq(new ANOVAResult(pValues, degreesOfFreedom, fValues)))
+    val pValues = Vectors.dense(testResults.map(_.pValue))
+    val degreesOfFreedom = testResults.map(_.degreesOfFreedom)
+    val fValues = Vectors.dense(testResults.map(_.statistic))
+    spark.createDataFrame(Seq(ANOVAResult(pValues, degreesOfFreedom, fValues)))
   }
 
   /**
@@ -75,81 +74,68 @@ object ANOVATest {
       dataset: Dataset[_],
       featuresCol: String,
       labelCol: String): Array[SelectionTestResult] = {
-
     val spark = dataset.sparkSession
     import spark.implicits._
 
     SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, featuresCol)
-    val Row(numSamples: Long, numClasses: Long) =
-      dataset.select(count(labelCol), countDistinct(labelCol)).head
-
     dataset.select(col(labelCol).cast("double"), col(featuresCol))
       .as[(Double, Vector)]
       .rdd
       .flatMap { case (label, features) =>
-        features.iterator.map { case (col, value) => (col, (label, value, value * value)) }
+        features.iterator.map { case (col, value) => (col, (label, value)) }
       }.aggregateByKey[(Double, Double, OpenHashMap[Double, Double], OpenHashMap[Double, Long])](
         (0.0, 0.0, new OpenHashMap[Double, Double], new OpenHashMap[Double, Long]))(
         seqOp = {
-          case (
+          case ((sum, sumOfSq, sums, counts), (label, value)) =>
             // sums: mapOfSumPerClass (key: label, value: sum of features for each label)
             // counts: mapOfCountPerClass key: label, value: count of features for each label
-            (sum: Double, sumOfSq: Double, sums, counts),
-            (label, feature, featureSq)
-           ) =>
-            sums.changeValue(label, feature, _ + feature)
+            sums.changeValue(label, value, _ + value)
             counts.changeValue(label, 1L, _ + 1L)
-            (sum + feature, sumOfSq + featureSq, sums, counts)
+            (sum + value, sumOfSq + value * value, sums, counts)
         },
         combOp = {
-          case (
-            (sum1, sumOfSq1, sums1, counts1),
-            (sum2, sumOfSq2, sums2, counts2)
-          ) =>
-            sums2.foreach { case (v, w) =>
-              sums1.changeValue(v, w, _ + w)
-            }
-            counts2.foreach { case (v, w) =>
-              counts1.changeValue(v, w, _ + w)
-            }
+          case ((sum1, sumOfSq1, sums1, counts1), (sum2, sumOfSq2, sums2, counts2)) =>
+            sums2.foreach { case (v, w) => sums1.changeValue(v, w, _ + w) }
+            counts2.foreach { case (v, w) => counts1.changeValue(v, w, _ + w) }
             (sum1 + sum2, sumOfSq1 + sumOfSq2, sums1, counts1)
         }
-        ).map {
-          case (col, (sum, sumOfSq, sums, counts)) =>
-            // e.g. features are [3.3, 2.5, 1.0, 3.0, 2.0] and labels are [1, 2, 1, 3, 3]
-            // sum: sum of all the features (3.3+2.5+1.0+3.0+2.0)
-            // sumOfSq: sum of squares of all the features (3.3^2+2.5^2+1.0^2+3.0^2+2.0^2)
-            // sums: mapOfSumPerClass (key: label, value: sum of features for each label)
-            //                                         ( 1 -> 3.3 + 1.0, 2 -> 2.5, 3 -> 3.0 + 2.0 )
-            // counts: mapOfCountPerClass (key: label, value: count of features for each label)
-            //                                         ( 1 -> 2, 2 -> 2, 3 -> 2 )
-            // sqSum: square of sum of all data ((3.3+2.5+1.0+3.0+2.0)^2)
-            val sqSum = sum * sum
-            val ssTot = sumOfSq - sqSum / numSamples
+        ).map { case (col, (sum, sumOfSq, sums, counts)) =>
+          val numSamples = counts.iterator.map(_._2).sum
+          val numClasses = counts.size
 
-            // sumOfSqSumPerClass:
-            //     sum( sq_sum_classes[k] / n_samples_per_class[k] for k in range(n_classes))
-            //     e.g. ((3.3+1.0)^2 / 2 + 2.5^2 / 1 + (3.0+2.0)^2 / 2)
-            val sumOfSqSumPerClass = sums.iterator
-              .map { case (label, sum) => sum * sum / counts(label) }.sum
-            // Sums of Squares Between
-            val ssbn = sumOfSqSumPerClass - (sqSum / numSamples)
-            // Sums of Squares Within
-            val sswn = ssTot - ssbn
-            // degrees of freedom between
-            val dfbn = numClasses - 1
-            // degrees of freedom within
-            val dfwn = numSamples - numClasses
-            // mean square between
-            val msb = ssbn / dfbn
-            // mean square within
-            val msw = sswn / dfwn
-            val fValue = msb / msw
-            val pValue = 1 - new FDistribution(dfbn, dfwn).cumulativeProbability(fValue)
-            (col, pValue, dfbn + dfwn, fValue)
+          // e.g. features are [3.3, 2.5, 1.0, 3.0, 2.0] and labels are [1, 2, 1, 3, 3]
+          // sum: sum of all the features (3.3+2.5+1.0+3.0+2.0)
+          // sumOfSq: sum of squares of all the features (3.3^2+2.5^2+1.0^2+3.0^2+2.0^2)
+          // sums: mapOfSumPerClass (key: label, value: sum of features for each label)
+          //                                         ( 1 -> 3.3 + 1.0, 2 -> 2.5, 3 -> 3.0 + 2.0 )
+          // counts: mapOfCountPerClass (key: label, value: count of features for each label)
+          //                                         ( 1 -> 2, 2 -> 2, 3 -> 2 )
+          // sqSum: square of sum of all data ((3.3+2.5+1.0+3.0+2.0)^2)
+          val sqSum = sum * sum
+          val ssTot = sumOfSq - sqSum / numSamples
+
+          // sumOfSqSumPerClass:
+          //     sum( sq_sum_classes[k] / n_samples_per_class[k] for k in range(n_classes))
+          //     e.g. ((3.3+1.0)^2 / 2 + 2.5^2 / 1 + (3.0+2.0)^2 / 2)
+          val sumOfSqSumPerClass = sums.iterator
+            .map { case (label, sum) => sum * sum / counts(label) }.sum
+          // Sums of Squares Between
+          val ssbn = sumOfSqSumPerClass - (sqSum / numSamples)
+          // Sums of Squares Within
+          val sswn = ssTot - ssbn
+          // degrees of freedom between
+          val dfbn = numClasses - 1
+          // degrees of freedom within
+          val dfwn = numSamples - numClasses
+          // mean square between
+          val msb = ssbn / dfbn
+          // mean square within
+          val msw = sswn / dfwn
+          val fValue = msb / msw
+          val pValue = 1 - new FDistribution(dfbn, dfwn).cumulativeProbability(fValue)
+          (col, pValue, dfbn + dfwn, fValue)
         }.collect().sortBy(_._1).map {
           case (col, pValue, degreesOfFreedom, fValue) =>
             new ANOVATestResult(pValue, degreesOfFreedom, fValue)

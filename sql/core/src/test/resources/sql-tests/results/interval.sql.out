@@ -639,7 +639,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'day' expecting <EOF>(line 1, pos 27)
+extraneous input 'day' expecting {<EOF>, ';'}(line 1, pos 27)
 
 == SQL ==
 select interval 30 day day day

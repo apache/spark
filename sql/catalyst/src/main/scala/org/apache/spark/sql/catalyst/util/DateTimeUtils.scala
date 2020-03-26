@@ -47,13 +47,6 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
-  final val GREGORIAN_CUTOVER_DAY = LocalDate.of(1582, 10, 15).toEpochDay
-  final val GREGORIAN_CUTOVER_MICROS = instantToMicros(
-    LocalDateTime.of(1582, 10, 15, 0, 0, 0)
-      .atOffset(ZoneOffset.UTC)
-      .toInstant)
-  final val GREGORIAN_CUTOVER_MILLIS = microsToMillis(GREGORIAN_CUTOVER_MICROS)
-
   final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
 
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
@@ -92,53 +85,103 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the number of days since epoch from java.sql.Date.
+   * Converts an instance of `java.sql.Date` to a number of days since the epoch
+   * 1970-01-01 via extracting date fields `year`, `month`, `days` from the input,
+   * creating a local date in Proleptic Gregorian calendar from the fields, and
+   * getting the number of days from the resulted local date.
+   *
+   * This approach was taken to have the same local date as the triple of `year`,
+   * `month`, `day` in the original hybrid calendar used by `java.sql.Date` and
+   * Proleptic Gregorian calendar used by Spark since version 3.0.0, see SPARK-26651.
+   *
+   * @param date It represents a specific instant in time based on
+   *             the hybrid calendar which combines Julian and
+   *             Gregorian calendars.
+   * @return The number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    if (date.getTime < GREGORIAN_CUTOVER_MILLIS) {
-      val era = if (date.before(julianCommonEraStart)) 0 else 1
-      val localDate = date.toLocalDate.`with`(ChronoField.ERA, era)
-      localDateToDays(localDate)
-    } else {
-      microsToDays(millisToMicros(date.getTime))
-    }
+    val era = if (date.before(julianCommonEraStart)) 0 else 1
+    val localDate = LocalDate
+      .of(date.getYear + 1900, date.getMonth + 1, 1)
+      .`with`(ChronoField.ERA, era)
+      // Add days separately to convert dates existed in Julian calendar but not
+      // in Proleptic Gregorian calendar. For example, 1000-02-29 is valid date
+      // in Julian calendar because 1000 is a leap year but 1000 is not a leap
+      // year in Proleptic Gregorian calendar. And 1000-02-29 doesn't exist in it.
+      .plusDays(date.getDate - 1) // Returns the next valid date after `date.getDate - 1` days
+    localDateToDays(localDate)
   }
 
   /**
-   * Returns a java.sql.Date from number of days since epoch.
+   * The opposite to `fromJavaDate` method which converts a number of days to an
+   * instance of `java.sql.Date`. It builds a local date in Proleptic Gregorian
+   * calendar, extracts date fields `year`, `month`, `day`, and creates a local
+   * date in the hybrid calendar (Julian + Gregorian calendars) from the fields.
+   *
+   * The purpose of the conversion is to have the same local date as the triple
+   * of `year`, `month`, `day` in the original Proleptic Gregorian calendar and
+   * in the target calender.
+   *
+   * @param daysSinceEpoch The number of days since 1970-01-01.
+   * @return A `java.sql.Date` from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    if (daysSinceEpoch < GREGORIAN_CUTOVER_DAY) {
-      Date.valueOf(LocalDate.ofEpochDay(daysSinceEpoch))
-    } else {
-      new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
-    }
+    val localDate = LocalDate.ofEpochDay(daysSinceEpoch)
+    new Date(localDate.getYear - 1900, localDate.getMonthValue - 1, localDate.getDayOfMonth)
   }
 
   /**
-   * Returns a java.sql.Timestamp from number of micros since epoch.
+   * Converts microseconds since the epoch to an instance of `java.sql.Timestamp`
+   * via creating a local timestamp at the system time zone in Proleptic Gregorian
+   * calendar, extracting date and time fields like `year` and `hours`, and forming
+   * new timestamp in the hybrid calendar from the extracted fields.
+   *
+   * The conversion is based on the JVM system time zone because the `java.sql.Timestamp`
+   * uses the time zone internally.
+   *
+   * The method performs the conversion via local timestamp fields to have the same date-time
+   * representation as `year`, `month`, `day`, ..., `seconds` in the original calendar
+   * and in the target calendar.
+   *
+   * @param us The number of microseconds since 1970-01-01T00:00:00.000000Z.
+   * @return A `java.sql.Timestamp` from number of micros since epoch.
    */
   def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
-    if (us < GREGORIAN_CUTOVER_MICROS) {
-      val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
-      Timestamp.valueOf(ldt)
-    } else {
-      Timestamp.from(microsToInstant(us))
-    }
+    val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
+    Timestamp.valueOf(ldt)
   }
 
   /**
-   * Returns the number of micros since epoch from java.sql.Timestamp.
+   * Converts an instance of `java.sql.Timestamp` to the number of microseconds since
+   * 1970-01-01T00:00:00.000000Z. It extracts date-time fields from the input, builds
+   * a local timestamp in Proleptic Gregorian calendar from the fields, and binds
+   * the timestamp to the system time zone. The resulted instant is converted to
+   * microseconds since the epoch.
+   *
+   * The conversion is performed via the system time zone because it is used internally
+   * in `java.sql.Timestamp` while extracting date-time fields.
+   *
+   * The goal of the function is to have the same local date-time in the original calendar
+   * - the hybrid calendar (Julian + Gregorian) and in the target calendar which is
+   * Proleptic Gregorian calendar, see SPARK-26651.
+   *
+   * @param t It represents a specific instant in time based on
+   *          the hybrid calendar which combines Julian and
+   *          Gregorian calendars.
+   * @return The number of micros since epoch from `java.sql.Timestamp`.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
-    if (t.getTime < GREGORIAN_CUTOVER_MILLIS) {
-      val era = if (t.before(julianCommonEraStart)) 0 else 1
-      val localDateTime = t.toLocalDateTime.`with`(ChronoField.ERA, era)
-      val instant = ZonedDateTime.of(localDateTime, ZoneId.systemDefault()).toInstant
-      instantToMicros(instant)
-    } else {
-      instantToMicros(t.toInstant)
-    }
+    val era = if (t.before(julianCommonEraStart)) 0 else 1
+    val localDateTime = LocalDateTime.of(
+      t.getYear + 1900, t.getMonth + 1, 1,
+      t.getHours, t.getMinutes, t.getSeconds, t.getNanos)
+      .`with`(ChronoField.ERA, era)
+      // Add days separately to convert dates existed in Julian calendar but not
+      // in Proleptic Gregorian calendar. For example, 1000-02-29 is valid date
+      // in Julian calendar because 1000 is a leap year but 1000 is not a leap
+      // year in Proleptic Gregorian calendar. And 1000-02-29 doesn't exist in it.
+      .plusDays(t.getDate - 1) // Returns the next valid date after `date.getDate - 1` days
+    instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
   }
 
   /**
@@ -977,11 +1020,16 @@ object DateTimeUtils {
     val localDateTime = LocalDateTime.of(
       cal.get(Calendar.YEAR),
       cal.get(Calendar.MONTH) + 1,
-      cal.get(Calendar.DAY_OF_MONTH),
+      // The number of days will be added later to handle non-existing
+      // Julian dates in Proleptic Gregorian calendar.
+      // For example, 1000-02-29 exists in Julian calendar because 1000
+      // is a leap year but it is not a leap year in Gregorian calendar.
+      1,
       cal.get(Calendar.HOUR_OF_DAY),
       cal.get(Calendar.MINUTE),
       cal.get(Calendar.SECOND),
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
+      .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
     instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
   }
 
@@ -1005,7 +1053,12 @@ object DateTimeUtils {
     val localDate = LocalDate.of(
       utcCal.get(Calendar.YEAR),
       utcCal.get(Calendar.MONTH) + 1,
-      utcCal.get(Calendar.DAY_OF_MONTH))
+      // The number of days will be added later to handle non-existing
+      // Julian dates in Proleptic Gregorian calendar.
+      // For example, 1000-02-29 exists in Julian calendar because 1000
+      // is a leap year but it is not a leap year in Gregorian calendar.
+      1)
+      .plusDays(utcCal.get(Calendar.DAY_OF_MONTH) - 1)
     Math.toIntExact(localDate.toEpochDay)
   }
 
