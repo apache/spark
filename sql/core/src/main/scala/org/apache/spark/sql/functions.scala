@@ -654,6 +654,29 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
+   * Aggregate function: returns and array of the approximate percentile values
+   * of numeric column col at the given percentages.
+   *
+   * If percentage is an array, each value must be between 0.0 and 1.0.
+   * If it is a single floating point value, it must be between 0.0 and 1.0.
+   *
+   * The accuracy parameter is a positive numeric literal
+   * which controls approximation accuracy at the cost of memory.
+   * Higher value of accuracy yields better accuracy, 1.0/accuracy
+   * is the relative error of the approximation.
+   *
+   * @group agg_funcs
+   * @since 3.1.0
+   */
+  def percentile_approx(e: Column, percentage: Column, accuracy: Column): Column = {
+    withAggregateFunction {
+      new ApproximatePercentile(
+        e.expr, percentage.expr, accuracy.expr
+      )
+    }
+  }
+
+  /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs
@@ -2632,11 +2655,13 @@ object functions {
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
-   *                 can be cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
-   * @param format A pattern `dd.MM.uuuu` would return a string like `18.03.1993`
+   *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
    * @return A string, or null if `dateExpr` was a string that could not be cast to a timestamp
    * @note Use specialized functions like [[year]] whenever possible as they benefit from a
    * specialized implementation.
@@ -2873,7 +2898,7 @@ object functions {
   /**
    * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
    * representing the timestamp of that moment in the current system time zone in the
-   * uuuu-MM-dd HH:mm:ss format.
+   * yyyy-MM-dd HH:mm:ss format.
    *
    * @param ut A number of a type that is castable to a long, such as string or integer. Can be
    *           negative for timestamps before the unix epoch
@@ -2890,7 +2915,9 @@ object functions {
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param ut A number of a type that is castable to a long, such as string or integer. Can be
    *           negative for timestamps before the unix epoch
@@ -2918,11 +2945,11 @@ object functions {
   }
 
   /**
-   * Converts time string in format uuuu-MM-dd HH:mm:ss to Unix timestamp (in seconds),
+   * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
    * using the default timezone and the default locale.
    *
    * @param s A date, timestamp or string. If a string, the data must be in the
-   *          `uuuu-MM-dd HH:mm:ss` format
+   *          `yyyy-MM-dd HH:mm:ss` format
    * @return A long, or null if the input was a string not of the correct format
    * @group datetime_funcs
    * @since 1.5.0
@@ -2934,10 +2961,12 @@ object functions {
   /**
    * Converts time string with given pattern to Unix timestamp (in seconds).
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a date, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @param p A date time pattern detailing the format of `s` when `s` is a string
    * @return A long, or null if `s` was a string that could not be cast to a date or `p` was
    *         an invalid format
@@ -2950,7 +2979,7 @@ object functions {
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   *          cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @return A timestamp, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
    * @since 2.2.0
@@ -2962,10 +2991,12 @@ object functions {
   /**
    * Converts time string with the given pattern to timestamp.
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @param fmt A date time pattern detailing the format of `s` when `s` is a string
    * @return A timestamp, or null if `s` was a string that could not be cast to a timestamp or
    *         `fmt` was an invalid format
@@ -2987,10 +3018,12 @@ object functions {
   /**
    * Converts the column into a `DateType` with a specified format
    *
-   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>
+   * for valid date and time format patterns
    *
    * @param e   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a date, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   *            cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @param fmt A date time pattern detailing the format of `e` when `e`is a string
    * @return A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
    *         invalid format
@@ -3957,6 +3990,10 @@ object functions {
   /**
    * Returns length of array or map.
    *
+   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+   * With the default settings, the function returns -1 for null input.
+   *
    * @group collection_funcs
    * @since 1.5.0
    */
@@ -4268,7 +4305,7 @@ object functions {
   (0 to 10).foreach { x =>
     val types = (1 to x).foldRight("RT")((i, s) => {s"A$i, $s"})
     val typeTags = (1 to x).map(i => s"A$i: TypeTag").foldLeft("RT: TypeTag")(_ + ", " + _)
-    val inputSchemas = (1 to x).foldRight("Nil")((i, s) => {s"Try(ScalaReflection.schemaFor(typeTag[A$i])).toOption :: $s"})
+    val inputEncoders = (1 to x).foldRight("Nil")((i, s) => {s"Try(ExpressionEncoder[A$i]()).toOption :: $s"})
     println(s"""
       |/**
       | * Defines a Scala closure of $x arguments as user-defined function (UDF).
@@ -4281,8 +4318,8 @@ object functions {
       | */
       |def udf[$typeTags](f: Function$x[$types]): UserDefinedFunction = {
       |  val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-      |  val inputSchemas = $inputSchemas
-      |  val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+      |  val inputEncoders = $inputEncoders
+      |  val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
       |  if (nullable) udf else udf.asNonNullable()
       |}""".stripMargin)
   }
@@ -4305,7 +4342,7 @@ object functions {
       | */
       |def udf(f: UDF$i[$extTypeArgs], returnType: DataType): UserDefinedFunction = {
       |  val func = $funcCall
-      |  SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill($i)(None))
+      |  SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill($i)(None))
       |}""".stripMargin)
   }
 
@@ -4387,8 +4424,8 @@ object functions {
    */
   def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4403,8 +4440,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag](f: Function1[A1, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4419,8 +4456,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: Function2[A1, A2, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4435,8 +4472,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](f: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4451,8 +4488,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](f: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4467,8 +4504,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](f: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4483,8 +4520,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](f: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4499,8 +4536,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](f: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A7])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4515,8 +4552,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](f: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A7])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A8])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4531,8 +4568,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](f: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A7])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A8])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A9])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4547,8 +4584,8 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](f: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
-    val inputSchemas = Try(ScalaReflection.schemaFor(typeTag[A1])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A2])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A3])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A4])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A5])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A6])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A7])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A8])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A9])).toOption :: Try(ScalaReflection.schemaFor(typeTag[A10])).toOption :: Nil
-    val udf = SparkUserDefinedFunction(f, dataType, inputSchemas)
+    val inputEncoders = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Nil
+    val udf = SparkUserDefinedFunction(f, dataType, inputEncoders)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -4567,7 +4604,7 @@ object functions {
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
     val func = () => f.asInstanceOf[UDF0[Any]].call()
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(0)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(0)(None))
   }
 
   /**
@@ -4581,7 +4618,7 @@ object functions {
    */
   def udf(f: UDF1[_, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(1)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(1)(None))
   }
 
   /**
@@ -4595,7 +4632,7 @@ object functions {
    */
   def udf(f: UDF2[_, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(2)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(2)(None))
   }
 
   /**
@@ -4609,7 +4646,7 @@ object functions {
    */
   def udf(f: UDF3[_, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(3)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(3)(None))
   }
 
   /**
@@ -4623,7 +4660,7 @@ object functions {
    */
   def udf(f: UDF4[_, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(4)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(4)(None))
   }
 
   /**
@@ -4637,7 +4674,7 @@ object functions {
    */
   def udf(f: UDF5[_, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(5)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(5)(None))
   }
 
   /**
@@ -4651,7 +4688,7 @@ object functions {
    */
   def udf(f: UDF6[_, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(6)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(6)(None))
   }
 
   /**
@@ -4665,7 +4702,7 @@ object functions {
    */
   def udf(f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(7)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(7)(None))
   }
 
   /**
@@ -4679,7 +4716,7 @@ object functions {
    */
   def udf(f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(8)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(8)(None))
   }
 
   /**
@@ -4693,7 +4730,7 @@ object functions {
    */
   def udf(f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(9)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(9)(None))
   }
 
   /**
@@ -4707,7 +4744,7 @@ object functions {
    */
   def udf(f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(10)(None))
+    SparkUserDefinedFunction(func, returnType, inputEncoders = Seq.fill(10)(None))
   }
 
   // scalastyle:on parameter.number
@@ -4740,11 +4777,12 @@ object functions {
         "information. Spark may blindly pass null to the Scala closure with primitive-type " +
         "argument, and the closure will see the default value of the Java type for the null " +
         "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-        "You could use other typed Scala UDF APIs to avoid this problem, or set " +
-        s"${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with caution."
+        "You could use typed Scala UDF APIs (e.g. `udf((x: Int) => x)`) to avoid this problem, " +
+        s"or set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with " +
+        s"caution."
       throw new AnalysisException(errorMsg)
     }
-    SparkUserDefinedFunction(f, dataType, inputSchemas = Nil)
+    SparkUserDefinedFunction(f, dataType, inputEncoders = Nil)
   }
 
   /**

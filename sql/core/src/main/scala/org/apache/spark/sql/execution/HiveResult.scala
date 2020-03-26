@@ -59,9 +59,9 @@ object HiveResult {
         .map(_.mkString("\t"))
   }
 
-  private lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-  private lazy val dateFormatter = DateFormatter(zoneId)
-  private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
+  private def zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+  private def dateFormatter = DateFormatter(zoneId)
+  private def timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
   def toHiveString(a: (Any, DataType), nested: Boolean = false): String = a match {

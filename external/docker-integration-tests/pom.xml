@@ -50,6 +50,7 @@
       <groupId>com.spotify</groupId>
       <artifactId>docker-client</artifactId>
       <scope>test</scope>
+      <classifier>shaded</classifier>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
@@ -104,6 +105,11 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- Although SPARK-28737 upgraded Jersey to 2.29 for JDK11, 'com.spotify.docker-client' still

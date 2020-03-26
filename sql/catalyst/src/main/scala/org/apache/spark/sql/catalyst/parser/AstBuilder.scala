@@ -104,6 +104,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
+  def parseRawDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
+    typedVisit[DataType](ctx.dataType())
+  }
+
   /* ********************************************************************************************
    * Plan parsing
    * ******************************************************************************************** */
@@ -1545,12 +1549,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Extract expression.
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
-    val fieldStr = ctx.field.getText
-    val source = expression(ctx.source)
-    val extractField = DatePart.parseExtractField(fieldStr, source, {
-      throw new ParseException(s"Literals of type '$fieldStr' are currently not supported.", ctx)
-    })
-    new DatePart(Literal(fieldStr), expression(ctx.source), extractField)
+    val arguments = Seq(Literal(ctx.field.getText), expression(ctx.source))
+    UnresolvedFunction("date_part", arguments, isDistinct = false)
   }
 
   /**
@@ -2823,7 +2823,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val provider = ctx.tableProvider.multipartIdentifier.getText
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
 
     Option(ctx.query).map(plan) match {

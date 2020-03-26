@@ -58,7 +58,6 @@ import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -98,6 +97,8 @@ private[hive] class HiveClientImpl(
     val clientLoader: IsolatedClientLoader)
   extends HiveClient
   with Logging {
+
+  import HiveClientImpl._
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
@@ -159,36 +160,7 @@ private[hive] class HiveClientImpl(
       s"(version ${version.fullVersion}) is ${conf.getVar(ConfVars.METASTOREWAREHOUSE)}")
 
   private def newState(): SessionState = {
-    val hiveConf = new HiveConf(classOf[SessionState])
-    // HiveConf is a Hadoop Configuration, which has a field of classLoader and
-    // the initial value will be the current thread's context class loader
-    // (i.e. initClassLoader at here).
-    // We call hiveConf.setClassLoader(initClassLoader) at here to make
-    // this action explicit.
-    hiveConf.setClassLoader(initClassLoader)
-
-    // 1: Take all from the hadoopConf to this hiveConf.
-    // This hadoopConf contains user settings in Hadoop's core-site.xml file
-    // and Hive's hive-site.xml file. Note, we load hive-site.xml file manually in
-    // SharedState and put settings in this hadoopConf instead of relying on HiveConf
-    // to load user settings. Otherwise, HiveConf's initialize method will override
-    // settings in the hadoopConf. This issue only shows up when spark.sql.hive.metastore.jars
-    // is not set to builtin. When spark.sql.hive.metastore.jars is builtin, the classpath
-    // has hive-site.xml. So, HiveConf will use that to override its default values.
-    // 2: we set all spark confs to this hiveConf.
-    // 3: we set all entries in config to this hiveConf.
-    val confMap = (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue) ++
-      sparkConf.getAll.toMap ++ extraConfig).toMap
-    confMap.foreach { case (k, v) => hiveConf.set(k, v) }
-    SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
-      logDebug(
-        s"""
-           |Applying Hadoop/Hive/Spark and extra properties to Hive Conf:
-           |$k=$v
-         """.stripMargin)
-    }
-    // Disable CBO because we removed the Calcite dependency.
-    hiveConf.setBoolean("hive.cbo.enable", false)
+    val hiveConf = newHiveConf(sparkConf, hadoopConf, extraConfig, Some(initClassLoader))
     val state = new SessionState(hiveConf)
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
@@ -783,6 +755,22 @@ private[hive] class HiveClientImpl(
     client.getTablesByPattern(dbName, pattern).asScala
   }
 
+  override def listTablesByType(
+      dbName: String,
+      pattern: String,
+      tableType: CatalogTableType): Seq[String] = withHiveState {
+    try {
+      // Try with Hive API getTablesByType first, it's supported from Hive 2.3+.
+      shim.getTablesByType(client, dbName, pattern, toHiveTableType(tableType))
+    } catch {
+      case _: UnsupportedOperationException =>
+        // Fallback to filter logic if getTablesByType not supported.
+        val tableNames = client.getTablesByPattern(dbName, pattern).asScala
+        val tables = getTablesByName(dbName, tableNames).filter(_.tableType == tableType)
+        tables.map(_.identifier.table)
+    }
+  }
+
   /**
    * Runs the specified SQL query using Hive.
    */
@@ -990,7 +978,7 @@ private[hive] class HiveClientImpl(
   }
 }
 
-private[hive] object HiveClientImpl {
+private[hive] object HiveClientImpl extends Logging {
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
     val typeString = if (c.metadata.contains(HIVE_TYPE_STRING)) {
@@ -1039,25 +1027,29 @@ private[hive] object HiveClientImpl {
   private def toOutputFormat(name: String) =
     Utils.classForName[org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]](name)
 
+  def toHiveTableType(catalogTableType: CatalogTableType): HiveTableType = {
+    catalogTableType match {
+      case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE
+      case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE
+      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+      case t =>
+        throw new IllegalArgumentException(
+          s"Unknown table type is found at toHiveTableType: $t")
+    }
+  }
+
   /**
    * Converts the native table metadata representation format CatalogTable to Hive's Table.
    */
   def toHiveTable(table: CatalogTable, userName: Option[String] = None): HiveTable = {
     val hiveTable = new HiveTable(table.database, table.identifier.table)
+    hiveTable.setTableType(toHiveTableType(table.tableType))
     // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
-    hiveTable.setTableType(table.tableType match {
-      case CatalogTableType.EXTERNAL =>
-        hiveTable.setProperty("EXTERNAL", "TRUE")
-        HiveTableType.EXTERNAL_TABLE
-      case CatalogTableType.MANAGED =>
-        HiveTableType.MANAGED_TABLE
-      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
-      case t =>
-        throw new IllegalArgumentException(
-          s"Unknown table type is found at toHiveTable: $t")
-    })
+    if (table.tableType == CatalogTableType.EXTERNAL) {
+      hiveTable.setProperty("EXTERNAL", "TRUE")
+    }
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)
@@ -1232,4 +1224,50 @@ private[hive] object HiveClientImpl {
     StatsSetupConst.RAW_DATA_SIZE,
     StatsSetupConst.TOTAL_SIZE
   )
+
+  def newHiveConf(
+      sparkConf: SparkConf,
+      hadoopConf: JIterable[JMap.Entry[String, String]],
+      extraConfig: Map[String, String],
+      classLoader: Option[ClassLoader] = None): HiveConf = {
+    val hiveConf = new HiveConf(classOf[SessionState])
+    // HiveConf is a Hadoop Configuration, which has a field of classLoader and
+    // the initial value will be the current thread's context class loader.
+    // We call hiveConf.setClassLoader(initClassLoader) at here to ensure it use the classloader
+    // we want.
+    classLoader.foreach(hiveConf.setClassLoader)
+    // 1: Take all from the hadoopConf to this hiveConf.
+    // This hadoopConf contains user settings in Hadoop's core-site.xml file
+    // and Hive's hive-site.xml file. Note, we load hive-site.xml file manually in
+    // SharedState and put settings in this hadoopConf instead of relying on HiveConf
+    // to load user settings. Otherwise, HiveConf's initialize method will override
+    // settings in the hadoopConf. This issue only shows up when spark.sql.hive.metastore.jars
+    // is not set to builtin. When spark.sql.hive.metastore.jars is builtin, the classpath
+    // has hive-site.xml. So, HiveConf will use that to override its default values.
+    // 2: we set all spark confs to this hiveConf.
+    // 3: we set all entries in config to this hiveConf.
+    val confMap = (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue) ++
+      sparkConf.getAll.toMap ++ extraConfig).toMap
+    confMap.foreach { case (k, v) => hiveConf.set(k, v) }
+    SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
+      logDebug(s"Applying Hadoop/Hive/Spark and extra properties to Hive Conf:$k=$v")
+    }
+    // Disable CBO because we removed the Calcite dependency.
+    hiveConf.setBoolean("hive.cbo.enable", false)
+    // If this is true, SessionState.start will create a file to log hive job which will not be
+    // deleted on exit and is useless for spark
+    if (hiveConf.getBoolean("hive.session.history.enabled", false)) {
+      logWarning("Detected HiveConf hive.session.history.enabled is true and will be reset to" +
+        " false to disable useless hive logic")
+      hiveConf.setBoolean("hive.session.history.enabled", false)
+    }
+    // If this is tez engine, SessionState.start might bring extra logic to initialize tez stuff,
+    // which is useless for spark.
+    if (hiveConf.get("hive.execution.engine") == "tez") {
+      logWarning("Detected HiveConf hive.execution.engine is 'tez' and will be reset to 'mr'" +
+        " to disable useless hive logic")
+      hiveConf.set("hive.execution.engine", "mr")
+    }
+    hiveConf
+  }
 }

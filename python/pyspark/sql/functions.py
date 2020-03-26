@@ -584,6 +584,59 @@ def nanvl(col1, col2):
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
+@since(3.1)
+def percentile_approx(col, percentage, accuracy=10000):
+    """Returns the approximate percentile value of numeric column col at the given percentage.
+    The value of percentage must be between 0.0 and 1.0.
+
+    The accuracy parameter (default: 10000)
+    is a positive numeric literal which controls approximation accuracy at the cost of memory.
+    Higher value of accuracy yields better accuracy, 1.0/accuracy is the relative error
+    of the approximation.
+
+    When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
+    In this case, returns the approximate percentile array of column col
+    at the given percentage array.
+
+    >>> key = (col("id") % 3).alias("key")
+    >>> value = (randn(42) + key * 10).alias("value")
+    >>> df = spark.range(0, 1000, 1, 1).select(key, value)
+    >>> df.select(
+    ...     percentile_approx("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles")
+    ... ).printSchema()
+    root
+     |-- quantiles: array (nullable = true)
+     |    |-- element: double (containsNull = false)
+
+    >>> df.groupBy("key").agg(
+    ...     percentile_approx("value", 0.5, lit(1000000)).alias("median")
+    ... ).printSchema()
+    root
+     |-- key: long (nullable = true)
+     |-- median: double (nullable = true)
+    """
+    sc = SparkContext._active_spark_context
+
+    if isinstance(percentage, (list, tuple)):
+        # A local list
+        percentage = sc._jvm.functions.array(_to_seq(sc, [
+            _create_column_from_literal(x) for x in percentage
+        ]))
+    elif isinstance(percentage, Column):
+        # Already a Column
+        percentage = _to_java_column(percentage)
+    else:
+        # Probably scalar
+        percentage = _create_column_from_literal(percentage)
+
+    accuracy = (
+        _to_java_column(accuracy) if isinstance(accuracy, Column)
+        else _create_column_from_literal(accuracy)
+    )
+
+    return Column(sc._jvm.functions.percentile_approx(_to_java_column(col), percentage, accuracy))
+
+
 @ignore_unicode_prefix
 @since(1.4)
 def rand(seed=None):
@@ -920,8 +973,9 @@ def date_format(date, format):
     format given by the second argument.
 
     A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
-    pattern letters of the Java class `java.time.format.DateTimeFormatter` can be used.
+    pattern letters of `datetime pattern`_. can be used.
 
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
     .. note:: Use when ever possible specialized functions like `year`. These benefit from a
         specialized implementation.
 
@@ -1138,8 +1192,7 @@ def months_between(date1, date2, roundOff=True):
 @since(2.2)
 def to_date(col, format=None):
     """Converts a :class:`Column` into :class:`pyspark.sql.types.DateType`
-    using the optionally specified format. Specify formats according to
-    `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
+    using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
 
@@ -1162,8 +1215,7 @@ def to_date(col, format=None):
 @since(2.2)
 def to_timestamp(col, format=None):
     """Converts a :class:`Column` into :class:`pyspark.sql.types.TimestampType`
-    using the optionally specified format. Specify formats according to
-    `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
+    using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
 
@@ -1249,7 +1301,7 @@ def last_day(date):
 
 @ignore_unicode_prefix
 @since(1.5)
-def from_unixtime(timestamp, format="uuuu-MM-dd HH:mm:ss"):
+def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     """
     Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
     representing the timestamp of that moment in the current system time zone in the given
@@ -1266,9 +1318,9 @@ def from_unixtime(timestamp, format="uuuu-MM-dd HH:mm:ss"):
 
 
 @since(1.5)
-def unix_timestamp(timestamp=None, format='uuuu-MM-dd HH:mm:ss'):
+def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
     """
-    Convert time string with given pattern ('uuuu-MM-dd HH:mm:ss', by default)
+    Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
     to Unix time stamp (in seconds), using the default timezone and the default
     locale, return null if fail.
 

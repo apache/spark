@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.lang.reflect.{ParameterizedType, Type, WildcardType}
-import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
 
@@ -466,7 +465,7 @@ private[hive] trait HiveInspectors {
         _ => constant
       case poi: WritableConstantTimestampObjectInspector =>
         val t = poi.getWritableConstantValue
-        val constant = SECONDS.toMicros(t.getSeconds) + NANOSECONDS.toMicros(t.getNanos)
+        val constant = DateTimeUtils.fromJavaTimestamp(t.getTimestamp)
         _ => constant
       case poi: WritableConstantIntObjectInspector =>
         val constant = poi.getWritableConstantValue.get()
@@ -618,7 +617,7 @@ private[hive] trait HiveInspectors {
         case x: DateObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              DateTimeUtils.fromJavaDate(x.getPrimitiveWritableObject(data).get())
+              new DaysWritable(x.getPrimitiveWritableObject(data)).gregorianDays
             } else {
               null
             }
@@ -634,8 +633,7 @@ private[hive] trait HiveInspectors {
         case x: TimestampObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              val t = x.getPrimitiveWritableObject(data)
-              SECONDS.toMicros(t.getSeconds) + NANOSECONDS.toMicros(t.getNanos)
+              DateTimeUtils.fromJavaTimestamp(x.getPrimitiveWritableObject(data).getTimestamp)
             } else {
               null
             }
@@ -1011,8 +1009,12 @@ private[hive] trait HiveInspectors {
       new hadoopIo.BytesWritable(value.asInstanceOf[Array[Byte]])
     }
 
-  private def getDateWritable(value: Any): hiveIo.DateWritable =
-    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Int])
+  private def getDateWritable(value: Any): DaysWritable =
+    if (value == null) {
+      null
+    } else {
+      new DaysWritable(value.asInstanceOf[Int])
+    }
 
   private def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
     if (value == null) {

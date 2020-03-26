@@ -619,7 +619,7 @@ A list of the available metrics, with a short description:
   </tr>
   <tr>
     <td>inputMetrics.*</td>
-    <td>Metrics related to reading data from [[org.apache.spark.rdd.HadoopRDD]] 
+    <td>Metrics related to reading data from <code>org.apache.spark.rdd.HadoopRDD</code>
     or from persisted data.</td>
   </tr>
   <tr>
@@ -803,11 +803,11 @@ A list of the available metrics, with a short description:
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.DirectPoolMemory</td>
-    <td>Peak memory that the JVM is using for direct buffer pool ([[java.lang.management.BufferPoolMXBean]])</td>
+    <td>Peak memory that the JVM is using for direct buffer pool (<code>java.lang.management.BufferPoolMXBean</code>)</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.MappedPoolMemory</td>
-    <td>Peak memory that the JVM is using for mapped buffer pool ([[java.lang.management.BufferPoolMXBean]])</td>
+    <td>Peak memory that the JVM is using for mapped buffer pool (<code>java.lang.management.BufferPoolMXBean</code>)</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeJVMVMemory</td>

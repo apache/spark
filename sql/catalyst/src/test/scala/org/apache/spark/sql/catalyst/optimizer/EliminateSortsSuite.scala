@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -244,7 +245,8 @@ class EliminateSortsSuite extends PlanTest {
   }
 
   test("should not remove orderBy in groupBy clause with ScalaUDF as aggs") {
-    val scalaUdf = ScalaUDF((s: Int) => s, IntegerType, 'a :: Nil, true :: Nil)
+    val scalaUdf = ScalaUDF((s: Int) => s, IntegerType, 'a :: Nil,
+      Option(ExpressionEncoder[Int]()) :: Nil)
     val projectPlan = testRelation.select('a, 'b)
     val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
     val groupByPlan = orderByPlan.groupBy('a)(scalaUdf)

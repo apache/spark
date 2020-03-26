@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.1.x
   lazy val v31excludes = v30excludes ++ Seq(
+    // [SPARK-31077] Remove ChiSqSelector dependency on mllib.ChiSqSelectorModel
+    // private constructor
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this")
   )
 
   // Exclude rules for 3.0.x
@@ -422,10 +425,6 @@ object MimaExcludes {
     // [SPARK-28199][SS] Remove deprecated ProcessingTime
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.ProcessingTime"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.ProcessingTime$"),
-
-    // [SPARK-28556][SQL] QueryExecutionListener should also notify Error
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.util.QueryExecutionListener.onFailure"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.util.QueryExecutionListener.onFailure"),
 
     // [SPARK-25382][SQL][PYSPARK] Remove ImageSchema.readImages in 3.0
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.image.ImageSchema.readImages"),
