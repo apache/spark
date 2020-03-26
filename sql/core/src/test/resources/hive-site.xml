@@ -23,4 +23,8 @@
       <value>true</value>
       <description>Internal marker for test.</description>
   </property>
+  <property>
+    <name>hive.metastore.warehouse.dir</name>
+    <value>/tmp/hive_one</value>
+  </property>
 </configuration>

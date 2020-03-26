@@ -27,7 +27,7 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -37,13 +37,13 @@ import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
- * Hive metastore and warehouse.
+ * A test suite for the `spark-sql` CLI tool.
  */
-class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
+class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
+  val sparkWareHouseDir = Utils.createTempDir()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -60,6 +60,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     } finally {
       super.afterAll()
     }
+  }
+
+  override def afterEach(): Unit = {
+    // Only running `runCliWithin` in a single test case will share the same temporary
+    // Hive metastore
+    Utils.deleteRecursively(metastorePath)
   }
 
   /**
@@ -163,18 +169,51 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     }
   }
 
-  test("Pick spark.sql.warehouse.dir first for Spark Cli if set") {
-    val sparkWareHouseDir = Utils.createTempDir()
-    Utils.deleteRecursively(metastorePath)
-    try {
-      runCliWithin(
-        1.minute,
-        Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=$sparkWareHouseDir"))(
-        "desc database default;" -> sparkWareHouseDir.getAbsolutePath)
-    } finally {
-      Utils.deleteRecursively(metastorePath)
-      Utils.deleteRecursively(sparkWareHouseDir)
-    }
+  test("load warehouse dir from hive-site.xml") {
+    runCliWithin(1.minute, maybeWarehouse = None)(
+      "desc database default;" -> "hive_one",
+      "set spark.sql.warehouse.dir;" -> "hive_one")
+  }
+
+  test("load warehouse dir from --hiveconf") {
+    // --hiveconf will overrides hive-site.xml
+    runCliWithin(2.minute)(
+      "desc database default;" -> warehousePath.getAbsolutePath,
+      "create database cliTestDb;" -> "",
+      "desc database cliTestDb;" -> warehousePath.getAbsolutePath,
+      "set spark.sql.warehouse.dir;" -> warehousePath.getAbsolutePath)
+  }
+
+  test("load warehouse dir from --conf spark(.hadoop).hive.*") {
+    // override conf from hive-site.xml
+    runCliWithin(
+      2.minute,
+      extraArgs = Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
+      maybeWarehouse = None)(
+      "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
+      "create database cliTestDb;" -> "",
+      "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
+      "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
+
+    // override conf from --hiveconf too
+    runCliWithin(
+      2.minute,
+      extraArgs = Seq("--conf", s"spark.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"))(
+      "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
+      "create database cliTestDb;" -> "",
+      "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
+      "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
+  }
+
+  test("load warehouse dir from spark.sql.warehouse.dir") {
+    // spark.sql.warehouse.dir overrides all hive ones
+    runCliWithin(
+      2.minute,
+      extraArgs =
+        Seq("--conf",
+          s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}1",
+          "--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=${sparkWareHouseDir}2"))(
+      "desc database default;" -> sparkWareHouseDir.getAbsolutePath.concat("1"))
   }
 
   test("Simple commands") {
@@ -324,20 +363,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SET conf3=${hiveconf:conf1};" -> "conftest",
       "SET conf3;" -> "conftest"
     )
-  }
-
-  test("SPARK-21451: spark.sql.warehouse.dir should respect options in --hiveconf") {
-    runCliWithin(1.minute)("set spark.sql.warehouse.dir;" -> warehousePath.getAbsolutePath)
-  }
-
-  test("SPARK-21451: Apply spark.hadoop.* configurations") {
-    val tmpDir = Utils.createTempDir(namePrefix = "SPARK-21451")
-    runCliWithin(
-      1.minute,
-      Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$tmpDir"),
-      maybeWarehouse = None)(
-      "set spark.sql.warehouse.dir;" -> tmpDir.getAbsolutePath)
-    tmpDir.delete()
   }
 
   test("Support hive.aux.jars.path") {

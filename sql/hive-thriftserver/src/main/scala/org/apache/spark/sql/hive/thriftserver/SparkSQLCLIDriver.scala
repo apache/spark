@@ -120,12 +120,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // We do not propagate metastore options to the execution copy of hive.
       if (key != "javax.jdo.option.ConnectionURL") {
         conf.set(key, value)
-        if (key != "hive.metastore.warehouse.dir") {
-          // We don't propagate hive.metastore.warehouse.dir, because it might be adjusted in
-          // [[SharedState.loadHiveConfFile]] based on the user specified or default values of
-          // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
-          sessionState.getOverriddenConfigurations.put(key, value)
-        }
+        sessionState.getOverriddenConfigurations.put(key, value)
       }
     }
 
@@ -195,8 +190,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
 
-    newHiveConf.foreach { kv =>
-      SparkSQLEnv.sqlContext.setConf(kv._1, kv._2)
+    for ((k, v) <- newHiveConf if k != "hive.metastore.warehouse.dir") {
+      SparkSQLEnv.sqlContext.setConf(k, v)
     }
 
     if (sessionState.execString != null) {
