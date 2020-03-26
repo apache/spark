@@ -27,10 +27,6 @@ import java.util.regex.Matcher
  */
 object CodeFormatter {
   val commentHolder = """\/\*(.+?)\*\/""".r
-  val commentRegexp =
-    ("""([ |\t]*?\/\*[\s|\S]*?\*\/[ |\t]*?)|""" + // strip /*comment*/
-      """([ |\t]*?\/\/[\s\S]*?\n)""").r           // strip //comment
-  val extraNewLinesRegexp = """\n\s*\n""".r       // strip extra newlines
 
   def format(code: CodeAndComment, maxLines: Int = -1): String = {
     val formatter = new CodeFormatter
@@ -95,8 +91,121 @@ object CodeFormatter {
     new CodeAndComment(code.result().trim(), map)
   }
 
+  private object State extends Enumeration {
+    val TEXT, SEPARATOR, SEPARATOR_WITH_NEWLINE, MAYBE_COMMENT, LINE_COMMENT, BLOCK_COMMENT,
+    BLOCK_COMMENT_WITH_NEWLINE, MAYBE_BLOCK_COMMENT_CLOSING,
+    MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING = Value
+  }
+
   def stripExtraNewLinesAndComments(input: String): String = {
-    extraNewLinesRegexp.replaceAllIn(commentRegexp.replaceAllIn(input, ""), "\n")
+    import State._
+
+    val sb = new StringBuffer(input.length)
+    var pos = 0
+    var state = TEXT
+    var prevNonCommentState = TEXT
+    var textBefore = false
+    while (pos < input.length) {
+      if (state == TEXT) {
+        if (input(pos) == ' ' || input(pos) == '\t') {
+          state = SEPARATOR
+        } else if (input(pos) == '\n') {
+          state = SEPARATOR_WITH_NEWLINE
+        } else if (input(pos) == '/') {
+          prevNonCommentState = state
+          state = MAYBE_COMMENT
+        } else {
+          sb.append(input(pos))
+          textBefore = true
+        }
+      } else if (state == SEPARATOR) {
+        if (input(pos) == ' ' || input(pos) == '\t') {
+        } else if (input(pos) == '\n') {
+          state = SEPARATOR_WITH_NEWLINE
+        } else if (input(pos) == '/') {
+          prevNonCommentState = state
+          state = MAYBE_COMMENT
+        } else {
+          if (textBefore) {
+            sb.append(' ')
+          }
+          sb.append(input(pos))
+          state = TEXT
+          textBefore = true
+        }
+      } else if (state == SEPARATOR_WITH_NEWLINE) {
+        if (input(pos) == ' ' || input(pos) == '\t' || input(pos) == '\n') {
+        } else if (input(pos) == '/') {
+          prevNonCommentState = state
+          state = MAYBE_COMMENT
+        } else {
+          if (textBefore) {
+            sb.append('\n')
+          }
+          sb.append(input(pos))
+          state = TEXT
+          textBefore = true
+        }
+      } else if (state == MAYBE_COMMENT) {
+        if (input(pos) == '/') {
+          state = LINE_COMMENT
+        } else if (input(pos) == '*') {
+          state = BLOCK_COMMENT
+        } else {
+          if (textBefore) {
+            if (prevNonCommentState == SEPARATOR) {
+              sb.append(' ')
+            } else if (prevNonCommentState == SEPARATOR_WITH_NEWLINE) {
+              sb.append('\n')
+            }
+          }
+          sb.append('/')
+          if (input(pos) == ' ' || input(pos) == '\t') {
+            state = SEPARATOR
+          } else if (input(pos) == '\n') {
+            state = SEPARATOR_WITH_NEWLINE
+          } else {
+            sb.append(input(pos))
+            state = TEXT
+            textBefore = true
+          }
+        }
+      } else if (state == LINE_COMMENT) {
+        if (input(pos) == '\n') {
+          state = SEPARATOR_WITH_NEWLINE
+        }
+      } else if (state == BLOCK_COMMENT) {
+        if (input(pos) == '\n') {
+          state = BLOCK_COMMENT_WITH_NEWLINE
+        } else if (input(pos) == '*') {
+          state = MAYBE_BLOCK_COMMENT_CLOSING
+        }
+      } else if (state == BLOCK_COMMENT_WITH_NEWLINE) {
+        if (input(pos) == '*') {
+          state = MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING
+        }
+      } else if (state == MAYBE_BLOCK_COMMENT_CLOSING) {
+        if (input(pos) == '\n') {
+          state = BLOCK_COMMENT_WITH_NEWLINE
+        } else if (input(pos) == '/') {
+          if (prevNonCommentState == SEPARATOR_WITH_NEWLINE) {
+            state = SEPARATOR_WITH_NEWLINE
+          } else {
+            state = SEPARATOR
+          }
+        } else {
+          state = BLOCK_COMMENT
+        }
+      } else if (state == MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING) {
+        if (input(pos) == '/') {
+          state = SEPARATOR_WITH_NEWLINE
+        } else {
+          state = BLOCK_COMMENT_WITH_NEWLINE
+        }
+      }
+      pos += 1
+    }
+    sb.toString
   }
 }
 

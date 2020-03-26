@@ -76,13 +76,11 @@ class CodeFormatterSuite extends SparkFunSuite {
 
     val reducedCode = CodeFormatter.stripExtraNewLinesAndComments(code)
     assert(reducedCode ===
-      """
-        |public function() {
+      """public function() {
         |code_body
         |code_body
         |code_body
-        |}
-      """.stripMargin)
+        |}""".stripMargin)
   }
 
   testCase("basic example") {
