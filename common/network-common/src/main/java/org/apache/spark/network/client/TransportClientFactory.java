@@ -116,7 +116,7 @@ public class TransportClientFactory implements Closeable {
     }
     this.metrics = new NettyMemoryMetrics(
       this.pooledAllocator, conf.getModuleName() + "-client", conf);
-    fastFailTimeWindow = conf.maxIORetries() > 0 ? (int)(conf.ioRetryWaitTimeMs() * 0.95) : 0;
+    fastFailTimeWindow = conf.maxIORetries() > 0 ? (int)(conf.ioRetryWaitTimeMs() * 0.95) : -1;
   }
 
   public MetricSet getAllMetrics() {
@@ -138,6 +138,11 @@ public class TransportClientFactory implements Closeable {
    * Concurrency: This method is safe to call from multiple threads.
    */
   public TransportClient createClient(String remoteHost, int remotePort)
+    throws IOException, InterruptedException {
+    return createClient(remoteHost, remotePort, false);
+  }
+
+  public TransportClient createClient(String remoteHost, int remotePort, boolean withRetry)
       throws IOException, InterruptedException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
@@ -197,7 +202,8 @@ public class TransportClientFactory implements Closeable {
           logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
         }
       }
-      if (System.currentTimeMillis() - clientPool.lastConnectionFailed < fastFailTimeWindow) {
+      if (withRetry && System.currentTimeMillis() - clientPool.lastConnectionFailed <
+        fastFailTimeWindow) {
         throw new IOException(
           String.format("Connecting to %s failed in the last %s ms, fail this connection directly",
             resolvedAddress, fastFailTimeWindow));

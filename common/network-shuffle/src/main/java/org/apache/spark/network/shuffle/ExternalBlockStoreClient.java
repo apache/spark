@@ -105,7 +105,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           (blockIds1, listener1) -> {
             // Unless this client is closed.
             if (clientFactory != null) {
-              TransportClient client = clientFactory.createClient(host, port);
+              TransportClient client = clientFactory.createClient(host, port, true);
               new OneForOneBlockFetcher(client, appId, execId,
                 blockIds1, listener1, conf, downloadFileManager).start();
             } else {
