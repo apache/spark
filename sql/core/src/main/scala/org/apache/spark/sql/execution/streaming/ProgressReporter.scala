@@ -143,7 +143,7 @@ trait ProgressReporter extends Logging {
   }
 
   /** Finalizes the query progress and adds it to list of recent status updates. */
-  protected def finishTrigger(hasNewData: Boolean): Unit = {
+  protected def finishTrigger(hasNewData: Boolean, hasExecuted: Boolean): Unit = {
     assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null)
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
@@ -170,9 +170,8 @@ trait ProgressReporter extends Logging {
       )
     }
 
-    val sinkProgress = SinkProgress(
-      sink.toString,
-      sinkCommitProgress.map(_.numOutputRows))
+    val sinkOutput = if (hasExecuted) sinkCommitProgress.map(_.numOutputRows) else Some(0L)
+    val sinkProgress = SinkProgress(sink.toString, sinkOutput)
     val observedMetrics = extractObservedMetrics(hasNewData, lastExecution)
 
     val newProgress = new StreamingQueryProgress(
@@ -189,7 +188,7 @@ trait ProgressReporter extends Logging {
       sink = sinkProgress,
       observedMetrics = new java.util.HashMap(observedMetrics.asJava))
 
-    if (hasNewData) {
+    if (hasExecuted) {
       // Reset noDataEventTimestamp if we processed any data
       lastNoDataProgressEventTime = Long.MinValue
       updateProgress(newProgress)
