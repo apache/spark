@@ -122,7 +122,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         conf.set(key, value)
         if (key != "hive.metastore.warehouse.dir") {
           // We don't propagate hive.metastore.warehouse.dir, because it might be adjusted in
-          // [[SharedState.loadHiveConfFile]] based of both the value of user specified
+          // [[SharedState.loadHiveConfFile]] based on the user specified or default values of
           // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
           sessionState.getOverriddenConfigurations.put(key, value)
         }
