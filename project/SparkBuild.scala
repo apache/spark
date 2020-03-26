@@ -554,8 +554,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % "14.0.1",
     dependencyOverrides += "commons-io" % "commons-io" % "2.4",
     dependencyOverrides += "com.fasterxml.jackson.core"  % "jackson-databind" % "2.6.7.3",
-    dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.8.2")
+    dependencyOverrides += "jline" % "jline" % "2.14.6")
 }
 
 /**
