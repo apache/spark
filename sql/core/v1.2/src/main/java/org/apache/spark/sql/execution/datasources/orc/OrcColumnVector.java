@@ -138,8 +138,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
 
   @Override
   public int getInt(int rowId) {
-    int index = getRowIndex(rowId);
-    int value = (int) longData.vector[index];
+    int value = (int) longData.vector[getRowIndex(rowId)];
     if (isDate) {
       return DateTimeUtils.rebaseJulianToGregorianDays(value);
     } else {
