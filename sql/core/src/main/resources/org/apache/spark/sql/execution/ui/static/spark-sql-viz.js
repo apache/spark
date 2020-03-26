@@ -73,7 +73,7 @@ function setupTooltipForSparkPlanNode(nodeId) {
 
 // labelSeparator should be a non-graphical character in order not to affect the width of boxes.
 var labelSeparator = "\x01";
-var stageAndTaskMetricsPattern = "^(.*)(\\(stage.*attempt.*task[^)]*\\))(.*)$";
+var stageAndTaskMetricsPattern = "^(.*)(\\(stage.*task[^)]*\\))(.*)$";
 
 /*
  * Helper function to pre-process the graph layout.
