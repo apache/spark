@@ -83,13 +83,19 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       timeout: FiniteDuration,
       extraArgs: Seq[String] = Seq.empty,
       errorResponses: Seq[String] = Seq("Error:"),
-      maybeWarehouse: Option[File] = Some(warehousePath))(
+      maybeWarehouse: Option[File] = Some(warehousePath),
+      useExternalHiveFile: Boolean = false)(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
     // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
     val queriesString = queries.map(_ + "\n").mkString
 
+    val extraHive = if (useExternalHiveFile) {
+      s"--driver-class-path ${System.getProperty("user.dir")}/src/test/noclasspath"
+    } else {
+      ""
+    }
     val warehouseConf =
       maybeWarehouse.map(dir => s"--hiveconf ${ConfVars.METASTOREWAREHOUSE}=$dir").getOrElse("")
     val command = {
@@ -98,12 +104,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       s"""$cliScript
          |  --master local
          |  --driver-java-options -Dderby.system.durability=test
+         |  $extraHive
          |  --conf spark.ui.enabled=false
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
          |  --hiveconf conf1=conftest
          |  --hiveconf conf2=1
-         |  --driver-class-path ${System.getProperty("user.dir")}/src/test/noclasspath
          |  $warehouseConf
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
@@ -171,14 +177,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
   }
 
   test("load warehouse dir from hive-site.xml") {
-    runCliWithin(1.minute, maybeWarehouse = None)(
+    runCliWithin(1.minute, maybeWarehouse = None, useExternalHiveFile = true)(
       "desc database default;" -> "hive_one",
       "set spark.sql.warehouse.dir;" -> "hive_one")
   }
 
   test("load warehouse dir from --hiveconf") {
     // --hiveconf will overrides hive-site.xml
-    runCliWithin(2.minute)(
+    runCliWithin(2.minute, useExternalHiveFile = true)(
       "desc database default;" -> warehousePath.getAbsolutePath,
       "create database cliTestDb;" -> "",
       "desc database cliTestDb;" -> warehousePath.getAbsolutePath,
@@ -190,7 +196,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     runCliWithin(
       2.minute,
       extraArgs = Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
-      maybeWarehouse = None)(
+      maybeWarehouse = None,
+      useExternalHiveFile = true)(
       "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
       "create database cliTestDb;" -> "",
       "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
