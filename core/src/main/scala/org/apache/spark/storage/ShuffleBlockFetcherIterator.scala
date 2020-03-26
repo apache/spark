@@ -329,9 +329,8 @@ final class ShuffleBlockFetcherIterator(
 
   private def createFetchRequest(
       blocks: Seq[FetchBlockInfo],
-      address: BlockManagerId,
-      curRequestSize: Long): FetchRequest = {
-    logDebug(s"Creating fetch request of $curRequestSize at $address "
+      address: BlockManagerId): FetchRequest = {
+    logDebug(s"Creating fetch request of ${blocks.map(_.size).sum} at $address "
       + s"with ${blocks.size} blocks")
     FetchRequest(address, blocks)
   }
@@ -339,17 +338,16 @@ final class ShuffleBlockFetcherIterator(
   private def createFetchRequests(
       curBlocks: Seq[FetchBlockInfo],
       address: BlockManagerId,
-      curRequestSize: Long,
       isLast: Boolean,
       collectedRemoteRequests: ArrayBuffer[FetchRequest]): Seq[FetchBlockInfo] = {
     val mergedBlocks = mergeContinuousShuffleBlockIdsIfNeeded(curBlocks)
     var retBlocks = Seq.empty[FetchBlockInfo]
     if (mergedBlocks.length <= maxBlocksInFlightPerAddress) {
-      collectedRemoteRequests += createFetchRequest(mergedBlocks, address, curRequestSize)
+      collectedRemoteRequests += createFetchRequest(mergedBlocks, address)
     } else {
       mergedBlocks.grouped(maxBlocksInFlightPerAddress).foreach { blocks =>
         if (blocks.length == maxBlocksInFlightPerAddress || isLast) {
-          collectedRemoteRequests += createFetchRequest(blocks, address, curRequestSize)
+          collectedRemoteRequests += createFetchRequest(blocks, address)
         } else {
           // The last group does not exceed `maxBlocksInFlightPerAddress`. Put it back
           // to `curBlocks`.
@@ -377,14 +375,14 @@ final class ShuffleBlockFetcherIterator(
       // For batch fetch, the actual block in flight should count for merged block.
       val mayExceedsMaxBlocks = !doBatchFetch && curBlocks.size >= maxBlocksInFlightPerAddress
       if (curRequestSize >= targetRemoteRequestSize || mayExceedsMaxBlocks) {
-        curBlocks = createFetchRequests(curBlocks, address, curRequestSize, isLast = false,
+        curBlocks = createFetchRequests(curBlocks, address, isLast = false,
           collectedRemoteRequests).to[ArrayBuffer]
         curRequestSize = curBlocks.map(_.size).sum
       }
     }
     // Add in the final request
     if (curBlocks.nonEmpty) {
-      curBlocks = createFetchRequests(curBlocks, address, curRequestSize, isLast = true,
+      curBlocks = createFetchRequests(curBlocks, address, isLast = true,
         collectedRemoteRequests).to[ArrayBuffer]
       curRequestSize = curBlocks.map(_.size).sum
     }
