@@ -142,7 +142,14 @@ trait ProgressReporter extends Logging {
     logInfo(s"Streaming query made progress: $newProgress")
   }
 
-  /** Finalizes the query progress and adds it to list of recent status updates. */
+  /**
+   * Finalizes the query progress and adds it to list of recent status updates.
+   *
+   * @param hasNewData Whether the sources of this stream had new data for this trigger.
+   * @param hasExecuted Whether any batch was executed during this trigger. Streaming queries that
+   *                    perform stateful aggregations with timeouts can still run batches even
+   *                    though the sources don't have any new data.
+   */
   protected def finishTrigger(hasNewData: Boolean, hasExecuted: Boolean): Unit = {
     assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null)
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
