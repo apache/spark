@@ -234,8 +234,8 @@ public class TransportClientFactorySuite {
   public void fastFailConnectionInTimeWindow() throws IOException, InterruptedException {
     TransportClientFactory factory = context.createClientFactory();
     TransportServer server = context.createServer();
-    server.close();
     int unreachablePort = server.getPort();
+    server.close();
     try {
       factory.createClient(TestUtils.getLocalHost(), unreachablePort);
     } catch (Exception e) {
