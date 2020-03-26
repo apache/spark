@@ -26,6 +26,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
+import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -413,6 +414,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(ret.resolved)
       checkEvaluation(ret, Seq(null, true, false, null))
     }
+
+    {
+      val array = Literal.create(Seq.empty, ArrayType(NullType, containsNull = false))
+      val ret = cast(array, ArrayType(IntegerType, containsNull = false))
+      assert(ret.resolved)
+      checkEvaluation(ret, Seq.empty)
+    }
+
     {
       val ret = cast(array, ArrayType(BooleanType, containsNull = false))
       assert(ret.resolved === false)
@@ -1156,6 +1165,19 @@ class CastSuite extends CastSuiteBase {
     assert(Cast.canCast(
       StructType(StructField("a", NullType, false) :: Nil),
       StructType(StructField("a", IntegerType, true) :: Nil)))
+  }
+
+  test("SPARK-31227: Non-nullable null type should not coerce to nullable type") {
+    TypeCoercionSuite.allTypes.foreach { t =>
+      assert(Cast.canCast(ArrayType(NullType, false), ArrayType(t, false)))
+
+      assert(Cast.canCast(
+        MapType(NullType, NullType, false), MapType(t, t, false)))
+
+      assert(Cast.canCast(
+        StructType(StructField("a", NullType, false) :: Nil),
+        StructType(StructField("a", t, false) :: Nil)))
+    }
   }
 
   test("Cast should output null for invalid strings when ANSI is not enabled.") {
