@@ -100,94 +100,96 @@ object CodeFormatter {
   def stripExtraNewLinesAndComments(input: String): String = {
     import State._
 
-    val sb = new StringBuffer(input.length)
+    val sb = new StringBuilder(input.length)
     var pos = 0
     var state = TEXT
     var prevNonCommentState = TEXT
     var textBefore = false
     while (pos < input.length) {
+      val c = input(pos)
+
       if (state == TEXT) {
-        if (input(pos) == ' ' || input(pos) == '\t') {
+        if (c == ' ' || c == '\t') {
           state = SEPARATOR
-        } else if (input(pos) == '\n') {
+        } else if (c == '\n') {
           state = SEPARATOR_WITH_NEWLINE
-        } else if (input(pos) == '/') {
+        } else if (c == '/') {
           prevNonCommentState = state
           state = MAYBE_COMMENT
         } else {
-          sb.append(input(pos))
+          sb += c
           textBefore = true
         }
       } else if (state == SEPARATOR) {
-        if (input(pos) == ' ' || input(pos) == '\t') {
-        } else if (input(pos) == '\n') {
+        if (c == ' ' || c == '\t') {
+        } else if (c == '\n') {
           state = SEPARATOR_WITH_NEWLINE
-        } else if (input(pos) == '/') {
+        } else if (c == '/') {
           prevNonCommentState = state
           state = MAYBE_COMMENT
         } else {
           if (textBefore) {
-            sb.append(' ')
+            sb += ' '
           }
-          sb.append(input(pos))
+          sb += c
           state = TEXT
           textBefore = true
         }
       } else if (state == SEPARATOR_WITH_NEWLINE) {
-        if (input(pos) == ' ' || input(pos) == '\t' || input(pos) == '\n') {
-        } else if (input(pos) == '/') {
+        if (c == ' ' || c == '\t' || c == '\n') {
+        } else if (c == '/') {
           prevNonCommentState = state
           state = MAYBE_COMMENT
         } else {
           if (textBefore) {
-            sb.append('\n')
+            sb += '\n'
           }
-          sb.append(input(pos))
+          sb += c
           state = TEXT
           textBefore = true
         }
       } else if (state == MAYBE_COMMENT) {
-        if (input(pos) == '/') {
+        if (c == '/') {
           state = LINE_COMMENT
-        } else if (input(pos) == '*') {
+        } else if (c == '*') {
           state = BLOCK_COMMENT
         } else {
           if (textBefore) {
             if (prevNonCommentState == SEPARATOR) {
-              sb.append(' ')
+              sb += ' '
             } else if (prevNonCommentState == SEPARATOR_WITH_NEWLINE) {
-              sb.append('\n')
+              sb += '\n'
             }
           }
-          sb.append('/')
-          if (input(pos) == ' ' || input(pos) == '\t') {
+          sb += '/'
+          if (c == ' ' || c == '\t') {
             state = SEPARATOR
-          } else if (input(pos) == '\n') {
+          } else if (c == '\n') {
             state = SEPARATOR_WITH_NEWLINE
           } else {
-            sb.append(input(pos))
+            sb += c
             state = TEXT
             textBefore = true
           }
         }
       } else if (state == LINE_COMMENT) {
-        if (input(pos) == '\n') {
+        if (c == '\n') {
           state = SEPARATOR_WITH_NEWLINE
         }
       } else if (state == BLOCK_COMMENT) {
-        if (input(pos) == '\n') {
+        if (c == '\n') {
           state = BLOCK_COMMENT_WITH_NEWLINE
-        } else if (input(pos) == '*') {
+        } else if (c == '*') {
           state = MAYBE_BLOCK_COMMENT_CLOSING
         }
       } else if (state == BLOCK_COMMENT_WITH_NEWLINE) {
-        if (input(pos) == '*') {
+        if (c == '*') {
           state = MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING
         }
       } else if (state == MAYBE_BLOCK_COMMENT_CLOSING) {
-        if (input(pos) == '\n') {
+        if (c == '\n') {
           state = BLOCK_COMMENT_WITH_NEWLINE
-        } else if (input(pos) == '/') {
+        } else if (c == '/') {
           if (prevNonCommentState == SEPARATOR_WITH_NEWLINE) {
             state = SEPARATOR_WITH_NEWLINE
           } else {
@@ -197,7 +199,7 @@ object CodeFormatter {
           state = BLOCK_COMMENT
         }
       } else if (state == MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING) {
-        if (input(pos) == '/') {
+        if (c == '/') {
           state = SEPARATOR_WITH_NEWLINE
         } else {
           state = BLOCK_COMMENT_WITH_NEWLINE
