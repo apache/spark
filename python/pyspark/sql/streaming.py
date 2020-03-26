@@ -489,7 +489,8 @@ class DataStreamReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
-        .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
+        .. _partition discovery:
+          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
         .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
@@ -724,8 +725,6 @@ class DataStreamReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
-
-        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
