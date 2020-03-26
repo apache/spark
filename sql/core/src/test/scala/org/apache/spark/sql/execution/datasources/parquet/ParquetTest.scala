@@ -62,10 +62,6 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
       (data: Seq[T])
       (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
-  protected def toDF[T <: Product: ClassTag: TypeTag](data: Seq[T]): DataFrame = {
-    spark.createDataFrame(data)
-  }
-
   /**
    * Writes `df` dataframe to a Parquet file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.

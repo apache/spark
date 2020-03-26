@@ -183,6 +183,7 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.eq(
         longColumn(n),
         Option(v).map(_.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong]).orNull)
+
     case ParquetSchemaType(DECIMAL, INT32, _, _) if pushDownDecimal =>
       (n: Array[String], v: Any) => FilterApi.eq(
         intColumn(n),

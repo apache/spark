@@ -21,9 +21,6 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
@@ -44,7 +41,6 @@ import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
-
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -112,7 +108,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
    * dataframes as new test data.
    */
   private def withNestedDataFrame(inputDF: DataFrame)
-      (runTests: (DataFrame, String, Any => Any) => Unit): Unit = {
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit = {
     assert(inputDF.schema.fields.length == 1)
     assert(!inputDF.schema.fields.head.dataType.isInstanceOf[StructType])
     val df = inputDF.toDF("temp")
@@ -140,8 +136,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         "`a.b`.`c.d`", // one level nesting with column names containing `dots`
         (x: Any) => Row(x)
       )
-    ).foreach { case (df, pushDownColName, resultTransFun) =>
-      runTests(df, pushDownColName, resultTransFun)
+    ).foreach { case (df, colName, resultFun) =>
+      runTest(df, colName, resultFun)
     }
   }
 
@@ -153,10 +149,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     val ts4 = data(3)
 
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.map(i => Tuple1(i)).toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val tsAttr = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === TimestampType)
+        val tsAttr = df(colName).expr
+        assert(df(colName).expr.dataType === TimestampType)
 
         checkFilterPredicate(tsAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(tsAttr.isNotNull, classOf[NotEq[_]],
@@ -213,12 +209,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   test("filter pushdown - boolean") {
-    val data = true :: false :: Nil
+    val data = (true :: false :: Nil).map(b => Tuple1.apply(Option(b)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val booleanAttr = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === BooleanType)
+        val booleanAttr = df(colName).expr
+        assert(df(colName).expr.dataType === BooleanType)
 
         checkFilterPredicate(booleanAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(booleanAttr.isNotNull, classOf[NotEq[_]],
@@ -234,10 +230,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - tinyint") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toByte)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val tinyIntAttr = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === ByteType)
+        val tinyIntAttr = df(colName).expr
+        assert(df(colName).expr.dataType === ByteType)
 
         checkFilterPredicate(tinyIntAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(tinyIntAttr.isNotNull, classOf[NotEq[_]],
@@ -270,10 +266,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - smallint") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toShort)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val smallIntAttr = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === ShortType)
+        val smallIntAttr = df(colName).expr
+        assert(df(colName).expr.dataType === ShortType)
 
         checkFilterPredicate(smallIntAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(smallIntAttr.isNotNull, classOf[NotEq[_]],
@@ -306,10 +302,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - integer") {
     val data = (1 to 4).map(i => Tuple1(Option(i)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val intAttr = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === IntegerType)
+        val intAttr = df(colName).expr
+        assert(df(colName).expr.dataType === IntegerType)
 
         checkFilterPredicate(intAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(intAttr.isNotNull, classOf[NotEq[_]],
@@ -342,10 +338,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - long") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toLong)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val longAttr = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === LongType)
+        val longAttr = df(colName).expr
+        assert(df(colName).expr.dataType === LongType)
 
         checkFilterPredicate(longAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(longAttr.isNotNull, classOf[NotEq[_]],
@@ -378,10 +374,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - float") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toFloat)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val floatAttr = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === FloatType)
+        val floatAttr = df(colName).expr
+        assert(df(colName).expr.dataType === FloatType)
 
         checkFilterPredicate(floatAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(floatAttr.isNotNull, classOf[NotEq[_]],
@@ -414,10 +410,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - double") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toDouble)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val doubleAttr = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === DoubleType)
+        val doubleAttr = df(colName).expr
+        assert(df(colName).expr.dataType === DoubleType)
 
         checkFilterPredicate(doubleAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(doubleAttr.isNotNull, classOf[NotEq[_]],
@@ -450,10 +446,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - string") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toString)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val stringAttr = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === StringType)
+        val stringAttr = df(colName).expr
+        assert(df(colName).expr.dataType === StringType)
 
         checkFilterPredicate(stringAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(stringAttr.isNotNull, classOf[NotEq[_]],
@@ -490,10 +486,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
     val data = (1 to 4).map(i => Tuple1(Option(i.b)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val binaryAttr: Expression = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === BinaryType)
+        val binaryAttr: Expression = df(colName).expr
+        assert(df(colName).expr.dataType === BinaryType)
 
         checkFilterPredicate(binaryAttr === 1.b, classOf[Eq[_]], resultFun(1.b))
         checkFilterPredicate(binaryAttr <=> 1.b, classOf[Eq[_]], resultFun(1.b))
@@ -531,10 +527,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
     val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21").map(_.date)
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+    withNestedDataFrame(data.map(i => Tuple1(i)).toDF()) { case (inputDF, colName, resultFun) =>
       withParquetDataFrame(inputDF) { implicit df =>
-        val dateAttr: Expression = df(pushDownColName).expr
-        assert(df(pushDownColName).expr.dataType === DateType)
+        val dateAttr: Expression = df(colName).expr
+        assert(df(colName).expr.dataType === DateType)
 
         checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
         checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
@@ -603,7 +599,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     // spark.sql.parquet.outputTimestampType = INT96 doesn't support pushdown
     withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
       ParquetOutputTimestampType.INT96.toString) {
-      withParquetDataFrame(toDF(millisData.map(i => Tuple1(i)))) { implicit df =>
+      import testImplicits._
+      withParquetDataFrame(millisData.map(i => Tuple1(i)).toDF()) { implicit df =>
         val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
         assertResult(None) {
           createParquetFilters(schema).createFilter(sources.IsNull("_1"))
@@ -623,10 +620,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         val rdd =
           spark.sparkContext.parallelize((1 to 4).map(i => Row(new java.math.BigDecimal(i))))
         val dataFrame = spark.createDataFrame(rdd, StructType.fromDDL(s"a decimal($precision, 2)"))
-        withNestedDataFrame(dataFrame) { case (inputDF, pushDownColName, resultFun) =>
+        withNestedDataFrame(dataFrame) { case (inputDF, colName, resultFun) =>
           withParquetDataFrame(inputDF) { implicit df =>
-            val decimalAttr: Expression = df(pushDownColName).expr
-            assert(df(pushDownColName).expr.dataType === DecimalType(precision, 2))
+            val decimalAttr: Expression = df(colName).expr
+            assert(df(colName).expr.dataType === DecimalType(precision, 2))
 
             checkFilterPredicate(decimalAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
             checkFilterPredicate(decimalAttr.isNotNull, classOf[NotEq[_]],
@@ -1166,7 +1163,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   test("SPARK-16371 Do not push down filters when inner name and outer name are the same") {
-    withParquetDataFrame(toDF((1 to 4).map(i => Tuple1(Tuple1(i))))) { implicit df =>
+    import testImplicits._
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Tuple1(i))).toDF()) { implicit df =>
       // Here the schema becomes as below:
       //
       // root
@@ -1308,7 +1306,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   test("filter pushdown - StringStartsWith") {
-    withParquetDataFrame(toDF((1 to 4).map(i => Tuple1(i + "str" + i)))) { implicit df =>
+    withParquetDataFrame {
+      import testImplicits._
+      (1 to 4).map(i => Tuple1(i + "str" + i)).toDF()
+    } { implicit df =>
       checkFilterPredicate(
         '_1.startsWith("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
@@ -1354,7 +1355,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
 
     // SPARK-28371: make sure filter is null-safe.
-    withParquetDataFrame(toDF(Seq(Tuple1[String](null)))) { implicit df =>
+    withParquetDataFrame {
+      import testImplicits._
+      Seq(Tuple1[String](null)).toDF()
+    } { implicit df =>
       checkFilterPredicate(
         '_1.startsWith("blah").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
