@@ -237,12 +237,12 @@ public class TransportClientFactorySuite {
     int unreachablePort = server.getPort();
     server.close();
     try {
-      factory.createClient(TestUtils.getLocalHost(), unreachablePort);
+      factory.createClient(TestUtils.getLocalHost(), unreachablePort, true);
     } catch (Exception e) {
       assert(e instanceof IOException);
     }
     expectedException.expect(IOException.class);
     expectedException.expectMessage("fail this connection directly");
-    factory.createClient(TestUtils.getLocalHost(), unreachablePort);
+    factory.createClient(TestUtils.getLocalHost(), unreachablePort, true);
   }
 }
