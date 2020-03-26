@@ -170,7 +170,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   test("to_csv - struct") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)
-    checkEvaluation(StructsToCsv(Map.empty, struct, utcId), "1")
+    checkEvaluation(StructsToCsv(Map.empty, struct, UTC_OPT), "1")
   }
 
   test("to_csv null input column") {
