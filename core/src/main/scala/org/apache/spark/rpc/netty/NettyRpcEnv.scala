@@ -253,7 +253,9 @@ private[netty] class NettyRpcEnv(
       val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
         override def run(): Unit = {
           val remoteReceAddr = if (remoteAddr == null) {
-            message.receiver.client.getChannel.remoteAddress()
+            Try {
+              message.receiver.client.getChannel.remoteAddress()
+            }.toOption.orNull
           } else {
             remoteAddr
           }
