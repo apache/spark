@@ -333,40 +333,6 @@ class SparkSubmitSuite
     sys.props("SPARK_SUBMIT") should be ("true")
   }
 
-  test("handles spark.yarn.applicationType on yarn mode") {
-    val clArgs = Seq(
-      "--deploy-mode", "client",
-      "--master", "yarn",
-      "--executor-memory", "5g",
-      "--executor-cores", "5",
-      "--class", "org.SomeClass",
-      "--jars", "one.jar,two.jar,three.jar",
-      "--driver-memory", "4g",
-      "--queue", "thequeue",
-      "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.txt,archive2.txt",
-      "--num-executors", "6",
-      "--name", "trill",
-      "--conf", "spark.yarn.applicationType=SPARK-SQL",
-      "--conf", "spark.ui.enabled=false",
-      "thejar.jar",
-      "arg1", "arg2")
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
-    childArgs.mkString(" ") should be ("arg1 arg2")
-    mainClass should be ("org.SomeClass")
-    classpath should have length (4)
-    classpath(0) should endWith ("thejar.jar")
-    classpath(1) should endWith ("one.jar")
-    classpath(2) should endWith ("two.jar")
-    classpath(3) should endWith ("three.jar")
-    conf.get("spark.yarn.applicationType") should be ("SPARK-SQL")
-  }
-
-  test("handles standalone cluster mode") {
-    testStandaloneCluster(useRest = true)
-  }
-
   test("handles legacy standalone cluster mode") {
     testStandaloneCluster(useRest = false)
   }

@@ -113,7 +113,8 @@ package object config {
 
   private[spark] val APPLICATION_TYPE = ConfigBuilder("spark.yarn.applicationType")
     .doc("Type of this application," +
-      "it separates different categories of applications like SPARK-SQL and SPARK-STREAMING")
+      "it allows user to specify a more specific type for the application, such as SPARK, SPARK-SQL," +
+      "SPARK-STREAMING, SPARK-MLLIB and SPARK-GRAPH")
     .stringConf
     .createWithDefault("SPARK")
 

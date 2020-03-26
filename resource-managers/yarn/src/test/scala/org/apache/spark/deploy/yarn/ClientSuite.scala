@@ -206,6 +206,21 @@ class ClientSuite extends SparkFunSuite with Matchers {
     appContext.getPriority.getPriority should be (1)
   }
 
+  test("specify a more specific type for the application") {
+    val sparkConf = new SparkConf().set("spark.yarn.applicationType", "SPARK-SQL")
+    val args = new ClientArguments(Array())
+
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+    val client = new Client(args, sparkConf, null)
+    client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
+    appContext.getApplicationType should be ("SPARK-SQL")
+  }
+
   test("spark.yarn.jars with multiple paths and globs") {
     val libs = Utils.createTempDir()
     val single = Utils.createTempDir()
