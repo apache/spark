@@ -1393,7 +1393,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val allFiles = metadata.allFiles()
 
         // batch 4 is a compact batch which logs would be cached in fileEntryCache
-        fileEntryCache.containsKey(4)
+        assert(fileEntryCache.containsKey(4L))
 
         val metadata2 = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark,
           chk.getCanonicalPath)
