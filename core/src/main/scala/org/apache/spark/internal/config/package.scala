@@ -1814,4 +1814,8 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
+  private[spark] val RESOURCE_PROFILE_MERGE_CONFLICTS =
+    ConfigBuilder("spark.scheduler.resourceProfile.mergeConflicts")
+      .booleanConf
+      .createWithDefault(false)
 }

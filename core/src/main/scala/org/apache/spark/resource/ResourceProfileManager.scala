@@ -17,7 +17,7 @@
 
 package org.apache.spark.resource
 
-import java.util.concurrent.ConcurrentHashMap
+import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils.isTesting
  */
 @Evolving
 private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Logging {
-  private val resourceProfileIdToResourceProfile = new ConcurrentHashMap[Int, ResourceProfile]()
+  private val resourceProfileIdToResourceProfile = new HashMap[Int, ResourceProfile]()
 
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
   addResourceProfile(defaultProfile)
@@ -59,12 +59,12 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
     true
   }
 
-  def addResourceProfile(rp: ResourceProfile): Unit = {
+  def addResourceProfile(rp: ResourceProfile): Unit = synchronized {
     isSupported(rp)
-    // force the computation of maxTasks and limitingResource now so we don't have cost later
-    rp.limitingResource(sparkConf)
-    val res = resourceProfileIdToResourceProfile.putIfAbsent(rp.id, rp)
-    if (res == null) {
+    if (!resourceProfileIdToResourceProfile.contains(rp.id)) {
+      // force the computation of maxTasks and limitingResource now so we don't have cost later
+      rp.limitingResource(sparkConf)
+      resourceProfileIdToResourceProfile.put(rp.id, rp)
       logInfo(s"Added ResourceProfile id: ${rp.id}")
     }
   }
@@ -73,11 +73,19 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
    * Gets the ResourceProfile associated with the id, if a profile doesn't exist
    * it returns the default ResourceProfile created from the application level configs.
    */
-  def resourceProfileFromId(rpId: Int): ResourceProfile = {
-    val rp = resourceProfileIdToResourceProfile.get(rpId)
-    if (rp == null) {
+  def resourceProfileFromId(rpId: Int): ResourceProfile = synchronized {
+    resourceProfileIdToResourceProfile.get(rpId).getOrElse(
       throw new SparkException(s"ResourceProfileId $rpId not found!")
-    }
-    rp
+    )
+  }
+
+  /*
+   * If the ResourceProfile passed in is equivalent to an existing one, return the
+   * existing one, other return None
+   */
+  def getEquivalentProfile(rp: ResourceProfile): Option[ResourceProfile] = synchronized {
+    resourceProfileIdToResourceProfile.find { case (_, rpEntry) =>
+      rpEntry.resourcesEqual(rp)
+    }.map(_._2)
   }
 }

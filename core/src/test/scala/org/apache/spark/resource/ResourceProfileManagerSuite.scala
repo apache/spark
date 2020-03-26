@@ -98,6 +98,36 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     assert(error.contains("ResourceProfiles are only supported on YARN with dynamic allocation"))
   }
 
+  test("ResourceProfileManager has equivalent profile") {
+    val conf = new SparkConf().set(EXECUTOR_CORES, 4)
+    val rpmanager = new ResourceProfileManager(conf)
+    var rpAlreadyExist: Option[ResourceProfile] = None
+    val checkId = 500
+    for (i <- 1 to 1000) {
+      val rprofBuilder = new ResourceProfileBuilder()
+      val ereqs = new ExecutorResourceRequests()
+      ereqs.cores(i).memory("4g").memoryOverhead("2000m")
+      val treqs = new TaskResourceRequests()
+      treqs.cpus(i)
+      rprofBuilder.require(ereqs).require(treqs)
+      val rprof = rprofBuilder.build
+      rpmanager.addResourceProfile(rprof)
+      if (i == checkId) rpAlreadyExist = Some(rprof)
+    }
+    val rpNotMatch = new ResourceProfileBuilder().build
+    assert(rpmanager.getEquivalentProfile(rpNotMatch).isEmpty,
+      s"resourceProfile should not have existed")
 
+    val rprofBuilder = new ResourceProfileBuilder()
+    val ereqs = new ExecutorResourceRequests()
+    ereqs.cores(checkId).memory("4g").memoryOverhead("2000m")
+    val treqs = new TaskResourceRequests()
+    treqs.cpus(checkId)
+    rprofBuilder.require(ereqs).require(treqs)
+    val rpShouldMatch = rprofBuilder.build
 
+    val equivProf = rpmanager.getEquivalentProfile(rpShouldMatch)
+    assert(equivProf.nonEmpty)
+    assert(equivProf.get.id == rpAlreadyExist.get.id, s"resourceProfile should have existed")
+  }
 }
