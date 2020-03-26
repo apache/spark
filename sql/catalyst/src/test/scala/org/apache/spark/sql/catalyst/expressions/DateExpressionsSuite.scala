@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -38,15 +37,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   import IntegralLiteralTestUtils._
 
-  val TimeZonePST = TimeZone.getTimeZone("PST")
-  val TimeZoneJST = TimeZone.getTimeZone("JST")
-
-  val gmtId = Option(TimeZoneGMT.getID)
-  val pstId = Option(TimeZonePST.getID)
-  val jstId = Option(TimeZoneJST.getID)
+  private val PST_OPT = Option(PST.getId)
+  private val JST_OPT = Option(JST.getId)
 
   def toMillis(timestamp: String): Long = {
-    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC)
+    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC)
     DateTimeUtils.microsToMillis(tf.parse(timestamp))
   }
   val date = "2015-04-08 13:10:15"
@@ -55,13 +50,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val ts = new Timestamp(toMillis(time))
 
   test("datetime function current_date") {
-    val d0 = DateTimeUtils.currentDate(ZoneOffset.UTC)
-    val cd = CurrentDate(gmtId).eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.currentDate(ZoneOffset.UTC)
+    val d0 = DateTimeUtils.currentDate(UTC)
+    val cd = CurrentDate(UTC_OPT).eval(EmptyRow).asInstanceOf[Int]
+    val d1 = DateTimeUtils.currentDate(UTC)
     assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
 
-    val cdjst = CurrentDate(jstId).eval(EmptyRow).asInstanceOf[Int]
-    val cdpst = CurrentDate(pstId).eval(EmptyRow).asInstanceOf[Int]
+    val cdjst = CurrentDate(JST_OPT).eval(EmptyRow).asInstanceOf[Int]
+    val cdpst = CurrentDate(PST_OPT).eval(EmptyRow).asInstanceOf[Int]
     assert(cdpst <= cd && cd <= cdjst)
   }
 
@@ -93,8 +88,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Year") {
     checkEvaluation(Year(Literal.create(null, DateType)), null)
     checkEvaluation(Year(Literal(d)), 2015)
-    checkEvaluation(Year(Cast(Literal(date), DateType, gmtId)), 2015)
-    checkEvaluation(Year(Cast(Literal(ts), DateType, gmtId)), 2013)
+    checkEvaluation(Year(Cast(Literal(date), DateType, UTC_OPT)), 2015)
+    checkEvaluation(Year(Cast(Literal(ts), DateType, UTC_OPT)), 2013)
 
     val c = Calendar.getInstance()
     (2000 to 2002).foreach { y =>
@@ -115,8 +110,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Quarter") {
     checkEvaluation(Quarter(Literal.create(null, DateType)), null)
     checkEvaluation(Quarter(Literal(d)), 2)
-    checkEvaluation(Quarter(Cast(Literal(date), DateType, gmtId)), 2)
-    checkEvaluation(Quarter(Cast(Literal(ts), DateType, gmtId)), 4)
+    checkEvaluation(Quarter(Cast(Literal(date), DateType, UTC_OPT)), 2)
+    checkEvaluation(Quarter(Cast(Literal(ts), DateType, UTC_OPT)), 4)
 
     val c = Calendar.getInstance()
     (2003 to 2004).foreach { y =>
@@ -138,8 +133,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Month") {
     checkEvaluation(Month(Literal.create(null, DateType)), null)
     checkEvaluation(Month(Literal(d)), 4)
-    checkEvaluation(Month(Cast(Literal(date), DateType, gmtId)), 4)
-    checkEvaluation(Month(Cast(Literal(ts), DateType, gmtId)), 11)
+    checkEvaluation(Month(Cast(Literal(date), DateType, UTC_OPT)), 4)
+    checkEvaluation(Month(Cast(Literal(ts), DateType, UTC_OPT)), 11)
 
     checkEvaluation(Month(Cast(Literal("1582-04-28 13:10:15"), DateType)), 4)
     checkEvaluation(Month(Cast(Literal("1582-10-04 13:10:15"), DateType)), 10)
@@ -163,8 +158,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(DayOfMonth(Cast(Literal("2000-02-29"), DateType)), 29)
     checkEvaluation(DayOfMonth(Literal.create(null, DateType)), null)
     checkEvaluation(DayOfMonth(Literal(d)), 8)
-    checkEvaluation(DayOfMonth(Cast(Literal(date), DateType, gmtId)), 8)
-    checkEvaluation(DayOfMonth(Cast(Literal(ts), DateType, gmtId)), 8)
+    checkEvaluation(DayOfMonth(Cast(Literal(date), DateType, UTC_OPT)), 8)
+    checkEvaluation(DayOfMonth(Cast(Literal(ts), DateType, UTC_OPT)), 8)
 
     checkEvaluation(DayOfMonth(Cast(Literal("1582-04-28 13:10:15"), DateType)), 28)
     checkEvaluation(DayOfMonth(Cast(Literal("1582-10-15 13:10:15"), DateType)), 15)
@@ -183,14 +178,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Seconds") {
-    assert(Second(Literal.create(null, DateType), gmtId).resolved === false)
-    assert(Second(Cast(Literal(d), TimestampType, gmtId), gmtId).resolved )
-    checkEvaluation(Second(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
-    checkEvaluation(Second(Cast(Literal(date), TimestampType, gmtId), gmtId), 15)
-    checkEvaluation(Second(Literal(ts), gmtId), 15)
+    assert(Second(Literal.create(null, DateType), UTC_OPT).resolved === false)
+    assert(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT).resolved )
+    checkEvaluation(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
+    checkEvaluation(Second(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 15)
+    checkEvaluation(Second(Literal(ts), UTC_OPT), 15)
 
     val c = Calendar.getInstance()
-    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+    for (tz <- outstandingTimezones) {
       val timeZoneId = Option(tz.getID)
       c.setTimeZone(tz)
       (0 to 60 by 5).foreach { s =>
@@ -207,10 +202,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("DayOfWeek") {
     checkEvaluation(DayOfWeek(Literal.create(null, DateType)), null)
     checkEvaluation(DayOfWeek(Literal(d)), Calendar.WEDNESDAY)
-    checkEvaluation(DayOfWeek(Cast(Literal(date), DateType, gmtId)),
+    checkEvaluation(DayOfWeek(Cast(Literal(date), DateType, UTC_OPT)),
       Calendar.WEDNESDAY)
-    checkEvaluation(DayOfWeek(Cast(Literal(ts), DateType, gmtId)), Calendar.FRIDAY)
-    checkEvaluation(DayOfWeek(Cast(Literal("2011-05-06"), DateType, gmtId)), Calendar.FRIDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal(ts), DateType, UTC_OPT)), Calendar.FRIDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), Calendar.FRIDAY)
     checkEvaluation(DayOfWeek(Literal(new Date(toMillis("2017-05-27 13:10:15")))),
       Calendar.SATURDAY)
     checkEvaluation(DayOfWeek(Literal(new Date(toMillis("1582-10-15 13:10:15")))),
@@ -221,9 +216,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("WeekDay") {
     checkEvaluation(WeekDay(Literal.create(null, DateType)), null)
     checkEvaluation(WeekDay(Literal(d)), 2)
-    checkEvaluation(WeekDay(Cast(Literal(date), DateType, gmtId)), 2)
-    checkEvaluation(WeekDay(Cast(Literal(ts), DateType, gmtId)), 4)
-    checkEvaluation(WeekDay(Cast(Literal("2011-05-06"), DateType, gmtId)), 4)
+    checkEvaluation(WeekDay(Cast(Literal(date), DateType, UTC_OPT)), 2)
+    checkEvaluation(WeekDay(Cast(Literal(ts), DateType, UTC_OPT)), 4)
+    checkEvaluation(WeekDay(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), 4)
     checkEvaluation(WeekDay(Literal(new Date(toMillis("2017-05-27 13:10:15")))), 5)
     checkEvaluation(WeekDay(Literal(new Date(toMillis("1582-10-15 13:10:15")))), 4)
     checkConsistencyBetweenInterpretedAndCodegen(WeekDay, DateType)
@@ -232,11 +227,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("WeekOfYear") {
     checkEvaluation(WeekOfYear(Literal.create(null, DateType)), null)
     checkEvaluation(WeekOfYear(Literal(d)), 15)
-    checkEvaluation(WeekOfYear(Cast(Literal(date), DateType, gmtId)), 15)
-    checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, gmtId)), 45)
-    checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType, gmtId)), 18)
-    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-15 13:10:15"), DateType, gmtId)), 41)
-    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-04 13:10:15"), DateType, gmtId)), 40)
+    checkEvaluation(WeekOfYear(Cast(Literal(date), DateType, UTC_OPT)), 15)
+    checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, UTC_OPT)), 45)
+    checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), 18)
+    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-15 13:10:15"), DateType, UTC_OPT)), 41)
+    checkEvaluation(WeekOfYear(Cast(Literal("1582-10-04 13:10:15"), DateType, UTC_OPT)), 40)
     checkConsistencyBetweenInterpretedAndCodegen(WeekOfYear, DateType)
   }
 
@@ -244,38 +239,38 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         checkEvaluation(
-          DateFormatClass(Literal.create(null, TimestampType), Literal("y"), gmtId),
+          DateFormatClass(Literal.create(null, TimestampType), Literal("y"), UTC_OPT),
           null)
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, gmtId),
-          Literal.create(null, StringType), gmtId), null)
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, UTC_OPT),
+          Literal.create(null, StringType), UTC_OPT), null)
 
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, gmtId),
-          Literal("y"), gmtId), "2015")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), gmtId), "2013")
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, gmtId),
-          Literal("H"), gmtId), "0")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), gmtId), "13")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, UTC_OPT),
+          Literal("y"), UTC_OPT), "2015")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), UTC_OPT), "2013")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, UTC_OPT),
+          Literal("H"), UTC_OPT), "0")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), UTC_OPT), "13")
 
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, pstId),
-          Literal("y"), pstId), "2015")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), pstId), "2013")
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, pstId),
-          Literal("H"), pstId), "0")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), pstId), "5")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, PST_OPT),
+          Literal("y"), PST_OPT), "2015")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), PST_OPT), "2013")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, PST_OPT),
+          Literal("H"), PST_OPT), "0")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), PST_OPT), "5")
 
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
-          Literal("y"), jstId), "2015")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), jstId), "2013")
-        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
-          Literal("H"), jstId), "0")
-        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), jstId), "22")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, JST_OPT),
+          Literal("y"), JST_OPT), "2015")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("y"), JST_OPT), "2013")
+        checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, JST_OPT),
+          Literal("H"), JST_OPT), "0")
+        checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), JST_OPT), "22")
 
         // SPARK-28072 The codegen path should work
         checkEvaluation(
           expression = DateFormatClass(
             BoundReference(ordinal = 0, dataType = TimestampType, nullable = true),
             BoundReference(ordinal = 1, dataType = StringType, nullable = true),
-            jstId),
+            JST_OPT),
           expected = "22",
           inputRow = InternalRow(DateTimeUtils.fromJavaTimestamp(ts), UTF8String.fromString("H")))
       }
@@ -283,14 +278,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Hour") {
-    assert(Hour(Literal.create(null, DateType), gmtId).resolved === false)
-    assert(Hour(Literal(ts), gmtId).resolved)
-    checkEvaluation(Hour(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
-    checkEvaluation(Hour(Cast(Literal(date), TimestampType, gmtId), gmtId), 13)
-    checkEvaluation(Hour(Literal(ts), gmtId), 13)
+    assert(Hour(Literal.create(null, DateType), UTC_OPT).resolved === false)
+    assert(Hour(Literal(ts), UTC_OPT).resolved)
+    checkEvaluation(Hour(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
+    checkEvaluation(Hour(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 13)
+    checkEvaluation(Hour(Literal(ts), UTC_OPT), 13)
 
     val c = Calendar.getInstance()
-    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+    for (tz <- outstandingTimezones) {
       val timeZoneId = Option(tz.getID)
       c.setTimeZone(tz)
       (0 to 24 by 6).foreach { h =>
@@ -309,15 +304,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Minute") {
-    assert(Minute(Literal.create(null, DateType), gmtId).resolved === false)
-    assert(Minute(Literal(ts), gmtId).resolved)
-    checkEvaluation(Minute(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
+    assert(Minute(Literal.create(null, DateType), UTC_OPT).resolved === false)
+    assert(Minute(Literal(ts), UTC_OPT).resolved)
+    checkEvaluation(Minute(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
     checkEvaluation(
-      Minute(Cast(Literal(date), TimestampType, gmtId), gmtId), 10)
-    checkEvaluation(Minute(Literal(ts), gmtId), 10)
+      Minute(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 10)
+    checkEvaluation(Minute(Literal(ts), UTC_OPT), 10)
 
     val c = Calendar.getInstance()
-    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+    for (tz <- outstandingTimezones) {
       val timeZoneId = Option(tz.getID)
       c.setTimeZone(tz)
       (0 to 60 by 5).foreach { m =>
@@ -389,7 +384,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("time_add") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+    for (tz <- outstandingTimezones) {
       val timeZoneId = Option(tz.getID)
       sdf.setTimeZone(tz)
 
@@ -427,7 +422,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("time_sub") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+    for (tz <- outstandingTimezones) {
       val timeZoneId = Option(tz.getID)
       sdf.setTimeZone(tz)
 
@@ -513,7 +508,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("months_between") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-    for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+    for (tz <- outstandingTimezones) {
       val timeZoneId = Option(tz.getID)
       sdf.setTimeZone(tz)
 
@@ -646,7 +641,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected)
     }
 
-    withDefaultTimeZone(TimeZoneGMT) {
+    withDefaultTimeZone(TimeZone.getTimeZone(UTC)) {
       val inputDate = Timestamp.valueOf("2015-07-22 05:30:06")
 
       Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
@@ -716,7 +711,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf1 = new SimpleDateFormat(fmt1, Locale.US)
         val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
-        for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+        for (tz <- outstandingTimezones) {
           val timeZoneId = Option(tz.getID)
           sdf1.setTimeZone(tz)
           sdf2.setTimeZone(tz)
@@ -765,10 +760,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZoneGMT)
+        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
 
-        withDefaultTimeZone(TimeZoneGMT) {
-          for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+        withDefaultTimeZone(TimeZone.getTimeZone(UTC)) {
+          for (tz <- outstandingTimezones) {
             val timeZoneId = Option(tz.getID)
             sdf1.setTimeZone(tz)
             sdf2.setTimeZone(tz)
@@ -832,10 +827,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZoneGMT)
+        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
 
-        withDefaultTimeZone(TimeZoneGMT) {
-          for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
+        withDefaultTimeZone(TimeZone.getTimeZone(UTC)) {
+          for (tz <- outstandingTimezones) {
             val timeZoneId = Option(tz.getID)
             sdf1.setTimeZone(tz)
             sdf2.setTimeZone(tz)
@@ -924,8 +919,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
-    test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
+    test("2015-07-24 00:00:00", LA.getId, "2015-07-24 07:00:00")
+    test("2015-01-24 00:00:00", LA.getId, "2015-01-24 08:00:00")
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
@@ -955,8 +950,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
-    test("2015-01-24 00:00:00", "PST", "2015-01-23 16:00:00")
+    test("2015-07-24 00:00:00", LA.getId, "2015-07-23 17:00:00")
+    test("2015-01-24 00:00:00", LA.getId, "2015-01-23 16:00:00")
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)

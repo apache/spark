@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.log4j.Level
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
@@ -350,8 +351,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("spark.sql.session.timeZone should only accept valid zone id") {
-    spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "MIT")
-    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === "MIT")
+    spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, MIT.getId)
+    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === MIT.getId)
     spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Chicago")
     assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) ===
       "America/Chicago")

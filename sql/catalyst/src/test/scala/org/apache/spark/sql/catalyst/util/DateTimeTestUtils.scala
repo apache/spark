@@ -22,20 +22,31 @@ import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
 
 /**
  * Helper functions for testing date and time functionality.
  */
 object DateTimeTestUtils {
 
+  val CEST = getZoneId("+02:00")
+  val CET = getZoneId("+01:00")
+  val JST = getZoneId("+09:00")
+  val LA = getZoneId("America/Los_Angeles")
+  val MIT = getZoneId("-09:30")
+  val PST = getZoneId("-08:00")
+  val UTC = getZoneId("+00:00")
+
+  val UTC_OPT = Option("UTC")
+
   val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
 
   val outstandingTimezonesIds: Seq[String] = Seq(
     "UTC",
-    "PST",
-    "CET",
+    PST.getId,
+    CET.getId,
     "Africa/Dakar",
-    "America/Los_Angeles",
+    LA.getId,
     "Antarctica/Vostok",
     "Asia/Hong_Kong",
     "Europe/Amsterdam")

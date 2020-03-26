@@ -1167,7 +1167,7 @@ class DataFrameSuite extends QueryTest
                            |""".stripMargin
     assert(df.showString(1, truncate = 0) === expectedAnswer)
 
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
 
       val expectedAnswer = """+----------+-------------------+
                              ||d         |ts                 |
@@ -1188,7 +1188,7 @@ class DataFrameSuite extends QueryTest
                          " ts  | 2016-12-01 00:00:00 \n"
     assert(df.showString(1, truncate = 0, vertical = true) === expectedAnswer)
 
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
 
       val expectedAnswer = "-RECORD 0------------------\n" +
                            " d   | 2016-12-01          \n" +

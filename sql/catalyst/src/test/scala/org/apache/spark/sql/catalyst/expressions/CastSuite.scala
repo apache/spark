@@ -49,7 +49,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   protected def checkNullCast(from: DataType, to: DataType): Unit = {
-    checkEvaluation(cast(Literal.create(null, from), to, Option("GMT")), null)
+    checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
   }
 
   test("null cast") {
@@ -141,7 +141,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the timeZoneId parameter.
-      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c = Calendar.getInstance(TimeZone.getTimeZone(UTC))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
       checkCastStringToTimestamp("2015-03-18T12:03:17Z", new Timestamp(c.getTimeInMillis))
@@ -172,7 +172,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the timeZoneId parameter.
-      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c = Calendar.getInstance(TimeZone.getTimeZone(UTC))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 456)
       checkCastStringToTimestamp("2015-03-18T12:03:17.456Z", new Timestamp(c.getTimeInMillis))
@@ -280,23 +280,23 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         millisToMicros(c.getTimeInMillis))
     }
 
-    val gmtId = Option("GMT")
-
     checkEvaluation(cast("abdef", StringType), "abdef")
-    checkEvaluation(cast("abdef", TimestampType, gmtId), null)
+    checkEvaluation(cast("abdef", TimestampType, UTC_OPT), null)
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
-    checkEvaluation(cast(cast(nts, TimestampType, gmtId), StringType, gmtId), nts)
+    checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
-      cast(cast(ts, StringType, gmtId), TimestampType, gmtId),
+      cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
       DateTimeUtils.fromJavaTimestamp(ts))
 
     // all convert to string type to check
-    checkEvaluation(cast(cast(cast(nts, TimestampType, gmtId), DateType, gmtId), StringType), sd)
     checkEvaluation(
-      cast(cast(cast(ts, DateType, gmtId), TimestampType, gmtId), StringType, gmtId),
+      cast(cast(cast(nts, TimestampType, UTC_OPT), DateType, UTC_OPT), StringType),
+      sd)
+    checkEvaluation(
+      cast(cast(cast(ts, DateType, UTC_OPT), TimestampType, UTC_OPT), StringType, UTC_OPT),
       zts)
 
     checkEvaluation(cast(cast("abdef", BinaryType), StringType), "abdef")
@@ -309,7 +309,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       5.toShort)
     checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", TimestampType, gmtId), ByteType),
+      cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       null)
     checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
@@ -360,8 +360,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(d, DecimalType(10, 2)), null)
     checkEvaluation(cast(d, StringType), "1970-01-01")
 
-    val gmtId = Option("GMT")
-    checkEvaluation(cast(cast(d, TimestampType, gmtId), StringType, gmtId), "1970-01-01 00:00:00")
+    checkEvaluation(
+      cast(cast(d, TimestampType, UTC_OPT), StringType, UTC_OPT),
+      "1970-01-01 00:00:00")
   }
 
   test("cast from timestamp") {
