@@ -103,6 +103,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
          |  --hiveconf conf1=conftest
          |  --hiveconf conf2=1
+         |  --driver-class-path ${System.getProperty("user.dir")}/src/test/noclasspath
          |  $warehouseConf
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
