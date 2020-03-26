@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-Reset all the properties specific to the current session to their default values. After RESET command, executing SET command will output empty.
+Reset any runtime configurations specific to the current session which were set via the [SET](sql-ref-syntax-aux-conf-mgmt-set.html) command to their default values.
 
 ### Syntax
 {% highlight sql %}
@@ -30,7 +30,7 @@ RESET
 
 ### Examples
 {% highlight sql %}
--- Reset all the properties specific to the current session to their default values.
+-- Reset any runtime configurations specific to the current session which were set via the SET command to their default values.
 RESET;
 {% endhighlight %}
 
