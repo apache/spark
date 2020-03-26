@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.SimpleDateFormat
-import java.util.{Calendar, Locale}
+import java.util.{Calendar, Locale, TimeZone}
 
 import org.scalatest.exceptions.TestFailedException
 
@@ -89,8 +89,8 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     )
 
     val csvData2 = "2016-01-01T00:00:00"
-    for (tz <- DateTimeTestUtils.outstandingTimezones) {
-      c = Calendar.getInstance(tz)
+    for (zid <- DateTimeTestUtils.outstandingZoneIds) {
+      c = Calendar.getInstance(TimeZone.getTimeZone(zid))
       c.set(2016, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
       checkEvaluation(
@@ -98,14 +98,14 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
           schema,
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
           Literal(csvData2),
-          Option(tz.getID)),
+          Option(zid.getId)),
         InternalRow(c.getTimeInMillis * 1000L)
       )
       checkEvaluation(
         CsvToStructs(
           schema,
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
-            DateTimeUtils.TIMEZONE_OPTION -> tz.getID),
+            DateTimeUtils.TIMEZONE_OPTION -> zid.getId),
           Literal(csvData2),
           UTC_OPT),
         InternalRow(c.getTimeInMillis * 1000L)
