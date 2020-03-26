@@ -490,11 +490,21 @@ object SQLConf {
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionFactor")
       .doc("A partition is considered as skewed if its size is larger than this factor " +
         "multiplying the median partition size and also larger than " +
-        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'")
+        "'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The skew factor must be positive.")
       .createWithDefault(10)
+
+  val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
+    buildConf("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes")
+      .doc("A partition is considered as skewed if its size in bytes is larger than this " +
+        s"threshold and also larger than '${SKEW_JOIN_SKEWED_PARTITION_FACTOR.key}' " +
+        "multiplying the median partition size. Ideally this config should be set larger " +
+        s"than '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'.")
+      .version("3.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("256MB")
 
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
@@ -1675,14 +1685,17 @@ object SQLConf {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
 
-  val SESSION_LOCAL_TIMEZONE =
-    buildConf("spark.sql.session.timeZone")
-      .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
-      .version("2.2.0")
-      .stringConf
-      .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
-        " ZoneId.of(_, ZoneId.SHORT_IDS)")
-      .createWithDefaultFunction(() => TimeZone.getDefault.getID)
+  val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
+    .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
+      "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
+      "Zone offsets must be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. " +
+      "Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other short names are not " +
+      "recommended to use because they can be ambiguous.")
+    .version("2.2.0")
+    .stringConf
+    .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
+      " ZoneId.of(_, ZoneId.SHORT_IDS)")
+    .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.in.memory.threshold")

@@ -22,6 +22,7 @@ import java.time.ZoneId
 import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
 import org.apache.spark.sql.types._
 
 class ArrowUtilsSuite extends SparkFunSuite {
@@ -66,7 +67,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtripWithTz(ZoneId.systemDefault().getId)
     roundtripWithTz("Asia/Tokyo")
     roundtripWithTz("UTC")
-    roundtripWithTz("America/Los_Angeles")
+    roundtripWithTz(LA.getId)
   }
 
   test("array") {

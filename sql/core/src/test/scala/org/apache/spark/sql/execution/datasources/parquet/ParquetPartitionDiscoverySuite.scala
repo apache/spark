@@ -693,10 +693,10 @@ abstract class ParquetPartitionDiscoverySuite
     }
 
     withTempPath { dir =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(dir.toString).select(fields: _*), row)
     }
   }
@@ -735,10 +735,10 @@ abstract class ParquetPartitionDiscoverySuite
     }
 
     withTempPath { dir =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name))
-      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(dir.toString).select(fields: _*), row)
     }
   }
