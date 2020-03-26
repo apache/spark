@@ -153,8 +153,7 @@ class PandasConversionMixin(object):
                 dtype[fieldIdx] = np.object
 
         df = pd.DataFrame()
-        for index in range(len(dtype)):
-            t = dtype[index]
+        for index, t in enumerate(dtype):
             if t is not None:
                 series = pdf.iloc[:, index].astype(t, copy=False)
             else:
