@@ -45,7 +45,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
 
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     warehousePath.delete()
@@ -78,7 +77,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       timeout: FiniteDuration,
       extraArgs: Seq[String] = Seq.empty,
       errorResponses: Seq[String] = Seq("Error:"),
-      metastore: File = metastorePath,
       maybeWarehouse: Option[File] = Some(warehousePath))(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
@@ -90,7 +88,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       maybeWarehouse.map(dir => s"--hiveconf ${ConfVars.METASTOREWAREHOUSE}=$dir").getOrElse("")
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
-      val jdbcUrl = s"jdbc:derby:;databaseName=$metastore;create=true"
+      val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
       s"""$cliScript
          |  --master local
          |  --driver-java-options -Dderby.system.durability=test
