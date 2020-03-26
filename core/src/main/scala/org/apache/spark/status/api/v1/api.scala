@@ -77,7 +77,15 @@ class ExecutorStageSummary private[spark](
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long,
-    val isBlacklistedForStage: Boolean)
+    val isBlacklistedForStage: Boolean,
+    val jvmHeapMemory: Long,
+    val jvmOffHeapMemory: Long,
+    val onHeapExecutionMemory: Long,
+    val offHeapExecutionMemory: Long,
+    val onHeapStorageMemory: Long,
+    val offHeapStorageMemory: Long,
+    val directPoolMemory: Long,
+    val mappedPoolMemory: Long)
 
 class ExecutorSummary private[spark](
     val id: String,

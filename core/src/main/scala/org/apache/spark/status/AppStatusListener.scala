@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.internal.config.Status._
@@ -605,6 +605,9 @@ private[spark] class AppStatusListener(
         stage.killedSummary = killedTasksSummary(event.reason, stage.killedSummary)
       }
       stage.activeTasksPerExecutor(event.taskInfo.executorId) -= 1
+
+      val metrics = stage.executorSummary(event.taskInfo.executorId).executorMetrics
+      metrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
       // [SPARK-24415] Wait for all tasks to finish before removing stage from live list
       val removeStage =
         stage.activeTasks == 0 &&
@@ -845,10 +848,21 @@ private[spark] class AppStatusListener(
     // check if there is a new peak value for any of the executor level memory metrics
     // for the live UI. SparkListenerExecutorMetricsUpdate events are only processed
     // for the live UI.
-    event.executorUpdates.foreach { case (_, peakUpdates) =>
+    event.executorUpdates.foreach { case (stageKey, peakUpdates) =>
       liveExecutors.get(event.execId).foreach { exec =>
         if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(peakUpdates)) {
           maybeUpdate(exec, now)
+        }
+      }
+
+      Option(liveStages.get(stageKey)).foreach { stage =>
+        if (stageKey == EventLoggingListener.DRIVER_STAGE_KEY ||
+          stageKey == (stage.info.stageId, stage.info.attemptNumber())) {
+          // If the update came from the driver, stageKey will be the dummy key (-1, -1),
+          // so record those peaks for all active stages.
+          // Otherwise, record the peaks for the matching stage.
+          val metrics = stage.executorSummary(event.execId).executorMetrics
+          metrics.compareAndUpdatePeakValues(peakUpdates)
         }
       }
     }

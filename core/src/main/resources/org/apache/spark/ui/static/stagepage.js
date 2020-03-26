@@ -454,7 +454,23 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 return typeof row.diskBytesSpilled != 'undefined' ? formatBytes(row.diskBytesSpilled, type) : "";
                             }
-                        }
+                        },{
+                            data: function(row, type) {
+                                return formatBytes(row.jvmHeapMemory, type) + "/" + formatBytes(row.jvmOffHeapMemory, type);
+                            }
+                        },{
+                             data: function(row, type) {
+                                 return formatBytes(row.onHeapExecutionMemory, type) + "/" + formatBytes(row.offHeapExecutionMemory, type);
+                             }
+                         },{
+                             data: function(row, type) {
+                                 return formatBytes(row.onHeapStorageMemory, type) + "/" + formatBytes(row.offHeapStorageMemory, type);
+                             }
+                         },{
+                             data: function(row, type) {
+                                 return formatBytes(row.directPoolMemory, type) + "/" + formatBytes(row.mappedPoolMemory, type);
+                             }
+                         }
                     ],
                     "order": [[0, "asc"]],
                     "bAutoWidth": false,

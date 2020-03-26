@@ -347,6 +347,8 @@ private class LiveExecutorStageSummary(
 
   var metrics = createMetrics(default = 0L)
 
+  var executorMetrics = new ExecutorMetrics()
+
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(
       taskTime,
@@ -363,7 +365,16 @@ private class LiveExecutorStageSummary(
       metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
-      isBlacklisted)
+      isBlacklisted,
+      executorMetrics.getMetricValue("JVMHeapMemory"),
+      executorMetrics.getMetricValue("JVMOffHeapMemory"),
+      executorMetrics.getMetricValue("OnHeapExecutionMemory"),
+      executorMetrics.getMetricValue("OffHeapExecutionMemory"),
+      executorMetrics.getMetricValue("OnHeapStorageMemory"),
+      executorMetrics.getMetricValue("OffHeapStorageMemory"),
+      executorMetrics.getMetricValue("DirectPoolMemory"),
+      executorMetrics.getMetricValue("MappedPoolMemory")
+    )
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
 
