@@ -21,6 +21,9 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
@@ -41,6 +44,7 @@ import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
+
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -103,30 +107,14 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     checkFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
-  private def checkBinaryFilterPredicate
-      (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
-      (implicit df: DataFrame): Unit = {
-    def checkBinaryAnswer(df: DataFrame, expected: Seq[Row]) = {
-      assertResult(expected.map(_.getAs[Array[Byte]](0).mkString(",")).sorted) {
-        df.rdd.map(_.getAs[Array[Byte]](0).mkString(",")).collect().toSeq.sorted
-      }
-    }
-
-    checkFilterPredicate(df, predicate, filterClass, checkBinaryAnswer _, expected)
-  }
-
-  private def checkBinaryFilterPredicate
-      (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Array[Byte])
-      (implicit df: DataFrame): Unit = {
-    checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
-  }
-
   /**
    * Takes single level `inputDF` dataframe to generate multi-level nested
    * dataframes as new test data.
    */
   private def withNestedDataFrame(inputDF: DataFrame)
-      (testCases: (DataFrame, String, Any => Any) => Unit): Unit = {
+      (runTests: (DataFrame, String, Any => Any) => Unit): Unit = {
+    assert(inputDF.schema.fields.length == 1)
+    assert(!inputDF.schema.fields.head.dataType.isInstanceOf[StructType])
     val df = inputDF.toDF("temp")
     Seq(
       (
@@ -153,7 +141,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         (x: Any) => Row(x)
       )
     ).foreach { case (df, pushDownColName, resultTransFun) =>
-      testCases(df, pushDownColName, resultTransFun)
+      runTests(df, pushDownColName, resultTransFun)
     }
   }
 
@@ -165,8 +153,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     val ts4 = data(3)
 
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
-      withParquetDataFrame(df) { implicit df =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
         val tsAttr = df(pushDownColName).expr
         assert(df(pushDownColName).expr.dataType === TimestampType)
 
@@ -227,8 +215,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - boolean") {
     val data = true :: false :: Nil
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
-      withParquetDataFrame(df) { implicit df =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
         val booleanAttr = df(pushDownColName).expr
         assert(df(pushDownColName).expr.dataType === BooleanType)
 
@@ -246,8 +234,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - tinyint") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toByte)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
-      withParquetDataFrame(df) { implicit df =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
         val tinyIntAttr = df(pushDownColName).expr
         assert(df(pushDownColName).expr.dataType === ByteType)
 
@@ -282,8 +270,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - smallint") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toShort)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
-      withParquetDataFrame(df) { implicit df =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
         val smallIntAttr = df(pushDownColName).expr
         assert(df(pushDownColName).expr.dataType === ShortType)
 
@@ -318,8 +306,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - integer") {
     val data = (1 to 4).map(i => Tuple1(Option(i)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
-      withParquetDataFrame(df) { implicit df =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
         val intAttr = df(pushDownColName).expr
         assert(df(pushDownColName).expr.dataType === IntegerType)
 
@@ -354,8 +342,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - long") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toLong)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
-      withParquetDataFrame(df) { implicit df =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
         val longAttr = df(pushDownColName).expr
         assert(df(pushDownColName).expr.dataType === LongType)
 
@@ -390,8 +378,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - float") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toFloat)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
-      withParquetDataFrame(df) { implicit df =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
         val floatAttr = df(pushDownColName).expr
         assert(df(pushDownColName).expr.dataType === FloatType)
 
@@ -426,8 +414,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - double") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toDouble)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
-      withParquetDataFrame(df) { implicit df =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
         val doubleAttr = df(pushDownColName).expr
         assert(df(pushDownColName).expr.dataType === DoubleType)
 
@@ -462,8 +450,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - string") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toString)))
     import testImplicits._
-    withNestedDataFrame(data.toDF()) { case (df, pushDownColName, resultFun) =>
-      withParquetDataFrame(df) { implicit df =>
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
         val stringAttr = df(pushDownColName).expr
         assert(df(pushDownColName).expr.dataType === StringType)
 
@@ -500,32 +488,39 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
 
-    withParquetDataFrame(toDF((1 to 4).map(i => Tuple1(i.b)))) { implicit df =>
-      checkBinaryFilterPredicate('_1 === 1.b, classOf[Eq[_]], 1.b)
-      checkBinaryFilterPredicate('_1 <=> 1.b, classOf[Eq[_]], 1.b)
+    val data = (1 to 4).map(i => Tuple1(Option(i.b)))
+    import testImplicits._
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
+        val binaryAttr: Expression = df(pushDownColName).expr
+        assert(df(pushDownColName).expr.dataType === BinaryType)
 
-      checkBinaryFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-      checkBinaryFilterPredicate(
-        '_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(i => Row.apply(i.b)).toSeq)
+        checkFilterPredicate(binaryAttr === 1.b, classOf[Eq[_]], resultFun(1.b))
+        checkFilterPredicate(binaryAttr <=> 1.b, classOf[Eq[_]], resultFun(1.b))
 
-      checkBinaryFilterPredicate(
-        '_1 =!= 1.b, classOf[NotEq[_]], (2 to 4).map(i => Row.apply(i.b)).toSeq)
+        checkFilterPredicate(binaryAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+        checkFilterPredicate(binaryAttr.isNotNull, classOf[NotEq[_]],
+          (1 to 4).map(i => Row.apply(resultFun(i.b))))
 
-      checkBinaryFilterPredicate('_1 < 2.b, classOf[Lt[_]], 1.b)
-      checkBinaryFilterPredicate('_1 > 3.b, classOf[Gt[_]], 4.b)
-      checkBinaryFilterPredicate('_1 <= 1.b, classOf[LtEq[_]], 1.b)
-      checkBinaryFilterPredicate('_1 >= 4.b, classOf[GtEq[_]], 4.b)
+        checkFilterPredicate(binaryAttr =!= 1.b, classOf[NotEq[_]],
+          (2 to 4).map(i => Row.apply(resultFun(i.b))))
 
-      checkBinaryFilterPredicate(Literal(1.b) === '_1, classOf[Eq[_]], 1.b)
-      checkBinaryFilterPredicate(Literal(1.b) <=> '_1, classOf[Eq[_]], 1.b)
-      checkBinaryFilterPredicate(Literal(2.b) > '_1, classOf[Lt[_]], 1.b)
-      checkBinaryFilterPredicate(Literal(3.b) < '_1, classOf[Gt[_]], 4.b)
-      checkBinaryFilterPredicate(Literal(1.b) >= '_1, classOf[LtEq[_]], 1.b)
-      checkBinaryFilterPredicate(Literal(4.b) <= '_1, classOf[GtEq[_]], 4.b)
+        checkFilterPredicate(binaryAttr < 2.b, classOf[Lt[_]], resultFun(1.b))
+        checkFilterPredicate(binaryAttr > 3.b, classOf[Gt[_]], resultFun(4.b))
+        checkFilterPredicate(binaryAttr <= 1.b, classOf[LtEq[_]], resultFun(1.b))
+        checkFilterPredicate(binaryAttr >= 4.b, classOf[GtEq[_]], resultFun(4.b))
 
-      checkBinaryFilterPredicate(!('_1 < 4.b), classOf[GtEq[_]], 4.b)
-      checkBinaryFilterPredicate(
-        '_1 < 2.b || '_1 > 3.b, classOf[Operators.Or], Seq(Row(1.b), Row(4.b)))
+        checkFilterPredicate(Literal(1.b) === binaryAttr, classOf[Eq[_]], resultFun(1.b))
+        checkFilterPredicate(Literal(1.b) <=> binaryAttr, classOf[Eq[_]], resultFun(1.b))
+        checkFilterPredicate(Literal(2.b) > binaryAttr, classOf[Lt[_]], resultFun(1.b))
+        checkFilterPredicate(Literal(3.b) < binaryAttr, classOf[Gt[_]], resultFun(4.b))
+        checkFilterPredicate(Literal(1.b) >= binaryAttr, classOf[LtEq[_]], resultFun(1.b))
+        checkFilterPredicate(Literal(4.b) <= binaryAttr, classOf[GtEq[_]], resultFun(4.b))
+
+        checkFilterPredicate(!(binaryAttr < 4.b), classOf[GtEq[_]], resultFun(4.b))
+        checkFilterPredicate(binaryAttr < 2.b || binaryAttr > 3.b, classOf[Operators.Or],
+          Seq(Row(resultFun(1.b)), Row(resultFun(4.b))))
+      }
     }
   }
 
@@ -534,40 +529,53 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       def date: Date = Date.valueOf(s)
     }
 
-    val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21")
+    val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21").map(_.date)
+    import testImplicits._
+    withNestedDataFrame(data.toDF()) { case (inputDF, pushDownColName, resultFun) =>
+      withParquetDataFrame(inputDF) { implicit df =>
+        val dateAttr: Expression = df(pushDownColName).expr
+        assert(df(pushDownColName).expr.dataType === DateType)
 
-    withParquetDataFrame(toDF(data.map(i => Tuple1(i.date)))) { implicit df =>
-      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], data.map(i => Row.apply(i.date)))
+        checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+        checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
+          data.map(i => Row.apply(resultFun(i))))
 
-      checkFilterPredicate('_1 === "2018-03-18".date, classOf[Eq[_]], "2018-03-18".date)
-      checkFilterPredicate('_1 <=> "2018-03-18".date, classOf[Eq[_]], "2018-03-18".date)
-      checkFilterPredicate('_1 =!= "2018-03-18".date, classOf[NotEq[_]],
-        Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(i.date)))
+        checkFilterPredicate(dateAttr === "2018-03-18".date, classOf[Eq[_]],
+          resultFun("2018-03-18".date))
+        checkFilterPredicate(dateAttr <=> "2018-03-18".date, classOf[Eq[_]],
+          resultFun("2018-03-18".date))
+        checkFilterPredicate(dateAttr =!= "2018-03-18".date, classOf[NotEq[_]],
+          Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i.date))))
 
-      checkFilterPredicate('_1 < "2018-03-19".date, classOf[Lt[_]], "2018-03-18".date)
-      checkFilterPredicate('_1 > "2018-03-20".date, classOf[Gt[_]], "2018-03-21".date)
-      checkFilterPredicate('_1 <= "2018-03-18".date, classOf[LtEq[_]], "2018-03-18".date)
-      checkFilterPredicate('_1 >= "2018-03-21".date, classOf[GtEq[_]], "2018-03-21".date)
+        checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
+          resultFun("2018-03-18".date))
+        checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
+          resultFun("2018-03-21".date))
+        checkFilterPredicate(dateAttr <= "2018-03-18".date, classOf[LtEq[_]],
+          resultFun("2018-03-18".date))
+        checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
+          resultFun("2018-03-21".date))
 
-      checkFilterPredicate(
-        Literal("2018-03-18".date) === '_1, classOf[Eq[_]], "2018-03-18".date)
-      checkFilterPredicate(
-        Literal("2018-03-18".date) <=> '_1, classOf[Eq[_]], "2018-03-18".date)
-      checkFilterPredicate(
-        Literal("2018-03-19".date) > '_1, classOf[Lt[_]], "2018-03-18".date)
-      checkFilterPredicate(
-        Literal("2018-03-20".date) < '_1, classOf[Gt[_]], "2018-03-21".date)
-      checkFilterPredicate(
-        Literal("2018-03-18".date) >= '_1, classOf[LtEq[_]], "2018-03-18".date)
-      checkFilterPredicate(
-        Literal("2018-03-21".date) <= '_1, classOf[GtEq[_]], "2018-03-21".date)
+        checkFilterPredicate(Literal("2018-03-18".date) === dateAttr, classOf[Eq[_]],
+          resultFun("2018-03-18".date))
+        checkFilterPredicate(Literal("2018-03-18".date) <=> dateAttr, classOf[Eq[_]],
+          resultFun("2018-03-18".date))
+        checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
+          resultFun("2018-03-18".date))
+        checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
+          resultFun("2018-03-21".date))
+        checkFilterPredicate(Literal("2018-03-18".date) >= dateAttr, classOf[LtEq[_]],
+          resultFun("2018-03-18".date))
+        checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
+          resultFun("2018-03-21".date))
 
-      checkFilterPredicate(!('_1 < "2018-03-21".date), classOf[GtEq[_]], "2018-03-21".date)
-      checkFilterPredicate(
-        '_1 < "2018-03-19".date || '_1 > "2018-03-20".date,
-        classOf[Operators.Or],
-        Seq(Row("2018-03-18".date), Row("2018-03-21".date)))
+        checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
+          resultFun("2018-03-21".date))
+        checkFilterPredicate(
+          dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
+          classOf[Operators.Or],
+          Seq(Row(resultFun("2018-03-18".date)), Row(resultFun("2018-03-21".date))))
+      }
     }
   }
 
@@ -612,33 +620,39 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       (false, DecimalType.MAX_PRECISION) // binaryWriterUsingUnscaledBytes
     ).foreach { case (legacyFormat, precision) =>
       withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> legacyFormat.toString) {
-        val schema = StructType.fromDDL(s"a decimal($precision, 2)")
         val rdd =
           spark.sparkContext.parallelize((1 to 4).map(i => Row(new java.math.BigDecimal(i))))
-        val dataFrame = spark.createDataFrame(rdd, schema)
-        withParquetDataFrame(dataFrame) { implicit df =>
-          assert(df.schema === schema)
-          checkFilterPredicate('a.isNull, classOf[Eq[_]], Seq.empty[Row])
-          checkFilterPredicate('a.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
+        val dataFrame = spark.createDataFrame(rdd, StructType.fromDDL(s"a decimal($precision, 2)"))
+        withNestedDataFrame(dataFrame) { case (inputDF, pushDownColName, resultFun) =>
+          withParquetDataFrame(inputDF) { implicit df =>
+            val decimalAttr: Expression = df(pushDownColName).expr
+            assert(df(pushDownColName).expr.dataType === DecimalType(precision, 2))
 
-          checkFilterPredicate('a === 1, classOf[Eq[_]], 1)
-          checkFilterPredicate('a <=> 1, classOf[Eq[_]], 1)
-          checkFilterPredicate('a =!= 1, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
+            checkFilterPredicate(decimalAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+            checkFilterPredicate(decimalAttr.isNotNull, classOf[NotEq[_]],
+              (1 to 4).map(i => Row.apply(resultFun(i))))
 
-          checkFilterPredicate('a < 2, classOf[Lt[_]], 1)
-          checkFilterPredicate('a > 3, classOf[Gt[_]], 4)
-          checkFilterPredicate('a <= 1, classOf[LtEq[_]], 1)
-          checkFilterPredicate('a >= 4, classOf[GtEq[_]], 4)
+            checkFilterPredicate(decimalAttr === 1, classOf[Eq[_]], resultFun(1))
+            checkFilterPredicate(decimalAttr <=> 1, classOf[Eq[_]], resultFun(1))
+            checkFilterPredicate(decimalAttr =!= 1, classOf[NotEq[_]],
+              (2 to 4).map(i => Row.apply(resultFun(i))))
 
-          checkFilterPredicate(Literal(1) === 'a, classOf[Eq[_]], 1)
-          checkFilterPredicate(Literal(1) <=> 'a, classOf[Eq[_]], 1)
-          checkFilterPredicate(Literal(2) > 'a, classOf[Lt[_]], 1)
-          checkFilterPredicate(Literal(3) < 'a, classOf[Gt[_]], 4)
-          checkFilterPredicate(Literal(1) >= 'a, classOf[LtEq[_]], 1)
-          checkFilterPredicate(Literal(4) <= 'a, classOf[GtEq[_]], 4)
+            checkFilterPredicate(decimalAttr < 2, classOf[Lt[_]], resultFun(1))
+            checkFilterPredicate(decimalAttr > 3, classOf[Gt[_]], resultFun(4))
+            checkFilterPredicate(decimalAttr <= 1, classOf[LtEq[_]], resultFun(1))
+            checkFilterPredicate(decimalAttr >= 4, classOf[GtEq[_]], resultFun(4))
 
-          checkFilterPredicate(!('a < 4), classOf[GtEq[_]], 4)
-          checkFilterPredicate('a < 2 || 'a > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+            checkFilterPredicate(Literal(1) === decimalAttr, classOf[Eq[_]], resultFun(1))
+            checkFilterPredicate(Literal(1) <=> decimalAttr, classOf[Eq[_]], resultFun(1))
+            checkFilterPredicate(Literal(2) > decimalAttr, classOf[Lt[_]], resultFun(1))
+            checkFilterPredicate(Literal(3) < decimalAttr, classOf[Gt[_]], resultFun(4))
+            checkFilterPredicate(Literal(1) >= decimalAttr, classOf[LtEq[_]], resultFun(1))
+            checkFilterPredicate(Literal(4) <= decimalAttr, classOf[GtEq[_]], resultFun(4))
+
+            checkFilterPredicate(!(decimalAttr < 4), classOf[GtEq[_]], resultFun(4))
+            checkFilterPredicate(decimalAttr < 2 || decimalAttr > 3, classOf[Operators.Or],
+              Seq(Row(resultFun(1)), Row(resultFun(4))))
+          }
         }
       }
     }
