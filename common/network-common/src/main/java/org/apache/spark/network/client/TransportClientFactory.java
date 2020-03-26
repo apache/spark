@@ -116,7 +116,7 @@ public class TransportClientFactory implements Closeable {
     }
     this.metrics = new NettyMemoryMetrics(
       this.pooledAllocator, conf.getModuleName() + "-client", conf);
-    fastFailTimeWindow = conf.maxIORetries() > 0 ? (int)(conf.ioRetryWaitTimeMs() * 0.95) : -1;
+    fastFailTimeWindow = (int)(conf.ioRetryWaitTimeMs() * 0.95);
   }
 
   public MetricSet getAllMetrics() {
