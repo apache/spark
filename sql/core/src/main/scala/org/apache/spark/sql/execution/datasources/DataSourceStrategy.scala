@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
@@ -221,6 +221,46 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
   }
 }
 
+/**
+ * Add a repartition by dynamic partition columns before insert Datasource table.
+ *
+ * Note that, this rule must be run after `DataSourceAnalysis`.
+ */
+case class RepartitionBeforeInsertDataSourceTable(conf: SQLConf) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (conf.repartitionBeforeInsert) {
+      insertRepartition(plan)
+    } else {
+      plan
+    }
+  }
+
+  private def insertRepartition(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case c @ CreateDataSourceTableAsSelectCommand(table, _, query, _)
+      if query.resolved && DDLUtils.isDatasourceTable(table) && table.bucketSpec.isEmpty
+        && table.partitionColumnNames.nonEmpty =>
+      val dynamicPartExps = table.partitionColumnNames.flatMap(n => query.output.find(_.name == n))
+      query match {
+        case RepartitionByExpression(partExpressions, _, _) if partExpressions == dynamicPartExps =>
+          c
+        case _ =>
+          c.copy(query = RepartitionByExpression(dynamicPartExps, query, conf.numShufflePartitions))
+      }
+
+    case i @ InsertIntoHadoopFsRelationCommand(
+        _, staticPartitions, _, partColumns, bucket, _, _, query, _, Some(table), _, _)
+      if query.resolved && DDLUtils.isDatasourceTable(table) && bucket.isEmpty
+        && table.partitionColumnNames.nonEmpty && staticPartitions.size != partColumns.size =>
+      val dynamicPartExps = partColumns.filterNot(p => staticPartitions.exists(s => p.name == s._1))
+      query match {
+        case RepartitionByExpression(partExpressions, _, _)
+          if partExpressions == dynamicPartExps || partExpressions == partColumns =>
+          i
+        case _ =>
+          i.copy(query = RepartitionByExpression(dynamicPartExps, query, conf.numShufflePartitions))
+        }
+  }
+}
 
 /**
  * Replaces [[UnresolvedCatalogRelation]] with concrete relation logical plans.

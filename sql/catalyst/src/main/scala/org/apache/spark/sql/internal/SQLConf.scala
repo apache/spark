@@ -2478,6 +2478,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val REPARTITION_BEFORE_INSERT =
+    buildConf("spark.sql.execution.repartitionBeforeInsert")
+      .internal()
+      .doc("When perform a insert into partitioned table. Turn on this config to " +
+        "insert a repartition by dynamic partition columns to ease pressure on the NameNode " +
+        "and improve insert performance.")
+      .booleanConf
+      .createWithDefault(true)
+
   val NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.nestedSchemaPruning.enabled")
       .internal()
@@ -3600,6 +3609,8 @@ class SQLConf extends Serializable with Logging {
   def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
+
+  def repartitionBeforeInsert: Boolean = getConf(REPARTITION_BEFORE_INSERT)
 
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 

@@ -91,6 +91,8 @@ class HiveSessionStateBuilder(
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
         HiveAnalysis +:
+        RepartitionBeforeInsertDataSourceTable(conf) +:
+        RepartitionBeforeInsertHiveTable(conf) +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
