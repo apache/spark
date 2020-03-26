@@ -1080,7 +1080,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .format("csv")
         .option("header", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1102,7 +1102,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .option("header", "true")
         .option("inferSchema", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)

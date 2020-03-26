@@ -1675,14 +1675,17 @@ object SQLConf {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
 
-  val SESSION_LOCAL_TIMEZONE =
-    buildConf("spark.sql.session.timeZone")
-      .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
-      .version("2.2.0")
-      .stringConf
-      .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
-        " ZoneId.of(_, ZoneId.SHORT_IDS)")
-      .createWithDefaultFunction(() => TimeZone.getDefault.getID)
+  val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
+    .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
+      "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
+      "Zone offsets must be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. " +
+      "Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other short names are not " +
+      "recommended to use because they can be ambiguous.")
+    .version("2.2.0")
+    .stringConf
+    .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
+      " ZoneId.of(_, ZoneId.SHORT_IDS)")
+    .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.in.memory.threshold")

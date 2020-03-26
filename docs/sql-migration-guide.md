@@ -111,9 +111,11 @@ license: |
 
   - Since Spark 3.0, `SHOW CREATE TABLE` will always return Spark DDL, even when the given table is a Hive serde table. For generating Hive DDL, please use `SHOW CREATE TABLE AS SERDE` command instead.
 
+  - Since Spark 3.0, column of CHAR type is not allowed in non-Hive-Serde tables, and CREATE/ALTER TABLE commands will fail if CHAR type is detected. Please use STRING type instead. In Spark version 2.4 and earlier, CHAR type is treated as STRING type and the length parameter is simply ignored.
+
 ### UDFs and Built-in Functions
 
-  - Since Spark 3.0, the `date_add` and `date_sub` functions only accepts int, smallint, tinyint as the 2nd argument, fractional and string types are not valid anymore, e.g. `date_add(cast('1964-05-23' as date), '12.34')` will cause `AnalysisException`. In Spark version 2.4 and earlier, if the 2nd argument is fractional or string value, it will be coerced to int value, and the result will be a date value of `1964-06-04`.
+  - Since Spark 3.0, the `date_add` and `date_sub` functions only accept int, smallint, tinyint as the 2nd argument, fractional and non-literal string are not valid anymore, e.g. `date_add(cast('1964-05-23' as date), 12.34)` will cause `AnalysisException`. Note that, string literals are still allowed, but Spark will throw Analysis Exception if the string content is not a valid integer. In Spark version 2.4 and earlier, if the 2nd argument is fractional or string value, it will be coerced to int value, and the result will be a date value of `1964-06-04`.
 
   - Since Spark 3.0, the function `percentile_approx` and its alias `approx_percentile` only accept integral value with range in `[1, 2147483647]` as its 3rd argument `accuracy`, fractional and string types are disallowed, e.g. `percentile_approx(10.0, 0.2, 1.8D)` will cause `AnalysisException`. In Spark version 2.4 and earlier, if `accuracy` is fractional or string value, it will be coerced to an int value, `percentile_approx(10.0, 0.2, 1.8D)` is operated as `percentile_approx(10.0, 0.2, 1)` which results in `10.0`.
 
@@ -967,29 +969,29 @@ Spark SQL supports the vast majority of Hive features, such as:
 * Unions
 * Sub-queries
   * Sub-queries in the FROM Clause
-  
+
     ```SELECT col FROM (SELECT a + b AS col FROM t1) t2```
   * Sub-queries in WHERE Clause
     * Correlated or non-correlated IN and NOT IN statement in WHERE Clause
-    
+
       ```
       SELECT col FROM t1 WHERE col IN (SELECT a FROM t2 WHERE t1.a = t2.a)
       SELECT col FROM t1 WHERE col IN (SELECT a FROM t2)
       ```
     * Correlated or non-correlated EXISTS and NOT EXISTS statement in WHERE Clause
-    
+
       ```
       SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t1.a = t2.a AND t2.a > 10)
       SELECT col FROM t1 WHERE EXISTS (SELECT t2.a FROM t2 WHERE t2.a > 10)
       ```
     * Non-correlated IN and NOT IN statement in JOIN Condition
-    
+
       ```SELECT t1.col FROM t1 JOIN t2 ON t1.a = t2.a AND t1.a IN (SELECT a FROM t3)```
-   
+
     * Non-correlated EXISTS and NOT EXISTS statement in JOIN Condition
-       
-      ```SELECT t1.col FROM t1 JOIN t2 ON t1.a = t2.a AND EXISTS (SELECT * FROM t3 WHERE t3.a > 10)``` 
-       
+
+      ```SELECT t1.col FROM t1 JOIN t2 ON t1.a = t2.a AND EXISTS (SELECT * FROM t3 WHERE t3.a > 10)```
+
 * Sampling
 * Explain
 * Partitioned tables including dynamic partition insertion

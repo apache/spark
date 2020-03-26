@@ -93,7 +93,7 @@ sealed abstract class UserDefinedFunction {
 private[spark] case class SparkUserDefinedFunction(
     f: AnyRef,
     dataType: DataType,
-    inputSchemas: Seq[Option[ScalaReflection.Schema]],
+    inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
     name: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
@@ -104,18 +104,11 @@ private[spark] case class SparkUserDefinedFunction(
   }
 
   private[sql] def createScalaUDF(exprs: Seq[Expression]): ScalaUDF = {
-    // It's possible that some of the inputs don't have a specific type(e.g. `Any`),  skip type
-    // check.
-    val inputTypes = inputSchemas.map(_.map(_.dataType).getOrElse(AnyDataType))
-    // `ScalaReflection.Schema.nullable` is false iff the type is primitive. Also `Any` is not
-    // primitive.
-    val inputsPrimitive = inputSchemas.map(_.map(!_.nullable).getOrElse(false))
     ScalaUDF(
       f,
       dataType,
       exprs,
-      inputsPrimitive,
-      inputTypes,
+      inputEncoders,
       udfName = name,
       nullable = nullable,
       udfDeterministic = deterministic)
