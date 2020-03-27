@@ -24,6 +24,7 @@ import java.time.{Instant, LocalDate}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand}
+import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -38,17 +39,16 @@ object HiveResult {
    */
   def hiveResultString(executedPlan: SparkPlan): Seq[String] = executedPlan match {
     case ExecutedCommandExec(_: DescribeCommandBase) =>
-      // If it is a describe command for a Hive table, we want to have the output format
-      // be similar with Hive.
-      executedPlan.executeCollectPublic().map {
-        case Row(name: String, dataType: String, comment) =>
-          Seq(name, dataType,
-            Option(comment.asInstanceOf[String]).getOrElse(""))
-            .map(s => String.format(s"%-20s", s))
-            .mkString("\t")
-      }
-    // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
+      formatDescribeTableOutput(executedPlan.executeCollectPublic())
+    case _: DescribeTableExec =>
+      formatDescribeTableOutput(executedPlan.executeCollectPublic())
+    // SHOW TABLES in Hive only output table names while our v1 command outputs
+    // database, table name, isTemp.
     case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
+      command.executeCollect().map(_.getString(1))
+    // SHOW TABLES in Hive only output table names while our v2 command outputs
+    // namespace and table name.
+    case command : ShowTablesExec =>
       command.executeCollect().map(_.getString(1))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
@@ -57,6 +57,15 @@ object HiveResult {
       // Reformat to match hive tab delimited output.
       result.map(_.zip(types).map(e => toHiveString(e)))
         .map(_.mkString("\t"))
+  }
+
+  private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {
+    rows.map {
+      case Row(name: String, dataType: String, comment) =>
+        Seq(name, dataType, Option(comment.asInstanceOf[String]).getOrElse(""))
+          .map(s => String.format(s"%-20s", s))
+          .mkString("\t")
+    }
   }
 
   private def zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)

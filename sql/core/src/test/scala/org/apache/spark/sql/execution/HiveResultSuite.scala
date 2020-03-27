@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 
 class HiveResultSuite extends SharedSparkSession {
@@ -67,5 +68,36 @@ class HiveResultSuite extends SharedSparkSession {
       .selectExpr(s"CAST(value AS decimal(38, 8))").queryExecution.executedPlan
     val result = HiveResult.hiveResultString(executedPlan)
     assert(result.head === "0.00000000")
+  }
+
+  test("SHOW TABLES in hive result") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      Seq(("testcat.ns", "tbl", "foo"), ("spark_catalog.default", "tbl", "csv")).foreach {
+        case (ns, tbl, source) =>
+          withTable(s"$ns.$tbl") {
+            spark.sql(s"CREATE TABLE $ns.$tbl (id bigint) USING $source")
+            val df = spark.sql(s"SHOW TABLES FROM $ns")
+            val executedPlan = df.queryExecution.executedPlan
+            assert(HiveResult.hiveResultString(executedPlan).head == tbl)
+          }
+      }
+    }
+  }
+
+  test("DESCRIBE TABLE in hive result") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      Seq(("testcat.ns", "tbl", "foo"), ("spark_catalog.default", "tbl", "csv")).foreach {
+        case (ns, tbl, source) =>
+          withTable(s"$ns.$tbl") {
+            spark.sql(s"CREATE TABLE $ns.$tbl (id bigint COMMENT 'col1') USING $source")
+            val df = spark.sql(s"DESCRIBE $ns.$tbl")
+            val executedPlan = df.queryExecution.executedPlan
+            val expected = "id                  " +
+              "\tbigint              " +
+              "\tcol1                "
+            assert(HiveResult.hiveResultString(executedPlan).head == expected)
+          }
+      }
+    }
   }
 }
