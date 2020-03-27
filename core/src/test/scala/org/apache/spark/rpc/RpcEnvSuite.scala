@@ -190,6 +190,46 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("ask a message remotely timeout") {
+    var remoteRef: RpcEndpointRef = null
+    env.setupEndpoint("ask-remotely", new RpcEndpoint {
+      override val rpcEnv = env
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case Register(ref) =>
+          remoteRef = ref
+          context.reply("okay")
+        case msg: String =>
+          context.reply(msg)
+      }
+    })
+    val conf = new SparkConf()
+    val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
+    // Use anotherEnv to find out the RpcEndpointRef
+    val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-remotely")
+    // Register a rpcEndpointRef in anotherEnv
+    val anotherRef = anotherEnv.setupEndpoint("receiver", new RpcEndpoint {
+      override val rpcEnv = anotherEnv
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case _ =>
+          Thread.sleep(1200)
+          context.reply("okay")
+      }
+    })
+    try {
+      val reply = rpcEndpointRef.askSync[String](Register(anotherRef))
+      assert("okay" === reply)
+      val answer = remoteRef.ask[String]("msg",
+        RpcTimeout(conf, Seq("spark.rpc.askTimeout", "spark.network.timeout"), "1s"))
+      val thrown = intercept[Exception] {
+        ThreadUtils.awaitResult(answer, Duration(1300, MILLISECONDS))
+      }
+      assert(thrown.getClass.equals(classOf[RpcTimeoutException]))
+      assert(!thrown.getMessage.contains("null"))
+    } finally {
+      anotherEnv.shutdown()
+      anotherEnv.awaitTermination()
+    }
+  }
   test("ask a message abort") {
     env.setupEndpoint("ask-abort", new RpcEndpoint {
       override val rpcEnv = env
@@ -988,6 +1028,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 }
+
+case class Register(ref: RpcEndpointRef)
 
 class UnserializableClass
 
