@@ -2457,7 +2457,7 @@ class RDD(object):
                 self._jrdd.rdd(),
                 prefetchPartitions)
         return _local_iterator_from_socket(sock_info, self._jrdd_deserializer)
-jj
+
     def barrier(self):
         """
         .. note:: Experimental
