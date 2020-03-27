@@ -622,15 +622,9 @@ private[hive] class HiveClientImpl(
   }
 
   @throws[Exception]
-  private def isEmptyPath(dirPath: Path): Boolean = {
+  private def isExistPath(dirPath: Path): Boolean = {
     val inpFs = dirPath.getFileSystem(conf)
-    if (inpFs.exists(dirPath)) {
-      val fStats = inpFs.listStatus(dirPath, HIDDEN_FILES_PATH_FILTER)
-      if (fStats.nonEmpty) {
-        return false
-      }
-    }
-    true
+    inpFs.exists(dirPath)
   }
 
   override def dropPartitions(
@@ -659,7 +653,7 @@ private[hive] class HiveClientImpl(
         // We make a dummy one for the empty partition. See [SPARK-29786] for more details.
         parts.foreach { partition =>
           val partPath = partition.getPath.head
-          if (isEmptyPath(partPath)) {
+          if (isExistPath(partPath)) {
             val fs = partPath.getFileSystem(conf)
             fs.mkdirs(partPath)
             fs.deleteOnExit(partPath)
