@@ -21,6 +21,7 @@ if sys.version >= '3':
     xrange = range
 else:
     from itertools import izip as zip
+from collections import Counter
 
 from pyspark import since
 from pyspark.rdd import _load_from_socket
@@ -131,11 +132,14 @@ class PandasConversionMixin(object):
 
         # Below is toPandas without Arrow optimization.
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+        column_counter = Counter(self.columns)
 
         dtype = [None] * len(self.schema)
-        for fieldIdx in range(len(self.schema)):
-            field = self.schema[fieldIdx]
-            pandas_col = pdf.iloc[:, fieldIdx]
+        for fieldIdx, field in enumerate(self.schema):
+            if column_counter[field.name] > 1:
+                pandas_col = pdf.iloc[:, fieldIdx]
+            else:
+                pandas_col = pdf[field.name]
 
             pandas_type = PandasConversionMixin._to_corrected_pandas_type(field.dataType)
             # SPARK-21766: if an integer field is nullable and has null values, it can be
@@ -154,11 +158,20 @@ class PandasConversionMixin(object):
 
         df = pd.DataFrame()
         for index, t in enumerate(dtype):
-            if t is not None:
-                series = pdf.iloc[:, index].astype(t, copy=False)
-            else:
+            column_name = self.schema[index].name
+
+            if column_counter[column_name] > 1:
                 series = pdf.iloc[:, index]
-            df.insert(index, self.schema[index].name, series, allow_duplicates=True)
+            else:
+                series = pdf[column_name]
+
+            if t is not None:
+                series = series.astype(t, copy=False)
+
+            if column_counter[column_name] > 1:
+                df.insert(index, column_name, series, allow_duplicates=True)
+            else:
+                df[column_name] = series
 
         pdf = df
 
