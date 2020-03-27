@@ -157,7 +157,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
             load(ts_before_1582_off)
           }
         }
-        benchmark.addCase("after 1582, vec on, rebase on", numIters) { _ =>
+        benchmark.addCase("before 1582, vec on, rebase on", numIters) { _ =>
           withSQLConf(
             SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
             SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
