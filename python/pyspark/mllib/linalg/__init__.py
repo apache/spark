@@ -17,9 +17,9 @@
 
 """
 MLlib utilities for linear algebra. For dense vectors, MLlib
-uses the NumPy C{array} type, so you can simply pass NumPy arrays
-around. For sparse vectors, users can construct a L{SparseVector}
-object from MLlib or pass SciPy C{scipy.sparse} column vectors if
+uses the NumPy `array` type, so you can simply pass NumPy arrays
+around. For sparse vectors, users can construct a :class:`SparseVector`
+object from MLlib or pass SciPy `scipy.sparse` column vectors if
 SciPy is available in their environment.
 """
 
@@ -847,7 +847,7 @@ class Vectors(object):
     .. note:: Dense vectors are simply represented as NumPy array objects,
         so there is no need to covert them for use in MLlib. For sparse vectors,
         the factory methods in this class create an MLlib-compatible type, or users
-        can pass in SciPy's C{scipy.sparse} column vectors.
+        can pass in SciPy's `scipy.sparse` column vectors.
     """
 
     @staticmethod
@@ -1135,14 +1135,14 @@ class DenseMatrix(Matrix):
             return self.values[i + j * self.numRows]
 
     def __eq__(self, other):
-        if (not isinstance(other, DenseMatrix) or
-                self.numRows != other.numRows or
-                self.numCols != other.numCols):
+        if (self.numRows != other.numRows or self.numCols != other.numCols):
             return False
+        if isinstance(other, SparseMatrix):
+            return np.all(self.toArray() == other.toArray())
 
         self_values = np.ravel(self.toArray(), order='F')
         other_values = np.ravel(other.toArray(), order='F')
-        return all(self_values == other_values)
+        return np.all(self_values == other_values)
 
 
 class SparseMatrix(Matrix):

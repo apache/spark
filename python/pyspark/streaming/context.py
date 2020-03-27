@@ -33,7 +33,7 @@ class StreamingContext(object):
     """
     Main entry point for Spark Streaming functionality. A StreamingContext
     represents the connection to a Spark cluster, and can be used to create
-    L{DStream} various input sources. It can be from an existing L{SparkContext}.
+    :class:`DStream` various input sources. It can be from an existing :class:`SparkContext`.
     After creating and transforming DStreams, the streaming computation can
     be started and stopped using `context.start()` and `context.stop()`,
     respectively. `context.awaitTermination()` allows the current thread
@@ -48,8 +48,8 @@ class StreamingContext(object):
         """
         Create a new StreamingContext.
 
-        @param sparkContext: L{SparkContext} object.
-        @param batchDuration: the time interval (in seconds) at which streaming
+        :param sparkContext: :class:`SparkContext` object.
+        :param batchDuration: the time interval (in seconds) at which streaming
                               data will be divided into batches
         """
 
@@ -92,8 +92,8 @@ class StreamingContext(object):
         recreated from the checkpoint data. If the data does not exist, then the provided setupFunc
         will be used to create a new context.
 
-        @param checkpointPath: Checkpoint directory used in an earlier streaming program
-        @param setupFunc:      Function to create a new context and setup DStreams
+        :param checkpointPath: Checkpoint directory used in an earlier streaming program
+        :param setupFunc:      Function to create a new context and setup DStreams
         """
         cls._ensure_initialized()
         gw = SparkContext._gateway
@@ -149,10 +149,10 @@ class StreamingContext(object):
         valid checkpoint data, then setupFunc will be called to create a new context and setup
         DStreams.
 
-        @param checkpointPath: Checkpoint directory used in an earlier streaming program. Can be
+        :param checkpointPath: Checkpoint directory used in an earlier streaming program. Can be
                                None if the intention is to always create a new context when there
                                is no active context.
-        @param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
+        :param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
         """
 
         if setupFunc is None:
@@ -183,7 +183,7 @@ class StreamingContext(object):
         """
         Wait for the execution to stop.
 
-        @param timeout: time to wait in seconds
+        :param timeout: time to wait in seconds
         """
         if timeout is None:
             self._jssc.awaitTermination()
@@ -196,7 +196,7 @@ class StreamingContext(object):
         throw the reported error during the execution; or `false` if the
         waiting time elapsed before returning from the method.
 
-        @param timeout: time to wait in seconds
+        :param timeout: time to wait in seconds
         """
         return self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
 
@@ -205,8 +205,8 @@ class StreamingContext(object):
         Stop the execution of the streams, with option of ensuring all
         received data has been processed.
 
-        @param stopSparkContext: Stop the associated SparkContext or not
-        @param stopGracefully: Stop gracefully by waiting for the processing
+        :param stopSparkContext: Stop the associated SparkContext or not
+        :param stopGracefully: Stop gracefully by waiting for the processing
                               of all received data to be completed
         """
         self._jssc.stop(stopSparkContext, stopGraceFully)
@@ -223,7 +223,7 @@ class StreamingContext(object):
         the RDDs (if the developer wishes to query old data outside the
         DStream computation).
 
-        @param duration: Minimum duration (in seconds) that each DStream
+        :param duration: Minimum duration (in seconds) that each DStream
                         should remember its RDDs
         """
         self._jssc.remember(self._jduration(duration))
@@ -233,7 +233,7 @@ class StreamingContext(object):
         Sets the context to periodically checkpoint the DStream operations for master
         fault-tolerance. The graph will be checkpointed every batch interval.
 
-        @param directory: HDFS-compatible directory where the checkpoint data
+        :param directory: HDFS-compatible directory where the checkpoint data
                          will be reliably stored
         """
         self._jssc.checkpoint(directory)
@@ -244,9 +244,9 @@ class StreamingContext(object):
         a TCP socket and receive byte is interpreted as UTF8 encoded ``\\n`` delimited
         lines.
 
-        @param hostname:      Hostname to connect to for receiving data
-        @param port:          Port to connect to for receiving data
-        @param storageLevel:  Storage level to use for storing the received objects
+        :param hostname:      Hostname to connect to for receiving data
+        :param port:          Port to connect to for receiving data
+        :param storageLevel:  Storage level to use for storing the received objects
         """
         jlevel = self._sc._getJavaStorageLevel(storageLevel)
         return DStream(self._jssc.socketTextStream(hostname, port, jlevel), self,
@@ -258,6 +258,7 @@ class StreamingContext(object):
         for new files and reads them as text files. Files must be wrriten to the
         monitored directory by "moving" them from another location within the same
         file system. File names starting with . are ignored.
+        The text files must be encoded as UTF-8.
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
 
@@ -269,8 +270,8 @@ class StreamingContext(object):
         them from another location within the same file system.
         File names starting with . are ignored.
 
-        @param directory:       Directory to load data from
-        @param recordLength:    Length of each record in bytes
+        :param directory:       Directory to load data from
+        :param recordLength:    Length of each record in bytes
         """
         return DStream(self._jssc.binaryRecordsStream(directory, recordLength), self,
                        NoOpSerializer())
@@ -289,9 +290,9 @@ class StreamingContext(object):
 
         .. note:: Changes to the queue after the stream is created will not be recognized.
 
-        @param rdds:       Queue of RDDs
-        @param oneAtATime: pick one rdd each time or pick all of them once.
-        @param default:    The default rdd if no more in rdds
+        :param rdds:       Queue of RDDs
+        :param oneAtATime: pick one rdd each time or pick all of them once.
+        :param default:    The default rdd if no more in rdds
         """
         if default and not isinstance(default, RDD):
             default = self._sc.parallelize(default)

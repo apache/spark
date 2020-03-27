@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,7 +17,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
 import logging
 from argparse import ArgumentParser
 import os
@@ -58,7 +57,8 @@ FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
 
 # Find out where the assembly jars are located.
-for scala in ["2.11", "2.12"]:
+# TODO: revisit for Scala 2.13
+for scala in ["2.12"]:
     build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
     if os.path.isdir(build_dir):
         SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
@@ -74,7 +74,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'SPARK_TESTING': '1',
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
-        'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
+        'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
+        'PYSPARK_ROW_FIELD_SORTING_ENABLED': 'true'
     })
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
@@ -86,9 +87,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
     env["TMPDIR"] = tmp_dir
 
     # Also override the JVM's temp directory by setting driver and executor options.
+    java_options = "-Djava.io.tmpdir={0} -Dio.netty.tryReflectionSetAccessible=true".format(tmp_dir)
     spark_args = [
-        "--conf", "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
-        "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
+        "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
         "pyspark-shell"
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
@@ -116,7 +118,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
                     log_file.writelines(per_test_output)
                 per_test_output.seek(0)
                 for line in per_test_output:
-                    decoded_line = line.decode()
+                    decoded_line = line.decode("utf-8", "replace")
                     if not re.match('[0-9]+', decoded_line):
                         print(decoded_line, end='')
                 per_test_output.close()
@@ -133,9 +135,9 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             per_test_output.seek(0)
             # Here expects skipped test output from unittest when verbosity level is
             # 2 (or --verbose option is enabled).
-            decoded_lines = map(lambda line: line.decode(), iter(per_test_output))
+            decoded_lines = map(lambda line: line.decode("utf-8", "replace"), iter(per_test_output))
             skipped_tests = list(filter(
-                lambda line: re.search(r'test_.* \(pyspark\..*\) ... skipped ', line),
+                lambda line: re.search(r'test_.* \(pyspark\..*\) ... (skip|SKIP)', line),
                 decoded_lines))
             skipped_counts = len(skipped_tests)
             if skipped_counts > 0:
@@ -159,11 +161,15 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python2.7", "python3.4", "pypy"] if which(x)]
-    if "python2.7" not in python_execs:
-        LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
-                       " back to `python` instead")
-        python_execs.insert(0, "python")
+    python_execs = [x for x in ["python3.6", "python2.7", "pypy"] if which(x)]
+
+    if "python3.6" not in python_execs:
+        p = which("python3")
+        if not p:
+            LOGGER.error("No python3 executable found.  Exiting!")
+            os._exit(1)
+        else:
+            python_execs.insert(0, p)
     return python_execs
 
 
@@ -261,8 +267,8 @@ def main():
         python_implementation = subprocess_check_output(
             [python_exec, "-c", "import platform; print(platform.python_implementation())"],
             universal_newlines=True).strip()
-        LOGGER.debug("%s python_implementation is %s", python_exec, python_implementation)
-        LOGGER.debug("%s version is: %s", python_exec, subprocess_check_output(
+        LOGGER.info("%s python_implementation is %s", python_exec, python_implementation)
+        LOGGER.info("%s version is: %s", python_exec, subprocess_check_output(
             [python_exec, "--version"], stderr=subprocess.STDOUT, universal_newlines=True).strip())
         if should_test_modules:
             for module in modules_to_test:

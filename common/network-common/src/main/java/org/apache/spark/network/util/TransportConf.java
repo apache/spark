@@ -108,7 +108,11 @@ public class TransportConf {
     return conf.getInt(SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY, 1);
   }
 
-  /** Requested maximum length of the queue of incoming connections. Default -1 for no backlog. */
+  /**
+   * Requested maximum length of the queue of incoming connections. If  &lt; 1,
+   * the default Netty value of {@link io.netty.util.NetUtil#SOMAXCONN} will be used.
+   * Default to -1.
+   */
   public int backLog() { return conf.getInt(SPARK_NETWORK_IO_BACKLOG_KEY, -1); }
 
   /** Number of threads used in the server thread pool. Default to 0, which is 2x#cores. */
@@ -312,7 +316,8 @@ public class TransportConf {
 
   /**
    * Percentage of io.serverThreads used by netty to process ChunkFetchRequest.
-   * Shuffle server will use a separate EventLoopGroup to process ChunkFetchRequest messages.
+   * When the config `spark.shuffle.server.chunkFetchHandlerThreadsPercent` is set,
+   * shuffle server will use a separate EventLoopGroup to process ChunkFetchRequest messages.
    * Although when calling the async writeAndFlush on the underlying channel to send
    * response back to client, the I/O on the channel is still being handled by
    * {@link org.apache.spark.network.server.TransportServer}'s default EventLoopGroup
@@ -335,10 +340,27 @@ public class TransportConf {
       return 0;
     }
     int chunkFetchHandlerThreadsPercent =
-      conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 100);
+      Integer.parseInt(conf.get("spark.shuffle.server.chunkFetchHandlerThreadsPercent"));
     int threads =
       this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors();
     return (int) Math.ceil(threads * (chunkFetchHandlerThreadsPercent / 100.0));
+  }
+
+  /**
+   * Whether to use a separate EventLoopGroup to process ChunkFetchRequest messages, it is decided
+   * by the config `spark.shuffle.server.chunkFetchHandlerThreadsPercent` is set or not.
+   */
+  public boolean separateChunkFetchRequest() {
+    return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0) > 0;
+  }
+
+  /**
+   * Whether to use the old protocol while doing the shuffle block fetching.
+   * It is only enabled while we need the compatibility in the scenario of new spark version
+   * job fetching blocks from old version external shuffle service.
+   */
+  public boolean useOldFetchProtocol() {
+    return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
   }
 
 }

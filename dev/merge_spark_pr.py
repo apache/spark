@@ -31,16 +31,21 @@ import re
 import subprocess
 import sys
 import traceback
-import urllib2
+if sys.version < '3':
+    input = raw_input  # noqa
+    from urllib2 import urlopen
+    from urllib2 import Request
+    from urllib2 import HTTPError
+else:
+    from urllib.request import urlopen
+    from urllib.request import Request
+    from urllib.error import HTTPError
 
 try:
     import jira.client
     JIRA_IMPORTED = True
 except ImportError:
     JIRA_IMPORTED = False
-
-if sys.version < '3':
-    input = raw_input  # noqa
 
 # Location of your Spark git development area
 SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
@@ -69,11 +74,11 @@ BRANCH_PREFIX = "PR_TOOL"
 
 def get_json(url):
     try:
-        request = urllib2.Request(url)
+        request = Request(url)
         if GITHUB_OAUTH_KEY:
             request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
-        return json.load(urllib2.urlopen(request))
-    except urllib2.HTTPError as e:
+        return json.load(urlopen(request))
+    except HTTPError as e:
         if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == '0':
             print("Exceeded the GitHub API rate limit; see the instructions in " +
                   "dev/merge_spark_pr.py to configure an OAuth token for making authenticated " +
@@ -92,9 +97,9 @@ def fail(msg):
 def run_cmd(cmd):
     print(cmd)
     if isinstance(cmd, list):
-        return subprocess.check_output(cmd)
+        return subprocess.check_output(cmd).decode('utf-8')
     else:
-        return subprocess.check_output(cmd.split(" "))
+        return subprocess.check_output(cmd.split(" ")).decode('utf-8')
 
 
 def continue_maybe(prompt):
@@ -110,7 +115,7 @@ def clean_up():
 
         branches = run_cmd("git branch").replace(" ", "").split("\n")
 
-        for branch in filter(lambda x: x.startswith(BRANCH_PREFIX), branches):
+        for branch in list(filter(lambda x: x.startswith(BRANCH_PREFIX), branches)):
             print("Deleting local branch %s" % branch)
             run_cmd("git branch -D %s" % branch)
 
@@ -237,7 +242,7 @@ def fix_version_from_branch(branch, versions):
         return versions[0]
     else:
         branch_ver = branch.replace("branch-", "")
-        return filter(lambda x: x.name.startswith(branch_ver), versions)[-1]
+        return list(filter(lambda x: x.name.startswith(branch_ver), versions))[-1]
 
 
 def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
@@ -272,11 +277,12 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
 
     versions = asf_jira.project_versions("SPARK")
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
-    versions = filter(lambda x: x.raw['released'] is False, versions)
+    versions = list(filter(lambda x: x.raw['released'] is False, versions))
     # Consider only x.y.z versions
-    versions = filter(lambda x: re.match(r'\d+\.\d+\.\d+', x.name), versions)
+    versions = list(filter(lambda x: re.match(r'\d+\.\d+\.\d+', x.name), versions))
 
-    default_fix_versions = map(lambda x: fix_version_from_branch(x, versions).name, merge_branches)
+    default_fix_versions = list(map(
+        lambda x: fix_version_from_branch(x, versions).name, merge_branches))
     for v in default_fix_versions:
         # Handles the case where we have forked a release branch but not yet made the release.
         # In this case, if the PR is committed to the master branch and the release branch, we
@@ -286,21 +292,35 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
         if patch == "0":
             previous = "%s.%s.%s" % (major, int(minor) - 1, 0)
             if previous in default_fix_versions:
-                default_fix_versions = filter(lambda x: x != v, default_fix_versions)
+                default_fix_versions = list(filter(lambda x: x != v, default_fix_versions))
     default_fix_versions = ",".join(default_fix_versions)
 
-    fix_versions = input("Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
-    if fix_versions == "":
-        fix_versions = default_fix_versions
-    fix_versions = fix_versions.replace(" ", "").split(",")
+    available_versions = set(list(map(lambda v: v.name, versions)))
+    while True:
+        try:
+            fix_versions = input(
+                "Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
+            if fix_versions == "":
+                fix_versions = default_fix_versions
+            fix_versions = fix_versions.replace(" ", "").split(",")
+            if set(fix_versions).issubset(available_versions):
+                break
+            else:
+                print("Specified version(s) [%s] not found in the available versions, try "
+                      "again (or leave blank and fix manually)." % (", ".join(fix_versions)))
+        except KeyboardInterrupt:
+            raise
+        except:
+            traceback.print_exc()
+            print("Error setting fix version(s), try again (or leave blank and fix manually)")
 
     def get_version_json(version_str):
-        return filter(lambda v: v.name == version_str, versions)[0].raw
+        return list(filter(lambda v: v.name == version_str, versions))[0].raw
 
-    jira_fix_versions = map(lambda v: get_version_json(v), fix_versions)
+    jira_fix_versions = list(map(lambda v: get_version_json(v), fix_versions))
 
-    resolve = filter(lambda a: a['name'] == "Resolve Issue", asf_jira.transitions(jira_id))[0]
-    resolution = filter(lambda r: r.raw['name'] == "Fixed", asf_jira.resolutions())[0]
+    resolve = list(filter(lambda a: a['name'] == "Resolve Issue", asf_jira.transitions(jira_id)))[0]
+    resolution = list(filter(lambda r: r.raw['name'] == "Fixed", asf_jira.resolutions()))[0]
     asf_jira.transition_issue(
         jira_id, resolve["id"], fixVersions=jira_fix_versions,
         comment=comment, resolution={'id': resolution.raw['id']})
@@ -316,7 +336,7 @@ def choose_jira_assignee(issue, asf_jira):
     while True:
         try:
             reporter = issue.fields.reporter
-            commentors = map(lambda x: x.author, issue.fields.comment.comments)
+            commentors = list(map(lambda x: x.author, issue.fields.comment.comments))
             candidates = set(commentors)
             candidates.add(reporter)
             candidates = list(candidates)
@@ -339,7 +359,7 @@ def choose_jira_assignee(issue, asf_jira):
                 except:
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
-                asf_jira.assign_issue(issue.key, assignee.key)
+                asf_jira.assign_issue(issue.key, assignee.name)
                 return assignee
         except KeyboardInterrupt:
             raise
@@ -443,7 +463,7 @@ def main():
         continue_maybe("The env-vars JIRA_USERNAME and/or JIRA_PASSWORD are not set. Continue?")
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
-    branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])
+    branch_names = list(filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches]))
     # Assumes branch names can be sorted lexicographically
     latest_branch = sorted(branch_names, reverse=True)[0]
 
@@ -453,8 +473,13 @@ def main():
 
     url = pr["url"]
 
+    # Warn if the PR is WIP
+    if "[WIP]" in pr["title"]:
+        msg = "The PR title has `[WIP]`:\n%s\nContinue?" % pr["title"]
+        continue_maybe(msg)
+
     # Decide whether to use the modified title or not
-    modified_title = standardize_jira_ref(pr["title"])
+    modified_title = standardize_jira_ref(pr["title"]).rstrip(".")
     if modified_title != pr["title"]:
         print("I've re-written the title as follows to match the standard format:")
         print("Original: %s" % pr["title"])
@@ -470,7 +495,24 @@ def main():
     else:
         title = pr["title"]
 
-    body = pr["body"]
+    modified_body = re.sub(re.compile(r'<!--[^>]*-->\n?', re.DOTALL), '', pr["body"]).lstrip()
+    if modified_body != pr["body"]:
+        print("=" * 80)
+        print(modified_body)
+        print("=" * 80)
+        print("I've removed the comments from PR template like the above:")
+        result = input("Would you like to use the modified body? (y/n): ")
+        if result.lower() == "y":
+            body = modified_body
+            print("Using modified body:")
+        else:
+            body = pr["body"]
+            print("Using original body:")
+        print("=" * 80)
+        print(body)
+        print("=" * 80)
+    else:
+        body = pr["body"]
     target_ref = pr["base"]["ref"]
     user_login = pr["user"]["login"]
     base_ref = pr["head"]["ref"]

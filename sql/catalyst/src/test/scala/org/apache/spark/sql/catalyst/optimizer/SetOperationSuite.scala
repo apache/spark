@@ -31,10 +31,10 @@ class SetOperationSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
-      Batch("Union Pushdown", Once,
+      Batch("Union Pushdown", FixedPoint(5),
         CombineUnions,
         PushProjectionThroughUnion,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PruneFilters) :: Nil
   }
 
@@ -44,8 +44,8 @@ class SetOperationSuite extends PlanTest {
   val testUnion = Union(testRelation :: testRelation2 :: testRelation3 :: Nil)
 
   test("union: combine unions into one unions") {
-    val unionQuery1 = Union(Union(testRelation, testRelation2), testRelation)
-    val unionQuery2 = Union(testRelation, Union(testRelation2, testRelation))
+    val unionQuery1 = Union(Union(testRelation, testRelation2), testRelation3)
+    val unionQuery2 = Union(testRelation, Union(testRelation2, testRelation3))
     val unionOptimized1 = Optimize.execute(unionQuery1.analyze)
     val unionOptimized2 = Optimize.execute(unionQuery2.analyze)
 
@@ -93,7 +93,7 @@ class SetOperationSuite extends PlanTest {
     val unionQuery1 = Distinct(Union(Distinct(Union(query1, query2)), query3)).analyze
     val optimized1 = Optimize.execute(unionQuery1)
     val distinctUnionCorrectAnswer1 =
-      Distinct(Union(query1 :: query2 :: query3 :: Nil)).analyze
+      Distinct(Union(query1 :: query2 :: query3 :: Nil))
     comparePlans(distinctUnionCorrectAnswer1, optimized1)
 
     //         query1
@@ -107,7 +107,7 @@ class SetOperationSuite extends PlanTest {
       Distinct(Union(query2, query3)))).analyze
     val optimized2 = Optimize.execute(unionQuery2)
     val distinctUnionCorrectAnswer2 =
-      Distinct(Union(query1 :: query2 :: query2 :: query3 :: Nil)).analyze
+      Distinct(Union(query1 :: query2 :: query2 :: query3 :: Nil))
     comparePlans(distinctUnionCorrectAnswer2, optimized2)
   }
 

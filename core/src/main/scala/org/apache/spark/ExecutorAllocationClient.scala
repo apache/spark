@@ -23,31 +23,43 @@ package org.apache.spark
  */
 private[spark] trait ExecutorAllocationClient {
 
-
   /** Get the list of currently active executors */
   private[spark] def getExecutorIds(): Seq[String]
 
   /**
+   * Whether an executor is active. An executor is active when it can be used to execute tasks
+   * for jobs submitted by the application.
+   *
+   * @return whether the executor with the given ID is currently active.
+   */
+  def isExecutorActive(id: String): Boolean
+
+  /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
-   * @param numExecutors The total number of executors we'd like to have. The cluster manager
-   *                     shouldn't kill any running executor to reach this number, but,
-   *                     if all existing executors were to die, this is the number of executors
-   *                     we'd want to be allocated.
-   * @param localityAwareTasks The number of tasks in all active stages that have a locality
-   *                           preferences. This includes running, pending, and completed tasks.
-   * @param hostToLocalTaskCount A map of hosts to the number of tasks from all active stages
-   *                             that would like to like to run on that host.
-   *                             This includes running, pending, and completed tasks.
+   *
+   * @param resourceProfileIdToNumExecutors The total number of executors we'd like to have per
+   *                                        ResourceProfile id. The cluster manager shouldn't kill
+   *                                        any running executor to reach this number, but, if all
+   *                                        existing executors were to die, this is the number
+   *                                        of executors we'd want to be allocated.
+   * @param numLocalityAwareTasksPerResourceProfileId The number of tasks in all active stages that
+   *                                                  have a locality preferences per
+   *                                                  ResourceProfile id. This includes running,
+   *                                                  pending, and completed tasks.
+   * @param hostToLocalTaskCount A map of ResourceProfile id to a map of hosts to the number of
+   *                             tasks from all active stages that would like to like to run on
+   *                             that host. This includes running, pending, and completed tasks.
    * @return whether the request is acknowledged by the cluster manager.
    */
   private[spark] def requestTotalExecutors(
-      numExecutors: Int,
-      localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int]): Boolean
+      resourceProfileIdToNumExecutors: Map[Int, Int],
+      numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
+      hostToLocalTaskCount: Map[Int, Map[String, Int]]): Boolean
 
   /**
-   * Request an additional number of executors from the cluster manager.
+   * Request an additional number of executors from the cluster manager for the default
+   * ResourceProfile.
    * @return whether the request is acknowledged by the cluster manager.
    */
   def requestExecutors(numAdditionalExecutors: Int): Boolean

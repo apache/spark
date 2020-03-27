@@ -102,7 +102,7 @@ function get_release_info {
   NEXT_VERSION="$VERSION"
   RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
   SHORT_VERSION=$(echo "$VERSION" | cut -d . -f 1-2)
-  local REV=$(echo "$VERSION" | cut -d . -f 3)
+  local REV=$(echo "$RELEASE_VERSION" | cut -d . -f 3)
 
   # Find out what rc is being prepared.
   # - If the current version is "x.y.0", then this is rc1 of the "x.y.0" release.
@@ -150,6 +150,9 @@ function get_release_info {
   GIT_REF="$RELEASE_TAG"
   if is_dry_run; then
     echo "This is a dry run. Please confirm the ref that will be built for testing."
+    if [[ $SKIP_TAG = 0 ]]; then
+      GIT_REF="$GIT_BRANCH"
+    fi
     GIT_REF=$(read_config "Ref" "$GIT_REF")
   fi
   export GIT_REF

@@ -2,6 +2,21 @@
 layout: global
 title: Collaborative Filtering - RDD-based API
 displayTitle: Collaborative Filtering - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -61,11 +76,11 @@ best parameter learned from a sampled subset to the full dataset and expect simi
 
 <div data-lang="scala" markdown="1">
 In the following example, we load rating data. Each row consists of a user, a product and a rating.
-We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS$) 
+We use the default [ALS.train()](api/scala/org/apache/spark/mllib/recommendation/ALS$.html)
 method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.
 
-Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS) for more details on the API.
+Refer to the [`ALS` Scala docs](api/scala/org/apache/spark/mllib/recommendation/ALS.html) for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/RecommendationExample.scala %}
 

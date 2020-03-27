@@ -34,9 +34,9 @@ class PowerIterationClusteringSuite extends SparkFunSuite
 
   @transient var data: Dataset[_] = _
   final val r1 = 1.0
-  final val n1 = 10
+  final val n1 = 80
   final val r2 = 4.0
-  final val n2 = 40
+  final val n2 = 80
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -161,14 +161,14 @@ class PowerIterationClusteringSuite extends SparkFunSuite
   }
 
   test("test default weight") {
-    val dataWithoutWeight = data.sample(0.5, 1L).select('src, 'dst)
+    val dataWithoutWeight = data.sample(0.5, 1L).select("src", "dst")
 
     val assignments = new PowerIterationClustering()
       .setK(2)
       .setMaxIter(40)
       .assignClusters(dataWithoutWeight)
     val localAssignments = assignments
-      .select('id, 'cluster)
+      .select("id", "cluster")
       .as[(Long, Int)].collect().toSet
 
     val dataWithWeightOne = dataWithoutWeight.withColumn("weight", lit(1.0))
@@ -178,7 +178,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setMaxIter(40)
       .assignClusters(dataWithWeightOne)
     val localAssignments2 = assignments2
-      .select('id, 'cluster)
+      .select("id", "cluster")
       .as[(Long, Int)].collect().toSet
 
     assert(localAssignments === localAssignments2)
@@ -222,7 +222,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       (0, 1),
       (0, 2),
       (3, 4)
-    )).toDF("src", "dst")
+    )).toDF("src", "dst").repartition(1)
 
     var assignments2 = new PowerIterationClustering()
       .setInitMode("random")

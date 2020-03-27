@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.streaming.StreamingConf.BACKPRESSURE_ENABLED
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -47,7 +48,7 @@ private[streaming] abstract class RateController(val streamUID: Int, rateEstimat
   /**
    * An initialization method called both from the constructor and Serialization code.
    */
-  private def init() {
+  private def init(): Unit = {
     executionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonSingleThreadExecutor("stream-rate-update"))
     rateLimit = new AtomicLong(-1L)
@@ -72,7 +73,7 @@ private[streaming] abstract class RateController(val streamUID: Int, rateEstimat
 
   def getLatestRate(): Long = rateLimit.get()
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     val elements = batchCompleted.batchInfo.streamIdToInputInfo
 
     for {
@@ -86,5 +87,5 @@ private[streaming] abstract class RateController(val streamUID: Int, rateEstimat
 
 object RateController {
   def isBackPressureEnabled(conf: SparkConf): Boolean =
-    conf.getBoolean("spark.streaming.backpressure.enabled", false)
+    conf.get(BACKPRESSURE_ENABLED)
 }

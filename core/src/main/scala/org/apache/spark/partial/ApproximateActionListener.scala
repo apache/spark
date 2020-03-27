@@ -43,7 +43,7 @@ private[spark] class ApproximateActionListener[T, U, R](
   var failure: Option[Exception] = None             // Set if the job has failed (permanently)
   var resultObject: Option[PartialResult[R]] = None // Set if we've already returned a PartialResult
 
-  override def taskSucceeded(index: Int, result: Any) {
+  override def taskSucceeded(index: Int, result: Any): Unit = {
     synchronized {
       evaluator.merge(index, result.asInstanceOf[U])
       finishedTasks += 1
@@ -56,7 +56,7 @@ private[spark] class ApproximateActionListener[T, U, R](
     }
   }
 
-  override def jobFailed(exception: Exception) {
+  override def jobFailed(exception: Exception): Unit = {
     synchronized {
       failure = Some(exception)
       this.notifyAll()

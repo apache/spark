@@ -18,6 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -30,14 +31,22 @@ import org.apache.spark.ui.UIUtils
 private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab) {
 
   def toNodeSeq(request: HttpServletRequest): Seq[Node] = {
-    <table class="table table-bordered table-striped table-condensed sortable table-fixed">
+    <table class="table table-bordered table-striped table-sm sortable table-fixed">
       <thead>
-        <th>Pool Name</th>
-        <th>Minimum Share</th>
-        <th>Pool Weight</th>
-        <th>Active Stages</th>
-        <th>Running Tasks</th>
-        <th>SchedulingMode</th>
+        <tr>
+          <th>Pool Name</th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top" title="Pool's minimum share of CPU
+             cores">Minimum Share</span>
+          </th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top" title="Pool's share of cluster
+             resources relative to others">Pool Weight</span>
+          </th>
+          <th>Active Stages</th>
+          <th>Running Tasks</th>
+          <th>SchedulingMode</th>
+        </tr>
       </thead>
       <tbody>
         {pools.map { case (s, p) => poolRow(request, s, p) }}
@@ -48,7 +57,8 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
   private def poolRow(request: HttpServletRequest, s: Schedulable, p: PoolData): Seq[Node] = {
     val activeStages = p.stageIds.size
     val href = "%s/stages/pool?poolname=%s"
-      .format(UIUtils.prependBaseUri(request, parent.basePath), URLEncoder.encode(p.name, "UTF-8"))
+      .format(UIUtils.prependBaseUri(request, parent.basePath),
+        URLEncoder.encode(p.name, StandardCharsets.UTF_8.name()))
     <tr>
       <td>
         <a href={href}>{p.name}</a>

@@ -196,8 +196,6 @@ class MatrixFactorizationModel @Since("0.8.0") (
       .map(t => Rating(t._1, product, t._2))
   }
 
-  protected override val formatVersion: String = "1.0"
-
   /**
    * Save this model to the given path.
    *

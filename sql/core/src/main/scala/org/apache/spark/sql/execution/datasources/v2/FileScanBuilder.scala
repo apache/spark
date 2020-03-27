@@ -16,16 +16,50 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.sources.v2.reader.{ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.execution.datasources.{PartitioningAwareFileIndex, PartitioningUtils}
 import org.apache.spark.sql.types.StructType
 
-abstract class FileScanBuilder(schema: StructType)
-  extends ScanBuilder
-  with SupportsPushDownRequiredColumns
-  with SupportsPushDownFilters {
-  protected var readSchema = schema
+abstract class FileScanBuilder(
+    sparkSession: SparkSession,
+    fileIndex: PartitioningAwareFileIndex,
+    dataSchema: StructType) extends ScanBuilder with SupportsPushDownRequiredColumns {
+  private val partitionSchema = fileIndex.partitionSchema
+  private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+  protected val supportsNestedSchemaPruning = false
+  protected var requiredSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
-    this.readSchema = requiredSchema
+    // [SPARK-30107] While `requiredSchema` might have pruned nested columns,
+    // the actual data schema of this scan is determined in `readDataSchema`.
+    // File formats that don't support nested schema pruning,
+    // use `requiredSchema` as a reference and prune only top-level columns.
+    this.requiredSchema = requiredSchema
   }
+
+  protected def readDataSchema(): StructType = {
+    val requiredNameSet = createRequiredNameSet()
+    val schema = if (supportsNestedSchemaPruning) requiredSchema else dataSchema
+    val fields = schema.fields.filter { field =>
+      val colName = PartitioningUtils.getColName(field, isCaseSensitive)
+      requiredNameSet.contains(colName) && !partitionNameSet.contains(colName)
+    }
+    StructType(fields)
+  }
+
+  protected def readPartitionSchema(): StructType = {
+    val requiredNameSet = createRequiredNameSet()
+    val fields = partitionSchema.fields.filter { field =>
+      val colName = PartitioningUtils.getColName(field, isCaseSensitive)
+      requiredNameSet.contains(colName)
+    }
+    StructType(fields)
+  }
+
+  private def createRequiredNameSet(): Set[String] =
+    requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
+
+  private val partitionNameSet: Set[String] =
+    partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
 }

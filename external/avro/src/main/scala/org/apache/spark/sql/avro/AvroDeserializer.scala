@@ -33,14 +33,18 @@ import org.apache.avro.util.Utf8
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
 class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
   private lazy val decimalConversions = new DecimalConversion()
+
+  // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
+  private val rebaseDateTime = SQLConf.get.avroRebaseDateTimeEnabled
 
   private val converter: Any => Any = rootCatalystType match {
     // A shortcut for empty schema.
@@ -88,6 +92,11 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
+      case (INT, DateType) if rebaseDateTime => (updater, ordinal, value) =>
+        val days = value.asInstanceOf[Int]
+        val rebasedDays = DateTimeUtils.rebaseJulianToGregorianDays(days)
+        updater.setInt(ordinal, rebasedDays)
+
       case (INT, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
@@ -95,14 +104,24 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
         updater.setLong(ordinal, value.asInstanceOf[Long])
 
       case (LONG, TimestampType) => avroType.getLogicalType match {
-        case _: TimestampMillis => (updater, ordinal, value) =>
-          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+        // For backward compatibility, if the Avro type is Long and it is not logical type
+        // (the `null` case), the value is processed as timestamp type with millisecond precision.
+        case null | _: TimestampMillis if rebaseDateTime => (updater, ordinal, value) =>
+          val millis = value.asInstanceOf[Long]
+          val micros = DateTimeUtils.millisToMicros(millis)
+          val rebasedMicros = DateTimeUtils.rebaseJulianToGregorianMicros(micros)
+          updater.setLong(ordinal, rebasedMicros)
+        case null | _: TimestampMillis => (updater, ordinal, value) =>
+          val millis = value.asInstanceOf[Long]
+          val micros = DateTimeUtils.millisToMicros(millis)
+          updater.setLong(ordinal, micros)
+        case _: TimestampMicros if rebaseDateTime => (updater, ordinal, value) =>
+          val micros = value.asInstanceOf[Long]
+          val rebasedMicros = DateTimeUtils.rebaseJulianToGregorianMicros(micros)
+          updater.setLong(ordinal, rebasedMicros)
         case _: TimestampMicros => (updater, ordinal, value) =>
-          updater.setLong(ordinal, value.asInstanceOf[Long])
-        case null => (updater, ordinal, value) =>
-          // For backward compatibility, if the Avro type is Long and it is not logical type,
-          // the value is processed as timestamp type with millisecond precision.
-          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+          val micros = value.asInstanceOf[Long]
+          updater.setLong(ordinal, micros)
         case other => throw new IncompatibleSchemaException(
           s"Cannot convert Avro logical type ${other} to Catalyst Timestamp type.")
       }
@@ -110,7 +129,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
       // For backward compatibility, we still keep this conversion.
       case (LONG, DateType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, (value.asInstanceOf[Long] / DateTimeUtils.MILLIS_PER_DAY).toInt)
+        updater.setInt(ordinal, (value.asInstanceOf[Long] / MILLIS_PER_DAY).toInt)
 
       case (FLOAT, FloatType) => (updater, ordinal, value) =>
         updater.setFloat(ordinal, value.asInstanceOf[Float])
@@ -167,14 +186,14 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (ARRAY, ArrayType(elementType, containsNull)) =>
         val elementWriter = newWriter(avroType.getElementType, elementType, path)
         (updater, ordinal, value) =>
-          val array = value.asInstanceOf[GenericData.Array[Any]]
-          val len = array.size()
-          val result = createArrayData(elementType, len)
+          val collection = value.asInstanceOf[java.util.Collection[Any]]
+          val result = createArrayData(elementType, collection.size())
           val elementUpdater = new ArrayDataUpdater(result)
 
           var i = 0
-          while (i < len) {
-            val element = array.get(i)
+          val iter = collection.iterator()
+          while (iter.hasNext) {
+            val element = iter.next()
             if (element == null) {
               if (!containsNull) {
                 throw new RuntimeException(s"Array value at path ${path.mkString(".")} is not " +
@@ -225,6 +244,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (UNION, _) =>
         val allTypes = avroType.getTypes.asScala
         val nonNullTypes = allTypes.filter(_.getType != NULL)
+        val nonNullAvroType = Schema.createUnion(nonNullTypes.asJava)
         if (nonNullTypes.nonEmpty) {
           if (nonNullTypes.length == 1) {
             newWriter(nonNullTypes.head, catalystType, path)
@@ -253,7 +273,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
                     (updater, ordinal, value) => {
                       val row = new SpecificInternalRow(st)
                       val fieldUpdater = new RowUpdater(row)
-                      val i = GenericData.get().resolveUnion(avroType, value)
+                      val i = GenericData.get().resolveUnion(nonNullAvroType, value)
                       fieldWriters(i)(fieldUpdater, i, value)
                       updater.set(ordinal, row)
                     }

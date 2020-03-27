@@ -21,24 +21,31 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.{LogicalTypes, Schema}
 import org.apache.avro.Conversions.DecimalConversion
+import org.apache.avro.LogicalTypes
 import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type
 import org.apache.avro.Schema.Type._
-import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed, Record}
+import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.util.Utf8
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * A serializer to serialize data in catalyst format to data in avro format.
  */
-class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) {
+class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean)
+  extends Logging {
+
+  // Whether to rebase datetimes from Gregorian to Julian calendar in write
+  private val rebaseDateTime: Boolean = SQLConf.get.avroRebaseDateTimeEnabled
 
   def serialize(catalystData: Any): Any = {
     converter.apply(catalystData)
@@ -133,15 +140,24 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       case (BinaryType, BYTES) =>
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
 
+      case (DateType, INT) if rebaseDateTime =>
+        (getter, ordinal) => DateTimeUtils.rebaseGregorianToJulianDays(getter.getInt(ordinal))
+
       case (DateType, INT) =>
         (getter, ordinal) => getter.getInt(ordinal)
 
       case (TimestampType, LONG) => avroType.getLogicalType match {
-          case _: TimestampMillis => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          // For backward compatibility, if the Avro type is Long and it is not logical type
+          // (the `null` case), output the timestamp value as with millisecond precision.
+          case null | _: TimestampMillis if rebaseDateTime => (getter, ordinal) =>
+            val micros = getter.getLong(ordinal)
+            val rebasedMicros = DateTimeUtils.rebaseGregorianToJulianMicros(micros)
+            DateTimeUtils.microsToMillis(rebasedMicros)
+          case null | _: TimestampMillis => (getter, ordinal) =>
+            DateTimeUtils.microsToMillis(getter.getLong(ordinal))
+          case _: TimestampMicros if rebaseDateTime => (getter, ordinal) =>
+            DateTimeUtils.rebaseGregorianToJulianMicros(getter.getLong(ordinal))
           case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
-          // For backward compatibility, if the Avro type is Long and it is not logical type,
-          // output the timestamp value as with millisecond precision.
-          case null => (getter, ordinal) => getter.getLong(ordinal) / 1000
           case other => throw new IncompatibleSchemaException(
             s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
         }
@@ -205,18 +221,28 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystStruct to " +
         s"Avro type $avroStruct.")
     }
-    val fieldConverters = catalystStruct.zip(avroStruct.getFields.asScala).map {
-      case (f1, f2) => newConverter(f1.dataType, resolveNullableType(f2.schema(), f1.nullable))
-    }
+
+    val (avroIndices: Array[Int], fieldConverters: Array[Converter]) =
+      catalystStruct.map { catalystField =>
+        val avroField = avroStruct.getField(catalystField.name)
+        if (avroField == null) {
+          throw new IncompatibleSchemaException(
+            s"Cannot convert Catalyst type $catalystStruct to Avro type $avroStruct.")
+        }
+        val converter = newConverter(catalystField.dataType, resolveNullableType(
+          avroField.schema(), catalystField.nullable))
+        (avroField.pos(), converter)
+      }.toArray.unzip
+
     val numFields = catalystStruct.length
-    (row: InternalRow) =>
+    row: InternalRow =>
       val result = new Record(avroStruct)
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
-          result.put(i, null)
+          result.put(avroIndices(i), null)
         } else {
-          result.put(i, fieldConverters(i).apply(row, i))
+          result.put(avroIndices(i), fieldConverters(i).apply(row, i))
         }
         i += 1
       }
@@ -224,7 +250,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
   }
 
   private def resolveNullableType(avroType: Schema, nullable: Boolean): Schema = {
-    if (nullable && avroType.getType != NULL) {
+    if (avroType.getType == Type.UNION && nullable) {
       // avro uses union to represent nullable type.
       val fields = avroType.getTypes.asScala
       assert(fields.length == 2)
@@ -232,6 +258,10 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       assert(actualType.length == 1)
       actualType.head
     } else {
+      if (nullable) {
+        logWarning("Writing avro files with non-nullable avro schema with nullable catalyst " +
+          "schema will throw runtime exception if there is a record with null value.")
+      }
       avroType
     }
   }

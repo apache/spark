@@ -23,22 +23,20 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.orc.{OrcConf, OrcFile}
+import org.apache.orc.{OrcConf, OrcFile, TypeDescription}
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.JoinedRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.datasources.{PartitionedFile, PartitioningUtils}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader}
 import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * A factory used to create Orc readers.
@@ -46,90 +44,95 @@ import org.apache.spark.util.SerializableConfiguration
  * @param sqlConf SQL configuration.
  * @param broadcastedConf Broadcast serializable Hadoop Configuration.
  * @param dataSchema Schema of orc files.
+ * @param readDataSchema Required data schema in the batch scan.
  * @param partitionSchema Schema of partitions.
- * @param readSchema Required schema in the batch scan.
  */
 case class OrcPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
     dataSchema: StructType,
-    partitionSchema: StructType,
-    readSchema: StructType) extends FilePartitionReaderFactory {
+    readDataSchema: StructType,
+    partitionSchema: StructType) extends FilePartitionReaderFactory {
+  private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
-      readSchema.length <= sqlConf.wholeStageMaxNumFields &&
-      readSchema.forall(_.dataType.isInstanceOf[AtomicType])
+      resultSchema.length <= sqlConf.wholeStageMaxNumFields &&
+      resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
 
+    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
+
     val filePath = new Path(new URI(file.filePath))
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val reader = OrcFile.createReader(filePath, readerOptions)
-
-    val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, readSchema, reader, conf)
+    val requestedColIdsOrEmptyFile =
+      Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+        OrcUtils.requestedColumnIds(
+          isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+      }
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader[InternalRow]
     } else {
       val requestedColIds = requestedColIdsOrEmptyFile.get
-      assert(requestedColIds.length == readSchema.length,
+      assert(requestedColIds.length == readDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
+
       val taskConf = new Configuration(conf)
-      taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
-        requestedColIds.filter(_ != -1).sorted.mkString(","))
 
       val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val requiredDataSchema = subtractSchema(readSchema, partitionSchema)
       val orcRecordReader = new OrcInputFormat[OrcStruct]
         .createRecordReader(fileSplit, taskAttemptContext)
+      val deserializer = new OrcDeserializer(dataSchema, readDataSchema, requestedColIds)
+      val fileReader = new PartitionReader[InternalRow] {
+        override def next(): Boolean = orcRecordReader.nextKeyValue()
 
-      val fullSchema = requiredDataSchema.toAttributes ++ partitionSchema.toAttributes
-      val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-      val deserializer = new OrcDeserializer(dataSchema, requiredDataSchema, requestedColIds)
+        override def get(): InternalRow = deserializer.deserialize(orcRecordReader.getCurrentValue)
 
-      val projection = if (partitionSchema.length == 0) {
-        (value: OrcStruct) => unsafeProjection(deserializer.deserialize(value))
-      } else {
-        val joinedRow = new JoinedRow()
-        (value: OrcStruct) =>
-          unsafeProjection(joinedRow(deserializer.deserialize(value), file.partitionValues))
+        override def close(): Unit = orcRecordReader.close()
       }
-      new PartitionRecordReaderWithProject(orcRecordReader, projection)
+
+      new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
+        partitionSchema, file.partitionValues)
     }
   }
 
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
     val conf = broadcastedConf.value.value
 
+    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
+
     val filePath = new Path(new URI(file.filePath))
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val reader = OrcFile.createReader(filePath, readerOptions)
-
-    val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, readSchema, reader, conf)
+    val requestedColIdsOrEmptyFile =
+      Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+        OrcUtils.requestedColumnIds(
+          isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+      }
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader
     } else {
-      val requestedColIds = requestedColIdsOrEmptyFile.get
-      assert(requestedColIds.length == readSchema.length,
+      val requestedColIds = requestedColIdsOrEmptyFile.get ++ Array.fill(partitionSchema.length)(-1)
+      assert(requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")
       val taskConf = new Configuration(conf)
-      taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
-        requestedColIds.filter(_ != -1).sorted.mkString(","))
 
       val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
@@ -137,33 +140,17 @@ case class OrcPartitionReaderFactory(
 
       val batchReader = new OrcColumnarBatchReader(capacity)
       batchReader.initialize(fileSplit, taskAttemptContext)
-      val columnNameMap = partitionSchema.fields.map(
-        PartitioningUtils.getColName(_, isCaseSensitive)).zipWithIndex.toMap
-      val requestedPartitionColIds = readSchema.fields.map { field =>
-        columnNameMap.getOrElse(PartitioningUtils.getColName(field, isCaseSensitive), -1)
-      }
+      val requestedPartitionColIds =
+        Array.fill(readDataSchema.length)(-1) ++ Range(0, partitionSchema.length)
 
       batchReader.initBatch(
-        reader.getSchema,
-        readSchema.fields,
+        TypeDescription.fromString(resultSchemaString),
+        resultSchema.fields,
         requestedColIds,
         requestedPartitionColIds,
         file.partitionValues)
       new PartitionRecordReader(batchReader)
     }
-  }
-
-  /**
-   * Returns a new StructType that is a copy of the original StructType, removing any items that
-   * also appear in other StructType. The order is preserved from the original StructType.
-   */
-  private def subtractSchema(original: StructType, other: StructType): StructType = {
-    val otherNameSet = other.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
-    val fields = original.fields.filterNot { field =>
-      otherNameSet.contains(PartitioningUtils.getColName(field, isCaseSensitive))
-    }
-
-    StructType(fields)
   }
 
 }

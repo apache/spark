@@ -17,13 +17,15 @@
 
 package org.apache.spark.ui
 
-import javax.servlet.http.HttpServletRequest
+import java.util.EnumSet
+import javax.servlet.DispatcherType
+import javax.servlet.http.{HttpServlet, HttpServletRequest}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.xml.Node
 
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping, ServletContextHandler, ServletHolder}
 import org.json4s.JsonAST.{JNothing, JValue}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
@@ -59,6 +61,10 @@ private[spark] abstract class WebUI(
   def getTabs: Seq[WebUITab] = tabs
   def getHandlers: Seq[ServletContextHandler] = handlers
 
+  def getDelegatingHandlers: Seq[DelegatingServletContextHandler] = {
+    handlers.map(new DelegatingServletContextHandler(_))
+  }
+
   /** Attaches a tab to this UI, along with all of its attached pages. */
   def attachTab(tab: WebUITab): Unit = {
     tab.pages.foreach(attachPage)
@@ -87,12 +93,21 @@ private[spark] abstract class WebUI(
     attachHandler(renderJsonHandler)
     val handlers = pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
     handlers += renderHandler
+    handlers += renderJsonHandler
   }
 
   /** Attaches a handler to this UI. */
   def attachHandler(handler: ServletContextHandler): Unit = synchronized {
     handlers += handler
     serverInfo.foreach(_.addHandler(handler, securityManager))
+  }
+
+  /** Attaches a handler to this UI. */
+  def attachHandler(contextPath: String, httpServlet: HttpServlet, pathSpec: String): Unit = {
+    val ctx = new ServletContextHandler()
+    ctx.setContextPath(contextPath)
+    ctx.addServlet(new ServletHolder(httpServlet), pathSpec)
+    attachHandler(ctx)
   }
 
   /** Detaches a handler from this UI. */
@@ -139,11 +154,17 @@ private[spark] abstract class WebUI(
     }
   }
 
+  /** @return Whether SSL enabled. Only valid after [[bind]]. */
+  def isSecure: Boolean = serverInfo.map(_.securePort.isDefined).getOrElse(false)
+
+  /** @return The scheme of web interface. Only valid after [[bind]]. */
+  def scheme: String = if (isSecure) "https://" else "http://"
+
   /** @return The url of web interface. Only valid after [[bind]]. */
-  def webUrl: String = s"http://$publicHostName:$boundPort"
+  def webUrl: String = s"${scheme}$publicHostName:${boundPort}"
 
   /** @return The actual port to which this server is bound. Only valid after [[bind]]. */
-  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
+  def boundPort: Int = serverInfo.map(si => si.securePort.getOrElse(si.boundPort)).getOrElse(-1)
 
   /** Stops the server behind this web interface. Only valid after [[bind]]. */
   def stop(): Unit = {
@@ -163,7 +184,7 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
   val name = prefix.capitalize
 
   /** Attach a page to this tab. This prepends the page's prefix with the tab's own prefix. */
-  def attachPage(page: WebUIPage) {
+  def attachPage(page: WebUIPage): Unit = {
     page.prefix = (prefix + "/" + page.prefix).stripSuffix("/")
     pages += page
   }
@@ -186,4 +207,37 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
 private[spark] abstract class WebUIPage(var prefix: String) {
   def render(request: HttpServletRequest): Seq[Node]
   def renderJson(request: HttpServletRequest): JValue = JNothing
+}
+
+private[spark] class DelegatingServletContextHandler(handler: ServletContextHandler) {
+
+  def prependFilterMapping(
+      filterName: String,
+      spec: String,
+      types: EnumSet[DispatcherType]): Unit = {
+    val mapping = new FilterMapping()
+    mapping.setFilterName(filterName)
+    mapping.setPathSpec(spec)
+    mapping.setDispatcherTypes(types)
+    handler.getServletHandler.prependFilterMapping(mapping)
+  }
+
+  def addFilter(
+      filterName: String,
+      className: String,
+      filterParams: Map[String, String]): Unit = {
+    val filterHolder = new FilterHolder()
+    filterHolder.setName(filterName)
+    filterHolder.setClassName(className)
+    filterParams.foreach { case (k, v) => filterHolder.setInitParameter(k, v) }
+    handler.getServletHandler.addFilter(filterHolder)
+  }
+
+  def filterCount(): Int = {
+    handler.getServletHandler.getFilters.length
+  }
+
+  def getContextPath(): String = {
+    handler.getContextPath
+  }
 }

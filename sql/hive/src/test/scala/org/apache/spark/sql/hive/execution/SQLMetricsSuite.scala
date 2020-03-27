@@ -19,8 +19,22 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton {
+
+  var originalValue: String = _
+  // With AQE on/off, the metric info is different.
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
+
+  override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
+    super.afterAll()
+  }
 
   test("writing data out metrics: hive") {
     testMetricsNonDynamicPartition("hive", "t1")

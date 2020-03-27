@@ -54,8 +54,8 @@ private[spark] class JavaSerializationStream(
     this
   }
 
-  def flush() { objOut.flush() }
-  def close() { objOut.close() }
+  def flush(): Unit = { objOut.flush() }
+  def close(): Unit = { objOut.close() }
 }
 
 private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
@@ -74,7 +74,7 @@ private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoa
   }
 
   def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]
-  def close() { objIn.close() }
+  def close(): Unit = { objIn.close() }
 }
 
 private object JavaDeserializationStream {

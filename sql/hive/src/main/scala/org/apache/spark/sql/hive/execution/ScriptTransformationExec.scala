@@ -94,9 +94,8 @@ case class ScriptTransformationExec(
       // This new thread will consume the ScriptTransformation's input rows and write them to the
       // external process. That process's output will be read by this current thread.
       val writerThread = new ScriptTransformationWriterThread(
-        inputIterator,
+        inputIterator.map(outputProjection),
         input.map(_.dataType),
-        outputProjection,
         inputSerde,
         inputSoi,
         ioschema,
@@ -249,16 +248,15 @@ case class ScriptTransformationExec(
 private class ScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
-    outputProjection: Projection,
     @Nullable inputSerde: AbstractSerDe,
-    @Nullable inputSoi: ObjectInspector,
+    @Nullable inputSoi: StructObjectInspector,
     ioschema: HiveScriptIOSchema,
     outputStream: OutputStream,
     proc: Process,
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
     conf: Configuration
-  ) extends Thread("Thread-ScriptTransformation-Feed") with Logging {
+  ) extends Thread("Thread-ScriptTransformation-Feed") with HiveInspectors with Logging {
 
   setDaemon(true)
 
@@ -278,8 +276,8 @@ private class ScriptTransformationWriterThread(
     var threwException: Boolean = true
     val len = inputSchema.length
     try {
-      iter.map(outputProjection).foreach { row =>
-        if (inputSerde == null) {
+      if (inputSerde == null) {
+        iter.foreach { row =>
           val data = if (len == 0) {
             ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
           } else {
@@ -295,10 +293,21 @@ private class ScriptTransformationWriterThread(
             sb.toString()
           }
           outputStream.write(data.getBytes(StandardCharsets.UTF_8))
-        } else {
-          val writable = inputSerde.serialize(
-            row.asInstanceOf[GenericInternalRow].values, inputSoi)
+        }
+      } else {
+        // Convert Spark InternalRows to hive data via `HiveInspectors.wrapperFor`.
+        val hiveData = new Array[Any](inputSchema.length)
+        val fieldOIs = inputSoi.getAllStructFieldRefs.asScala.map(_.getFieldObjectInspector).toArray
+        val wrappers = fieldOIs.zip(inputSchema).map { case (f, dt) => wrapperFor(f, dt) }
 
+        iter.foreach { row =>
+          var i = 0
+          while (i < fieldOIs.length) {
+            hiveData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, inputSchema(i)))
+            i += 1
+          }
+
+          val writable = inputSerde.serialize(hiveData, inputSoi)
           if (scriptInputWriter != null) {
             scriptInputWriter.write(writable)
           } else {
@@ -374,14 +383,13 @@ case class HiveScriptIOSchema (
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
 
-  def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, ObjectInspector)] = {
+  def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, StructObjectInspector)] = {
     inputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(input)
       val serde = initSerDe(serdeClass, columns, columnTypes, inputSerdeProps)
       val fieldObjectInspectors = columnTypes.map(toInspector)
       val objectInspector = ObjectInspectorFactory
         .getStandardStructObjectInspector(columns.asJava, fieldObjectInspectors.asJava)
-        .asInstanceOf[ObjectInspector]
       (serde, objectInspector)
     }
   }
@@ -407,8 +415,8 @@ case class HiveScriptIOSchema (
       columnTypes: Seq[DataType],
       serdeProps: Seq[(String, String)]): AbstractSerDe = {
 
-    val serde = Utils.classForName(serdeClassName).getConstructor().
-      newInstance().asInstanceOf[AbstractSerDe]
+    val serde = Utils.classForName[AbstractSerDe](serdeClassName).getConstructor().
+      newInstance()
 
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
 
@@ -428,8 +436,8 @@ case class HiveScriptIOSchema (
       inputStream: InputStream,
       conf: Configuration): Option[RecordReader] = {
     recordReaderClass.map { klass =>
-      val instance = Utils.classForName(klass).getConstructor().
-        newInstance().asInstanceOf[RecordReader]
+      val instance = Utils.classForName[RecordReader](klass).getConstructor().
+        newInstance()
       val props = new Properties()
       // Can not use props.putAll(outputSerdeProps.toMap.asJava) in scala-2.12
       // See https://github.com/scala/bug/issues/10418
@@ -441,8 +449,8 @@ case class HiveScriptIOSchema (
 
   def recordWriter(outputStream: OutputStream, conf: Configuration): Option[RecordWriter] = {
     recordWriterClass.map { klass =>
-      val instance = Utils.classForName(klass).getConstructor().
-        newInstance().asInstanceOf[RecordWriter]
+      val instance = Utils.classForName[RecordWriter](klass).getConstructor().
+        newInstance()
       instance.initialize(outputStream, conf)
       instance
     }

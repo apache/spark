@@ -23,16 +23,16 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasPredictionCol
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules,
-  FPGrowth => MLlibFPGrowth}
+import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules, FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -116,7 +116,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
 }
 
 /**
- * :: Experimental ::
  * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
  * <a href="https://doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
  * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
@@ -128,7 +127,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
  * Association rule learning (Wikipedia)</a>
  */
 @Since("2.2.0")
-@Experimental
 class FPGrowth @Since("2.2.0") (
     @Since("2.2.0") override val uid: String)
   extends Estimator[FPGrowthModel] with FPGrowthParams with DefaultParamsWritable {
@@ -213,13 +211,11 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by FPGrowth.
  *
  * @param freqItemsets frequent itemsets in the format of DataFrame("items"[Array], "freq"[Long])
  */
 @Since("2.2.0")
-@Experimental
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") @transient val freqItemsets: DataFrame,
@@ -290,14 +286,17 @@ class FPGrowthModel private[ml] (
 
     val dt = dataset.schema($(itemsCol)).dataType
     // For each rule, examine the input items and summarize the consequents
-    val predictUDF = udf((items: Seq[_]) => {
+    val predictUDF = SparkUserDefinedFunction((items: Seq[Any]) => {
       if (items != null) {
         val itemset = items.toSet
         brRules.value.filter(_._1.forall(itemset.contains))
           .flatMap(_._2.filter(!itemset.contains(_))).distinct
       } else {
         Seq.empty
-      }}, dt)
+      }},
+      dt,
+      Nil
+    )
     dataset.withColumn($(predictionCol), predictUDF(col($(itemsCol))))
   }
 
@@ -314,6 +313,11 @@ class FPGrowthModel private[ml] (
 
   @Since("2.2.0")
   override def write: MLWriter = new FPGrowthModel.FPGrowthModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"FPGrowthModel: uid=$uid, numTrainingRecords=$numTrainingRecords"
+  }
 }
 
 @Since("2.2.0")

@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import io.netty.channel.{Channel, ChannelHandlerContext, SimpleChannelInboundHandler}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
 
 /**
  * Authentication handler for connections from the R process.

@@ -28,12 +28,20 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 
 /**
+ * The operator takes limited number of elements from its child operator.
+ */
+trait LimitExec extends UnaryExecNode {
+  /** Number of element should be taken from child operator */
+  def limit: Int
+}
+
+/**
  * Take the first `limit` elements and collect them to a single partition.
  *
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
+case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
@@ -57,6 +65,28 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   }
 }
 
+/**
+ * Take the last `limit` elements and collect them to a single partition.
+ *
+ * This operator will be used when a logical `Tail` operation is the final operator in an
+ * logical plan, which happens when the user is collecting results back to the driver.
+ */
+case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
+  override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = SinglePartition
+  override def executeCollect(): Array[InternalRow] = child.executeTail(limit)
+  protected override def doExecute(): RDD[InternalRow] = {
+    // This is a bit hacky way to avoid a shuffle and scanning all data when it performs
+    // at `Dataset.tail`.
+    // Since this execution plan and `execute` are currently called only when
+    // `Dataset.tail` is invoked, the jobs are always executed when they are supposed to be.
+
+    // If we use this execution plan separately like `Dataset.limit` without an actual
+    // job launch, we might just have to mimic the implementation of `CollectLimitExec`.
+    sparkContext.parallelize(executeCollect(), numSlices = 1)
+  }
+}
+
 object BaseLimitExec {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
@@ -70,8 +100,7 @@ object BaseLimitExec {
  * Helper trait which defines methods that are shared by both
  * [[LocalLimitExec]] and [[GlobalLimitExec]].
  */
-trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
-  val limit: Int
+trait BaseLimitExec extends LimitExec with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>

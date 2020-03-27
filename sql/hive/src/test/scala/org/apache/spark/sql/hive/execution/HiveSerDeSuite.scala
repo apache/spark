@@ -21,13 +21,14 @@ import java.net.URI
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -81,16 +82,23 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
     }.head
   }
 
+  // Make sure we set the config values to TestHive.conf.
+  override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit =
+    SQLConf.withExistingConf(TestHive.conf)(super.withSQLConf(pairs: _*)(f))
+
   test("Test the default fileformat for Hive-serde tables") {
-    withSQLConf("hive.default.fileformat" -> "orc") {
-      val (desc, exists) = extractTableDesc("CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
+    withSQLConf("hive.default.fileformat" -> "orc",
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
+      val (desc, exists) = extractTableDesc(
+        "CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
       assert(exists)
       assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
       assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
       assert(desc.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
     }
 
-    withSQLConf("hive.default.fileformat" -> "parquet") {
+    withSQLConf("hive.default.fileformat" -> "parquet",
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
       val (desc, exists) = extractTableDesc("CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
       assert(exists)
       val input = desc.storage.inputFormat
@@ -209,5 +217,24 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
     val v8 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'wrong')"
     val e8 = intercept[IllegalArgumentException](analyzeCreateTable(v8))
     assert(e8.getMessage.contains("invalid fileFormat: 'wrong'"))
+  }
+
+  test("SPARK-27555: fall back to hive-site.xml if hive.default.fileformat " +
+    "is not found in SQLConf ") {
+    val testSession = SparkSession.getActiveSession.get
+    try {
+      testSession.sparkContext.hadoopConfiguration.set("hive.default.fileformat", "parquetfile")
+      val sqlConf = new SQLConf()
+      var storageFormat = HiveSerDe.getDefaultStorage(sqlConf)
+      assert(storageFormat.serde.
+        contains("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+      // should take orc as it is present in sqlConf
+      sqlConf.setConfString("hive.default.fileformat", "orc")
+      storageFormat = HiveSerDe.getDefaultStorage(sqlConf)
+      assert(storageFormat.serde.contains("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+    }
+    finally {
+      testSession.sparkContext.hadoopConfiguration.unset("hive.default.fileformat")
+    }
   }
 }

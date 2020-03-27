@@ -23,6 +23,7 @@ import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
 class UnivocityGenerator(
@@ -43,9 +44,15 @@ class UnivocityGenerator(
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
-    options.timeZone,
-    options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    needVarLengthSecondFraction = false)
+  private val dateFormatter = DateFormatter(
+    options.dateFormat,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT)
 
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case DateType =>

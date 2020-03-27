@@ -56,9 +56,9 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("number of features more than 65535") {
-    val data1 = sc.parallelize(Array(
-      Vectors.dense((1 to 100000).map(_ => 2.0).to[scala.Vector].toArray),
-      Vectors.dense((1 to 100000).map(_ => 0.0).to[scala.Vector].toArray)
+    val data1 = sc.parallelize(Seq(
+      Vectors.dense(Array.fill(100000)(2.0)),
+      Vectors.dense(Array.fill(100000)(0.0))
     ), 2)
 
     val pca = new PCA(2).fit(data1)

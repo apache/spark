@@ -23,7 +23,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpSe
 
 import scala.collection.JavaConverters._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.config.UI._
@@ -53,9 +53,24 @@ private class HttpSecurityFilter(
     val hres = res.asInstanceOf[HttpServletResponse]
     hres.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
 
-    if (!securityMgr.checkUIViewPermissions(hreq.getRemoteUser())) {
+    val requestUser = hreq.getRemoteUser()
+
+    // The doAs parameter allows proxy servers (e.g. Knox) to impersonate other users. For
+    // that to be allowed, the authenticated user needs to be an admin.
+    val effectiveUser = Option(hreq.getParameter("doAs"))
+      .map { proxy =>
+        if (requestUser != proxy && !securityMgr.checkAdminPermissions(requestUser)) {
+          hres.sendError(HttpServletResponse.SC_FORBIDDEN,
+            s"User $requestUser is not allowed to impersonate others.")
+          return
+        }
+        proxy
+      }
+      .getOrElse(requestUser)
+
+    if (!securityMgr.checkUIViewPermissions(effectiveUser)) {
       hres.sendError(HttpServletResponse.SC_FORBIDDEN,
-        "User is not authorized to access this page.")
+        s"User $effectiveUser is not authorized to access this page.")
       return
     }
 
@@ -77,12 +92,13 @@ private class HttpSecurityFilter(
         hres.setHeader("Strict-Transport-Security", _))
     }
 
-    chain.doFilter(new XssSafeRequest(hreq), res)
+    chain.doFilter(new XssSafeRequest(hreq, effectiveUser), res)
   }
 
 }
 
-private class XssSafeRequest(req: HttpServletRequest) extends HttpServletRequestWrapper(req) {
+private class XssSafeRequest(req: HttpServletRequest, effectiveUser: String)
+  extends HttpServletRequestWrapper(req) {
 
   private val NEWLINE_AND_SINGLE_QUOTE_REGEX = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
 
@@ -91,6 +107,8 @@ private class XssSafeRequest(req: HttpServletRequest) extends HttpServletRequest
       stripXSS(name) -> values.map(stripXSS)
     }.toMap
   }
+
+  override def getRemoteUser(): String = effectiveUser
 
   override def getParameterMap(): JMap[String, Array[String]] = parameterMap.asJava
 

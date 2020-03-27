@@ -21,7 +21,6 @@ import java.io.{FileDescriptor, InputStream}
 import java.lang
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs._

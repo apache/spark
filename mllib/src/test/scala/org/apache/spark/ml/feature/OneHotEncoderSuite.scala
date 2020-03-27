@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.attribute.{AttributeGroup, BinaryAttribute, NominalAttribute}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamsSuite
@@ -52,7 +53,35 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
     val encoder = new OneHotEncoder()
       .setInputCols(Array("input"))
       .setOutputCols(Array("output"))
-    assert(encoder.getDropLast === true)
+    assert(encoder.getDropLast)
+    encoder.setDropLast(false)
+    assert(encoder.getDropLast === false)
+    val model = encoder.fit(df)
+    testTransformer[(Double, Vector)](df, model, "output", "expected") {
+      case Row(output: Vector, expected: Vector) =>
+        assert(output === expected)
+    }
+  }
+
+  test("Single Column: OneHotEncoder dropLast = false") {
+    val data = Seq(
+      Row(0.0, Vectors.sparse(3, Seq((0, 1.0)))),
+      Row(1.0, Vectors.sparse(3, Seq((1, 1.0)))),
+      Row(2.0, Vectors.sparse(3, Seq((2, 1.0)))),
+      Row(0.0, Vectors.sparse(3, Seq((0, 1.0)))),
+      Row(0.0, Vectors.sparse(3, Seq((0, 1.0)))),
+      Row(2.0, Vectors.sparse(3, Seq((2, 1.0)))))
+
+    val schema = StructType(Array(
+      StructField("input", DoubleType),
+      StructField("expected", new VectorUDT)))
+
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    val encoder = new OneHotEncoder()
+      .setInputCol("input")
+      .setOutputCol("output")
+    assert(encoder.getDropLast)
     encoder.setDropLast(false)
     assert(encoder.getDropLast === false)
     val model = encoder.fit(df)
@@ -104,6 +133,22 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("Single Column: input column with ML attribute") {
+    val attr = NominalAttribute.defaultAttr.withValues("small", "medium", "large")
+    val df = Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply).toDF("size")
+      .select(col("size").as("size", attr.toMetadata()))
+    val encoder = new OneHotEncoder()
+      .setInputCol("size")
+      .setOutputCol("encoded")
+    val model = encoder.fit(df)
+    testTransformerByGlobalCheckFunc[(Double)](df, model, "encoded") { rows =>
+      val group = AttributeGroup.fromStructField(rows.head.schema("encoded"))
+      assert(group.size === 2)
+      assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("small").withIndex(0))
+      assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("medium").withIndex(1))
+    }
+  }
+
   test("input column without ML attribute") {
     val df = Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply).toDF("index")
     val encoder = new OneHotEncoder()
@@ -122,6 +167,13 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
     val encoder = new OneHotEncoder()
       .setInputCols(Array("index"))
       .setOutputCols(Array("encoded"))
+    testDefaultReadWrite(encoder)
+  }
+
+  test("Single Column: read/write") {
+    val encoder = new OneHotEncoder()
+      .setInputCol("index")
+      .setOutputCol("encoded")
     testDefaultReadWrite(encoder)
   }
 
@@ -173,6 +225,48 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("Single Column: OneHotEncoder with varying types") {
+    val data = Seq(
+      Row(0.0, Vectors.sparse(3, Seq((0, 1.0)))),
+      Row(1.0, Vectors.sparse(3, Seq((1, 1.0)))),
+      Row(2.0, Vectors.sparse(3, Seq((2, 1.0)))),
+      Row(0.0, Vectors.sparse(3, Seq((0, 1.0)))),
+      Row(0.0, Vectors.sparse(3, Seq((0, 1.0)))),
+      Row(2.0, Vectors.sparse(3, Seq((2, 1.0)))))
+
+    val schema = StructType(Array(
+      StructField("input", DoubleType),
+      StructField("expected", new VectorUDT)))
+
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    class NumericTypeWithEncoder[A](val numericType: NumericType)
+                                   (implicit val encoder: Encoder[(A, Vector)])
+
+    val types = Seq(
+      new NumericTypeWithEncoder[Short](ShortType),
+      new NumericTypeWithEncoder[Long](LongType),
+      new NumericTypeWithEncoder[Int](IntegerType),
+      new NumericTypeWithEncoder[Float](FloatType),
+      new NumericTypeWithEncoder[Byte](ByteType),
+      new NumericTypeWithEncoder[Double](DoubleType),
+      new NumericTypeWithEncoder[Decimal](DecimalType(10, 0))(ExpressionEncoder()))
+
+    for (t <- types) {
+      val dfWithTypes = df.select(col("input").cast(t.numericType), col("expected"))
+      val estimator = new OneHotEncoder()
+        .setInputCol("input")
+        .setOutputCol("output")
+        .setDropLast(false)
+
+      val model = estimator.fit(dfWithTypes)
+      testTransformer(dfWithTypes, model, "output", "expected") {
+        case Row(output: Vector, expected: Vector) =>
+          assert(output === expected)
+      }(t.encoder)
+    }
+  }
+
   test("OneHotEncoder: encoding multiple columns and dropLast = false") {
     val data = Seq(
       Row(0.0, Vectors.sparse(3, Seq((0, 1.0))), 2.0, Vectors.sparse(4, Seq((2, 1.0)))),
@@ -193,7 +287,7 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
     val encoder = new OneHotEncoder()
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("output1", "output2"))
-    assert(encoder.getDropLast === true)
+    assert(encoder.getDropLast)
     encoder.setDropLast(false)
     assert(encoder.getDropLast === false)
 
@@ -207,6 +301,58 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
       "expected2") {
       case Row(output1: Vector, output2: Vector, expected1: Vector, expected2: Vector) =>
         assert(output1 === expected1)
+        assert(output2 === expected2)
+    }
+  }
+
+  test("Single Column: OneHotEncoder: encoding multiple columns and dropLast = false") {
+    val data = Seq(
+      Row(0.0, Vectors.sparse(3, Seq((0, 1.0))), 2.0, Vectors.sparse(4, Seq((2, 1.0)))),
+      Row(1.0, Vectors.sparse(3, Seq((1, 1.0))), 3.0, Vectors.sparse(4, Seq((3, 1.0)))),
+      Row(2.0, Vectors.sparse(3, Seq((2, 1.0))), 0.0, Vectors.sparse(4, Seq((0, 1.0)))),
+      Row(0.0, Vectors.sparse(3, Seq((0, 1.0))), 1.0, Vectors.sparse(4, Seq((1, 1.0)))),
+      Row(0.0, Vectors.sparse(3, Seq((0, 1.0))), 0.0, Vectors.sparse(4, Seq((0, 1.0)))),
+      Row(2.0, Vectors.sparse(3, Seq((2, 1.0))), 2.0, Vectors.sparse(4, Seq((2, 1.0)))))
+
+    val schema = StructType(Array(
+      StructField("input1", DoubleType),
+      StructField("expected1", new VectorUDT),
+      StructField("input2", DoubleType),
+      StructField("expected2", new VectorUDT)))
+
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    val encoder1 = new OneHotEncoder()
+      .setInputCol("input1")
+      .setOutputCol("output1")
+    assert(encoder1.getDropLast)
+    encoder1.setDropLast(false)
+    assert(encoder1.getDropLast === false)
+
+    val model1 = encoder1.fit(df)
+    testTransformer[(Double, Vector, Double, Vector)](
+      df,
+      model1,
+      "output1",
+      "expected1") {
+      case Row(output1: Vector, expected1: Vector) =>
+        assert(output1 === expected1)
+    }
+
+    val encoder2 = new OneHotEncoder()
+      .setInputCol("input2")
+      .setOutputCol("output2")
+    assert(encoder2.getDropLast)
+    encoder2.setDropLast(false)
+    assert(encoder2.getDropLast === false)
+
+    val model2 = encoder2.fit(df)
+    testTransformer[(Double, Vector, Double, Vector)](
+      df,
+      model2,
+      "output2",
+      "expected2") {
+      case Row(output2: Vector, expected2: Vector) =>
         assert(output2 === expected2)
     }
   }
@@ -418,5 +564,53 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
       model,
       expectedMessagePart = "OneHotEncoderModel expected 2 categorical values",
       firstResultCol = "encoded")
+  }
+
+  test("assert exception is thrown if both multi-column and single-column params are set") {
+    import testImplicits._
+    val df = Seq((0.5, 0.3), (0.5, -0.4)).toDF("feature1", "feature2")
+    ParamsSuite.testExclusiveParams(new OneHotEncoder, df, ("inputCol", "feature1"),
+      ("inputCols", Array("feature1", "feature2")))
+    ParamsSuite.testExclusiveParams(new OneHotEncoder, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"), ("outputCols", Array("result1", "result2")))
+
+    // this should fail because at least one of inputCol and inputCols must be set
+    ParamsSuite.testExclusiveParams(new OneHotEncoder, df, ("outputCol", "feature1"))
+  }
+
+  test("Compare single/multiple column(s) OneHotEncoder in pipeline") {
+    val df = Seq((0.0, 2.0), (1.0, 3.0), (2.0, 0.0), (0.0, 1.0), (0.0, 0.0), (2.0, 2.0))
+      .toDF("input1", "input2")
+
+    val multiColsEncoder = new OneHotEncoder()
+      .setInputCols(Array("input1", "input2"))
+      .setOutputCols(Array("output1", "output2"))
+
+    val plForMultiCols = new Pipeline()
+      .setStages(Array(multiColsEncoder))
+      .fit(df)
+
+    val encoderForCol1 = new OneHotEncoder()
+      .setInputCol("input1")
+      .setOutputCol("output1")
+    val encoderForCol2 = new OneHotEncoder()
+      .setInputCol("input2")
+      .setOutputCol("output2")
+
+    val plForSingleCol = new Pipeline()
+      .setStages(Array(encoderForCol1, encoderForCol2))
+      .fit(df)
+
+    val resultForSingleCol = plForSingleCol.transform(df)
+      .select("output1", "output2")
+      .collect()
+    val resultForMultiCols = plForMultiCols.transform(df)
+      .select("output1", "output2")
+      .collect()
+
+    resultForSingleCol.zip(resultForMultiCols).foreach {
+      case (rowForSingle, rowForMultiCols) =>
+        assert(rowForSingle === rowForMultiCols)
+    }
   }
 }

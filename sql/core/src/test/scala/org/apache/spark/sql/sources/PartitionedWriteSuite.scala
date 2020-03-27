@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String)
@@ -43,7 +43,7 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
   }
 }
 
-class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
+class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("write many partitions") {
@@ -139,15 +139,15 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
       checkPartitionValues(files.head, "2016-12-01 00:00:00")
     }
     withTempPath { f =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .partitionBy("ts").parquet(f.getAbsolutePath)
       val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
       assert(files.length == 1)
-      // use timeZone option "GMT" to format partition value.
+      // use timeZone option utcTz.getId to format partition value.
       checkPartitionValues(files.head, "2016-12-01 08:00:00")
     }
     withTempPath { f =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         df.write.partitionBy("ts").parquet(f.getAbsolutePath)
         val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
         assert(files.length == 1)

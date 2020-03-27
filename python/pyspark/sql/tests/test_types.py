@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -203,10 +204,14 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(df.columns, ['b'])
 
     def test_negative_decimal(self):
-        df = self.spark.createDataFrame([(1, ), (11, )], ["value"])
-        ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
-        actual = list(map(lambda r: int(r.value), ret))
-        self.assertEqual(actual, [0, 10])
+        try:
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true")
+            df = self.spark.createDataFrame([(1, ), (11, )], ["value"])
+            ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
+            actual = list(map(lambda r: int(r.value), ret))
+            self.assertEqual(actual, [0, 10])
+        finally:
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false")
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
@@ -535,6 +540,22 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
 
+    @unittest.skipIf(sys.version < "3", "only Python 3 infers bytes as binary type")
+    def test_infer_binary_type(self):
+        binaryrow = [Row(f1='a', f2=b"abcd")]
+        df = self.sc.parallelize(binaryrow).toDF()
+        self.assertEqual(df.schema.fields[1].dataType, BinaryType())
+
+        # this saving as Parquet caused issues as well.
+        output_dir = os.path.join(self.tempdir.name, "infer_binary_type")
+        df.write.parquet(output_dir)
+        df1 = self.spark.read.parquet(output_dir)
+        self.assertEqual('a', df1.first().f1)
+        self.assertEqual(b"abcd", df1.first().f2)
+
+        self.assertEqual(_infer_type(b""), BinaryType())
+        self.assertEqual(_infer_type(b"1234"), BinaryType())
+
     def test_merge_type(self):
         self.assertEqual(_merge_type(LongType(), NullType()), LongType())
         self.assertEqual(_merge_type(NullType(), LongType()), LongType())
@@ -739,6 +760,17 @@ class DataTypeTests(unittest.TestCase):
         tst = TimestampType()
         self.assertEqual(tst.toInternal(datetime.datetime.max) % 1000000, 999999)
 
+    # regression test for SPARK-23299
+    def test_row_without_column_name(self):
+        row = Row("Alice", 11)
+        self.assertEqual(repr(row), "<Row('Alice', 11)>")
+
+        # test __repr__ with unicode values
+        if sys.version_info.major >= 3:
+            self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
+        else:
+            self.assertEqual(repr(Row(u"数", u"量")), r"<Row(u'\u6570', u'\u91cf')>")
+
     def test_empty_row(self):
         row = Row()
         self.assertEqual(len(row), 0)
@@ -818,7 +850,8 @@ class DataTypeVerificationTests(unittest.TestCase):
             (2**31 - 1, IntegerType()),
 
             # Long
-            (2**64, LongType()),
+            (-(2**63), LongType()),
+            (2**63 - 1, LongType()),
 
             # Float & Double
             (1.0, FloatType()),
@@ -939,13 +972,26 @@ class DataTypeVerificationTests(unittest.TestCase):
             with self.assertRaises(exp, msg=msg):
                 _make_type_verifier(data_type, nullable=False)(obj)
 
+    @unittest.skipIf(sys.version_info[:2] < (3, 6), "Create Row without sorting fields")
+    def test_row_without_field_sorting(self):
+        sorting_enabled_tmp = Row._row_field_sorting_enabled
+        Row._row_field_sorting_enabled = False
+
+        r = Row(b=1, a=2)
+        TestRow = Row("b", "a")
+        expected = TestRow(1, 2)
+
+        self.assertEqual(r, expected)
+        self.assertEqual(repr(r), "Row(b=1, a=2)")
+        Row._row_field_sorting_enabled = sorting_enabled_tmp
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_types import *
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -57,7 +57,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   var denseMat: RowMatrix = _
   var sparseMat: RowMatrix = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     denseMat = new RowMatrix(sc.parallelize(denseData, 2))
     sparseMat = new RowMatrix(sc.parallelize(sparseData, 2))
@@ -99,6 +99,26 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       val G = mat.computeGramianMatrix()
       assert(G.asBreeze === expected.asBreeze)
     }
+  }
+
+  test("getTreeAggregateIdealDepth") {
+    val nbPartitions = 100
+    val vectors = sc.emptyRDD[Vector]
+      .repartition(nbPartitions)
+    val rowMat = new RowMatrix(vectors)
+
+    assert(rowMat.getTreeAggregateIdealDepth(100 * 1024 * 1024) === 2)
+    assert(rowMat.getTreeAggregateIdealDepth(110 * 1024 * 1024) === 3)
+    assert(rowMat.getTreeAggregateIdealDepth(700 * 1024 * 1024) === 10)
+
+    val zeroSizeException = intercept[Exception]{
+      rowMat.getTreeAggregateIdealDepth(0)
+    }
+    assert(zeroSizeException.getMessage.contains("zero-size object to aggregate"))
+    val objectBiggerThanResultSize = intercept[Exception]{
+      rowMat.getTreeAggregateIdealDepth(1100 * 1024 * 1024)
+    }
+    assert(objectBiggerThanResultSize.getMessage.contains("it's bigger than maxResultSize"))
   }
 
   test("similar columns") {
@@ -193,7 +213,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     brzNorm(v, 1.0) < 1e-6
   }
 
-  def assertColumnEqualUpToSign(A: BDM[Double], B: BDM[Double], k: Int) {
+  def assertColumnEqualUpToSign(A: BDM[Double], B: BDM[Double], k: Int): Unit = {
     assert(A.rows === B.rows)
     for (j <- 0 until k) {
       val aj = A(::, j)
@@ -318,7 +338,7 @@ class RowMatrixClusterSuite extends SparkFunSuite with LocalClusterSparkContext 
 
   var mat: RowMatrix = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val m = 4
     val n = 200000

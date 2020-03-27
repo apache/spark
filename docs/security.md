@@ -2,6 +2,21 @@
 layout: global
 displayTitle: Spark Security
 title: Security
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -51,11 +66,12 @@ also see their authentication secret. Access control rules should be properly se
 Kubernetes admin to ensure that Spark authentication is secure.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.authenticate</code></td>
   <td>false</td>
   <td>Whether Spark authenticates its internal connections.</td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.authenticate.secret</code></td>
@@ -63,6 +79,7 @@ Kubernetes admin to ensure that Spark authentication is secure.
   <td>
     The secret key used authentication. See above for when this configuration should be set.
   </td>
+  <td>1.0.0</td>
 </tr>
 </table>
 
@@ -70,7 +87,7 @@ Alternatively, one can mount authentication secrets using files and Kubernetes s
 the user mounts into their pods.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.authenticate.secret.file</code></td>
   <td>None</td>
@@ -79,6 +96,7 @@ the user mounts into their pods.
     contents of the file have been securely generated. This file is loaded on both the driver
     and the executors unless other settings override this (see below).
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.authenticate.secret.driver.file</code></td>
@@ -91,6 +109,7 @@ the user mounts into their pods.
     and the executors can both use files to load the secret key. Ensure that the contents of the file
     on the driver is identical to the contents of the file on the executors.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.authenticate.secret.executor.file</code></td>
@@ -103,6 +122,7 @@ the user mounts into their pods.
     and the executors can both use files to load the secret key. Ensure that the contents of the file
     on the driver is identical to the contents of the file on the executors.
   </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
@@ -123,13 +143,14 @@ is still required when talking to shuffle services from Spark versions older tha
 The following table describes the different options available for configuring this feature.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.network.crypto.enabled</code></td>
   <td>false</td>
   <td>
     Enable AES-based RPC encryption, including the new authentication protocol added in 2.2.0.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.keyLength</code></td>
@@ -137,6 +158,7 @@ The following table describes the different options available for configuring th
   <td>
     The length in bits of the encryption key to generate. Valid values are 128, 192 and 256.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.keyFactoryAlgorithm</code></td>
@@ -145,6 +167,7 @@ The following table describes the different options available for configuring th
     The key factory algorithm to use when generating encryption keys. Should be one of the
     algorithms supported by the javax.crypto.SecretKeyFactory class in the JRE being used.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.config.*</code></td>
@@ -154,6 +177,7 @@ The following table describes the different options available for configuring th
     use. The config name should be the name of commons-crypto configuration without the
     <code>commons.crypto</code> prefix.
   </td>
+  <td></td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.saslFallback</code></td>
@@ -164,6 +188,7 @@ The following table describes the different options available for configuring th
     do not support the internal Spark authentication protocol. On the shuffle service side,
     disabling this feature will block older clients from authenticating.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.authenticate.enableSaslEncryption</code></td>
@@ -193,7 +218,7 @@ encrypting output data generated by applications with APIs such as `saveAsHadoop
 The following settings cover enabling encryption for data written to disk:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.io.encryption.enabled</code></td>
   <td>false</td>
@@ -201,6 +226,7 @@ The following settings cover enabling encryption for data written to disk:
     Enable local disk I/O encryption. Currently supported by all modes except Mesos. It's strongly
     recommended that RPC encryption be enabled when using this feature.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.io.encryption.keySizeBits</code></td>
@@ -208,6 +234,7 @@ The following settings cover enabling encryption for data written to disk:
   <td>
     IO encryption key size in bits. Supported values are 128, 192 and 256.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.io.encryption.keygen.algorithm</code></td>
@@ -217,6 +244,7 @@ The following settings cover enabling encryption for data written to disk:
     described in the KeyGenerator section of the Java Cryptography Architecture Standard Algorithm
     Name Documentation.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.io.encryption.commons.config.*</code></td>
@@ -226,6 +254,7 @@ The following settings cover enabling encryption for data written to disk:
     use. The config name should be the name of commons-crypto configuration without the
     <code>commons.crypto</code> prefix.
   </td>
+  <td>2.1.0</td>
 </tr>
 </table>
 

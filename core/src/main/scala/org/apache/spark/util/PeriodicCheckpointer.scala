@@ -24,7 +24,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -100,7 +99,7 @@ private[spark] abstract class PeriodicCheckpointer[T](
       var canDelete = true
       while (checkpointQueue.size > 1 && canDelete) {
         // Delete the oldest checkpoint only if the next checkpoint exists.
-        if (isCheckpointed(checkpointQueue.head)) {
+        if (isCheckpointed(checkpointQueue(1))) {
           removeCheckpointFile()
         } else {
           canDelete = false

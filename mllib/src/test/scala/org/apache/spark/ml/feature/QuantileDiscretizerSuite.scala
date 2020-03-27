@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql._
 
@@ -29,25 +30,30 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val spark = this.spark
     import spark.implicits._
 
-    val datasetSize = 100000
+    val datasetSize = 30000
     val numBuckets = 5
-    val df = sc.parallelize(1 to datasetSize).map(_.toDouble).map(Tuple1.apply).toDF("input")
+    val df = sc.parallelize(1 to datasetSize).map(_.toDouble).toDF("input")
     val discretizer = new QuantileDiscretizer()
       .setInputCol("input")
       .setOutputCol("result")
       .setNumBuckets(numBuckets)
     val model = discretizer.fit(df)
 
-    testTransformerByGlobalCheckFunc[(Double)](df, model, "result") { rows =>
-      val result = rows.map { r => Tuple1(r.getDouble(0)) }.toDF("result")
-      val observedNumBuckets = result.select("result").distinct.count
-      assert(observedNumBuckets === numBuckets,
-        "Observed number of buckets does not equal expected number of buckets.")
-      val relativeError = discretizer.getRelativeError
-      val numGoodBuckets = result.groupBy("result").count
-        .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}").count
-      assert(numGoodBuckets === numBuckets,
-        "Bucket sizes are not within expected relative error tolerance.")
+    testTransformerByGlobalCheckFunc[Double](df, model, "result") { rows =>
+      val result = rows.map(_.getDouble(0)).toDF("result").cache()
+      try {
+        val observedNumBuckets = result.select("result").distinct().count()
+        assert(observedNumBuckets === numBuckets,
+          "Observed number of buckets does not equal expected number of buckets.")
+        val relativeError = discretizer.getRelativeError
+        val numGoodBuckets = result.groupBy("result").count()
+          .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}")
+          .count()
+        assert(numGoodBuckets === numBuckets,
+          "Bucket sizes are not within expected relative error tolerance.")
+      } finally {
+        result.unpersist()
+      }
     }
   }
 
@@ -162,10 +168,10 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val spark = this.spark
     import spark.implicits._
 
-    val datasetSize = 100000
+    val datasetSize = 30000
     val numBuckets = 5
-    val data1 = Array.range(1, 100001, 1).map(_.toDouble)
-    val data2 = Array.range(1, 200000, 2).map(_.toDouble)
+    val data1 = Array.range(1, datasetSize + 1, 1).map(_.toDouble)
+    val data2 = Array.range(1, 2 * datasetSize, 2).map(_.toDouble)
     val df = data1.zip(data2).toSeq.toDF("input1", "input2")
 
     val discretizer = new QuantileDiscretizer()
@@ -175,20 +181,24 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val model = discretizer.fit(df)
     testTransformerByGlobalCheckFunc[(Double, Double)](df, model, "result1", "result2") { rows =>
       val result =
-        rows.map { r => Tuple2(r.getDouble(0), r.getDouble(1)) }.toDF("result1", "result2")
-      val relativeError = discretizer.getRelativeError
-      for (i <- 1 to 2) {
-        val observedNumBuckets = result.select("result" + i).distinct.count
-        assert(observedNumBuckets === numBuckets,
-          "Observed number of buckets does not equal expected number of buckets.")
+        rows.map(r => (r.getDouble(0), r.getDouble(1))).toDF("result1", "result2").cache()
+      try {
+        val relativeError = discretizer.getRelativeError
+        for (i <- 1 to 2) {
+          val observedNumBuckets = result.select("result" + i).distinct().count()
+          assert(observedNumBuckets === numBuckets,
+            "Observed number of buckets does not equal expected number of buckets.")
 
-        val numGoodBuckets = result
-          .groupBy("result" + i)
-          .count
-          .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}")
-          .count
-        assert(numGoodBuckets === numBuckets,
-          "Bucket sizes are not within expected relative error tolerance.")
+          val numGoodBuckets = result
+            .groupBy("result" + i)
+            .count()
+            .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}")
+            .count()
+          assert(numGoodBuckets === numBuckets,
+            "Bucket sizes are not within expected relative error tolerance.")
+        }
+      } finally {
+        result.unpersist()
       }
     }
   }
@@ -414,23 +424,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     assert(readDiscretizer.hasDefault(readDiscretizer.outputCol))
   }
 
-  test("Multiple Columns: Both inputCol and inputCols are set") {
-    val spark = this.spark
-    import spark.implicits._
-    val discretizer = new QuantileDiscretizer()
-      .setInputCol("input")
-      .setOutputCol("result")
-      .setNumBuckets(3)
-      .setInputCols(Array("input1", "input2"))
-    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
-      .map(Tuple1.apply).toDF("input")
-    // When both inputCol and inputCols are set, we throw Exception.
-    intercept[IllegalArgumentException] {
-      discretizer.fit(df)
-    }
-  }
-
-  test("Multiple Columns: Mismatched sizes of inputCols / outputCols") {
+  test("Multiple Columns: Mismatched sizes of inputCols/outputCols") {
     val spark = this.spark
     import spark.implicits._
     val discretizer = new QuantileDiscretizer()
@@ -442,5 +436,80 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     intercept[IllegalArgumentException] {
       discretizer.fit(df)
     }
+  }
+
+  test("Multiple Columns: Mismatched sizes of inputCols/numBucketsArray") {
+    val spark = this.spark
+    import spark.implicits._
+    val discretizer = new QuantileDiscretizer()
+      .setInputCols(Array("input1", "input2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setNumBucketsArray(Array(2, 5, 10))
+    val data1 = Array(1.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 2.0, 2.0, 2.0)
+    val data2 = Array(1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0, 3.0, 2.0, 3.0)
+    val df = data1.zip(data2).toSeq.toDF("input1", "input2")
+    intercept[IllegalArgumentException] {
+      discretizer.fit(df)
+    }
+  }
+
+  test("Multiple Columns: Set both of numBuckets/numBucketsArray") {
+    val spark = this.spark
+    import spark.implicits._
+    val discretizer = new QuantileDiscretizer()
+      .setInputCols(Array("input1", "input2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setNumBucketsArray(Array(2, 5))
+      .setNumBuckets(2)
+    val data1 = Array(1.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 2.0, 2.0, 2.0)
+    val data2 = Array(1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0, 3.0, 2.0, 3.0)
+    val df = data1.zip(data2).toSeq.toDF("input1", "input2")
+    intercept[IllegalArgumentException] {
+      discretizer.fit(df)
+    }
+  }
+
+  test("Setting numBucketsArray for Single-Column QuantileDiscretizer") {
+    val spark = this.spark
+    import spark.implicits._
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setOutputCol("result")
+      .setNumBucketsArray(Array(2, 5))
+    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+      .map(Tuple1.apply).toDF("input")
+    intercept[IllegalArgumentException] {
+      discretizer.fit(df)
+    }
+  }
+
+  test("Assert exception is thrown if both multi-column and single-column params are set") {
+    val spark = this.spark
+    import spark.implicits._
+    val df = Seq((0.5, 0.3), (0.5, -0.4)).toDF("feature1", "feature2")
+    ParamsSuite.testExclusiveParams(new QuantileDiscretizer, df, ("inputCol", "feature1"),
+      ("inputCols", Array("feature1", "feature2")))
+    ParamsSuite.testExclusiveParams(new QuantileDiscretizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"), ("outputCols", Array("result1", "result2")))
+    // this should fail because at least one of inputCol and inputCols must be set
+    ParamsSuite.testExclusiveParams(new QuantileDiscretizer, df, ("outputCol", "feature1"))
+  }
+
+  test("Setting inputCol without setting outputCol") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+      .map(Tuple1.apply).toDF("input")
+    val numBuckets = 2
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setNumBuckets(numBuckets)
+    val model = discretizer.fit(df)
+    val result = model.transform(df)
+
+    val observedNumBuckets = result.select(discretizer.getOutputCol).distinct.count
+    assert(observedNumBuckets === numBuckets,
+      "Observed number of buckets does not equal expected number of buckets.")
   }
 }

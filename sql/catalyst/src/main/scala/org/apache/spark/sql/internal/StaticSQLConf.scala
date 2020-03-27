@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.Locale
+
 import org.apache.spark.util.Utils
 
 
@@ -42,6 +44,7 @@ object StaticSQLConf {
   val GLOBAL_TEMP_DATABASE = buildStaticConf("spark.sql.globalTempDatabase")
     .internal()
     .stringConf
+    .transform(_.toLowerCase(Locale.ROOT))
     .createWithDefault("global_temp")
 
   // This is used to control when we will split a schema's JSON string to multiple pieces
@@ -100,7 +103,7 @@ object StaticSQLConf {
 
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
     .doc("A comma-separated list of classes that implement " +
-      "Function1[SparkSessionExtension, Unit] used to configure Spark Session extensions. The " +
+      "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
       "classes must have a no-args constructor. If multiple extensions are specified, they are " +
       "applied in the specified order. For the case of rules and planner strategies, they are " +
       "applied in the specified order. For the case of parsers, the last parser is used and each " +
@@ -132,4 +135,71 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(1000)
 
+  val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to fetch and broadcast the table. " +
+        "If we encounter memory issue like frequently full GC or OOM when broadcast table " +
+        "we can decrease this number in order to reduce memory usage. " +
+        "Notice the number should be carefully chosen since decreasing parallelism might " +
+        "cause longer waiting for other broadcasting. Also, increasing parallelism may " +
+        "cause memory problem.")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
+      .createWithDefault(128)
+
+  val SUBQUERY_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.subquery.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to execute the subquery.")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
+      .createWithDefault(16)
+
+  val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
+    .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
+      "event. Defaults to no truncation. If set to 0, callsite will be logged instead.")
+    .intConf
+    .checkValue(_ >= 0, "Must be set greater or equal to zero")
+    .createWithDefault(Int.MaxValue)
+
+  val SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS =
+    buildStaticConf("spark.sql.legacy.sessionInitWithConfigDefaults")
+      .doc("Flag to revert to legacy behavior where a cloned SparkSession receives SparkConf " +
+        "defaults, dropping any overrides in its parent SparkSession.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED =
+    buildStaticConf("spark.sql.defaultUrlStreamHandlerFactory.enabled")
+      .doc(
+        "When true, register Hadoop's FsUrlStreamHandlerFactory to support " +
+        "ADD JAR against HDFS locations. " +
+        "It should be disabled when a different stream protocol handler should be registered " +
+        "to support a particular protocol type, or if Hadoop's FsUrlStreamHandlerFactory " +
+        "conflicts with other protocol types such as `http` or `https`. See also SPARK-25694 " +
+        "and HADOOP-14598.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_UI_ENABLED =
+    buildStaticConf("spark.sql.streaming.ui.enabled")
+      .doc("Whether to run the Structured Streaming Web UI for the Spark application when the " +
+        "Spark Web UI is enabled.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_UI_RETAINED_PROGRESS_UPDATES =
+    buildStaticConf("spark.sql.streaming.ui.retainedProgressUpdates")
+      .doc("The number of progress updates to retain for a streaming query for Structured " +
+        "Streaming UI.")
+      .intConf
+      .createWithDefault(100)
+
+  val STREAMING_UI_RETAINED_QUERIES =
+    buildStaticConf("spark.sql.streaming.ui.retainedQueries")
+      .doc("The number of inactive queries to retain for Structured Streaming UI.")
+      .intConf
+      .createWithDefault(100)
 }

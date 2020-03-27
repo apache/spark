@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Union}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -174,18 +175,18 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     assert(d0.isWiderThan(d1) === false)
     assert(d1.isWiderThan(d0) === false)
     assert(d1.isWiderThan(d2) === false)
-    assert(d2.isWiderThan(d1) === true)
+    assert(d2.isWiderThan(d1))
     assert(d2.isWiderThan(d3) === false)
-    assert(d3.isWiderThan(d2) === true)
-    assert(d4.isWiderThan(d3) === true)
+    assert(d3.isWiderThan(d2))
+    assert(d4.isWiderThan(d3))
 
     assert(d1.isWiderThan(ByteType) === false)
-    assert(d2.isWiderThan(ByteType) === true)
+    assert(d2.isWiderThan(ByteType))
     assert(d2.isWiderThan(ShortType) === false)
-    assert(d3.isWiderThan(ShortType) === true)
-    assert(d3.isWiderThan(IntegerType) === true)
+    assert(d3.isWiderThan(ShortType))
+    assert(d3.isWiderThan(IntegerType))
     assert(d3.isWiderThan(LongType) === false)
-    assert(d4.isWiderThan(LongType) === true)
+    assert(d4.isWiderThan(LongType))
     assert(d4.isWiderThan(FloatType) === false)
     assert(d4.isWiderThan(DoubleType) === false)
   }
@@ -273,12 +274,14 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   }
 
   test("SPARK-24468: operations on decimals with negative scale") {
-    val a = AttributeReference("a", DecimalType(3, -10))()
-    val b = AttributeReference("b", DecimalType(1, -1))()
-    val c = AttributeReference("c", DecimalType(35, 1))()
-    checkType(Multiply(a, b), DecimalType(5, -11))
-    checkType(Multiply(a, c), DecimalType(38, -9))
-    checkType(Multiply(b, c), DecimalType(37, 0))
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val a = AttributeReference("a", DecimalType(3, -10))()
+      val b = AttributeReference("b", DecimalType(1, -1))()
+      val c = AttributeReference("c", DecimalType(35, 1))()
+      checkType(Multiply(a, b), DecimalType(5, -11))
+      checkType(Multiply(a, c), DecimalType(38, -9))
+      checkType(Multiply(b, c), DecimalType(37, 0))
+    }
   }
 
   /** strength reduction for integer/decimal comparisons */

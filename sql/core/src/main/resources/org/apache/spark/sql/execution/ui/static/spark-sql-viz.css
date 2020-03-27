@@ -16,8 +16,10 @@
  */
 
 #plan-viz-graph .label {
+  font-size: 0.85rem;
   font-weight: normal;
   text-shadow: none;
+  color: black;
 }
 
 #plan-viz-graph svg g.cluster rect {
@@ -33,7 +35,7 @@
 }
 
 /* Highlight the SparkPlan node name */
-#plan-viz-graph svg text :first-child {
+#plan-viz-graph svg text :first-child:not(.stageId-and-taskId-metrics) {
   font-weight: bold;
 }
 

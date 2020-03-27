@@ -114,6 +114,7 @@ private[spark] class SerializerManager(
       case _: RDDBlockId => compressRdds
       case _: TempLocalBlockId => compressShuffleSpill
       case _: TempShuffleBlockId => compressShuffle
+      case _: ShuffleBlockBatchId => compressShuffle
       case _ => false
     }
   }

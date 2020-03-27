@@ -29,7 +29,7 @@ from pyspark.util import _exception_message
 
 pandas_requirement_message = None
 try:
-    from pyspark.sql.utils import require_minimum_pandas_version
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
 except ImportError as e:
     # If Pandas version requirement is not satisfied, skip related tests.
@@ -37,7 +37,7 @@ except ImportError as e:
 
 pyarrow_requirement_message = None
 try:
-    from pyspark.sql.utils import require_minimum_pyarrow_version
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
     require_minimum_pyarrow_version()
 except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
@@ -260,9 +260,3 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
         super(ReusedSQLTestCase, cls).tearDownClass()
         cls.spark.stop()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
-
-    def assertPandasEqual(self, expected, result):
-        msg = ("DataFrames are not equal: " +
-               "\n\nExpected:\n%s\n%s" % (expected, expected.dtypes) +
-               "\n\nResult:\n%s\n%s" % (result, result.dtypes))
-        self.assertTrue(expected.equals(result), msg=msg)

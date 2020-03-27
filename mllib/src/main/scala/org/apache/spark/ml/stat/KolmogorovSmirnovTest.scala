@@ -19,17 +19,15 @@ package org.apache.spark.ml.stat
 
 import scala.annotation.varargs
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.function.Function
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.col
 
 /**
- * :: Experimental ::
- *
  * Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a
  * continuous distribution. By comparing the largest difference between the empirical cumulative
  * distribution of the sample data and the theoretical distribution we can provide a test for the
@@ -38,7 +36,6 @@ import org.apache.spark.sql.functions.col
  * @see <a href="https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test">
  * Kolmogorov-Smirnov test (Wikipedia)</a>
  */
-@Experimental
 @Since("2.4.0")
 object KolmogorovSmirnovTest {
 

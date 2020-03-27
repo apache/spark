@@ -269,21 +269,27 @@ class PersistenceTest(SparkSessionTestCase):
 
     def test_onevsrest(self):
         temp_path = tempfile.mkdtemp()
-        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
-                                         (1.0, Vectors.sparse(2, [], [])),
-                                         (2.0, Vectors.dense(0.5, 0.5))] * 10,
-                                        ["label", "features"])
+        df = self.spark.createDataFrame([(0.0, 0.5, Vectors.dense(1.0, 0.8)),
+                                         (1.0, 0.5, Vectors.sparse(2, [], [])),
+                                         (2.0, 1.0, Vectors.dense(0.5, 0.5))] * 10,
+                                        ["label", "wt", "features"])
+
         lr = LogisticRegression(maxIter=5, regParam=0.01)
         ovr = OneVsRest(classifier=lr)
-        model = ovr.fit(df)
-        ovrPath = temp_path + "/ovr"
-        ovr.save(ovrPath)
-        loadedOvr = OneVsRest.load(ovrPath)
-        self._compare_pipelines(ovr, loadedOvr)
-        modelPath = temp_path + "/ovrModel"
-        model.save(modelPath)
-        loadedModel = OneVsRestModel.load(modelPath)
-        self._compare_pipelines(model, loadedModel)
+
+        def reload_and_compare(ovr, suffix):
+            model = ovr.fit(df)
+            ovrPath = temp_path + "/{}".format(suffix)
+            ovr.save(ovrPath)
+            loadedOvr = OneVsRest.load(ovrPath)
+            self._compare_pipelines(ovr, loadedOvr)
+            modelPath = temp_path + "/{}Model".format(suffix)
+            model.save(modelPath)
+            loadedModel = OneVsRestModel.load(modelPath)
+            self._compare_pipelines(model, loadedModel)
+
+        reload_and_compare(OneVsRest(classifier=lr), "ovr")
+        reload_and_compare(OneVsRest(classifier=lr).setWeightCol("wt"), "ovrw")
 
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)
@@ -392,7 +398,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

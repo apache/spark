@@ -84,11 +84,8 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
    */
   protected def makeBadMemoryStore(mm: MemoryManager): MemoryStore = {
     val ms = mock(classOf[MemoryStore], RETURNS_SMART_NULLS)
-    when(ms.evictBlocksToFreeSpace(any(), anyLong(), any())).thenAnswer(new Answer[Long] {
-      override def answer(invocation: InvocationOnMock): Long = {
-        throw new RuntimeException("bad memory store!")
-      }
-    })
+    when(ms.evictBlocksToFreeSpace(any(), anyLong(), any())).thenAnswer(
+      (_: InvocationOnMock) => throw new RuntimeException("bad memory store!"))
     mm.setMemoryStore(ms)
     ms
   }
@@ -106,27 +103,24 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
    * records the number of bytes this is called with. This variable is expected to be cleared
    * by the test code later through [[assertEvictBlocksToFreeSpaceCalled]].
    */
-  private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Long] = {
-    new Answer[Long] {
-      override def answer(invocation: InvocationOnMock): Long = {
-        val args = invocation.getArguments
-        val numBytesToFree = args(1).asInstanceOf[Long]
-        assert(numBytesToFree > 0)
-        require(evictBlocksToFreeSpaceCalled.get() === DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED,
-          "bad test: evictBlocksToFreeSpace() variable was not reset")
-        evictBlocksToFreeSpaceCalled.set(numBytesToFree)
-        if (numBytesToFree <= mm.storageMemoryUsed) {
-          // We can evict enough blocks to fulfill the request for space
-          mm.releaseStorageMemory(numBytesToFree, mm.tungstenMemoryMode)
-          evictedBlocks += Tuple2(null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L))
-          numBytesToFree
-        } else {
-          // No blocks were evicted because eviction would not free enough space.
-          0L
-        }
+  private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Long] =
+    (invocation: InvocationOnMock) => {
+      val args = invocation.getArguments
+      val numBytesToFree = args(1).asInstanceOf[Long]
+      assert(numBytesToFree > 0)
+      require(evictBlocksToFreeSpaceCalled.get() === DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED,
+        "bad test: evictBlocksToFreeSpace() variable was not reset")
+      evictBlocksToFreeSpaceCalled.set(numBytesToFree)
+      if (numBytesToFree <= mm.storageMemoryUsed) {
+        // We can evict enough blocks to fulfill the request for space
+        mm.releaseStorageMemory(numBytesToFree, mm.tungstenMemoryMode)
+        evictedBlocks += Tuple2(null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L))
+        numBytesToFree
+      } else {
+        // No blocks were evicted because eviction would not free enough space.
+        0L
       }
     }
-  }
 
   /**
    * Assert that [[MemoryStore.evictBlocksToFreeSpace]] is called with the given parameters.

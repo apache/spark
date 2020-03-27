@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.streaming.StreamingConf.BLOCK_INTERVAL
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, SystemClock}
 
@@ -100,14 +101,15 @@ private[streaming] class BlockGenerator(
   }
   import GeneratorState._
 
-  private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
-  require(blockIntervalMs > 0, s"'spark.streaming.blockInterval' should be a positive value")
+  private val blockIntervalMs = conf.get(BLOCK_INTERVAL)
+  require(blockIntervalMs > 0, s"'${BLOCK_INTERVAL.key}' should be a positive value")
 
   private val blockIntervalTimer =
     new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
   private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
-  private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
+  private val blockPushingThread =
+    new Thread() { override def run(): Unit = keepPushingBlocks() }
 
   @volatile private var currentBuffer = new ArrayBuffer[Any]
   @volatile private var state = Initialized
@@ -255,7 +257,7 @@ private[streaming] class BlockGenerator(
   }
 
   /** Keep pushing blocks to the BlockManager. */
-  private def keepPushingBlocks() {
+  private def keepPushingBlocks(): Unit = {
     logInfo("Started block pushing thread")
 
     def areBlocksBeingGenerated: Boolean = synchronized {
@@ -288,12 +290,12 @@ private[streaming] class BlockGenerator(
     }
   }
 
-  private def reportError(message: String, t: Throwable) {
+  private def reportError(message: String, t: Throwable): Unit = {
     logError(message, t)
     listener.onError(message, t)
   }
 
-  private def pushBlock(block: Block) {
+  private def pushBlock(block: Block): Unit = {
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)
   }

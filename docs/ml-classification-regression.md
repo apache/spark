@@ -2,6 +2,21 @@
 layout: global
 title: Classification and regression
 displayTitle: Classification and regression
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 
@@ -56,7 +71,7 @@ $\alpha$ and `regParam` corresponds to $\lambda$.
 
 <div data-lang="scala" markdown="1">
 
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegression).
+More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/classification/LogisticRegression.html).
 
 {% include_example scala/org/apache/spark/examples/ml/LogisticRegressionWithElasticNetExample.scala %}
 </div>
@@ -94,12 +109,12 @@ only available on the driver.
 
 <div data-lang="scala" markdown="1">
 
-[`LogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionTrainingSummary)
+[`LogisticRegressionTrainingSummary`](api/scala/org/apache/spark/ml/classification/LogisticRegressionTrainingSummary.html)
 provides a summary for a
-[`LogisticRegressionModel`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionModel).
+[`LogisticRegressionModel`](api/scala/org/apache/spark/ml/classification/LogisticRegressionModel.html).
 In the case of binary classification, certain additional metrics are
 available, e.g. ROC curve. The binary summary can be accessed via the
-`binarySummary` method. See [`BinaryLogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.BinaryLogisticRegressionTrainingSummary).
+`binarySummary` method. See [`BinaryLogisticRegressionTrainingSummary`](api/scala/org/apache/spark/ml/classification/BinaryLogisticRegressionTrainingSummary.html).
 
 Continuing the earlier example:
 
@@ -201,7 +216,7 @@ We use two feature transformers to prepare the data; these help index categories
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.classification.DecisionTreeClassifier).
+More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/classification/DecisionTreeClassifier.html).
 
 {% include_example scala/org/apache/spark/examples/ml/DecisionTreeClassificationExample.scala %}
 
@@ -246,7 +261,7 @@ We use two feature transformers to prepare the data; these help index categories
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.RandomForestClassifier) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/RandomForestClassifier.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/RandomForestClassifierExample.scala %}
 </div>
@@ -287,7 +302,7 @@ We use two feature transformers to prepare the data; these help index categories
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.GBTClassifier) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/GBTClassifier.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/GradientBoostedTreeClassifierExample.scala %}
 </div>
@@ -343,7 +358,7 @@ MLPC employs backpropagation for learning the model. We use the logistic loss fu
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.MultilayerPerceptronClassifier) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/MultilayerPerceptronClassifier.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/MultilayerPerceptronClassifierExample.scala %}
 </div>
@@ -388,7 +403,7 @@ in Spark ML supports binary classification with linear SVM. Internally, it optim
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.LinearSVC) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/LinearSVC.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/LinearSVCExample.scala %}
 </div>
@@ -432,7 +447,7 @@ The example below demonstrates how to load the
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.OneVsRest) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/OneVsRest.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/OneVsRestExample.scala %}
 </div>
@@ -463,16 +478,18 @@ it computes the conditional probability distribution of each feature given each 
 For prediction, it applies Bayes' theorem to compute the conditional probability distribution
 of each label given an observation.
 
-MLlib supports both [multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
-and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
+MLlib supports [Multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes),
+[Complement naive Bayes](https://people.csail.mit.edu/jrennie/papers/icml03-nb.pdf),
+[Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html)
+and [Gaussian naive Bayes](https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes).
 
 *Input data*:
-These models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+These Multinomial, Complement and Bernoulli models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
 Within that context, each observation is a document and each feature represents a term.
-A feature's value is the frequency of the term (in multinomial Naive Bayes) or
+A feature's value is the frequency of the term (in Multinomial or Complement Naive Bayes) or
 a zero or one indicating whether the term was found in the document (in Bernoulli Naive Bayes).
-Feature values must be *non-negative*. The model type is selected with an optional parameter
-"multinomial" or "bernoulli" with "multinomial" as the default.
+Feature values for Multinomial and Bernoulli models must be *non-negative*. The model type is selected with an optional parameter
+"multinomial", "complement", "bernoulli" or "gaussian", with "multinomial" as the default.
 For document classification, the input feature vectors should usually be sparse vectors.
 Since the training data is only used once, it is not necessary to cache it.
 
@@ -484,7 +501,7 @@ setting the parameter $\lambda$ (default to $1.0$).
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.NaiveBayes) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/NaiveBayes.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/NaiveBayesExample.scala %}
 </div>
@@ -513,6 +530,42 @@ Refer to the [R API docs](api/R/spark.naiveBayes.html) for more details.
 </div>
 
 
+## Factorization machines classifier
+
+For more background and more details about the implementation of factorization machines,
+refer to the [Factorization Machines section](ml-classification-regression.html#factorization-machines).
+
+**Examples**
+
+The following examples load a dataset in LibSVM format, split it into training and test sets,
+train on the first dataset, and then evaluate on the held-out test set.
+We scale features to be between 0 and 1 to prevent the exploding gradient problem.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/FMClassifier.html) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/FMClassifierExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/FMClassifier.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaFMClassifierExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.FMClassifier) for more details.
+
+{% include_example python/ml/fm_classifier_example.py %}
+</div>
+
+</div>
+
+
 # Regression
 
 ## Linear regression
@@ -532,7 +585,7 @@ regression model and extracting model summary statistics.
 
 <div data-lang="scala" markdown="1">
 
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.regression.LinearRegression).
+More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/regression/LinearRegression.html).
 
 {% include_example scala/org/apache/spark/examples/ml/LinearRegressionWithElasticNetExample.scala %}
 </div>
@@ -653,7 +706,7 @@ others.
     <tr>
       <td>Gamma</td>
       <td>Continuous</td>
-      <td>Inverse*, Idenity, Log</td>
+      <td>Inverse*, Identity, Log</td>
     </tr>
     <tr>
       <td>Tweedie</td>
@@ -673,7 +726,7 @@ function and extracting model summary statistics.
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/GeneralizedLinearRegression.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/GeneralizedLinearRegressionExample.scala %}
 </div>
@@ -715,7 +768,7 @@ We use a feature transformer to index categorical features, adding metadata to t
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.regression.DecisionTreeRegressor).
+More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/regression/DecisionTreeRegressor.html).
 
 {% include_example scala/org/apache/spark/examples/ml/DecisionTreeRegressionExample.scala %}
 </div>
@@ -757,7 +810,7 @@ We use a feature transformer to index categorical features, adding metadata to t
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.RandomForestRegressor) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/RandomForestRegressor.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/RandomForestRegressorExample.scala %}
 </div>
@@ -798,7 +851,7 @@ be true in general.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GBTRegressor) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/GBTRegressor.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/GradientBoostedTreeRegressorExample.scala %}
 </div>
@@ -892,7 +945,7 @@ The implementation matches the result from R's survival function
 
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.AFTSurvivalRegression) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/AFTSurvivalRegression.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/AFTSurvivalRegressionExample.scala %}
 </div>
@@ -972,7 +1025,7 @@ is treated as piecewise linear function. The rules for prediction therefore are:
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [`IsotonicRegression` Scala docs](api/scala/index.html#org.apache.spark.ml.regression.IsotonicRegression) for details on the API.
+Refer to the [`IsotonicRegression` Scala docs](api/scala/org/apache/spark/ml/regression/IsotonicRegression.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/IsotonicRegressionExample.scala %}
 </div>
@@ -997,6 +1050,43 @@ Refer to the [`IsotonicRegression` R API docs](api/R/spark.isoreg.html) for more
 </div>
 
 </div>
+
+
+## Factorization machines regressor
+
+For more background and more details about the implementation of factorization machines,
+refer to the [Factorization Machines section](ml-classification-regression.html#factorization-machines).
+
+**Examples**
+
+The following examples load a dataset in LibSVM format, split it into training and test sets,
+train on the first dataset, and then evaluate on the held-out test set.
+We scale features to be between 0 and 1 to prevent the exploding gradient problem.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/FMRegressor.html) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/FMRegressorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/FMRegressor.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaFMRegressorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.FMRegressor) for more details.
+
+{% include_example python/ml/fm_regressor_example.py %}
+</div>
+
+</div>
+
 
 # Linear methods
 
@@ -1026,6 +1116,40 @@ to a [ridge
 regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model.
 We implement Pipelines API for both linear regression and logistic
 regression with elastic net regularization.
+
+# Factorization Machines
+
+[Factorization Machines](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) are able to estimate interactions
+between features even in problems with huge sparsity (like advertising and recommendation system).
+The `spark.ml` implementation supports factorization machines for binary classification and for regression.
+
+Factorization machines formula is:
+
+$$
+\hat{y} = w_0 + \sum\limits^n_{i-1} w_i x_i +
+  \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
+$$
+
+The first two terms denote intercept and linear term (same as in linear regression),
+and the last term denotes pairwise interactions term. $$v_i$$ describes the i-th variable
+with k factors.
+
+FM can be used for regression and optimization criterion is mean square error. FM also can be used for
+binary classification through sigmoid function. The optimization criterion is logistic loss.
+
+The pairwise interactions can be reformulated:
+
+$$
+\sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
+  = \frac{1}{2}\sum\limits^k_{f=1}
+    \left(\left( \sum\limits^n_{i=1}v_{i,f}x_i \right)^2 -
+    \sum\limits^n_{i=1}v_{i,f}^2x_i^2 \right)
+$$
+
+This equation has only linear complexity in both k and n - i.e. its computation is in $$O(kn)$$.
+
+In general, in order to prevent the exploding gradient problem, it is best to scale continuous features to be between 0 and 1,
+or bin the continuous features and one-hot encode them.
 
 # Decision trees
 

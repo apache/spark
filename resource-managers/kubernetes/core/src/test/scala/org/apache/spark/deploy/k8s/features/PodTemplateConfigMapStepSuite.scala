@@ -23,6 +23,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.util.Utils
 
 class PodTemplateConfigMapStepSuite extends SparkFunSuite {
 
@@ -46,9 +47,9 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite {
       .set(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE, templateFile.getAbsolutePath)
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
 
-    val writer = new PrintWriter(templateFile)
-    writer.write("pod-template-contents")
-    writer.close()
+    Utils.tryWithResource(new PrintWriter(templateFile)) { writer =>
+      writer.write("pod-template-contents")
+    }
 
     val step = new PodTemplateConfigMapStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())

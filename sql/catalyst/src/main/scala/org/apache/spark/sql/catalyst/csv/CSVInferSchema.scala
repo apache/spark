@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import java.util.Locale
+
 import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.types._
 
@@ -29,10 +32,15 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private val timestampParser = TimestampFormatter(
     options.timestampFormat,
-    options.timeZone,
-    options.locale)
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    needVarLengthSecondFraction = true)
 
-  private val decimalParser = {
+  private val decimalParser = if (options.locale == Locale.US) {
+    // Special handling the default locale for backward compatibility
+    s: String => new java.math.BigDecimal(s)
+  } else {
     ExprUtils.getDecimalParser(options.locale)
   }
 

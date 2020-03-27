@@ -23,7 +23,6 @@ import java.util.Random
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
-import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.commons.io.FileUtils
@@ -489,8 +488,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   }
 
   test("implicit feedback regression") {
-    val trainingWithNeg = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
-    val trainingWithZero = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
+    val trainingWithNeg = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
+    val trainingWithZero = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
     val modelWithNeg =
       trainALS(trainingWithNeg, rank = 1, maxIter = 5, regParam = 0.01, implicitPrefs = true)
     val modelWithZero =
@@ -662,11 +661,12 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first().getSeq[Float](1)
         } { (ex, act, df, enc) =>
+          // With AQE on/off, the order of result may be different. Here sortby the result.
           val expected = ex.transform(df).selectExpr("prediction")
-            .first().getFloat(0)
+            .sort("prediction").first().getFloat(0)
           testTransformerByGlobalCheckFunc(df, act, "prediction") {
             case rows: Seq[Row] =>
-              expected ~== rows.head.getFloat(0) absTol 1e-6
+              expected ~== rows.sortBy(_.getFloat(0)).head.getFloat(0) absTol 1e-6
           }(enc)
         }
     }
@@ -696,12 +696,14 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     withClue("transform should fail when ids exceed integer range. ") {
       val model = als.fit(df)
       def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
-        assert(intercept[SparkException] {
-          model.transform(dataFrame).first
-        }.getMessage.contains(msg))
-        assert(intercept[StreamingQueryException] {
+        val e1 = intercept[SparkException] {
+          model.transform(dataFrame).collect()
+        }
+        TestUtils.assertExceptionMsg(e1, msg)
+        val e2 = intercept[StreamingQueryException] {
           testTransformer[A](dataFrame, model, "prediction") { _ => }
-        }.getMessage.contains(msg))
+        }
+        TestUtils.assertExceptionMsg(e2, msg)
       }
       testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
         df("item")))
@@ -915,6 +917,38 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val itemSubsetRecs = model.recommendForItemSubset(itemSubset, k)
     val allItemRecs = model.recommendForAllItems(k).as[(Int, Seq[(Int, Float)])].collect().toMap
     checkRecommendations(itemSubsetRecs, allItemRecs, "user")
+  }
+
+  test("ALS should not introduce unnecessary shuffle") {
+    def getShuffledDependencies(rdd: RDD[_]): Seq[ShuffleDependency[_, _, _]] = {
+      rdd.dependencies.flatMap {
+        case s: ShuffleDependency[_, _, _] =>
+          Seq(s) ++ getShuffledDependencies(s.rdd)
+        case o =>
+          Seq.empty ++ getShuffledDependencies(o.rdd)
+      }
+    }
+
+    val spark = this.spark
+    import spark.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    val data = ratings.toDF
+    val model = new ALS()
+      .setMaxIter(2)
+      .setImplicitPrefs(true)
+      .setCheckpointInterval(-1)
+      .fit(data)
+
+    val userFactors = model.userFactors
+    val itemFactors = model.itemFactors
+    val shuffledUserFactors = getShuffledDependencies(userFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("userFactors")
+    }
+    val shuffledItemFactors = getShuffledDependencies(itemFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("itemFactors")
+    }
+    assert(shuffledUserFactors.size == 0)
+    assert(shuffledItemFactors.size == 0)
   }
 
   private def checkRecommendations(

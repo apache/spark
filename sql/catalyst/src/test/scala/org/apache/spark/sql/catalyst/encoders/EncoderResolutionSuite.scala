@@ -80,7 +80,7 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = Seq('arr.array(StringType))
     assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
       s"""
-         |Cannot up cast array element from string to bigint as it may truncate
+         |Cannot up cast array element from string to bigint.
          |The type path of the target object is:
          |- array element class: "scala.Long"
          |- field (class: "scala.Array", name: "arr")
@@ -196,13 +196,28 @@ class EncoderResolutionSuite extends PlanTest {
     encoder.resolveAndBind(attrs)
   }
 
+  test("SPARK-28497: complex type is not compatible with string encoder schema") {
+    val encoder = ExpressionEncoder[String]
+
+    Seq('a.struct('x.long), 'a.array(StringType), 'a.map(StringType, StringType)).foreach { attr =>
+      val attrs = Seq(attr)
+      assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+        s"""
+           |Cannot up cast `a` from ${attr.dataType.catalogString} to string.
+           |The type path of the target object is:
+           |- root class: "java.lang.String"
+           |You can either add an explicit cast to the input data or choose a higher precision type
+        """.stripMargin.trim + " of the field in the target object")
+    }
+  }
+
   test("throw exception if real type is not compatible with encoder schema") {
     val msg1 = intercept[AnalysisException] {
       ExpressionEncoder[StringIntClass].resolveAndBind(Seq('a.string, 'b.long))
     }.message
     assert(msg1 ==
       s"""
-         |Cannot up cast `b` from bigint to int as it may truncate
+         |Cannot up cast `b` from bigint to int.
          |The type path of the target object is:
          |- field (class: "scala.Int", name: "b")
          |- root class: "org.apache.spark.sql.catalyst.encoders.StringIntClass"
@@ -215,7 +230,7 @@ class EncoderResolutionSuite extends PlanTest {
     }.message
     assert(msg2 ==
       s"""
-         |Cannot up cast `b`.`b` from decimal(38,18) to bigint as it may truncate
+         |Cannot up cast `b`.`b` from decimal(38,18) to bigint.
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.catalyst.encoders.StringLongClass", name: "b")

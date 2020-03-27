@@ -1,0 +1,29 @@
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.3
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+cast strings to intervals:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+prepare string w/ interval                          448            469          20          2.2         447.6       1.0X
+prepare string w/o interval                         405            409           4          2.5         404.6       1.1X
+1 units w/ interval                                 321            328           6          3.1         321.4       1.4X
+1 units w/o interval                                303            307           4          3.3         303.1       1.5X
+2 units w/ interval                                 445            458          12          2.2         444.6       1.0X
+2 units w/o interval                                416            424          10          2.4         416.2       1.1X
+3 units w/ interval                                1006           1012           8          1.0        1006.4       0.4X
+3 units w/o interval                               1240           1249           8          0.8        1239.6       0.4X
+4 units w/ interval                                1295           1418         106          0.8        1295.4       0.3X
+4 units w/o interval                               1172           1188          15          0.9        1171.6       0.4X
+5 units w/ interval                                1326           1335          11          0.8        1325.6       0.3X
+5 units w/o interval                               1309           1336          44          0.8        1308.7       0.3X
+6 units w/ interval                                1441           1464          29          0.7        1441.0       0.3X
+6 units w/o interval                               1350           1369          17          0.7        1350.1       0.3X
+7 units w/ interval                                1606           1669          99          0.6        1605.6       0.3X
+7 units w/o interval                               1546           1557          12          0.6        1546.3       0.3X
+8 units w/ interval                                1771           1875         120          0.6        1770.6       0.3X
+8 units w/o interval                               1775           1789          13          0.6        1775.2       0.3X
+9 units w/ interval                                2126           2757         849          0.5        2126.4       0.2X
+9 units w/o interval                               2053           2070          21          0.5        2053.3       0.2X
+10 units w/ interval                               2209           2243          30          0.5        2209.1       0.2X
+10 units w/o interval                              2400           2702         365          0.4        2400.2       0.2X
+11 units w/ interval                               2616           2699          72          0.4        2616.5       0.2X
+11 units w/o interval                              3218           3380         195          0.3        3218.4       0.1X
+
