@@ -213,7 +213,6 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(rprof.resourcesEqual(rprof2), "resource profile resourcesEqual not working")
   }
 
-
   test("Test ExecutorResourceRequests memory helpers") {
     val rprof = new ResourceProfileBuilder()
     val ereqs = new ExecutorResourceRequests()
