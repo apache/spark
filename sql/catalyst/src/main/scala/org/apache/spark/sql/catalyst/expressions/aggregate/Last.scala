@@ -115,7 +115,5 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
 
   override lazy val evaluateExpression: AttributeReference = last
 
-  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("last")
-
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 }

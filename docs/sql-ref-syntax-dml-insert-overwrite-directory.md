@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 ### Description
-The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using Spark native format. The inserted rows can be specified by value expressions or result from a query.
+The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using a given Spark file format. The inserted rows can be specified by value expressions or result from a query.
 
 ### Syntax
 {% highlight sql %}
@@ -39,13 +39,13 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 <dl>
   <dt><code><em>file_format</em></code></dt>
   <dd>
-  Specifies the file format to use for the insert. Valid options are <code>TEXT</code>, <code>CSV</code>, <code>JSON</code>, <code>JDBC</code>, <code>PARQUET</code>, <code>ORC</code>, <code>HIVE</code>, <code>DELTA</code>, <code>LIBSVM</code>, or a fully qualified class name of a custom implementation of <code>org.apache.spark.sql.sources.DataSourceRegister</code>.
+  Specifies the file format to use for the insert. Valid options are <code>TEXT</code>, <code>CSV</code>, <code>JSON</code>, <code>JDBC</code>, <code>PARQUET</code>, <code>ORC</code>, <code>HIVE</code>, <code>LIBSVM</code>, or a fully qualified class name of a custom implementation of <code>org.apache.spark.sql.execution.datasources.FileFormat</code>.
   </dd>
 </dl>
 
 <dl>
   <dt><code><em>OPTIONS ( key = val [ , ... ] )</em></code></dt>
-  <dd>Specifies one or more table property key and value pairs.</dd>
+  <dd>Specifies one or more options for the writing of the file format.</dd>
 </dl>
 
 <dl>

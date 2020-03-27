@@ -257,6 +257,7 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateTable: without USING clause") {
+    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key, "false")
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val testCatalog = catalog("testcat").asTableCatalog
@@ -319,6 +320,37 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("CreateTableAsSelect: do not double execute on collect(), take() and other queries") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+      case (catalog, identifier) =>
+        val df = spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+
+        df.collect()
+        df.take(5)
+        df.tail(5)
+        df.where("true").collect()
+        df.where("true").take(5)
+        df.where("true").tail(5)
+
+        val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        assert(table.name == identifier)
+        assert(table.partitioning.isEmpty)
+        assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
+        assert(table.schema == new StructType()
+          .add("id", LongType)
+          .add("data", StringType))
+
+        val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
+    }
+  }
+
   test("ReplaceTableAsSelect: basic v2 implementation.") {
     val basicCatalog = catalog("testcat").asTableCatalog
     val atomicCatalog = catalog("testcat_atomic").asTableCatalog
@@ -343,6 +375,43 @@ class DataSourceV2SQLSuite
         checkAnswer(
           spark.internalCreateDataFrame(rdd, replacedTable.schema),
           spark.table("source").select("id"))
+    }
+  }
+
+  Seq("REPLACE", "CREATE OR REPLACE").foreach { cmd =>
+    test(s"ReplaceTableAsSelect: do not double execute $cmd on collect()") {
+      val basicCatalog = catalog("testcat").asTableCatalog
+      val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+      val basicIdentifier = "testcat.table_name"
+      val atomicIdentifier = "testcat_atomic.table_name"
+
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (catalog, identifier) =>
+          spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+          val originalTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+          val df = spark.sql(s"$cmd TABLE $identifier USING foo AS SELECT id FROM source")
+
+          df.collect()
+          df.take(5)
+          df.tail(5)
+          df.where("true").collect()
+          df.where("true").take(5)
+          df.where("true").tail(5)
+
+          val replacedTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+          assert(replacedTable != originalTable, "Table should have been replaced.")
+          assert(replacedTable.name == identifier)
+          assert(replacedTable.partitioning.isEmpty)
+          assert(replacedTable.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
+          assert(replacedTable.schema == new StructType().add("id", LongType))
+
+          val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
+          checkAnswer(
+            spark.internalCreateDataFrame(rdd, replacedTable.schema),
+            spark.table("source").select("id"))
+      }
     }
   }
 
@@ -613,6 +682,7 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateTableAsSelect: without USING clause") {
+    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key, "false")
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val testCatalog = catalog("testcat").asTableCatalog

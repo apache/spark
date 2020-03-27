@@ -459,12 +459,11 @@ class DataStreamReader(OptionUtils):
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.time.format.DateTimeFormatter``. This
-                           applies to date type. If None is set, it uses the
+                           follow the formats at `datetime pattern`_.
+                           This applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
-                                Custom date formats follow the formats at
-                                ``java.time.format.DateTimeFormatter``.
+                                Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
@@ -490,7 +489,9 @@ class DataStreamReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
-        .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
+        .. _partition discovery:
+          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
+        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -671,12 +672,11 @@ class DataStreamReader(OptionUtils):
         :param negativeInf: sets the string representation of a negative infinity value. If None
                             is set, it uses the default value, ``Inf``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.time.format.DateTimeFormatter``. This
-                           applies to date type. If None is set, it uses the
+                           follow the formats at `datetime pattern`_.
+                           This applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
-                                Custom date formats follow the formats at
-                                ``java.time.format.DateTimeFormatter``.
+                                Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is

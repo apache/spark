@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -33,7 +33,7 @@ HAVING boolean_expression
   <dt><code><em>boolean_expression</em></code></dt>
   <dd>
     Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
-    more expressions may be combined together using the logical 
+    more expressions may be combined together using the logical
     operators ( <code>AND</code>, <code>OR</code> ).<br><br>
 
     <b>Note</b><br>
@@ -70,7 +70,7 @@ SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING city = 'Fremo
 
 -- `HAVING` clause referring to aggregate function.
 SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING sum(quantity) > 15;
- 
+
   +-------+---+
   |   city|sum|
   +-------+---+
@@ -100,7 +100,7 @@ SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING max(quantity)
 
 -- `HAVING` clause referring to constant expression.
 SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING 1 > 0 ORDER BY city;
-  
+
   +--------+---+
   |    city|sum|
   +--------+---+
@@ -116,7 +116,7 @@ SELECT sum(quantity) AS sum FROM dealer HAVING sum(quantity) > 10;
   +---+
   | 78|
   +---+
- 
+
 {% endhighlight %}
 
 ### Related Clauses

@@ -1699,4 +1699,18 @@ class JDBCSuite extends QueryTest
     assert(JdbcDialects.get("jdbc:teradata://localhost/db") === TeradataDialect)
     assert(JdbcDialects.get("jdbc:Teradata://localhost/db") === TeradataDialect)
   }
+
+  test("SQLContext.jdbc (deprecated)") {
+    val sqlContext = spark.sqlContext
+    var jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE")
+    checkAnswer(jdbcDF, Row("fred", 1) :: Row("mary", 2) :: Row ("joe 'foo' \"bar\"", 3) :: Nil)
+
+    jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3)
+    checkNumPartitions(jdbcDF, 3)
+    checkAnswer(jdbcDF, Row("fred", 1) :: Row("mary", 2) :: Row ("joe 'foo' \"bar\"", 3) :: Nil)
+
+    val parts = Array[String]("THEID = 2")
+    jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts)
+    checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
+  }
 }

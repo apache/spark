@@ -42,7 +42,8 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     options.timestampFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT,
+    needVarLengthSecondFraction = true)
 
   /**
    * Infer the type of a collection of json records in three stages:

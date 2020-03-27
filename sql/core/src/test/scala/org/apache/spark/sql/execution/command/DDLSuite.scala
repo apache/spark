@@ -2084,6 +2084,27 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-31163: acl/permission should handle non-existed path when truncating table") {
+    withSQLConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL.key -> "false") {
+      withTable("tab1") {
+        sql("CREATE TABLE tab1 (col1 STRING, col2 INT) USING parquet PARTITIONED BY (col2)")
+        sql("INSERT INTO tab1 SELECT 'one', 1")
+        checkAnswer(spark.table("tab1"), Row("one", 1))
+        val part = spark.sessionState.catalog.listPartitions(TableIdentifier("tab1")).head
+        val path = new File(part.location.getPath)
+        sql("TRUNCATE TABLE tab1")
+        // simulate incomplete/unsuccessful truncate
+        assert(path.exists())
+        path.delete()
+        assert(!path.exists())
+        // execute without java.io.FileNotFoundException
+        sql("TRUNCATE TABLE tab1")
+        // partition path should be re-created
+        assert(path.exists())
+      }
+    }
+  }
+
   test("create temporary view with mismatched schema") {
     withTable("tab1") {
       spark.range(10).write.saveAsTable("tab1")

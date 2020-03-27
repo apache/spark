@@ -28,10 +28,9 @@ object ShufflePartitionsUtil extends Logging {
   final val MERGED_PARTITION_FACTOR = 1.2
 
   /**
-   * Coalesce the same range of partitions (`firstPartitionIndex` to `lastPartitionIndex`, the
-   * start is inclusive and the end is exclusive) from multiple shuffles. This method assumes that
-   * all the shuffles have the same number of partitions, and the partitions of same index will be
-   * read together by one task.
+   * Coalesce the partitions from multiple shuffles. This method assumes that all the shuffles
+   * have the same number of partitions, and the partitions of same index will be read together
+   * by one task.
    *
    * The strategy used to determine the number of coalesced partitions is described as follows.
    * To determine the number of coalesced partitions, we have a target size for a coalesced
@@ -56,10 +55,8 @@ object ShufflePartitionsUtil extends Logging {
    */
   def coalescePartitions(
       mapOutputStatistics: Array[MapOutputStatistics],
-      firstPartitionIndex: Int,
-      lastPartitionIndex: Int,
       advisoryTargetSize: Long,
-      minNumPartitions: Int = 1): Seq[ShufflePartitionSpec] = {
+      minNumPartitions: Int): Seq[ShufflePartitionSpec] = {
     // If `minNumPartitions` is very large, it is possible that we need to use a value less than
     // `advisoryTargetSize` as the target size of a coalesced task.
     val totalPostShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId.sum).sum
@@ -87,11 +84,12 @@ object ShufflePartitionsUtil extends Logging {
       "There should be only one distinct value of the number of shuffle partitions " +
         "among registered Exchange operators.")
 
+    val numPartitions = distinctNumShufflePartitions.head
     val partitionSpecs = ArrayBuffer[CoalescedPartitionSpec]()
-    var latestSplitPoint = firstPartitionIndex
+    var latestSplitPoint = 0
     var coalescedSize = 0L
-    var i = firstPartitionIndex
-    while (i < lastPartitionIndex) {
+    var i = 0
+    while (i < numPartitions) {
       // We calculate the total size of i-th shuffle partitions from all shuffles.
       var totalSizeOfCurrentPartition = 0L
       var j = 0
@@ -112,7 +110,7 @@ object ShufflePartitionsUtil extends Logging {
       }
       i += 1
     }
-    partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, lastPartitionIndex)
+    partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, numPartitions)
 
     partitionSpecs
   }

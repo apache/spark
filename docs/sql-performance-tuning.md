@@ -186,3 +186,70 @@ The "REPARTITION_BY_RANGE" hint must have column names and a partition number is
     SELECT /*+ REPARTITION(3, c) */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t
+
+## Adaptive Query Execution
+Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan. AQE is disabled by default. Spark SQL can use the umbrella configuration of `spark.sql.adaptive.enabled` to control whether turn it on/off. As of Spark 3.0, there are three major features in AQE, including coalescing post-shuffle partitions, converting sort-merge join to broadcast join, and skew join optimization.
+
+### Coalescing Post Shuffle Partitions
+This feature coalesces the post shuffle partitions based on the map output statistics when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.coalescePartitions.enabled` configurations are true. This feature simplifies the tuning of shuffle partition number when running queries. You do not need to set a proper shuffle partition number to fit your dataset. Spark can pick the proper shuffle partition number at runtime once you set a large enough initial number of shuffle partitions via `spark.sql.adaptive.coalescePartitions.initialPartitionNum` configuration.
+ <table class="table">
+   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+   <tr>
+     <td><code>spark.sql.adaptive.coalescePartitions.enabled</code></td>
+     <td>true</td>
+     <td>
+       When true and <code>spark.sql.adaptive.enabled</code> is true, Spark will coalesce contiguous shuffle partitions according to the target size (specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>), to avoid too many small tasks.
+     </td>
+   </tr>
+   <tr>
+     <td><code>spark.sql.adaptive.coalescePartitions.minPartitionNum</code></td>
+     <td>Default Parallelism</td>
+     <td>
+       The minimum number of shuffle partitions after coalescing. If not set, the default value is the default parallelism of the Spark cluster. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
+     </td>
+   </tr>
+   <tr>
+     <td><code>spark.sql.adaptive.coalescePartitions.initialPartitionNum</code></td>
+     <td>200</td>
+     <td>
+       The initial number of shuffle partitions before coalescing. By default it equals to <code>spark.sql.shuffle.partitions</code>. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
+     </td>
+   </tr>
+   <tr>
+     <td><code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code></td>
+     <td>64 MB</td>
+     <td>
+       The advisory size in bytes of the shuffle partition during adaptive optimization (when <code>spark.sql.adaptive.enabled</code> is true). It takes effect when Spark coalesces small shuffle partitions or splits skewed shuffle partition.
+     </td>
+   </tr>
+ </table>
+ 
+### Converting sort-merge join to broadcast join
+AQE converts sort-merge join to broadcast hash join when the runtime statistics of any join side is smaller than the broadcast hash join threshold. This is not as efficient as planning a broadcast hash join in the first place, but it's better than keep doing the sort-merge join, as we can save the sorting of both the join sides, and read shuffle files locally to save network traffic(if `spark.sql.adaptive.localShuffleReader.enabled` is true)
+
+### Optimizing Skew Join
+Data skew can severely downgrade the performance of join queries. This feature dynamically handles skew in sort-merge join by splitting (and replicating if needed) skewed tasks into roughly evenly sized tasks. It takes effect when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.skewJoin.enabled` configurations are enabled.
+  <table class="table">
+     <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+     <tr>
+       <td><code>spark.sql.adaptive.skewJoin.enabled</code></td>
+       <td>true</td>
+       <td>
+         When true and <code>spark.sql.adaptive.enabled</code> is true, Spark dynamically handles skew in sort-merge join by splitting (and replicating if needed) skewed partitions.
+       </td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code></td>
+       <td>10</td>
+       <td>
+         A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewedPartitionThresholdInBytes</code>.
+       </td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code></td>
+       <td>256MB</td>
+       <td>
+         A partition is considered as skewed if its size in bytes is larger than this threshold and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code> multiplying the median partition size. Ideally this config should be set larger than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
+       </td>
+     </tr>
+   </table>
