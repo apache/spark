@@ -509,7 +509,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  test("SPARK-31238: compatibility with Spark 2.4 in reading timestamps") {
+  test("SPARK-31284: compatibility with Spark 2.4 in reading timestamps") {
     Seq(false, true).foreach { vectorized =>
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         checkAnswer(
@@ -519,7 +519,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  test("SPARK-31238: rebasing timestamps in write") {
+  test("SPARK-31284: rebasing timestamps in write") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
       Seq("1001-01-01 01:02:03.123456").toDF("tsS")
