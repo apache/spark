@@ -138,8 +138,7 @@ class FileStreamSourceLog(
     files.lastOption.foreach { lastEntry =>
       val latestBatchId = lastEntry.batchId
       val latestCompactedBatchId = getAllValidBatches(latestBatchId, compactInterval)(0)
-      if (latestCompactedBatchId > 0 &&
-          (latestBatchId - latestCompactedBatchId) < PREV_NUM_BATCHES_TO_READ_IN_RESTORE) {
+      if ((latestBatchId - latestCompactedBatchId) < PREV_NUM_BATCHES_TO_READ_IN_RESTORE) {
         val logsForLatestCompactedBatch = files.filter { entry =>
           entry.batchId == latestCompactedBatchId
         }

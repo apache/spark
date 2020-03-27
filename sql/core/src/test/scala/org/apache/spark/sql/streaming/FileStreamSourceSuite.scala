@@ -1379,6 +1379,17 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
 
     withSQLConf(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "5") {
+      def verifyBatchAvailabilityInCache(
+          fileEntryCache: java.util.LinkedHashMap[Long, Array[FileEntry]],
+          expectNotAvailable: Seq[Int],
+          expectAvailable: Seq[Int]): Unit = {
+        expectNotAvailable.foreach { batchId =>
+          assert(!fileEntryCache.containsKey(batchId.toLong))
+        }
+        expectAvailable.foreach { batchId =>
+          assert(fileEntryCache.containsKey(batchId.toLong))
+        }
+      }
       withTempDir { chk =>
         val _fileEntryCache = PrivateMethod[java.util.LinkedHashMap[Long, Array[FileEntry]]](
           Symbol("fileEntryCache"))
@@ -1393,7 +1404,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val allFiles = metadata.allFiles()
 
         // batch 4 is a compact batch which logs would be cached in fileEntryCache
-        assert(fileEntryCache.containsKey(4L))
+        verifyBatchAvailabilityInCache(fileEntryCache, Seq(0, 1, 2, 3), Seq(4))
 
         val metadata2 = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark,
           chk.getCanonicalPath)
@@ -1401,11 +1412,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
         // allFiles() doesn't restore the logs for the latest compact batch into file entry cache
         assert(metadata2.allFiles() === allFiles)
-        assert(!fileEntryCache2.containsKey(4L))
+        verifyBatchAvailabilityInCache(fileEntryCache2, Seq(0, 1, 2, 3, 4), Seq.empty)
 
         // restore() will restore the logs for the latest compact batch into file entry cache
         assert(metadata2.restore() === allFiles)
-        assert(fileEntryCache2.containsKey(4L))
+        verifyBatchAvailabilityInCache(fileEntryCache2, Seq(0, 1, 2, 3), Seq(4))
 
         (5 to 5 + FileStreamSourceLog.PREV_NUM_BATCHES_TO_READ_IN_RESTORE).foreach { batchId =>
           metadata2.add(batchId, createEntries(batchId, 100))
@@ -1420,7 +1431,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         // if the latest batch is too far from latest compact batch, because it's unlikely Spark
         // will request the batch for the start point.
         assert(metadata2.restore() === allFiles2)
-        assert(!fileEntryCache3.containsKey(4L))
+        verifyBatchAvailabilityInCache(fileEntryCache3, Seq(0, 1, 2, 3, 4), Seq.empty)
       }
     }
   }
