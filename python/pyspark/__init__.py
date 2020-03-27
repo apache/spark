@@ -55,6 +55,12 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.resourceinformation import ResourceInformation
+from pyspark.taskresourcerequest import TaskResourceRequest
+from pyspark.executorresourcerequest import ExecutorResourceRequest
+from pyspark.taskresourcerequests import TaskResourceRequests
+from pyspark.executorresourcerequests import ExecutorResourceRequests
+from pyspark.resourceprofilebuilder import ResourceProfileBuilder
+from pyspark.resourceprofile import ResourceProfile
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.status import *
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
@@ -120,4 +126,6 @@ __all__ = [
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
     "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
     "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "ResourceInformation",
+    "TaskResourceRequest", "TaskResourceRequests", "ExecutorResourceRequest",
+    "ExecutorResourceRequests", "ResourceProfile"
 ]

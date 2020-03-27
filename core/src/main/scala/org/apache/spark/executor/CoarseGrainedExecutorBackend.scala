@@ -347,7 +347,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId))
-      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
+      // we have to add the pyspark memory conf into SparkConfs so the PythonRunner can
+      // pick it up properly
+      val pysparkMemoryConf = cfg.resourceProfile.getInternalPysparkMemoryConfs
+      val props = cfg.sparkProperties ++
+        Seq[(String, String)](("spark.app.id", arguments.appId)) ++ pysparkMemoryConf
       fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.

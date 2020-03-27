@@ -25,6 +25,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
 /**
  * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
@@ -48,6 +49,7 @@ import org.apache.spark.rdd.RDD
  * @param appAttemptId attempt id of the app this task belongs to
  * @param isBarrier whether this task belongs to a barrier stage. Spark must launch all the tasks
  *                  at the same time for a barrier stage.
+ * @param resourceProfileId the id of the ResourceProfile used with this task
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,
@@ -60,9 +62,10 @@ private[spark] class ShuffleMapTask(
     jobId: Option[Int] = None,
     appId: Option[String] = None,
     appAttemptId: Option[String] = None,
-    isBarrier: Boolean = false)
+    isBarrier: Boolean = false,
+    resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
   extends Task[MapStatus](stageId, stageAttemptId, partition.index, localProperties,
-    serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
+    serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier, resourceProfileId)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */

@@ -275,6 +275,8 @@ class BarrierTaskContext private[spark] (
     resources().asJava
   }
 
+  override def resourceProfileId(): Int = taskContext.resourceProfileId()
+
   override private[spark] def killTaskIfInterrupted(): Unit = taskContext.killTaskIfInterrupted()
 
   override private[spark] def getKillReason(): Option[String] = taskContext.getKillReason()

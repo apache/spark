@@ -29,6 +29,7 @@ import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
 
@@ -54,7 +55,8 @@ private[spark] class TaskContextImpl(
     @transient private val metricsSystem: MetricsSystem,
     // The default value is only used in tests.
     override val taskMetrics: TaskMetrics = TaskMetrics.empty,
-    override val resources: Map[String, ResourceInformation] = Map.empty)
+    override val resources: Map[String, ResourceInformation] = Map.empty,
+    override val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
   extends TaskContext
   with Logging {
 

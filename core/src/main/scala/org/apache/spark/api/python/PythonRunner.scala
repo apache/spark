@@ -35,6 +35,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
+import org.apache.spark.resource.ResourceProfile.{getPysparkMemoryFromInternalConfs, DEFAULT_RESOURCE_PROFILE_ID}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
@@ -85,9 +86,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   private val conf = SparkEnv.get.conf
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
-  // each python worker gets an equal part of the allocation. the worker pool will grow to the
-  // number of concurrent tasks, which is determined by the number of cores in this executor.
-  private val memoryMb = conf.get(PYSPARK_EXECUTOR_MEMORY).map(_ / conf.get(EXECUTOR_CORES))
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
@@ -105,6 +103,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
   // Authentication helper used when serving method calls via socket from Python side.
   private lazy val authHelper = new SocketAuthHelper(conf)
+
+  // each python worker gets an equal part of the allocation. the worker pool will grow to the
+  // number of concurrent tasks, which is determined by the number of cores in this executor.
+  private def getWorkerMemoryMb(mem: Option[Long]): Option[Long] = {
+    mem.map(_ / conf.get(EXECUTOR_CORES))
+  }
 
   def compute(
       inputIterator: Iterator[IN],
@@ -124,8 +128,22 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
-    if (memoryMb.isDefined) {
-      envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", memoryMb.get.toString)
+    // Check to see if the pyspark memory conf set for the resource profile id being used.
+    // Not all cluster managers are supported so fall back to the application level config
+    // when its the default profile id.
+    val rpId = context.resourceProfileId()
+    val memoryMb = if (rpId == DEFAULT_RESOURCE_PROFILE_ID) {
+      logInfo("using default profile so default executor memory")
+      conf.get(PYSPARK_EXECUTOR_MEMORY)
+    } else {
+      val mem = getPysparkMemoryFromInternalConfs(conf, rpId)
+      logInfo(s"using prorfile $rpId memory $mem")
+      mem
+
+    }
+    val workerMemoryMb = getWorkerMemoryMb(memoryMb)
+    if (workerMemoryMb.isDefined) {
+      envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)
     }
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)

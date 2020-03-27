@@ -27,6 +27,7 @@ import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util._
 
 /**
@@ -53,6 +54,7 @@ import org.apache.spark.util._
  * @param appAttemptId attempt id of the app this task belongs to
  * @param isBarrier whether this task belongs to a barrier stage. Spark must launch all the tasks
  *                  at the same time for a barrier stage.
+ * @param resourceProfileId the id of the ResourceProfile used with this task
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
@@ -65,7 +67,8 @@ private[spark] abstract class Task[T](
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
     val appAttemptId: Option[String] = None,
-    val isBarrier: Boolean = false) extends Serializable {
+    val isBarrier: Boolean = false,
+    val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
@@ -96,7 +99,8 @@ private[spark] abstract class Task[T](
       localProperties,
       metricsSystem,
       metrics,
-      resources)
+      resources,
+      resourceProfileId)
 
     context = if (isBarrier) {
       new BarrierTaskContext(taskContext)
