@@ -3471,7 +3471,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
-        testGropingIDs(32, Seq(0, 1))
+        testGropingIDs(32, Seq(0, 1))Tra
         val errMsg = intercept[AnalysisException] {
           testGropingIDs(33)
         }.getMessage
