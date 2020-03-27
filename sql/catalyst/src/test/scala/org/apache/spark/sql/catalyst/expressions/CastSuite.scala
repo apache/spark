@@ -112,13 +112,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    new ParVector(ALL_TIMEZONES.toVector).foreach { tz =>
+    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
-        checkEvaluation(cast(Literal(str), TimestampType, Option(tz.getID)), expected)
+        checkEvaluation(cast(Literal(str), TimestampType, Option(zid.getId)), expected)
       }
 
       checkCastStringToTimestamp("123", null)
 
+      val tz = TimeZone.getTimeZone(zid)
       var c = Calendar.getInstance(tz)
       c.set(2015, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
@@ -263,10 +264,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val zts = sd + " 00:00:00"
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
-    val ts = withDefaultTimeZone(TimeZoneGMT)(Timestamp.valueOf(nts))
+    val ts = withDefaultTimeZone(UTC)(Timestamp.valueOf(nts))
 
     for (tz <- ALL_TIMEZONES) {
-      val timeZoneId = Option(tz.getID)
+      val timeZoneId = Option(tz.getId)
       var c = Calendar.getInstance(TimeZoneGMT)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
