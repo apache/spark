@@ -141,7 +141,7 @@ private[spark] class TaskSchedulerImpl(
   private val schedulingModeConf = conf.get(SCHEDULER_MODE)
   val schedulingMode: SchedulingMode =
     try {
-      SchedulingMode.withName(schedulingModeConf.toUpperCase(Locale.ROOT))
+      SchedulingMode.withName(schedulingModeConf)
     } catch {
       case e: java.util.NoSuchElementException =>
         throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
