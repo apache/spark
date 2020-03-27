@@ -25,11 +25,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -3494,14 +3495,27 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(Row(Map[Int, Int]()), Row(Map(1 -> 2))))
   }
 
-  test("SPARK-31242: clone SparkSession should respect sessionInitWithConfigDefaults") {
-    // Note, only the conf explicitly set in SparkConf(e.g. in SharedSparkSessionBase) would cause
-    // problem before the fix.
-    withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
-      val cloned = spark.cloneSession()
-      SparkSession.setActiveSession(cloned)
-      assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
-    }
+  test("Perform propagating empty relation after RewritePredicateSubquery") {
+    val df1 = sql(
+      s"""
+         |select *
+         |from values(1), (2) t1(key)
+         | where key in
+         |  (select key from values(1) t2(key) where 1=0)
+       """.stripMargin)
+    assert(df1.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
+    checkAnswer(df1, Nil)
+
+    val df2 = sql(
+      s"""
+         |select *
+         |from values(1), (2) t1(key)
+         | where key not in
+         |  (select key from values(1) t2(key) where 1=0)
+       """.stripMargin)
+
+    assert(df2.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
+    checkAnswer(df2, Nil)
   }
 }
 
