@@ -45,7 +45,6 @@ class HiveSharedStateSuite extends SparkFunSuite {
       GLOBAL_TEMP_DATABASE.key -> tmpDb)
 
     val state = new SharedState(sc, initialConfigs)
-    assert(state.warehousePath !== invalidPath, "warehouse path can't determine by session options")
     assert(sc.conf.get(WAREHOUSE_PATH.key) !== invalidPath,
       "warehouse conf in session options can't affect application wide spark conf")
     assert(sc.hadoopConfiguration.get(ConfVars.METASTOREWAREHOUSE.varname) !== invalidPath,
