@@ -2485,7 +2485,7 @@ object SQLConf {
         "insert a repartition by dynamic partition columns to ease pressure on the NameNode " +
         "and improve insert performance.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.nestedSchemaPruning.enabled")
