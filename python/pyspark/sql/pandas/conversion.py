@@ -136,6 +136,7 @@ class PandasConversionMixin(object):
 
         dtype = [None] * len(self.schema)
         for fieldIdx, field in enumerate(self.schema):
+            # For duplicate column name, we use `iloc` to access it.
             if column_counter[field.name] > 1:
                 pandas_col = pdf.iloc[:, fieldIdx]
             else:
@@ -160,6 +161,7 @@ class PandasConversionMixin(object):
         for index, t in enumerate(dtype):
             column_name = self.schema[index].name
 
+            # For duplicate column name, we use `iloc` to access it.
             if column_counter[column_name] > 1:
                 series = pdf.iloc[:, index]
             else:
@@ -168,6 +170,9 @@ class PandasConversionMixin(object):
             if t is not None:
                 series = series.astype(t, copy=False)
 
+            # `insert` API makes copy of data, we only do it for Series of duplicate column names.
+            # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work because `iloc` could
+            # return a view or a copy depending by context.
             if column_counter[column_name] > 1:
                 df.insert(index, column_name, series, allow_duplicates=True)
             else:
