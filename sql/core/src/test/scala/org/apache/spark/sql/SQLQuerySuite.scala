@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -1081,7 +1081,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-19218 `SET -v` should not fail with null value configuration") {
-    import SQLConf._
+    import org.apache.spark.sql.internal.SQLConf._
     val confEntry = buildConf("spark.test").doc("doc").stringConf.createWithDefault(null)
 
     try {
@@ -3502,42 +3502,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       SparkSession.setActiveSession(cloned)
       assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
     }
-  }
-
-  test("Perform propagating empty relation after RewritePredicateSubquery") {
-    val df1 = sql(
-      s"""
-         |select *
-         |from values(1), (2) t1(key)
-         | where key in
-         |  (select key from values(1) t2(key) where 1=0)
-       """.stripMargin)
-    assert(df1.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
-    checkAnswer(df1, Nil)
-
-    val df2 = sql(
-      s"""
-         |select *
-         |from values(1), (2) t1(key)
-         | where key not in
-         |  (select key from values(1) t2(key) where 1=0)
-       """.stripMargin)
-
-    assert(df2.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
-    checkAnswer(df2, Seq(Row(1), Row(2)))
-
-    // Because [[RewriteNonCorrelatedExists]] will rewrite non-correlated exists subqueries to
-    // scalar expressions early, so this only take effects on correlated exists subqueries
-    val df3 = sql(
-      s"""
-         |select *
-         |from values(1), (2) t1(key)
-         | where exists
-         |  (select key from values(1) t2(key) where t1.key = 1 and 1=0)
-       """.stripMargin)
-
-    assert(df3.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
-    checkAnswer(df3, Nil)
   }
 }
 
