@@ -18,19 +18,20 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.UUID
 import java.util.concurrent.TimeUnit._
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
+import org.apache.spark.sql.SparkSession.defaultSession
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -87,6 +88,28 @@ class SparkSession private(
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  private val sessionListener: SparkListener = new SparkListener {
+    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+      defaultSession.set(null)
+    }
+  }
+  // Used to manage state in the the `SparkSession` singleton
+  private[spark] val sessionId: UUID = UUID.randomUUID
+  private[spark] val terminated: AtomicBoolean = new AtomicBoolean(false)
+  sparkContext.addSparkListener(sessionListener)
+
+  private[spark] def assertNotTerminated(): Unit = {
+    if (terminated.get()) {
+      throw new IllegalStateException(
+        s"""Cannot call methods on a terminated SparkSession.
+           |This terminated SparkSession was created at:
+           |
+           |${creationSite.longForm}
+         """.stripMargin)
+    }
+  }
+
+
   /**
    * Constructor used in Pyspark. Contains explicit application of Spark Session Extensions
    * which otherwise only occurs during getOrCreate. We cannot add this to the default constructor
@@ -107,6 +130,8 @@ class SparkSession private(
     SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
       .getOrElse(SQLConf.getFallbackConf)
   })
+
+  def removeListener(): Unit = sparkContext.removeSparkListener(sessionListener)
 
   /**
    * The version of Spark on which this application is running.
@@ -284,6 +309,7 @@ class SparkSession private(
    * @return 2.0.0
    */
   def emptyDataset[T: Encoder]: Dataset[T] = {
+    assertNotTerminated()
     val encoder = implicitly[Encoder[T]]
     new Dataset(self, LocalRelation(encoder.schema.toAttributes), encoder)
   }
@@ -294,6 +320,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = withActive {
+    assertNotTerminated()
     val encoder = Encoders.product[A]
     Dataset.ofRows(self, ExternalRDD(rdd, self)(encoder))
   }
@@ -304,6 +331,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = withActive {
+    assertNotTerminated()
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
@@ -342,6 +370,7 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
+    assertNotTerminated()
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val encoder = RowEncoder(schema)
@@ -359,6 +388,7 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    assertNotTerminated()
     createDataFrame(rowRDD.rdd, schema)
   }
 
@@ -372,6 +402,7 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
+    assertNotTerminated()
     Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
@@ -384,6 +415,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = withActive {
+    assertNotTerminated()
     val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
@@ -402,6 +434,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
+    assertNotTerminated()
     createDataFrame(rdd.rdd, beanClass)
   }
 
@@ -413,6 +446,7 @@ class SparkSession private(
    * @since 1.6.0
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = withActive {
+    assertNotTerminated()
     val attrSeq = getSchema(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
     Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
@@ -424,6 +458,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
+    assertNotTerminated()
     Dataset.ofRows(self, LogicalRelation(baseRelation))
   }
 
@@ -459,6 +494,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
+    assertNotTerminated()
     // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
     val enc = encoderFor[T].copy()
     val attributes = enc.schema.toAttributes
@@ -476,6 +512,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
+    assertNotTerminated()
     Dataset[T](self, ExternalRDD(data, self))
   }
 
@@ -495,6 +532,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
+    assertNotTerminated()
     createDataset(data.asScala)
   }
 
@@ -504,7 +542,10 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def range(end: Long): Dataset[java.lang.Long] = range(0, end)
+  def range(end: Long): Dataset[java.lang.Long] = {
+    assertNotTerminated()
+    range(0, end)
+  }
 
   /**
    * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
@@ -513,6 +554,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
+    assertNotTerminated()
     range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
   }
 
@@ -523,6 +565,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
+    assertNotTerminated()
     range(start, end, step, numPartitions = sparkContext.defaultParallelism)
   }
 
@@ -534,6 +577,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
+    assertNotTerminated()
     new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
   }
 
@@ -544,6 +588,7 @@ class SparkSession private(
       catalystRows: RDD[InternalRow],
       schema: StructType,
       isStreaming: Boolean = false): DataFrame = {
+    assertNotTerminated()
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(
@@ -577,14 +622,17 @@ class SparkSession private(
    * @since 2.0.0
    */
   def table(tableName: String): DataFrame = {
+    assertNotTerminated()
     table(sessionState.sqlParser.parseMultipartIdentifier(tableName))
   }
 
   private[sql] def table(multipartIdentifier: Seq[String]): DataFrame = {
+    assertNotTerminated()
     Dataset.ofRows(self, UnresolvedRelation(multipartIdentifier))
   }
 
   private[sql] def table(tableIdent: TableIdentifier): DataFrame = {
+    assertNotTerminated()
     Dataset.ofRows(self, UnresolvedRelation(tableIdent))
   }
 
@@ -599,6 +647,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = withActive {
+    assertNotTerminated()
     val tracker = new QueryPlanningTracker
     val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
       sessionState.sqlParser.parsePlan(sqlText)
@@ -623,6 +672,7 @@ class SparkSession private(
    */
   @Unstable
   def executeCommand(runner: String, command: String, options: Map[String, String]): DataFrame = {
+    assertNotTerminated()
     DataSource.lookupDataSource(runner, sessionState.conf) match {
       case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
         Dataset.ofRows(self, ExternalCommandExecutor(
@@ -643,7 +693,10 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def read: DataFrameReader = new DataFrameReader(self)
+  def read: DataFrameReader = {
+    assertNotTerminated()
+    new DataFrameReader(self)
+  }
 
   /**
    * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
@@ -654,7 +707,10 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def readStream: DataStreamReader = new DataStreamReader(self)
+  def readStream: DataStreamReader = {
+    assertNotTerminated()
+    new DataStreamReader(self)
+  }
 
   /**
    * Executes some code block and prints to stdout the time taken to execute the block. This is
@@ -691,23 +747,55 @@ class SparkSession private(
   // scalastyle:on
 
   /**
-   * Stop the underlying `SparkContext` if there are no active sessions remaining.
+   * Lifecycle method that cleans up state of spark session, and mark session
+   * "ended" forever. This differs from `stop()` or `stopContext()` as it keeps
+   * the underlying `SparkContext` alive, while only getting
+   */
+
+  def terminate(): Unit = {
+    // Session is still active
+    if (!terminated.get()) {
+      sparkContext.removeSparkListener(this.sessionListener)
+      SparkSession.removeTerminatedSession(sessionId)
+      terminated.set(true)
+    }
+    else {
+      throw new IllegalStateException(
+        s"""Cannot call methods on a terminated SparkSession. Call
+           |getOrCreate() to create a new session.
+           |""".stripMargin)
+    }
+  }
+
+  /**
+   * Stop the underlying `SparkContext`.
    *
    * @since 2.0.0
    */
-  def stop(): Unit = {
-    SparkSession.clearActiveSession()
-    if (SparkSession.numActiveSessions.get() == 0) {
-      sparkContext.stop()
+  def stopContext(): Unit = {
+    if (!terminated.get()) {
+      // stopping the context should also terminate this session
+      terminate()
+      SparkSession.removeTerminatedSession(sessionId)
+      SparkSession.clearDefaultSession()
+      SparkSession.clearActiveSession()
     }
+    sparkContext.stop()
   }
+
+  /**
+   * Synonym for `stopContext()`.
+   *
+   * @since 2.0.0
+   */
+  def stop(): Unit = stopContext()
 
   /**
    * Synonym for `stop()`.
    *
    * @since 2.1.0
    */
-  override def close(): Unit = stop()
+  override def close(): Unit = stopContext()
 
   /**
    * Parses the data type in our internal string representation. The data type string should
@@ -772,8 +860,6 @@ class SparkSession private(
 
 @Stable
 object SparkSession extends Logging {
-
-  private[spark] val numActiveSessions: AtomicInteger = new AtomicInteger(0)
 
   /**
    * Builder for [[SparkSession]].
@@ -918,7 +1004,7 @@ object SparkSession extends Logging {
 
       // Global synchronization so we will only set the default session once.
       SparkSession.synchronized {
-        // If the current thread does not have an active session, get it from the global session.
+        // If the current thread does not have an active session, get it from the default session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
           options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
@@ -950,17 +1036,6 @@ object SparkSession extends Logging {
         options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
         setDefaultSession(session)
         setActiveSession(session)
-
-        // Register a successfully instantiated context to the singleton. This should be at the
-        // end of the class definition so that the singleton is updated only if there is no
-        // exception in the construction of the instance.
-        sparkContext.addSparkListener(new SparkListener {
-          override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-            defaultSession.set(null)
-            // Should remove listener after this event fires
-            sparkContext.removeSparkListener(this)
-          }
-        })
       }
 
       return session
@@ -974,6 +1049,23 @@ object SparkSession extends Logging {
    */
   def builder(): Builder = new Builder
 
+  def removeTerminatedSession(sessionId: UUID): Unit = {
+    // clean up active session
+    if (getActiveSession.isDefined) {
+      val activeSession = getActiveSession.get
+        if(sessionId.equals(activeSession.sessionId)) {
+          clearActiveSession()
+      }
+    }
+    // clean up default session
+    if (getDefaultSession.isDefined) {
+      val defaultSession = getDefaultSession.get
+      if(sessionId.equals(defaultSession.sessionId)) {
+        clearDefaultSession()
+      }
+    }
+  }
+
   /**
    * Changes the SparkSession that will be returned in this thread and its children when
    * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
@@ -982,26 +1074,18 @@ object SparkSession extends Logging {
    * @since 2.0.0
    */
   def setActiveSession(session: SparkSession): Unit = {
-    if (session != getActiveSession.get && getActiveSession.isDefined) {
-      numActiveSessions.getAndIncrement
-      activeThreadSession.set(session)
-    } else if (session == null) {
-      this.clearActiveSession()
-    }
+    activeThreadSession.set(session)
   }
 
   /**
-   * Clears the active SparkSession for current thread assuming it is defined.
-   * Subsequent calls to getOrCreate will return the first created context
-   * instead of a thread-local override.
+   * Clears the active SparkSession for current thread. Subsequent calls to getOrCreate will
+   * return the first created context instead of a thread-local override.
    *
    * @since 2.0.0
    */
   def clearActiveSession(): Unit = {
-    if (getActiveSession.isDefined) {
-      activeThreadSession.remove()
-      numActiveSessions.decrementAndGet()
-    }
+    activeThreadSession.remove()
+
   }
 
   /**
@@ -1014,14 +1098,12 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Clears the default SparkSession that is returned by the builder
-   * if it is not null.
+   * Clears the default SparkSession that is returned by the builder.
+   *
    * @since 2.0.0
    */
   def clearDefaultSession(): Unit = {
-    if (getDefaultSession.isDefined) {
-      defaultSession.set(null)
-    }
+    defaultSession.set(null)
   }
 
   /**
@@ -1082,6 +1164,7 @@ object SparkSession extends Logging {
 
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
+
       case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
     }
@@ -1089,6 +1172,7 @@ object SparkSession extends Logging {
 
   private def assertOnDriver(): Unit = {
     if (Utils.isTesting && TaskContext.get != null) {
+      defaultSession.get().sessionListener
       // we're accessing it during task execution, fail.
       throw new IllegalStateException(
         "SparkSession should only be created and accessed on the driver.")
