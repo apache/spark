@@ -3514,7 +3514,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
        """.stripMargin)
 
     assert(df2.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
-    checkAnswer(df2, Nil)
+    checkAnswer(df2, Seq(Row(1), Row(2)))
   }
 }
 
