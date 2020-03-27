@@ -984,38 +984,6 @@ class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
     super.afterEach()
   }
 
-  test("ALS shuffle cleanup standalone") {
-    val conf = new SparkConf()
-    val localDir = Utils.createTempDir()
-    val checkpointDir = Utils.createTempDir()
-    def getAllFiles: Set[File] =
-      FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
-    try {
-      conf.set("spark.local.dir", localDir.getAbsolutePath)
-      val sc = new SparkContext("local[2]", "test", conf)
-      try {
-        sc.setCheckpointDir(checkpointDir.getAbsolutePath)
-        // Test checkpoint and clean parents
-        val input = sc.parallelize(1 to 1000)
-        val keyed = input.map(x => (x % 20, 1))
-        val shuffled = keyed.reduceByKey(_ + _)
-        val keysOnly = shuffled.keys
-        val deps = keysOnly.dependencies
-        keysOnly.count()
-        ALS.cleanShuffleDependencies(sc, deps, true)
-        val resultingFiles = getAllFiles
-        assert(resultingFiles === Set())
-        // Ensure running count again works fine even if we kill the shuffle files.
-        keysOnly.count()
-      } finally {
-        sc.stop()
-      }
-    } finally {
-      Utils.deleteRecursively(localDir)
-      Utils.deleteRecursively(checkpointDir)
-    }
-  }
-
   test("ALS shuffle cleanup in algorithm") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
