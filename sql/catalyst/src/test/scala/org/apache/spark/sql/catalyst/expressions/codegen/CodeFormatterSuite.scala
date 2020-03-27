@@ -61,23 +61,33 @@ class CodeFormatterSuite extends SparkFunSuite {
         |  * line
         |  * comments
         |  */
+        |  // comment
         |
         |public function() {
         |/*comment*/
         |  /*comment_with_space*/
-        |code_body
+        |code_body /* comment */ code_body/**/code_body // comment
         |//comment
-        |code_body
+        |code_body /*
+        |  * multi
+        |  * line
+        |  * comments
+        |  */
         |  //comment_with_space
         |
-        |code_body
+        |code_body // comment
+        | /*
+        |  * multi
+        |  * line
+        |  * comments
+        |  */
         |}
       """.stripMargin
 
     val reducedCode = CodeFormatter.stripExtraNewLinesAndComments(code)
     assert(reducedCode ===
       """public function() {
-        |code_body
+        |code_body code_body code_body
         |code_body
         |code_body
         |}""".stripMargin)
