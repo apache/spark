@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.log4j.Level
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
@@ -113,6 +114,21 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     } finally {
       sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
     }
+  }
+
+  test("reset will not change static sql configs and spark core configs") {
+    val conf = spark.sparkContext.getConf.getAll.toMap
+    val appName = conf.get("spark.app.name")
+    val driverHost = conf.get("spark.driver.host")
+    val master = conf.get("spark.master")
+    val warehouseDir = conf.get("spark.sql.warehouse.dir")
+    // ensure the conf here is not default value, and will not be reset to default value later
+    assert(warehouseDir.get.contains(this.getClass.getCanonicalName))
+    sql("RESET")
+    assert(conf.get("spark.app.name") === appName)
+    assert(conf.get("spark.driver.host") === driverHost)
+    assert(conf.get("spark.master") === master)
+    assert(conf.get("spark.sql.warehouse.dir") === warehouseDir)
   }
 
   test("reset - public conf") {
@@ -350,8 +366,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("spark.sql.session.timeZone should only accept valid zone id") {
-    spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "MIT")
-    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === "MIT")
+    spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, MIT.getId)
+    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === MIT.getId)
     spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Chicago")
     assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) ===
       "America/Chicago")

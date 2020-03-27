@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.execution.datasources
 
 import java.io.{DataInput, DataOutput, IOException}
 import java.sql.Date
@@ -23,7 +23,7 @@ import java.sql.Date
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.WritableUtils
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{rebaseGregorianToJulianDays, rebaseJulianToGregorianDays}
 
 /**
  * The class accepts/returns days in Gregorian calendar and rebase them
@@ -35,25 +35,31 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
  * @param julianDays The number of days since the epoch 1970-01-01 in
  *                   Julian calendar.
  */
-private[hive] class DaysWritable(
+class DaysWritable(
     var gregorianDays: Int,
     var julianDays: Int)
   extends DateWritable {
 
+  def this() = this(0, 0)
   def this(gregorianDays: Int) =
-    this(gregorianDays, DaysWritable.rebaseGregorianToJulianDays(gregorianDays))
+    this(gregorianDays, rebaseGregorianToJulianDays(gregorianDays))
   def this(dateWritable: DateWritable) = {
     this(
       gregorianDays = dateWritable match {
         case daysWritable: DaysWritable => daysWritable.gregorianDays
         case dateWritable: DateWritable =>
-        DaysWritable.rebaseJulianToGregorianDays(dateWritable.getDays)
+        rebaseJulianToGregorianDays(dateWritable.getDays)
       },
       julianDays = dateWritable.getDays)
   }
 
   override def getDays: Int = julianDays
   override def get(): Date = new Date(DateWritable.daysToMillis(julianDays))
+
+  override def set(d: Int): Unit = {
+    gregorianDays = d
+    julianDays = rebaseGregorianToJulianDays(d)
+  }
 
   @throws[IOException]
   override def write(out: DataOutput): Unit = {
@@ -63,37 +69,6 @@ private[hive] class DaysWritable(
   @throws[IOException]
   override def readFields(in: DataInput): Unit = {
     julianDays = WritableUtils.readVInt(in)
-    gregorianDays = DaysWritable.rebaseJulianToGregorianDays(julianDays)
+    gregorianDays = rebaseJulianToGregorianDays(julianDays)
   }
-}
-
-private[hive] object DaysWritable {
-  // Rebasing days since the epoch to store the same number of days
-  // as by Spark 2.4 and earlier versions. Spark 3.0 switched to
-  // Proleptic Gregorian calendar (see SPARK-26651), and as a consequence of that,
-  // this affects dates before 1582-10-15. Spark 2.4 and earlier versions use
-  // Julian calendar for dates before 1582-10-15. So, the same local date may
-  // be mapped to different number of days since the epoch in different calendars.
-  // For example:
-  // Proleptic Gregorian calendar: 1582-01-01 -> -141714
-  // Julian calendar: 1582-01-01 -> -141704
-  // The code below converts -141714 to -141704.
-  def rebaseGregorianToJulianDays(daysSinceEpoch: Int): Int = {
-    if (daysSinceEpoch < DateTimeUtils.GREGORIAN_CUTOVER_DAY) {
-      DateTimeUtils.rebaseGregorianToJulianDays(daysSinceEpoch)
-    } else {
-      daysSinceEpoch
-    }
-  }
-
-  def rebaseJulianToGregorianDays(daysSinceEpoch: Int): Int = {
-    if (daysSinceEpoch < JULIAN_CUTOVER_DAY) {
-      DateTimeUtils.rebaseJulianToGregorianDays(daysSinceEpoch)
-    } else {
-      daysSinceEpoch
-    }
-  }
-
-  final val JULIAN_CUTOVER_DAY =
-    rebaseGregorianToJulianDays(DateTimeUtils.GREGORIAN_CUTOVER_DAY.toInt)
 }

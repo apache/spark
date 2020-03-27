@@ -256,12 +256,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     def splitWithSemicolon(seq: Seq[String]) = {
       seq.mkString("\n").split("(?<=[^\\\\]);")
     }
-    val input = fileToString(new File(testCase.inputFile))
 
-    val (comments, code) = input.split("\n").partition { line =>
+    def splitCommentsAndCodes(input: String) = input.split("\n").partition { line =>
       val newLine = line.trim
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
     }
+
+    val input = fileToString(new File(testCase.inputFile))
+
+    val (comments, code) = splitCommentsAndCodes(input)
 
     // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
@@ -269,7 +272,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     val importedCode = importedTestCaseName.flatMap { testCaseName =>
       listTestCases.find(_.name == testCaseName).map { testCase =>
         val input = fileToString(new File(testCase.inputFile))
-        val (_, code) = input.split("\n").partition(_.trim.startsWith("--"))
+        val (_, code) = splitCommentsAndCodes(input)
         code
       }
     }.flatten

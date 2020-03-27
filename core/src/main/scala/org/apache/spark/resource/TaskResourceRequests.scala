@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.resource.ResourceProfile._
 
 /**
- * A set of task resource requests. This is used in conjuntion with the ResourceProfile to
+ * A set of task resource requests. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
  *

@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.ql.io.sarg.PredicateLeaf.{Operator => OrcOperator}
 import org.apache.hadoop.hive.serde2.io.{DateWritable, HiveDecimalWritable}
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.types.Decimal
 
 /**
@@ -47,13 +48,13 @@ private[sql] object OrcShimUtils {
 
   def getDateWritable(reuseObj: Boolean): (SpecializedGetters, Int) => DateWritable = {
     if (reuseObj) {
-      val result = new DateWritable()
+      val result = new DaysWritable()
       (getter, ordinal) =>
         result.set(getter.getInt(ordinal))
         result
     } else {
       (getter: SpecializedGetters, ordinal: Int) =>
-        new DateWritable(getter.getInt(ordinal))
+        new DaysWritable(getter.getInt(ordinal))
     }
   }
 

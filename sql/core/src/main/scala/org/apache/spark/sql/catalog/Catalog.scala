@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalog
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{Evolving, Experimental, Stable}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -215,6 +215,20 @@ abstract class Catalog {
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If no database identifier is provided, it refers to a table in
    *                  the current database.
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(tableName: String, path: String): DataFrame = {
+    createTable(tableName, path)
+  }
+
+  /**
+   * Creates a table from the given path and returns the corresponding DataFrame.
+   * It will use the default data source configured by spark.sql.sources.default.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
    * @since 2.2.0
    */
   def createTable(tableName: String, path: String): DataFrame
@@ -226,9 +240,40 @@ abstract class Catalog {
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If no database identifier is provided, it refers to a table in
    *                  the current database.
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(tableName: String, path: String, source: String): DataFrame = {
+    createTable(tableName, path, source)
+  }
+
+  /**
+   * Creates a table from the given path based on a data source and returns the corresponding
+   * DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
    * @since 2.2.0
    */
   def createTable(tableName: String, path: String, source: String): DataFrame
+
+  /**
+   * Creates a table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, options)
+  }
 
   /**
    * Creates a table based on the dataset in a data source and a set of options.
@@ -248,6 +293,24 @@ abstract class Catalog {
 
   /**
    * (Scala-specific)
+   * Creates a table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, options)
+  }
+
+  /**
+   * (Scala-specific)
    * Creates a table based on the dataset in a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
@@ -260,6 +323,24 @@ abstract class Catalog {
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame
+
+  /**
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options)
+  }
 
   /**
    * Create a table based on the dataset in a data source, a schema and a set of options.
@@ -276,6 +357,25 @@ abstract class Catalog {
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
     createTable(tableName, source, schema, options.asScala.toMap)
+  }
+
+  /**
+   * (Scala-specific)
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options)
   }
 
   /**
