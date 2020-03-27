@@ -489,8 +489,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
 
-    val tz = LA.getId
-    withDefaultTimeZone(getZoneId(tz)) {
+    withDefaultTimeZone(LA) {
+      val tz = LA.getId
       // Daylight Saving Time
       test("2016-03-13 01:59:59", tz, "2016-03-13 09:59:59.0")
       test("2016-03-13 02:00:00", tz, "2016-03-13 10:00:00.0")
