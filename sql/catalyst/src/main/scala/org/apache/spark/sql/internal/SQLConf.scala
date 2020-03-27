@@ -1864,7 +1864,6 @@ object SQLConf {
         "containing `dots` to data sources. Currently, Parquet implements both optimizations " +
         "while ORC only supports predicates for names containing `dots`. The other data sources" +
         "don't support this feature yet.")
-      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
