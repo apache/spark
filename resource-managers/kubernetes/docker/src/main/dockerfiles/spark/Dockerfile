@@ -27,10 +27,8 @@ ARG spark_uid=185
 # of the Spark distribution. E.g.:
 # docker build -t spark:latest -f kubernetes/dockerfiles/spark/Dockerfile .
 
-RUN echo 'deb https://deb.debian.org/debian buster main' >/etc/apt/sources.list && \
-    echo 'deb-src https://deb.debian.org/debian buster main' >>/etc/apt/sources.list
-
 RUN set -ex && \
+    sed -i 's/http\:/https\:/g' /etc/apt/sources.list && \
     apt-get update && \
     ln -s /lib /lib64 && \
     apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps && \
