@@ -41,13 +41,17 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
  * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
- *                                  dynamically, i.e., we first write files under a staging
- *                                  directory with partition path, e.g.
- *                                  /path/to/staging/a=1/b=1/xxx.parquet. When committing the job,
- *                                  we first clean up the corresponding partition directories at
- *                                  destination path, e.g. /path/to/destination/a=1/b=1, and move
- *                                  files from staging directory to the corresponding partition
- *                                  directories under destination path.
+ *                                  dynamically, i.e., for speculative tasks, we first write files
+ *                                  to task attempt paths under a staging directory, e.g.
+ *                                  /path/to/staging/.spark-staging-{jobId}/_temporary/
+ *                                  {appAttemptId}/_temporary/{taskAttemptId}/a=1/b=1/xxx.parquet.
+ *                                  When committing the job, we first move files from task attempt
+ *                                  paths to corresponding partition directories under the staging
+ *                                  directory, e.g.
+ *                                  /path/to/staging/.spark-staging-{jobId}/a=1/b=1.
+ *                                  Secondly, move the partition directories under staging
+ *                                  directory to partition directories under destination path,
+ *                                  e.g. /path/to/destination/a=1/b=1
  */
 class HadoopMapReduceCommitProtocol(
     jobId: String,
@@ -89,7 +93,7 @@ class HadoopMapReduceCommitProtocol(
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  private def stagingDir = new Path(path, ".spark-staging-" + jobId)
+  protected def stagingDir = getStagingDir(path, jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
@@ -106,13 +110,13 @@ class HadoopMapReduceCommitProtocol(
     val filename = getFilename(taskContext, ext)
 
     val stagingDir: Path = committer match {
-      case _ if dynamicPartitionOverwrite =>
-        assert(dir.isDefined,
-          "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
-        partitionPaths += dir.get
-        this.stagingDir
       // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
+        if (dynamicPartitionOverwrite) {
+          assert(dir.isDefined,
+            "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
+          partitionPaths += dir.get
+        }
         new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
       case _ => new Path(path)
     }
