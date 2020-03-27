@@ -2062,6 +2062,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val NESTED_PREDICATE_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.optimizer.nestedPredicatePushdown.enabled")
+      .internal()
+      .doc("When true, Spark tries to push down predicates for nested columns and or names " +
+        "containing `dots` to data sources. Currently, Parquet implements both optimizations " +
+        "while ORC only supports predicates for names containing `dots`. The other data sources" +
+        "don't support this feature yet.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
       .internal()
@@ -3047,6 +3058,8 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def nestedPredicatePushdownEnabled: Boolean = getConf(NESTED_PREDICATE_PUSHDOWN_ENABLED)
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
