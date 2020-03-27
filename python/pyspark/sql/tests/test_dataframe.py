@@ -529,6 +529,24 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEquals(types[4], np.object)  # datetime.date
         self.assertEquals(types[5], 'datetime64[ns]')
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_to_pandas_on_cross_join(self):
+        import numpy as np
+
+        sql = """
+        select t1.*, t2.* from (
+          select explode(sequence(1, 3)) v
+        ) t1 left join (
+          select explode(sequence(1, 3)) v
+        ) t2
+        """
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            df = self.spark.sql(sql)
+            pdf = df.toPandas()
+            types = pdf.dtypes
+            self.assertEquals(types.iloc[0], np.int32)
+            self.assertEquals(types.iloc[1], np.int32)
+
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_to_pandas_required_pandas_not_found(self):
         with QuietTest(self.sc):
