@@ -126,9 +126,13 @@ public class TransportClientFactory implements Closeable {
   /**
    * Create a {@link TransportClient} connecting to the given remote host / port.
    *
-   * We maintains an array of clients (size determined by spark.shuffle.io.numConnectionsPerPeer)
+   * We maintain an array of clients (client pool, size determined by spark.shuffle.io.numConnectionsPerPeer)
    * and randomly picks one to use. If no client was previously created in the randomly selected
    * spot, this function creates a new client and places it there.
+   *
+   * We also maintain a last connection failed time of client pool and a fast fail time window
+   * based on io retry wait time. If this connection request can be retried and the last connection
+   * for this client pool failed in the fast fail time window, fail this connection directly.
    *
    * Prior to the creation of a new TransportClient, we will execute all
    * {@link TransportClientBootstrap}s that are registered with this factory.
@@ -137,11 +141,6 @@ public class TransportClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  public TransportClient createClient(String remoteHost, int remotePort)
-    throws IOException, InterruptedException {
-    return createClient(remoteHost, remotePort, false);
-  }
-
   public TransportClient createClient(String remoteHost, int remotePort, boolean withRetry)
       throws IOException, InterruptedException {
     // Get connection from the connection pool first.
@@ -217,6 +216,11 @@ public class TransportClientFactory implements Closeable {
       }
       return clientPool.clients[clientIndex];
     }
+  }
+
+  public TransportClient createClient(String remoteHost, int remotePort)
+    throws IOException, InterruptedException {
+    return createClient(remoteHost, remotePort, false);
   }
 
   /**
