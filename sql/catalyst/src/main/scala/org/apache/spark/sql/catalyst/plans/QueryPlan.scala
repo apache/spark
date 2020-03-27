@@ -28,7 +28,9 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * defines some basic properties of a query plan node, as well as some new transform APIs to
  * transform the expressions of the plan node.
  *
- * Note that, the tree traverse APIs like `transform`, `foreach`, `collect`, etc. that are
+ * Note that, the query plan is a mutually recursive structure:
+ *   QueryPlan -> Expression (subquery) -> QueryPlan
+ * The tree traverse APIs like `transform`, `foreach`, `collect`, etc. that are
  * inherited from `TreeNode`, do not traverse into query plans inside subqueries.
  */
 abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
