@@ -1081,7 +1081,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-19218 `SET -v` should not fail with null value configuration") {
-    import org.apache.spark.sql.internal.SQLConf._
+    import SQLConf._
     val confEntry = buildConf("spark.test").doc("doc").stringConf.createWithDefault(null)
 
     try {
