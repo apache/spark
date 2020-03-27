@@ -386,7 +386,7 @@ servlet filters.
 To enable authorization in the SHS, a few extra options are used:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.history.ui.acls.enable</code></td>
   <td>false</td>
