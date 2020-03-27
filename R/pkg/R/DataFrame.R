@@ -521,6 +521,32 @@ setMethod("createOrReplaceTempView",
               invisible(callJMethod(x@sdf, "createOrReplaceTempView", viewName))
           })
 
+#' (Deprecated) Register Temporary Table
+#'
+#' Registers a SparkDataFrame as a Temporary Table in the SparkSession
+#' @param x A SparkDataFrame
+#' @param tableName A character vector containing the name of the table
+#'
+#' @seealso \link{createOrReplaceTempView}
+#' @rdname registerTempTable-deprecated
+#' @name registerTempTable
+#' @aliases registerTempTable,SparkDataFrame,character-method
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' registerTempTable(df, "json_df")
+#' new_df <- sql("SELECT * FROM json_df")
+#'}
+#' @note registerTempTable since 1.4.0
+setMethod("registerTempTable",
+          signature(x = "SparkDataFrame", tableName = "character"),
+          function(x, tableName) {
+              .Deprecated("createOrReplaceTempView")
+              invisible(callJMethod(x@sdf, "createOrReplaceTempView", tableName))
+          })
+
 #' insertInto
 #'
 #' Insert the contents of a SparkDataFrame into a table registered in the current SparkSession.
@@ -936,6 +962,7 @@ setMethod("write.orc",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' write.parquet(df, "/tmp/sparkr-tmp1/")
+#' saveAsParquetFile(df, "/tmp/sparkr-tmp2/")
 #'}
 #' @note write.parquet since 1.6.0
 setMethod("write.parquet",
@@ -944,6 +971,17 @@ setMethod("write.parquet",
             write <- callJMethod(x@sdf, "write")
             write <- setWriteOptions(write, mode = mode, ...)
             invisible(handledCallJMethod(write, "parquet", path))
+          })
+
+#' @rdname write.parquet
+#' @name saveAsParquetFile
+#' @aliases saveAsParquetFile,SparkDataFrame,character-method
+#' @note saveAsParquetFile since 1.4.0
+setMethod("saveAsParquetFile",
+          signature(x = "SparkDataFrame", path = "character"),
+          function(x, path) {
+            .Deprecated("write.parquet")
+            write.parquet(x, path)
           })
 
 #' Save the content of SparkDataFrame in a text file at the specified path.

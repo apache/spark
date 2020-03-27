@@ -528,6 +528,9 @@ setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 #' @rdname printSchema
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
+#' @rdname registerTempTable-deprecated
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
+
 #' @rdname rename
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
@@ -591,6 +594,9 @@ setGeneric("write.orc", function(x, path, ...) { standardGeneric("write.orc") })
 setGeneric("write.parquet", function(x, path, ...) {
   standardGeneric("write.parquet")
 })
+
+#' @rdname write.parquet
+setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
 
 #' @rdname write.stream
 setGeneric("write.stream", function(df, source = NULL, outputMode = NULL, ...) {

@@ -389,6 +389,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' df <- read.json(path, multiLine = TRUE)
+#' df <- jsonFile(path)
 #' }
 #' @name read.json
 #' @note read.json since 1.6.0
@@ -401,6 +402,46 @@ read.json <- function(path, ...) {
   read <- callJMethod(read, "options", options)
   sdf <- handledCallJMethod(read, "json", paths)
   dataFrame(sdf)
+}
+
+#' @rdname read.json
+#' @name jsonFile
+#' @note jsonFile since 1.4.0
+jsonFile <- function(path) {
+  .Deprecated("read.json")
+  read.json(path)
+}
+
+#' JSON RDD
+#'
+#' Loads an RDD storing one JSON object per string as a SparkDataFrame.
+#'
+#' @param sqlContext SQLContext to use
+#' @param rdd An RDD of JSON string
+#' @param schema A StructType object to use as schema
+#' @param samplingRatio The ratio of simpling used to infer the schema
+#' @return A SparkDataFrame
+#' @noRd
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' rdd <- texFile(sc, "path/to/json")
+#' df <- jsonRDD(sqlContext, rdd)
+#'}
+
+# TODO: remove - this method is no longer exported
+# TODO: support schema
+jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
+  .Deprecated("read.json")
+  rdd <- serializeToString(rdd)
+  if (is.null(schema)) {
+    read <- callJMethod(sqlContext, "read")
+    # samplingRatio is deprecated
+    sdf <- callJMethod(read, "json", callJMethod(getJRDD(rdd), "rdd"))
+    dataFrame(sdf)
+  } else {
+    stop("not implemented")
+  }
 }
 
 #' Create a SparkDataFrame from an ORC file.
@@ -443,6 +484,15 @@ read.parquet <- function(path, ...) {
   read <- callJMethod(read, "options", options)
   sdf <- handledCallJMethod(read, "parquet", paths)
   dataFrame(sdf)
+}
+
+#' @param ... argument(s) passed to the method.
+#' @rdname read.parquet
+#' @name parquetFile
+#' @note parquetFile since 1.4.0
+parquetFile <- function(...) {
+  .Deprecated("read.parquet")
+  read.parquet(unlist(list(...)))
 }
 
 #' Create a SparkDataFrame from a text file.

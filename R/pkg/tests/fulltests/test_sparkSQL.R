@@ -106,6 +106,15 @@ if (is_windows()) {
   Sys.setenv(TZ = "GMT")
 }
 
+test_that("calling sparkRSQL.init returns existing SQL context", {
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
+})
+
+test_that("calling sparkRSQL.init returns existing SparkSession", {
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sparkSession)
+})
+
 test_that("calling sparkR.session returns existing SparkSession", {
   expect_equal(sparkR.session(), sparkSession)
 })
@@ -619,10 +628,14 @@ test_that("read/write json files", {
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
     write.json(df, jsonPath3)
 
-    # Test read.json() works with multiple input paths
+    # Test read.json()/jsonFile() works with multiple input paths
     jsonDF1 <- read.json(c(jsonPath2, jsonPath3))
     expect_is(jsonDF1, "SparkDataFrame")
     expect_equal(count(jsonDF1), 6)
+    # Suppress warnings because jsonFile is deprecated
+    jsonDF2 <- suppressWarnings(jsonFile(c(jsonPath2, jsonPath3)))
+    expect_is(jsonDF2, "SparkDataFrame")
+    expect_equal(count(jsonDF2), 6)
 
     unlink(jsonPath2)
     unlink(jsonPath3)
@@ -642,6 +655,20 @@ test_that("read/write json files - compression option", {
   unlink(jsonPath)
 })
 
+test_that("jsonRDD() on a RDD with json string", {
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
+  rdd <- parallelize(sc, mockLines)
+  expect_equal(countRDD(rdd), 3)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd))
+  expect_is(df, "SparkDataFrame")
+  expect_equal(count(df), 3)
+
+  rdd2 <- flatMap(rdd, function(x) c(x, x))
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd2))
+  expect_is(df, "SparkDataFrame")
+  expect_equal(count(df), 6)
+})
+
 test_that("test tableNames and tables", {
   count <- count(listTables())
 
@@ -656,10 +683,10 @@ test_that("test tableNames and tables", {
   expect_true("tableName" %in% colnames(tables()))
   expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
-  createOrReplaceTempView(df, "table2")
+  suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
   expect_equal(count(tables), count + 2)
-  dropTempView("table1")
+  suppressWarnings(dropTempTable("table1"))
   expect_true(dropTempView("table2"))
 
   tables <- listTables()
@@ -2845,14 +2872,17 @@ test_that("read/write Parquet files", {
     expect_is(df2, "SparkDataFrame")
     expect_equal(count(df2), 3)
 
-    # Test write.parquet and read.parquet
+    # Test write.parquet/saveAsParquetFile and read.parquet/parquetFile
     parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
     write.parquet(df, parquetPath2)
     parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
-    write.parquet(df, parquetPath3)
+   suppressWarnings(saveAsParquetFile(df, parquetPath3))
     parquetDF <- read.parquet(c(parquetPath2, parquetPath3))
     expect_is(parquetDF, "SparkDataFrame")
     expect_equal(count(parquetDF), count(df) * 2)
+    parquetDF2 <- suppressWarnings(parquetFile(parquetPath2, parquetPath3))
+    expect_is(parquetDF2, "SparkDataFrame")
+    expect_equal(count(parquetDF2), count(df) * 2)
 
     # Test if varargs works with variables
     saveMode <- "overwrite"
