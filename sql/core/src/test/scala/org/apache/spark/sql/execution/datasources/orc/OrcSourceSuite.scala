@@ -508,6 +508,34 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       }
     }
   }
+
+  test("SPARK-31284: compatibility with Spark 2.4 in reading timestamps") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        checkAnswer(
+          readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
+          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+      }
+    }
+  }
+
+  test("SPARK-31284: rebasing timestamps in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      Seq("1001-01-01 01:02:03.123456").toDF("tsS")
+        .select($"tsS".cast("timestamp").as("ts"))
+        .write
+        .orc(path)
+
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          checkAnswer(
+            spark.read.orc(path),
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+        }
+      }
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSparkSession {
