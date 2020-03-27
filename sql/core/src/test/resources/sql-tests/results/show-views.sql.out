@@ -61,7 +61,7 @@ struct<>
 -- !query
 SHOW VIEWS
 -- !query schema
-struct<database:string,viewName:string,isTemporary:boolean>
+struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
 aggtest
 arraydata
@@ -71,14 +71,13 @@ tenk1
 testdata
 view_1
 view_2
-view_3
 view_4
 
 
 -- !query
 SHOW VIEWS FROM showdb
 -- !query schema
-struct<database:string,viewName:string,isTemporary:boolean>
+struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
 aggtest
 arraydata
@@ -88,14 +87,13 @@ tenk1
 testdata
 view_1
 view_2
-view_3
 view_4
 
 
 -- !query
 SHOW VIEWS IN showdb
 -- !query schema
-struct<database:string,viewName:string,isTemporary:boolean>
+struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
 aggtest
 arraydata
@@ -105,14 +103,13 @@ tenk1
 testdata
 view_1
 view_2
-view_3
 view_4
 
 
 -- !query
 SHOW VIEWS IN global_temp
 -- !query schema
-struct<database:string,viewName:string,isTemporary:boolean>
+struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
 aggtest
 arraydata
@@ -127,18 +124,17 @@ view_4
 -- !query
 SHOW VIEWS 'view_*'
 -- !query schema
-struct<database:string,viewName:string,isTemporary:boolean>
+struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
 view_1
 view_2
-view_3
 view_4
 
 
 -- !query
 SHOW VIEWS LIKE 'view_1*|view_2*'
 -- !query schema
-struct<database:string,viewName:string,isTemporary:boolean>
+struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
 view_1
 view_2
@@ -147,22 +143,20 @@ view_2
 -- !query
 SHOW VIEWS IN showdb 'view_*'
 -- !query schema
-struct<database:string,viewName:string,isTemporary:boolean>
+struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
 view_1
 view_2
-view_3
 view_4
 
 
 -- !query
 SHOW VIEWS IN showdb LIKE 'view_*'
 -- !query schema
-struct<database:string,viewName:string,isTemporary:boolean>
+struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
 view_1
 view_2
-view_3
 view_4
 
 

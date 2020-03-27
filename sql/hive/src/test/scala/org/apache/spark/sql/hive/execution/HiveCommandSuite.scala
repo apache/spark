@@ -128,21 +128,22 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row("default", "show1a", false) ::
           Row("default", "show2b", false) ::
           Row("default", "parquet_view1", false) ::
-          Row("global_temp", "temp1", true) ::
           Row("", "temp2", true) :: Nil)
       checkAnswer(
         sql("SHOW VIEWS IN default"),
         Row("default", "show1a", false) ::
           Row("default", "show2b", false) ::
           Row("default", "parquet_view1", false) ::
-          Row("global_temp", "temp1", true) ::
           Row("", "temp2", true) :: Nil)
       checkAnswer(
         sql("SHOW VIEWS FROM default"),
         Row("default", "show1a", false) ::
           Row("default", "show2b", false) ::
           Row("default", "parquet_view1", false) ::
-          Row("global_temp", "temp1", true) ::
+          Row("", "temp2", true) :: Nil)
+      checkAnswer(
+        sql("SHOW VIEWS FROM global_temp"),
+        Row("global_temp", "temp1", true) ::
           Row("", "temp2", true) :: Nil)
       checkAnswer(
         sql("SHOW VIEWS 'show1*|show2*'"),

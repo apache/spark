@@ -690,7 +690,8 @@ class ResolveSessionCatalog(
       if (isSessionCatalog(resolved.catalog)) {
         Some(resolved.catalog -> resolved.namespace)
       } else {
-        None
+        throw new AnalysisException(
+          s"Cannot use catalog ${resolved.catalog.name}, only SessionCatalog is supported.")
       }
   }
 

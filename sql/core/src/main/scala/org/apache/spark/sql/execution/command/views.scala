@@ -309,7 +309,7 @@ case class ShowViewsCommand(
 
   // The result of SHOW VIEWS has three basic columns: database, viewName and isTemporary.
   override val output: Seq[Attribute] = Seq(
-    AttributeReference("database", StringType, nullable = false)(),
+    AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("viewName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)())
 
@@ -321,11 +321,11 @@ case class ShowViewsCommand(
     val views = tableIdentifierPattern.map(catalog.listViews(db, _))
       .getOrElse(catalog.listViews(db, "*"))
     views.map { tableIdent =>
-      val database = tableIdent.database.getOrElse("")
+      val namespace = tableIdent.database.getOrElse("")
       val tableName = tableIdent.table
       val isTemp = catalog.isTemporaryTable(tableIdent)
 
-      Row(database, tableName, isTemp)
+      Row(namespace, tableName, isTemp)
     }
   }
 }

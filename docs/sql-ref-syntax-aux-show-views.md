@@ -23,7 +23,7 @@ license: |
 The `SHOW VIEWS` statement returns all the views for an optionally specified database.
 Additionally, the output of this statement may be filtered by an optional matching
 pattern. If no database is specified then the views are returned from the 
-current database. Note that the command always lists global and temporary views 
+current database. Note that the command also lists local temporary views 
 regardless of a given database.
 
 ### Syntax
@@ -65,33 +65,29 @@ CREATE TEMP VIEW temp2 AS SELECT 1 as col1;
 -- List all views in default database
 SHOW VIEWS;
   +-------------+------------+--------------+--+
-  | database    | viewName   | isTemporary  |
+  | namespace   | viewName   | isTemporary  |
   +-------------+------------+--------------+--+
   | default     | sam        | false        |
   | default     | sam1       | false        |
   | default     | suj        | false        |
-  | global_temp | temp1      | true         |
   |             | temp2      | true         |
   +-------------+------------+--------------+--+
 
 -- List all views from userdb database 
 SHOW VIEWS FROM userdb;
   +-------------+------------+--------------+--+
-  | database    | viewName   | isTemporary  |
+  | namespace   | viewName   | isTemporary  |
   +-------------+------------+--------------+--+
   | userdb      | user1      | false        |
   | userdb      | user2      | false        |
-  | global_temp | temp1      | true         |
   |             | temp2      | true         |
   +-------------+------------+--------------+--+
-
--- List all views in userdb database
-SHOW VIEWS IN userdb;
+  
+-- List all views in global temp view database 
+SHOW VIEWS IN global_temp;
   +-------------+------------+--------------+--+
-  | database    | viewName   | isTemporary  |
+  | namespace   | viewName   | isTemporary  |
   +-------------+------------+--------------+--+
-  | userdb      | user1      | false        |
-  | userdb      | user2      | false        |
   | global_temp | temp1      | true         |
   |             | temp2      | true         |
   +-------------+------------+--------------+--+
@@ -99,7 +95,7 @@ SHOW VIEWS IN userdb;
 -- List all views from default database matching the pattern `sam*`
 SHOW VIEWS FROM default LIKE 'sam*';
   +-----------+------------+--------------+--+
-  | database  | viewName   | isTemporary  |
+  | namespace | viewName   | isTemporary  |
   +-----------+------------+--------------+--+
   | default   | sam        | false        |
   | default   | sam1       | false        |
@@ -108,11 +104,10 @@ SHOW VIEWS FROM default LIKE 'sam*';
 -- List all views matching the pattern `sam|suj｜temp*`
 SHOW VIEWS LIKE 'sam|suj|temp*';
   +-------------+------------+--------------+--+
-  | database    | viewName   | isTemporary  |
+  | namespace   | viewName   | isTemporary  |
   +-------------+------------+--------------+--+
   | default     | sam        | false        |
   | default     | suj        | false        |
-  | global_temp | temp1      | true         |
   |             | temp2      | true         |
   +-------------+------------+--------------+--+
 
