@@ -3525,6 +3525,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     assert(df2.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
     checkAnswer(df2, Seq(Row(1), Row(2)))
+
+    // Because [[RewriteNonCorrelatedExists]] will rewrite non-correlated exists subqueries to
+    // scalar expressions early, so this only take effects on correlated exists subqueries
+    val df3 = sql(
+      s"""
+         |select *
+         |from values(1), (2) t1(key)
+         | where exists
+         |  (select key from values(1) t2(key) where t1.key = 1 and 1=0)
+       """.stripMargin)
+
+    assert(df3.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
+    checkAnswer(df3, Nil)
   }
 }
 
