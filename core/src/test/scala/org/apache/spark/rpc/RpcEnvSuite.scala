@@ -190,7 +190,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-  test("ask a message remotely timeout") {
+  test("SPARK-31233: ask rpcEndpointRef in client mode timeout") {
     var remoteRef: RpcEndpointRef = null
     env.setupEndpoint("ask-remotely", new RpcEndpoint {
       override val rpcEnv = env
@@ -230,6 +230,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       anotherEnv.awaitTermination()
     }
   }
+
   test("ask a message abort") {
     env.setupEndpoint("ask-abort", new RpcEndpoint {
       override val rpcEnv = env
