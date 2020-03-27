@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-
 class RewriteSubquerySuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -52,4 +51,24 @@ class RewriteSubquerySuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  object OptimizeWithPropagateEmpty extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Column Pruning", FixedPoint(100), ColumnPruning) ::
+        Batch("Rewrite Subquery", FixedPoint(1),
+          RewritePredicateSubquery,
+          PropagateEmptyRelation,
+          ColumnPruning,
+          CollapseProject,
+          RemoveNoopOperators) :: Nil
+  }
+
+  test("Perform propagating empty relation after RewritePredicateSubquery") {
+    val relation = LocalRelation('a.int)
+    val relInSubquery = LocalRelation('x.int)
+
+    val query = relation.where('a.in(ListQuery(relInSubquery.select('x)))).select('a)
+
+    val plan = OptimizeWithPropagateEmpty.execute(query.analyze)
+    comparePlans(plan, relation)
+  }
 }
