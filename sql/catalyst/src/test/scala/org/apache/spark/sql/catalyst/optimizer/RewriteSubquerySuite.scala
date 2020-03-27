@@ -52,7 +52,7 @@ class RewriteSubquerySuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Perform propagating empty relation after RewritePredicateSubquery") {
+  test("SPARK-31280: Perform propagating empty relation after RewritePredicateSubquery") {
     val relation = LocalRelation('a.int)
     val relInSubquery = LocalRelation('x.int)
 

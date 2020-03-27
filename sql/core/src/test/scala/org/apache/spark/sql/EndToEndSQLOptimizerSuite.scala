@@ -22,12 +22,12 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class EndToEndSQLOptimizerSuite extends QueryTest with SharedSparkSession {
 
-  test("Perform propagating empty relation after RewritePredicateSubquery") {
+  test("SPARK-31280: Perform propagating empty relation after RewritePredicateSubquery") {
     val df1 = sql(
       s"""
          |SELECT *
          |FROM VALUES(1), (2) t1(key)
-         | WHERE key IN
+         |WHERE key IN
          |  (SELECT key FROM VALUES(1) t2(key) WHERE 1=0)
        """.stripMargin)
     assert(df1.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
@@ -37,7 +37,7 @@ class EndToEndSQLOptimizerSuite extends QueryTest with SharedSparkSession {
       s"""
          |SELECT *
          |FROM VALUES(1), (2) t1(key)
-         | WHERE key NOT IN
+         |WHERE key NOT IN
          |  (SELECT key FROM VALUES(1) t2(key) WHERE 1=0)
        """.stripMargin)
 
@@ -50,7 +50,7 @@ class EndToEndSQLOptimizerSuite extends QueryTest with SharedSparkSession {
       s"""
          |SELECT *
          |FROM VALUES(1), (2) t1(key)
-         | WHERE EXISTS
+         |WHERE EXISTS
          |  (SELECT key FROM VALUES(1) t2(key) WHERE t1.key = 1 AND 1=0)
        """.stripMargin)
 
