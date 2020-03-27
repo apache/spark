@@ -1026,7 +1026,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           val deps = itemFactors.dependencies
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
-          ALS.cleanShuffleDependencies(sc, deps)
+          itemFactors.cleanShuffleDependencies()
           deletePreviousCheckpointFile()
 
           previousCachedItemFactors.foreach(_.unpersist())
