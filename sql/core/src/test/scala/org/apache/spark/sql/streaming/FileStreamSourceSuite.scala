@@ -1421,7 +1421,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         (5 to 5 + FileStreamSourceLog.PREV_NUM_BATCHES_TO_READ_IN_RESTORE).foreach { batchId =>
           metadata2.add(batchId, createEntries(batchId, 100))
         }
-        val allFiles2 = metadata2.allFiles()
 
         val metadata3 = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark,
           chk.getCanonicalPath)
@@ -1430,7 +1429,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         // restore() will not restore the logs for the latest compact batch into file entry cache
         // if the latest batch is too far from latest compact batch, because it's unlikely Spark
         // will request the batch for the start point.
-        assert(metadata2.restore() === allFiles2)
+        assert(metadata3.restore() === metadata2.allFiles())
         verifyBatchAvailabilityInCache(fileEntryCache3, Seq(0, 1, 2, 3, 4), Seq.empty)
       }
     }
