@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
-
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
