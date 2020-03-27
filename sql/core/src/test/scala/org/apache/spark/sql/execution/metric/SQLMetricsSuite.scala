@@ -726,7 +726,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("Scan parquet default.testdataforscan", Map(
           "number of output rows" -> 3L,
-          "number of files read" -> 1L))))
+          "number of files read" -> 2L))))
       )
     }
   }
