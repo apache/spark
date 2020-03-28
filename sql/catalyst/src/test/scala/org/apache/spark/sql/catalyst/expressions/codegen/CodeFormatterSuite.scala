@@ -61,35 +61,63 @@ class CodeFormatterSuite extends SparkFunSuite {
         |  * line
         |  * comments
         |  */
-        |  // comment
         |
         |public function() {
         |/*comment*/
         |  /*comment_with_space*/
-        |code_body /* comment */ code_body/**/code_body // comment
+        |code_body
         |//comment
-        |code_body /*
-        |  * multi
-        |  * line
-        |  * comments
-        |  */
+        |code_body
         |  //comment_with_space
         |
-        |code_body // comment
-        | /*
-        |  * multi
-        |  * line
-        |  * comments
-        |  */
+        |code_body
         |}
       """.stripMargin
 
     val reducedCode = CodeFormatter.stripExtraNewLinesAndComments(code)
     assert(reducedCode ===
       """public function() {
-        |code_body code_body code_body
         |code_body
         |code_body
+        |code_body
+        |}""".stripMargin)
+  }
+
+  test("removing extra new lines and comments 2") {
+    val code =
+      """
+        | /*
+        |  * comment before code
+        |  */
+        |  // comment before code
+        |
+        |  public function() {
+        |    /*
+        |     * comment
+        |     */
+        |    // comment
+        |    code_body/*comment*/code_body//comment
+        |    /*
+        |     * comment
+        |     */
+        |    // comment
+        |    code_body /* comment */ code_body // comment
+        |    /*
+        |     * comment
+        |     */
+        |    // comment
+        |  }
+        | /*
+        |  * comment after code
+        |  */
+        |  // comment after code
+      """.stripMargin
+
+    val reducedCode = CodeFormatter.stripExtraNewLinesAndComments(code)
+    assert(reducedCode ===
+      """public function() {
+        |code_body code_body
+        |code_body code_body
         |}""".stripMargin)
   }
 
