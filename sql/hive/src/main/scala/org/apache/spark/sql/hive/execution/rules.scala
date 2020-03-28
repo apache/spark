@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 object HiveRules {
@@ -33,9 +33,9 @@ object HiveRules {
 
     override def apply(plan: LogicalPlan): Unit = {
       plan.foreach {
-        case CreateHiveTableAsSelectCommand(tableDesc, _, _, _) =>
+        case CreateHiveTableAsSelectCommand(tableDesc, _, _, mode) =>
           val location = tableDesc.storage.locationUri
-          if (location.isDefined) {
+          if (location.isDefined && mode == SaveMode.Overwrite) {
             val path = new Path(location.get)
             val fs = FileSystem.get(location.get, SparkContext.getActive.get.hadoopConfiguration)
             if (fs.exists(path)) {
