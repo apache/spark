@@ -129,13 +129,19 @@ private class LiveTask(
   // checked when calculating indexed values when writing to the store (see [[TaskDataWrapper]]).
   private var metrics: v1.TaskMetrics = createMetrics(default = -1L)
 
+  val executorMetrics = new ExecutorMetrics()
+
   var errorMessage: Option[String] = None
 
   /**
    * Update the metrics for the task and return the difference between the previous and new
    * values.
    */
-  def updateMetrics(metrics: TaskMetrics): v1.TaskMetrics = {
+  def updateMetrics(metrics: TaskMetrics,
+                    executorMetrics: Option[ExecutorMetrics] = None): v1.TaskMetrics = {
+    executorMetrics.foreach {
+      this.executorMetrics.compareAndUpdatePeakValues
+    }
     if (metrics != null) {
       val old = this.metrics
       val newMetrics = createMetrics(
@@ -149,6 +155,8 @@ private class LiveTask(
         metrics.memoryBytesSpilled,
         metrics.diskBytesSpilled,
         metrics.peakExecutionMemory,
+        this.executorMetrics.getMetricValue("JVMHeapMemory"),
+        this.executorMetrics.getMetricValue("JVMOffHeapMemory"),
         metrics.inputMetrics.bytesRead,
         metrics.inputMetrics.recordsRead,
         metrics.outputMetrics.bytesWritten,
@@ -224,6 +232,8 @@ private class LiveTask(
       taskMetrics.memoryBytesSpilled,
       taskMetrics.diskBytesSpilled,
       taskMetrics.peakExecutionMemory,
+      taskMetrics.peakJvmHeapMemory,
+      taskMetrics.peakJvmOffHeapMemory,
       taskMetrics.inputMetrics.bytesRead,
       taskMetrics.inputMetrics.recordsRead,
       taskMetrics.outputMetrics.bytesWritten,
@@ -677,6 +687,8 @@ private[spark] object LiveEntityHelpers {
       memoryBytesSpilled: Long,
       diskBytesSpilled: Long,
       peakExecutionMemory: Long,
+      peakJvmHeapMemory: Long,
+      peakJvmOffHeapMemory: Long,
       inputBytesRead: Long,
       inputRecordsRead: Long,
       outputBytesWritten: Long,
@@ -702,6 +714,8 @@ private[spark] object LiveEntityHelpers {
       memoryBytesSpilled,
       diskBytesSpilled,
       peakExecutionMemory,
+      peakJvmHeapMemory,
+      peakJvmOffHeapMemory,
       new v1.InputMetrics(
         inputBytesRead,
         inputRecordsRead),
@@ -725,8 +739,8 @@ private[spark] object LiveEntityHelpers {
 
   def createMetrics(default: Long): v1.TaskMetrics = {
     createMetrics(default, default, default, default, default, default, default, default,
-      default, default, default, default, default, default, default, default,
-      default, default, default, default, default, default, default, default)
+      default, default, default, default, default, default, default, default, default,
+      default, default, default, default, default, default, default, default, default)
   }
 
   /** Add m2 values to m1. */
@@ -761,6 +775,8 @@ private[spark] object LiveEntityHelpers {
       updateMetricValue(m.memoryBytesSpilled),
       updateMetricValue(m.diskBytesSpilled),
       updateMetricValue(m.peakExecutionMemory),
+      updateMetricValue(m.peakJvmHeapMemory),
+      updateMetricValue(m.peakJvmOffHeapMemory),
       updateMetricValue(m.inputMetrics.bytesRead),
       updateMetricValue(m.inputMetrics.recordsRead),
       updateMetricValue(m.outputMetrics.bytesWritten),
@@ -789,6 +805,8 @@ private[spark] object LiveEntityHelpers {
       m1.memoryBytesSpilled + m2.memoryBytesSpilled * mult,
       m1.diskBytesSpilled + m2.diskBytesSpilled * mult,
       m1.peakExecutionMemory + m2.peakExecutionMemory * mult,
+      m1.peakJvmHeapMemory + m2.peakJvmHeapMemory * mult,
+      m1.peakJvmOffHeapMemory + m2.peakJvmOffHeapMemory * mult,
       m1.inputMetrics.bytesRead + m2.inputMetrics.bytesRead * mult,
       m1.inputMetrics.recordsRead + m2.inputMetrics.recordsRead * mult,
       m1.outputMetrics.bytesWritten + m2.outputMetrics.bytesWritten * mult,

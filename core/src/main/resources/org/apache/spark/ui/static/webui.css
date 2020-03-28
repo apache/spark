@@ -353,6 +353,14 @@ a.expandbutton {
   width: 180px;
 }
 
+.peak-jvm-heap-memory-checkbox-div {
+  width: 180px;
+}
+
+.peak-jvm-off-heap-memory-checkbox-div {
+  width: 240px;
+}
+
 #active-tasks-table th {
   border-top: 1px solid #dddddd;
   border-bottom: 1px solid #dddddd;

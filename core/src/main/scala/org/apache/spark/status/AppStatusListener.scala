@@ -574,7 +574,7 @@ private[spark] class AppStatusListener(
           None
       }
       task.errorMessage = errorMessage
-      val delta = task.updateMetrics(event.taskMetrics)
+      val delta = task.updateMetrics(event.taskMetrics, Some(event.taskExecutorMetrics))
       update(task, now, last = true)
       delta
     }.orNull

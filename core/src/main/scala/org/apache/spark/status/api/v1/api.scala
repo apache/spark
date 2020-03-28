@@ -285,6 +285,8 @@ class TaskMetrics private[spark](
     val memoryBytesSpilled: Long,
     val diskBytesSpilled: Long,
     val peakExecutionMemory: Long,
+    val peakJvmHeapMemory: Long,
+    val peakJvmOffHeapMemory: Long,
     val inputMetrics: InputMetrics,
     val outputMetrics: OutputMetrics,
     val shuffleReadMetrics: ShuffleReadMetrics,
@@ -325,6 +327,8 @@ class TaskMetricDistributions private[spark](
     val gettingResultTime: IndexedSeq[Double],
     val schedulerDelay: IndexedSeq[Double],
     val peakExecutionMemory: IndexedSeq[Double],
+    val peakJvmHeapMemory: IndexedSeq[Double],
+    val peakJvmOffHeapMemory: IndexedSeq[Double],
     val memoryBytesSpilled: IndexedSeq[Double],
     val diskBytesSpilled: IndexedSeq[Double],
 

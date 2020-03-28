@@ -533,7 +533,9 @@ private[ui] class TaskPagedTable(
         (HEADER_GC_TIME, ""),
         (HEADER_SER_TIME, TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
         (HEADER_GETTING_RESULT_TIME, TaskDetailsClassNames.GETTING_RESULT_TIME),
-        (HEADER_PEAK_MEM, TaskDetailsClassNames.PEAK_EXECUTION_MEMORY)) ++
+        (HEADER_PEAK_MEM, TaskDetailsClassNames.PEAK_EXECUTION_MEMORY),
+        (HEADER_PEAK_JVM_HEAP_MEMORY, TaskDetailsClassNames.PEAK_JVM_HEAP_MEMORY),
+        (HEADER_PEAK_JVM_OFF_HEAP_MEMORY, TaskDetailsClassNames.PEAK_JVM_OFF_HEAP_MEMORY)) ++
         {if (hasAccumulators(stage)) Seq((HEADER_ACCUMULATORS, "")) else Nil} ++
         {if (hasInput(stage)) Seq((HEADER_INPUT_SIZE, "")) else Nil} ++
         {if (hasOutput(stage)) Seq((HEADER_OUTPUT_SIZE, "")) else Nil} ++
@@ -638,6 +640,12 @@ private[ui] class TaskPagedTable(
       </td>
       <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
         {formatBytes(task.taskMetrics.map(_.peakExecutionMemory))}
+      </td>
+      <td class={TaskDetailsClassNames.PEAK_JVM_HEAP_MEMORY}>
+        {formatBytes(task.taskMetrics.map(_.peakJvmHeapMemory))}
+      </td>
+      <td class={TaskDetailsClassNames.PEAK_JVM_OFF_HEAP_MEMORY}>
+        {formatBytes(task.taskMetrics.map(_.peakJvmOffHeapMemory))}
       </td>
       {if (hasAccumulators(stage)) {
         <td>{accumulatorsInfo(task)}</td>
@@ -744,6 +752,8 @@ private[spark] object ApiHelper {
   val HEADER_SER_TIME = "Result Serialization Time"
   val HEADER_GETTING_RESULT_TIME = "Getting Result Time"
   val HEADER_PEAK_MEM = "Peak Execution Memory"
+  val HEADER_PEAK_JVM_HEAP_MEMORY = "Peak JVM Heap Memory"
+  val HEADER_PEAK_JVM_OFF_HEAP_MEMORY = "Peak JVM Off Heap Memory"
   val HEADER_ACCUMULATORS = "Accumulators"
   val HEADER_INPUT_SIZE = "Input Size / Records"
   val HEADER_OUTPUT_SIZE = "Output Size / Records"
@@ -774,6 +784,8 @@ private[spark] object ApiHelper {
     HEADER_SER_TIME -> TaskIndexNames.SER_TIME,
     HEADER_GETTING_RESULT_TIME -> TaskIndexNames.GETTING_RESULT_TIME,
     HEADER_PEAK_MEM -> TaskIndexNames.PEAK_MEM,
+    HEADER_PEAK_JVM_HEAP_MEMORY -> TaskIndexNames.PEAK_HEAP,
+    HEADER_PEAK_JVM_OFF_HEAP_MEMORY -> TaskIndexNames.PEAK_OFF_HEAP,
     HEADER_ACCUMULATORS -> TaskIndexNames.ACCUMULATORS,
     HEADER_INPUT_SIZE -> TaskIndexNames.INPUT_SIZE,
     HEADER_OUTPUT_SIZE -> TaskIndexNames.OUTPUT_SIZE,

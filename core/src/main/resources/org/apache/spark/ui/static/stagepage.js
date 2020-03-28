@@ -93,6 +93,12 @@ function getColumnNameForTaskMetricSummary(columnKey) {
         case "peakExecutionMemory":
             return "Peak Execution Memory";
 
+        case "peakJvmHeapMemory":
+            return "Peak JVM Heap Memory";
+
+        case "peakJvmOffHeapMemory":
+            return "Peak JVM Off Heap Memory";
+
         case "resultSerializationTime":
             return "Result Serialization Time";
 
@@ -275,7 +281,7 @@ function getStageAttemptId() {
 var taskSummaryMetricsTableArray = [];
 var taskSummaryMetricsTableCurrentStateArray = [];
 var taskSummaryMetricsDataTable;
-var optionalColumns = [11, 12, 13, 14, 15, 16, 17, 21];
+var optionalColumns = [11, 12, 13, 14, 15, 16, 17, 18, 19, 23];
 var taskTableSelector;
 
 $(document).ready(function () {
@@ -296,6 +302,8 @@ $(document).ready(function () {
         "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15'> Result Serialization Time</div>" +
         "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16'> Getting Result Time</div>" +
         "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17'> Peak Execution Memory</div>" +
+        "<div id='peak_jvm_heap_memory' class='peak-jvm-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-18' data-column='18'> Peak JVM Heap Memory</div>" +
+        "<div id='peak_jvm_off_heap_memory' class='peak-jvm-off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-19' data-column='19'> Peak JVM Off Heap Memory</div>" +
         "</div>");
 
     $('#scheduler_delay').attr("data-toggle", "tooltip")
@@ -327,6 +335,13 @@ $(document).ready(function () {
                 "should be approximately the sum of the peak sizes across all such data structures created " +
                 "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
                 "external sort.");
+    $('#peak_jvm_heap_memory').attr("data-toggle", "tooltip")
+            .attr("data-placement", "top")
+            .attr("title", "Peak Executor JVM heap memory usage during this task running");
+    $('#peak_jvm_off_heap_memory').attr("data-toggle", "tooltip")
+            .attr("data-placement", "top")
+            .attr("title", "Peak Executor JVM off-heap memory usage during this task running");
+
     $('[data-toggle="tooltip"]').tooltip();
     var tasksSummary = $("#parent-container");
     getStandAloneAppId(function (appId) {
@@ -552,6 +567,18 @@ $(document).ready(function () {
                                 taskSummaryMetricsTableArray.push(row);
                                 break;
 
+                            case "peakJvmHeapMemory":
+                                var row = createRowMetadataForColumn(
+                                    columnKey, taskMetricsResponse[columnKey], 18);
+                                    taskSummaryMetricsTableArray.push(row);
+                                break;
+
+                            case "peakJvmOffHeapMemory":
+                                var row = createRowMetadataForColumn(
+                                    columnKey, taskMetricsResponse[columnKey], 19);
+                                    taskSummaryMetricsTableArray.push(row);
+                                    break;
+
                             case "inputMetrics":
                                 var row = createRowMetadataForColumn(
                                     columnKey, taskMetricsResponse[columnKey], 1);
@@ -572,7 +599,7 @@ $(document).ready(function () {
                                 var row1 = createRowMetadataForColumn(
                                     columnKey, taskMetricsResponse[columnKey], 4);
                                 var row2 = createRowMetadataForColumn(
-                                    "shuffleWriteTime", taskMetricsResponse[columnKey], 21);
+                                    "shuffleWriteTime", taskMetricsResponse[columnKey], 23);
                                 if (dataToShow.showShuffleWriteData) {
                                     taskSummaryMetricsTableArray.push(row1);
                                     taskSummaryMetricsTableArray.push(row2);
@@ -768,6 +795,26 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
+                                 if (row.taskMetrics && row.taskMetrics.peakJvmHeapMemory) {
+                                     return type === 'display' ? formatBytes(row.taskMetrics.peakJvmHeapMemory, type) : row.taskMetrics.peakJvmHeapMemory;
+                                 } else {
+                                     return "";
+                                 }
+                             },
+                             name: "Peak JVM Heap Memory"
+                        },
+                        {
+                            data : function (row, type) {
+                                 if (row.taskMetrics && row.taskMetrics.peakJvmOffHeapMemory) {
+                                     return type === 'display' ? formatBytes(row.taskMetrics.peakJvmOffHeapMemory, type) : row.taskMetrics.peakJvmOffHeapMemory;
+                                 } else {
+                                     return "";
+                                 }
+                            },
+                            name: "Peak JVM Off Heap Memory"
+                        },
+                        {
+                            data : function (row, type) {
                                 if (accumulatorTable.length > 0 && row.accumulatorUpdates.length > 0) {
                                     var allAccums = "";
                                     row.accumulatorUpdates.forEach(function(accumulator) {
@@ -891,7 +938,9 @@ $(document).ready(function () {
                         { "visible": false, "targets": 16 },
                         { "visible": false, "targets": 17 },
                         { "visible": false, "targets": 18 },
-                        { "visible": false, "targets": 21 }
+                        { "visible": false, "targets": 19 },
+                        { "visible": false, "targets": 20 },
+                        { "visible": false, "targets": 23 }
                     ],
                     "deferRender": true
                 };
@@ -949,17 +998,17 @@ $(document).ready(function () {
                 if (accumulatorTable.length == 0) {
                     $("#accumulator-update-table").hide();
                 } else {
-                    taskTableSelector.column(18).visible(true);
+                    taskTableSelector.column(20).visible(true);
                     $("#accumulator-update-table").show();
                 }
                 // Showing relevant stage data depending on stage type for task table and executor
                 // summary table
-                taskTableSelector.column(19).visible(dataToShow.showInputData);
-                taskTableSelector.column(20).visible(dataToShow.showOutputData);
-                taskTableSelector.column(22).visible(dataToShow.showShuffleWriteData);
-                taskTableSelector.column(23).visible(dataToShow.showShuffleReadData);
-                taskTableSelector.column(24).visible(dataToShow.showBytesSpilledData);
-                taskTableSelector.column(25).visible(dataToShow.showBytesSpilledData);
+                taskTableSelector.column(21).visible(dataToShow.showInputData);
+                taskTableSelector.column(22).visible(dataToShow.showOutputData);
+                taskTableSelector.column(24).visible(dataToShow.showShuffleWriteData);
+                taskTableSelector.column(25).visible(dataToShow.showShuffleReadData);
+                taskTableSelector.column(26).visible(dataToShow.showBytesSpilledData);
+                taskTableSelector.column(27).visible(dataToShow.showBytesSpilledData);
 
                 if (window.localStorage) {
                     if (window.localStorage.getItem("arrowtoggle1class") !== null &&

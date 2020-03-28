@@ -199,6 +199,8 @@ private[spark] class AppStatusStore(
         gettingResultTime = toValues(_.gettingResultTime),
         schedulerDelay = toValues(_.schedulerDelay),
         peakExecutionMemory = toValues(_.peakExecutionMemory),
+        peakJvmHeapMemory = toValues(_.peakJvmHeapMemory),
+        peakJvmOffHeapMemory = toValues(_.peakJvmOffHeapMemory),
         memoryBytesSpilled = toValues(_.memoryBytesSpilled),
         diskBytesSpilled = toValues(_.diskBytesSpilled),
         inputMetrics = new v1.InputMetricDistributions(
@@ -276,6 +278,8 @@ private[spark] class AppStatusStore(
       },
       schedulerDelay = scanTasks(TaskIndexNames.SCHEDULER_DELAY) { t => t.schedulerDelay },
       peakExecutionMemory = scanTasks(TaskIndexNames.PEAK_MEM) { t => t.peakExecutionMemory },
+      peakJvmHeapMemory = scanTasks(TaskIndexNames.PEAK_HEAP) { t => t.peakJVMHeapMemory},
+      peakJvmOffHeapMemory = scanTasks(TaskIndexNames.PEAK_OFF_HEAP) { t => t.peakJVMOffHeapMemory},
       memoryBytesSpilled = scanTasks(TaskIndexNames.MEM_SPILL) { t => t.memoryBytesSpilled },
       diskBytesSpilled = scanTasks(TaskIndexNames.DISK_SPILL) { t => t.diskBytesSpilled },
       inputMetrics = new v1.InputMetricDistributions(
@@ -319,6 +323,8 @@ private[spark] class AppStatusStore(
           gettingResultTime = computedQuantiles.gettingResultTime(idx),
           schedulerDelay = computedQuantiles.schedulerDelay(idx),
           peakExecutionMemory = computedQuantiles.peakExecutionMemory(idx),
+          peakJvmHeapMemory = computedQuantiles.peakJvmHeapMemory(idx),
+          peakJvmOffHeapMemory = computedQuantiles.peakJvmOffHeapMemory(idx),
           memoryBytesSpilled = computedQuantiles.memoryBytesSpilled(idx),
           diskBytesSpilled = computedQuantiles.diskBytesSpilled(idx),
 

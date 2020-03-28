@@ -123,6 +123,8 @@ private[spark] object TaskIndexNames {
   final val OUTPUT_RECORDS = "or"
   final val OUTPUT_SIZE = "os"
   final val PEAK_MEM = "pem"
+  final val PEAK_HEAP = "pjh"
+  final val PEAK_OFF_HEAP = "pjoh"
   final val RESULT_SIZE = "rs"
   final val SCHEDULER_DELAY = "dly"
   final val SER_TIME = "rst"
@@ -204,6 +206,10 @@ private[spark] class TaskDataWrapper(
     val diskBytesSpilled: Long,
     @KVIndexParam(value = TaskIndexNames.PEAK_MEM, parent = TaskIndexNames.STAGE)
     val peakExecutionMemory: Long,
+    @KVIndexParam(value = TaskIndexNames.PEAK_HEAP, parent = TaskIndexNames.STAGE)
+    val peakJVMHeapMemory: Long,
+    @KVIndexParam(value = TaskIndexNames.PEAK_OFF_HEAP, parent = TaskIndexNames.STAGE)
+    val peakJVMOffHeapMemory: Long,
     @KVIndexParam(value = TaskIndexNames.INPUT_SIZE, parent = TaskIndexNames.STAGE)
     val inputBytesRead: Long,
     @KVIndexParam(value = TaskIndexNames.INPUT_RECORDS, parent = TaskIndexNames.STAGE)
@@ -258,6 +264,8 @@ private[spark] class TaskDataWrapper(
         getMetricValue(memoryBytesSpilled),
         getMetricValue(diskBytesSpilled),
         getMetricValue(peakExecutionMemory),
+        getMetricValue(peakJVMHeapMemory),
+        getMetricValue(peakJVMOffHeapMemory),
         new InputMetrics(
           getMetricValue(inputBytesRead),
           getMetricValue(inputRecordsRead)),
@@ -476,6 +484,8 @@ private[spark] class CachedQuantile(
     val gettingResultTime: Double,
     val schedulerDelay: Double,
     val peakExecutionMemory: Double,
+    val peakJvmHeapMemory: Double,
+    val peakJvmOffHeapMemory: Double,
     val memoryBytesSpilled: Double,
     val diskBytesSpilled: Double,
 
