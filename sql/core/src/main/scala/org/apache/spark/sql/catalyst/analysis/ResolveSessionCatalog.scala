@@ -538,15 +538,21 @@ class ResolveSessionCatalog(
         replace,
         viewType)
 
-    case ShowViewsStatement(SessionCatalogAndNamespace(_, ns), pattern) =>
-      val namespace = if (ns.isEmpty) {
-        None
-      } else if (ns.length == 1) {
-        Some(ns.head)
-      } else {
-        throw new AnalysisException(s"The database name is not valid: ${ns.quoted}")
+    case ShowViewsStatement(resolved: ResolvedNamespace, pattern) =>
+      resolved match {
+        case SessionCatalogAndNamespace(_, ns) =>
+          val namespace = if (ns.isEmpty) {
+            None
+          } else if (ns.length == 1) {
+            Some(ns.head)
+          } else {
+            throw new AnalysisException(s"The database name is not valid: ${ns.quoted}")
+          }
+          ShowViewsCommand(namespace, pattern)
+        case _ =>
+          throw new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
+            s"SHOW VIEWS, only SessionCatalog supports this command.")
       }
-      ShowViewsCommand(namespace, pattern)
 
     case ShowTableProperties(r: ResolvedTable, propertyKey) if isSessionCatalog(r.catalog) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)

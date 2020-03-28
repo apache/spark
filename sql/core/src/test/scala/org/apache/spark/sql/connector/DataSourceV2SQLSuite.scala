@@ -917,6 +917,15 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
 
+  test("ShowViews: using v2 catalog, command not supported.") {
+    val exception = intercept[AnalysisException] {
+      runShowTablesSql("SHOW VIEWS FROM testcat", Seq(), expectV2Catalog = true, isShowView = true)
+    }
+
+    assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
+      " only SessionCatalog supports this command."))
+  }
+
   test("ShowTables: using v2 catalog with empty namespace") {
     spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
     runShowTablesSql("SHOW TABLES FROM testcat", Seq(Row("", "table")))
