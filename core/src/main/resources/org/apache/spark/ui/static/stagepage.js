@@ -170,6 +170,7 @@ function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
 
         default:
             return (row.columnKey == 'peakExecutionMemory' || row.columnKey == 'memoryBytesSpilled'
+                    || row.columnKey == 'peakJvmHeapMemory' || row.columnKey == 'peakJvmOffHeapMemory'
                     || row.columnKey == 'diskBytesSpilled') ? formatBytes(
                     row.data[columnIndex], type) : (formatDuration(row.data[columnIndex]));
 
