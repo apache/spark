@@ -517,8 +517,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     )
 
     val jsonData2 = """{"t": "2016-01-01T00:00:00"}"""
-    for (tz <- DateTimeTestUtils.outstandingTimezones) {
-      c = Calendar.getInstance(tz)
+    for (zid <- DateTimeTestUtils.outstandingZoneIds) {
+      c = Calendar.getInstance(TimeZone.getTimeZone(zid))
       c.set(2016, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
       checkEvaluation(
@@ -526,14 +526,14 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
           schema,
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
           Literal(jsonData2),
-          Option(tz.getID)),
+          Option(zid.getId)),
         InternalRow(c.getTimeInMillis * 1000L)
       )
       checkEvaluation(
         JsonToStructs(
           schema,
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
-            DateTimeUtils.TIMEZONE_OPTION -> tz.getID),
+            DateTimeUtils.TIMEZONE_OPTION -> zid.getId),
           Literal(jsonData2),
           UTC_OPT),
         InternalRow(c.getTimeInMillis * 1000L)
