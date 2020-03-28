@@ -210,31 +210,43 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val clock = new StreamManualClock()
 
     testStream(aggWithWatermark)(
-      StartStream(Trigger.ProcessingTime("interval 1 second"), clock),
       AddData(inputData, 15),
-      AdvanceManualClock(1000L),
-      CheckAnswer(), // watermark = 5
+      StartStream(Trigger.ProcessingTime("interval 1 second"), clock),
+      AdvanceManualClock(1000L), // triggers first batch
+      CheckAnswer(), // watermark = 0
       AssertOnQuery { _.stateNodes.size === 1 },
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
       AddData(inputData, 10, 12, 14),
-      AdvanceManualClock(1000L),
+      AdvanceManualClock(1000L), // watermark = 5, runs no-data microbatch
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
+      AssertOnQuery { _.lastProgress.sink.numOutputRows == 0 },
+      AdvanceManualClock(1000L), // runs with new data from above
       CheckAnswer(), // watermark = 5
       AssertOnQuery { _.stateNodes.size === 1 },
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
+      AssertOnQuery { _.lastProgress.sink.numOutputRows == 0 },
       AddData(inputData, 25),
-      AdvanceManualClock(1000L),
+      AdvanceManualClock(1000L), // actually runs batch with data
+      CheckAnswer(), // watermark = 5, will update to 15 next batch
+      AssertOnQuery { _.stateNodes.size === 1 },
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 3 },
+      AssertOnQuery { _.lastProgress.sink.numOutputRows == 0 },
+      AdvanceManualClock(1000L), // runs batch with no new data and watermark progresses
       CheckAnswer(), // watermark = 15, but nothing yet
       AssertOnQuery { _.lastProgress.sink.numOutputRows == 0 },
-      AdvanceManualClock(1000L),
-      AssertOnQuery { _.lastProgress.sink.numOutputRows == 0 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
-      AdvanceManualClock(100L), // trigger no-data microbatch
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 3 },
+      AssertOnQuery { _.lastProgress.sink.numOutputRows == 0 },
+      AdvanceManualClock(1000L), // trigger no-data microbatch, with new watermark
       CheckAnswer((10, 3)), // watermark = 15
-      AssertOnQuery { _.stateNodes.size === 1 },
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 1 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
       AssertOnQuery { _.lastProgress.sink.numOutputRows == 1 }
