@@ -162,7 +162,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
    * formats of `timeZone` are supported:
    *   <ul>
    *     <li> Region-based zone ID: It should have the form 'area/city', such as
@@ -210,7 +210,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
    * formats of `timeZone` are supported:
    *   <ul>
    *     <li> Region-based zone ID: It should have the form 'area/city', such as
@@ -237,7 +237,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
    * formats of `timeZone` are supported:
    *   <ul>
    *     <li> Region-based zone ID: It should have the form 'area/city', such as

@@ -343,7 +343,6 @@ class DataStreamReader(OptionUtils):
                 timestamps in the JSON/CSV datasources or partition values. The following
                 formats of `timeZone` are supported:
 
-
                 * Region-based zone ID: It should have the form 'area/city', such as \
                   'America/Los_Angeles'.
                 * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
@@ -368,7 +367,6 @@ class DataStreamReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
                 timestamps in the JSON/CSV datasources or partition values. The following
                 formats of `timeZone` are supported:
-
 
                 * Region-based zone ID: It should have the form 'area/city', such as \
                   'America/Los_Angeles'.
@@ -832,10 +830,9 @@ class DataStreamWriter(object):
         """Adds an output option for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
                 timestamps in the JSON/CSV datasources or partition values. The following
                 formats of `timeZone` are supported:
-
 
                 * Region-based zone ID: It should have the form 'area/city', such as \
                   'America/Los_Angeles'.
@@ -856,10 +853,9 @@ class DataStreamWriter(object):
         """Adds output options for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
                 timestamps in the JSON/CSV datasources or partition values. The following
                 formats of `timeZone` are supported:
-
 
                 * Region-based zone ID: It should have the form 'area/city', such as \
                   'America/Los_Angeles'.
