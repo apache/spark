@@ -6,48 +6,48 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.3
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 Save dates to parquet:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-after 1582, noop                                   8873           8873           0         11.3          88.7       1.0X
-before 1582, noop                                  8543           8543           0         11.7          85.4       1.0X
-after 1582, rebase off                            20145          20145           0          5.0         201.4       0.4X
-after 1582, rebase on                             51934          51934           0          1.9         519.3       0.2X
-before 1582, rebase off                           20253          20253           0          4.9         202.5       0.4X
-before 1582, rebase on                            58564          58564           0          1.7         585.6       0.2X
+after 1582, noop                                  19105          19105           0          5.2         191.0       1.0X
+before 1582, noop                                  8289           8289           0         12.1          82.9       2.3X
+after 1582, rebase off                            29998          29998           0          3.3         300.0       0.6X
+after 1582, rebase on                             61779          61779           0          1.6         617.8       0.3X
+before 1582, rebase off                           18777          18777           0          5.3         187.8       1.0X
+before 1582, rebase on                            58391          58391           0          1.7         583.9       0.3X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.3
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-Load date from parquet:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Load dates from parquet:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-after 1582, vec off, rebase off                    9260           9308          48         10.8          92.6       1.0X
-after 1582, vec off, rebase on                    27658          28050         348          3.6         276.6       0.3X
-after 1582, vec on, rebase off                     2689           2799         115         37.2          26.9       3.4X
-after 1582, vec on, rebase on                      2558           2564           6         39.1          25.6       3.6X
-before 1582, vec off, rebase off                   8990           9009          20         11.1          89.9       1.0X
-before 1582, vec off, rebase on                   29806          30053         268          3.4         298.1       0.3X
-before 1582, vec on, rebase off                    2550           2567          15         39.2          25.5       3.6X
-before 1582, vec on, rebase on                     2578           2586          13         38.8          25.8       3.6X
+after 1582, vec off, rebase off                   11302          11569         328          8.8         113.0       1.0X
+after 1582, vec off, rebase on                    31014          31140         198          3.2         310.1       0.4X
+after 1582, vec on, rebase off                     3187           3357         261         31.4          31.9       3.5X
+after 1582, vec on, rebase on                     22647          22781         115          4.4         226.5       0.5X
+before 1582, vec off, rebase off                  11099          11209          96          9.0         111.0       1.0X
+before 1582, vec off, rebase on                   33300          33428         119          3.0         333.0       0.3X
+before 1582, vec on, rebase off                    3255           3366         131         30.7          32.6       3.5X
+before 1582, vec on, rebase on                    24548          24993         386          4.1         245.5       0.5X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.3
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
 Save timestamps to parquet:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-after 1582, noop                                   2099           2099           0         47.6          21.0       1.0X
-before 1582, noop                                  2080           2080           0         48.1          20.8       1.0X
-after 1582, rebase off                            12626          12626           0          7.9         126.3       0.2X
-after 1582, rebase on                             76490          76490           0          1.3         764.9       0.0X
-before 1582, rebase off                           12548          12548           0          8.0         125.5       0.2X
-before 1582, rebase on                            81903          81903           0          1.2         819.0       0.0X
+after 1582, noop                                   2094           2094           0         47.8          20.9       1.0X
+before 1582, noop                                  2073           2073           0         48.2          20.7       1.0X
+after 1582, rebase off                            13400          13400           0          7.5         134.0       0.2X
+after 1582, rebase on                             77886          77886           0          1.3         778.9       0.0X
+before 1582, rebase off                           13378          13378           0          7.5         133.8       0.2X
+before 1582, rebase on                            90746          90746           0          1.1         907.5       0.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.3
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-Load timestamp from parquet:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Load timestamps from parquet:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-after 1582, vec off, rebase off                   12780          12890         126          7.8         127.8       1.0X
-after 1582, vec off, rebase on                    53386          53418          35          1.9         533.9       0.2X
-after 1582, vec on, rebase off                     4000           4055          84         25.0          40.0       3.2X
-after 1582, vec on, rebase on                     45193          45277         125          2.2         451.9       0.3X
-before 1582, vec off, rebase off                  12806          12913         101          7.8         128.1       1.0X
-before 1582, vec off, rebase on                   54768          54976         355          1.8         547.7       0.2X
-before 1582, vec on, rebase off                    4017           4300         294         24.9          40.2       3.2X
-before 1582, vec on, rebase on                    46892          47118         200          2.1         468.9       0.3X
+after 1582, vec off, rebase off                   13037          13180         186          7.7         130.4       1.0X
+after 1582, vec off, rebase on                    53351          53398          41          1.9         533.5       0.2X
+after 1582, vec on, rebase off                     4027           4076          49         24.8          40.3       3.2X
+after 1582, vec on, rebase on                     46889          47083         326          2.1         468.9       0.3X
+before 1582, vec off, rebase off                  13720          13913         219          7.3         137.2       1.0X
+before 1582, vec off, rebase on                   57410          57779         320          1.7         574.1       0.2X
+before 1582, vec on, rebase off                    4045           4183         146         24.7          40.4       3.2X
+before 1582, vec on, rebase on                    49008          49458         397          2.0         490.1       0.3X
 
 
