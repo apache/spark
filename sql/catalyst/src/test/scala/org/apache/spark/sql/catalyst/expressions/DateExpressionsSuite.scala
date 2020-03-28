@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
-import java.util.{Calendar, Locale}
+import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
