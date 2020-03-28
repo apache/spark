@@ -48,6 +48,15 @@ class TableAlreadyExistsException(message: String) extends AnalysisException(mes
 class TempTableAlreadyExistsException(table: String)
   extends TableAlreadyExistsException(s"Temporary view '$table' already exists")
 
+class ViewAlreadyExistsException(message: String, cause: Option[Throwable] = None)
+  extends AnalysisException(message, cause = cause) {
+
+  def this(ident: Identifier, cause: Throwable) =
+    this(s"View '${ident.quoted}' already exists", cause = Option(cause))
+
+  def this(ident: Identifier) = this(ident, null)
+}
+
 class PartitionAlreadyExistsException(db: String, table: String, spec: TablePartitionSpec)
   extends AnalysisException(
     s"Partition already exists in table '$table' database '$db':\n" + spec.mkString("\n"))

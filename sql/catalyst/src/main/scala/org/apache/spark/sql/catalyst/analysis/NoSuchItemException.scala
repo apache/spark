@@ -30,10 +30,14 @@ import org.apache.spark.sql.connector.catalog.Identifier
 class NoSuchDatabaseException(
     val db: String) extends NoSuchNamespaceException(s"Database '$db' not found")
 
-class NoSuchNamespaceException(message: String) extends AnalysisException(message) {
-  def this(namespace: Array[String]) = {
-    this(s"Namespace '${namespace.quoted}' not found")
+class NoSuchNamespaceException(message: String, cause: Option[Throwable] = None)
+  extends AnalysisException(message) {
+
+  def this(namespace: Array[String], cause: Throwable) = {
+    this(s"Namespace '${namespace.quoted}' not found", cause = Option(cause))
   }
+
+  def this(namespace: Array[String]) = this(namespace, cause = null)
 }
 
 class NoSuchTableException(message: String) extends AnalysisException(message) {
@@ -44,6 +48,15 @@ class NoSuchTableException(message: String) extends AnalysisException(message) {
   def this(tableIdent: Identifier) = {
     this(s"Table ${tableIdent.quoted} not found")
   }
+}
+
+class NoSuchViewException(message: String, cause: Option[Throwable] = None)
+  extends AnalysisException(message, cause = cause) {
+
+  def this(ident: Identifier, cause: Throwable) =
+    this(s"View '${ident.quoted}' not found", cause = Option(cause))
+
+  def this(ident: Identifier) = this(ident, cause = null)
 }
 
 class NoSuchPartitionException(
