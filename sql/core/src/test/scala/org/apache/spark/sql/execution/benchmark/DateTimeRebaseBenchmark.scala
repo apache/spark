@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneOffset}
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.SECONDS_PER_DAY
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -56,15 +57,27 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
     val start = LocalDateTime.of(10, 1, 1, 0, 0, 0)
     val end = LocalDateTime.of(1580, 1, 1, 0, 0, 0)
     genTs(cardinality, start, end)
+  }
 
+  private def genDate(cardinality: Int, start: LocalDate, end: LocalDate): DataFrame = {
+    val startSec = LocalDateTime.of(start, LocalTime.MIDNIGHT).toEpochSecond(ZoneOffset.UTC)
+    val endSec = LocalDateTime.of(end, LocalTime.MIDNIGHT).toEpochSecond(ZoneOffset.UTC)
+    spark.range(0, cardinality * SECONDS_PER_DAY, SECONDS_PER_DAY, 1)
+      .select((($"id" % (endSec - startSec)) + startSec).as("seconds"))
+      .select($"seconds".cast("timestamp").as("ts"))
+      .select($"ts".cast("date").as("date"))
   }
 
   private def genDateAfter1582(cardinality: Int): DataFrame = {
-    genTsAfter1582(cardinality).select($"ts".cast("date").as("date"))
+    val start = LocalDate.of(1582, 10, 15)
+    val end = LocalDate.of(3000, 1, 1)
+    genDate(cardinality, start, end)
   }
 
   private def genDateBefore1582(cardinality: Int): DataFrame = {
-    genTsBefore1582(cardinality).select($"ts".cast("date").as("date"))
+    val start = LocalDate.of(10, 1, 1)
+    val end = LocalDate.of(1580, 1, 1)
+    genDate(cardinality, start, end)
   }
 
   private def genDF(cardinality: Int, dateTime: String, after1582: Boolean): DataFrame = {
