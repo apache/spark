@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.time.{LocalDate, LocalDateTime, ZoneOffset}
+import java.time.{LocalDateTime, ZoneOffset}
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
