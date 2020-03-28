@@ -192,7 +192,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("SPARK-31233: ask rpcEndpointRef in client mode timeout") {
     var remoteRef: RpcEndpointRef = null
-    env.setupEndpoint("ask-remotely", new RpcEndpoint {
+    env.setupEndpoint("ask-remotely-server", new RpcEndpoint {
       override val rpcEnv = env
       override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
         case Register(ref) =>
@@ -205,7 +205,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val conf = new SparkConf()
     val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
-    val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-remotely")
+    val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-remotely-server")
     // Register a rpcEndpointRef in anotherEnv
     val anotherRef = anotherEnv.setupEndpoint("receiver", new RpcEndpoint {
       override val rpcEnv = anotherEnv
