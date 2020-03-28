@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.{LocalDate, LocalDateTime, ZoneOffset}
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
@@ -59,113 +59,88 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
 
   }
 
-  private def save(df: DataFrame, path: String, format: String = "parquet"): Unit = {
-    df.write.mode("overwrite").format(format).save(path)
+  private def genDateAfter1582(cardinality: Int): DataFrame = {
+    genTsAfter1582(cardinality).select($"ts".cast("date").as("date"))
   }
 
-  private def load(path: String, format: String = "parquet"): Unit = {
-    spark.read.format(format).load(path).noop()
+  private def genDateBefore1582(cardinality: Int): DataFrame = {
+    genTsBefore1582(cardinality).select($"ts".cast("date").as("date"))
+  }
+
+  private def genDF(cardinality: Int, dateTime: String, after1582: Boolean): DataFrame = {
+    (dateTime, after1582) match {
+      case ("date", true) => genDateAfter1582(cardinality)
+      case ("date", false) => genDateBefore1582(cardinality)
+      case ("timestamp", true) => genTsAfter1582(cardinality)
+      case ("timestamp", false) => genTsBefore1582(cardinality)
+      case _ => throw new IllegalArgumentException(
+        s"cardinality = $cardinality dateTime = $dateTime after1582 = $after1582")
+    }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     withTempPath { path =>
       runBenchmark("Parquet read/write") {
         val rowsNum = 100000000
-        var numIters = 1
-        var benchmark = new Benchmark("Save timestamps to parquet", rowsNum, output = output)
-        benchmark.addCase("after 1582, noop", numIters) { _ =>
-          genTsAfter1582(rowsNum).noop()
-        }
-        val ts_after_1582_off = path.getAbsolutePath + "/ts_after_1582_off"
-        benchmark.addCase("after 1582, rebase off", numIters) { _ =>
-          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
-            save(genTsAfter1582(rowsNum), ts_after_1582_off)
+        Seq("date", "timestamp").foreach { dateTime =>
+          val benchmark = new Benchmark(s"Save ${dateTime}s to parquet", rowsNum, output = output)
+          benchmark.addCase("after 1582, noop", 1) { _ =>
+            genDF(rowsNum, dateTime, after1582 = true).noop()
           }
-        }
-        val ts_after_1582_on = path.getAbsolutePath + "/ts_after_1582_on"
-        benchmark.addCase("after 1582, rebase on", numIters) { _ =>
-          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
-            save(genTsAfter1582(rowsNum), ts_after_1582_on)
+          benchmark.addCase("before 1582, noop", 1) { _ =>
+            genDF(rowsNum, dateTime, after1582 = false).noop()
           }
-        }
-        benchmark.addCase("before 1582, noop", numIters) { _ =>
-          genTsBefore1582(rowsNum).noop()
-        }
-        val ts_before_1582_off = path.getAbsolutePath + "/ts_before_1582_off"
-        benchmark.addCase("before 1582, rebase off", numIters) { _ =>
-          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
-            save(genTsBefore1582(rowsNum), ts_before_1582_off)
-          }
-        }
-        val ts_before_1582_on = path.getAbsolutePath + "/ts_before_1582_on"
-        benchmark.addCase("before 1582, rebase on", numIters) { _ =>
-          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
-            save(genTsBefore1582(rowsNum), ts_before_1582_on)
-          }
-        }
-        benchmark.run()
 
-        numIters = 3
-        benchmark = new Benchmark("Load timestamps from parquet", rowsNum, output = output)
-        benchmark.addCase("after 1582, vec off, rebase off", numIters) { _ =>
-          withSQLConf(
-            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-            SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
-            load(ts_after_1582_off)
+          def save(after1582: Boolean, rebase: Boolean): Unit = {
+            val period = if (after1582) "after" else "before"
+            val rebaseFlag = if (rebase) "on" else "off"
+            val caseName = s"$period 1582, rebase $rebaseFlag"
+            benchmark.addCase(caseName, 1) { _ =>
+              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> rebase.toString) {
+                val df = genDF(rowsNum, dateTime, after1582)
+                val pathToWrite = path.getAbsolutePath + s"/${dateTime}_${period}_1582_$rebaseFlag"
+                df.write
+                  .mode("overwrite")
+                  .format("parquet")
+                  .save(pathToWrite)
+              }
+            }
           }
-        }
-        benchmark.addCase("after 1582, vec off, rebase on", numIters) { _ =>
-          withSQLConf(
-            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-            SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
-            load(ts_after_1582_on)
-          }
-        }
-        benchmark.addCase("after 1582, vec on, rebase off", numIters) { _ =>
-          withSQLConf(
-            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-            SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
-            load(ts_after_1582_off)
-          }
-        }
-        benchmark.addCase("after 1582, vec on, rebase on", numIters) { _ =>
-          withSQLConf(
-            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-            SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
-            load(ts_after_1582_on)
-          }
-        }
 
-        benchmark.addCase("before 1582, vec off, rebase off", numIters) { _ =>
-          withSQLConf(
-            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-            SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
-            load(ts_before_1582_off)
+          Seq(true, false).foreach { after1582 =>
+            Seq(false, true).foreach { rebase =>
+              save(after1582, rebase)
+            }
           }
-        }
-        benchmark.addCase("before 1582, vec off, rebase on", numIters) { _ =>
-          withSQLConf(
-            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-            SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
-            load(ts_before_1582_on)
-          }
-        }
-        benchmark.addCase("before 1582, vec on, rebase off", numIters) { _ =>
-          withSQLConf(
-            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-            SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
-            load(ts_before_1582_off)
-          }
-        }
-        benchmark.addCase("before 1582, vec on, rebase on", numIters) { _ =>
-          withSQLConf(
-            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-            SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
-            load(ts_before_1582_on)
-          }
-        }
+          benchmark.run()
 
-        benchmark.run()
+          val benchmark2 = new Benchmark(s"Load $dateTime from parquet", rowsNum, output = output)
+
+          def load(after1582: Boolean, vec: Boolean, rebase: Boolean): Unit = {
+            val period = if (after1582) "after" else "before"
+            val rebaseFlag = if (rebase) "on" else "off"
+            val vecFlag = if (vec) "on" else "off"
+            val caseName = s"$period 1582, vec $vecFlag, rebase $rebaseFlag"
+            benchmark2.addCase(caseName, 3) { _ =>
+              withSQLConf(
+                SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vec.toString,
+                SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> rebase.toString) {
+                val pathToRead = path.getAbsolutePath + s"/${dateTime}_${period}_1582_$rebaseFlag"
+                spark.read.format("parquet").load(pathToRead).noop()
+              }
+            }
+          }
+
+          Seq(true, false).foreach { after1582 =>
+            Seq(false, true).foreach { vec =>
+              Seq(false, true).foreach { rebase =>
+                load(after1582, vec, rebase)
+              }
+            }
+          }
+
+          benchmark2.run()
+        }
       }
     }
   }
