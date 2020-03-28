@@ -58,17 +58,17 @@ class SizeBasedCoalescer(val maxSize: Long, val schema: Seq[Attribute])
       val partitionSize = partitionIndexToSize(index)
       if (currentSum + partitionSize < maxSize) {
         addPartition(partition, partitionSize)
-        index += 1
-        if (index == partitions.length) {
-          updateGroups()
-        }
       } else {
         if (currentGroup.partitions.isEmpty) {
           addPartition(partition, partitionSize)
-          index += 1
         } else {
           updateGroups()
+          addPartition(partition, partitionSize)
         }
+      }
+      index += 1
+      if (index == partitions.length) {
+        updateGroups()
       }
     }
     groups.toArray

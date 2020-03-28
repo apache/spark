@@ -172,8 +172,13 @@ object FileFormatWriter extends Logging {
         val originRdd = empty2NullPlan.execute()
         val maxSize = sparkSession.sessionState.conf.mergeSmallOutputFilesMaxSize
         val coalescer = new SizeBasedCoalescer(maxSize, plan.output)
+        val shufflePartitionNum = if (originRdd.partitions.length > 0) {
+          originRdd.partitions.length
+        } else {
+          1
+        }
         val coalescedRdd =
-          originRdd.coalesce(originRdd.partitions.length, shuffle = false, Some(coalescer))
+          originRdd.coalesce(shufflePartitionNum, shuffle = true, Some(coalescer))
         if (orderingMatched) {
           coalescedRdd
         } else {
