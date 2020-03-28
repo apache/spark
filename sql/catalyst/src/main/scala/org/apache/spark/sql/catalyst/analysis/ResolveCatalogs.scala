@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, ViewChange}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -122,22 +122,35 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       createAlterTable(nameParts, catalog, tbl, changes)
 
     case AlterViewSetPropertiesStatement(
-         NonSessionCatalogAndTable(catalog, tbl), props) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
-          s"because view support in catalog has not been implemented yet")
+        NonSessionCatalogAndIdentifier(catalog, ident), props) =>
+      val changes = props.map {
+        case (property, value) => ViewChange.setProperty(property, value)
+      }.toSeq
+      AlterView(catalog.asViewCatalog, ident, changes)
 
     case AlterViewUnsetPropertiesStatement(
-         NonSessionCatalogAndTable(catalog, tbl), keys, ifExists) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
-          s"because view support in catalog has not been implemented yet")
-
-    case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>
-      if (isView) {
-        throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
+        NonSessionCatalogAndIdentifier(catalog, ident), keys, ifExists) =>
+      if (!ifExists) {
+        val view = catalog.asViewCatalog.loadView(ident)
+        keys.find(!view.properties.containsKey(_)).foreach { k =>
+          throw new AnalysisException(
+            s"Attempted to unset non-existent property '$k' in view $ident")
+        }
       }
-      RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
+      val changes = keys.map(ViewChange.removeProperty)
+      AlterView(catalog.asViewCatalog, ident, changes)
+
+    case RenameTableStatement(NonSessionCatalogAndTable(oldCatalog, oldName),
+        NonSessionCatalogAndTable(newCatalog, newName), isView) =>
+      if (oldCatalog.name != newCatalog.name) {
+        throw new AnalysisException(
+          s"Cannot move table or view between catalogs: from=$oldCatalog and to=$newCatalog")
+      }
+      if (isView) {
+        RenameView(oldCatalog.asViewCatalog, oldName.asIdentifier, newName.asIdentifier)
+      } else {
+        RenameTable(oldCatalog.asTableCatalog, oldName.asIdentifier, newName.asIdentifier)
+      }
 
     case DescribeColumnStatement(
          NonSessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
@@ -197,10 +210,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case DropTableStatement(NonSessionCatalogAndTable(catalog, tbl), ifExists, _) =>
       DropTable(catalog.asTableCatalog, tbl.asIdentifier, ifExists)
 
-    case DropViewStatement(NonSessionCatalogAndTable(catalog, viewName), _) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
-          s"because view support in catalog has not been implemented yet")
+    case DropViewStatement(NonSessionCatalogAndIdentifier(catalog, ident), ifExists) =>
+      DropView(catalog.asViewCatalog, ident, ifExists)
 
     case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
         if !isSessionCatalog(catalog) =>
@@ -217,6 +228,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case ShowCurrentNamespaceStatement() =>
       ShowCurrentNamespace(catalogManager)
+
+    case s @ ShowCreateTableStatement(nameParts @ NonSessionCatalogAndTable(catalog, tbl), _) =>
+      CatalogV2Util.loadView(catalog, tbl.asIdentifier) match {
+        case Some(view) =>
+          ShowCreateView(V2ViewDescription(nameParts.quoted, view))
+        case None =>
+          s
+      }
+
   }
 
   object NonSessionCatalogAndTable {

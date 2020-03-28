@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedExceptio
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
-import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.{View => V2View, _}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
@@ -515,4 +515,67 @@ case class CommentOnNamespace(child: LogicalPlan, comment: String) extends Comma
  */
 case class CommentOnTable(child: LogicalPlan, comment: String) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * Create or replace a view in a v2 catalog.
+ */
+case class CreateView(
+    catalog: ViewCatalog,
+    ident: Identifier,
+    sql: String,
+    comment: Option[String],
+    viewSchema: StructType,
+    properties: Map[String, String],
+    allowExisting: Boolean,
+    replace: Boolean) extends Command
+
+/**
+ * Drop a view in a v2 catalog.
+ */
+case class DropView(
+    catalog: ViewCatalog,
+    ident: Identifier,
+    ifExists: Boolean) extends Command
+
+/**
+ * Alter a view in a v2 catalog.
+ */
+case class AlterView(
+    catalog: ViewCatalog,
+    ident: Identifier,
+    changes: Seq[ViewChange]) extends Command
+
+/**
+ * The logical plan of the ALTER VIEW RENAME command for v2 views.
+ */
+case class RenameView(
+    catalog: ViewCatalog,
+    oldIdent: Identifier,
+    newIdent: Identifier) extends Command
+
+/**
+ * Describe a view in a v2 catalog.
+ */
+case class DescribeView(desc: V2ViewDescription, isExtended: Boolean) extends Command {
+  override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
+}
+
+/**
+ * Show create statement for a view in a v2 catalog.
+ */
+case class ShowCreateView(desc: V2ViewDescription) extends Command {
+  override def output: Seq[Attribute] = Seq(
+    AttributeReference("create_statement", StringType, nullable = false)())
+}
+
+/**
+ * Show view properties.
+ */
+case class ShowViewProperties(
+    desc: V2ViewDescription,
+    propertyKey: Option[String]) extends Command {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("key", StringType, nullable = false)(),
+    AttributeReference("value", StringType, nullable = false)())
 }

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.{View => V2View}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -415,6 +415,39 @@ case class InsertIntoDir(
 }
 
 /**
+ * A trait for view description used by [[View]] container.
+ */
+trait ViewDescription {
+  val identifier: String
+  val viewCatalogAndNamespace: Seq[String]
+  val viewQueryColumnNames: Seq[String]
+}
+
+/**
+ * View description backed by a [[CatalogTable]].
+ *
+ * @param metadata a CatalogTable
+ */
+case class CatalogViewDescription(metadata: CatalogTable) extends ViewDescription {
+  override val identifier: String = metadata.identifier.quotedString
+  override val viewCatalogAndNamespace: Seq[String] = metadata.viewCatalogAndNamespace
+  override val viewQueryColumnNames: Seq[String] = metadata.viewQueryColumnNames
+}
+
+/**
+ * View description backed by a View in V2 catalog.
+ *
+ * @param view a view in V2 catalog
+ */
+case class V2ViewDescription(
+    override val identifier: String,
+    view: V2View) extends ViewDescription {
+  override val viewCatalogAndNamespace: Seq[String] =
+    view.currentCatalog +: view.currentNamespace.toSeq
+  override val viewQueryColumnNames: Seq[String] = view.schema.fieldNames
+}
+
+/**
  * A container for holding the view description(CatalogTable), and the output of the view. The
  * child should be a logical plan parsed from the `CatalogTable.viewText`, should throw an error
  * if the `viewText` is not defined.
@@ -428,7 +461,7 @@ case class InsertIntoDir(
  *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
  */
 case class View(
-    desc: CatalogTable,
+    desc: ViewDescription,
     output: Seq[Attribute],
     child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
 
@@ -443,6 +476,11 @@ case class View(
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
+}
+
+object View {
+  def apply(desc: CatalogTable, output: Seq[Attribute], child: LogicalPlan): LogicalPlan =
+    View(CatalogViewDescription(desc), output, child)
 }
 
 /**

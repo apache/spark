@@ -76,6 +76,13 @@ private[sql] object CatalogV2Implicits {
         throw new AnalysisException(s"Cannot use catalog ${plugin.name}: not a TableCatalog")
     }
 
+    def asViewCatalog: ViewCatalog = plugin match {
+      case viewCatalog: ViewCatalog =>
+        viewCatalog
+      case _ =>
+        throw new AnalysisException(s"Cannot use catalog ${plugin.name}: not a ViewCatalog")
+    }
+
     def asNamespaceCatalog: SupportsNamespaces = plugin match {
       case namespaceCatalog: SupportsNamespaces =>
         namespaceCatalog

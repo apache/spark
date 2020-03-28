@@ -388,6 +388,17 @@ trait CheckAnalysis extends PredicateHelper {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
+          case c: CreateViewStatement =>
+            if (c.viewType == PersistedView && c.originalText.isEmpty) {
+              throw new AnalysisException(
+                "'originalText' must be provided to create permanent view")
+            }
+
+            if (c.allowExisting && c.replace) {
+              throw new AnalysisException(
+                "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
+            }
+
           // If the view output doesn't have the same number of columns neither with the child
           // output, nor with the query column names, throw an AnalysisException.
           // If the view's child output can't up cast to the view output,

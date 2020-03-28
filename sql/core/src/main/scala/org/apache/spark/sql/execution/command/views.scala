@@ -409,8 +409,8 @@ object ViewHelper {
    */
   def checkCyclicViewReference(
       plan: LogicalPlan,
-      path: Seq[TableIdentifier],
-      viewIdent: TableIdentifier): Unit = {
+      path: Seq[String],
+      viewIdent: String): Unit = {
     plan match {
       case v: View =>
         val ident = v.desc.identifier
@@ -438,4 +438,10 @@ object ViewHelper {
       }
     }
   }
+
+  def checkCyclicViewReference(
+      plan: LogicalPlan,
+      path: Seq[TableIdentifier],
+      viewIdent: TableIdentifier): Unit =
+    checkCyclicViewReference(plan, path.map(_.quotedString), viewIdent.quotedString)
 }

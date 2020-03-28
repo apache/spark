@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -36,6 +36,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   import DataSourceV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  private val catalogManager: CatalogManager = session.sessionState.catalogManager
 
   private def withProjectAndFilter(
       project: Seq[NamedExpression],
@@ -286,6 +288,36 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
       ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
+
+    case CreateView(catalog, ident, sql, comment, schema, properties, allowExisting, replace) =>
+      CreateViewExec(
+        catalog,
+        ident,
+        sql,
+        catalogManager.currentCatalog.name +: catalogManager.currentNamespace,
+        comment,
+        schema,
+        properties,
+        allowExisting,
+        replace) :: Nil
+
+    case AlterView(catalog, ident, changes) =>
+      AlterViewExec(catalog, ident, changes) :: Nil
+
+    case DropView(catalog, ident, ifExists) =>
+      DropViewExec(catalog, ident, ifExists) :: Nil
+
+    case RenameView(catalog, oldIdent, newIdent) =>
+      RenameViewExec(catalog, oldIdent, newIdent) :: Nil
+
+    case d @ DescribeView(desc, isExtended) =>
+      DescribeViewExec(d.output, desc, isExtended) :: Nil
+
+    case show @ ShowCreateView(view) =>
+      ShowCreateViewExec(show.output, view) :: Nil
+
+    case show @ ShowViewProperties(view, propertyKey) =>
+      ShowViewPropertiesExec(show.output, view, propertyKey) :: Nil
 
     case _ => Nil
   }

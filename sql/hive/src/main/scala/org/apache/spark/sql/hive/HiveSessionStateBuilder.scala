@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, CreateViewAnalysis, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -71,10 +71,14 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
   override protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
+    override val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] =
+      ViewSubstitution(sqlParser) :: Nil
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
+        CreateViewAnalysis(catalogManager, createQueryExecution) +:
         new FallBackFileSourceV2(session) +:
         new ResolveSessionCatalog(
           catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:

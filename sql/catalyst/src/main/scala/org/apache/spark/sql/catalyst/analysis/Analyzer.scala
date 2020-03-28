@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -188,6 +189,11 @@ class Analyzer(
       maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
+   * Override to provide additional rules for the "Substitution" batch.
+   */
+  val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Override to provide additional rules for the "Resolution" batch.
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
@@ -206,10 +212,11 @@ class Analyzer(
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Substitution", fixedPoint,
-      CTESubstitution,
-      WindowsSubstitution,
-      EliminateUnions,
-      new SubstituteUnresolvedOrdinals(conf)),
+      CTESubstitution +:
+      WindowsSubstitution +:
+      EliminateUnions +:
+      new SubstituteUnresolvedOrdinals(conf) +:
+      extendedSubstitutionRules : _*),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveNamespace(catalogManager) ::
@@ -320,6 +327,62 @@ class Analyzer(
       }
     }
   }
+  /**
+   * Substitute persisted views in parsed plans with parsed view sql text.
+   */
+  case class ViewSubstitution(sqlParser: ParserInterface) extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
+      case u @ UnresolvedRelation(
+          parts @ CatalogAndIdentifier(catalog, ident)) if !isSQLOnFile(parts) =>
+        CatalogV2Util.loadView(catalog, ident)
+            .map(createViewRelation(parts.quoted, _))
+            .getOrElse(u)
+    }
+
+    private def isSQLOnFile(parts: Seq[String]): Boolean = parts match {
+      case Seq(_, path) if path.contains("/") => true
+      case _ => false
+    }
+
+    private def createViewRelation(name: String, view: V2View): LogicalPlan = {
+      if (!catalogManager.isCatalogRegistered(view.currentCatalog)) {
+        throw new AnalysisException(
+          s"Invalid current catalog '${view.currentCatalog}' in view '$name'")
+      }
+
+      val child = sqlParser.parsePlan(view.sql)
+      val desc = V2ViewDescription(name, view)
+      val qualifiedChild = desc.viewCatalogAndNamespace match {
+        case Seq() =>
+          // Views from Spark 2.2 or prior do not store catalog or namespace,
+          // however its sql text should already be fully qualified.
+          child
+        case catalogAndNamespace =>
+          // Substitute CTEs within the view before qualifying table identifiers
+          qualifyTableIdentifiers(CTESubstitution.apply(child), catalogAndNamespace)
+      }
+
+      // The relation is a view, so we wrap the relation by:
+      // 1. Add a [[View]] operator over the relation to keep track of the view desc;
+      // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
+      SubqueryAlias(name, View(desc, view.schema.toAttributes, qualifiedChild))
+    }
+
+    /**
+     * Qualify table identifiers with default catalog and database if necessary.
+     */
+    private def qualifyTableIdentifiers(
+        child: LogicalPlan,
+        catalogAndNamespace: Seq[String]): LogicalPlan =
+      child transform {
+        case u @ UnresolvedRelation(Seq(table)) =>
+          u.copy(multipartIdentifier = catalogAndNamespace :+ table)
+        case u @ UnresolvedRelation(parts) if !catalogManager.isCatalogRegistered(parts.head) =>
+          u.copy(multipartIdentifier = catalogAndNamespace.head +: parts)
+      }
+  }
+
   /**
    * Substitute child plan with WindowSpecDefinitions.
    */
