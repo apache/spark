@@ -114,7 +114,8 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
           }
           benchmark.run()
 
-          val benchmark2 = new Benchmark(s"Load $dateTime from parquet", rowsNum, output = output)
+          val benchmark2 = new Benchmark(
+            s"Load ${dateTime}s from parquet", rowsNum, output = output)
 
           def load(after1582: Boolean, vec: Boolean, rebase: Boolean): Unit = {
             val period = if (after1582) "after" else "before"
