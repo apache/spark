@@ -1895,13 +1895,20 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     checkAnswer(spark.read.schema(schema).csv(input), Row(null))
     checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
     assert(spark.read.csv(input).collect().toSet == Set(Row()))
+  }
 
-    val schemaWithCorruptField = schema.add("_corrupt_record", StringType)
+  test("SPARK-31261: bad csv input with `columnNameCorruptRecord` should not cause NPE") {
+    val schema = StructType(
+      StructField("a", IntegerType) :: StructField("_corrupt_record", StringType) :: Nil)
+    val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+
     checkAnswer(
       spark.read
         .option("columnNameOfCorruptRecord", "_corrupt_record")
-        .schema(schemaWithCorruptField).csv(input),
+        .schema(schema)
+        .csv(input),
       Row(null, null))
+    assert(spark.read.csv(input).collect().toSet == Set(Row()))
   }
 
   test("field names of inferred schema shouldn't compare to the first row") {
