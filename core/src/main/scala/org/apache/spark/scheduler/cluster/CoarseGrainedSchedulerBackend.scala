@@ -581,7 +581,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   private[spark] def decommissionExecutor(executorId: String): Unit = {
     if (driverEndpoint != null) {
-      logInfo("Propogating executor decommission to driver.")
+      logInfo("Propagating executor decommission to driver.")
       driverEndpoint.send(DecommissionExecutor(executorId))
     }
   }

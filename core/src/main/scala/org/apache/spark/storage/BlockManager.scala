@@ -1558,22 +1558,22 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Called for pro-active replenishment of blocks lost due to executor failures
-   *
    * @param blockId blockId being replicate
    * @param existingReplicas existing block managers that have a replica
    * @param maxReplicas maximum replicas needed
+   * @param forceFetchPeers whether to force refresh the peer list or not
+   * @param maxReplicationFailures number of replication failures to tolerate before
+   *                               giving up.
+   * @return whether block was successfully replicated or not
    */
   def replicateBlock(
       blockId: BlockId,
       existingReplicas: Set[BlockManagerId],
       maxReplicas: Int,
-      forceFetch: Boolean = true,
+      forceFetchPeers: Boolean = true,
       maxReplicationFailures: Option[Int] = None): Boolean = {
-    var replicatedSuccessfully = true
     logInfo(s"Using $blockManagerId to pro-actively replicate $blockId")
-    blockInfoManager.lockForReading(blockId).foreach { info =>
-      replicatedSuccessfully = false
+    blockInfoManager.lockForReading(blockId).forall { info =>
       val data = doGetLocalBytes(blockId, info)
       val storageLevel = StorageLevel(
         useDisk = info.level.useDisk,
@@ -1581,16 +1581,15 @@ private[spark] class BlockManager(
         useOffHeap = info.level.useOffHeap,
         deserialized = info.level.deserialized,
         replication = maxReplicas)
-      getPeers(forceFetch)
+      getPeers(forceFetchPeers)
       try {
-        replicatedSuccessfully = replicate(
+        replicate(
           blockId, data, storageLevel, info.classTag, existingReplicas, maxReplicationFailures)
       } finally {
         logDebug(s"Releasing lock for $blockId")
         releaseLockAndDispose(blockId, data)
       }
     }
-    replicatedSuccessfully
   }
 
   /**
@@ -1812,7 +1811,7 @@ private[spark] class BlockManager(
           blockId,
           existingReplicas.toSet,
           maxReplicas,
-          forceFetch = false,
+          forceFetchPeers = false,
           maxReplicationFailures = Some(maxReplicationFailures))
         if (replicatedSuccessfully) {
           logInfo(s"Block $blockId offloaded successfully, Removing block now")
