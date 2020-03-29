@@ -1034,6 +1034,18 @@ object DateTimeUtils {
     instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
   }
 
+  private def rebaseDays(daysArr: Array[Int], diffArr: Array[Int], days: Int): Int = {
+    val index = util.Arrays.binarySearch(daysArr, days)
+    val diff = if (index >= 0) diffArr(index) else diffArr(-index - 2)
+    val rebased = days + diff
+    rebased
+  }
+
+  private val julToGregDay = Array(
+    -719164, -682945, -646420, -609895, -536845, -500320, -463795,
+    -390745, -354220, -317695, -244645, -208120, -171595, -141427)
+  private val julToGregDiff = Array(2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, 0)
+
   /**
    * Converts the given number of days since the epoch day 1970-01-01 to
    * a local date in Julian calendar, interprets the result as a local
@@ -1044,23 +1056,7 @@ object DateTimeUtils {
    * @return The rebased number of days in Gregorian calendar.
    */
   def rebaseJulianToGregorianDays(days: Int): Int = {
-    val utcCal = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
-      .setCalendarType("gregory")
-      .setTimeZone(TimeZoneUTC)
-      .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
-      .build()
-    val localDate = LocalDate.of(
-      utcCal.get(Calendar.YEAR),
-      utcCal.get(Calendar.MONTH) + 1,
-      // The number of days will be added later to handle non-existing
-      // Julian dates in Proleptic Gregorian calendar.
-      // For example, 1000-02-29 exists in Julian calendar because 1000
-      // is a leap year but it is not a leap year in Gregorian calendar.
-      1)
-      .plusDays(utcCal.get(Calendar.DAY_OF_MONTH) - 1)
-    Math.toIntExact(localDate.toEpochDay)
+    rebaseDays(julToGregDay, julToGregDiff, days)
   }
 
   private val gregToJulDay = Array(
@@ -1085,9 +1081,6 @@ object DateTimeUtils {
    * @return The rebased number of days since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianDays(days: Int): Int = {
-    val index = util.Arrays.binarySearch(gregToJulDay, days)
-    val diff = if (index >= 0) gregToJulDiff(index) else gregToJulDiff(-index - 2)
-    val rebased = days + diff
-    rebased
+    rebaseDays(gregToJulDay, gregToJulDiff, days)
   }
 }

@@ -38,6 +38,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("nanoseconds truncation") {
     val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
+
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String): Unit = {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultZoneId)
@@ -455,6 +456,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
         === expected)
     }
+
     for (tz <- ALL_TIMEZONES) {
       withDefaultTimeZone(tz) {
         test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
@@ -510,10 +512,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("truncTimestamp") {
     def testTrunc(
-        level: Int,
-        expected: String,
-        inputTS: SQLTimestamp,
-        zoneId: ZoneId = defaultZoneId): Unit = {
+      level: Int,
+      expected: String,
+      inputTS: SQLTimestamp,
+      zoneId: ZoneId = defaultZoneId): Unit = {
       val truncated =
         DateTimeUtils.truncTimestamp(inputTS, level, zoneId)
       val expectedTS = toTimestamp(expected, defaultZoneId)
@@ -699,6 +701,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
     Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
+
   private def fromJavaDateLegacy(date: Date): Int = {
     millisToDaysLegacy(date.getTime, defaultTimeZone())
   }
@@ -785,6 +788,39 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     var days = start
     while (days < end) {
       assert(rebaseGregorianToJulianDays(days) === refRebaseGregorianToJulianDays(days))
+      days += 1
+    }
+  }
+
+  test("optimization of days rebasing - Julian to Gregorian") {
+    def refRebaseJulianToGregorianDays(days: Int): Int = {
+      val utcCal = new Calendar.Builder()
+        // `gregory` is a hybrid calendar that supports both
+        // the Julian and Gregorian calendar systems
+        .setCalendarType("gregory")
+        .setTimeZone(TimeZoneUTC)
+        .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
+        .build()
+      val localDate = LocalDate.of(
+        utcCal.get(Calendar.YEAR),
+        utcCal.get(Calendar.MONTH) + 1,
+        // The number of days will be added later to handle non-existing
+        // Julian dates in Proleptic Gregorian calendar.
+        // For example, 1000-02-29 exists in Julian calendar because 1000
+        // is a leap year but it is not a leap year in Gregorian calendar.
+        1)
+        .plusDays(utcCal.get(Calendar.DAY_OF_MONTH) - 1)
+      Math.toIntExact(localDate.toEpochDay)
+    }
+
+    val start = rebaseGregorianToJulianDays(
+      localDateToDays(LocalDate.of(1, 1, 1)))
+    val end = rebaseGregorianToJulianDays(
+      localDateToDays(LocalDate.of(2030, 1, 1)))
+
+    var days = start
+    while (days < end) {
+      assert(rebaseJulianToGregorianDays(days) === refRebaseJulianToGregorianDays(days))
       days += 1
     }
   }
