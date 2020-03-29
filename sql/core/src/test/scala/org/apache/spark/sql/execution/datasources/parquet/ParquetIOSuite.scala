@@ -82,7 +82,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
    * Writes `data` to a Parquet file, reads it back and check file contents.
    */
   protected def checkParquetFile[T <: Product : ClassTag: TypeTag](data: Seq[T]): Unit = {
-    withParquetDataFrame(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
+    withParquetDataFrame(data.toDF())(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 
   test("basic data types (without binary)") {
@@ -94,7 +94,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
   test("raw binary") {
     val data = (1 to 4).map(i => Tuple1(Array.fill(3)(i.toByte)))
-    withParquetDataFrame(data) { df =>
+    withParquetDataFrame(data.toDF()) { df =>
       assertResult(data.map(_._1.mkString(",")).sorted) {
         df.collect().map(_.getAs[Array[Byte]](0).mkString(",")).sorted
       }
@@ -197,7 +197,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
   testStandardAndLegacyModes("struct") {
     val data = (1 to 4).map(i => Tuple1((i, s"val_$i")))
-    withParquetDataFrame(data) { df =>
+    withParquetDataFrame(data.toDF()) { df =>
       // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(struct) =>
         Row(Row(struct.productIterator.toSeq: _*))
@@ -214,7 +214,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         )
       )
     }
-    withParquetDataFrame(data) { df =>
+    withParquetDataFrame(data.toDF()) { df =>
       // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(array) =>
         Row(array.map(struct => Row(struct.productIterator.toSeq: _*)))
@@ -233,7 +233,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         )
       )
     }
-    withParquetDataFrame(data) { df =>
+    withParquetDataFrame(data.toDF()) { df =>
       // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(array) =>
         Row(array.map { case Tuple1(Tuple1(str)) => Row(Row(str))})
@@ -243,7 +243,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
   testStandardAndLegacyModes("nested struct with array of array as field") {
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
-    withParquetDataFrame(data) { df =>
+    withParquetDataFrame(data.toDF()) { df =>
       // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(struct) =>
         Row(Row(struct.productIterator.toSeq: _*))
@@ -260,7 +260,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         )
       )
     }
-    withParquetDataFrame(data) { df =>
+    withParquetDataFrame(data.toDF()) { df =>
       // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.map { case (k, v) => Row(k.productIterator.toSeq: _*) -> v })
@@ -277,7 +277,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         )
       )
     }
-    withParquetDataFrame(data) { df =>
+    withParquetDataFrame(data.toDF()) { df =>
       // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
@@ -293,7 +293,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       null.asInstanceOf[java.lang.Float],
       null.asInstanceOf[java.lang.Double])
 
-    withParquetDataFrame(allNulls :: Nil) { df =>
+    withParquetDataFrame((allNulls :: Nil).toDF()) { df =>
       val rows = df.collect()
       assert(rows.length === 1)
       assert(rows.head === Row(Seq.fill(5)(null): _*))
@@ -306,7 +306,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       None.asInstanceOf[Option[Long]],
       None.asInstanceOf[Option[String]])
 
-    withParquetDataFrame(allNones :: Nil) { df =>
+    withParquetDataFrame((allNones :: Nil).toDF()) { df =>
       val rows = df.collect()
       assert(rows.length === 1)
       assert(rows.head === Row(Seq.fill(3)(null): _*))

@@ -34,6 +34,8 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests.SKIP_VALIDATE_CORES_TESTING
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -212,7 +214,6 @@ class TaskSetManagerSuite
     }
     super.afterEach()
   }
-
 
   test("TaskSet with no preferences") {
     sc = new SparkContext("local", "test")
@@ -657,7 +658,8 @@ class TaskSetManagerSuite
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
 
-    val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0, null)
+    val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0,
+      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     assert(!manager.emittedTaskSizeWarning)
@@ -672,7 +674,8 @@ class TaskSetManagerSuite
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
 
     val taskSet = new TaskSet(
-      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
+      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     intercept[TaskNotSerializableException] {
@@ -743,7 +746,8 @@ class TaskSetManagerSuite
     val singleTask = new ShuffleMapTask(0, 0, null, new Partition {
         override def index: Int = 0
       }, Seq(TaskLocation("host1", "execA")), new Properties, null)
-    val taskSet = new TaskSet(Array(singleTask), 0, 0, 0, null)
+    val taskSet = new TaskSet(Array(singleTask), 0, 0, 0,
+      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // Offer host1, which should be accepted as a PROCESS_LOCAL location
@@ -1053,10 +1057,10 @@ class TaskSetManagerSuite
     }
     // Offer resources for 4 tasks to start
     for ((k, v) <- List(
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec2" -> "host2",
-        "exec2" -> "host2")) {
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec2" -> "host2",
+      "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(k, v, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -1480,10 +1484,10 @@ class TaskSetManagerSuite
     }
     // Offer resources for 4 tasks to start
     for ((exec, host) <- Seq(
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec3" -> "host3",
-        "exec2" -> "host2")) {
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec3" -> "host3",
+      "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(exec, host, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -1552,10 +1556,10 @@ class TaskSetManagerSuite
     }
     // Offer resources for 4 tasks to start
     for ((k, v) <- List(
-        "exec1" -> "host1",
-        "exec1" -> "host1",
-        "exec2" -> "host2",
-        "exec2" -> "host2")) {
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec2" -> "host2",
+      "exec2" -> "host2")) {
       val taskOption = manager.resourceOffer(k, v, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
@@ -1655,7 +1659,7 @@ class TaskSetManagerSuite
     assert(FakeRackUtil.numBatchInvocation === 1)
   }
 
-  test("TaskSetManager allocate resource addresses from available resources") {
+  test("TaskSetManager passes task resource along") {
     import TestUtils._
 
     sc = new SparkContext("local", "test")
@@ -1664,15 +1668,13 @@ class TaskSetManagerSuite
     val taskSet = FakeTask.createTaskSet(1)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
-    val availableResources = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
-    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF, availableResources)
+    val taskResourceAssignments = Map(GPU -> new ResourceInformation(GPU, Array("0", "1")))
+    val taskOption =
+      manager.resourceOffer("exec1", "host1", NO_PREF, taskResourceAssignments)
     assert(taskOption.isDefined)
     val allocatedResources = taskOption.get.resources
     assert(allocatedResources.size == 1)
     assert(allocatedResources(GPU).addresses sameElements Array("0", "1"))
-    // Allocated resource addresses should still present in `availableResources`, they will only
-    // get removed inside TaskSchedulerImpl later.
-    assert(availableResources(GPU) sameElements Array("0", "1", "2", "3"))
   }
 
   test("SPARK-26755 Ensure that a speculative task is submitted only once for execution") {
@@ -1793,15 +1795,16 @@ class TaskSetManagerSuite
       numTasks: Int,
       numExecutorCores: Int,
       numCoresPerTask: Int): (TaskSetManager, ManualClock) = {
-    sc = new SparkContext("local", "test")
-    sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
+    val conf = new SparkConf()
+    conf.set(config.SPECULATION_ENABLED, true)
+    conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
     // Set the number of slots per executor
-    sc.conf.set(config.EXECUTOR_CORES.key, numExecutorCores.toString)
-    sc.conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
+    conf.set(config.EXECUTOR_CORES.key, numExecutorCores.toString)
+    conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
     if (speculationThresholdOpt.isDefined) {
-      sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
+      conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
     }
+    sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     // Create a task set with the given number of tasks
     val taskSet = FakeTask.createTaskSet(numTasks)
@@ -1890,15 +1893,28 @@ class TaskSetManagerSuite
 
   test("SPARK-30417 when spark.task.cpus is greater than spark.executor.cores due to " +
     "standalone settings, speculate if there is only one task in the stage") {
-    val (manager, clock) = testSpeculationDurationSetup(
-      Some("60min"),
-      // Set the quantile to be 1.0 so that regular speculation would not be triggered
-      speculationQuantile = 1.0,
-      numTasks = 1,
-      numExecutorCores = 1,
-      numCoresPerTask = 2
-    )
+    val numTasks = 1
+    val numCoresPerTask = 2
+    val conf = new SparkConf()
+    // skip throwing exception when cores per task > cores per executor to emulate standalone mode
+    conf.set(SKIP_VALIDATE_CORES_TESTING, true)
+    conf.set(config.SPECULATION_ENABLED, true)
+    conf.set(config.SPECULATION_QUANTILE.key, "1.0")
+    // Skip setting cores per executor to emulate standalone default mode
+    conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
+    conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, "60min")
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    // Create a task set with the given number of tasks
+    val taskSet = FakeTask.createTaskSet(numTasks)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    manager.isZombie = false
 
+    // Offer resources for the task to start
+    for (i <- 1 to numTasks) {
+      manager.resourceOffer(s"exec$i", s"host$i", NO_PREF)
+    }
     clock.advance(1000*60*60)
     assert(!manager.checkSpeculatableTasks(0))
     assert(sched.speculativeTasks.size == 0)
@@ -1942,7 +1958,8 @@ class TaskSetManagerSuite
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val tasks = Array.tabulate[Task[_]](2)(partition => new FakeLongTasks(stageId = 0, partition))
-    val taskSet: TaskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null)
+    val taskSet: TaskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val stageId = taskSet.stageId
     val stageAttemptId = taskSet.stageAttemptId
     sched.submitTasks(taskSet)
