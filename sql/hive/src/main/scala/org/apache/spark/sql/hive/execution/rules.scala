@@ -17,27 +17,30 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 object HiveRules {
 
-  object CTASWriteChecker extends (LogicalPlan => Unit) {
+  case class CTASWriteChecker(catalog: SessionCatalog) extends (LogicalPlan => Unit) {
 
     def failAnalysis(msg: String): Unit = {
       throw new AnalysisException(msg)
     }
 
-    override def apply(plan: LogicalPlan): Unit = {
+    override def apply(plan: LogicalPlan) : Unit = {
       plan.foreach {
-        case CreateHiveTableAsSelectCommand(tableDesc, _, _, mode) =>
+        case CreateHiveTableAsSelectCommand(tableDesc, _, _, _) =>
+
+          val tableExists = catalog.tableExists(tableDesc.identifier)
           val location = tableDesc.storage.locationUri
-          if (location.isDefined && mode == SaveMode.Overwrite) {
+          if (!tableExists && location.isDefined) {
             val path = new Path(location.get)
-            val fs = FileSystem.get(location.get, SparkContext.getActive.get.hadoopConfiguration)
+            val fs = path.getFileSystem(SparkContext.getActive.get.hadoopConfiguration)
             if (fs.exists(path)) {
               if (fs.isDirectory(path)) {
                 failAnalysis("Creating table as select with a existed location of directory" +

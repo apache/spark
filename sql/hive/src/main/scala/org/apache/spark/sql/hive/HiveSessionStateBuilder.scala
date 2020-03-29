@@ -94,7 +94,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
         PreReadCheck +:
-        CTASWriteChecker +:
+        CTASWriteChecker(catalog) +:
         TableCapabilityCheck +:
         CommandCheck(conf) +:
         customCheckRules

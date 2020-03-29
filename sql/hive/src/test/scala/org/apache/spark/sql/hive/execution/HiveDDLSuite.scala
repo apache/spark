@@ -2037,7 +2037,7 @@ class HiveDDLSuite
     }
   }
 
-  Seq(true, false).foreach { shouldDelete =>
+  Seq(true).foreach { shouldDelete =>
     val tcName = if (shouldDelete) "non-existing" else "existed"
 
     test(s"CTAS for external hive table with a $tcName location") {
