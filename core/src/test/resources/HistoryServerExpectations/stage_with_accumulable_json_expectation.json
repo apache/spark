@@ -74,6 +74,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakJvmOnHeapMemory" : 0,
+        "peakJvmOffHeapMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -129,6 +131,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakJvmOnHeapMemory" : 0,
+        "peakJvmOffHeapMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -184,6 +188,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakJvmOnHeapMemory" : 0,
+        "peakJvmOffHeapMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -239,6 +245,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakJvmOnHeapMemory" : 0,
+        "peakJvmOffHeapMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -294,6 +302,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakJvmOnHeapMemory" : 0,
+        "peakJvmOffHeapMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -349,6 +359,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakJvmOnHeapMemory" : 0,
+        "peakJvmOffHeapMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -404,6 +416,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakJvmOnHeapMemory" : 0,
+        "peakJvmOffHeapMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0
@@ -459,6 +473,8 @@
         "memoryBytesSpilled" : 0,
         "diskBytesSpilled" : 0,
         "peakExecutionMemory" : 0,
+        "peakJvmOnHeapMemory" : 0,
+        "peakJvmOffHeapMemory" : 0,
         "inputMetrics" : {
           "bytesRead" : 0,
           "recordsRead" : 0

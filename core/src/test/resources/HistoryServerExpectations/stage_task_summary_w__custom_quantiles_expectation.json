@@ -10,6 +10,8 @@
   "gettingResultTime" : [ 0.0, 0.0, 0.0 ],
   "schedulerDelay" : [ 2.0, 6.0, 53.0 ],
   "peakExecutionMemory" : [ 0.0, 0.0, 0.0 ],
+  "peakJvmOnHeapMemory" : [ 0.0, 0.0, 0.0 ],
+  "peakJvmOffHeapMemory" : [ 0.0, 0.0, 0.0 ],
   "memoryBytesSpilled" : [ 0.0, 0.0, 0.0 ],
   "diskBytesSpilled" : [ 0.0, 0.0, 0.0 ],
   "inputMetrics" : {
