@@ -93,8 +93,8 @@ function getColumnNameForTaskMetricSummary(columnKey) {
         case "peakExecutionMemory":
             return "Peak Execution Memory";
 
-        case "peakJvmHeapMemory":
-            return "Peak JVM Heap Memory";
+        case "peakJvmOnHeapMemory":
+            return "Peak JVM On Heap Memory";
 
         case "peakJvmOffHeapMemory":
             return "Peak JVM Off Heap Memory";
@@ -170,7 +170,7 @@ function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
 
         default:
             return (row.columnKey == 'peakExecutionMemory' || row.columnKey == 'memoryBytesSpilled'
-                    || row.columnKey == 'peakJvmHeapMemory' || row.columnKey == 'peakJvmOffHeapMemory'
+                    || row.columnKey == 'peakJvmOnHeapMemory' || row.columnKey == 'peakJvmOffHeapMemory'
                     || row.columnKey == 'diskBytesSpilled') ? formatBytes(
                     row.data[columnIndex], type) : (formatDuration(row.data[columnIndex]));
 
@@ -303,7 +303,7 @@ $(document).ready(function () {
         "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15'> Result Serialization Time</div>" +
         "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16'> Getting Result Time</div>" +
         "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17'> Peak Execution Memory</div>" +
-        "<div id='peak_jvm_heap_memory' class='peak-jvm-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-18' data-column='18'> Peak JVM Heap Memory</div>" +
+        "<div id='peak_jvm_on_heap_memory' class='peak-jvm-on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-18' data-column='18'> Peak JVM On Heap Memory</div>" +
         "<div id='peak_jvm_off_heap_memory' class='peak-jvm-off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-19' data-column='19'> Peak JVM Off Heap Memory</div>" +
         "</div>");
 
@@ -336,9 +336,9 @@ $(document).ready(function () {
                 "should be approximately the sum of the peak sizes across all such data structures created " +
                 "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
                 "external sort.");
-    $('#peak_jvm_heap_memory').attr("data-toggle", "tooltip")
+    $('#peak_jvm_on_heap_memory').attr("data-toggle", "tooltip")
             .attr("data-placement", "top")
-            .attr("title", "Peak Executor JVM heap memory usage during this task running");
+            .attr("title", "Peak Executor JVM on-heap memory usage during this task running");
     $('#peak_jvm_off_heap_memory').attr("data-toggle", "tooltip")
             .attr("data-placement", "top")
             .attr("title", "Peak Executor JVM off-heap memory usage during this task running");
@@ -568,7 +568,7 @@ $(document).ready(function () {
                                 taskSummaryMetricsTableArray.push(row);
                                 break;
 
-                            case "peakJvmHeapMemory":
+                            case "peakJvmOnHeapMemory":
                                 var row = createRowMetadataForColumn(
                                     columnKey, taskMetricsResponse[columnKey], 18);
                                     taskSummaryMetricsTableArray.push(row);
@@ -796,13 +796,13 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                 if (row.taskMetrics && row.taskMetrics.peakJvmHeapMemory) {
-                                     return type === 'display' ? formatBytes(row.taskMetrics.peakJvmHeapMemory, type) : row.taskMetrics.peakJvmHeapMemory;
+                                 if (row.taskMetrics && row.taskMetrics.peakJvmOnHeapMemory) {
+                                     return type === 'display' ? formatBytes(row.taskMetrics.peakJvmOnHeapMemory, type) : row.taskMetrics.peakJvmOnHeapMemory;
                                  } else {
                                      return "";
                                  }
                              },
-                             name: "Peak JVM Heap Memory"
+                             name: "Peak JVM On Heap Memory"
                         },
                         {
                             data : function (row, type) {

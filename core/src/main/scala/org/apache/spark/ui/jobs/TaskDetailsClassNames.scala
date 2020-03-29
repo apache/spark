@@ -33,6 +33,6 @@ private[spark] object TaskDetailsClassNames {
   val GETTING_RESULT_TIME = "getting_result_time"
   val PEAK_EXECUTION_MEMORY = "peak_execution_memory"
 
-  val PEAK_JVM_HEAP_MEMORY = "peak_jvm_heap_memory"
+  val PEAK_JVM_ON_HEAP_MEMORY = "peak_jvm_on_heap_memory"
   val PEAK_JVM_OFF_HEAP_MEMORY = "peak_jvm_off_heap_memory"
 }

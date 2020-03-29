@@ -353,8 +353,8 @@ a.expandbutton {
   width: 180px;
 }
 
-.peak-jvm-heap-memory-checkbox-div {
-  width: 180px;
+.peak-jvm-on-heap-memory-checkbox-div {
+  width: 240px;
 }
 
 .peak-jvm-off-heap-memory-checkbox-div {
