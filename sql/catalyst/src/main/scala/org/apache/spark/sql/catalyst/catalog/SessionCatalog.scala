@@ -328,15 +328,17 @@ class SessionCatalog(
 
   def validateTableLocation(table: CatalogTable): Unit = {
     // SPARK-19724: the default location of a managed table should be non-existent or empty.
-    if (table.tableType == CatalogTableType.MANAGED) {
-      val tableLocation =
-        new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
-      val fs = tableLocation.getFileSystem(hadoopConf)
+    // SPARK-31298: when create external table also should be a non-existent or empty
+    val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
+      new Path(defaultTablePath(table.identifier))
+    } else {
+      new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
+    }
+    val fs = tableLocation.getFileSystem(hadoopConf)
 
-      if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
-        throw new AnalysisException(s"Can not create the managed table('${table.identifier}')" +
-          s". The associated location('${tableLocation.toString}') already exists.")
-      }
+    if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
+      throw new AnalysisException(s"Can not create the managed table('${table.identifier}')" +
+        s". The associated location('${tableLocation.toString}') already exists.")
     }
   }
 
