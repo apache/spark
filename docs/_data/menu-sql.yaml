@@ -67,6 +67,8 @@
       url: sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
     - text: "Pandas UDFs (a.k.a. Vectorized UDFs)"
       url: sql-pyspark-pandas-with-arrow.html#pandas-udfs-aka-vectorized-udfs
+    - text: "Pandas Function APIs"
+      url: sql-pyspark-pandas-with-arrow.html#pandas-function-apis
     - text: Usage Notes
       url: sql-pyspark-pandas-with-arrow.html#usage-notes
 - text: Migration Guide
