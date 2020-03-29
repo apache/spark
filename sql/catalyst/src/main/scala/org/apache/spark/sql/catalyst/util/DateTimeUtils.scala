@@ -1035,9 +1035,11 @@ object DateTimeUtils {
   }
 
   private def rebaseDays(daysArr: Array[Int], diffArr: Array[Int], days: Int): Int = {
-    val index = util.Arrays.binarySearch(daysArr, days)
-    val diff = if (index >= 0) diffArr(index) else diffArr(-index - 2)
-    val rebased = days + diff
+    var i = daysArr.length - 1
+    while (i >= 0 && days < daysArr(i)) {
+      i -= 1
+    }
+    val rebased = days + diffArr(if (i < 0) 0 else i)
     rebased
   }
 
