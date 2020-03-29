@@ -2,52 +2,52 @@
 Parquet read/write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.5+10 on Mac OS X 10.15.3
-Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1058-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Save dates to parquet:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-after 1582, noop                                  15986          15986           0          6.3         159.9       1.0X
-before 1582, noop                                  8463           8463           0         11.8          84.6       1.9X
-after 1582, rebase off                            25404          25404           0          3.9         254.0       0.6X
-after 1582, rebase on                             54458          54458           0          1.8         544.6       0.3X
-before 1582, rebase off                           17023          17023           0          5.9         170.2       0.9X
-before 1582, rebase on                            54942          54942           0          1.8         549.4       0.3X
+after 1582, noop                                   9272           9272           0         10.8          92.7       1.0X
+before 1582, noop                                  9142           9142           0         10.9          91.4       1.0X
+after 1582, rebase off                            21841          21841           0          4.6         218.4       0.4X
+after 1582, rebase on                             58245          58245           0          1.7         582.4       0.2X
+before 1582, rebase off                           19813          19813           0          5.0         198.1       0.5X
+before 1582, rebase on                            63737          63737           0          1.6         637.4       0.1X
 
-OpenJDK 64-Bit Server VM 11.0.5+10 on Mac OS X 10.15.3
-Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1058-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Load dates from parquet:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-after 1582, vec off, rebase off                   10840          11008         151          9.2         108.4       1.0X
-after 1582, vec off, rebase on                    27635          27820         234          3.6         276.4       0.4X
-after 1582, vec on, rebase off                     2939           2981          51         34.0          29.4       3.7X
-after 1582, vec on, rebase on                     20195          20206           9          5.0         202.0       0.5X
-before 1582, vec off, rebase off                  10571          10641          82          9.5         105.7       1.0X
-before 1582, vec off, rebase on                   30889          30975         116          3.2         308.9       0.4X
-before 1582, vec on, rebase off                    2848           2916          83         35.1          28.5       3.8X
-before 1582, vec on, rebase on                    22721          22770          73          4.4         227.2       0.5X
+after 1582, vec off, rebase off                   13004          13063          67          7.7         130.0       1.0X
+after 1582, vec off, rebase on                    36224          36253          26          2.8         362.2       0.4X
+after 1582, vec on, rebase off                     3596           3654          54         27.8          36.0       3.6X
+after 1582, vec on, rebase on                     26144          26253         112          3.8         261.4       0.5X
+before 1582, vec off, rebase off                  12872          12914          51          7.8         128.7       1.0X
+before 1582, vec off, rebase on                   37762          37904         153          2.6         377.6       0.3X
+before 1582, vec on, rebase off                    3522           3592          94         28.4          35.2       3.7X
+before 1582, vec on, rebase on                    27580          27615          59          3.6         275.8       0.5X
 
-OpenJDK 64-Bit Server VM 11.0.5+10 on Mac OS X 10.15.3
-Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1058-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Save timestamps to parquet:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-after 1582, noop                                   2341           2341           0         42.7          23.4       1.0X
-before 1582, noop                                  2327           2327           0         43.0          23.3       1.0X
-after 1582, rebase off                            12859          12859           0          7.8         128.6       0.2X
-after 1582, rebase on                             64691          64691           0          1.5         646.9       0.0X
-before 1582, rebase off                           13093          13093           0          7.6         130.9       0.2X
-before 1582, rebase on                            71913          71913           0          1.4         719.1       0.0X
+after 1582, noop                                   3113           3113           0         32.1          31.1       1.0X
+before 1582, noop                                  3078           3078           0         32.5          30.8       1.0X
+after 1582, rebase off                            15749          15749           0          6.3         157.5       0.2X
+after 1582, rebase on                             69106          69106           0          1.4         691.1       0.0X
+before 1582, rebase off                           15967          15967           0          6.3         159.7       0.2X
+before 1582, rebase on                            76843          76843           0          1.3         768.4       0.0X
 
-OpenJDK 64-Bit Server VM 11.0.5+10 on Mac OS X 10.15.3
-Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1058-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Load timestamps from parquet:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-after 1582, vec off, rebase off                   12307          12547         224          8.1         123.1       1.0X
-after 1582, vec off, rebase on                    42650          43006         433          2.3         426.5       0.3X
-after 1582, vec on, rebase off                     3822           3865          65         26.2          38.2       3.2X
-after 1582, vec on, rebase on                     33704          33749          79          3.0         337.0       0.4X
-before 1582, vec off, rebase off                  12299          12348          84          8.1         123.0       1.0X
-before 1582, vec off, rebase on                   44533          44972         662          2.2         445.3       0.3X
-before 1582, vec on, rebase off                    4245           4519         258         23.6          42.5       2.9X
-before 1582, vec on, rebase on                    35629          35856         252          2.8         356.3       0.3X
+after 1582, vec off, rebase off                   15070          15172          94          6.6         150.7       1.0X
+after 1582, vec off, rebase on                    43748          43867         157          2.3         437.5       0.3X
+after 1582, vec on, rebase off                     4805           4859          60         20.8          48.1       3.1X
+after 1582, vec on, rebase on                     33960          34027          61          2.9         339.6       0.4X
+before 1582, vec off, rebase off                  15037          15071          52          6.7         150.4       1.0X
+before 1582, vec off, rebase on                   44590          44749         156          2.2         445.9       0.3X
+before 1582, vec on, rebase off                    4831           4852          30         20.7          48.3       3.1X
+before 1582, vec on, rebase on                    35460          35481          18          2.8         354.6       0.4X
 
 
