@@ -24,6 +24,7 @@ import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
