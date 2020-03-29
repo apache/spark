@@ -85,8 +85,8 @@ trait ProgressReporter extends Logging {
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
 
-  // The timestamp we report an event
-  private var lastProgressEventTime = Long.MinValue
+  // The timestamp we report an event that has no input data
+  private var lastNoDataProgressEventTime = Long.MinValue
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
   timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
@@ -177,7 +177,11 @@ trait ProgressReporter extends Logging {
       )
     }
 
-    val sinkOutput = if (hasExecuted) sinkCommitProgress.map(_.numOutputRows) else Some(0L)
+    val sinkOutput = if (hasExecuted) {
+      sinkCommitProgress.map(_.numOutputRows)
+    } else {
+      sinkCommitProgress.map(_ => 0L)
+    }
     val sinkProgress = SinkProgress(sink.toString, sinkOutput)
     val observedMetrics = extractObservedMetrics(hasNewData, lastExecution)
 
@@ -196,13 +200,13 @@ trait ProgressReporter extends Logging {
       observedMetrics = new java.util.HashMap(observedMetrics.asJava))
 
     if (hasExecuted) {
-      // Reset lastProgressEventTime if we processed any data
-      lastProgressEventTime = triggerClock.getTimeMillis()
+      // Reset noDataEventTimestamp if we processed any data
+      lastNoDataProgressEventTime = Long.MinValue
       updateProgress(newProgress)
     } else {
       val now = triggerClock.getTimeMillis()
-      if (now - noDataProgressEventInterval >= lastProgressEventTime) {
-        lastProgressEventTime = now
+      if (now - noDataProgressEventInterval >= lastNoDataProgressEventTime) {
+        lastNoDataProgressEventTime = now
         updateProgress(newProgress)
       }
     }
