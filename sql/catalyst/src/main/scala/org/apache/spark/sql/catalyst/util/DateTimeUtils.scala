@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
+import java.util
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -1062,6 +1063,11 @@ object DateTimeUtils {
     Math.toIntExact(localDate.toEpochDay)
   }
 
+  private val gregToJulDay = Array(
+    -719162, -682944, -646420, -609896, -536847, -500323, -463799,
+    -390750, -354226, -317702, -244653, -208129, -171605, -141427)
+  private val gregToJulDiff = Array(-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0)
+
   /**
    * Rebasing days since the epoch to store the same number of days
    * as by Spark 2.4 and earlier versions. Spark 3.0 switched to
@@ -1079,14 +1085,9 @@ object DateTimeUtils {
    * @return The rebased number of days since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianDays(days: Int): Int = {
-    val localDate = LocalDate.ofEpochDay(days)
-    val utcCal = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
-      .setCalendarType("gregory")
-      .setTimeZone(TimeZoneUTC)
-      .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
-      .build()
-    Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
+    val index = util.Arrays.binarySearch(gregToJulDay, days)
+    val diff = if (index >= 0) gregToJulDiff(index) else gregToJulDiff(-index - 2)
+    val rebased = days + diff
+    rebased
   }
 }

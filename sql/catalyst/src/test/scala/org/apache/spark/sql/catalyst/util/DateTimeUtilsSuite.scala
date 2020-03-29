@@ -20,11 +20,10 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
-import java.util.{Locale, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -763,6 +762,29 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           }
         }
       }
+    }
+  }
+
+  test("optimization of days rebasing - Gregorian to Julian") {
+    def refRebaseGregorianToJulianDays(days: Int): Int = {
+      val localDate = LocalDate.ofEpochDay(days)
+      val utcCal = new Calendar.Builder()
+        // `gregory` is a hybrid calendar that supports both
+        // the Julian and Gregorian calendar systems
+        .setCalendarType("gregory")
+        .setTimeZone(TimeZoneUTC)
+        .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
+        .build()
+      Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
+    }
+
+    val start = localDateToDays(LocalDate.of(1, 1, 1))
+    val end = localDateToDays(LocalDate.of(2030, 1, 1))
+
+    var days = start
+    while (days < end) {
+      assert(rebaseGregorianToJulianDays(days) === refRebaseGregorianToJulianDays(days))
+      days += 1
     }
   }
 }
