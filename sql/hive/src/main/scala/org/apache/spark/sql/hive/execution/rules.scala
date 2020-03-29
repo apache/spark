@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.fs.Path
+import java.io.{FileNotFoundException, IOException}
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.hadoop.fs.{FileStatus, Path}
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 object HiveRules {
 
-  case class CTASWriteChecker(catalog: SessionCatalog) extends (LogicalPlan => Unit) {
+  case class CTASWriteChecker(session: SparkSession)
+    extends (LogicalPlan => Unit) with Logging {
 
     def failAnalysis(msg: String): Unit = {
       throw new AnalysisException(msg)
@@ -35,25 +37,40 @@ object HiveRules {
     override def apply(plan: LogicalPlan) : Unit = {
       plan.foreach {
         case CreateHiveTableAsSelectCommand(tableDesc, _, _, _) =>
-
-          val tableExists = catalog.tableExists(tableDesc.identifier)
+          val tableExists = session.sessionState.catalog.tableExists(tableDesc.identifier)
           val location = tableDesc.storage.locationUri
-          if (!tableExists && location.isDefined) {
-            val path = new Path(location.get)
-            val fs = path.getFileSystem(SparkContext.getActive.get.hadoopConfiguration)
-            if (fs.exists(path)) {
-              if (fs.isDirectory(path)) {
-                failAnalysis("Creating table as select with a existed location of directory" +
-                  "is not allowed, please check the path and try again")
+          if (!tableExists && location.isDefined && location.get.toString.length != 0) {
+            try {
+              val hadoopConfiguration = session.sessionState.newHadoopConf()
+              val path = new Path(location.get)
+              val fs = path.getFileSystem(hadoopConfiguration)
+              val locStatus: FileStatus = if (fs != null) {
+                fs.getFileStatus(path)
               } else {
-                failAnalysis("Creating table as select with a existed location of file" +
-                  "is not allowed, please check the path and try again")
+                null
               }
+              if (locStatus != null && locStatus.isDirectory) {
+                val lStats = fs.listStatus(path)
+                if (lStats != null && lStats.nonEmpty) {
+                  val stagingDir = hadoopConfiguration.get("hive.exec.stagingdir", ".hive-staging")
+                  // Don't throw an exception if the target location only contains the staging-dirs
+                  lStats.foreach { lStat =>
+                    if (!lStat.getPath.getName.startsWith(stagingDir)) {
+                      failAnalysis("CREATE-TABLE-AS-SELECT cannot create table with " +
+                        s"location to a non-empty directory $path.")
+                    }
+                  }
+                }
+              }
+            } catch {
+              case nfe: FileNotFoundException =>
+              // we will create the folder if it does not exist.
+              case ioE: IOException =>
+                logDebug("Exception when validate folder ", ioE);
             }
           }
         case _ => // OK
       }
     }
   }
-
 }
