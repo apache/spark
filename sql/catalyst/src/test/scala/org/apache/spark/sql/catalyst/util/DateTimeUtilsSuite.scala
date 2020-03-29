@@ -38,7 +38,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("nanoseconds truncation") {
     val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
-
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String): Unit = {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultZoneId)
@@ -456,7 +455,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
         === expected)
     }
-
     for (tz <- ALL_TIMEZONES) {
       withDefaultTimeZone(tz) {
         test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
@@ -512,10 +510,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("truncTimestamp") {
     def testTrunc(
-      level: Int,
-      expected: String,
-      inputTS: SQLTimestamp,
-      zoneId: ZoneId = defaultZoneId): Unit = {
+        level: Int,
+        expected: String,
+        inputTS: SQLTimestamp,
+        zoneId: ZoneId = defaultZoneId): Unit = {
       val truncated =
         DateTimeUtils.truncTimestamp(inputTS, level, zoneId)
       val expectedTS = toTimestamp(expected, defaultZoneId)
@@ -701,7 +699,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
     Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
-
   private def fromJavaDateLegacy(date: Date): Int = {
     millisToDaysLegacy(date.getTime, defaultTimeZone())
   }
