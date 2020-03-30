@@ -68,17 +68,22 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
 
   def addResourceProfile(rp: ResourceProfile): Unit = {
     isSupported(rp)
+    var putNewProfile = false
     writeLock.lock()
     try {
       if (!resourceProfileIdToResourceProfile.contains(rp.id)) {
-        resourceProfileIdToResourceProfile.put(rp.id, rp)
+        val prev = resourceProfileIdToResourceProfile.put(rp.id, rp)
+        if (prev.isEmpty) putNewProfile = true
       }
     } finally {
       writeLock.unlock()
     }
-    // force the computation of maxTasks and limitingResource now so we don't have cost later
-    rp.limitingResource(sparkConf)
-    logInfo(s"Added ResourceProfile id: ${rp.id}")
+    // do this outside the write lock only when we add a new profile
+    if (putNewProfile) {
+      // force the computation of maxTasks and limitingResource now so we don't have cost later
+      rp.limitingResource(sparkConf)
+      logInfo(s"Added ResourceProfile id: ${rp.id}")
+    }
   }
 
   /*
