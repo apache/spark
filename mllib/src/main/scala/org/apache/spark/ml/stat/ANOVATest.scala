@@ -126,21 +126,31 @@ object ANOVATest {
   private def testClassificationSparseFeatures(
       points: RDD[(Double, Vector)],
       numFeatures: Int): Array[SelectionTestResult] = {
-    val sc = points.sparkContext
     val counts = points.map(_._1).countByValue().toMap
-    val bcCounts = sc.broadcast(counts)
 
-    val results = points.flatMap { case (label, features) =>
-      require(features.size == numFeatures,
-        s"Number of features must be $numFeatures but got ${features.size}")
-      features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
+    points.mapPartitionsWithIndex { case (pid, iter) =>
+      iter.flatMap { case (label, features) =>
+        require(features.size == numFeatures,
+          s"Number of features must be $numFeatures but got ${features.size}")
+        features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
+      } ++ {
+        if (pid == 0) {
+          // append this to make sure that all columns are taken into account
+          Iterator.tabulate(numFeatures)(col => (col, null))
+        } else Iterator.empty
+      }
     }.aggregateByKey[(Double, Double, OpenHashMap[Double, Double])](
       (0.0, 0.0, new OpenHashMap[Double, Double]))(
       seqOp = {
-        case ((sum, sumOfSq, sums), (label, value)) =>
+        case ((sum, sumOfSq, sums), labelAndValue) =>
           // sums: mapOfSumPerClass (key: label, value: sum of features for each label)
-          sums.changeValue(label, value, _ + value)
-          (sum + value, sumOfSq + value * value, sums)
+          if (labelAndValue != null) {
+            val (label, value) = labelAndValue
+            sums.changeValue(label, value, _ + value)
+            (sum + value, sumOfSq + value * value, sums)
+          } else {
+            (sum, sumOfSq, sums)
+          }
       },
       combOp = {
         case ((sum1, sumOfSq1, sums1), (sum2, sumOfSq2, sums2)) =>
@@ -148,33 +158,15 @@ object ANOVATest {
           (sum1 + sum2, sumOfSq1 + sumOfSq2, sums1)
       }
     ).mapValues { case (sum, sumOfSq, sums) =>
-      val counts = bcCounts.value
       counts.keysIterator.foreach { label =>
         // adjust sums if all related feature values are 0 for some label
         if (!sums.contains(label)) sums.update(label, 0.0)
       }
       computeANOVA(sum, sumOfSq, sums.toMap, counts)
-    }.collectAsMap()
-
-    bcCounts.destroy()
-
-    val finalResults = Array.ofDim[SelectionTestResult](numFeatures)
-    results.foreach { case (col, (pValue, degreesOfFreedom, fValue)) =>
-      finalResults(col) = new ANOVATestResult(pValue, degreesOfFreedom, fValue)
+    }.collect().sortBy(_._1).map {
+      case (_, (pValue, degreesOfFreedom, fValue)) =>
+        new ANOVATestResult(pValue, degreesOfFreedom, fValue)
     }
-
-    if (results.size < numFeatures) {
-      // if some column only contains 0 values
-      val (pValue, degreesOfFreedom, fValue) =
-        computeANOVA(0.0, 0.0, counts.mapValues(_ => 0.0), counts)
-      val zeroRes = new ANOVATestResult(pValue, degreesOfFreedom, fValue)
-
-      Iterator.range(0, numFeatures)
-        .filterNot(results.contains)
-        .foreach (col => finalResults(col) = zeroRes)
-    }
-
-    finalResults
   }
 
   private def computeANOVA(
