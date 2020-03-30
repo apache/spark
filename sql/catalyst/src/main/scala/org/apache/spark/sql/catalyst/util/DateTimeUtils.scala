@@ -1058,11 +1058,15 @@ object DateTimeUtils {
     rebased
   }
 
-  private val julToGregDay = Array(
+  // The differences in days between Julian and Proleptic Gregorian dates.
+  // The diff at the index `i` is applicable for all days in the date interval:
+  // [julianGregDiffSwitchDay(i), julianGregDiffSwitchDay(i+1))
+  private val julianGregDiffs = Array(2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, 0)
+  // The sorted days when difference in days between Julian and Proleptic
+  // Gregorian calendars was changed.
+  private val julianGregDiffSwitchDay = Array(
     -719164, -682945, -646420, -609895, -536845, -500320, -463795,
     -390745, -354220, -317695, -244645, -208120, -171595, -141427)
-  private val julToGregDiff = Array(2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, 0)
-
   /**
    * Converts the given number of days since the epoch day 1970-01-01 to
    * a local date in Julian calendar, interprets the result as a local
@@ -1073,14 +1077,18 @@ object DateTimeUtils {
    * @return The rebased number of days in Gregorian calendar.
    */
   def rebaseJulianToGregorianDays(days: Int): Int = {
-    rebaseDays(julToGregDay, julToGregDiff, days)
+    rebaseDays(julianGregDiffSwitchDay, julianGregDiffs, days)
   }
 
-  private val gregToJulDay = Array(
+  // The differences in days between Proleptic Gregorian and Julian dates.
+  // The diff at the index `i` is applicable for all days in the date interval:
+  // [gregJulianDiffSwitchDay(i), gregJulianDiffSwitchDay(i+1))
+  private val grepJulianDiffs = Array(-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0)
+  // The sorted days when difference in days between Proleptic
+  // Gregorian and Julian was changed.
+  private val gregJulianDiffSwitchDay = Array(
     -719162, -682944, -646420, -609896, -536847, -500323, -463799,
     -390750, -354226, -317702, -244653, -208129, -171605, -141427)
-  private val gregToJulDiff = Array(-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0)
-
   /**
    * Rebasing days since the epoch to store the same number of days
    * as by Spark 2.4 and earlier versions. Spark 3.0 switched to
@@ -1098,6 +1106,6 @@ object DateTimeUtils {
    * @return The rebased number of days since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianDays(days: Int): Int = {
-    rebaseDays(gregToJulDay, gregToJulDiff, days)
+    rebaseDays(gregJulianDiffSwitchDay, grepJulianDiffs, days)
   }
 }
