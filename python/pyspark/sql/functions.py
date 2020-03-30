@@ -1366,7 +1366,12 @@ def from_utc_timestamp(timestamp, tz):
     timestamp to string according to the session local timezone.
 
     :param timestamp: the column that contains timestamps
-    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+    :param tz: A string detailing the time zone ID that the input should be adjusted to. It should
+               be in the format of either region-based zone IDs or zone offsets. Region IDs must
+               have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
+               the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are
+               supported as aliases of '+00:00'. Other short names are not recommended to use
+               because they can be ambiguous.
 
     .. versionchanged:: 2.4
        `tz` can take a :class:`Column` containing timezone ID strings.
@@ -1400,7 +1405,12 @@ def to_utc_timestamp(timestamp, tz):
     timestamp to string according to the session local timezone.
 
     :param timestamp: the column that contains timestamps
-    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+    :param tz: A string detailing the time zone ID that the input should be adjusted to. It should
+               be in the format of either region-based zone IDs or zone offsets. Region IDs must
+               have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
+               the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are
+               supported as aliases of '+00:00'. Other short names are not recommended to use
+               because they can be ambiguous.
 
     .. versionchanged:: 2.4
        `tz` can take a :class:`Column` containing timezone ID strings.
