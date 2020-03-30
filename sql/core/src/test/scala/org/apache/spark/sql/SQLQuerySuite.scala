@@ -3493,6 +3493,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("(SELECT map()) UNION ALL (SELECT map(1, 2))"),
       Seq(Row(Map[Int, Int]()), Row(Map(1 -> 2))))
   }
+
+  test("SPARK-28551: CTAS DataSource External Table should with non-existent or empty location") {
+    withTempDir { dir =>
+      val tempLocation = dir.toURI.getPath.stripSuffix("/")
+      withTable("ctas1") {
+        intercept[AnalysisException] {
+          sql(s"CREATE TABLE ctas1(id string) LOCATION 'file:$tempLocation/c1'")
+          sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
+          // with existed non-empty path
+          sql(s"CREATE TABLE ctas_with_exists_location LOCATION 'file:$tempLocation/c1' " +
+            s"AS SELECT key k, value FROM src ORDER BY k, value")
+        }
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

@@ -584,15 +584,32 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("CTAS without convert with location") {
+  test("SPARK-28551: CTAS Hive External Table should with non-existent or empty location") {
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
       withTempDir { dir =>
         val tempLocation = dir.toURI.getPath.stripSuffix("/")
         withTable("ctas1") {
           intercept[AnalysisException] {
             sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION 'file:$tempLocation/c1'")
-            // with existed path
+            sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
+            // with existed non-empty path
             sql(s"CREATE TABLE ctas_with_exists_location stored as rcfile " +
+              s"LOCATION 'file:$tempLocation/c1' " +
+              s"AS SELECT key k, value FROM src ORDER BY k, value")
+          }
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
+      withTempDir { dir =>
+        val tempLocation = dir.toURI.getPath.stripSuffix("/")
+        withTable("ctas1") {
+          intercept[AnalysisException] {
+            sql(s"CREATE TABLE ctas1(id string) LOCATION 'file:$tempLocation/c1'")
+            sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
+            // with existed non-empty path
+            sql(s"CREATE TABLE ctas_with_exists_location " +
               s"LOCATION 'file:$tempLocation/c1' " +
               s"AS SELECT key k, value FROM src ORDER BY k, value")
           }
