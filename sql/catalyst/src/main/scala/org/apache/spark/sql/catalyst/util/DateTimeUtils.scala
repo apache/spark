@@ -1033,12 +1033,28 @@ object DateTimeUtils {
     instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
   }
 
-  private def rebaseDays(daysArr: Array[Int], diffArr: Array[Int], days: Int): Int = {
-    var i = daysArr.length - 1
-    while (i >= 0 && days < daysArr(i)) {
+  /**
+   * Rebases days since the epoch from an original to an target calendar, from instance
+   * from a hybrid (Julian + Gregorian) to Proleptic Gregorian calendar.
+   *
+   * It finds the latest switch day which is less than `days`, and adds the difference
+   * in days associated with the switch day to the given `days`. The function is based
+   * on linear search which starts from the most recent switch days. This allows to perform
+   * less comparisons for modern dates.
+   *
+   * @param switchDays The days when difference in days between original and target
+   *                   calendar was changed.
+   * @param diffs The differences in days between calendars.
+   * @param days The number of days since the epoch 1970-01-01 to be rebased to the
+   *             target calendar.
+   * @return The rebased day
+   */
+  private def rebaseDays(switchDays: Array[Int], diffs: Array[Int], days: Int): Int = {
+    var i = switchDays.length - 1
+    while (i >= 0 && days < switchDays(i)) {
       i -= 1
     }
-    val rebased = days + diffArr(if (i < 0) 0 else i)
+    val rebased = days + diffs(if (i < 0) 0 else i)
     rebased
   }
 
