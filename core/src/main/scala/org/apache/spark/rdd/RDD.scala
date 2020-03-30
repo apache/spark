@@ -23,6 +23,7 @@ import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Codec
 import scala.language.implicitConversions
+import scala.ref.WeakReference
 import scala.reflect.{classTag, ClassTag}
 import scala.util.hashing
 
@@ -243,6 +244,9 @@ abstract class RDD[T: ClassTag](
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
   @volatile private var dependencies_ : Seq[Dependency[_]] = _
+  // When we overwrite the dependencies we keep a weak reference to the old dependencies
+  // for user controlled cleanup.
+  @volatile @transient private var legacyDependencies: WeakReference[Seq[Dependency[_]]] = _
   @volatile @transient private var partitions_ : Array[Partition] = _
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
@@ -266,17 +270,22 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Get the list of dependencies of this RDD, ignoring checkpointing.
+   * Get the list of dependencies of this RDD ignoring checkpointing.
    */
-  final private def internalDependencies: Seq[Dependency[_]] = {
-    if (dependencies_ == null) {
+  final private def internalDependencies: Option[Seq[Dependency[_]]] = {
+    if (legacyDependencies != null) {
+      legacyDependencies.get
+    } else if (dependencies_ != null) {
+      Some(dependencies_)
+    } else {
+      // This case should be infrequent.
       stateLock.synchronized {
         if (dependencies_ == null) {
           dependencies_ = getDependencies
         }
+        Some(dependencies_)
       }
     }
-    dependencies_
   }
 
   /**
@@ -1596,7 +1605,7 @@ abstract class RDD[T: ClassTag](
    * directory set with `SparkContext#setCheckpointDir` and all references to its parent
    * RDDs will be removed. This function must be called before any job has been
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
-   * memory, otherwise saving it on a file will require recomputation.
+   * memory, otherwise saving it on a file will require re computation.
    */
   def checkpoint(): Unit = RDDCheckpointData.synchronized {
     // NOTE: we use a global lock here due to complexities downstream with ensuring
@@ -1717,8 +1726,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * :: Experimental ::
-   * Marks an RDD's shuffles and it's ancestors non-persisted ancestors as no longer needed.
+   * Marks an RDD's shuffles and it's non-persisted ancestors as no longer needed.
    * This cleans up shuffle files aggressively to allow nodes to be terminated.
+   * If the RDD will still be used downstream checkpoint and materialize it first.
    * If you are uncertain of what you are doing please do not use this feature.
    * Additional techniques for mitigating orphaned shuffle files:
    *   * Tuning the driver GC to be more aggressive so the regular context cleaner is triggered
@@ -1738,12 +1748,12 @@ abstract class RDD[T: ClassTag](
           cleaner.doCleanupShuffle(shuffleId, blocking)
         }
         val rdd = dep.rdd
-        val rddDeps = rdd.internalDependencies
-        if (rdd.getStorageLevel == StorageLevel.NONE && rddDeps != null) {
-          rddDeps.foreach(cleanEagerly)
+        val rddDepsOpt = rdd.internalDependencies
+        if (rdd.getStorageLevel == StorageLevel.NONE) {
+          rddDepsOpt.foreach(deps => deps.foreach(cleanEagerly))
         }
       }
-      dependencies.foreach(cleanEagerly)
+      internalDependencies.foreach(deps => deps.foreach(cleanEagerly))
     }
   }
 
@@ -1887,6 +1897,7 @@ abstract class RDD[T: ClassTag](
    * created from the checkpoint file, and forget its old dependencies and partitions.
    */
   private[spark] def markCheckpointed(): Unit = stateLock.synchronized {
+    legacyDependencies = new WeakReference(dependencies_)
     clearDependencies()
     partitions_ = null
     deps = null    // Forget the constructor argument for dependencies too

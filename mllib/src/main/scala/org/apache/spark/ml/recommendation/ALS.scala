@@ -1023,7 +1023,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           userLocalIndexEncoder, solver = solver)
         if (shouldCheckpoint(iter)) {
           itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
-          val deps = itemFactors.dependencies
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
           itemFactors.cleanShuffleDependencies()

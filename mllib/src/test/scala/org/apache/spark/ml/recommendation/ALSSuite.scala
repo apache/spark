@@ -988,13 +988,23 @@ class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
     val checkpointDir = Utils.createTempDir()
-    def getAllFiles: Set[File] =
-      FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    def getAllFiles: Set[File] = {
+      val files = FileUtils.listFiles(
+        localDir,
+        TrueFileFilter.INSTANCE,
+        TrueFileFilter.INSTANCE).asScala.toSet
+      files
+    }
     try {
       conf.set("spark.local.dir", localDir.getAbsolutePath)
       val sc = new SparkContext("local[2]", "ALSCleanerSuite", conf)
+      val pattern = "shuffle_(\\d+)_.+\\.data".r
       try {
         sc.setCheckpointDir(checkpointDir.getAbsolutePath)
+        // There should be 0 shuffle files at the start
+        val initialIds = getAllFiles.flatMap { f =>
+          pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
+        assert(initialIds.size === 0)
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
@@ -1012,7 +1022,6 @@ class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
         val resultingFiles = getAllFiles
         // We expect the last shuffles files, block ratings, user factors, and item factors to be
         // around but no more.
-        val pattern = "shuffle_(\\d+)_.+\\.data".r
         val rddIds = resultingFiles.flatMap { f =>
           pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
         assert(rddIds.size === 4)
