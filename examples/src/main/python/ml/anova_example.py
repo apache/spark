@@ -15,11 +15,17 @@
 # limitations under the License.
 #
 
+"""
+An example for ANOVA testing.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/anova_example.py
+"""
+
 from __future__ import print_function
 
 from pyspark.sql import SparkSession
 # $example on$
-from pyspark.ml.feature import ChiSqSelector
+from pyspark.ml.stat import ANOVATest
 from pyspark.ml.linalg import Vectors
 # $example off$
 
@@ -38,10 +44,10 @@ if __name__ == "__main__":
             (4, Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]))]
     df = spark.createDataFrame(data, ["label", "features"])
 
-    r = ChiSquareTest.test(df, "features", "label").head()
+    r = ANOVATest.test(df, "features", "label").head()
     print("pValues: " + str(r.pValues))
     print("degreesOfFreedom: " + str(r.degreesOfFreedom))
-    print("fValues: " + str(r.statistics))
+    print("fValues: " + str(r.fValues))
     # $example off$
 
     spark.stop()
