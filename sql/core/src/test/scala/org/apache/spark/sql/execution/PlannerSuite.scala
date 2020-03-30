@@ -994,6 +994,42 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       }
     }
   }
+
+  test("SPARK-31280: Perform propagating empty relation after RewritePredicateSubquery") {
+    val df1 = sql(
+      s"""
+         |SELECT *
+         |FROM VALUES(1), (2) t1(key)
+         |WHERE key IN
+         |  (SELECT key FROM VALUES(1) t2(key) WHERE 1=0)
+       """.stripMargin)
+    assert(df1.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
+    assert(df1.queryExecution.sparkPlan.isInstanceOf[LocalTableScanExec])
+
+    val df2 = sql(
+      s"""
+         |SELECT *
+         |FROM VALUES(1), (2) t1(key)
+         |WHERE key NOT IN
+         |  (SELECT key FROM VALUES(1) t2(key) WHERE 1=0)
+       """.stripMargin)
+
+    assert(df2.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
+    assert(df2.queryExecution.sparkPlan.isInstanceOf[LocalTableScanExec])
+
+    // Because RewriteNonCorrelatedExists will rewrite non-correlated exists subqueries to
+    // scalar expressions early, so this only take effects on correlated exists subqueries
+    val df3 = sql(
+      s"""
+         |SELECT *
+         |FROM VALUES(1), (2) t1(key)
+         |WHERE EXISTS
+         |  (SELECT key FROM VALUES(1) t2(key) WHERE t1.key = 1 AND 1=0)
+       """.stripMargin)
+
+    assert(df3.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
+    assert(df3.queryExecution.sparkPlan.isInstanceOf[LocalTableScanExec])
+  }
 }
 
 // Used for unit-testing EnsureRequirements

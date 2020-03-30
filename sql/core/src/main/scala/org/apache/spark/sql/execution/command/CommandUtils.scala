@@ -386,4 +386,12 @@ object CommandUtils extends Logging {
   private def isDataPath(path: Path, stagingDir: String): Boolean = {
     !path.getName.startsWith(stagingDir) && DataSourceUtils.isDataPath(path)
   }
+
+  def uncacheTableOrView(sparkSession: SparkSession, name: String): Unit = {
+    try {
+      sparkSession.catalog.uncacheTable(name)
+    } catch {
+      case NonFatal(e) => logWarning("Exception when attempting to uncache $name", e)
+    }
+  }
 }

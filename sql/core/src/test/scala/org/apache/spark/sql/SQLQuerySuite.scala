@@ -3506,6 +3506,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             s"AS SELECT key k, value FROM src ORDER BY k, value")
         }
       }
+
+  test("SPARK-31242: clone SparkSession should respect sessionInitWithConfigDefaults") {
+    // Note, only the conf explicitly set in SparkConf(e.g. in SharedSparkSessionBase) would cause
+    // problem before the fix.
+    withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
+      val cloned = spark.cloneSession()
+      SparkSession.setActiveSession(cloned)
+      assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
     }
   }
 }

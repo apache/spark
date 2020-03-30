@@ -67,6 +67,8 @@
       url: sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
     - text: "Pandas UDFs (a.k.a. Vectorized UDFs)"
       url: sql-pyspark-pandas-with-arrow.html#pandas-udfs-aka-vectorized-udfs
+    - text: "Pandas Function APIs"
+      url: sql-pyspark-pandas-with-arrow.html#pandas-function-apis
     - text: Usage Notes
       url: sql-pyspark-pandas-with-arrow.html#usage-notes
 - text: Migration Guide
@@ -174,7 +176,7 @@
                 - text: REFRESH TABLE
                   url: sql-ref-syntax-aux-refresh-table.html
                 - text: REFRESH
-                  url: sql-ref-syntax-aux-cache-refresh.md
+                  url: sql-ref-syntax-aux-cache-refresh.html
             - text: DESCRIBE
               url: sql-ref-syntax-aux-describe.html
               subitems:

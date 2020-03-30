@@ -198,6 +198,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CheckCartesianProducts) :+
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
+      ConvertToLocalRelation,
+      PropagateEmptyRelation,
       ColumnPruning,
       CollapseProject,
       RemoveNoopOperators) :+
@@ -609,24 +611,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
         .map(_._2)
       p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
-    // prune unrequired nested fields
-    case p @ Project(projectList, g: Generate) if SQLConf.get.nestedPruningOnExpressions &&
-        NestedColumnAliasing.canPruneGenerator(g.generator) =>
-      val exprsToPrune = projectList ++ g.generator.children
-      NestedColumnAliasing.getAliasSubMap(exprsToPrune, g.qualifiedGeneratorOutput).map {
-        case (nestedFieldToAlias, attrToAliases) =>
-          val newGenerator = g.generator.transform {
-            case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-              nestedFieldToAlias(f).toAttribute
-          }.asInstanceOf[Generator]
-
-          // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
-          val newGenerate = g.copy(generator = newGenerator)
-
-          val newChild = NestedColumnAliasing.replaceChildrenWithAliases(newGenerate, attrToAliases)
-
-          Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
-      }.getOrElse(p)
+    // prune unrequired nested fields from `Generate`.
+    case GeneratorNestedColumnAliasing(p) => p
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>

@@ -105,9 +105,18 @@ class DataFrameReader(OptionUtils):
         """Adds an input option for the underlying data source.
 
         You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
             * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
@@ -120,9 +129,18 @@ class DataFrameReader(OptionUtils):
         """Adds input options for the underlying data source.
 
         You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
             * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
@@ -253,7 +271,8 @@ class DataFrameReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
-        .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
+        .. _partition discovery:
+          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
         .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
@@ -490,8 +509,6 @@ class DataFrameReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
-        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
-
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
@@ -666,9 +683,18 @@ class DataFrameWriter(OptionUtils):
         """Adds an output option for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
@@ -678,9 +704,18 @@ class DataFrameWriter(OptionUtils):
         """Adds output options for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
         """
         for k in options:
             self._jwrite = self._jwrite.option(k, to_str(options[k]))
@@ -865,8 +900,6 @@ class DataFrameWriter(OptionUtils):
         :param ignoreNullFields: Whether to ignore null fields when generating JSON objects.
                         If None is set, it uses the default value, ``true``.
 
-        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
-
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -980,8 +1013,6 @@ class DataFrameWriter(OptionUtils):
                            the default value, ``""``.
         :param lineSep: defines the line separator that should be used for writing. If None is
                         set, it uses the default value, ``\\n``. Maximum length is 1 character.
-
-        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
