@@ -128,16 +128,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
-    // Check to see if the pyspark memory conf set for the resource profile id being used.
-    // Not all cluster managers are supported so fall back to the application level config
-    // when its the default profile id.
+    // Check to see if the pyspark memory conf is set for the resource profile id being used.
+    // Note we don't fallback to the cluster default if its not set in the profile because
+    // this is a totally optional config and the user may not want it set.
     val rpId = context.resourceProfileId()
     val memoryMb = if (rpId == DEFAULT_RESOURCE_PROFILE_ID) {
-      logInfo("using default profile so default executor memory")
+      logInfo("Using the default pyspark executor memory")
       conf.get(PYSPARK_EXECUTOR_MEMORY)
     } else {
       val mem = getPysparkMemoryFromInternalConfs(conf, rpId)
-      logInfo(s"using prorfile $rpId memory $mem")
+      logInfo(s"Using profile $rpId pyspark executor memory $mem")
       mem
 
     }
