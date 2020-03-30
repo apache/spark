@@ -595,9 +595,6 @@ setGeneric("write.parquet", function(x, path, ...) {
   standardGeneric("write.parquet")
 })
 
-#' @rdname write.parquet
-setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
-
 #' @rdname write.stream
 setGeneric("write.stream", function(df, source = NULL, outputMode = NULL, ...) {
   standardGeneric("write.stream")

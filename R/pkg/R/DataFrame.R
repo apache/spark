@@ -962,7 +962,6 @@ setMethod("write.orc",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' write.parquet(df, "/tmp/sparkr-tmp1/")
-#' saveAsParquetFile(df, "/tmp/sparkr-tmp2/")
 #'}
 #' @note write.parquet since 1.6.0
 setMethod("write.parquet",
@@ -971,17 +970,6 @@ setMethod("write.parquet",
             write <- callJMethod(x@sdf, "write")
             write <- setWriteOptions(write, mode = mode, ...)
             invisible(handledCallJMethod(write, "parquet", path))
-          })
-
-#' @rdname write.parquet
-#' @name saveAsParquetFile
-#' @aliases saveAsParquetFile,SparkDataFrame,character-method
-#' @note saveAsParquetFile since 1.4.0
-setMethod("saveAsParquetFile",
-          signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
-            .Deprecated("write.parquet")
-            write.parquet(x, path)
           })
 
 #' Save the content of SparkDataFrame in a text file at the specified path.
