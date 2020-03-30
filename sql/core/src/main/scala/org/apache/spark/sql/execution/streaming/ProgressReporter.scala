@@ -85,8 +85,8 @@ trait ProgressReporter extends Logging {
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
 
-  // The timestamp we report an event that has no input data
-  private var lastNoDataProgressEventTime = Long.MinValue
+  // The timestamp we report an event that has not executed anything
+  private var lastNoExecutionProgressEventTime = Long.MinValue
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
   timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
@@ -201,12 +201,12 @@ trait ProgressReporter extends Logging {
 
     if (hasExecuted) {
       // Reset noDataEventTimestamp if we processed any data
-      lastNoDataProgressEventTime = Long.MinValue
+      lastNoExecutionProgressEventTime = Long.MinValue
       updateProgress(newProgress)
     } else {
       val now = triggerClock.getTimeMillis()
-      if (now - noDataProgressEventInterval >= lastNoDataProgressEventTime) {
-        lastNoDataProgressEventTime = now
+      if (now - noDataProgressEventInterval >= lastNoExecutionProgressEventTime) {
+        lastNoExecutionProgressEventTime = now
         updateProgress(newProgress)
       }
     }
