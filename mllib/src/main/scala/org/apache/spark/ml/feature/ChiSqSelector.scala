@@ -31,7 +31,7 @@ import org.apache.spark.ml.stat.{ChiSquareTest, SelectionTestResult}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Params for [[ChiSqSelector]] and [[ChiSqSelectorModel]].
@@ -197,12 +197,9 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
-    }
 
-    val testResult = ChiSquareTest.testChiSquare(dataset, getFeaturesCol, getLabelCol)
+    val testResult = ChiSquareTest
+      .testChiSquare(dataset, getFeaturesCol, getLabelCol)
       .zipWithIndex
     val features = $(selectorType) match {
       case "numTopFeatures" =>

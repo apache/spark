@@ -17,15 +17,16 @@
 
 package org.apache.spark.ml.stat
 
+import org.apache.commons.math3.distribution.ChiSquaredDistribution
+
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.util.collection.OpenHashMap
 
 
 /**
@@ -42,6 +43,8 @@ object ChiSquareTest {
       pValues: Vector,
       degreesOfFreedom: Array[Int],
       statistics: Vector)
+
+  private[ml] val maxCategories: Int = 10000
 
   /**
    * Conduct Pearson's independence test for every feature against the label. For each feature, the
@@ -62,18 +65,15 @@ object ChiSquareTest {
    *         Each of these fields has one value per feature.
    */
   @Since("2.2.0")
-  def test(dataset: DataFrame, featuresCol: String, labelCol: String): DataFrame = {
+  def test(
+      dataset: DataFrame,
+      featuresCol: String,
+      labelCol: String): DataFrame = {
     val spark = dataset.sparkSession
-    import spark.implicits._
-
-    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
-    SchemaUtils.checkNumericType(dataset.schema, labelCol)
-    val rdd = dataset.select(col(labelCol).cast("double"), col(featuresCol)).as[(Double, Vector)]
-      .rdd.map { case (label, features) => OldLabeledPoint(label, OldVectors.fromML(features)) }
-    val testResults = OldStatistics.chiSqTest(rdd)
-    val pValues = Vectors.dense(testResults.map(_.pValue))
-    val degreesOfFreedom = testResults.map(_.degreesOfFreedom)
-    val statistics = Vectors.dense(testResults.map(_.statistic))
+    val results = testChiSquare(dataset, featuresCol, labelCol)
+    val pValues = Vectors.dense(results.map(_.pValue))
+    val degreesOfFreedom = results.map(_.degreesOfFreedom.toInt)
+    val statistics = Vectors.dense(results.map(_.statistic))
     spark.createDataFrame(Seq(ChiSquareResult(pValues, degreesOfFreedom, statistics)))
   }
 
@@ -89,14 +89,196 @@ object ChiSquareTest {
       dataset: Dataset[_],
       featuresCol: String,
       labelCol: String): Array[SelectionTestResult] = {
-
     SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
-    val input = dataset.select(col(labelCol).cast(DoubleType), col(featuresCol)).rdd
-      .map { case Row(label: Double, features: Vector) =>
-        OldLabeledPoint(label, OldVectors.fromML(features))
+
+    val spark = dataset.sparkSession
+    import spark.implicits._
+
+    val points = dataset.select(col(labelCol).cast("double"), col(featuresCol))
+      .as[(Double, Vector)]
+      .rdd
+    chiSquared(points)
+  }
+
+  private[spark] def chiSquared(points: RDD[(Double, Vector)]): Array[SelectionTestResult] = {
+    val results = points.first()._2 match {
+      case dv: DenseVector =>
+        chiSquaredDenseFeatures(points, dv.size)
+      case sv: SparseVector =>
+        chiSquaredSparseFeatures(points, sv.size)
+    }
+    results.map(r => r)
+  }
+
+  private def chiSquaredDenseFeatures(
+      points: RDD[(Double, Vector)],
+      numFeatures: Int): Array[ChiSqTestResult] = {
+    points.flatMap { case (label, features) =>
+      require(features.size == numFeatures,
+        s"Number of features must be $numFeatures but got ${features.size}")
+      features.iterator.map { case (col, value) => (col, (label, value)) }
+    }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
+      seqOp = { case (counts, t) =>
+        counts.changeValue(t, 1L, _ + 1L)
+        counts
+      },
+      combOp = { case (counts1, counts2) =>
+        counts2.foreach { case (t, c) => counts1.changeValue(t, c, _ + c) }
+        counts1
       }
-    val chiTestResult = OldStatistics.chiSqTest(input)
-    chiTestResult.map(r => new ChiSqTestResult(r.pValue, r.degreesOfFreedom, r.statistic))
+    ).map { case (col, counts) =>
+      val result = computeChiSq(counts.toMap, col)
+      (col, result.pValue, result.degreesOfFreedom, result.statistic)
+    }.collect().sortBy(_._1).map {
+      case (_, pValue, degreesOfFreedom, statistic) =>
+        new ChiSqTestResult(pValue, degreesOfFreedom, statistic)
+    }
+  }
+
+  private def chiSquaredSparseFeatures(
+      points: RDD[(Double, Vector)],
+      numFeatures: Int): Array[ChiSqTestResult] = {
+    val labelCounts = points.map(_._1).countByValue().toMap
+    val numInstances = labelCounts.valuesIterator.sum
+    val numLabels = labelCounts.size
+    if (numLabels > maxCategories) {
+      throw new SparkException(s"Chi-square test expect factors (categorical values) but "
+        + s"found more than $maxCategories distinct label values.")
+    }
+
+    val numParts = points.getNumPartitions
+    points.mapPartitionsWithIndex { case (pid, iter) =>
+      iter.flatMap { case (label, features) =>
+        require(features.size == numFeatures,
+          s"Number of features must be $numFeatures but got ${features.size}")
+        features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
+      } ++ {
+        // append this to make sure that all columns are taken into account
+        Iterator.range(pid, numFeatures, numParts)
+          .map(col => (col, null))
+      }
+    }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
+      seqOp = { case (counts, labelAndValue) =>
+        if (labelAndValue != null) counts.changeValue(labelAndValue, 1L, _ + 1L)
+        counts
+      },
+      combOp = { case (counts1, counts2) =>
+        counts2.foreach { case (t, c) => counts1.changeValue(t, c, _ + c) }
+        counts1
+      }
+    ).map { case (col, counts) =>
+      val nnz = counts.iterator.map(_._2).sum
+      require(numInstances >= nnz)
+      if (numInstances > nnz) {
+        val labelNNZ = counts.iterator
+          .map { case ((label, _), c) => (label, c) }
+          .toArray
+          .groupBy(_._1)
+          .mapValues(_.map(_._2).sum)
+        labelCounts.foreach { case (label, countByLabel) =>
+          val nnzByLabel = labelNNZ.getOrElse(label, 0L)
+          val nzByLabel = countByLabel - nnzByLabel
+          if (nzByLabel > 0) {
+            counts.update((label, 0.0), nzByLabel)
+          }
+        }
+      }
+
+      val result = computeChiSq(counts.toMap, col)
+      (col, result.pValue, result.degreesOfFreedom, result.statistic)
+    }.collect().sortBy(_._1).map {
+      case (_, pValue, degreesOfFreedom, statistic) =>
+        new ChiSqTestResult(pValue, degreesOfFreedom, statistic)
+    }
+  }
+
+  private def computeChiSq(
+      counts: Map[(Double, Double), Long],
+      col: Int): ChiSqTestResult = {
+    val label2Index = counts.iterator.map(_._1._1).toArray.distinct.sorted.zipWithIndex.toMap
+    val numLabels = label2Index.size
+    if (numLabels > maxCategories) {
+      throw new SparkException(s"Chi-square test expect factors (categorical values) but "
+        + s"found more than $maxCategories distinct label values.")
+    }
+
+    val value2Index = counts.iterator.map(_._1._2).toArray.distinct.sorted.zipWithIndex.toMap
+    val numValues = value2Index.size
+    if (numValues > maxCategories) {
+      throw new SparkException(s"Chi-square test expect factors (categorical values) but "
+        + s"found more than $maxCategories distinct values in column $col.")
+    }
+
+    val contingency = new DenseMatrix(numValues, numLabels,
+      Array.ofDim[Double](numValues * numLabels))
+    counts.foreach { case ((label, value), c) =>
+      val i = value2Index(value)
+      val j = label2Index(label)
+      contingency.update(i, j, c)
+    }
+
+    chiSquaredMatrix(contingency)
+  }
+
+  /*
+   * Pearson's independence test on the input contingency matrix.
+   */
+  private def chiSquaredMatrix(counts: Matrix): ChiSqTestResult = {
+    val numRows = counts.numRows
+    val numCols = counts.numCols
+
+    // get row and column sums
+    val colSums = new Array[Double](numCols)
+    val rowSums = new Array[Double](numRows)
+    val colMajorArr = counts.toArray
+    val colMajorArrLen = colMajorArr.length
+
+    var i = 0
+    while (i < colMajorArrLen) {
+      val elem = colMajorArr(i)
+      if (elem < 0.0) {
+        throw new IllegalArgumentException("Contingency table cannot contain negative entries.")
+      }
+      colSums(i / numRows) += elem
+      rowSums(i % numRows) += elem
+      i += 1
+    }
+    val total = colSums.sum
+
+    // second pass to collect statistic
+    var statistic = 0.0
+    var j = 0
+    while (j < colMajorArrLen) {
+      val col = j / numRows
+      val colSum = colSums(col)
+      if (colSum == 0.0) {
+        throw new IllegalArgumentException("Chi-squared statistic undefined for input matrix due to"
+          + s"0 sum in column [$col].")
+      }
+      val row = j % numRows
+      val rowSum = rowSums(row)
+      if (rowSum == 0.0) {
+        throw new IllegalArgumentException("Chi-squared statistic undefined for input matrix due to"
+          + s"0 sum in row [$row].")
+      }
+      val expected = colSum * rowSum / total
+      statistic += chiSqFunc(colMajorArr(j), expected)
+      j += 1
+    }
+    val df = (numCols - 1) * (numRows - 1)
+    if (df == 0) {
+      // 1 column or 1 row. Constant distribution is independent of anything.
+      // pValue = 1.0 and statistic = 0.0 in this case.
+      new ChiSqTestResult(1.0, 0, 0.0)
+    } else {
+      val pValue = 1.0 - new ChiSquaredDistribution(df).cumulativeProbability(statistic)
+      new ChiSqTestResult(pValue, df, statistic)
+    }
+  }
+
+  private def chiSqFunc(observed: Double, expected: Double): Double = {
+    val dev = observed - expected
+    dev * dev / expected
   }
 }

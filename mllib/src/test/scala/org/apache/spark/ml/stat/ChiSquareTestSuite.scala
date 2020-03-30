@@ -108,7 +108,7 @@ class ChiSquareTestSuite
 
   test("fail on continuous features or labels") {
     val tooManyCategories: Int = 100000
-    assert(tooManyCategories > ChiSqTest.maxCategories, "This unit test requires that " +
+    assert(tooManyCategories > ChiSquareTest.maxCategories, "This unit test requires that " +
       "tooManyCategories be large enough to cause ChiSqTest to throw an exception.")
 
     val random = new Random(11L)

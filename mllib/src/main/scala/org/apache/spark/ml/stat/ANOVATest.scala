@@ -136,8 +136,7 @@ object ANOVATest {
         features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
       } ++ {
         // append this to make sure that all columns are taken into account
-        Iterator.range(0, numFeatures)
-          .filter(_ % numParts == pid)
+        Iterator.range(pid, numFeatures, numParts)
           .map(col => (col, null))
       }
     }.aggregateByKey[(Double, Double, OpenHashMap[Double, Double])](

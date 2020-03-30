@@ -189,7 +189,11 @@ object Statistics {
    */
   @Since("1.1.0")
   def chiSqTest(data: RDD[LabeledPoint]): Array[ChiSqTestResult] = {
-    ChiSqTest.chiSquaredFeatures(data)
+    val points = data.map { l => (l.label, l.features.asML) }
+    ChiSquareTest.chiSquared(points).map { result =>
+      new ChiSqTestResult(result.pValue, result.degreesOfFreedom.toInt, result.statistic,
+        ChiSqTest.PEARSON.name, ChiSqTest.NullHypothesis.independence.toString)
+    }
   }
 
   /**

@@ -19,12 +19,8 @@ package org.apache.spark.mllib.stat.test
 
 import org.apache.commons.math3.distribution.ChiSquaredDistribution
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.rdd.RDD
-import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Conduct the chi-squared test for the input RDDs using the specified method.
@@ -71,134 +67,7 @@ private[spark] object ChiSqTest extends Logging {
   /**
    * Max number of categories when indexing labels and features
    */
-  private[spark] val maxCategories: Int = 10000
-
-  /**
-   * Conduct Pearson's independence test for each feature against the label across the input RDD.
-   * The contingency table is constructed from the raw (feature, label) pairs and used to conduct
-   * the independence test.
-   * Returns an array containing the ChiSquaredTestResult for every feature against the label.
-   */
-  def chiSquaredFeatures(data: RDD[LabeledPoint],
-      methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
-    data.first().features match {
-      case dv: DenseVector =>
-        chiSquaredDenseFeatures(data, dv.size, methodName)
-      case sv: SparseVector =>
-        chiSquaredSparseFeatures(data, sv.size, methodName)
-    }
-  }
-
-  private def chiSquaredDenseFeatures(data: RDD[LabeledPoint],
-      numFeatures: Int,
-      methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
-    data.flatMap { case LabeledPoint(label, features) =>
-      require(features.size == numFeatures,
-        s"Number of features must be $numFeatures but got ${features.size}")
-      features.iterator.map { case (col, value) => (col, (label, value)) }
-    }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
-      seqOp = { case (counts, t) =>
-        counts.changeValue(t, 1L, _ + 1L)
-        counts
-      },
-      combOp = { case (counts1, counts2) =>
-        counts2.foreach { case (t, c) => counts1.changeValue(t, c, _ + c) }
-        counts1
-      }
-    ).map { case (col, counts) =>
-      (col, computeChiSq(counts.toMap, methodName, col))
-    }.collect().sortBy(_._1).map {
-      case (_, (pValue, degreesOfFreedom, statistic, nullHypothesis)) =>
-        new ChiSqTestResult(pValue, degreesOfFreedom, statistic, methodName, nullHypothesis)
-    }
-  }
-
-  private def chiSquaredSparseFeatures(data: RDD[LabeledPoint],
-      numFeatures: Int,
-      methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
-    val labelCounts = data.map(_.label).countByValue().toMap
-    val numInstances = labelCounts.valuesIterator.sum
-    val numLabels = labelCounts.size
-    if (numLabels > maxCategories) {
-      throw new SparkException(s"Chi-square test expect factors (categorical values) but "
-        + s"found more than $maxCategories distinct label values.")
-    }
-
-    val numParts = data.getNumPartitions
-    data.mapPartitionsWithIndex { case (pid, iter) =>
-      iter.flatMap { case LabeledPoint(label, features) =>
-        require(features.size == numFeatures,
-          s"Number of features must be $numFeatures but got ${features.size}")
-        features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
-      } ++ {
-        // append this to make sure that all columns are taken into account
-        Iterator.range(0, numFeatures)
-          .filter(_ % numParts == pid)
-          .map(col => (col, null))
-      }
-    }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
-      seqOp = { case (counts, labelAndValue) =>
-        if (labelAndValue != null) counts.changeValue(labelAndValue, 1L, _ + 1L)
-        counts
-      },
-      combOp = { case (counts1, counts2) =>
-        counts2.foreach { case (t, c) => counts1.changeValue(t, c, _ + c) }
-        counts1
-      }
-    ).map { case (col, counts) =>
-      val nnz = counts.iterator.map(_._2).sum
-      require(numInstances >= nnz)
-      if (numInstances > nnz) {
-        val labelNNZ = counts.iterator
-          .map { case ((label, _), c) => (label, c) }
-          .toArray
-          .groupBy(_._1)
-          .mapValues(_.map(_._2).sum)
-        labelCounts.foreach { case (label, countByLabel) =>
-          val nnzByLabel = labelNNZ.getOrElse(label, 0L)
-          val nzByLabel = countByLabel - nnzByLabel
-          if (nzByLabel > 0) {
-            counts.update((label, 0.0), nzByLabel)
-          }
-        }
-      }
-
-      (col, computeChiSq(counts.toMap, methodName, col))
-    }.collect().sortBy(_._1).map {
-      case (_, (pValue, degreesOfFreedom, statistic, nullHypothesis)) =>
-        new ChiSqTestResult(pValue, degreesOfFreedom, statistic, methodName, nullHypothesis)
-    }
-  }
-
-  private def computeChiSq(
-      counts: Map[(Double, Double), Long],
-      methodName: String,
-      col: Int): (Double, Int, Double, String) = {
-    val label2Index = counts.iterator.map(_._1._1).toArray.distinct.sorted.zipWithIndex.toMap
-    val numLabels = label2Index.size
-    if (numLabels > maxCategories) {
-      throw new SparkException(s"Chi-square test expect factors (categorical values) but "
-        + s"found more than $maxCategories distinct label values.")
-    }
-
-    val value2Index = counts.iterator.map(_._1._2).toArray.distinct.sorted.zipWithIndex.toMap
-    val numValues = value2Index.size
-    if (numValues > maxCategories) {
-      throw new SparkException(s"Chi-square test expect factors (categorical values) but "
-        + s"found more than $maxCategories distinct values in column $col.")
-    }
-
-    val contingency = new DenseMatrix(numValues, numLabels,
-      Array.ofDim[Double](numValues * numLabels))
-    counts.foreach { case ((label, value), c) =>
-      val i = value2Index(value)
-      val j = label2Index(label)
-      contingency.update(i, j, c)
-    }
-
-    val result = ChiSqTest.chiSquaredMatrix(contingency, methodName)
-    (result.pValue, result.degreesOfFreedom, result.statistic, result.nullHypothesis)
-  }
+  private[mllib] val maxCategories: Int = 10000
 
   /*
    * Pearson's goodness of fit test on the input observed and expected counts/relative frequencies.
