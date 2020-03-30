@@ -27,10 +27,6 @@ import java.util.regex.Matcher
  */
 object CodeFormatter {
   val commentHolder = """\/\*(.+?)\*\/""".r
-  val commentRegexp =
-    ("""([ |\t]*?\/\*[\s|\S]*?\*\/[ |\t]*?)|""" + // strip /*comment*/
-      """([ |\t]*?\/\/[\s\S]*?\n)""").r           // strip //comment
-  val extraNewLinesRegexp = """\n\s*\n""".r       // strip extra newlines
 
   def format(code: CodeAndComment, maxLines: Int = -1): String = {
     val formatter = new CodeFormatter
@@ -95,16 +91,23 @@ object CodeFormatter {
     new CodeAndComment(code.result().trim(), map)
   }
 
-  def stripExtraNewLinesAndCommentsUsingRegexp(input: String): String = {
-    extraNewLinesRegexp.replaceAllIn(commentRegexp.replaceAllIn(input, ""), "\n")
-  }
-
   private object State extends Enumeration {
-    val TEXT, SEPARATOR, SEPARATOR_WITH_NEWLINE, MAYBE_COMMENT, LINE_COMMENT, BLOCK_COMMENT,
-    BLOCK_COMMENT_WITH_NEWLINE, MAYBE_BLOCK_COMMENT_CLOSING,
-    MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING = Value
+    type State = Value
+
+    val TEXT,
+        SEPARATOR,
+        SEPARATOR_WITH_NEWLINE,
+        MAYBE_COMMENT,
+        LINE_COMMENT,
+        BLOCK_COMMENT,
+        BLOCK_COMMENT_WITH_NEWLINE,
+        MAYBE_BLOCK_COMMENT_CLOSING,
+        MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING = Value
   }
 
+  // SPARK-30564 shows that a slow strip function during the code generation can cause significant
+  // overhead to the execution. This custom strip function is much faster than using regular
+  // expressions.
   def stripExtraNewLinesAndComments(input: String): String = {
     import State._
 
@@ -116,102 +119,109 @@ object CodeFormatter {
     while (pos < input.length) {
       val c = input(pos)
 
-      if (state == TEXT) {
-        if (c == ' ' || c == '\t') {
-          state = SEPARATOR
-        } else if (c == '\n') {
-          state = SEPARATOR_WITH_NEWLINE
-        } else if (c == '/') {
-          prevNonCommentState = state
-          state = MAYBE_COMMENT
-        } else {
-          sb += c
-          textBefore = true
-        }
-      } else if (state == SEPARATOR) {
-        if (c == ' ' || c == '\t') {
-        } else if (c == '\n') {
-          state = SEPARATOR_WITH_NEWLINE
-        } else if (c == '/') {
-          prevNonCommentState = state
-          state = MAYBE_COMMENT
-        } else {
-          if (textBefore) {
-            sb += ' '
+      state match {
+        case TEXT =>
+          c match {
+            case _ if c == ' ' || c == '\t' =>
+              state = SEPARATOR
+            case '\n' =>
+             state = SEPARATOR_WITH_NEWLINE
+            case '/' =>
+              prevNonCommentState = state
+              state = MAYBE_COMMENT
+            case _ =>
+              sb += c
+              textBefore = true
           }
-          sb += c
-          state = TEXT
-          textBefore = true
-        }
-      } else if (state == SEPARATOR_WITH_NEWLINE) {
-        if (c == ' ' || c == '\t' || c == '\n') {
-        } else if (c == '/') {
-          prevNonCommentState = state
-          state = MAYBE_COMMENT
-        } else {
-          if (textBefore) {
-            sb += '\n'
+        case SEPARATOR =>
+          c match {
+            case _ if c == ' ' || c == '\t' =>
+            case '\n' =>
+              state = SEPARATOR_WITH_NEWLINE
+            case '/' =>
+              prevNonCommentState = state
+              state = MAYBE_COMMENT
+            case _ =>
+              if (textBefore) {
+                sb += ' '
+              }
+              sb += c
+              state = TEXT
+              textBefore = true
           }
-          sb += c
-          state = TEXT
-          textBefore = true
-        }
-      } else if (state == MAYBE_COMMENT) {
-        if (c == '/') {
-          state = LINE_COMMENT
-        } else if (c == '*') {
-          state = BLOCK_COMMENT
-        } else {
-          if (textBefore) {
-            if (prevNonCommentState == SEPARATOR) {
-              sb += ' '
-            } else if (prevNonCommentState == SEPARATOR_WITH_NEWLINE) {
-              sb += '\n'
+        case SEPARATOR_WITH_NEWLINE =>
+          c match {
+            case _ if c == ' ' || c == '\t' || c == '\n' =>
+            case '/' =>
+              prevNonCommentState = state
+              state = MAYBE_COMMENT
+            case _ =>
+              if (textBefore) {
+                sb += '\n'
+              }
+              sb += c
+              state = TEXT
+              textBefore = true
+          }
+        case MAYBE_COMMENT =>
+          c match {
+            case '/' =>
+              state = LINE_COMMENT
+            case '*' =>
+              state = BLOCK_COMMENT
+            case _ =>
+              if (textBefore) {
+                if (prevNonCommentState == SEPARATOR) {
+                  sb += ' '
+                } else if (prevNonCommentState == SEPARATOR_WITH_NEWLINE) {
+                  sb += '\n'
+                }
+              }
+              sb += '/'
+              c match {
+                case _ if c == ' ' || c == '\t' =>
+                  state = SEPARATOR
+                case '\n' =>
+                  state = SEPARATOR_WITH_NEWLINE
+                case _ =>
+                  sb += c
+                  state = TEXT
+                  textBefore = true
+              }
             }
+        case LINE_COMMENT =>
+          if (c == '\n') {
+            state = SEPARATOR_WITH_NEWLINE
           }
-          sb += '/'
-          if (c == ' ' || c == '\t') {
-            state = SEPARATOR
-          } else if (c == '\n') {
+        case BLOCK_COMMENT =>
+          if (c == '\n') {
+            state = BLOCK_COMMENT_WITH_NEWLINE
+          } else if (c == '*') {
+            state = MAYBE_BLOCK_COMMENT_CLOSING
+          }
+        case BLOCK_COMMENT_WITH_NEWLINE =>
+          if (c == '*') {
+            state = MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING
+          }
+        case MAYBE_BLOCK_COMMENT_CLOSING =>
+          c match {
+            case '\n' =>
+              state = BLOCK_COMMENT_WITH_NEWLINE
+            case '/' =>
+              if (prevNonCommentState == SEPARATOR_WITH_NEWLINE) {
+                state = SEPARATOR_WITH_NEWLINE
+              } else {
+                state = SEPARATOR
+              }
+            case _ =>
+              state = BLOCK_COMMENT
+          }
+        case MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING =>
+          if (c == '/') {
             state = SEPARATOR_WITH_NEWLINE
           } else {
-            sb += c
-            state = TEXT
-            textBefore = true
+            state = BLOCK_COMMENT_WITH_NEWLINE
           }
-        }
-      } else if (state == LINE_COMMENT) {
-        if (c == '\n') {
-          state = SEPARATOR_WITH_NEWLINE
-        }
-      } else if (state == BLOCK_COMMENT) {
-        if (c == '\n') {
-          state = BLOCK_COMMENT_WITH_NEWLINE
-        } else if (c == '*') {
-          state = MAYBE_BLOCK_COMMENT_CLOSING
-        }
-      } else if (state == BLOCK_COMMENT_WITH_NEWLINE) {
-        if (c == '*') {
-          state = MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING
-        }
-      } else if (state == MAYBE_BLOCK_COMMENT_CLOSING) {
-        if (c == '\n') {
-          state = BLOCK_COMMENT_WITH_NEWLINE
-        } else if (c == '/') {
-          if (prevNonCommentState == SEPARATOR_WITH_NEWLINE) {
-            state = SEPARATOR_WITH_NEWLINE
-          } else {
-            state = SEPARATOR
-          }
-        } else {
-          state = BLOCK_COMMENT
-        }
-      } else if (state == MAYBE_BLOCK_COMMENT_WITH_NEWLINE_CLOSING) {
-        if (c == '/') {
-          state = SEPARATOR_WITH_NEWLINE
-        } else {
-          state = BLOCK_COMMENT_WITH_NEWLINE
-        }
       }
       pos += 1
     }

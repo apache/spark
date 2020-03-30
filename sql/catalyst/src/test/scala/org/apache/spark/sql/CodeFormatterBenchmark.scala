@@ -36,13 +36,22 @@ import org.apache.spark.util.Utils.times
  */
 object CodeFormatterBenchmark extends BenchmarkBase {
 
+  private val commentRegexp =
+    ("""([ |\t]*?\/\*[\s|\S]*?\*\/[ |\t]*?)|""" + // strip /*comment*/
+      """([ |\t]*?\/\/[\s\S]*?\n)""").r           // strip //comment
+  private val extraNewLinesRegexp = """\n\s*\n""".r       // strip extra newlines
+
+  private def stripExtraNewLinesAndCommentsUsingRegexp(input: String): String = {
+    extraNewLinesRegexp.replaceAllIn(commentRegexp.replaceAllIn(input, ""), "\n")
+  }
+
   def test(name: String, sourceCode: String, numIters: Int, stripNum: Int, lineNum: Int): Unit = {
     runBenchmark(name) {
       val benchmark = new Benchmark(name, stripNum * lineNum, output = output)
 
       benchmark.addCase("regular expression", numIters) { _: Int =>
         times(stripNum) {
-          val formatted = CodeFormatter.stripExtraNewLinesAndCommentsUsingRegexp(sourceCode)
+          val formatted = stripExtraNewLinesAndCommentsUsingRegexp(sourceCode)
         }
       }
 
