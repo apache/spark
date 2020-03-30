@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.{FileNotFoundException, IOException}
 import java.util.Locale
 
+import org.apache.hadoop.fs.{FileStatus, Path}
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -26,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLeng
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -527,6 +531,56 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 
       case _ => // OK
+    }
+  }
+}
+
+trait CTASWriteChecker extends Logging {
+  val session: SparkSession
+
+  def failAnalysis(msg: String): Unit = {
+    throw new AnalysisException(msg)
+  }
+
+  def checkLocation(table: CatalogTable): Unit = {
+    val tableExists = session.sessionState.catalog.tableExists(table.identifier)
+    val location = table.storage.locationUri
+    if (!tableExists && location.isDefined && location.get.toString.length != 0) {
+      try {
+        val hadoopConfiguration = session.sessionState.newHadoopConf()
+        val path = new Path(location.get)
+        val fs = path.getFileSystem(hadoopConfiguration)
+        val locStatus: FileStatus = if (fs != null) {
+          fs.getFileStatus(path)
+        } else {
+          null
+        }
+        if (locStatus != null && locStatus.isDirectory) {
+          val lStats = fs.listStatus(path)
+          if (lStats != null && lStats.nonEmpty) {
+            failAnalysis("CREATE-TABLE-AS-SELECT cannot create table with " +
+              s"location to a non-empty directory $path.")
+          }
+        }
+      } catch {
+        case nfe: FileNotFoundException =>
+        // we will create the folder if it does not exist.
+        case ioE: IOException =>
+          logDebug("Exception when validate folder ", ioE);
+      }
+    }
+  }
+}
+
+
+case class DataSourceCTASDataSourceWriteChecker(session: SparkSession)
+  extends (LogicalPlan => Unit) with CTASWriteChecker {
+
+  override def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case CreateDataSourceTableAsSelectCommand(table, _, _, _) =>
+        checkLocation(table)
+      case _ =>
     }
   }
 }

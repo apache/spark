@@ -190,6 +190,7 @@ abstract class BaseSessionStateBuilder(
       PreWriteCheck +:
         PreReadCheck +:
         HiveOnlyCheck +:
+        DataSourceCTASDataSourceWriteChecker(session) +:
         TableCapabilityCheck +:
         CommandCheck(conf) +:
         customCheckRules
