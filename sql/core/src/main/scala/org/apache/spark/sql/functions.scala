@@ -4864,9 +4864,10 @@ object functions {
         "information. Spark may blindly pass null to the Scala closure with primitive-type " +
         "argument, and the closure will see the default value of the Java type for the null " +
         "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-        "You could use typed Scala UDF APIs (e.g. `udf((x: Int) => x)`) to avoid this problem, " +
-        s"or set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with " +
-        s"caution."
+        "You could use typed Scala UDF APIs (e.g. `udf((x: Int) => x)`) or Java UDF (e.g. " +
+        "`udf(new UDF1[String, Int] { override def call(s: String): Int = s.length() }, " +
+        "IntegerType)`) if input types are all non primitive to avoid this problem or set " +
+        "${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and use this API with caution."
       throw new AnalysisException(errorMsg)
     }
     SparkUserDefinedFunction(f, dataType, inputEncoders = Nil)
