@@ -93,7 +93,8 @@ private[spark] object ChiSqTest extends Logging {
       numFeatures: Int,
       methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
     data.flatMap { case LabeledPoint(label, features) =>
-      require(features.size == numFeatures)
+      require(features.size == numFeatures,
+        s"Number of features must be $numFeatures but got ${features.size}")
       features.iterator.map { case (col, value) => (col, (label, value)) }
     }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
       seqOp = { case (counts, t) =>
@@ -127,7 +128,8 @@ private[spark] object ChiSqTest extends Logging {
     val bcLabelCounts = sc.broadcast(labelCounts)
 
     val results = data.flatMap { case LabeledPoint(label, features) =>
-      require(features.size == numFeatures)
+      require(features.size == numFeatures,
+        s"Number of features must be $numFeatures but got ${features.size}")
       features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
     }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
       seqOp = { case (counts, t) =>
