@@ -93,9 +93,9 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     withTempPath { path =>
-      runBenchmark("Parquet read/write") {
+      runBenchmark("Rebasing dates/timestamps in Parquet datasource") {
         val rowsNum = 100000000
-        Seq("date" /* , "timestamp" */ ).foreach { dateTime =>
+        Seq("date", "timestamp").foreach { dateTime =>
           val benchmark = new Benchmark(s"Save ${dateTime}s to parquet", rowsNum, output = output)
           benchmark.addCase("after 1582, noop", 1) { _ =>
             genDF(rowsNum, dateTime, after1582 = true).noop()
