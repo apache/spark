@@ -39,6 +39,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile.PYSPARK_MEMORY_PROPERTY
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -1154,6 +1155,8 @@ private[spark] class DAGScheduler(
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
     val properties = jobIdToActiveJob(jobId).properties
+    val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
+    rp.getPysparkMemory.map(m => properties.setProperty(PYSPARK_MEMORY_PROPERTY, m.toString))
 
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are

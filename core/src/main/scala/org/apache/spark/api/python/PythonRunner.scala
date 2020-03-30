@@ -128,6 +128,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
+    val pymem = Option(context.getLocalProperty("spark.resource.pyspark.memory"))
+    logInfo("task context pyspark memory is: $pymem")
     // Check to see if the pyspark memory conf is set for the resource profile id being used.
     // Note we don't fallback to the cluster default if its not set in the profile because
     // this is a totally optional config and the user may not want it set.

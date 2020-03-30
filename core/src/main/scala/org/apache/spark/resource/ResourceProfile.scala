@@ -78,6 +78,10 @@ class ResourceProfile(
     taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
   }
 
+  private[spark] def getPysparkMemory: Option[Long] = {
+    taskResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount.toLong)
+  }
+
   private[spark] def getInternalPysparkMemoryConfs: Seq[(String, String)] = {
     _internalPysparkMemoryConf
   }
@@ -332,6 +336,7 @@ object ResourceProfile extends Logging {
     rp.getTaskCpus.getOrElse(conf.get(CPUS_PER_TASK))
   }
 
+  private[spark] val PYSPARK_MEMORY_PROPERTY = "resource.pyspark.memory"
   private[spark] val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
 
   // Helper class for constructing the resource profile internal configs. The configs look like:
@@ -343,11 +348,11 @@ object ResourceProfile extends Logging {
   }
 
   /**
-   * Create the ResourceProfile internal pyspark memory conf that are used by the executors.
-   * It pulls any pyspark.memory config from the profile and returns a Seq of key and value
-   * where the keys get formatted as:
+   * Create the ResourceProfile internal pyspark memory conf that is used by the executors.
+   * It pulls any pyspark.memory config from the profile and returns Seq of key and value
+   * where the key is formatted as:
    *
-   * spark.resourceProfile.executor.[rpId].[resourceName].[amount, vendor, discoveryScript]
+   * spark.resourceProfile.executor.[rpId].pyspark.memory.amount
    */
   private[spark] def createPysparkMemoryInternalConfs(
       rp: ResourceProfile
