@@ -718,15 +718,15 @@ A list of the available metrics, with a short description:
   </tr>
   <tr>
     <td>totalInputBytes</td>
-    <td>Total input bytes summed in this Executor.</td>
+    <td>Total input bytes summed in this executor.</td>
   </tr>
   <tr>
     <td>totalShuffleRead</td>
-    <td>Total shuffer read bytes summed in this Executor.</td>
+    <td>Total shuffle read bytes summed in this executor.</td>
   </tr>
   <tr>
     <td>totalShuffleWrite</td>
-    <td>Total shuffer write bytes summed in this Executor.</td>
+    <td>Total shuffle write bytes summed in this executor.</td>
   </tr>
   <tr>
     <td>maxMemory</td>
