@@ -83,7 +83,7 @@ class CodeFormatterSuite extends SparkFunSuite {
         |}""".stripMargin)
   }
 
-  test("removing extra new lines and comments 2") {
+  test("improves extra new line and comment removals") {
     val code =
       """
         | /*
