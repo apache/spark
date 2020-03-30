@@ -26,7 +26,6 @@ import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
-
 import org.apache.spark.util.Utils
 
 
