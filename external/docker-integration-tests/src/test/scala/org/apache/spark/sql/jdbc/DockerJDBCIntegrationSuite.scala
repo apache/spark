@@ -65,6 +65,10 @@ abstract class DatabaseOnDocker {
 
   /**
    * Optional entry point when container starts
+   *
+   * Startup process is a parameter of entry point. This may or may not be considered during
+   * startup. Prefer entry point to startup process when you need a command always to be executed or
+   * you want to change the initialization order.
    */
   def getEntryPoint: Option[String]
 
