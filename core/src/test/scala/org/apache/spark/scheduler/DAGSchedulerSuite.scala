@@ -3185,7 +3185,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       scheduler.mergeResourceProfilesForStage(resourceprofiles)
     }.getMessage()
 
-    assert(error.contains("Multiple ResourceProfile's specified in the RDDs"))
+    assert(error.contains("Multiple ResourceProfiles specified in the RDDs"))
   }
 
   test("test 2 resource profile with merge conflict config true") {
@@ -3303,6 +3303,26 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mergedRp.executorResources.get(GPU).get.amount == 4)
     assert(mergedRp.executorResources.get(GPU).get.discoveryScript == "disc")
     assert(mergedRp.taskResources.get(GPU).get.amount == 2)
+  }
+
+  test("test merge 3 resource profiles") {
+    afterEach()
+    val conf = new SparkConf()
+    conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
+    init(conf)
+    val ereqs = new ExecutorResourceRequests().cores(4)
+    val treqs = new TaskResourceRequests().cpus(1)
+    val rp1 = new ResourceProfile(ereqs.requests, treqs.requests)
+    val ereqs2 = new ExecutorResourceRequests().cores(2)
+    val treqs2 = new TaskResourceRequests().cpus(1)
+    val rp2 = new ResourceProfile(ereqs2.requests, treqs2.requests)
+    val ereqs3 = new ExecutorResourceRequests().cores(3)
+    val treqs3 = new TaskResourceRequests().cpus(2)
+    val rp3 = new ResourceProfile(ereqs3.requests, treqs3.requests)
+    var mergedRp = scheduler.mergeResourceProfilesForStage(HashSet(rp1, rp2, rp3))
+
+    assert(mergedRp.getTaskCpus.get == 2)
+    assert(mergedRp.getExecutorCores.get == 4)
   }
 
   /**
