@@ -39,6 +39,7 @@ import org.apache.hadoop.yarn.util.Records
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.Utils
