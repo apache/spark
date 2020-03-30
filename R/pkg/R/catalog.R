@@ -159,6 +159,8 @@ clearCache <- function() {
   invisible(callJMethod(catalog, "clearCache"))
 }
 
+#' (Deprecated) Drop Temporary Table
+#'
 #' Drops the temporary table with the given table name in the catalog.
 #' If the table has been cached/persisted before, it's also unpersisted.
 #'
