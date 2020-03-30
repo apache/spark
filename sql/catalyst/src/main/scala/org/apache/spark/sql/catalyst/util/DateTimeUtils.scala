@@ -1064,6 +1064,9 @@ object DateTimeUtils {
   private val julianGregDiffs = Array(2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, 0)
   // The sorted days in Julian calendar when difference in days between Julian and
   // Proleptic Gregorian calendars was changed.
+  // The starting point is the `0001-01-01` (-719164 days since the epoch in
+  // Julian calendar). All dates before the staring point have the same difference
+  // of 2 days in Julian and Proleptic Gregorian calendars.
   private val julianGregDiffSwitchDay = Array(
     -719164, -682945, -646420, -609895, -536845, -500320, -463795,
     -390745, -354220, -317695, -244645, -208120, -171595, -141427)
@@ -1087,6 +1090,9 @@ object DateTimeUtils {
   private val grepJulianDiffs = Array(-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0)
   // The sorted days in Proleptic Gregorian calendar when difference in days between
   // Proleptic Gregorian and Julian was changed.
+  // The starting point is the `0001-01-01` (-719162 days since the epoch in
+  // Proleptic Gregorian calendar). All dates before the staring point have the same
+  // difference of -2 days in Proleptic Gregorian and Julian calendars.
   private val gregJulianDiffSwitchDay = Array(
     -719162, -682944, -646420, -609896, -536847, -500323, -463799,
     -390750, -354226, -317702, -244653, -208129, -171605, -141427)
