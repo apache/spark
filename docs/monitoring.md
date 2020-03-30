@@ -678,7 +678,7 @@ A list of the available metrics, with a short description:
     <td>memoryUsed</td>
     <td>Storage memory used by this executor.</td>
   </tr>
-  <td>
+  <tr>
     <td>diskUsed</td>
     <td>Disk space used for RDD storage by this executor.</td>
   </tr>
