@@ -886,7 +886,10 @@ private[spark] class Client(
     var prefixEnv: Option[String] = None
 
     // Add Xmx for AM memory
-    javaOpts += "-Xmx" + amMemory + "m"
+    javaOpts += s"-Xmx${amMemory}m"
+    if (isClusterMode) {
+      javaOpts += s"-XX:MaxDirectMemorySize=${amMemoryOverhead}m"
+    }
 
     val tmpDir = new Path(Environment.PWD.$$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
     javaOpts += "-Djava.io.tmpdir=" + tmpDir

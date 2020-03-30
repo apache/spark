@@ -56,6 +56,7 @@ private[yarn] class ExecutorRunnable(
     securityMgr: SecurityManager,
     localResources: Map[String, LocalResource],
     resourceProfileId: Int) extends Logging {
+  import YarnSparkHadoopUtil._
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
@@ -135,8 +136,18 @@ private[yarn] class ExecutorRunnable(
     val javaOpts = ListBuffer[String]()
 
     // Set the JVM memory
-    val executorMemoryString = executorMemory + "m"
-    javaOpts += "-Xmx" + executorMemoryString
+    val executorOffHeapMemory = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf)
+    val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
+      math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
+    val isPython = sparkConf.get(IS_PYTHON_APP)
+    val pysparkWorkerMemory: Int = if (isPython) {
+      sparkConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
+    } else {
+      0
+    }
+    val directMemory = executorOffHeapMemory + executorMemoryOverhead + pysparkWorkerMemory
+    javaOpts += s"-Xmx${executorMemory}m"
+    javaOpts += s"-XX:MaxDirectMemorySize=${directMemory}m"
 
     // Set extra Java options for the executor, if defined
     sparkConf.get(EXECUTOR_JAVA_OPTIONS).foreach { opts =>
