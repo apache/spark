@@ -64,16 +64,14 @@ case class CustomShuffleReaderExec private(
   override def stringArgs: Iterator[Any] = {
     val desc = if (isLocalReader) {
       "local"
+    } else if (hasCoalescedPartition && hasSkewedPartition) {
+      "coalesced and skewed"
+    } else if (hasCoalescedPartition) {
+      "coalesced"
+    } else if (hasSkewedPartition) {
+      "skewed"
     } else {
-      if (hasCoalescedPartition && hasSkewedPartition) {
-        "coalesced and skewed"
-      } else if (hasCoalescedPartition) {
-        "coalesced"
-      } else if (hasSkewedPartition) {
-        "skewed"
-      } else {
-        ""
-      }
+      ""
     }
     Iterator(desc)
   }
@@ -100,6 +98,35 @@ case class CustomShuffleReaderExec private(
     case _ => None
   }
 
+  private lazy val partitionDataSizeMetrics = {
+    val maxSize = SQLMetrics.createSizeMetric(sparkContext, "maximum partition data size")
+    val minSize = SQLMetrics.createSizeMetric(sparkContext, "minimum partition data size")
+    val avgSize = SQLMetrics.createSizeMetric(sparkContext, "average partition data size")
+    val mapStats = shuffleStage.get.mapStats.bytesByPartitionId
+    val sizes = partitionSpecs.map {
+      case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
+        startReducerIndex.until(endReducerIndex).map(mapStats(_)).sum
+      case p: PartialReducerPartitionSpec => p.dataSize
+      case p => throw new IllegalStateException("unexpected " + p)
+    }
+    maxSize.set(sizes.max)
+    minSize.set(sizes.min)
+    avgSize.set(sizes.sum / sizes.length)
+    Map(
+      "maxPartitionDataSize" -> maxSize,
+      "minPartitionDataSize" -> minSize,
+      "avgPartitionDataSize" -> avgSize)
+  }
+
+  private lazy val skewedPartitionMetrics = {
+    val metrics = SQLMetrics.createMetric(sparkContext, "number of skewed partitions")
+    val numSkewedPartitions = partitionSpecs.collect {
+      case p: PartialReducerPartitionSpec => p.reducerIndex
+    }.distinct.length
+    metrics.set(numSkewedPartitions)
+    Map("numSkewedPartitions" -> metrics)
+  }
+
   override lazy val metrics = {
     if (shuffleStage.isDefined) {
       val numPartitions = SQLMetrics.createMetric(sparkContext, "number of partitions")
@@ -110,44 +137,13 @@ case class CustomShuffleReaderExec private(
           // data size info is available.
           Map.empty
         } else {
-          val maxSize = SQLMetrics.createSizeMetric(sparkContext, "max data size of partitions")
-          val minSize = SQLMetrics.createSizeMetric(sparkContext, "min data size of partitions")
-          val avgSize = SQLMetrics.createSizeMetric(sparkContext, "avg data size of partitions")
-          val mapStats = shuffleStage.get.mapStats.bytesByPartitionId
-          val sizes = partitionSpecs.map {
-            case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
-              startReducerIndex.until(endReducerIndex).map(mapStats(_)).sum
-            case p: PartialReducerPartitionSpec => p.dataSize
-            case p => throw new IllegalStateException("unexpected " + p)
-          }
-          maxSize.set(sizes.max)
-          minSize.set(sizes.min)
-          avgSize.set(sizes.sum / sizes.length)
-          Map(
-            "maxPartitionDataSize" -> maxSize,
-            "minPartitionDataSize" -> minSize,
-            "avgPartitionDataSize" -> avgSize)
+          partitionDataSizeMetrics
         }
       } ++ {
         if (hasSkewedPartition) {
-          val skewedPartitions = SQLMetrics.createMetric(
-            sparkContext, "number of skewed partitions")
-          var i = 0
-          var currentReducerIndex = -1
-          while (i < partitionSpecs.length) {
-            partitionSpecs(i) match {
-              case p: PartialReducerPartitionSpec =>
-                if (p.reducerIndex != currentReducerIndex) {
-                  skewedPartitions.add(1)
-                  currentReducerIndex = p.reducerIndex
-                }
-              case _ => currentReducerIndex = -1
-            }
-            i += 1
-          }
-          Some("numSkewedPartitions" -> skewedPartitions)
+          skewedPartitionMetrics
         } else {
-          None
+          Map.empty
         }
       }
     } else {

@@ -287,16 +287,14 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 private object ShuffleStage {
   def unapply(plan: SparkPlan): Option[ShuffleStageInfo] = plan match {
     case s: ShuffleQueryStageExec =>
-      val mapStats = getMapStats(s)
-      val sizes = mapStats.bytesByPartitionId
+      val sizes = s.mapStats.bytesByPartitionId
       val partitions = sizes.zipWithIndex.map {
         case (size, i) => CoalescedPartitionSpec(i, i + 1) -> size
       }
-      Some(ShuffleStageInfo(s, mapStats, partitions))
+      Some(ShuffleStageInfo(s, s.mapStats, partitions))
 
     case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
-      val mapStats = getMapStats(s)
-      val sizes = mapStats.bytesByPartitionId
+      val sizes = s.mapStats.bytesByPartitionId
       val partitions = partitionSpecs.map {
         case spec @ CoalescedPartitionSpec(start, end) =>
           var sum = 0L
@@ -309,15 +307,9 @@ private object ShuffleStage {
         case other => throw new IllegalArgumentException(
           s"Expect CoalescedPartitionSpec but got $other")
       }
-      Some(ShuffleStageInfo(s, mapStats, partitions))
+      Some(ShuffleStageInfo(s, s.mapStats, partitions))
 
     case _ => None
-  }
-
-  private def getMapStats(stage: ShuffleQueryStageExec): MapOutputStatistics = {
-    assert(stage.resultOption.isDefined, "ShuffleQueryStageExec should" +
-      " already be ready when executing OptimizeSkewedPartitions rule")
-    stage.mapStats
   }
 }
 
