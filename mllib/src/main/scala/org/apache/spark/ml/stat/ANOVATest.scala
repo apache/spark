@@ -128,16 +128,17 @@ object ANOVATest {
       numFeatures: Int): Array[SelectionTestResult] = {
     val counts = points.map(_._1).countByValue().toMap
 
+    val numParts = points.getNumPartitions
     points.mapPartitionsWithIndex { case (pid, iter) =>
       iter.flatMap { case (label, features) =>
         require(features.size == numFeatures,
           s"Number of features must be $numFeatures but got ${features.size}")
         features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
       } ++ {
-        if (pid == 0) {
-          // append this to make sure that all columns are taken into account
-          Iterator.tabulate(numFeatures)(col => (col, null))
-        } else Iterator.empty
+        // append this to make sure that all columns are taken into account
+        Iterator.range(0, numFeatures)
+          .filter(_ % numParts == pid)
+          .map(col => (col, null))
       }
     }.aggregateByKey[(Double, Double, OpenHashMap[Double, Double])](
       (0.0, 0.0, new OpenHashMap[Double, Double]))(
