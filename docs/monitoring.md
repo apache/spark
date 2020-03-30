@@ -657,15 +657,14 @@ A list of the available metrics, with a short description:
 
 ### Executor Metrics
 
-Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe
-the performance metrics of Executor itself like JVM heap memory, GC information.
-Executor metric values and their measured memory peak values per executor are exposed via the REST API in JSON and Prometheus format.
-The JSON end point is exposed at: `/applications/[app-id]/executors`, the Prometheus end point at: `/metrics/executors/prometheus`.
-The Prometheus end point is conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
+Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
+Executor metric values and their measured memory peak values per executor are exposed via the REST API in JSON format and in Prometheus format.
+The JSON end point is exposed at: `/applications/[app-id]/executors`, and the Prometheus endpoint at: `/metrics/executors/prometheus`.
+The Prometheus endpoint is conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
 In addition, aggregated per-stage peak values of the executor memory metrics are written to the event log if
 `spark.eventLog.logStageExecutorMetrics` is true.  
 Executor memory metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
-A list of the available executor metrics, with a short description:
+A list of the available metrics, with a short description:
 
 <table class="table">
   <tr><th>Executor Level Metric name</th>
@@ -679,9 +678,10 @@ A list of the available executor metrics, with a short description:
     <td>memoryUsed</td>
     <td>Storage memory used by this executor.</td>
   </tr>
-  <tr>
+  <td>
     <td>diskUsed</td>
-    <td>Disk space used for RDD storage by this executor.</tr>
+    <td>Disk space used for RDD storage by this executor.</td>
+  </tr>
   <tr>
     <td>totalCores</td>
     <td>Number of cores available in this executor.</td>
