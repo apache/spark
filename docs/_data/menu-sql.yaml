@@ -123,6 +123,8 @@
               url: sql-ref-syntax-ddl-truncate-table.html
             - text: REPAIR TABLE
               url: sql-ref-syntax-ddl-repair-table.html
+            - text: USE DATABASE
+              url: sql-ref-syntax-qry-select-usedb.html
         - text: Data Manipulation Statements
           url: sql-ref-syntax-dml.html
           subitems:
@@ -152,8 +154,6 @@
                   url: sql-ref-syntax-qry-select-distribute-by.html
                 - text: LIMIT Clause 
                   url: sql-ref-syntax-qry-select-limit.html
-                - text: USE database
-                  url: sql-ref-syntax-qry-select-usedb.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements
