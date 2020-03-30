@@ -257,6 +257,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
           val table = catalog.getTableMetadata(TableIdentifier("t"))
           assert(table.bucketSpec == Option(BucketSpec(numBuckets, Seq("a"), Seq("b"))))
         }
+        Utils.deleteRecursively(path)
       })
 
       // Over the new limit
