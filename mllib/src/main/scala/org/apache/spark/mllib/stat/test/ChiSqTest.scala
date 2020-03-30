@@ -126,7 +126,8 @@ private[spark] object ChiSqTest extends Logging {
 
     data.mapPartitionsWithIndex { case (pid, iter) =>
       iter.flatMap { case LabeledPoint(label, features) =>
-        require(features.size == numFeatures)
+        require(features.size == numFeatures,
+          s"Number of features must be $numFeatures but got ${features.size}")
         features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
       } ++ {
         if (pid == 0) {
