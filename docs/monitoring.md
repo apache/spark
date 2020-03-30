@@ -713,7 +713,7 @@ A list of the available metrics, with a short description:
   </tr>
   <tr>
     <td>totalGCTime</td>
-    <td>Elapsed time the JVM spent in garbage collection summed in this Executor.
+    <td>Elapsed time the JVM spent in garbage collection summed in this executor.
     The value is expressed in milliseconds.</td>
   </tr>
   <tr>
