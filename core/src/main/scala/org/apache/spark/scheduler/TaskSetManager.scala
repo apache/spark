@@ -469,7 +469,7 @@ private[spark] class TaskSetManager(
           s"taskResourceAssignments ${taskResourceAssignments}")
 
         sched.dagScheduler.taskStarted(task, info)
-        val desc = new TaskDescription(
+        new TaskDescription(
           taskId,
           attemptNum,
           execId,
@@ -481,8 +481,6 @@ private[spark] class TaskSetManager(
           task.localProperties,
           taskResourceAssignments,
           serializedTask)
-        desc.properties.setProperty("spark.resource.pyspark.memory", "2048")
-        desc
       }
     } else {
       None

@@ -193,12 +193,6 @@ abstract class TaskContext extends Serializable {
   @Evolving
   def resourcesJMap(): java.util.Map[String, ResourceInformation]
 
-  /**
-   * ResourceProfile Id used by the task.
-   */
-  @Evolving
-  def resourceProfileId(): Int
-
   @DeveloperApi
   def taskMetrics(): TaskMetrics
 

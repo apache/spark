@@ -51,8 +51,6 @@ class ResourceProfile(
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
   private var _coresLimitKnown: Boolean = false
-  private var _internalPysparkMemoryConf: Seq[(String, String)] =
-    ResourceProfile.createPysparkMemoryInternalConfs(this)
 
   def id: Int = _id
 
@@ -79,11 +77,7 @@ class ResourceProfile(
   }
 
   private[spark] def getPysparkMemory: Option[Long] = {
-    taskResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount.toLong)
-  }
-
-  private[spark] def getInternalPysparkMemoryConfs: Seq[(String, String)] = {
-    _internalPysparkMemoryConf
+    executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount.toLong)
   }
 
   /*
@@ -337,40 +331,4 @@ object ResourceProfile extends Logging {
   }
 
   private[spark] val PYSPARK_MEMORY_PROPERTY = "resource.pyspark.memory"
-  private[spark] val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
-
-  // Helper class for constructing the resource profile internal configs. The configs look like:
-  // spark.resourceProfile.executor.[rpId].[resourceName].amount
-  private[spark] case class ResourceProfileInternalConf(rpId: Int, resourceName: String) {
-    val prefix = s"$SPARK_RP_EXEC_PREFIX.$rpId."
-    def resourceNameAndAmount: String = s"$resourceName.${ResourceUtils.AMOUNT}"
-    def amountConf: String = s"$prefix$resourceNameAndAmount"
-  }
-
-  /**
-   * Create the ResourceProfile internal pyspark memory conf that is used by the executors.
-   * It pulls any pyspark.memory config from the profile and returns Seq of key and value
-   * where the key is formatted as:
-   *
-   * spark.resourceProfile.executor.[rpId].pyspark.memory.amount
-   */
-  private[spark] def createPysparkMemoryInternalConfs(
-      rp: ResourceProfile
-  ): Seq[(String, String)] = {
-    rp.executorResources.get(ResourceProfile.PYSPARK_MEM).map { pysparkMem =>
-      val pysparkMemIntConf = ResourceProfileInternalConf(rp.id, ResourceProfile.PYSPARK_MEM)
-      Seq((pysparkMemIntConf.amountConf, pysparkMem.amount.toString))
-    }.getOrElse(Seq.empty)
-  }
-
-  /**
-   * Get the pyspark memory setting from internal resource confs.
-   * The config looks like: spark.resourceProfile.executor.[rpId].pyspark.memory.amount
-   */
-  private[spark] def getPysparkMemoryFromInternalConfs(
-      sparkConf: SparkConf,
-      rpId: Int): Option[Long] = {
-    val rName = ResourceProfile.PYSPARK_MEM
-    sparkConf.getOption(ResourceProfileInternalConf(rpId, rName).amountConf).map(_.toLong)
-  }
 }

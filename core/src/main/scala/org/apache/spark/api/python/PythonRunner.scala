@@ -35,7 +35,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.resource.ResourceProfile.{getPysparkMemoryFromInternalConfs, DEFAULT_RESOURCE_PROFILE_ID}
+import org.apache.spark.resource.ResourceProfile.PYSPARK_MEMORY_PROPERTY
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
@@ -128,21 +128,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
-    val pymem = Option(context.getLocalProperty("spark.resource.pyspark.memory"))
-    logInfo("task context pyspark memory is: $pymem")
-    // Check to see if the pyspark memory conf is set for the resource profile id being used.
-    // Note we don't fallback to the cluster default if its not set in the profile because
-    // this is a totally optional config and the user may not want it set.
-    val rpId = context.resourceProfileId()
-    val memoryMb = if (rpId == DEFAULT_RESOURCE_PROFILE_ID) {
-      logInfo("Using the default pyspark executor memory")
-      conf.get(PYSPARK_EXECUTOR_MEMORY)
-    } else {
-      val mem = getPysparkMemoryFromInternalConfs(conf, rpId)
-      logInfo(s"Using profile $rpId pyspark executor memory $mem")
-      mem
-
-    }
+    val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_PROPERTY)).map(_.toLong)
+    logInfo(s"task context pyspark memory is: $memoryMb")
     val workerMemoryMb = getWorkerMemoryMb(memoryMb)
     if (workerMemoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)

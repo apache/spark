@@ -34,12 +34,13 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.resource.ResourceProfile.PYSPARK_MEMORY_PROPERTY
+import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, PYSPARK_MEMORY_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -1155,8 +1156,15 @@ private[spark] class DAGScheduler(
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
     val properties = jobIdToActiveJob(jobId).properties
-    val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
-    rp.getPysparkMemory.map(m => properties.setProperty(PYSPARK_MEMORY_PROPERTY, m.toString))
+    val pysparkMem = if (stage.resourceProfileId == DEFAULT_RESOURCE_PROFILE_ID) {
+      logDebug("Using the default pyspark executor memory")
+      sc.conf.get(PYSPARK_EXECUTOR_MEMORY)
+    } else {
+      val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
+      logDebug(s"Using profile ${stage.resourceProfileId} pyspark executor memory")
+      rp.getPysparkMemory
+    }
+    pysparkMem.map(m => properties.setProperty(PYSPARK_MEMORY_PROPERTY, m.toString))
 
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
@@ -1258,8 +1266,7 @@ private[spark] class DAGScheduler(
             stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
-              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier(),
-              stage.resourceProfileId)
+              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
           }
 
         case stage: ResultStage =>
@@ -1270,7 +1277,7 @@ private[spark] class DAGScheduler(
             new ResultTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, id, properties, serializedTaskMetrics,
               Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
-              stage.rdd.isBarrier(), stage.resourceProfileId)
+              stage.rdd.isBarrier())
           }
       }
     } catch {
