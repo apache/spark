@@ -143,10 +143,7 @@ trait Block extends TreeNode[Block] with JavaCode {
     case _ => code.trim
   }
 
-  def length: Int = {
-    // Returns a code length without comments
-    CodeFormatter.stripExtraNewLinesAndComments(toString).length
-  }
+  def length: Int = toString.length
 
   def isEmpty: Boolean = toString.isEmpty
 
