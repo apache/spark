@@ -2511,11 +2511,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_PARQUET_REBASE_DATETIME =
-    buildConf("spark.sql.legacy.parquet.rebaseDateTime.enabled")
+  val LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.rebaseDateTimeInWrite.enabled")
       .internal()
       .doc("When true, rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the hybrid calendar (Julian + Gregorian) in write and " +
+        "to the hybrid calendar (Julian + Gregorian) in write. " +
+        "The rebasing is performed by converting micros/millis/days to " +
+        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
+        "timestamp in the target calendar, and getting the number of micros/millis/days " +
+        "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_PARQUET_REBASE_DATETIME_IN_READ =
+    buildConf("spark.sql.legacy.parquet.rebaseDateTimeInRead.enabled")
+      .internal()
+      .doc("When true, rebase dates/timestamps " +
         "from the hybrid calendar to Proleptic Gregorian calendar in read. " +
         "The rebasing is performed by converting micros/millis/days to " +
         "a local date/timestamp in the source calendar, interpreting the resulted date/" +
@@ -3118,7 +3130,9 @@ class SQLConf extends Serializable with Logging {
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
-  def parquetRebaseDateTimeEnabled: Boolean = getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME)
+  def parquetRebaseDateTimeInReadEnabled: Boolean = {
+    getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ)
+  }
 
   def avroRebaseDateTimeEnabled: Boolean = getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME)
 
