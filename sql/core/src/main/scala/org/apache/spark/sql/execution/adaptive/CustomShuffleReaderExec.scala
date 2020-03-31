@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 
 /**
@@ -127,7 +127,7 @@ case class CustomShuffleReaderExec private(
     Map("numSkewedPartitions" -> metrics)
   }
 
-  override lazy val metrics = {
+  override lazy val metrics: Map[String, SQLMetric] = {
     if (shuffleStage.isDefined) {
       val numPartitions = SQLMetrics.createMetric(sparkContext, "number of partitions")
       numPartitions.set(partitionSpecs.length)
