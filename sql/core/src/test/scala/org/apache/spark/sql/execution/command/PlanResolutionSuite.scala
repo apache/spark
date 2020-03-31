@@ -552,7 +552,7 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(ctas.catalog.name == "testcat")
         assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
         assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions == Map("other" -> "20"))
+        assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 
@@ -586,7 +586,7 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(ctas.catalog.name == "testcat")
         assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
         assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions == Map("other" -> "20"))
+        assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 

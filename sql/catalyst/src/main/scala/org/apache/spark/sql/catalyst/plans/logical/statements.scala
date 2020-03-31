@@ -83,6 +83,7 @@ case class CreateTableAsSelectStatement(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
+    writeOptions: Map[String, String],
     ifNotExists: Boolean) extends ParsedStatement {
 
   override def children: Seq[LogicalPlan] = Seq(asSelect)
@@ -133,6 +134,7 @@ case class ReplaceTableAsSelectStatement(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
+    writeOptions: Map[String, String],
     orCreate: Boolean) extends ParsedStatement {
 
   override def children: Seq[LogicalPlan] = Seq(asSelect)

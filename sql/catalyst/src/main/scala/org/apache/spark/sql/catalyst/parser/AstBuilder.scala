@@ -2779,7 +2779,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case Some(query) =>
         CreateTableAsSelectStatement(
           table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
-          ifNotExists = ifNotExists)
+          writeOptions = Map.empty, ifNotExists = ifNotExists)
 
       case None if temp =>
         // CREATE TEMPORARY TABLE ... USING ... is not supported by the catalyst parser.
@@ -2834,7 +2834,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
       case Some(query) =>
         ReplaceTableAsSelectStatement(table, query, partitioning, bucketSpec, properties,
-          provider, options, location, comment, orCreate = orCreate)
+          provider, options, location, comment, writeOptions = Map.empty, orCreate = orCreate)
 
       case _ =>
         ReplaceTableStatement(table, schema.getOrElse(new StructType), partitioning,
