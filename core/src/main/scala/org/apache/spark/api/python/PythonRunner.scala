@@ -129,7 +129,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
     val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_PROPERTY)).map(_.toLong)
-    logInfo(s"task context pyspark memory is: $memoryMb")
     val workerMemoryMb = getWorkerMemoryMb(memoryMb)
     if (workerMemoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)

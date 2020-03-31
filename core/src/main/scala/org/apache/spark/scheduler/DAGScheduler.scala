@@ -1137,6 +1137,22 @@ private[spark] class DAGScheduler(
     }
   }
 
+  /**
+   * PythonRunner needs to know what the pyspark memory setting is for the profile being run.
+   *  Pass it in the local properties of the task if it's set for the stage profile.
+   */
+  private def addPysparkMemToProperties(stage: Stage, properties: Properties): Unit = {
+    val pysparkMem = if (stage.resourceProfileId == DEFAULT_RESOURCE_PROFILE_ID) {
+      logDebug("Using the default pyspark executor memory")
+      sc.conf.get(PYSPARK_EXECUTOR_MEMORY)
+    } else {
+      val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
+      logDebug(s"Using profile ${stage.resourceProfileId} pyspark executor memory")
+      rp.getPysparkMemory
+    }
+    pysparkMem.map(m => properties.setProperty(PYSPARK_MEMORY_PROPERTY, m.toString))
+  }
+
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     logDebug("submitMissingTasks(" + stage + ")")
@@ -1156,15 +1172,7 @@ private[spark] class DAGScheduler(
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
     val properties = jobIdToActiveJob(jobId).properties
-    val pysparkMem = if (stage.resourceProfileId == DEFAULT_RESOURCE_PROFILE_ID) {
-      logDebug("Using the default pyspark executor memory")
-      sc.conf.get(PYSPARK_EXECUTOR_MEMORY)
-    } else {
-      val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
-      logDebug(s"Using profile ${stage.resourceProfileId} pyspark executor memory")
-      rp.getPysparkMemory
-    }
-    pysparkMem.map(m => properties.setProperty(PYSPARK_MEMORY_PROPERTY, m.toString))
+    addPysparkMemToProperties(stage, properties)
 
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
