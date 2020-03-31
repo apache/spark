@@ -45,7 +45,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.{ParentClassLoader, Utils}
+import org.apache.spark.util.{LongAccumulator, ParentClassLoader, Utils}
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -1309,6 +1309,9 @@ object CodeGenerator extends Logging {
   // bytecode instruction
   final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
+  // Display the total compile time for generating java code in the output of the test case.
+  val compileTime = new LongAccumulator
+
   /**
    * Compile the Java source code into a Java class, using Janino.
    *
@@ -1466,10 +1469,12 @@ object CodeGenerator extends Logging {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()
-          def timeMs: Double = (endTime - startTime).toDouble / NANOS_PER_MILLIS
+          val duration = endTime - startTime
+          val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
           CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
           CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
           logInfo(s"Code generated in $timeMs ms")
+          compileTime.add(duration)
           result
         }
       })
