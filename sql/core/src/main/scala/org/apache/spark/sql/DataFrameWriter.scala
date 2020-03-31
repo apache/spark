@@ -582,7 +582,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           Some(source),
           Map.empty,
           extraOptions.get("path"),
-          extraOptions.get("comment"),
+          extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
           orCreate = true)      // Create the table if it doesn't exist
 
@@ -599,7 +599,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           Some(source),
           Map.empty,
           extraOptions.get("path"),
-          extraOptions.get("comment"),
+          extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
           ifNotExists = other == SaveMode.Ignore)
     }
