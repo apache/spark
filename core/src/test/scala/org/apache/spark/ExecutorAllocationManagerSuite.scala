@@ -841,7 +841,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   }
 
   test ("interleaving add and remove") {
-    val manager = createManager(createConf(5, 12, 5))
+    val clock = new ManualClock()
+    val manager = createManager(createConf(5, 12, 5), clock)
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
     val updatesNeeded =
@@ -849,8 +850,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Add a few executors
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    clock.advance(1000)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    clock.advance(1000)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     onExecutorAddedDefaultProfile(manager, "1")
     onExecutorAddedDefaultProfile(manager, "2")
