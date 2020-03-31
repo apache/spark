@@ -2656,7 +2656,7 @@ class PipelinedRDD(RDD):
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed or self.has_resourceProfile)
 
-def _is_barrier(self):
+    def _is_barrier(self):
         return self.is_barrier
 
 
