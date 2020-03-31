@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
+import org.apache.hadoop.yarn.api.records.{NodeState => YarnNodeState}
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -456,6 +457,28 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  // Helper method to get NodeState of the Yarn.
+  def getYarnNodeState(state: YarnNodeState): NodeState.Value = {
+    // In hadoop-2.7 there is no support for node state DECOMMISSIONING
+    // In Hadoop-2.8, hadoop3.1 and later version of spark there is a support
+    // to node state DECOMMISSIONING.
+    // Inorder to build the spark using hadoop2 and hadoop3, not
+    // using YarnNodeState for the node state DECOMMISSIONING here and
+    // and for other state we are matching the YarnNodeState and assigning
+    // the node state at spark end
+    if (state.toString.equals(NodeState.DECOMMISSIONING.toString)) {
+      NodeState.DECOMMISSIONING
+    } else {
+      state match {
+        case YarnNodeState.RUNNING => NodeState.RUNNING
+        case YarnNodeState.DECOMMISSIONED => NodeState.DECOMMISSIONED
+        case YarnNodeState.LOST => NodeState.LOST
+        case YarnNodeState.UNHEALTHY => NodeState.LOST
+        case _ => NodeState.OTHER
+      }
+    }
+  }
+
   def processGracefulDecommission(allocateResponse: AllocateResponse): Unit = {
     // Create a consolidated node decommission info report.
     val nodeInfos = new HashMap[String, NodeInfo]
@@ -483,11 +506,11 @@ private[yarn] class YarnAllocator(
           }
           nodeInfos(x.getNodeId().getHost())
             = NodeInfo(terminationTime = Some(nodeTerminationTime),
-            nodeState = NodeState.getYarnNodeState(x.getNodeState()))
+            nodeState = getYarnNodeState(x.getNodeState()))
         } else {
           nodeInfos(x.getNodeId().getHost())
             = NodeInfo(terminationTime = None,
-            nodeState = NodeState.getYarnNodeState(x.getNodeState()))
+            nodeState = getYarnNodeState(x.getNodeState()))
         }
       }
     }

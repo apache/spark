@@ -21,38 +21,14 @@ import java.text.SimpleDateFormat
 
 import scala.collection.mutable.{HashMap}
 
-import org.apache.hadoop.yarn.api.records.{NodeState => YarnNodeState}
-
 /**
  * State of the node.
  * Add the node state depending upon the cluster manager, For Yarn
  * getYarnNodeState is added to create the node state for Decommission Tracker
  */
 private[spark] object NodeState extends Enumeration {
-  val RUNNING, DECOMMISSIONED, GRACEFUL_DECOMMISSIONING, DECOMMISSIONING, LOST, OTHER = Value
+  val RUNNING, DECOMMISSIONED, DECOMMISSIONING, LOST, OTHER = Value
   type NodeState = Value
-
-  // Helper method to get NodeState of the Yarn.
-  def getYarnNodeState(state: YarnNodeState): NodeState.Value = {
-    // In hadoop-2.7 there is no support for node state DECOMMISSIONING
-    // In Hadoop-2.8, hadoop3.1 and later version of spark there is a support
-    // to node state DECOMMISSIONING.
-    // Inorder to build the spark using hadoop2 and hadoop3, not
-    // using YarnNodeState for the node state DECOMMISSIONING here and
-    // and for other state we are matching the YarnNodeState and assigning
-    // the node state at spark end
-    if (state.toString.equals(NodeState.DECOMMISSIONING.toString)) {
-      NodeState.GRACEFUL_DECOMMISSIONING
-    } else {
-      state match {
-        case YarnNodeState.RUNNING => NodeState.RUNNING
-        case YarnNodeState.DECOMMISSIONED => NodeState.DECOMMISSIONED
-        case YarnNodeState.LOST => NodeState.LOST
-        case YarnNodeState.UNHEALTHY => NodeState.LOST
-        case _ => NodeState.OTHER
-      }
-    }
-  }
 }
 
 /**

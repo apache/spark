@@ -224,7 +224,7 @@ private[spark] abstract class YarnSchedulerBackend(
     clusterInfo.nodeInfos.foreach { case (node, nodeInfo) =>
       nodeInfo.nodeState match {
 
-        case NodeState.GRACEFUL_DECOMMISSIONING =>
+        case NodeState.DECOMMISSIONING =>
           if (nodeInfo.terminationTime.isDefined && nodeInfo.terminationTime.get > 0) {
             // eg. Spot Loss/ preemptible VMs loss case
             addNodeToDecommission(node, nodeInfo.terminationTime.get, NodeLoss)

@@ -1884,10 +1884,10 @@ package object config {
   private[spark] val GRACEFUL_DECOMMISSION_FETCHFAILED_IGNORE_THRESHOLD =
     ConfigBuilder("spark.graceful.decommission.fetchfailed.ignore.threshold")
       .doc("Threshold of number of times fetchfailed ignored due to node" +
-        " decommission.This is configurable as per the need of the user and" +
-        " depending upon type of the cloud. If we keep this a large value and " +
-        " there is continuous decommission of nodes, in those scenarios stage" +
-        " will never abort and keeps on retrying in an unbounded manner.")
+        "decommission.This is configurable as per the need of the user and" +
+        "depending upon type of the cloud. If we keep this a large value and " +
+        "there is continuous decommission of nodes, in those scenarios stage" +
+        "will never abort and keeps on retrying in an unbounded manner.")
       .version("3.1.0")
       .intConf
       .createWithDefault(8)
@@ -1905,11 +1905,11 @@ package object config {
     ConfigBuilder("spark.graceful.decommission.shuffedata.leasetimePct")
       .doc("Percentage of time to expiry after which shuffle data " +
         "cleaned up (if enabled) on the node. Value ranges between (0-100)" +
-        " This value is always greater than or equal to executor" +
-        " leaseTime (is set to be equal if incorrectly configured)." +
-        " Near 0% would mean generated data is marked as lost too early." +
-        " Too close to 100 would shuffle data may not get cleared proactively" +
-        " leading to tasks going into fetchFail scenarios")
+        "This value is always greater than or equal to executor" +
+        "leaseTime (is set to be equal if incorrectly configured)." +
+        "Near 0% would mean generated data is marked as lost too early." +
+        "Too close to 100 would shuffle data may not get cleared proactively" +
+        "leading to tasks going into fetchFail scenarios")
       .version("3.1.0")
       .intConf
       .checkValue(v => v >= 0 && v < 100, "The percentage should be positive.")
@@ -1926,7 +1926,8 @@ package object config {
     ConfigBuilder("spark.graceful.decommission.node.timeout")
       .doc("Interval in seconds after which the node is decommissioned in case aws spotloss" +
         "the time is approximately 110s and in case of GCP preemptible VMs this is around 30s" +
-        "this config can be changed according to node type in the public cloud")
+        "this config can be changed according to node type in the public cloud. This will" +
+        "be applied if the decommission timeout is not sent by the Resource Manager")
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("110s")
