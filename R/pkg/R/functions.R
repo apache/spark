@@ -2614,7 +2614,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 
 #' @details
 #' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
-#' samples from U[0.0, 1.0].
+#' samples uniformly distributed in [0.0, 1.0).
 #' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
