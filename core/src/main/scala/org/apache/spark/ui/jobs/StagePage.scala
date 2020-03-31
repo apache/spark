@@ -143,6 +143,10 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div>
         <ul class="list-unstyled">
           <li>
+            <strong>Resource Profile ID: </strong>
+            {stageData.resourceProfileId}
+          </li>
+          <li>
             <strong>Total Time Across All Tasks: </strong>
             {UIUtils.formatDuration(stageData.executorRunTime)}
           </li>

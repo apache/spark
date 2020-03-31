@@ -28,7 +28,7 @@ import com.google.common.collect.Interners
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
@@ -245,6 +245,21 @@ private class LiveTask(
 
 }
 
+private class LiveResourceProfile(val resourceProfileId: Int) extends LiveEntity {
+
+  var executorResources = Map[String, ExecutorResourceRequest]()
+  var taskResources = Map[String, TaskResourceRequest]()
+  var maxTasksPerExecutor: Option[Int] = None
+
+  def toApi(): v1.ResourceProfileInfo = {
+    new v1.ResourceProfileInfo(resourceProfileId, executorResources, taskResources)
+  }
+
+  override protected def doUpdate(): Any = {
+    new ResourceProfileWrapper(toApi())
+  }
+}
+
 private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
 
   var hostPort: String = null
@@ -284,6 +299,8 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
   var totalOffHeap = 0L
   var usedOnHeap = 0L
   var usedOffHeap = 0L
+
+  var resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
   def hasMemoryInfo: Boolean = totalOnHeap >= 0L
 
@@ -327,7 +344,8 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
       blacklistedInStages,
       Some(peakExecutorMetrics).filter(_.isSet),
       attributes,
-      resources)
+      resources,
+      resourceProfileId)
     new ExecutorSummaryWrapper(info)
   }
 }
@@ -465,7 +483,8 @@ private class LiveStage extends LiveEntity {
       accumulatorUpdates = newAccumulatorInfos(info.accumulables.values),
       tasks = None,
       executorSummary = None,
-      killedTasksSummary = killedSummary)
+      killedTasksSummary = killedSummary,
+      resourceProfileId = info.resourceProfileId)
   }
 
   override protected def doUpdate(): Any = {

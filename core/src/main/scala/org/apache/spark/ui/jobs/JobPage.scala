@@ -26,6 +26,7 @@ import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
@@ -252,7 +253,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           accumulatorUpdates = Nil,
           tasks = None,
           executorSummary = None,
-          killedTasksSummary = Map())
+          killedTasksSummary = Map(),
+          ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
       }
     }
 

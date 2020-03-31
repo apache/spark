@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils
@@ -42,6 +43,13 @@ private[spark] class AppStatusStore(
   def environmentInfo(): v1.ApplicationEnvironmentInfo = {
     val klass = classOf[ApplicationEnvironmentInfoWrapper]
     store.read(klass, klass.getName()).info
+  }
+
+  def resourceProfileInfo(): Seq[v1.ResourceProfileInfo] = {
+    val klass = classOf[ResourceProfileWrapper]
+    // store.read(klass, 0).rpInfo
+    val it = store.view(classOf[ResourceProfileWrapper]).asScala.map(_.rpInfo)
+    it.toSeq
   }
 
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
@@ -479,7 +487,8 @@ private[spark] class AppStatusStore(
       accumulatorUpdates = stage.accumulatorUpdates,
       tasks = Some(tasks),
       executorSummary = Some(executorSummary(stage.stageId, stage.attemptId)),
-      killedTasksSummary = stage.killedTasksSummary)
+      killedTasksSummary = stage.killedTasksSummary,
+      resourceProfileId = stage.resourceProfileId)
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {
