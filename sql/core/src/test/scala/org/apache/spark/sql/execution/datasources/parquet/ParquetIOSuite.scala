@@ -917,7 +917,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
                 .select($"tsS".cast("timestamp").as("ts"))
                 .write
                 .parquet(path)
-
+            }
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "true") {
               checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(tsStr)))
             }
             withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "false") {
@@ -937,7 +938,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           .select($"dateS".cast("date").as("date"))
           .write
           .parquet(path)
-
+      }
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "true") {
         checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-01")))
       }
       withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "false") {
