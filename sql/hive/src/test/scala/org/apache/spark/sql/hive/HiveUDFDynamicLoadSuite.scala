@@ -141,103 +141,42 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
 
   udfTestInfos.foreach { udfInfo =>
     val jarUrl = getHiveUDFTestJarUrl
-    test("SPARK-26560 Spark should be able to run Hive UDF using jar regardless of " +
+    test("Spark should be able to run Hive UDF using jar regardless of " +
       s"current thread context classloader (${udfInfo.identifier}") {
-      testHiveUDFUsingJarWithChangingClassloader(
-        udfInfo.funcName,
-        jarUrl,
-        udfInfo.className,
-        udfInfo.fnVerifyQuery
-      )
-    }
+      Utils.withContextClassLoader(Utils.getSparkClassLoader) {
+        withUserDefinedFunction(udfInfo.funcName -> false) {
+          val sparkClassLoader = Thread.currentThread().getContextClassLoader
 
-    test("SPARK-31312 Transformed Hive UDF using jar expression should not be failed to run " +
-      s"regardless of current thread context classloader (${udfInfo.identifier})") {
-      testHiveUDFUsingJarWithChangingClassloaderWithCopyUDFExpression(
-        udfInfo.funcName,
-        jarUrl,
-        udfInfo.className,
-        udfInfo.fnVerifyQuery,
-        udfInfo.fnCreateHiveUDFExpression)
-    }
-  }
+          sql(s"CREATE FUNCTION ${udfInfo.funcName} AS '${udfInfo.className}' USING JAR '$jarUrl'")
 
-  private def testHiveUDFUsingJarWithChangingClassloader(
-      funcName: String,
-      jarUrl: String,
-      className: String,
-      // this function must call Hive UDF to load JAR
-      fnVerifyQuery: () => Unit): Unit = {
-    // force to use Spark classloader as other test (even in other test suites) may change the
-    // current thread's context classloader to jar classloader
-    Utils.withContextClassLoader(Utils.getSparkClassLoader) {
-      withUserDefinedFunction(funcName -> false) {
-        val sparkClassLoader = Thread.currentThread().getContextClassLoader
+          assert(Thread.currentThread().getContextClassLoader eq sparkClassLoader)
 
-        sql(s"CREATE FUNCTION $funcName AS '$className' USING JAR '$jarUrl'")
+          // JAR will be loaded at first usage, and it will change the current thread's
+          // context classloader to jar classloader in sharedState.
+          // See SessionState.addJar for details.
+          udfInfo.fnVerifyQuery()
 
-        assert(Thread.currentThread().getContextClassLoader eq sparkClassLoader)
+          assert(Thread.currentThread().getContextClassLoader ne sparkClassLoader)
+          assert(Thread.currentThread().getContextClassLoader eq
+            spark.sqlContext.sharedState.jarClassLoader)
 
-        // JAR will be loaded at first usage, and it will change the current thread's
-        // context classloader to jar classloader in sharedState.
-        // See SessionState.addJar for details.
-        fnVerifyQuery()
+          val udfExpr = udfInfo.fnCreateHiveUDFExpression()
+          // force initializing - this is what we do in HiveSessionCatalog
+          udfExpr.dataType
 
-        assert(Thread.currentThread().getContextClassLoader ne sparkClassLoader)
-        assert(Thread.currentThread().getContextClassLoader eq
-          spark.sqlContext.sharedState.jarClassLoader)
+          // Roll back to the original classloader and run query again. Without this line, the test
+          // would pass, as thread's context classloader is changed to jar classloader. But thread
+          // context classloader can be changed from others as well which would fail the query; one
+          // example is spark-shell, which thread context classloader rolls back automatically. This
+          // mimics the behavior of spark-shell.
+          Thread.currentThread().setContextClassLoader(sparkClassLoader)
 
-        // Roll back to the original classloader and run query again. Without this line, the test
-        // would pass, as thread's context classloader is changed to jar classloader. But thread
-        // context classloader can be changed from others as well which would fail the query; one
-        // example is spark-shell, which thread context classloader rolls back automatically. This
-        // mimics the behavior of spark-shell.
-        Thread.currentThread().setContextClassLoader(sparkClassLoader)
+          udfInfo.fnVerifyQuery()
 
-        fnVerifyQuery()
-      }
-    }
-  }
-
-  private def testHiveUDFUsingJarWithChangingClassloaderWithCopyUDFExpression(
-      funcName: String,
-      jarUrl: String,
-      className: String,
-      // this function must call Hive UDF to load JAR
-      fnVerifyQuery: () => Unit,
-      fnCreateHiveUDFExpression: () => Expression): Unit = {
-    // force to use Spark classloader as other test (even in other test suites) may change the
-    // current thread's context classloader to jar classloader
-    Utils.withContextClassLoader(Utils.getSparkClassLoader) {
-      withUserDefinedFunction(funcName -> false) {
-        val sparkClassLoader = Thread.currentThread().getContextClassLoader
-
-        sql(s"CREATE FUNCTION $funcName AS '$className' USING JAR '$jarUrl'")
-
-        assert(Thread.currentThread().getContextClassLoader eq sparkClassLoader)
-
-        // JAR will be loaded at first usage, and it will change the current thread's
-        // context classloader to jar classloader in sharedState.
-        // See SessionState.addJar for details.
-        fnVerifyQuery()
-
-        assert(Thread.currentThread().getContextClassLoader ne sparkClassLoader)
-        assert(Thread.currentThread().getContextClassLoader eq
-          spark.sqlContext.sharedState.jarClassLoader)
-
-        val udfExpr = fnCreateHiveUDFExpression()
-        // force initializing - this is what we do in HiveSessionCatalog
-        udfExpr.dataType
-
-        // Roll back to the original classloader and run query again. Without this line, the test
-        // would pass, as thread's context classloader is changed to jar classloader. But thread
-        // context classloader can be changed from others as well which would fail the query; one
-        // example is spark-shell, which thread context classloader rolls back automatically. This
-        // mimics the behavior of spark-shell.
-        Thread.currentThread().setContextClassLoader(sparkClassLoader)
-
-        val newExpr = udfExpr.makeCopy(udfExpr.productIterator.map(_.asInstanceOf[AnyRef]).toArray)
-        newExpr.dataType
+          val newExpr = udfExpr.makeCopy(udfExpr.productIterator.map(_.asInstanceOf[AnyRef])
+            .toArray)
+          newExpr.dataType
+        }
       }
     }
   }
