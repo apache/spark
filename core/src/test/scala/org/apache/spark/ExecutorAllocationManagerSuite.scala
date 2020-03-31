@@ -841,6 +841,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   }
 
   test ("interleaving add and remove") {
+    // use ManualClock to disable ExecutorAllocationManager.schedule()
+    // in order to avoid unexpected update of target executors
     val clock = new ManualClock()
     val manager = createManager(createConf(5, 12, 5), clock)
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
