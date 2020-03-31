@@ -161,7 +161,9 @@ object ChiSquareTest {
       }
     }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
       seqOp = { case (counts, labelAndValue) =>
-        if (labelAndValue != null) counts.changeValue(labelAndValue, 1L, _ + 1L)
+        if (labelAndValue != null) {
+          counts.changeValue(labelAndValue, 1L, _ + 1L)
+        }
         counts
       },
       combOp = { case (counts1, counts2) =>
