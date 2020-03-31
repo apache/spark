@@ -83,15 +83,11 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
           // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
           // number of output partitions.
           case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
-            CustomShuffleReaderExec(stage, partitionSpecs, COALESCED_SHUFFLE_READER_DESCRIPTION)
+            CustomShuffleReaderExec(stage, partitionSpecs)
         }
       } else {
         plan
       }
     }
   }
-}
-
-object CoalesceShufflePartitions {
-  val COALESCED_SHUFFLE_READER_DESCRIPTION = "coalesced"
 }
