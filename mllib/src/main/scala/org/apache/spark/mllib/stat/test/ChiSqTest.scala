@@ -93,7 +93,8 @@ private[spark] object ChiSqTest extends Logging {
       numFeatures: Int,
       methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
     data.flatMap { case LabeledPoint(label, features) =>
-      require(features.size == numFeatures)
+      require(features.size == numFeatures,
+        s"Number of features must be $numFeatures but got ${features.size}")
       features.iterator.map { case (col, value) => (col, (label, value)) }
     }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
       seqOp = { case (counts, t) =>
@@ -123,15 +124,21 @@ private[spark] object ChiSqTest extends Logging {
         + s"found more than $maxCategories distinct label values.")
     }
 
-    val sc = data.sparkContext
-    val bcLabelCounts = sc.broadcast(labelCounts)
-
-    val results = data.flatMap { case LabeledPoint(label, features) =>
-      require(features.size == numFeatures)
-      features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
+    val numParts = data.getNumPartitions
+    data.mapPartitionsWithIndex { case (pid, iter) =>
+      iter.flatMap { case LabeledPoint(label, features) =>
+        require(features.size == numFeatures,
+          s"Number of features must be $numFeatures but got ${features.size}")
+        features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
+      } ++ {
+        // append this to make sure that all columns are taken into account
+        Iterator.range(0, numFeatures)
+          .filter(_ % numParts == pid)
+          .map(col => (col, null))
+      }
     }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
-      seqOp = { case (counts, t) =>
-        counts.changeValue(t, 1L, _ + 1L)
+      seqOp = { case (counts, labelAndValue) =>
+        if (labelAndValue != null) counts.changeValue(labelAndValue, 1L, _ + 1L)
         counts
       },
       combOp = { case (counts1, counts2) =>
@@ -139,7 +146,6 @@ private[spark] object ChiSqTest extends Logging {
         counts1
       }
     ).map { case (col, counts) =>
-      val labelCounts = bcLabelCounts.value
       val nnz = counts.iterator.map(_._2).sum
       require(numInstances >= nnz)
       if (numInstances > nnz) {
@@ -158,30 +164,10 @@ private[spark] object ChiSqTest extends Logging {
       }
 
       (col, computeChiSq(counts.toMap, methodName, col))
-    }.collectAsMap()
-
-    bcLabelCounts.destroy()
-
-    val finalResults = Array.ofDim[ChiSqTestResult](numFeatures)
-    results.foreach { case (col, (pValue, degreesOfFreedom, statistic, nullHypothesis)) =>
-      finalResults(col) = new ChiSqTestResult(pValue, degreesOfFreedom, statistic,
-        methodName, nullHypothesis)
+    }.collect().sortBy(_._1).map {
+      case (_, (pValue, degreesOfFreedom, statistic, nullHypothesis)) =>
+        new ChiSqTestResult(pValue, degreesOfFreedom, statistic, methodName, nullHypothesis)
     }
-
-    if (results.size < numFeatures) {
-      // if some column only contains 0 values
-      val counts = labelCounts.map { case (label, countByLabel) => ((label, 0.0), countByLabel) }
-      val (pValue, degreesOfFreedom, statistic, nullHypothesis) =
-        computeChiSq(counts, methodName, 0)
-      val zeroRes = new ChiSqTestResult(pValue, degreesOfFreedom, statistic,
-        methodName, nullHypothesis)
-
-      Iterator.range(0, numFeatures)
-        .filterNot(results.contains)
-        .foreach (col => finalResults(col) = zeroRes)
-    }
-
-    finalResults
   }
 
   private def computeChiSq(

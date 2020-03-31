@@ -198,8 +198,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CheckCartesianProducts) :+
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
-      ConvertToLocalRelation,
-      PropagateEmptyRelation,
       ColumnPruning,
       CollapseProject,
       RemoveNoopOperators) :+

@@ -158,7 +158,7 @@ The following table describes the different options available for configuring th
   <td>
     The length in bits of the encryption key to generate. Valid values are 128, 192 and 256.
   </td>
-  <td></td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.keyFactoryAlgorithm</code></td>
@@ -167,7 +167,7 @@ The following table describes the different options available for configuring th
     The key factory algorithm to use when generating encryption keys. Should be one of the
     algorithms supported by the javax.crypto.SecretKeyFactory class in the JRE being used.
   </td>
-  <td></td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.config.*</code></td>
@@ -177,7 +177,7 @@ The following table describes the different options available for configuring th
     use. The config name should be the name of commons-crypto configuration without the
     <code>commons.crypto</code> prefix.
   </td>
-  <td></td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.saslFallback</code></td>
@@ -196,6 +196,7 @@ The following table describes the different options available for configuring th
   <td>
     Enable SASL-based encrypted communication.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.sasl.serverAlwaysEncrypt</code></td>
@@ -204,6 +205,7 @@ The following table describes the different options available for configuring th
     Disable unencrypted connections for ports using SASL authentication. This will deny connections
     from clients that have authentication enabled, but do not request SASL-based encryption.
   </td>
+  <td>1.4.0</td>
 </tr>
 </table>
 
@@ -286,7 +288,7 @@ below.
 The following options control the authentication of Web UIs:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
@@ -294,6 +296,7 @@ The following options control the authentication of Web UIs:
     See the <a href="configuration.html#spark-ui">Spark UI</a> configuration for how to configure
     filters.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.acls.enable</code></td>
@@ -303,6 +306,7 @@ The following options control the authentication of Web UIs:
     permissions to view or modify the application. Note this requires the user to be authenticated,
     so if no authentication filter is installed, this option does not do anything.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.admin.acls</code></td>
@@ -310,6 +314,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of users that have view and modify access to the Spark application.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.admin.acls.groups</code></td>
@@ -317,6 +322,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of groups that have view and modify access to the Spark application.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.modify.acls</code></td>
@@ -324,6 +330,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of users that have modify access to the Spark application.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.modify.acls.groups</code></td>
@@ -331,6 +338,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of groups that have modify access to the Spark application.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.view.acls</code></td>
@@ -338,6 +346,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of users that have view access to the Spark application.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.view.acls.groups</code></td>
@@ -345,6 +354,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of groups that have view access to the Spark application.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.user.groups.mapping</code></td>
@@ -361,6 +371,7 @@ The following options control the authentication of Web UIs:
     Windows environment is currently <b>not</b> supported. However, a new platform/protocol can
     be supported by implementing the trait mentioned above.
   </td>
+  <td>2.0.0</td>
 </tr>
 </table>
 
@@ -375,7 +386,7 @@ servlet filters.
 To enable authorization in the SHS, a few extra options are used:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.history.ui.acls.enable</code></td>
   <td>false</td>
@@ -389,6 +400,7 @@ To enable authorization in the SHS, a few extra options are used:
     If disabled, no access control checks are made for any application UIs available through
     the history server.
   </td>
+  <td>1.0.1</td>
 </tr>
 <tr>
   <td><code>spark.history.ui.admin.acls</code></td>
@@ -397,6 +409,7 @@ To enable authorization in the SHS, a few extra options are used:
     Comma separated list of users that have view access to all the Spark applications in history
     server.
   </td>
+  <td>2.1.1</td>
 </tr>
 <tr>
   <td><code>spark.history.ui.admin.acls.groups</code></td>
@@ -405,6 +418,7 @@ To enable authorization in the SHS, a few extra options are used:
     Comma separated list of groups that have view access to all the Spark applications in history
     server.
   </td>
+  <td>2.1.1</td>
 </tr>
 </table>
 
@@ -620,7 +634,7 @@ Apache Spark can be configured to include HTTP headers to aid in preventing Cros
 Security.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.ui.xXssProtection</code></td>
   <td><code>1; mode=block</code></td>
@@ -635,6 +649,7 @@ Security.
         of the page if an attack is detected.)</li>
     </ul>
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.xContentTypeOptions.enabled</code></td>
@@ -642,7 +657,8 @@ Security.
   <td>
     When enabled, X-Content-Type-Options HTTP response header will be set to "nosniff".
   </td>
-  </tr>
+  <td>2.3.0</td>
+</tr>
 <tr>
   <td><code>spark.ui.strictTransportSecurity</code></td>
   <td>None</td>
@@ -656,6 +672,7 @@ Security.
       <li><code>max-age=&lt;expire-time&gt;; preload</code></li>
     </ul>
   </td>
+  <td>2.3.0</td>
 </tr>
 </table>
 
@@ -796,16 +813,17 @@ deployment-specific page for more information.
 The following options provides finer-grained control for this feature:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.security.credentials.${service}.enabled</code></td>
   <td><code>true</code></td>
   <td>
-  Controls whether to obtain credentials for services when security is enabled.
-  By default, credentials for all supported services are retrieved when those services are
-  configured, but it's possible to disable that behavior if it somehow conflicts with the
-  application being run.
+    Controls whether to obtain credentials for services when security is enabled.
+    By default, credentials for all supported services are retrieved when those services are
+    configured, but it's possible to disable that behavior if it somehow conflicts with the
+    application being run.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kerberos.access.hadoopFileSystems</code></td>
@@ -818,6 +836,7 @@ The following options provides finer-grained control for this feature:
     or in a trusted realm). Spark acquires security tokens for each of the filesystems so that
     the Spark application can access those remote Hadoop filesystems.
   </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
