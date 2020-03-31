@@ -24,8 +24,9 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.util.collection.OpenHashMap
 
 
@@ -69,6 +70,9 @@ object ChiSquareTest {
       dataset: DataFrame,
       featuresCol: String,
       labelCol: String): DataFrame = {
+    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
+    SchemaUtils.checkNumericType(dataset.schema, labelCol)
+
     val spark = dataset.sparkSession
     val results = testChiSquare(dataset, featuresCol, labelCol)
     val pValues = Vectors.dense(results.map(_.pValue))
@@ -92,35 +96,35 @@ object ChiSquareTest {
     SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
 
-    val spark = dataset.sparkSession
-    import spark.implicits._
-
-    val points = dataset.select(col(labelCol).cast("double"), col(featuresCol))
-      .as[(Double, Vector)]
-      .rdd
+    val points = dataset.select(col(labelCol).cast(DoubleType), col(featuresCol)).rdd
+      .map { case Row(label: Double, features: Vector) => (label, features) }
     chiSquared(points)
   }
 
   private[spark] def chiSquared(points: RDD[(Double, Vector)]): Array[SelectionTestResult] = {
-    val results = points.first()._2 match {
+    val resultRDD = points.first()._2 match {
       case dv: DenseVector =>
         chiSquaredDenseFeatures(points, dv.size)
       case sv: SparseVector =>
         chiSquaredSparseFeatures(points, sv.size)
     }
-    results.map(r => r)
+
+    resultRDD.collect().sortBy(_._1).map {
+      case (_, pValue, degreesOfFreedom, statistic) =>
+        new ChiSqTestResult(pValue, degreesOfFreedom, statistic)
+    }
   }
 
   private def chiSquaredDenseFeatures(
       points: RDD[(Double, Vector)],
-      numFeatures: Int): Array[ChiSqTestResult] = {
+      numFeatures: Int): RDD[(Int, Double, Long, Double)] = {
     points.flatMap { case (label, features) =>
       require(features.size == numFeatures,
         s"Number of features must be $numFeatures but got ${features.size}")
       features.iterator.map { case (col, value) => (col, (label, value)) }
     }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
-      seqOp = { case (counts, t) =>
-        counts.changeValue(t, 1L, _ + 1L)
+      seqOp = { case (counts, labelAndValue) =>
+        counts.changeValue(labelAndValue, 1L, _ + 1L)
         counts
       },
       combOp = { case (counts1, counts2) =>
@@ -130,15 +134,12 @@ object ChiSquareTest {
     ).map { case (col, counts) =>
       val result = computeChiSq(counts.toMap, col)
       (col, result.pValue, result.degreesOfFreedom, result.statistic)
-    }.collect().sortBy(_._1).map {
-      case (_, pValue, degreesOfFreedom, statistic) =>
-        new ChiSqTestResult(pValue, degreesOfFreedom, statistic)
     }
   }
 
   private def chiSquaredSparseFeatures(
       points: RDD[(Double, Vector)],
-      numFeatures: Int): Array[ChiSqTestResult] = {
+      numFeatures: Int): RDD[(Int, Double, Long, Double)] = {
     val labelCounts = points.map(_._1).countByValue().toMap
     val numInstances = labelCounts.valuesIterator.sum
     val numLabels = labelCounts.size
@@ -187,9 +188,6 @@ object ChiSquareTest {
 
       val result = computeChiSq(counts.toMap, col)
       (col, result.pValue, result.degreesOfFreedom, result.statistic)
-    }.collect().sortBy(_._1).map {
-      case (_, pValue, degreesOfFreedom, statistic) =>
-        new ChiSqTestResult(pValue, degreesOfFreedom, statistic)
     }
   }
 
