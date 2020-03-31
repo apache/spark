@@ -15,22 +15,15 @@
     specific language governing permissions and limitations
     under the License.
 
-Google Sheets Operators
-=======================
+Google Cloud Storage to Google Sheets Transfer Operators
+========================================================
 
-cThe latest version of the Sheets API lets developers programmatically:
+Google has a service `Google Cloud Storage <https://cloud.google.com/storage/>`__. This service is
+used to store large data from various applications.
 
-- Read and write data
-- Format text and numbers
-- Build pivot tables
-- Enforce cell validation
-- Set frozen rows
-- Adjust column sizes
-- Apply formulas
-- Create charts... and more!
-
-For more information check `official documentation <https://developers.google.com/sheets/api>`__.
-
+With `Google Sheets <https://www.google.pl/intl/en/sheets/about/>`__, everyone can work together in the same
+spreadsheet at the same time. Use formulas functions, and formatting options to save time and simplify
+common spreadsheet tasks.
 
 .. contents::
   :depth: 1
@@ -41,27 +34,19 @@ Prerequisite Tasks
 
 .. include:: _partials/prerequisite_tasks.rst
 
-.. _howto/operator:GoogleSheetsCreateSpreadsheet:
+.. _howto/operator:GCSToGoogleSheets:
 
-Create spreadsheet
-^^^^^^^^^^^^^^^^^^
+Upload data from GCS to Google Sheets
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To create new spreadsheet you can use the
-:class:`~airflow.providers.google.suite.operators.sheet.GoogleSheetsCreateSpreadsheet`.
+To upload data from Google Cloud Storage to Google Spreadsheet you can use the
+:class:`~airflow.providers.google.cloud.operators.sheets_to_gcs.GoogleSheetsToGCSOperator`.
 
 .. exampleinclude:: ../../../../airflow/providers/google/suite/example_dags/example_sheets.py
     :language: python
     :dedent: 4
-    :start-after: [START create_spreadsheet]
-    :end-before: [END create_spreadsheet]
+    :start-after: [START upload_sheet_to_gcs]
+    :end-before: [END upload_sheet_to_gcs]
 
 You can use :ref:`Jinja templating <jinja-templating>` with
-:template-fields:`airflow.providers.google.suite.operators.sheets.GoogleSheetsCreateSpreadsheet`.
-
-To get the URL of newly created spreadsheet use XCom value:
-
-.. exampleinclude:: ../../../../airflow/providers/google/suite/example_dags/example_sheets.py
-    :language: python
-    :dedent: 4
-    :start-after: [START print_spreadsheet_url]
-    :end-before: [END print_spreadsheet_url]
+:template-fields:`airflow.providers.google.cloud.operators.sheets_to_gcs.GoogleSheetsToGCSOperator`.
