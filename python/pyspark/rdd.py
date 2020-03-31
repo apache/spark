@@ -2488,10 +2488,12 @@ class RDD(object):
     def withResources(self, profile):
         """
         .. note:: Experimental
+
         Specify a ResourceProfile to use when calculating this RDD. This is only supported on
         certain cluster managers and currently requires dynamic allocation to be enabled.
         It will result in new executors with the resources specified being acquired to
         calculate the RDD.
+
         .. versionadded:: 3.0.0
         """
         self.has_resourceProfile = True
@@ -2501,8 +2503,10 @@ class RDD(object):
     def getResourceProfile(self):
         """
         .. note:: Experimental
+
         Get the ResourceProfile specified with this RDD or None if it wasn't specified.
         :return: the user specified ResourceProfile or null if none was specified
+
         .. versionadded:: 3.0.0
         """
         return ResourceProfile(self._jrdd.getResourceProfile())
