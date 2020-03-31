@@ -140,7 +140,14 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
   )
 
   udfTestInfos.foreach { udfInfo =>
-    val jarUrl = getHiveUDFTestJarUrl
+    // The test jars are built from below commit:
+    // https://github.com/HeartSaVioR/hive/commit/12f3f036b6efd0299cd1d457c0c0a65e0fd7e5f2
+    // which contain new UDF classes to be dynamically loaded and tested via Spark.
+
+    // This jar file should not be placed to the classpath.
+    val jarPath = "src/test/noclasspath/hive-test-udfs.jar"
+    val jarUrl = s"file://${System.getProperty("user.dir")}/$jarPath"
+
     test("Spark should be able to run Hive UDF using jar regardless of " +
       s"current thread context classloader (${udfInfo.identifier}") {
       Utils.withContextClassLoader(Utils.getSparkClassLoader) {
@@ -179,15 +186,5 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
         }
       }
     }
-  }
-
-  private def getHiveUDFTestJarUrl: String = {
-    // The test jars are built from below commit:
-    // https://github.com/HeartSaVioR/hive/commit/12f3f036b6efd0299cd1d457c0c0a65e0fd7e5f2
-    // which contain new UDF classes to be dynamically loaded and tested via Spark.
-
-    // This jar file should not be placed to the classpath.
-    val jarPath = "src/test/noclasspath/hive-test-udfs.jar"
-    s"file://${System.getProperty("user.dir")}/$jarPath"
   }
 }
