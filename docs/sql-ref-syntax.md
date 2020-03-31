@@ -21,7 +21,7 @@ license: |
 
 Spark SQL is Apache Spark's module for working with structured data. The SQL Syntax section describes the SQL syntax in detail along with usage examples when applicable. This document provides a list of Data Definition and Data Manipulation Statements, as well as Data Retrieval and Auxiliary Statements.
 
-### Data Definition Statements
+### DDL Statements
 - [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)
 - [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
 - [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
@@ -37,7 +37,7 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
 - [TRUNCATE TABLE](sql-ref-syntax-ddl-truncate-table.html)
 - [USE DATABASE](sql-ref-syntax-qry-select-usedb.html)
 
-### Data Manipulation Statements
+### DML Statements
 - [INSERT INTO](sql-ref-syntax-dml-insert-into.html)
 - [INSERT OVERWRITE](sql-ref-syntax-dml-insert-overwrite-table.html)
 - [INSERT OVERWRITE DIRECTORY](sql-ref-syntax-dml-insert-overwrite-directory.html)
