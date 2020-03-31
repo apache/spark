@@ -476,7 +476,7 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    // Non-PySpark applications will also need Python dependencies.
+    // Non-PySpark applications can need Python dependencies.
     if (deployMode == CLIENT && clusterManager != YARN) {
       // The YARN backend handles python files differently, so don't merge the lists.
       args.files = mergeFileLists(args.files, args.pyFiles)
