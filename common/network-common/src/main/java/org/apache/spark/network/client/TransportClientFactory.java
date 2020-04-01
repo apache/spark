@@ -130,9 +130,9 @@ public class TransportClientFactory implements Closeable {
    * and randomly picks one to use. If no client was previously created in the randomly selected
    * spot, this function creates a new client and places it there.
    *
-   * We also maintain a last connection failed time of these clients and a fast fail time window
-   * based on io retry wait time. If this connection request can be retried and the last connection
-   * failed time of these clients in the fast fail time window, fail this connection directly.
+   * If the fastFail parameter is true, fail immediately when the last attempt to the same address
+   * failed within the fast fail time window (95 percent of the io wait retry timeout). The
+   * assumption is the caller will handle retrying.
    *
    * Prior to the creation of a new TransportClient, we will execute all
    * {@link TransportClientBootstrap}s that are registered with this factory.
@@ -141,8 +141,10 @@ public class TransportClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    *
-   * @param fastFail whether this connection should fast fail when the last connection of these
-   *                 clients failed in the last fast fail time window.
+   * @param remoteHost remote address host
+   * @param remotePort remote address port
+   * @param fastFail whether this call should fail immediately when the last attempt to the same
+   *                 address failed with in the last fast fail time window.
    */
   public TransportClient createClient(String remoteHost, int remotePort, boolean fastFail)
       throws IOException, InterruptedException {
