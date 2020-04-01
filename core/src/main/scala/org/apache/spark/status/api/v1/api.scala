@@ -382,14 +382,6 @@ class ApplicationEnvironmentInfo private[spark] (
     val classpathEntries: Seq[(String, String)],
     val resourceProfiles: Seq[ResourceProfileInfo])
 
-class ApplicationEnvironmentWithResourceProfileInfo private[spark] (
-    val runtime: RuntimeInfo,
-    val sparkProperties: Seq[(String, String)],
-    val hadoopProperties: Seq[(String, String)],
-    val systemProperties: Seq[(String, String)],
-    val classpathEntries: Seq[(String, String)],
-    val resourceProfiles: Seq[ResourceProfileInfo])
-
 class RuntimeInfo private[spark](
     val javaVersion: String,
     val javaHome: String,
