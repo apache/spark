@@ -136,7 +136,8 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
           Seq(true, false).foreach { after1582 =>
             Seq(false, true).foreach { rebase =>
               benchmark.addCase(caseName(after1582, Some(rebase)), 1) { _ =>
-                withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> rebase.toString) {
+                withSQLConf(
+                  SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> rebase.toString) {
                   genDF(rowsNum, dateTime, after1582)
                     .write
                     .mode("overwrite")
@@ -156,7 +157,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
                 benchmark2.addCase(caseName(after1582, Some(rebase), Some(vec)), 3) { _ =>
                   withSQLConf(
                     SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vec.toString,
-                    SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> rebase.toString) {
+                    SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
                     spark.read
                       .format("parquet")
                       .load(getPath(path, dateTime, after1582, Some(rebase)))
