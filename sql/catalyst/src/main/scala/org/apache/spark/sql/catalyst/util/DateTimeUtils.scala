@@ -84,13 +84,6 @@ object DateTimeUtils {
     tf.format(us)
   }
 
-  private def millisToDays(millisUtc: Long, timeZone: TimeZone): SQLDate = {
-    // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
-    // will correctly work as input for function toJavaDate(Int)
-    val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
-    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
-  }
-
   /**
    * Converts an instance of `java.sql.Date` to a number of days since the epoch
    * 1970-01-01 via extracting date fields `year`, `month`, `days` from the input,
@@ -107,50 +100,8 @@ object DateTimeUtils {
    * @return The number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    val days = millisToDays(date.getTime, defaultTimeZone())
-    rebaseJulianToGregorianDays(days)
-  }
-
-  private def daysToMillis(days: SQLDate, timeZone: TimeZone): Long = {
-    val millisLocal = days.toLong * MILLIS_PER_DAY
-    millisLocal - getOffsetFromLocalMillis(millisLocal, timeZone)
-  }
-
-  /**
-   * Lookup the offset for given millis seconds since 1970-01-01 00:00:00 in given timezone.
-   * TODO: Improve handling of normalization differences.
-   * TODO: Replace with JSR-310 or similar system - see SPARK-16788
-   */
-  private def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
-    var guess = tz.getRawOffset
-    // the actual offset should be calculated based on milliseconds in UTC
-    val offset = tz.getOffset(millisLocal - guess)
-    if (offset != guess) {
-      guess = tz.getOffset(millisLocal - offset)
-      if (guess != offset) {
-        // fallback to do the reverse lookup using java.sql.Timestamp
-        // this should only happen near the start or end of DST
-        val days = Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
-        val year = getYear(days)
-        val month = getMonth(days)
-        val day = getDayOfMonth(days)
-
-        var millisOfDay = (millisLocal % MILLIS_PER_DAY).toInt
-        if (millisOfDay < 0) {
-          millisOfDay += MILLIS_PER_DAY.toInt
-        }
-        val seconds = (millisOfDay / 1000L).toInt
-        val hh = seconds / 3600
-        val mm = seconds / 60 % 60
-        val ss = seconds % 60
-        val ms = millisOfDay % 1000
-        val calendar = Calendar.getInstance(tz)
-        calendar.set(year, month - 1, day, hh, mm, ss)
-        calendar.set(Calendar.MILLISECOND, ms)
-        guess = (millisLocal - calendar.getTimeInMillis()).toInt
-      }
-    }
-    guess
+    val rebasedMicros = rebaseJulianToGregorianMicros(millisToMicros(date.getTime))
+    microsToDays(rebasedMicros)
   }
 
   /**
@@ -167,8 +118,8 @@ object DateTimeUtils {
    * @return A `java.sql.Date` from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    val rebasedDays = rebaseGregorianToJulianDays(daysSinceEpoch)
-    new Date(daysToMillis(rebasedDays, defaultTimeZone()))
+    val rebasedMicros = rebaseGregorianToJulianMicros(daysToMicros(daysSinceEpoch))
+    new Date(microsToMillis(rebasedMicros))
   }
 
   /**
