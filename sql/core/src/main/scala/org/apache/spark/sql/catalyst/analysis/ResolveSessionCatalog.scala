@@ -538,9 +538,10 @@ class ResolveSessionCatalog(
         replace,
         viewType)
 
-    case ShowViewsStatement(resolved: ResolvedNamespace, pattern) =>
+    case ShowViews(resolved: ResolvedNamespace, pattern) =>
       resolved match {
         case SessionCatalogAndNamespace(_, ns) =>
+          // Fallback to v1 ShowViewsCommand since there is no view API in v2 catalog
           val namespace = if (ns.isEmpty) {
             None
           } else if (ns.length == 1) {

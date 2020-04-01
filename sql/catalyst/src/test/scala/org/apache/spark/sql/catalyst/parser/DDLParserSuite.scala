@@ -1273,25 +1273,25 @@ class DDLParserSuite extends AnalysisTest {
   test("show views") {
     comparePlans(
       parsePlan("SHOW VIEWS"),
-      ShowViewsStatement(UnresolvedNamespace(Seq.empty[String]), None))
+      ShowViews(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
       parsePlan("SHOW VIEWS '*test*'"),
-      ShowViewsStatement(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+      ShowViews(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
     comparePlans(
       parsePlan("SHOW VIEWS LIKE '*test*'"),
-      ShowViewsStatement(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+      ShowViews(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
     comparePlans(
       parsePlan("SHOW VIEWS FROM testcat.ns1.ns2.tbl"),
-      ShowViewsStatement(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
+      ShowViews(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW VIEWS IN testcat.ns1.ns2.tbl"),
-      ShowViewsStatement(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
+      ShowViews(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW VIEWS IN ns1 '*test*'"),
-      ShowViewsStatement(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
+      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
     comparePlans(
       parsePlan("SHOW VIEWS IN ns1 LIKE '*test*'"),
-      ShowViewsStatement(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
+      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
   }
 
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {

@@ -23,7 +23,8 @@ license: |
 The `SHOW VIEWS` statement returns all the views for an optionally specified database.
 Additionally, the output of this statement may be filtered by an optional matching
 pattern. If no database is specified then the views are returned from the 
-current database. Note that the command also lists local temporary views 
+current database. If the specified database is global temporary view database, we will
+list global temporary views. Note that the command also lists local temporary views 
 regardless of a given database.
 
 ### Syntax
@@ -101,7 +102,7 @@ SHOW VIEWS FROM default LIKE 'sam*';
   | default   | sam1       | false        |
   +-----------+------------+--------------+--+
 
--- List all views matching the pattern `sam|suj｜temp*`
+-- List all views from the current database matching the pattern `sam|suj｜temp*`
 SHOW VIEWS LIKE 'sam|suj|temp*';
   +-------------+------------+--------------+--+
   | namespace   | viewName   | isTemporary  |

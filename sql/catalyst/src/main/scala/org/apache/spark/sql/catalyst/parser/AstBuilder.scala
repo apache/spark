@@ -2898,11 +2898,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[ShowViewsStatement]] command.
+   * Create a [[ShowViews]] command.
    */
   override def visitShowViews(ctx: ShowViewsContext): LogicalPlan = withOrigin(ctx) {
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    ShowViewsStatement(
+    ShowViews(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(string))
   }
