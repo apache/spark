@@ -34,6 +34,7 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
@@ -2547,9 +2548,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   /**
    * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
-   * getShuffleDependencies correctly returns the direct shuffle dependencies of a particular
-   * RDD. The test creates the following RDD graph (where n denotes a narrow dependency and s
-   * denotes a shuffle dependency):
+   * getShuffleDependenciesAndResourceProfiles correctly returns the direct shuffle dependencies
+   * of a particular RDD. The test creates the following RDD graph (where n denotes a narrow
+   * dependency and s denotes a shuffle dependency):
    *
    * A <------------s---------,
    *                           \
@@ -2558,7 +2559,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
    * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
    */
-  test("getShuffleDependencies correctly returns only direct shuffle parents") {
+  test("getShuffleDependenciesAndResourceProfiles correctly returns only direct shuffle parents") {
     val rddA = new MyRDD(sc, 2, Nil)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
     val rddB = new MyRDD(sc, 2, Nil)
@@ -2569,11 +2570,16 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val narrowDepD = new OneToOneDependency(rddD)
     val rddE = new MyRDD(sc, 1, List(shuffleDepA, narrowDepD), tracker = mapOutputTracker)
 
-    assert(scheduler.getShuffleDependencies(rddA) === Set())
-    assert(scheduler.getShuffleDependencies(rddB) === Set())
-    assert(scheduler.getShuffleDependencies(rddC) === Set(shuffleDepB))
-    assert(scheduler.getShuffleDependencies(rddD) === Set(shuffleDepC))
-    assert(scheduler.getShuffleDependencies(rddE) === Set(shuffleDepA, shuffleDepC))
+    val (shuffleDepsA, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddA)
+    assert(shuffleDepsA === Set())
+    val (shuffleDepsB, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddB)
+    assert(shuffleDepsB === Set())
+    val (shuffleDepsC, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddC)
+    assert(shuffleDepsC === Set(shuffleDepB))
+    val (shuffleDepsD, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddD)
+    assert(shuffleDepsD === Set(shuffleDepC))
+    val (shuffleDepsE, _) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
+    assert(shuffleDepsE === Set(shuffleDepA, shuffleDepC))
   }
 
   test("SPARK-17644: After one stage is aborted for too many failed attempts, subsequent stages" +
@@ -3139,6 +3145,97 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // Finish
     complete(taskSets(2), Seq((Success, 42), (Success, 42), (Success, 42), (Success, 42)))
     assertDataStructuresEmpty()
+  }
+
+  test("test default resource profile") {
+    val rdd = sc.parallelize(1 to 10).map(x => (x, x))
+    val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
+    val rp = scheduler.mergeResourceProfilesForStage(resourceprofiles)
+    assert(rp.id == scheduler.sc.resourceProfileManager.defaultResourceProfile.id)
+  }
+
+  test("test 1 resource profile") {
+    val ereqs = new ExecutorResourceRequests().cores(4)
+    val treqs = new TaskResourceRequests().cpus(1)
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+
+    val rdd = sc.parallelize(1 to 10).map(x => (x, x)).withResources(rp1)
+    val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
+    val rpMerged = scheduler.mergeResourceProfilesForStage(resourceprofiles)
+    val expectedid = Option(rdd.getResourceProfile).map(_.id)
+    assert(expectedid.isDefined)
+    assert(expectedid.get != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(rpMerged.id == expectedid.get)
+  }
+
+  test("test 2 resource profiles errors by default") {
+    import org.apache.spark.resource._
+    val ereqs = new ExecutorResourceRequests().cores(4)
+    val treqs = new TaskResourceRequests().cpus(1)
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+
+    val ereqs2 = new ExecutorResourceRequests().cores(2)
+    val treqs2 = new TaskResourceRequests().cpus(2)
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+
+    val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
+    val error = intercept[IllegalArgumentException] {
+      val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
+      scheduler.mergeResourceProfilesForStage(resourceprofiles)
+    }.getMessage()
+
+    assert(error.contains("Multiple ResourceProfile's specified in the RDDs"))
+  }
+
+  /**
+   * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
+   * getShuffleDependenciesAndResourceProfiles correctly returns the direct shuffle dependencies
+   * of a particular RDD. The test creates the following RDD graph (where n denotes a narrow
+   * dependency and s denotes a shuffle dependency):
+   *
+   * A <------------s---------,
+   *                           \
+   * B <--s-- C <--s-- D <--n------ E
+   *
+   * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
+   * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
+   */
+  test("getShuffleDependenciesAndResourceProfiles returns deps and profiles correctly") {
+    import org.apache.spark.resource._
+    val ereqs = new ExecutorResourceRequests().cores(4)
+    val treqs = new TaskResourceRequests().cpus(1)
+    val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
+    val ereqs2 = new ExecutorResourceRequests().cores(6)
+    val treqs2 = new TaskResourceRequests().cpus(2)
+    val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
+
+    val rddWithRp = new MyRDD(sc, 2, Nil).withResources(rp1)
+    val rddA = new MyRDD(sc, 2, Nil).withResources(rp1)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
+    val rddB = new MyRDD(sc, 2, Nil)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
+    val rddWithRpDep = new OneToOneDependency(rddWithRp)
+    val rddC = new MyRDD(sc, 1, List(rddWithRpDep, shuffleDepB)).withResources(rp2)
+    val shuffleDepC = new ShuffleDependency(rddC, new HashPartitioner(1))
+    val rddD = new MyRDD(sc, 1, List(shuffleDepC))
+    val narrowDepD = new OneToOneDependency(rddD)
+    val rddE = new MyRDD(sc, 1, List(shuffleDepA, narrowDepD), tracker = mapOutputTracker)
+
+    val (shuffleDepsA, rprofsA) = scheduler.getShuffleDependenciesAndResourceProfiles(rddA)
+    assert(shuffleDepsA === Set())
+    assert(rprofsA === Set(rp1))
+    val (shuffleDepsB, rprofsB) = scheduler.getShuffleDependenciesAndResourceProfiles(rddB)
+    assert(shuffleDepsB === Set())
+    assert(rprofsB === Set())
+    val (shuffleDepsC, rprofsC) = scheduler.getShuffleDependenciesAndResourceProfiles(rddC)
+    assert(shuffleDepsC === Set(shuffleDepB))
+    assert(rprofsC === Set(rp1, rp2))
+    val (shuffleDepsD, rprofsD) = scheduler.getShuffleDependenciesAndResourceProfiles(rddD)
+    assert(shuffleDepsD === Set(shuffleDepC))
+    assert(rprofsD === Set())
+    val (shuffleDepsE, rprofsE) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
+    assert(shuffleDepsE === Set(shuffleDepA, shuffleDepC))
+    assert(rprofsE === Set())
   }
 
   /**

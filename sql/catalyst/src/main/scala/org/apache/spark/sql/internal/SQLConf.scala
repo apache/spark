@@ -490,11 +490,21 @@ object SQLConf {
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionFactor")
       .doc("A partition is considered as skewed if its size is larger than this factor " +
         "multiplying the median partition size and also larger than " +
-        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'")
+        "'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The skew factor must be positive.")
       .createWithDefault(10)
+
+  val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
+    buildConf("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes")
+      .doc("A partition is considered as skewed if its size in bytes is larger than this " +
+        s"threshold and also larger than '${SKEW_JOIN_SKEWED_PARTITION_FACTOR.key}' " +
+        "multiplying the median partition size. Ideally this config should be set larger " +
+        s"than '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'.")
+      .version("3.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("256MB")
 
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
@@ -1675,14 +1685,17 @@ object SQLConf {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
 
-  val SESSION_LOCAL_TIMEZONE =
-    buildConf("spark.sql.session.timeZone")
-      .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
-      .version("2.2.0")
-      .stringConf
-      .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
-        " ZoneId.of(_, ZoneId.SHORT_IDS)")
-      .createWithDefaultFunction(() => TimeZone.getDefault.getID)
+  val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
+    .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
+      "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
+      "Zone offsets must be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. " +
+      "Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other short names are not " +
+      "recommended to use because they can be ambiguous.")
+    .version("2.2.0")
+    .stringConf
+    .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
+      " ZoneId.of(_, ZoneId.SHORT_IDS)")
+    .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.in.memory.threshold")
@@ -2049,6 +2062,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val NESTED_PREDICATE_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.optimizer.nestedPredicatePushdown.enabled")
+      .internal()
+      .doc("When true, Spark tries to push down predicates for nested columns and or names " +
+        "containing `dots` to data sources. Currently, Parquet implements both optimizations " +
+        "while ORC only supports predicates for names containing `dots`. The other data sources" +
+        "don't support this feature yet.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
       .internal()
@@ -2154,8 +2178,8 @@ object SQLConf {
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
-    .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
-      "The size function returns null for null input if the flag is disabled.")
+    .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
+      "null. Otherwise, it returns -1, which was inherited from Hive.")
     .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
@@ -2484,6 +2508,58 @@ object SQLConf {
     buildConf("spark.sql.legacy.integerGroupingId")
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.rebaseDateTimeInWrite.enabled")
+      .internal()
+      .doc("When true, rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the hybrid calendar (Julian + Gregorian) in write. " +
+        "The rebasing is performed by converting micros/millis/days to " +
+        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
+        "timestamp in the target calendar, and getting the number of micros/millis/days " +
+        "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_PARQUET_REBASE_DATETIME_IN_READ =
+    buildConf("spark.sql.legacy.parquet.rebaseDateTimeInRead.enabled")
+      .internal()
+      .doc("When true, rebase dates/timestamps " +
+        "from the hybrid calendar to Proleptic Gregorian calendar in read. " +
+        "The rebasing is performed by converting micros/millis/days to " +
+        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
+        "timestamp in the target calendar, and getting the number of micros/millis/days " +
+        "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_AVRO_REBASE_DATETIME_IN_WRITE =
+    buildConf("spark.sql.legacy.avro.rebaseDateTimeInWrite.enabled")
+      .internal()
+      .doc("When true, rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the hybrid calendar (Julian + Gregorian) in write. " +
+        "The rebasing is performed by converting micros/millis/days to " +
+        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
+        "timestamp in the target calendar, and getting the number of micros/millis/days " +
+        "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_AVRO_REBASE_DATETIME_IN_READ =
+    buildConf("spark.sql.legacy.avro.rebaseDateTimeInRead.enabled")
+      .internal()
+      .doc("When true, rebase dates/timestamps " +
+        "from the hybrid calendar to Proleptic Gregorian calendar in read. " +
+        "The rebasing is performed by converting micros/millis/days to " +
+        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
+        "timestamp in the target calendar, and getting the number of micros/millis/days " +
+        "since the epoch 1970-01-01 00:00:00Z.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -3007,6 +3083,8 @@ class SQLConf extends Serializable with Logging {
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
+  def nestedPredicatePushdownEnabled: Boolean = getConf(NESTED_PREDICATE_PUSHDOWN_ENABLED)
+
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
 
@@ -3014,7 +3092,10 @@ class SQLConf extends Serializable with Logging {
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
-  def legacySizeOfNull: Boolean = getConf(SQLConf.LEGACY_SIZE_OF_NULL)
+  def legacySizeOfNull: Boolean = {
+    // size(null) should return null under ansi mode.
+    getConf(SQLConf.LEGACY_SIZE_OF_NULL) && !getConf(ANSI_ENABLED)
+  }
 
   def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
 
@@ -3060,6 +3141,10 @@ class SQLConf extends Serializable with Logging {
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def parquetRebaseDateTimeInReadEnabled: Boolean = {
+    getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ)
+  }
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -65,7 +65,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       Thread.sleep(Random.nextInt(1000))
       // Pass partitionId message in
       val message: String = context.partitionId().toString
-      val messages: ArrayBuffer[String] = context.allGather(message)
+      val messages: Array[String] = context.allGather(message)
       messages.toList.iterator
     }
     // Take a sorted list of all the partitionId messages

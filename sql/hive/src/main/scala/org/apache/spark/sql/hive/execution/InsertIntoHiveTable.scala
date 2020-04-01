@@ -106,7 +106,7 @@ case class InsertIntoHiveTable(
     }
 
     // un-cache this table.
-    sparkSession.catalog.uncacheTable(table.identifier.quotedString)
+    CommandUtils.uncacheTableOrView(sparkSession, table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
 
     CommandUtils.updateTableStats(sparkSession, table)

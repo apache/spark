@@ -160,22 +160,28 @@ private[ui] class SparkPlanGraphNode(
     val metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val builder = new mutable.StringBuilder(name)
+    val builder = new mutable.StringBuilder("<b>" + name + "</b>")
 
     val values = for {
       metric <- metrics
       value <- metricsValue.get(metric.accumulatorId)
     } yield {
-      metric.name + ": " + value
+      // The value may contain ":" to extend the name, like `total (min, med, max): ...`
+      if (value.contains(":")) {
+        metric.name + " " + value
+      } else {
+        metric.name + ": " + value
+      }
     }
 
     if (values.nonEmpty) {
       // If there are metrics, display each entry in a separate line.
       // Note: whitespace between two "\n"s is to create an empty line between the name of
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-      builder ++= "\n \n"
-      builder ++= values.mkString("\n")
-      s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
+      builder ++= "<br><br>"
+      builder ++= values.mkString("<br>")
+      val labelStr = StringEscapeUtils.escapeJava(builder.toString().replaceAll("\n", "<br>"))
+      s"""  $id [labelType="html" label="${labelStr}"];"""
     } else {
       // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
       // so that there won't be gaps between an edge and a small node.
@@ -210,6 +216,7 @@ private[ui] class SparkPlanGraphCluster(
     }
     s"""
        |  subgraph cluster${id} {
+       |    isCluster="true";
        |    label="${StringEscapeUtils.escapeJava(labelStr)}";
        |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
        |  }

@@ -437,7 +437,7 @@ private[spark] class ExecutorAllocationManager(
           } else {
             logDebug(s"Lowering target number of executors to" +
               s" ${numExecutorsTargetPerResourceProfileId(rpId)} (previously " +
-              s"$targetNum.oldNumExecutorsTarget for resource profile id: ${rpId}) " +
+              s"${targetNum.oldNumExecutorsTarget} for resource profile id: ${rpId}) " +
               "because not all requested executors " +
               "are actually needed")
           }

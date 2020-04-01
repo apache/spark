@@ -528,6 +528,9 @@ setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 #' @rdname printSchema
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
+#' @rdname registerTempTable-deprecated
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
+
 #' @rdname rename
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
