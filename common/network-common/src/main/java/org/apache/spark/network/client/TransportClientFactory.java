@@ -140,8 +140,11 @@ public class TransportClientFactory implements Closeable {
    * This blocks until a connection is successfully established and fully bootstrapped.
    *
    * Concurrency: This method is safe to call from multiple threads.
+   *
+   * @param fastFail whether this connection should fast fail when the last connection of these
+   *                 clients failed in the last fast fail time window.
    */
-  public TransportClient createClient(String remoteHost, int remotePort, boolean withRetry)
+  public TransportClient createClient(String remoteHost, int remotePort, boolean fastFail)
       throws IOException, InterruptedException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
@@ -201,7 +204,9 @@ public class TransportClientFactory implements Closeable {
           logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
         }
       }
-      if (withRetry && System.currentTimeMillis() - clientPool.lastConnectionFailed <
+      // If this connection should fast fail when last connection failed in last fast fail time
+      // window and it did, fail this connection directly.
+      if (fastFail && System.currentTimeMillis() - clientPool.lastConnectionFailed <
         fastFailTimeWindow) {
         throw new IOException(
           String.format("Connecting to %s failed in the last %s ms, fail this connection directly",
