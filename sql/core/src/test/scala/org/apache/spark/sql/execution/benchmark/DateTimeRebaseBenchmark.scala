@@ -109,7 +109,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
             val rebaseFlag = if (rebase) "on" else "off"
             val caseName = s"$period 1582, rebase $rebaseFlag"
             benchmark.addCase(caseName, 1) { _ =>
-              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> rebase.toString) {
+              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> rebase.toString) {
                 val df = genDF(rowsNum, dateTime, after1582)
                 val pathToWrite = path.getAbsolutePath + s"/${dateTime}_${period}_1582_$rebaseFlag"
                 df.write
@@ -138,7 +138,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
             benchmark2.addCase(caseName, 3) { _ =>
               withSQLConf(
                 SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vec.toString,
-                SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> rebase.toString) {
+                SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
                 val pathToRead = path.getAbsolutePath + s"/${dateTime}_${period}_1582_$rebaseFlag"
                 spark.read.format("parquet").load(pathToRead).noop()
               }
