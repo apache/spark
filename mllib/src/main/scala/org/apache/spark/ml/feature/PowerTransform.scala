@@ -152,8 +152,18 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
     } else Map.empty[Int, Long]
 
     if (groups.nonEmpty) {
-      pairCounts = makeBins(pairCounts.as[(Int, Double, Long)], groups)
-        .toDF("col", "value", "cnt")
+      // make bins:
+      // group pairs by key with a bounded size, using weighted average
+      // as the output value, and sum of counts as the output count.
+      pairCounts = pairCounts.as[(Int, Double, Long)]
+        .mapPartitions { iter =>
+          MLUtils.combineWithinGroups[Int, (Double, Long), (Double, Long)](
+            input = iter.map(t => (t._1, (t._2, t._3))),
+            initOp = { case (v, c) => (v * c, c) },
+            seqOp = { case ((sum, count), (v, c)) => (sum + v * c, count + c) },
+            getSize = (k: Int) => groups.getOrElse(k, 1)
+          ).map { case (key, (sum, count)) => (key, sum / count, count) }
+        }.toDF("col", "value", "cnt")
     }
 
     val solutions = pairCounts
@@ -318,64 +328,6 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
 
     require(values.forall(v => !v.isNaN),
       s"PowerTransform by Yeo-Johnson method requires NonNaN values but got $v.")
-  }
-
-  private[ml] def makeBins(
-      dataset: Dataset[(Int, Double, Long)],
-      groups: Map[Int, Long]): Dataset[(Int, Double, Long)] = {
-    val spark = dataset.sparkSession
-    import spark.implicits._
-    dataset.mapPartitions { iter => makeBins(iter, groups) }
-  }
-
-  /**
-   * Group input iterator by given group sizes
-   * @param iter input iterator containing (column, value, count)
-   * @param groups group size of each column, if do not contain a column, means it size=1.
-   * @return grouped iterator, for a group, use mean of values (weighted by input counts)
-   *         as the output value, and sum of counts as the output count.
-   */
-  private[ml] def makeBins(
-    iter: Iterator[(Int, Double, Long)],
-    groups: Map[Int, Long]): Iterator[(Int, Double, Long)] = {
-    if (iter.hasNext) {
-      var prevCol = -1
-      var group = -1L
-      var valueSum = Double.NaN
-      var countSum = -1L
-      var cnt = 0L
-
-      iter.flatMap { case (col, v, c) =>
-        var ret = Seq.empty[(Int, Double, Long)]
-        if (prevCol != col) {
-          if (prevCol >= 0 && cnt > 0) {
-            ret ++= Seq((prevCol, valueSum / countSum, countSum))
-          }
-
-          prevCol = col
-          group = groups.getOrElse(col, 1L)
-          valueSum = v * c
-          countSum = c
-          cnt = 1L
-        } else {
-          valueSum += v * c
-          countSum += c
-          cnt += 1L
-        }
-
-        if (group == cnt) {
-          ret ++= Seq((col, valueSum / countSum, countSum))
-          valueSum = 0.0
-          countSum = 0L
-          cnt = 0L
-        }
-        ret
-      } ++ {
-        if (prevCol >= 0 && cnt > 0) {
-          Iterator.single((prevCol, valueSum / countSum, countSum))
-        } else Iterator.empty
-      }
-    } else Iterator.empty
   }
 }
 

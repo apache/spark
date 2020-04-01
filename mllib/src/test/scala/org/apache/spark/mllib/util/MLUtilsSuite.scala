@@ -353,4 +353,41 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       convertMatrixColumnsFromML(df, "p._2")
     }
   }
+
+  test("combineWithinGroups") {
+    val seq1 = Seq(
+      (0, 0.0, 1L),
+      (0, 1.0, 1L),
+      (0, 2.0, 2L),
+      (1, 1.0, 1L),
+      (1, 2.0, 1L),
+      (2, 0.5, 3L)
+    )
+
+    def computeAvgWithinGroups(
+        iter: Iterator[(Int, Double, Long)],
+        groups: Map[Int, Long]): Iterator[(Int, Double, Long)] = {
+      MLUtils.combineWithinGroups[Int, (Double, Long), (Double, Long)](
+        input = iter.map(t => (t._1, (t._2, t._3))),
+        initOp = { case (v, c) => (v * c, c) },
+        seqOp = { case ((sum, count), (v, c)) => (sum + v * c, count + c) },
+        getSize = (k: Int) => groups.getOrElse(k, 1)
+      ).map { case (key, (sum, count)) => (key, sum / count, count) }
+    }
+
+    assert(computeAvgWithinGroups(seq1.iterator, Map.empty[Int, Long]).toSeq === seq1)
+    assert(computeAvgWithinGroups(seq1.iterator, Map(0 -> 2L, 1 -> 1L, 2 -> 3L)).toSeq ===
+      Seq((0, 0.5, 2L), (0, 2.0, 2L), (1, 1.0, 1L), (1, 2.0, 1L), (2, 0.5, 3L)))
+    assert(computeAvgWithinGroups(seq1.iterator, Map(0 -> 4L, 2 -> 5L)).toSeq ===
+      Seq((0, 1.25, 4L), (1, 1.0, 1L), (1, 2.0, 1L), (2, 0.5, 3L)))
+    assert(computeAvgWithinGroups(seq1.iterator, Map(0 -> 3L, 1 -> 2L)).toSeq ===
+      Seq((0, 1.25, 4L), (1, 1.5, 2L), (2, 0.5, 3L)))
+    assert(computeAvgWithinGroups(seq1.iterator, Map(0 -> 5L, 1 -> 5L, 2 -> 1L)).toSeq ===
+      Seq((0, 1.25, 4L), (1, 1.5, 2L), (2, 0.5, 3L)))
+
+    val seq2 = Seq((0, 0.0, 1L))
+
+    assert(computeAvgWithinGroups(seq2.iterator, Map.empty[Int, Long]).toSeq === seq2)
+    assert(computeAvgWithinGroups(seq2.iterator, Map(0 -> 2L, 1 -> 1L, 2 -> 3L)).toSeq === seq2)
+  }
 }

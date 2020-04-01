@@ -554,4 +554,46 @@ object MLUtils extends Logging {
       math.log1p(math.exp(x))
     }
   }
+
+  /**
+   * Sequentially group input elements to groups, and do aggregation within each group.
+   * A group only contains single key, and be of size no greater than the corresponding size.
+   * For example, input keys = [1, 1, 1, 2, 2, 2, 3, 3, 1],
+   * group sizes are: 1->2, 2->5, 3->1,
+   * then the groups are {1, 1}, {1}, {2, 2, 2}, {3}, {3}, {1}.
+   *
+   * @param input input iterator containing (key, value), usually sorted by key
+   * @param getSize group size of each key.
+   * @return aggregated iterator
+   */
+  private[spark] def combineWithinGroups[K, V, U](
+      input: Iterator[(K, V)],
+      initOp: V => U,
+      seqOp: (U, V) => U,
+      getSize: K => Long): Iterator[(K, U)] = {
+    if (input.isEmpty) return Iterator.empty
+
+    // null.asInstanceOf[K] won't work with K=Int/Long/...
+    var prevK = Option.empty[K]
+    var prevU = null.asInstanceOf[U]
+    var groupSize = -1L
+    var groupCount = 0L
+
+    input.flatMap { case (key, value) =>
+      if (!prevK.contains(key) || groupCount == groupSize) {
+        val ret = prevK.map(k => (k, prevU))
+
+        prevK = Some(key)
+        prevU = initOp(value)
+        groupSize = getSize(key)
+        groupCount = 1L
+
+        ret.iterator
+      } else {
+        prevU = seqOp(prevU, value)
+        groupCount += 1L
+        Iterator.empty
+      }
+    } ++ prevK.iterator.map(k => (k, prevU))
+  }
 }
