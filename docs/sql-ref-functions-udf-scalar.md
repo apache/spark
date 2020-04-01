@@ -21,7 +21,58 @@ license: |
 
 ### Description
 
-User-Defined Functions (UDFs) are user-programmable routines that act on one row. This documentation contains examples that demonstrate how to define and register UDFs that act on a single row and invoke them in Spark SQL.
+User-Defined Functions (UDFs) are user-programmable routines that act on one row. This documentation lists the classes that are required for creating and registering UDFs. It also contains examples that demonstrate how to define, register UDFs and invoke them in Spark SQL.
+
+
+### org.apache.spark.sql.expressions.UserDefinedFunction
+
+A user-defined function. To create one, use the `udf` functions in `functions`.
+
+<dl>
+  <dt><code><em>asNonNullable(): UserDefinedFunction</em></code></dt>
+  <dd>
+    Updates UserDefinedFunction to non-nullable.
+  </dd>
+</dl>
+
+<dl>
+  <dt><code><em>asNondeterministic(): UserDefinedFunction</em></code></dt>
+  <dd>
+    Updates UserDefinedFunction to nondeterministic.
+  </dd>
+</dl>
+
+<dl>
+  <dt><code><em>deterministic: Boolean</em></code></dt>
+  <dd>
+    Returns true iff the UDF is deterministic, i.e. the UDF produces the same output given the same input.
+  </dd>
+</dl>
+
+<dl>
+  <dt><code><em>nullable: Boolean</em></code></dt>
+  <dd>
+    Returns true when the UDF can return a nullable value.
+  </dd>
+</dl>
+
+<dl>
+  <dt><code><em>withName(name: String): UserDefinedFunction</em></code></dt>
+  <dd>
+    Updates UserDefinedFunction with a given name.
+  </dd>
+</dl>
+
+### org.apache.spark.sql.UDFRegistration
+
+Functions for registering user-defined functions. Use `SparkSession.udf` to access this: `spark.udf`
+
+<dl>
+  <dt><code><em>register(name: String, udf: UserDefinedFunction): UserDefinedFunction</em></code></dt>
+  <dd>
+    Registers a user-defined function (UDF).
+  </dd>
+</dl>
 
 ### Examples
 
@@ -119,8 +170,10 @@ SELECT SUM(value) FROM groupData GROUP BY groupFunction(value);
 +----------+
 
 # Define and register a UDF using Python
-from pyspark.sql.functions import UserDefinedFunction, udf
-self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+from pyspark.sql.functions import udf
+from pyspark.sql.types import IntegerType
+
+spark.udf.register("twoArgs", lambda x, y: len(x) + y, IntegerType())
 
 -- SQL
 SELECT twoArgs('test', 1);
@@ -132,4 +185,3 @@ SELECT twoArgs('test', 1);
 +----------------+
 
 {% endhighlight %}
-
