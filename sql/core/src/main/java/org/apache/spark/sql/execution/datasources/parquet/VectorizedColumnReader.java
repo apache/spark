@@ -131,7 +131,7 @@ public class VectorizedColumnReader {
     if (totalValueCount == 0) {
       throw new IOException("totalValueCount == 0");
     }
-    this.rebaseDateTime = SQLConf.get().parquetRebaseDateTimeEnabled();
+    this.rebaseDateTime = SQLConf.get().parquetRebaseDateTimeInReadEnabled();
   }
 
   /**

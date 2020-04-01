@@ -45,7 +45,8 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
   extends Logging {
 
   // Whether to rebase datetimes from Gregorian to Julian calendar in write
-  private val rebaseDateTime: Boolean = SQLConf.get.avroRebaseDateTimeEnabled
+  private val rebaseDateTime: Boolean =
+    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_WRITE)
 
   def serialize(catalystData: Any): Any = {
     converter.apply(catalystData)
