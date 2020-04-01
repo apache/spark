@@ -491,6 +491,28 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
             agg2 = self.spark.sql("select max_udf(id) from table")
             assert_frame_equal(agg1.toPandas(), agg2.toPandas())
 
+    def test_no_predicate_pushdown_through(self):
+        from pyspark.sql.functions import monotonically_increasing_id, explode_outer
+        import numpy as np
+
+        @pandas_udf('float', PandasUDFType.GROUPED_AGG)
+        def mean(x):
+            return np.mean(x)
+
+        df = self.spark.createDataFrame([
+            Row(foo=[Row(bar=42), Row(bar=43), Row(bar=44)]),
+        ])
+
+        df_with_id = df.withColumn('id', monotonically_increasing_id())
+        exploded = df_with_id.select('id', explode_outer('foo').alias('foos'))
+
+        agg = exploded.groupBy('id').agg(mean('foos.bar').alias("mean"))
+
+        joined = df_with_id.join(agg, 'id', 'left').select(df_with_id['id'], 'mean')
+        filtered = joined.filter(joined['mean'] > 1.0)
+
+        assert(filtered.collect()[0]["mean"] == 43.0)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_udf_grouped_agg import *
