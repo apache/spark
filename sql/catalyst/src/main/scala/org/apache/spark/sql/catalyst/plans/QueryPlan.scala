@@ -232,10 +232,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   }
 
   /**
-   * Returns a sequence containing the result of applying a partial function to all elements in this
+   * A variant of `collect`. This method not only apply the given function to all elements in this
    * plan, also considering all the plans in its (nested) subqueries
    */
-  def collectInPlanAndSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
+  def collectWithSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
     (this +: subqueriesAll).flatMap(_.collect(f))
 
   override def innerChildren: Seq[QueryPlan[_]] = subqueries
