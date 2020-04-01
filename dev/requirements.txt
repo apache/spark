@@ -1,10 +1,21 @@
-flake8==3.7.*
-jira==1.0.*
-pycodestyle==2.5.*
-PyGithub==1.26.*
-Unidecode==0.4.*
+# testing
+flake8
+pycodestyle
+
+# dev/release tools
+jira
+pip-tools
+PyGithub
+Unidecode
 
 # docs
-mkdocs==1.0.*
-numpy==1.18.*
-sphinx==2.3.*
+mkdocs
+sphinx
+
+# PySpark
+# It's difficult to compile dependencies by directly referencing
+# python/setup.py due to a limitation of pip-tools.
+# See: https://github.com/jazzband/pip-tools/issues/908
+numpy
+pandas
+pyarrow
