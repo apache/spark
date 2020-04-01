@@ -126,32 +126,31 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
 
     var pairCounts = dataset
       .select($(inputCol))
-      .flatMap { case Row(vec: Vector) =>
-        require(vec.size == numFeatures)
-        validateFunc(vec)
-        vec.iterator
-      }.toDF("col", "value")
-      .groupBy("col", "value")
-      .agg(count(lit(0)).as("cnt"))
-      .sort("col", "value")
+      .flatMap { case Row(vector: Vector) =>
+        require(vector.size == numFeatures,
+          s"Number of features must be $numFeatures but got ${vector.size}")
+        validateFunc(vector)
+        vector.iterator
+      }.toDF("column", "value")
+      .groupBy("column", "value")
+      .agg(count(lit(0)).as("count"))
+      .sort("column", "value")
 
-    val groups = if (0 < $(numBins) && $(numBins) <= numRows) {
+    val groupSizes = if (0 < $(numBins) && $(numBins) <= numRows) {
       val localNumBins = $(numBins)
       pairCounts
-        .groupBy("col")
+        .groupBy("column")
         .count()
         .as[(Int, Long)]
-        .flatMap { case (col, num) =>
-          val group = num / localNumBins
-          if (group > 1) {
-            Some((col, group))
-          } else {
-            None
-          }
+        .flatMap { case (col, numDistinctValues) =>
+          val groupSize = numDistinctValues / localNumBins
+          if (groupSize > 1) {
+            Iterator.single((col, groupSize))
+          } else Iterator.empty
         }.collect().toMap
     } else Map.empty[Int, Long]
 
-    if (groups.nonEmpty) {
+    if (groupSizes.nonEmpty) {
       // make bins:
       // group pairs by key with a bounded size, using weighted average
       // as the output value, and sum of counts as the output count.
@@ -161,14 +160,14 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
             input = iter.map(t => (t._1, (t._2, t._3))),
             initOp = { case (v, c) => (v * c, c) },
             seqOp = { case ((sum, count), (v, c)) => (sum + v * c, count + c) },
-            getSize = (k: Int) => groups.getOrElse(k, 1)
+            getSize = (k: Int) => groupSizes.getOrElse(k, 1)
           ).map { case (key, (sum, count)) => (key, sum / count, count) }
-        }.toDF("col", "value", "cnt")
+        }.toDF("column", "value", "count")
     }
 
     val solutions = pairCounts
-      .groupBy("col")
-      .agg(collect_list(struct("value", "cnt")))
+      .groupBy("column")
+      .agg(collect_list(struct("value", "count")))
       .as[(Int, Seq[(Double, Long)])]
       .map { case (col, seq) =>
         val computeIter = () => seq.iterator
