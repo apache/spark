@@ -26,18 +26,17 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, SupportsWrite, Table, TableCatalog, TableProvider, V1Table}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateTableAsSelectStatement, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -574,12 +573,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val canUseV2 = lookupV2Provider().isDefined
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
-      case NonSessionCatalogAndIdentifier(catalog, ident) =>
-        saveAsTable(catalog.asTableCatalog, ident)
+      case nameParts @ NonSessionCatalogAndIdentifier(catalog, ident) =>
+        saveAsTable(catalog.asTableCatalog, ident, nameParts)
 
-      case SessionCatalogAndIdentifier(catalog, ident)
+      case nameParts @ SessionCatalogAndIdentifier(catalog, ident)
           if canUseV2 && ident.namespace().length <= 1 =>
-        saveAsTable(catalog.asTableCatalog, ident)
+        saveAsTable(catalog.asTableCatalog, ident, nameParts)
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)
@@ -591,14 +590,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
 
-  private def saveAsTable(catalog: TableCatalog, ident: Identifier): Unit = {
+  private def saveAsTable(
+      catalog: TableCatalog, ident: Identifier, nameParts: Seq[String]): Unit = {
     val tableOpt = try Option(catalog.loadTable(ident)) catch {
       case _: NoSuchTableException => None
-    }
-
-    def getLocationIfExists: Option[(String, String)] = {
-      val opts = CaseInsensitiveMap(extraOptions.toMap)
-      opts.get("path").map(TableCatalog.PROP_LOCATION -> _)
     }
 
     val command = (mode, tableOpt) match {
@@ -611,12 +606,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
-        ReplaceTableAsSelect(
-          catalog,
-          ident,
-          partitioningAsV2,
+        ReplaceTableAsSelectStatement(
+          nameParts,
           df.queryExecution.analyzed,
-          Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
+          partitioningAsV2,
+          None,
+          Map.empty,
+          Some(source),
+          Map.empty,
+          extraOptions.get("path"),
+          extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
           orCreate = true)      // Create the table if it doesn't exist
 
@@ -624,14 +623,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // We have a potential race condition here in AppendMode, if the table suddenly gets
         // created between our existence check and physical execution, but this can't be helped
         // in any case.
-        CreateTableAsSelect(
-          catalog,
-          ident,
-          partitioningAsV2,
+        CreateTableAsSelectStatement(
+          nameParts,
           df.queryExecution.analyzed,
-          Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
+          partitioningAsV2,
+          None,
+          Map.empty,
+          Some(source),
+          Map.empty,
+          extraOptions.get("path"),
+          extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
-          ignoreIfExists = other == SaveMode.Ignore)
+          ifNotExists = other == SaveMode.Ignore)
     }
 
     runCommand(df.sparkSession, "saveAsTable") {

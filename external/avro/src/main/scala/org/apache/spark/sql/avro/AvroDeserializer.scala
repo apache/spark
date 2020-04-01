@@ -44,7 +44,8 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
   private lazy val decimalConversions = new DecimalConversion()
 
   // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
-  private val rebaseDateTime = SQLConf.get.avroRebaseDateTimeEnabled
+  private val rebaseDateTime =
+    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ)
 
   private val converter: Any => Any = rootCatalystType match {
     // A shortcut for empty schema.
