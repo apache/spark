@@ -1310,7 +1310,11 @@ object CodeGenerator extends Logging {
   final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
   // Display the total compile time for generating java code in the output of the test case.
-  val compileTime = new LongAccumulator
+  private val _compileTime = new LongAccumulator
+
+  def compileTime: Long = _compileTime.sum
+
+  def resetCompileTime: Unit = _compileTime.reset()
 
   /**
    * Compile the Java source code into a Java class, using Janino.
@@ -1474,7 +1478,7 @@ object CodeGenerator extends Logging {
           CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
           CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
           logInfo(s"Code generated in $timeMs ms")
-          compileTime.add(duration)
+          _compileTime.add(duration)
           result
         }
       })

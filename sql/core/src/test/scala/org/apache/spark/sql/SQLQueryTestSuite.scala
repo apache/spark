@@ -660,6 +660,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     // Add Locale setting
     Locale.setDefault(Locale.US)
     RuleExecutor.resetMetrics()
+    CodeGenerator.resetCompileTime
   }
 
   override def afterAll(): Unit = {
@@ -673,7 +674,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       val codegenInfo =
         s"""
            |=== Metrics of Whole Codegen ===
-           |Total compile time: ${CodeGenerator.compileTime.sum.toDouble / NANOS_PER_SECOND} seconds
+           |Total compile time: ${CodeGenerator.compileTime.toDouble / NANOS_PER_SECOND} seconds
          """.stripMargin
       logWarning(codegenInfo)
     } finally {
