@@ -309,7 +309,8 @@ private[spark] object JsonProtocol {
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
     ("Failure Reason" -> failureReason) ~
-    ("Accumulables" -> accumulablesToJson(stageInfo.accumulables.values))
+    ("Accumulables" -> accumulablesToJson(stageInfo.accumulables.values)) ~
+    ("Resource Profile Id" -> stageInfo.resourceProfileId)
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {

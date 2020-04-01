@@ -1162,8 +1162,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ],
-      |      "Resource Profile Id" : 0
+      |    ]
       |  }
       |}
     """.stripMargin
@@ -1210,8 +1209,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ],
-      |      "Resource Profile Id" : 0
+      |    ]
       |  }
       |}
     """.stripMargin
@@ -1264,8 +1262,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ],
-      |    "Resource Profile Id" : 0
+      |    ]
       |  },
       |  "Task Executor Metrics" : {
       |    "JVMHeapMemory" : 543,
@@ -1389,8 +1386,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ],
-      |    "Resource Profile Id" : 0
+      |    ]
       |  },
       |  "Task Executor Metrics" : {
       |    "JVMHeapMemory" : 543,
@@ -1514,8 +1510,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ],
-      |    "Resource Profile Id" : 0
+      |    ]
       |  },
       |  "Task Executor Metrics" : {
       |    "JVMHeapMemory" : 543,
