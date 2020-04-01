@@ -20,6 +20,7 @@ package org.apache.spark.resource
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
+import org.apache.spark.scheduler.LiveListenerBus
 
 class ResourceProfileManagerSuite extends SparkFunSuite {
 
@@ -39,9 +40,11 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     }
   }
 
+  val listenerBus = new LiveListenerBus(new SparkConf())
+
   test("ResourceProfileManager") {
     val conf = new SparkConf().set(EXECUTOR_CORES, 4)
-    val rpmanager = new ResourceProfileManager(conf)
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
     val defaultProf = rpmanager.defaultResourceProfile
     assert(defaultProf.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assert(defaultProf.executorResources.size === 2,
@@ -53,7 +56,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
   test("isSupported yarn no dynamic allocation") {
     val conf = new SparkConf().setMaster("yarn").set(EXECUTOR_CORES, 4)
     conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
-    val rpmanager = new ResourceProfileManager(conf)
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
     // default profile should always work
     val defaultProf = rpmanager.defaultResourceProfile
     val rprof = new ResourceProfileBuilder()
@@ -71,7 +74,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val conf = new SparkConf().setMaster("yarn").set(EXECUTOR_CORES, 4)
     conf.set(DYN_ALLOCATION_ENABLED, true)
     conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
-    val rpmanager = new ResourceProfileManager(conf)
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
     // default profile should always work
     val defaultProf = rpmanager.defaultResourceProfile
     val rprof = new ResourceProfileBuilder()
@@ -84,7 +87,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
   test("isSupported yarn with local mode") {
     val conf = new SparkConf().setMaster("local").set(EXECUTOR_CORES, 4)
     conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
-    val rpmanager = new ResourceProfileManager(conf)
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
     // default profile should always work
     val defaultProf = rpmanager.defaultResourceProfile
     val rprof = new ResourceProfileBuilder()

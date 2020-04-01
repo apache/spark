@@ -1419,7 +1419,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       conf: SparkConf,
       clock: Clock = new SystemClock()): ExecutorAllocationManager = {
     ResourceProfile.reInitDefaultProfile(conf)
-    rpManager = new ResourceProfileManager(conf)
+    rpManager = new ResourceProfileManager(conf, listenerBus)
     val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
       resourceProfileManager = rpManager)
     managers += manager

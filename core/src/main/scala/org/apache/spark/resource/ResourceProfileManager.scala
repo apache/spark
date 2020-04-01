@@ -23,6 +23,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests._
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.isTesting
 
@@ -33,7 +34,8 @@ import org.apache.spark.util.Utils.isTesting
  * so this shouldn't be much overhead.
  */
 @Evolving
-private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Logging {
+private[spark] class ResourceProfileManager(sparkConf: SparkConf,
+    listenerBus: LiveListenerBus) extends Logging {
   private val resourceProfileIdToResourceProfile = new ConcurrentHashMap[Int, ResourceProfile]()
 
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
@@ -66,6 +68,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
     val res = resourceProfileIdToResourceProfile.putIfAbsent(rp.id, rp)
     if (res == null) {
       logInfo(s"Added ResourceProfile id: ${rp.id}")
+      listenerBus.post(SparkListenerResourceProfileAdded(rp))
     }
   }
 
