@@ -453,7 +453,7 @@ private[spark] class DAGScheduler(
         val startResourceProfile = stageResourceProfiles.head
         val mergedProfile = stageResourceProfiles.drop(1)
           .foldLeft(startResourceProfile)((a, b) => mergeResourceProfiles(a, b))
-        // compared merged profile with existing ones so we we don't add it over and over again
+        // compared merged profile with existing ones so we don't add it over and over again
         // if the user runs the same operation multiple times
         val resProfile = sc.resourceProfileManager.getEquivalentProfile(mergedProfile)
         resProfile match {
@@ -466,7 +466,7 @@ private[spark] class DAGScheduler(
         }
       } else {
         throw new IllegalArgumentException("Multiple ResourceProfiles specified in the RDDs for " +
-          "this stage, either resolve the conflicting ResourceProfile's yourself or enable " +
+          "this stage, either resolve the conflicting ResourceProfiles yourself or enable " +
           s"${config.RESOURCE_PROFILE_MERGE_CONFLICTS.key} and understand how Spark handles " +
           "the merging them.")
       }
