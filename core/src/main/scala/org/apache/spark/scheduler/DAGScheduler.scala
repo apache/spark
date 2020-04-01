@@ -467,7 +467,7 @@ private[spark] class DAGScheduler(
       } else {
         throw new IllegalArgumentException("Multiple ResourceProfiles specified in the RDDs for " +
           "this stage, either resolve the conflicting ResourceProfile's yourself or enable " +
-          "spark.scheduler.resourceProfile.mergeConflicts and understand how Spark handles " +
+          s"${config.RESOURCE_PROFILE_MERGE_CONFLICTS.key} and understand how Spark handles " +
           "the merging them.")
       }
     } else {
