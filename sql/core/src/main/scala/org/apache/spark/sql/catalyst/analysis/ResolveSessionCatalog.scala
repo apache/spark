@@ -542,14 +542,11 @@ class ResolveSessionCatalog(
       resolved match {
         case SessionCatalogAndNamespace(_, ns) =>
           // Fallback to v1 ShowViewsCommand since there is no view API in v2 catalog
-          val namespace = if (ns.isEmpty) {
-            None
-          } else if (ns.length == 1) {
-            Some(ns.head)
-          } else {
+          assert(ns.nonEmpty)
+          if (ns.length != 1) {
             throw new AnalysisException(s"The database name is not valid: ${ns.quoted}")
           }
-          ShowViewsCommand(namespace, pattern)
+          ShowViewsCommand(Some(ns.head), pattern)
         case _ =>
           throw new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
             s"SHOW VIEWS, only SessionCatalog supports this command.")

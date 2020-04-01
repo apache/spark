@@ -911,7 +911,7 @@ class DataSourceV2SQLSuite
 
   test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     val exception = intercept[AnalysisException] {
-      runShowTablesSql("SHOW VIEWS FROM a.b", Seq(), expectV2Catalog = false, isShowView = true)
+      sql("SHOW TABLES FROM a.b")
     }
 
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
@@ -919,7 +919,7 @@ class DataSourceV2SQLSuite
 
   test("ShowViews: using v2 catalog, command not supported.") {
     val exception = intercept[AnalysisException] {
-      runShowTablesSql("SHOW VIEWS FROM testcat", Seq(), expectV2Catalog = true, isShowView = true)
+      sql("SHOW VIEWS FROM testcat")
     }
 
     assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
