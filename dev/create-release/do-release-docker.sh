@@ -92,7 +92,7 @@ for f in "$SELF"/*; do
   fi
 done
 
-cp "$SPARK_ROOT/dev/requirements.txt" "$WORKDIR/dev-requirements.txt"
+cp "$SPARK_ROOT/dev/requirements-pinned.txt" "$WORKDIR/dev-requirements-pinned.txt"
 
 GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"

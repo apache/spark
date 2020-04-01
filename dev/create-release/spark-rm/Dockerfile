@@ -33,7 +33,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
-COPY ./dev-requirements.txt /dev-requirements.txt
+COPY ./dev-requirements-pinned.txt /dev-requirements-pinned.txt
 ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 
 # Install extra needed repos and refresh.
@@ -67,7 +67,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
   update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \
   update-alternatives --set python /usr/bin/python3.6 && \
-  pip3 install $PIP_PKGS && \
+  pip3 install -r dev-requirements-pinned.txt && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
   $APT_INSTALL r-base r-base-dev && \
