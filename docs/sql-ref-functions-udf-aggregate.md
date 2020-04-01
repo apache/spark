@@ -1,7 +1,7 @@
 ---
 layout: global
-title: User Defined Aggregate Functions (UDAF)
-displayTitle: User Defined Aggregate Functions (UDAF)
+title: User Defined Aggregate Functions (UDAFs)
+displayTitle: User Defined Aggregate Functions (UDAFs)
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,15 +21,18 @@ license: |
 
 ### Description
 
-User-Defined Aggregate Functions (UDAFs) are user-defined functions that act on multiple rows at once and return a single value as a result. This documentation contains examples that demonstrate how to define and register UDAFs in Scala and invoke them in SPARK SQL.
+User-Defined Aggregate Functions (UDAFs) are user-programmable routines that act on multiple rows at once and return a single aggregated value as a result. This documentation contains examples that demonstrate how to define and register UDAFs in Scala and invoke them in Spark SQL.
 
 ### Examples
 
 {% highlight sql %}
 
-// Define, register a UDAF to calculate the sum of product of two columns
+// Define and register a UDAF to calculate the sum of product of two columns
 // Scala
-import functions.udf
+import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions.udf
+
 val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
   def zero: Long = 0L
   def reduce(b: Long, a: (Long, Long)): Long = b + (a._1 * a._2)

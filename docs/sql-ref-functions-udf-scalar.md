@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Scalar User Defined Functions (UDF)
-displayTitle: Scalar User Defined Functions (UDF)
+title: Scalar User Defined Functions (UDFs)
+displayTitle: Scalar User Defined Functions (UDFs)
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,15 +21,17 @@ license: |
 
 ### Description
 
-This documentation contains examples that demonstrate how to define and register UDFs that act on a single row and invoke them in SPARK SQL.
+User-Defined Functions (UDFs) are user-programmable routines that act on one row. This documentation contains examples that demonstrate how to define and register UDFs that act on a single row and invoke them in Spark SQL.
 
 ### Examples
 
 {% highlight sql %}
 
-// Define, register a zero argument non-deterministic UDF
+// Define and register a zero argument non-deterministic UDF
+// UDF is deterministic by default, i.e. produces the same result for the same input.
 // Scala
-import functions.udf
+import org.apache.spark.sql.functions.udf
+
 val foo = udf(() => Math.random())
 spark.udf.register("random", foo.asNondeterministic())
 
@@ -42,9 +44,10 @@ SELECT random();
 |0.9199799737037972|
 +------------------+
 
-// Define, register a one argument UDF
+// Define and register a one argument UDF
 // Scala
-import functions.udf
+import org.apache.spark.sql.functions.udf
+
 val plusOne = udf((x: Int) => x + 1)
 spark.udf.register("plusOne", plusOne)
 
@@ -59,7 +62,8 @@ SELECT plusOne(5);
 
 // Define a two arguments UDF and register it with Spark in one step
 // Scala
-import functions.udf
+import import org.apache.spark.sql.functions.udf
+
 spark.udf.register("strLenScala", (_: String).length + (_: Int))
 
 -- SQL
@@ -73,7 +77,8 @@ SELECT strLenScala('test', 1));
 
 // UDF in a WHERE clause
 // Scala
-import functions.udf
+import org.apache.spark.sql.functions.udf
+
 spark.udf.register("oneArgFilter", (n: Int) => { n > 5 })
 spark.range(1, 10).createOrReplaceTempView("test")
 
@@ -89,13 +94,18 @@ SELECT * FROM test WHERE oneArgFilter(id);
 |9  |
 +---+
 
-// UDF in a GROUP BY
+// UDF in a GROUP BY clause
 // Scala
-import functions.udf
+import org.apache.spark.sql.functions.udf
+
 spark.udf.register("groupFunction", (n: Int) => { n > 10 })
 
-val df = Seq(("red", 1), ("red", 2), ("blue", 10),
-    ("green", 100), ("green", 200)).toDF("color", "value")
+val df = Seq(("red", 1),
+             ("red", 2),
+             ("blue", 10),
+             ("green", 100),
+             ("green", 200))
+             .toDF("color", "value")
 df.createOrReplaceTempView("groupData")
 
 -- SQL
