@@ -37,9 +37,8 @@ class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override val usesIpc = false
     override val jdbcPort = 5432
 
-    override var dbName: Option[String] = Some("postgres")
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/${dbName.get}?user=$principal&gsslib=gssapi"
+      s"jdbc:postgresql://$ip:$port/postgres?user=$principal&gsslib=gssapi"
 
     override def getEntryPoint: Option[String] = None
 

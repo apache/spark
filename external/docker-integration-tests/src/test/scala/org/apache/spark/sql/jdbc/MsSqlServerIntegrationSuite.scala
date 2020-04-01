@@ -35,7 +35,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     override val usesIpc = false
     override val jdbcPort: Int = 1433
 
-    override var dbName: Option[String] = None
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:sqlserver://$ip:$port;user=sa;password=Sapass123;"
 

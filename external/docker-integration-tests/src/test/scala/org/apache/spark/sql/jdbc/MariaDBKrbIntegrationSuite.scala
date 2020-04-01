@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
 import javax.security.auth.login.Configuration
 
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig}
@@ -38,9 +37,8 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override val usesIpc = false
     override val jdbcPort = 3306
 
-    override var dbName: Option[String] = Some("mysql")
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/${dbName.get}?user=$principal"
+      s"jdbc:mysql://$ip:$port/mysql?user=$principal"
 
     override def getEntryPoint: Option[String] =
       Some("/docker-entrypoint/mariadb_docker_entrypoint.sh")
@@ -67,11 +65,5 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     val config = new SecureConnectionProvider.JDBCConfiguration(
       Configuration.getConfiguration, "Krb5ConnectorContext", keytabFile, principal)
     Configuration.setConfiguration(config)
-  }
-
-  override def dataPreparation(conn: Connection): Unit = {
-    super.dataPreparation(conn)
-    db.dbName = Some("foo")
-    jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
   }
 }

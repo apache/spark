@@ -54,11 +54,6 @@ abstract class DatabaseOnDocker {
   val jdbcPort: Int
 
   /**
-   * Optional database name to connect to (not all database drivers need this).
-   */
-  var dbName: Option[String]
-
-  /**
    * Return a JDBC URL that connects to the database running at the given IP address and port.
    */
   def getJdbcUrl(ip: String, port: Int): String

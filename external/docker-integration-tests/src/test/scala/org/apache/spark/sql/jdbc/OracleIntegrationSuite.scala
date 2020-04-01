@@ -64,7 +64,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     )
     override val usesIpc = false
     override val jdbcPort: Int = 1521
-    override var dbName: Option[String] = None
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:oracle:thin:system/oracle@//$ip:$port/xe"
     override def getEntryPoint: Option[String] = None
