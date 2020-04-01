@@ -143,7 +143,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div>
         <ul class="list-unstyled">
           <li>
-            <strong>Resource Profile ID: </strong>
+            <strong>Resource Profile Id: </strong>
             {stageData.resourceProfileId}
           </li>
           <li>

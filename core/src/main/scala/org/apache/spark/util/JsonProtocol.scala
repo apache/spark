@@ -533,9 +533,9 @@ private[spark] object JsonProtocol {
 
   def executorResourceRequestToJson(execReq: ExecutorResourceRequest): JValue = {
     ("Resource Name" -> execReq.resourceName) ~
-      ("Amount" -> execReq.amount) ~
-      ("Discovery Script" -> execReq.discoveryScript) ~
-      ("Vendor" -> execReq.vendor)
+    ("Amount" -> execReq.amount) ~
+    ("Discovery Script" -> execReq.discoveryScript) ~
+    ("Vendor" -> execReq.vendor)
   }
 
   def executorResourceRequestMapToJson(m: Map[String, ExecutorResourceRequest]): JValue = {
@@ -548,7 +548,7 @@ private[spark] object JsonProtocol {
 
   def taskResourceRequestToJson(taskReq: TaskResourceRequest): JValue = {
     ("Resource Name" -> taskReq.resourceName) ~
-      ("Amount" -> taskReq.amount)
+    ("Amount" -> taskReq.amount)
   }
 
   def taskResourceRequestMapToJson(m: Map[String, TaskResourceRequest]): JValue = {

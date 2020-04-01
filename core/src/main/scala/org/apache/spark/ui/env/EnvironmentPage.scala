@@ -157,11 +157,11 @@ private[ui] class EnvironmentPage(
     UIUtils.headerSparkPage(request, "Environment", content, parent)
   }
 
-  private def resourceProfileHeader = Seq("Resource Profile ID", "Resource Profile Contents")
+  private def resourceProfileHeader = Seq("Resource Profile Id", "Resource Profile Contents")
   private def propertyHeader = Seq("Name", "Value")
   private def classPathHeader = Seq("Resource", "Source")
   private def headerClasses = Seq("sorttable_alpha", "sorttable_alpha")
-  private def headerClassesNoSortValues = Seq("sorttable_alpha", "sorttable_nosort")
+  private def headerClassesNoSortValues = Seq("sorttable_numeric", "sorttable_nosort")
 
   private def jvmRowDataPre(kv: (String, String)) =
     <tr><td>{kv._1}</td><td><pre>{kv._2}</pre></td></tr>
