@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
@@ -1756,6 +1757,7 @@ package object config {
     ConfigBuilder("spark.scheduler.mode")
       .version("0.8.0")
       .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
       .createWithDefault(SchedulingMode.FIFO.toString)
 
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
