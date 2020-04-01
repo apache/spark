@@ -198,8 +198,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val testResult = ChiSquareTest
-      .testChiSquare(dataset, getFeaturesCol, getLabelCol)
+    val testResult = ChiSquareTest.testChiSquare(dataset, getFeaturesCol, getLabelCol)
       .zipWithIndex
     val features = $(selectorType) match {
       case "numTopFeatures" =>
