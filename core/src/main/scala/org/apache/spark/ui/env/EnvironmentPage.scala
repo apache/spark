@@ -66,9 +66,8 @@ private[ui] class EnvironmentPage(
     }.toMap
 
     val resourceProfileInformationTable = UIUtils.listingTable(resourceProfileHeader,
-      jvmRowDataPre, resourceProfileInfo.toSeq.sorted, fixedWidth = true,
-      headerClasses = headerClassesNoSortValues)
-
+      jvmRowDataPre, resourceProfileInfo.toSeq.sortWith(_._1.toInt < _._1.toInt),
+      fixedWidth = true, headerClasses = headerClassesNoSortValues)
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true,
       headerClasses = headerClasses)
