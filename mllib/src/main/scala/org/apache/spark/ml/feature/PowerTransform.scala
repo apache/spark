@@ -182,7 +182,7 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
       }.collect().sortBy(_._1).map(_._2)
 
     val lambda = Vectors.dense(solutions)
-   copyValues(new PowerTransformModel(uid, lambda.compressed).setParent(this))
+    copyValues(new PowerTransformModel(uid, lambda.compressed).setParent(this))
   }
 
   override def copy(extra: ParamMap): PowerTransform = defaultCopy(extra)
