@@ -2494,7 +2494,7 @@ class RDD(object):
         It will result in new executors with the resources specified being acquired to
         calculate the RDD.
 
-        .. versionadded:: 3.0.0
+        .. versionadded:: 3.1.0
         """
         self.has_resourceProfile = True
         self._jrdd.withResources(profile._jResourceProfile)
@@ -2507,7 +2507,7 @@ class RDD(object):
         Get the ResourceProfile specified with this RDD or None if it wasn't specified.
         :return: the user specified ResourceProfile or null if none was specified
 
-        .. versionadded:: 3.0.0
+        .. versionadded:: 3.1.0
         """
         return ResourceProfile(self._jrdd.getResourceProfile())
 
