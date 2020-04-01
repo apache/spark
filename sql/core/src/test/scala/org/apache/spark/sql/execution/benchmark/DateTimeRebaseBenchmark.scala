@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import java.io.File
 import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneOffset}
 
 import org.apache.spark.benchmark.Benchmark
@@ -91,68 +92,116 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def benchmarkInputs(benchmark: Benchmark, rowsNum: Int, dateTime: String): Unit = {
+    benchmark.addCase("after 1582, noop", 1) { _ =>
+      genDF(rowsNum, dateTime, after1582 = true).noop()
+    }
+    benchmark.addCase("before 1582, noop", 1) { _ =>
+      genDF(rowsNum, dateTime, after1582 = false).noop()
+    }
+  }
+
+  private def flagToStr(flag: Boolean): String = {
+    if (flag) "on" else "off"
+  }
+
+  private def caseName(
+      after1582: Boolean,
+      rebase: Option[Boolean] = None,
+      vec: Option[Boolean] = None): String = {
+    val period = if (after1582) "after" else "before"
+    val vecFlag = vec.map(flagToStr).map(flag => s", vec $flag").getOrElse("")
+    val rebaseFlag = rebase.map(flagToStr).map(flag => s", rebase $flag").getOrElse("")
+    s"$period 1582$vecFlag$rebaseFlag"
+  }
+
+  private def getPath(
+      basePath: File,
+      dateTime: String,
+      after1582: Boolean,
+      rebase: Option[Boolean] = None): String = {
+    val period = if (after1582) "after" else "before"
+    val rebaseFlag = rebase.map(flagToStr).map(flag => s"_$flag").getOrElse("")
+    basePath.getAbsolutePath + s"/${dateTime}_${period}_1582$rebaseFlag"
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    val rowsNum = 100000000
+
     withTempPath { path =>
       runBenchmark("Rebasing dates/timestamps in Parquet datasource") {
-        val rowsNum = 100000000
         Seq("date", "timestamp").foreach { dateTime =>
           val benchmark = new Benchmark(s"Save ${dateTime}s to parquet", rowsNum, output = output)
-          benchmark.addCase("after 1582, noop", 1) { _ =>
-            genDF(rowsNum, dateTime, after1582 = true).noop()
-          }
-          benchmark.addCase("before 1582, noop", 1) { _ =>
-            genDF(rowsNum, dateTime, after1582 = false).noop()
-          }
-
-          def save(after1582: Boolean, rebase: Boolean): Unit = {
-            val period = if (after1582) "after" else "before"
-            val rebaseFlag = if (rebase) "on" else "off"
-            val caseName = s"$period 1582, rebase $rebaseFlag"
-            benchmark.addCase(caseName, 1) { _ =>
-              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> rebase.toString) {
-                val df = genDF(rowsNum, dateTime, after1582)
-                val pathToWrite = path.getAbsolutePath + s"/${dateTime}_${period}_1582_$rebaseFlag"
-                df.write
-                  .mode("overwrite")
-                  .format("parquet")
-                  .save(pathToWrite)
-              }
-            }
-          }
-
+          benchmarkInputs(benchmark, rowsNum, dateTime)
           Seq(true, false).foreach { after1582 =>
             Seq(false, true).foreach { rebase =>
-              save(after1582, rebase)
+              benchmark.addCase(caseName(after1582, Some(rebase)), 1) { _ =>
+                withSQLConf(
+                  SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> rebase.toString) {
+                  genDF(rowsNum, dateTime, after1582)
+                    .write
+                    .mode("overwrite")
+                    .format("parquet")
+                    .save(getPath(path, dateTime, after1582, Some(rebase)))
+                }
+              }
             }
           }
           benchmark.run()
 
           val benchmark2 = new Benchmark(
             s"Load ${dateTime}s from parquet", rowsNum, output = output)
-
-          def load(after1582: Boolean, vec: Boolean, rebase: Boolean): Unit = {
-            val period = if (after1582) "after" else "before"
-            val rebaseFlag = if (rebase) "on" else "off"
-            val vecFlag = if (vec) "on" else "off"
-            val caseName = s"$period 1582, vec $vecFlag, rebase $rebaseFlag"
-            benchmark2.addCase(caseName, 3) { _ =>
-              withSQLConf(
-                SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vec.toString,
-                SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
-                val pathToRead = path.getAbsolutePath + s"/${dateTime}_${period}_1582_$rebaseFlag"
-                spark.read.format("parquet").load(pathToRead).noop()
-              }
-            }
-          }
-
           Seq(true, false).foreach { after1582 =>
             Seq(false, true).foreach { vec =>
               Seq(false, true).foreach { rebase =>
-                load(after1582, vec, rebase)
+                benchmark2.addCase(caseName(after1582, Some(rebase), Some(vec)), 3) { _ =>
+                  withSQLConf(
+                    SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vec.toString,
+                    SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+                    spark.read
+                      .format("parquet")
+                      .load(getPath(path, dateTime, after1582, Some(rebase)))
+                      .noop()
+                  }
+                }
               }
             }
           }
+          benchmark2.run()
+        }
+      }
+    }
 
+    withTempPath { path =>
+      runBenchmark("Rebasing dates/timestamps in ORC datasource") {
+        Seq("date", "timestamp").foreach { dateTime =>
+          val benchmark = new Benchmark(s"Save ${dateTime}s to ORC", rowsNum, output = output)
+          benchmarkInputs(benchmark, rowsNum, dateTime)
+          Seq(true, false).foreach { after1582 =>
+            benchmark.addCase(caseName(after1582), 1) { _ =>
+              genDF(rowsNum, dateTime, after1582)
+                .write
+                .mode("overwrite")
+                .format("orc")
+                .save(getPath(path, dateTime, after1582))
+            }
+          }
+          benchmark.run()
+
+          val benchmark2 = new Benchmark(s"Load ${dateTime}s from ORC", rowsNum, output = output)
+          Seq(true, false).foreach { after1582 =>
+            Seq(false, true).foreach { vec =>
+              benchmark2.addCase(caseName(after1582, vec = Some(vec)), 3) { _ =>
+                withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vec.toString) {
+                  spark
+                    .read
+                    .format("orc")
+                    .load(getPath(path, dateTime, after1582))
+                    .noop()
+                }
+              }
+            }
+          }
           benchmark2.run()
         }
       }
