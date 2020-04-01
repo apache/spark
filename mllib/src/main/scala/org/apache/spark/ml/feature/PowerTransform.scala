@@ -47,11 +47,13 @@ private[feature] trait PowerTransformParams extends Params with HasInputCol with
    *
    * @group param
    */
+  @Since("3.1.0")
   final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
     "which is a string (case-sensitive). Supported options: yeo-johnson (default), and box-cox.",
     ParamValidators.inArray[String](PowerTransform.supportedModelTypes))
 
   /** @group getParam */
+  @Since("3.1.0")
   final def getModelType: String = $(modelType)
 
   setDefault(modelType -> PowerTransform.YeoJohnson)
@@ -62,11 +64,13 @@ private[feature] trait PowerTransformParams extends Params with HasInputCol with
    * Default: 100,000.
    * @group expertParam
    */
+  @Since("3.1.0")
   val numBins: IntParam = new IntParam(this, "numBins", "Number of bins to down-sample " +
     "the curves in statistics computation. If 0, no down-sampling will occur. Must be >= 0.",
     ParamValidators.gtEq(0))
 
   /** @group expertGetParam */
+  @Since("3.1.0")
   def getNumBins: Int = $(numBins)
 
   setDefault(numBins -> 100000)
@@ -90,25 +94,32 @@ private[feature] trait PowerTransformParams extends Params with HasInputCol with
  * positive or negative data.
  */
 @Since("3.1.0")
-class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
+class PowerTransform @Since("3.1.0")(
+    @Since("3.1.0") override val uid: String)
   extends Estimator[PowerTransformModel] with PowerTransformParams with DefaultParamsWritable {
 
   import PowerTransform._
 
+  @Since("3.1.0")
   def this() = this(Identifiable.randomUID("power_trans"))
 
   /** @group setParam */
+  @Since("3.1.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("3.1.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("3.1.0")
   def setModelType(value: String): this.type = set(modelType, value)
 
   /** @group expertSetParam */
+  @Since("3.1.0")
   def setNumBins(value: Int): this.type = set(numBins, value)
 
+  @Since("3.1.0")
   override def fit(dataset: Dataset[_]): PowerTransformModel = {
     transformSchema(dataset.schema, logging = true)
 
@@ -116,18 +127,15 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
     import spark.implicits._
 
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(inputCol))
-    lazy val numRows = dataset.count()
 
     val validateFunc = $(modelType) match {
-      case BoxCox => vec: Vector => requirePositiveValues(vec)
-      case YeoJohnson => vec: Vector => requireNonNaNValues(vec)
+      case BoxCox => vec: Vector => requirePositiveValues(vec, numFeatures)
+      case YeoJohnson => vec: Vector => requireNonNaNValues(vec, numFeatures)
     }
 
     var pairCounts = dataset
       .select($(inputCol))
       .flatMap { case Row(vector: Vector) =>
-        require(vector.size == numFeatures,
-          s"Number of features must be $numFeatures but got ${vector.size}")
         validateFunc(vector)
         vector.iterator
       }.toDF("column", "value")
@@ -135,14 +143,13 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
       .agg(count(lit(0)).as("count"))
       .sort("column", "value")
 
-    val groupSizes = if (0 < $(numBins) && $(numBins) < numRows) {
-      val localNumBins = $(numBins)
+    val groupSizes = if ($(numBins) > 0) {
       pairCounts
         .groupBy("column")
         .count()
         .as[(Int, Long)]
         .flatMap { case (col, numDistinctValues) =>
-          val groupSize = numDistinctValues / localNumBins
+          val groupSize = numDistinctValues / $(numBins)
           if (groupSize > 1) {
             Iterator.single((col, groupSize))
           } else Iterator.empty
@@ -150,7 +157,9 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
     } else Map.empty[Int, Long]
 
     if (groupSizes.nonEmpty) {
-      // make bins:
+      logInfo(s"There are too many distinct values in columns: " +
+        s"${groupSizes.keys.mkString("[", ",", "]")}, going to perform down-sampling")
+      // down-sampling is performed within partitions:
       // group pairs by key with a bounded size, using weighted average
       // as the output value, and sum of counts as the output count.
       pairCounts = pairCounts.as[(Int, Double, Long)]
@@ -183,8 +192,10 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
     copyValues(new PowerTransformModel(uid, lambda.compressed).setParent(this))
   }
 
+  @Since("3.1.0")
   override def copy(extra: ParamMap): PowerTransform = defaultCopy(extra)
 
+  @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
@@ -194,6 +205,7 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
 @Since("3.1.0")
 object PowerTransform extends DefaultParamsReadable[PowerTransform] {
 
+  @Since("3.1.0")
   override def load(path: String): PowerTransform = super.load(path)
 
   /** String name for Box-Cox transform model type. */
@@ -305,7 +317,9 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
     brentSolve(obj)
   }
 
-  private[feature] def requirePositiveValues(v: Vector): Unit = {
+  private[feature] def requirePositiveValues(v: Vector, n: Int): Unit = {
+    require(v.size == n, s"Number of features must be $n but got ${v.size}")
+
     val values = v match {
       case sv: SparseVector =>
         require(sv.size == sv.numActives,
@@ -318,7 +332,9 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
       s"PowerTransform by Box-Cox method requires positive feature values but got $v.")
   }
 
-  private[feature] def requireNonNaNValues(v: Vector): Unit = {
+  private[feature] def requireNonNaNValues(v: Vector, n: Int): Unit = {
+    require(v.size == n, s"Number of features must be $n but got ${v.size}")
+
     val values = v match {
       case sv: SparseVector => sv.values
       case dv: DenseVector => dv.values
@@ -337,36 +353,41 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
  */
 @Since("3.1.0")
 class PowerTransformModel private[ml](
-    override val uid: String,
-    val lambda: Vector)
+    @Since("3.1.0") override val uid: String,
+    @Since("3.1.0") val lambda: Vector)
   extends Model[PowerTransformModel] with PowerTransformParams with MLWritable {
 
   import PowerTransform._
   import PowerTransformModel._
 
+  @Since("3.1.0")
   val numFeatures: Int = lambda.size
 
   /** @group setParam */
+  @Since("3.1.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("3.1.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("3.1.0")
   override def copy(extra: ParamMap): PowerTransformModel = {
     val copied = new PowerTransformModel(uid, lambda)
     copyValues(copied, extra).setParent(parent)
   }
 
+  @Since("3.1.0")
   override def write: MLWriter = new PowerTransformModelWriter(this)
 
+  @Since("3.1.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val transformer = $(modelType) match {
       case BoxCox =>
         udf { vector: Vector =>
-          require(vector.size == numFeatures)
-          requirePositiveValues(vector)
+          requirePositiveValues(vector, numFeatures)
           val localLambda = lambda
           val transformed = Array.tabulate(numFeatures) { i =>
             boxCoxTransform(vector(i), localLambda(i))
@@ -376,8 +397,7 @@ class PowerTransformModel private[ml](
 
       case YeoJohnson =>
         udf { vector: Vector =>
-          require(vector.size == numFeatures)
-          requireNonNaNValues(vector)
+          requireNonNaNValues(vector, numFeatures)
           val localLambda = lambda
           val transformed = Array.tabulate(numFeatures) { i =>
             yeoJohnsonTransform(vector(i), localLambda(i))
@@ -464,7 +484,9 @@ object PowerTransformModel extends MLReadable[PowerTransformModel] {
     }
   }
 
+  @Since("3.1.0")
   override def read: MLReader[PowerTransformModel] = new PowerTransformModelReader
 
+  @Since("3.1.0")
   override def load(path: String): PowerTransformModel = super.load(path)
 }
