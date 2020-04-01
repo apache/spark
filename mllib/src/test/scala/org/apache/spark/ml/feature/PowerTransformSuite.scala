@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import scala.util.Random
+
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
@@ -28,8 +30,11 @@ class PowerTransformSuite extends MLTest with DefaultReadWriteTest {
   import testImplicits._
 
   @transient var data: Array[Vector] = _
+  @transient var dataWithNoise: Array[Vector] = _
   @transient var resWithYeoJohnson: Array[Vector] = _
   @transient var resWithBoxCox: Array[Vector] = _
+
+  private val seed = 42L
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -39,6 +44,15 @@ class PowerTransformSuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(0.94293279, 1.60960836, 0.3879099),
       Vectors.dense(1.35235668, 0.21715673, 1.09977091)
     )
+
+    val rng = new Random(seed)
+    dataWithNoise = data.flatMap { vector =>
+      val values = vector.toArray
+      Iterator.tabulate(1000) { i =>
+        val valuesWithNoise = values.map { v => v + rng.nextGaussian * 1e-6 }
+        Vectors.dense(valuesWithNoise)
+      }
+    }
 
     resWithYeoJohnson = Array(
       Vectors.dense(1.88609649e+02, 1.64321816e+00, 1.26875990e+00),
@@ -133,6 +147,36 @@ class PowerTransformSuite extends MLTest with DefaultReadWriteTest {
 
     testTransformer[(Vector, Vector)](df, ptm, "transformed", "expected")(
       assertResult)
+  }
+
+  test("Yeo-Johnson with down-sampling") {
+    val df = dataWithNoise.map(Tuple1.apply).toSeq.toDF("features")
+    val pt = new PowerTransform()
+      .setInputCol("features")
+      .setOutputCol("transformed")
+      .setModelType("yeo-johnson")
+
+    val ptm = pt.fit(df)
+    assert(ptm.lambda ~== Vectors.dense(9.00955644, 1.72211468, 2.16092368) relTol 1e-5)
+
+    pt.setNumBins(100)
+    val ptm2 = pt.fit(df)
+    assert(ptm.lambda ~== ptm2.lambda relTol 1e-2)
+  }
+
+  test("Box-Cox with down-sampling") {
+    val df = dataWithNoise.map(Tuple1.apply).toSeq.toDF("features")
+    val pt = new PowerTransform()
+      .setInputCol("features")
+      .setOutputCol("transformed")
+      .setModelType("box-cox")
+
+    val ptm = pt.fit(df)
+    assert(ptm.lambda ~== Vectors.dense(4.92011835, 0.86296595, 1.15354434) relTol 1e-5)
+
+    pt.setNumBins(100)
+    val ptm2 = pt.fit(df)
+    assert(ptm.lambda ~== ptm2.lambda relTol 1e-2)
   }
 
   test("PowerTransform read/write") {

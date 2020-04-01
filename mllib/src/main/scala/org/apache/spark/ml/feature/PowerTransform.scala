@@ -143,7 +143,7 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
         .as[(Int, Long)]
         .flatMap { case (col, num) =>
           val group = num / localNumBins
-          if (group >= 2) {
+          if (group > 1) {
             Some((col, group))
           } else {
             None
