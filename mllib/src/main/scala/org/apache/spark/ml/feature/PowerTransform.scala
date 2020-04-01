@@ -115,9 +115,8 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
     val spark = dataset.sparkSession
     import spark.implicits._
 
-    val localModelType = $(modelType)
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(inputCol))
-    val numRows = dataset.count()
+    lazy val numRows = dataset.count()
 
     val validateFunc = $(modelType) match {
       case BoxCox => vec: Vector => requirePositiveValues(vec)
@@ -171,7 +170,7 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
       .as[(Int, Seq[(Double, Long)])]
       .map { case (col, seq) =>
         val computeIter = () => seq.iterator
-        val (solution, _) = localModelType match {
+        val (solution, _) = $(modelType) match {
           case BoxCox =>
             solveBoxCox(computeIter)
           case YeoJohnson =>
