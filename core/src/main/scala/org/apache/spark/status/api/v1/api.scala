@@ -372,12 +372,15 @@ class AccumulableInfo private[spark](
 class VersionInfo private[spark](
   val spark: String)
 
+// Note the resourceProfiles information are only added here on return from the
+// REST call, they are not stored with it.
 class ApplicationEnvironmentInfo private[spark] (
     val runtime: RuntimeInfo,
     val sparkProperties: Seq[(String, String)],
     val hadoopProperties: Seq[(String, String)],
     val systemProperties: Seq[(String, String)],
-    val classpathEntries: Seq[(String, String)])
+    val classpathEntries: Seq[(String, String)],
+    val resourceProfiles: Seq[ResourceProfileInfo])
 
 class ApplicationEnvironmentWithResourceProfileInfo private[spark] (
     val runtime: RuntimeInfo,

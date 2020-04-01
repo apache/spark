@@ -86,17 +86,6 @@ private[ui] class EnvironmentPage(
       headerClasses = headerClasses)
     val content =
       <span>
-        <span class="collapse-aggregated-execResourceProfileInformation collapse-table"
-              onClick="collapseTable('collapse-aggregated-execResourceProfileInformation',
-            'aggregated-execResourceProfileInformation')">
-          <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
-            <a>Resource Profiles</a>
-          </h4>
-        </span>
-        <div class="aggregated-execResourceProfileInformation collapsible-table">
-          {resourceProfileInformationTable}
-        </div>
         <span class="collapse-aggregated-runtimeInformation collapse-table"
             onClick="collapseTable('collapse-aggregated-runtimeInformation',
             'aggregated-runtimeInformation')">
@@ -118,6 +107,17 @@ private[ui] class EnvironmentPage(
         </span>
         <div class="aggregated-sparkProperties collapsible-table">
           {sparkPropertiesTable}
+        </div>
+        <span class="collapse-aggregated-execResourceProfileInformation collapse-table"
+              onClick="collapseTable('collapse-aggregated-execResourceProfileInformation',
+            'aggregated-execResourceProfileInformation')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Resource Profiles</a>
+          </h4>
+        </span>
+        <div class="aggregated-execResourceProfileInformation collapsible-table">
+          {resourceProfileInformationTable}
         </div>
         <span class="collapse-aggregated-hadoopProperties collapse-table"
               onClick="collapseTable('collapse-aggregated-hadoopProperties',
