@@ -136,7 +136,7 @@ class PowerTransform @Since("3.1.0")(@Since("3.1.0") override val uid: String)
       .agg(count(lit(0)).as("count"))
       .sort("column", "value")
 
-    val groupSizes = if (0 < $(numBins) && $(numBins) <= numRows) {
+    val groupSizes = if (0 < $(numBins) && $(numBins) < numRows) {
       val localNumBins = $(numBins)
       pairCounts
         .groupBy("column")
