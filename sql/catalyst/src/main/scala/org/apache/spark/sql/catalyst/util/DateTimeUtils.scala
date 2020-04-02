@@ -1033,7 +1033,13 @@ object DateTimeUtils {
       cal.get(Calendar.SECOND),
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
       .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
-    instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
+    val zonedDateTime = localDateTime.atZone(ZoneId.systemDefault)
+    val adjustedZdt = if (cal.get(Calendar.DST_OFFSET) == 0) {
+      zonedDateTime.withLaterOffsetAtOverlap()
+    } else {
+      zonedDateTime
+    }
+    instantToMicros(adjustedZdt.toInstant)
   }
 
   /**
