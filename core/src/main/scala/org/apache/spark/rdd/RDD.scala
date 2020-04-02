@@ -1726,12 +1726,12 @@ abstract class RDD[T: ClassTag](
 
   /**
    * :: Experimental ::
-   * Marks an RDD's shuffles and it's non-persisted ancestors as no longer needed.
-   * This cleans up shuffle files aggressively to allow nodes to be terminated.
-   * If the RDD will still be used downstream checkpoint and materialize it first.
-   * If you are uncertain of what you are doing please do not use this feature.
+   * Removes an RDD's shuffles and it's non-persisted ancestors.
+   * When running without a shuffle service, cleaning up shuffle files enables downscaling.
+   * If you use the RDD after this call, you should checkpoint and materialize it first.
+   * If you are uncertain of what you are doing, please do not use this feature.
    * Additional techniques for mitigating orphaned shuffle files:
-   *   * Tuning the driver GC to be more aggressive so the regular context cleaner is triggered
+   *   * Tuning the driver GC to be more aggressive, so the regular context cleaner is triggered
    *   * Setting an appropriate TTL for shuffle files to be auto cleaned
    */
   @Experimental
