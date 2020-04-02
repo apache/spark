@@ -65,7 +65,7 @@ A user-defined function. To create one, use the `udf` functions in `functions`.
 
 ### UDFRegistration
 
-Functions for registering user-defined functions. Use `SparkSession.udf` to access this: `spark.udf`
+Functions for registering user-defined functions. Use `SparkSession.udf` to access this.
 
 <dl>
   <dt><code><em>register(name: String, udf: UserDefinedFunction): UserDefinedFunction</em></code></dt>

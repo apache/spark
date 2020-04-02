@@ -35,7 +35,7 @@ A base class for user-defined aggregations, which can be used in Dataset operati
 <dl>
   <dt><code><em>bufferEncoder: Encoder[BUF]</em></code></dt>
   <dd>
-    Register a deterministic Java UDF(0-22) instance as user-defined function (UDF).
+    Specifies the Encoder for the intermediate value type.
   </dd>
 </dl>
 
@@ -64,20 +64,20 @@ A base class for user-defined aggregations, which can be used in Dataset operati
 <dl>
   <dt><code><em>reduce(b: BUF, a: IN): BUF</em></code></dt>
   <dd>
-    Combine two values to produce a new aggregated value. For performance, the function may modify <code>b</code> and return it instead of constructing new object for <code>b</code>.
+     Aggregate input value <code>a</code> into current intermediate value. For performance, the function may modify <code>b</code> and return it instead of constructing new object for <code>b</code>.
   </dd>
 </dl>
 
 <dl>
   <dt><code><em>zero: BUF</em></code></dt>
   <dd>
-    A zero value for this aggregation.
+    The initial value of the intermediate result for this aggregation.
   </dd>
 </dl>
 
 ### UDFRegistration
 
-Functions for registering user-defined functions. Use `SparkSession.udf` to access this: `spark.udf`
+Functions for registering user-defined functions. Use `SparkSession.udf` to access this.
 
 <dl>
   <dt><code><em>register(name: String, udf: UserDefinedFunction): UserDefinedFunction</em></code></dt>
