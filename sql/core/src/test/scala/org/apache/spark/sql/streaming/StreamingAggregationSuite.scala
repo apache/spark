@@ -185,7 +185,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
-  testWithAllStateVersions("state metrics - append mode") {
+  (1 to 50).foreach { i =>
+  testWithAllStateVersions(s"trial $i: state metrics - append mode") {
     val inputData = MemoryStream[Int]
     val aggWithWatermark = inputData.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
@@ -215,8 +216,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val clock = new StreamManualClock()
 
     testStream(aggWithWatermark)(
-      AddData(inputData, 15),
       StartStream(Trigger.ProcessingTime("interval 1 second"), clock),
+      AddData(inputData, 15),
       AdvanceManualClock(1000L), // triggers first batch
       CheckAnswer(), // watermark = 0
       AssertOnQuery { _.stateNodes.size === 1 },
@@ -225,12 +226,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
       AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
       AddData(inputData, 10, 12, 14),
-      AdvanceManualClock(1000L), // watermark = 5, runs no-data microbatch
-      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 0 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
-      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
-      AdvanceManualClock(1000L), // runs with new data from above
+      AdvanceManualClock(1000L), // watermark = 5, runs with the just added data
       CheckAnswer(), // watermark = 5
       AssertOnQuery { _.stateNodes.size === 1 },
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
@@ -257,6 +253,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
       AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 1 }
     )
+  }
   }
 
   testWithAllStateVersions("state metrics - update/complete mode") {
