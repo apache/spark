@@ -186,11 +186,13 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       var numSkewedLeft = 0
       var numSkewedRight = 0
       for (partitionIndex <- 0 until numPartitions) {
-        val isLeftSkew = isSkewed(leftActualSizes(partitionIndex), leftMedSize) && canSplitLeft
+        val leftActualSize = leftActualSizes(partitionIndex)
+        val isLeftSkew = isSkewed(leftActualSize, leftMedSize) && canSplitLeft
         val leftPartSpec = left.partitionsWithSizes(partitionIndex)._1
         val isLeftCoalesced = leftPartSpec.startReducerIndex + 1 < leftPartSpec.endReducerIndex
 
-        val isRightSkew = isSkewed(rightActualSizes(partitionIndex), rightMedSize) && canSplitRight
+        val rightActualSize = rightActualSizes(partitionIndex)
+        val isRightSkew = isSkewed(rightActualSize, rightMedSize) && canSplitRight
         val rightPartSpec = right.partitionsWithSizes(partitionIndex)._1
         val isRightCoalesced = rightPartSpec.startReducerIndex + 1 < rightPartSpec.endReducerIndex
 
@@ -200,8 +202,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           val skewSpecs = createSkewPartitionSpecs(
             left.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, leftTargetSize)
           if (skewSpecs.isDefined) {
-            val sizeStr = FileUtils.byteCountToDisplaySize(leftActualSizes(partitionIndex))
-            logDebug(s"Left side partition $partitionIndex ($sizeStr) is skewed, " +
+            logDebug(s"Left side partition $partitionIndex " +
+              s"(${FileUtils.byteCountToDisplaySize(leftActualSize)}) is skewed, " +
               s"split it into ${skewSpecs.get.length} parts.")
             numSkewedLeft += 1
           }
@@ -216,8 +218,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           val skewSpecs = createSkewPartitionSpecs(
             right.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, rightTargetSize)
           if (skewSpecs.isDefined) {
-            val sizeStr = FileUtils.byteCountToDisplaySize(rightActualSizes(partitionIndex))
-            logDebug(s"Right side partition $partitionIndex ($sizeStr) is skewed, " +
+            logDebug(s"Right side partition $partitionIndex " +
+              s"(${FileUtils.byteCountToDisplaySize(rightActualSize)}) is skewed, " +
               s"split it into ${skewSpecs.get.length} parts.")
             numSkewedRight += 1
           }

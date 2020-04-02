@@ -36,6 +36,11 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 case class CustomShuffleReaderExec private(
     child: SparkPlan,
     partitionSpecs: Seq[ShufflePartitionSpec]) extends UnaryExecNode {
+  // If this reader is to read shuffle files locally, then all partition specs should be
+  // `PartialMapperPartitionSpec`.
+  if (partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec])) {
+    assert(partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]))
+  }
 
   override def output: Seq[Attribute] = child.output
   override lazy val outputPartitioning: Partitioning = {
@@ -76,29 +81,21 @@ case class CustomShuffleReaderExec private(
     Iterator(desc)
   }
 
-  def hasCoalescedPartition: Boolean = {
+  def hasCoalescedPartition: Boolean =
     partitionSpecs.exists(_.isInstanceOf[CoalescedPartitionSpec])
-  }
 
-  def hasSkewedPartition: Boolean = {
+  def hasSkewedPartition: Boolean =
     partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec])
-  }
 
-  def isLocalReader: Boolean = {
-    if (partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec])) {
-      assert(partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]))
-      true
-    } else {
-      false
-    }
-  }
+  def isLocalReader: Boolean =
+    partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec])
 
   private def shuffleStage = child match {
     case stage: ShuffleQueryStageExec => Some(stage)
     case _ => None
   }
 
-  private lazy val partitionDataSizeMetrics = {
+  private def partitionDataSizeMetrics = {
     val maxSize = SQLMetrics.createSizeMetric(sparkContext, "maximum partition data size")
     val minSize = SQLMetrics.createSizeMetric(sparkContext, "minimum partition data size")
     val avgSize = SQLMetrics.createSizeMetric(sparkContext, "average partition data size")
@@ -118,7 +115,7 @@ case class CustomShuffleReaderExec private(
       "avgPartitionDataSize" -> avgSize)
   }
 
-  private lazy val skewedPartitionMetrics = {
+  private def skewedPartitionMetrics = {
     val metrics = SQLMetrics.createMetric(sparkContext, "number of skewed partitions")
     val numSkewedPartitions = partitionSpecs.collect {
       case p: PartialReducerPartitionSpec => p.reducerIndex
@@ -127,7 +124,7 @@ case class CustomShuffleReaderExec private(
     Map("numSkewedPartitions" -> metrics)
   }
 
-  override lazy val metrics: Map[String, SQLMetric] = {
+  @transient override lazy val metrics: Map[String, SQLMetric] = {
     if (shuffleStage.isDefined) {
       val numPartitions = SQLMetrics.createMetric(sparkContext, "number of partitions")
       numPartitions.set(partitionSpecs.length)
