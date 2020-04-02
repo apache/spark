@@ -226,7 +226,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
       AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
       AddData(inputData, 10, 12, 14),
-      AdvanceManualClock(1000L), // watermark = 5, runs with the just added data
+      AdvanceManualClock(1000L), // watermark = 0, runs with the just added data
       CheckAnswer(), // watermark = 5
       AssertOnQuery { _.stateNodes.size === 1 },
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
