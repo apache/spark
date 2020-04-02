@@ -132,6 +132,7 @@ case class ScriptTransformationExec(
         lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
 
         private def checkFailureAndPropagate(cause: Throwable = null): Unit = {
+          proc.waitFor()
           if (writerThread.exception.isDefined) {
             throw writerThread.exception.get
           }

@@ -172,6 +172,28 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
+
+  test("SPARK-30973 ScriptTransformationExec should wait for the termination") {
+    (0 until 10).foreach { index =>
+      assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+      val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+
+      val e = intercept[SparkException] {
+        val plan =
+          new ScriptTransformationExec(
+            input = Seq(rowsDf.col("a").expr),
+            script = "some_non_existent_command",
+            output = Seq(AttributeReference("a", StringType)()),
+            child = rowsDf.queryExecution.sparkPlan,
+            ioschema = noSerdeIOSchema)
+        SparkPlanTest.executePlan(plan, hiveContext)
+      }
+      assert(e.getMessage.contains("Subprocess exited with status"))
+      assert(uncaughtExceptionHandler.exception.isEmpty)
+    }
+  }
+
   test("SPARK-24339 verify the result after pruning the unused columns") {
     val rowsDf = Seq(
       ("Bob", 16, 176),
