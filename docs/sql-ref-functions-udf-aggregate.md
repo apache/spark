@@ -23,7 +23,7 @@ license: |
 
 User-Defined Aggregate Functions (UDAFs) are user-programmable routines that act on multiple rows at once and return a single aggregated value as a result. This documentation lists the classes that are required for creating and registering UDAFs. It also contains examples that demonstrate how to define and register UDAFs in Scala and invoke them in Spark SQL.
 
-### org.apache.spark.sql.expressions.Aggregator[-IN, BUF, OUT]
+### Aggregator[-IN, BUF, OUT]
 
 A base class for user-defined aggregations, which can be used in Dataset operations to take all of the elements of a group and reduce them to a single value.
 - IN The input type for the aggregation.
@@ -64,7 +64,7 @@ A base class for user-defined aggregations, which can be used in Dataset operati
 <dl>
   <dt><code><em>reduce(b: BUF, a: IN): BUF</em></code></dt>
   <dd>
-    Combine two values to produce a new value. For performance, the function may modify b and return it instead of constructing new object for b.
+    Combine two values to produce a new aggregated value. For performance, the function may modify <code>b</code> and return it instead of constructing new object for <code>b</code>.
   </dd>
 </dl>
 
@@ -75,7 +75,7 @@ A base class for user-defined aggregations, which can be used in Dataset operati
   </dd>
 </dl>
 
-### org.apache.spark.sql.UDFRegistration
+### UDFRegistration
 
 Functions for registering user-defined functions. Use `SparkSession.udf` to access this: `spark.udf`
 
@@ -118,8 +118,7 @@ val df = Seq(
 
 df.createOrReplaceTempView("testUDAF")
 
--- SQL
-SELECT agg(a, b) FROM testUDAF;
+sql("SELECT agg(a, b) FROM testUDAF").show()
 
 +---------------------------------------------+
 |$anon$2(CAST(a AS BIGINT), CAST(b AS BIGINT))|
