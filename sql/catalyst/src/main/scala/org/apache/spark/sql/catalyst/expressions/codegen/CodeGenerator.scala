@@ -1318,9 +1318,11 @@ object CodeGenerator extends Logging {
   // log for easy analysis and view.
   private val _compileTime = new LongAccumulator
 
+  // Returns the total compile time of Java source code in nanoseconds.
   // Visible for testing
   def compileTime: Long = _compileTime.sum
 
+  // Reset compile time.
   // Visible for testing
   def resetCompileTime: Unit = _compileTime.reset()
 
