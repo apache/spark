@@ -141,7 +141,7 @@ private[spark] class TaskSchedulerImpl(
   private val schedulingModeConf = conf.get(SCHEDULER_MODE)
   val schedulingMode: SchedulingMode =
     try {
-      SchedulingMode.withName(schedulingModeConf.toUpperCase(Locale.ROOT))
+      SchedulingMode.withName(schedulingModeConf)
     } catch {
       case e: java.util.NoSuchElementException =>
         throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
@@ -487,7 +487,7 @@ private[spark] class TaskSchedulerImpl(
         newExecAvail = true
       }
     }
-    val hosts = offers.map(_.host).toSet.toSeq
+    val hosts = offers.map(_.host).distinct
     for ((host, Some(rack)) <- hosts.zip(getRacksForHosts(hosts))) {
       hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += host
     }

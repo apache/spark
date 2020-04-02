@@ -166,7 +166,12 @@ private[ui] class SparkPlanGraphNode(
       metric <- metrics
       value <- metricsValue.get(metric.accumulatorId)
     } yield {
-      metric.name + ": " + value
+      // The value may contain ":" to extend the name, like `total (min, med, max): ...`
+      if (value.contains(":")) {
+        metric.name + " " + value
+      } else {
+        metric.name + ": " + value
+      }
     }
 
     if (values.nonEmpty) {

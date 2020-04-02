@@ -154,11 +154,14 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       expected.foreach { case (id, value) =>
         // The values in actual can be SQL metrics meaning that they contain additional formatting
         // when converted to string. Verify that they start with the expected value.
-        // TODO: this is brittle. There is no requirement that the actual string needs to start
-        // with the accumulator value.
         assert(actual.contains(id))
         val v = actual(id).trim
-        assert(v.startsWith(value.toString), s"Wrong value for accumulator $id")
+        if (v.contains("\n")) {
+          // The actual value can be "total (max, ...)\n6 ms (5 ms, ...)".
+          assert(v.split("\n")(1).startsWith(value.toString), s"Wrong value for accumulator $id")
+        } else {
+          assert(v.startsWith(value.toString), s"Wrong value for accumulator $id")
+        }
       }
     }
 
