@@ -861,7 +861,7 @@ class AdaptiveQueryExecSuite
         }
       }
       spark.sparkContext.addSparkListener(listener)
-      withSQLConf(SQLConf.QUERY_DESCRIPTION_MODE_IN_LISTENERS.key -> mode,
+      withSQLConf(SQLConf.UI_EXPLAIN_MODE.key -> mode,
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
         val dfApdaptive = sql("SELECT * FROM testData join testData2 ON key = a where value = '1'")

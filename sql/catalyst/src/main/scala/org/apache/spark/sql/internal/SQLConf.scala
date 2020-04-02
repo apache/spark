@@ -2335,8 +2335,8 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val QUERY_DESCRIPTION_MODE_IN_LISTENERS = buildConf("spark.sql.queryDescriptionModeInListeners")
-    .doc("Configures the query explain mode used in SQL listeners. The value can be 'simple', " +
+  val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
+    .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
       "'extended', 'codegen', 'cost', or 'formatted'. The default log level is 'formatted'.")
     .version("3.1.0")
     .stringConf
@@ -2859,7 +2859,7 @@ class SQLConf extends Serializable with Logging {
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
-  def queryDescriptionModeInListeners: String = getConf(QUERY_DESCRIPTION_MODE_IN_LISTENERS)
+  def uiExplainMode: String = getConf(UI_EXPLAIN_MODE)
 
   def addSingleFileInAddFile: Boolean = getConf(LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE)
 

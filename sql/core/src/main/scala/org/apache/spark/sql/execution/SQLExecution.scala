@@ -85,7 +85,7 @@ object SQLExecution {
         }.getOrElse(callSite.shortForm)
 
       val planDescriptionMode =
-        ExplainMode.fromString(sparkSession.sessionState.conf.queryDescriptionModeInListeners)
+        ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
 
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Throwable] = None
