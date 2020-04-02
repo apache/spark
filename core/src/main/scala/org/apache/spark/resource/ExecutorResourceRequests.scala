@@ -39,7 +39,7 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
 
   def requests: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
 
-  def requestsJMap: JMap[String, ExecutorResourceRequest] = _executorResources.asScala.asJava
+  def requestsJMap: JMap[String, ExecutorResourceRequest] = _executorResources.asScala.toMap.asJava
 
   /**
    * Specify heap memory. The value specified will be converted to MiB.
