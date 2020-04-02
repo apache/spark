@@ -361,6 +361,16 @@ def create_default_connections(session=None):
     )
     merge_conn(
         Connection(
+            conn_id="pinot_broker_default",
+            conn_type="pinot",
+            host="localhost",
+            port=9000,
+            extra='{"endpoint": "/query", "schema": "http"}',
+        ),
+        session
+    )
+    merge_conn(
+        Connection(
             conn_id="postgres_default",
             conn_type="postgres",
             login="postgres",
