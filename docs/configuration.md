@@ -2136,6 +2136,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.resource.profileMergeConflicts</code></td>
+  <td>false</td>
+  <td>
+    If set to "true", Spark will merge ResourceProfiles when different profiles are specified
+    in RDDs that get combined into a single stage. When they are merged, Spark chooses the maximum of
+    each resource and creates a new ResourceProfile. The default of false results in Spark throwing
+    an exception if multiple different ResourceProfiles are found in RDDs going into the same stage.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.scheduler.blacklist.unschedulableTaskSetTimeout</code></td>
   <td>120s</td>
   <td>
