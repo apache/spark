@@ -334,9 +334,12 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       spark.sparkContext.addSparkListener(listener)
       withSQLConf(SQLConf.UI_EXPLAIN_MODE.key -> mode) {
         createTestDataFrame.collect()
-        spark.sparkContext.listenerBus.waitUntilEmpty()
-        assert(checkDone)
-        spark.sparkContext.removeSparkListener(listener)
+        try {
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          assert(checkDone)
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
+        }
       }
     }
 
