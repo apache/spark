@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
  * An interface for those physical operators that support codegen.
@@ -567,6 +567,26 @@ object WholeStageCodegenExec {
   def isTooManyFields(conf: SQLConf, dataType: DataType): Boolean = {
     numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
   }
+
+  // The whole codegen generates java code on the driver side and sends it to the Executor side
+  // for execution after compilation. The whole codegen can bring significant performance
+  // improvements in large data and distributed environments. However, in the test environment,
+  // due to the small amount of data, the time to generate Java code takes up a major part of the
+  // entire runtime. So we summarize the total generation time and output it to the execution log
+  // for easy analysis and view.
+  private val _generateJavaTime = new LongAccumulator
+
+  // Increase the total generation time of Java source code in nanoseconds.
+  // Visible for testing
+  def incrGenerateJavaTime(time: Long): Unit = _generateJavaTime.add(time)
+
+  // Returns the total generation time of Java source code in nanoseconds.
+  // Visible for testing
+  def generateJavaTime: Long = _generateJavaTime.sum
+
+  // Reset generation time.
+  // Visible for testing
+  def resetGenerateJavaTime: Unit = _generateJavaTime.reset()
 }
 
 /**
@@ -628,6 +648,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * @return the tuple of the codegen context and the actual generated source.
    */
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
+    val startTime = System.nanoTime()
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
 
@@ -679,6 +700,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments()))
 
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
+    val duration = System.nanoTime() - startTime
+    WholeStageCodegenExec.incrGenerateJavaTime(duration)
     (ctx, cleanedSource)
   }
 
