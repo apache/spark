@@ -822,7 +822,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("rebasing overlapped timestamps during daylight saving time") {
+  test("SPARK-31328: rebasing overlapped timestamps during daylight saving time") {
     Seq(
       LA.getId -> Seq("2019-11-03T08:00:00Z", "2019-11-03T08:30:00Z", "2019-11-03T09:00:00Z"),
       "Europe/Amsterdam" ->
