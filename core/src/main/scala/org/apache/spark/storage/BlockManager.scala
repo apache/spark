@@ -1558,6 +1558,8 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Replicates a block to peer block managers based on existingReplicas and maxReplicas
+   *
    * @param blockId blockId being replicate
    * @param existingReplicas existing block managers that have a replica
    * @param maxReplicas maximum replicas needed
