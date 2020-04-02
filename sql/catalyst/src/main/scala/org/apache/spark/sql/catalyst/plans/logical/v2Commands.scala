@@ -439,7 +439,7 @@ case class ShowTables(
 /**
  * The logical plan of the SHOW VIEWS command that works for v1 and v2 catalogs.
  *
- * Notes: v2 catalogs does not support views API yet, the command will fallback to
+ * Notes: v2 catalogs do not support views API yet, the command will fallback to
  * v1 ShowViewsCommand during ResolveSessionCatalog.
  */
 case class ShowViews(

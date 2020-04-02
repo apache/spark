@@ -50,8 +50,8 @@ object HiveResult {
     // namespace and table name.
     case command : ShowTablesExec =>
       command.executeCollect().map(_.getString(1))
-    // SHOW VIEWS in Hive only output table names while our v1 command outputs
-    // namespace, table name, isTemp.
+    // SHOW VIEWS in Hive only outputs table names while our v1 command outputs
+    // namespace, table name, and isTemp.
     case command @ ExecutedCommandExec(_: ShowViewsCommand) =>
       command.executeCollect().map(_.getString(1))
     case other =>

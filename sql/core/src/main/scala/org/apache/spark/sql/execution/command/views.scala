@@ -307,7 +307,7 @@ case class ShowViewsCommand(
     databaseName: Option[String],
     tableIdentifierPattern: Option[String]) extends RunnableCommand {
 
-  // The result of SHOW VIEWS has three basic columns: database, viewName and isTemporary.
+  // The result of SHOW VIEWS has three basic columns: namespace, viewName and isTemporary.
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("viewName", StringType, nullable = false)(),
