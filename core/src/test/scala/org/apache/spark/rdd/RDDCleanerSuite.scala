@@ -64,7 +64,7 @@ class RDDCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
         val resultingFiles = getAllFiles
         assert(resultingFiles === Set())
         // Ensure running count again works fine even if we kill the shuffle files.
-        keysOnly.count()
+        assert(keysOnly.count() === 20)
       } finally {
         sc.stop()
       }
