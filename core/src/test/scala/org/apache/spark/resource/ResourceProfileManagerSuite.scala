@@ -103,7 +103,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
 
   test("ResourceProfileManager has equivalent profile") {
     val conf = new SparkConf().set(EXECUTOR_CORES, 4)
-    val rpmanager = new ResourceProfileManager(conf)
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
     var rpAlreadyExist: Option[ResourceProfile] = None
     val checkId = 500
     for (i <- 1 to 1000) {
