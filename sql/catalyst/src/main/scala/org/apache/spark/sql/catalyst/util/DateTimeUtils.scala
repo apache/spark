@@ -991,13 +991,16 @@ object DateTimeUtils {
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
-    val ldt = microsToInstant(micros).atZone(ZoneId.systemDefault).toLocalDateTime
+    val instant = microsToInstant(micros)
+    val zoneId = ZoneId.systemDefault
+    val ldt = instant.atZone(zoneId).toLocalDateTime
     val cal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
       .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
+      .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
       .build()
     millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
