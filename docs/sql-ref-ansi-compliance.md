@@ -28,7 +28,7 @@ The casting behaviours are defined as store assignment rules in the standard.
 When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules. This is a separate configuration because its default value is `ANSI`, while the configuration `spark.sql.ansi.enabled` is disabled by default.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.sql.ansi.enabled</code></td>
   <td>false</td>
@@ -37,6 +37,7 @@ When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with
     1. Spark will throw a runtime exception if an overflow occurs in any operation on integral/decimal field.
     2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in the SQL parser.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.storeAssignmentPolicy</code></td>
@@ -52,6 +53,7 @@ When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with
     With strict policy, Spark doesn't allow any possible precision loss or data truncation in type coercion,
     e.g. converting double to int or decimal to double is not allowed.
   </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
