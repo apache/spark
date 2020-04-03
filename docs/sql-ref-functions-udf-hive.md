@@ -29,28 +29,31 @@ Spark SQL supports integration of Hive UDFs, UDAFs and UDTFs. Similar to Spark U
 <pre><code>
 // Register a Hive UDF and use it in Spark SQL
 // Scala
-sql(s"CREATE TEMPORARY FUNCTION testUDF AS 'org.apache.spark.sql.hive.execution.PairUDF'")
-sql("SELECT testUDF(pair) FROM hiveUDFTestTable")
+// include the JAR file containing mytest.hiveUDF implementation
+sql("CREATE TEMPORARY FUNCTION testUDF AS 'mytest.hiveUDF'")
+sql("SELECT testUDF(value) FROM hiveUDFTestTable")
 
 // Register a Hive UDAF and use it in Spark SQL
 // Scala
+// include the JAR file containing
+// org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMax
 sql(
     """
-    |CREATE TEMPORARY FUNCTION test_avg
-    |AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage'
+      |CREATE TEMPORARY FUNCTION hive_max
+      |AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMax'
     """.stripMargin)
-sql("SELECT test_avg(1), test_avg(substr(value,5)) FROM src")
+sql("SELECT key % 2, hive_max(key) FROM t GROUP BY key % 2")
 
 // Register a Hive UDTF and use it in Spark SQL
 // Scala
 // GenericUDTFCount2 outputs the number of rows seen, twice.
 // The function source code can be found at:
 // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
-sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath}")
+// include the JAR file containing GenericUDTFCount2 implementation
 sql(
     """
-    |CREATE TEMPORARY FUNCTION udtf_count2
-    |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+      |CREATE TEMPORARY FUNCTION udtf_count2
+      |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
     """.stripMargin)
 sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a)").show
 
