@@ -568,8 +568,8 @@ object WholeStageCodegenExec {
     numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
   }
 
-  // The whole codegen generates java code on the driver side and sends it to the Executor side
-  // for execution after compilation. The whole codegen can bring significant performance
+  // The whole stage codegen generates java code on the driver side and sends it to the Executor
+  // side for execution after compilation. The whole codegen can bring significant performance
   // improvements in large data and distributed environments. However, in the test environment,
   // due to the small amount of data, the time to generate Java code takes up a major part of the
   // entire runtime. So we summarize the total generation time and output it to the execution log
