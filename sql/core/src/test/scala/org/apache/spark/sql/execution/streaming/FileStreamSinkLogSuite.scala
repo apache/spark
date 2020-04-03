@@ -251,9 +251,9 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
     withCountOpenLocalFileSystemAsLocalFileSystem {
       val scheme = CountOpenLocalFileSystem.scheme
       withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
-        withTempDir { file =>
+        withTempDir { dir =>
           val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
-            s"$scheme:///${file.getCanonicalPath}")
+            s"$scheme:///${dir.getCanonicalPath}")
           for (batchId <- 0 to 2) {
             sinkLog.add(
               batchId,
@@ -262,20 +262,24 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
           def getCountForOpenOnMetadataFile(batchId: Long): Long = {
             val path = sinkLog.batchIdToPath(batchId).toUri.getPath
-            CountOpenLocalFileSystem.pathToNumOpenCalled
-              .get(path).map(_.get()).getOrElse(0)
+            CountOpenLocalFileSystem.pathToNumOpenCalled.get(path).map(_.get()).getOrElse(0)
           }
 
-          val curCount = getCountForOpenOnMetadataFile(2)
+          CountOpenLocalFileSystem.resetCount()
 
-          assert(sinkLog.getLatestBatchId() === Some(2))
+          assert(sinkLog.getLatestBatchId() === Some(2L))
           // getLatestBatchId doesn't open the latest metadata log file
-          assert(getCountForOpenOnMetadataFile(2L) === curCount)
+          (0L to 2L).foreach { batchId =>
+            assert(getCountForOpenOnMetadataFile(batchId) === 0)
+          }
 
           assert(sinkLog.getLatest().map(_._1).getOrElse(-1L) === 2L)
+          (0L to 1L).foreach { batchId =>
+            assert(getCountForOpenOnMetadataFile(batchId) === 0)
+          }
           // getLatest opens the latest metadata log file, which explains the needs on
           // having "getLatestBatchId".
-          assert(getCountForOpenOnMetadataFile(2L) === curCount + 1)
+          assert(getCountForOpenOnMetadataFile(2L) === 1)
         }
       }
     }
@@ -342,4 +346,6 @@ class CountOpenLocalFileSystem extends RawLocalFileSystem {
 object CountOpenLocalFileSystem {
   val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt)}fs"
   val pathToNumOpenCalled = new mutable.HashMap[String, AtomicLong]
+
+  def resetCount(): Unit = pathToNumOpenCalled.clear()
 }
