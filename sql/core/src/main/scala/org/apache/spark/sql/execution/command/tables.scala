@@ -1067,7 +1067,14 @@ trait ShowCreateTableCommandBase {
     iter.mkString("(\n  ", ",\n  ", ")\n")
   }
 
-  protected def showViewDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
+  protected def showCreateView(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    showViewDataColumns(metadata, builder)
+    showTableComment(metadata, builder)
+    showViewProperties(metadata, builder)
+    showViewText(metadata, builder)
+  }
+
+  private def showViewDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.schema.nonEmpty) {
       val viewColumns = metadata.schema.map { f =>
         val comment = f.getComment()
@@ -1081,7 +1088,7 @@ trait ShowCreateTableCommandBase {
     }
   }
 
-  protected def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val viewProps = metadata.properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
     if (viewProps.nonEmpty) {
       val props = viewProps.map { case (key, value) =>
@@ -1092,7 +1099,7 @@ trait ShowCreateTableCommandBase {
     }
   }
 
-  protected def showViewText(metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showViewText(metadata: CatalogTable, builder: StringBuilder): Unit = {
     builder ++= metadata.viewText.mkString("AS ", "", "\n")
   }
 }
@@ -1156,11 +1163,7 @@ case class ShowCreateTableCommand(table: TableIdentifier)
 
       val stmt = if (tableMetadata.tableType == VIEW) {
         builder ++= s"CREATE VIEW ${table.quotedString} "
-
-        showViewDataColumns(metadata, builder)
-        showTableComment(metadata, builder)
-        showViewProperties(metadata, builder)
-        showViewText(metadata, builder)
+        showCreateView(metadata, builder)
 
         builder.toString()
       } else {
@@ -1313,10 +1316,7 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
     builder ++= s"CREATE$tableTypeString ${table.quotedString}"
 
     if (metadata.tableType == VIEW) {
-      showViewDataColumns(metadata, builder)
-      showTableComment(metadata, builder)
-      showViewProperties(metadata, builder)
-      showViewText(metadata, builder)
+      showCreateView(metadata, builder)
     } else {
       showHiveTableHeader(metadata, builder)
       showTableComment(metadata, builder)
