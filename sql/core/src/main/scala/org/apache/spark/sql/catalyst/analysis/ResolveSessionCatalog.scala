@@ -553,7 +553,7 @@ class ResolveSessionCatalog(
           if (ns.length != 1) {
             throw new AnalysisException(s"The database name is not valid: ${ns.quoted}")
           }
-          ShowViewsCommand(Some(ns.head), pattern)
+          ShowViewsCommand(ns.head, pattern)
         case _ =>
           throw new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
             "SHOW VIEWS, only SessionCatalog supports this command.")
