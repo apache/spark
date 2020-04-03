@@ -61,8 +61,10 @@ public class SparkAvroKeyOutputFormat extends AvroKeyOutputFormat<GenericRecord>
 // This a fork of org.apache.avro.mapreduce.AvroKeyRecordWriter, in order to set file metadata.
 class SparkAvroKeyRecordWriter<T> extends RecordWriter<AvroKey<T>, NullWritable>
     implements Syncable {
+
   private final DataFileWriter<T> mAvroFileWriter;
-  public SparkAvroKeyRecordWriter(
+
+  SparkAvroKeyRecordWriter(
       Schema writerSchema,
       GenericData dataModel,
       CodecFactory compressionCodec,
