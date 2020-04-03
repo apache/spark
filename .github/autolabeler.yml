@@ -37,14 +37,15 @@ docs:
 core:
   - "/core/"
 sql:
-  - "/sql/"
+  - "sql/"
 ml:
-  - "/mllib/"
-  - "/mllib-local/"
+  - "ml/"
+  - "mllib/"
+  - "mllib-local/"
 streaming:
-  - "/streaing/"
+  - "streaming/"
 python:
-  - "/python/"
+  - "python/"
 java:
   - "/common/"
   - "java/"
