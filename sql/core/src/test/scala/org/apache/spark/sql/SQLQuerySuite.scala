@@ -3493,6 +3493,46 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("(SELECT map()) UNION ALL (SELECT map(1, 2))"),
       Seq(Row(Map[Int, Int]()), Row(Map(1 -> 2))))
   }
+
+
+  test("SPARK-31334: TypeCoercion should before then ResolveAggregateFunctions") {
+    Seq(
+      (1, 3),
+      (2, 3),
+      (3, 6),
+      (4, 7),
+      (5, 9),
+      (6, 9)
+    ).toDF("a", "b").createOrReplaceTempView("testData1")
+
+    checkAnswer(sql(
+      """
+        | SELECT b, sum(a) as a
+        | FROM testData1
+        | GROUP BY b
+        | HAVING sum(a) > 3
+      """.stripMargin),
+      Row(7, 4) :: Row(9, 11) :: Nil)
+
+    Seq(
+      ("1", 3),
+      ("2", 3),
+      ("3", 6),
+      ("4", 7),
+      ("5", 9),
+      ("6", 9)
+    ).toDF("a", "b").createOrReplaceTempView("testData2")
+
+    checkAnswer(sql(
+      """
+        | SELECT b, sum(a) as a
+        | FROM testData2
+        | GROUP BY b
+        | HAVING sum(a) > 3
+      """.stripMargin),
+      Row(7, 4.0) :: Row(9, 11.0) :: Nil)
+  }
+
 }
 
 case class Foo(bar: Option[String])

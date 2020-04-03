@@ -211,44 +211,44 @@ class Analyzer(
       EliminateUnions,
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
-      ResolveTableValuedFunctions ::
-      ResolveNamespace(catalogManager) ::
-      new ResolveCatalogs(catalogManager) ::
-      ResolveInsertInto ::
-      ResolveRelations ::
-      ResolveTables ::
-      ResolveReferences ::
-      ResolveCreateNamedStruct ::
-      ResolveDeserializer ::
-      ResolveNewInstance ::
-      ResolveUpCast ::
-      ResolveGroupingAnalytics ::
-      ResolvePivot ::
-      ResolveOrdinalInOrderByAndGroupBy ::
-      ResolveAggAliasInGroupBy ::
-      ResolveMissingReferences ::
-      ExtractGenerator ::
-      ResolveGenerate ::
-      ResolveFunctions ::
-      ResolveAliases ::
-      ResolveSubquery ::
-      ResolveSubqueryColumnAliases ::
-      ResolveWindowOrder ::
-      ResolveWindowFrame ::
-      ResolveNaturalAndUsingJoin ::
-      ResolveOutputRelation ::
-      ExtractWindowExpressions ::
-      GlobalAggregates ::
-      ResolveAggregateFunctions ::
-      TimeWindowing ::
-      ResolveInlineTables(conf) ::
-      ResolveHigherOrderFunctions(v1SessionCatalog) ::
-      ResolveLambdaVariables(conf) ::
-      ResolveTimeZone(conf) ::
-      ResolveRandomSeed ::
-      ResolveBinaryArithmetic(conf) ::
-      TypeCoercion.typeCoercionRules(conf) ++
-      extendedResolutionRules : _*),
+      (ResolveTableValuedFunctions +:
+        ResolveNamespace(catalogManager) +:
+        new ResolveCatalogs(catalogManager) +:
+        ResolveInsertInto +:
+        ResolveRelations +:
+        ResolveTables +:
+        ResolveReferences +:
+        ResolveCreateNamedStruct +:
+        ResolveDeserializer +:
+        ResolveNewInstance +:
+        ResolveUpCast +:
+        ResolveGroupingAnalytics +:
+        ResolvePivot +:
+        ResolveOrdinalInOrderByAndGroupBy +:
+        ResolveAggAliasInGroupBy +:
+        ResolveMissingReferences +:
+        ExtractGenerator +:
+        ResolveGenerate +:
+        ResolveFunctions +:
+        ResolveAliases +:
+        ResolveSubquery +:
+        ResolveSubqueryColumnAliases +:
+        ResolveWindowOrder +:
+        ResolveWindowFrame +:
+        ResolveNaturalAndUsingJoin +:
+        ResolveOutputRelation +:
+        ExtractWindowExpressions +:
+        GlobalAggregates +:
+        TypeCoercion.typeCoercionRules(conf) :+
+        ResolveAggregateFunctions :+
+        TimeWindowing :+
+        ResolveInlineTables(conf) :+
+        ResolveHigherOrderFunctions(v1SessionCatalog) :+
+        ResolveLambdaVariables(conf) :+
+        ResolveTimeZone(conf) :+
+        ResolveRandomSeed :+
+        ResolveBinaryArithmetic(conf))
+        .++:(extendedResolutionRules): _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
