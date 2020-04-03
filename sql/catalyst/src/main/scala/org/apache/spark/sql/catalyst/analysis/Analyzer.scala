@@ -211,44 +211,44 @@ class Analyzer(
       EliminateUnions,
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
-      (ResolveTableValuedFunctions +:
-        ResolveNamespace(catalogManager) +:
-        new ResolveCatalogs(catalogManager) +:
-        ResolveInsertInto +:
-        ResolveRelations +:
-        ResolveTables +:
-        ResolveReferences +:
-        ResolveCreateNamedStruct +:
-        ResolveDeserializer +:
-        ResolveNewInstance +:
-        ResolveUpCast +:
-        ResolveGroupingAnalytics +:
-        ResolvePivot +:
-        ResolveOrdinalInOrderByAndGroupBy +:
-        ResolveAggAliasInGroupBy +:
-        ResolveMissingReferences +:
-        ExtractGenerator +:
-        ResolveGenerate +:
-        ResolveFunctions +:
-        ResolveAliases +:
-        ResolveSubquery +:
-        ResolveSubqueryColumnAliases +:
-        ResolveWindowOrder +:
-        ResolveWindowFrame +:
-        ResolveNaturalAndUsingJoin +:
-        ResolveOutputRelation +:
-        ExtractWindowExpressions +:
-        GlobalAggregates +:
-        TypeCoercion.typeCoercionRules(conf) :+
-        ResolveAggregateFunctions :+
-        TimeWindowing :+
-        ResolveInlineTables(conf) :+
-        ResolveHigherOrderFunctions(v1SessionCatalog) :+
-        ResolveLambdaVariables(conf) :+
-        ResolveTimeZone(conf) :+
-        ResolveRandomSeed :+
-        ResolveBinaryArithmetic(conf))
-        .++:(extendedResolutionRules): _*),
+      ResolveTableValuedFunctions ::
+        ResolveNamespace(catalogManager) ::
+        new ResolveCatalogs(catalogManager) ::
+        ResolveInsertInto ::
+        ResolveRelations ::
+        ResolveTables ::
+        ResolveReferences ::
+        ResolveCreateNamedStruct ::
+        ResolveDeserializer ::
+        ResolveNewInstance ::
+        ResolveUpCast ::
+        ResolveGroupingAnalytics ::
+        ResolvePivot ::
+        ResolveOrdinalInOrderByAndGroupBy ::
+        ResolveAggAliasInGroupBy ::
+        ResolveMissingReferences ::
+        ExtractGenerator ::
+        ResolveGenerate ::
+        ResolveFunctions ::
+        ResolveAliases ::
+        ResolveSubquery ::
+        ResolveSubqueryColumnAliases ::
+        ResolveWindowOrder ::
+        ResolveWindowFrame ::
+        ResolveNaturalAndUsingJoin ::
+        ResolveOutputRelation ::
+        ExtractWindowExpressions ::
+        GlobalAggregates ::
+        ResolveAggregateFunctions ::
+        TimeWindowing ::
+        ResolveInlineTables(conf) ::
+        ResolveHigherOrderFunctions(v1SessionCatalog) ::
+        ResolveLambdaVariables(conf) ::
+        ResolveTimeZone(conf) ::
+        ResolveRandomSeed ::
+        ResolveBinaryArithmetic(conf) ::
+        TypeCoercion.typeCoercionRules(conf) ++
+          extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
@@ -1393,7 +1393,24 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
-        q.mapExpressions(resolveExpressionTopDown(_, q))
+        q.mapExpressions { e =>
+          q match {
+            case _: Filter if containsAggregate(e) =>
+              e
+            case _ =>
+              resolveExpressionTopDown(e, q)
+          }
+        }
+    }
+
+    def containsAggregate(e: Expression): Boolean = {
+      e.find {
+        case func: UnresolvedFunction =>
+          v1SessionCatalog.lookupFunction(func.name, func.arguments)
+            .isInstanceOf[AggregateFunction]
+        case _ =>
+          false
+      }.isDefined || e.find(_.isInstanceOf[AggregateExpression]).isDefined
     }
 
     def resolveAssignments(
@@ -1679,7 +1696,9 @@ class Analyzer(
           Project(child.output, newSort)
         }
 
-      case f @ Filter(cond, child) if (!f.resolved || f.missingInput.nonEmpty) && child.resolved =>
+      case f @ Filter(cond, child) if (!f.resolved || f.missingInput.nonEmpty) && child.resolved
+        && !containsAggregate(cond) =>
+
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
         if (child.output == newChild.output) {
           f.copy(condition = newCond.head)
@@ -1688,6 +1707,16 @@ class Analyzer(
           val newFilter = Filter(newCond.head, newChild)
           Project(child.output, newFilter)
         }
+    }
+
+    def containsAggregate(e: Expression): Boolean = {
+      e.find {
+        case func: UnresolvedFunction =>
+          v1SessionCatalog.lookupFunction(func.name, func.arguments)
+            .isInstanceOf[AggregateFunction]
+        case _ =>
+          false
+      }.isDefined || e.find(_.isInstanceOf[AggregateExpression]).isDefined
     }
 
     /**
