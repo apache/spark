@@ -26,7 +26,7 @@ User-Defined Functions (UDFs) are user-programmable routines that act on one row
 
 ### UserDefinedFunction
 
-A user-defined function. To create one, use the `udf` functions in `functions`.
+To define the properties of a user-defined function, the user can use some of the methods defined in this class.
 
 <dl>
   <dt><code><em>asNonNullable(): UserDefinedFunction</em></code></dt>
@@ -39,20 +39,6 @@ A user-defined function. To create one, use the `udf` functions in `functions`.
   <dt><code><em>asNondeterministic(): UserDefinedFunction</em></code></dt>
   <dd>
     Updates UserDefinedFunction to nondeterministic.
-  </dd>
-</dl>
-
-<dl>
-  <dt><code><em>deterministic: Boolean</em></code></dt>
-  <dd>
-    Returns true iff the UDF is deterministic, i.e. the UDF produces the same output given the same input.
-  </dd>
-</dl>
-
-<dl>
-  <dt><code><em>nullable: Boolean</em></code></dt>
-  <dd>
-    Returns true when the UDF can return a nullable value.
   </dd>
 </dl>
 
