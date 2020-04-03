@@ -1693,7 +1693,6 @@ class Analyzer(
 
       case f @ Filter(cond, child) if (!f.resolved || f.missingInput.nonEmpty) && child.resolved
         && !ResolveReferences.containsAggregate(cond) =>
-
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
         if (child.output == newChild.output) {
           f.copy(condition = newCond.head)
