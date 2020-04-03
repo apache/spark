@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -37,6 +38,14 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       Seq("").toDF("a").selectExpr("version()"),
       Row(SPARK_VERSION_SHORT + " " + SPARK_REVISION))
+  }
+
+  test("try") {
+    withSQLConf((SQLConf.ANSI_ENABLED.key -> "true")) {
+      val df = Seq((1, "one")).toDF("a", "b")
+      checkAnswer(df.selectExpr("try(a / 0)"), Row(null))
+      checkAnswer(df.selectExpr("try(cast(b as int))"), Row(null))
+    }
   }
 }
 

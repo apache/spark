@@ -491,6 +491,7 @@ object FunctionRegistry {
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
+    expression[TryExpression]("try"),
 
     // grouping sets
     expression[Cube]("cube"),

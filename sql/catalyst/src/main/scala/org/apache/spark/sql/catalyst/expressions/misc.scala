@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -196,5 +198,55 @@ case class TypeOf(child: Expression) extends UnaryExpression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Evaluate an expression and handle certain types of execution errors by" +
+    " returning NULL.\nIn cases where it is preferable that queries produce NULL instead of" +
+    " failing when corrupt or invalid data is encountered, the TRY function may be useful," +
+    " especially when ANSI mode is on and the users need null-tolerant on certain columns or" +
+    " outputs.\nAnalysisExceptions will not handle by this, typically errors handled by TRY" +
+    " function are: " +
+    """
+      * Division by zero,
+      * Invalid casting,
+      * Numeric value out of range,
+      * e.t.c
+      """,
+  examples = """
+      Examples:
+      > SELECT _FUNC_(1 / 0);
+       NULL
+  """,
+  since = "3.1.0")
+case class TryExpression(child: Expression) extends UnaryExpression {
+
+  override def nullable: Boolean = true
+  override def dataType: DataType = child.dataType
+  override def prettyName: String = "try"
+
+  override def eval(input: InternalRow): Any = {
+    try {
+      child.eval(input)
+    } catch {
+      case NonFatal(_) => null
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    val javaType = CodeGenerator.javaType(dataType)
+    ev.copy(code =
+      code"""
+        boolean ${ev.isNull} = false;
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        try {
+          ${eval.code}
+          ${ev.isNull} = ${eval.isNull};
+          ${ev.value} = ${eval.value};
+        } catch (java.lang.Exception e) {
+          ${ev.isNull} = true;
+        }""")
   }
 }
