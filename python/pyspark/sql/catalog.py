@@ -173,6 +173,9 @@ class Catalog(object):
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
         created table.
 
+        .. versionchanged:: 3.1
+           Added the ``description`` parameter.
+
         :return: :class:`DataFrame`
         """
         if path is not None:

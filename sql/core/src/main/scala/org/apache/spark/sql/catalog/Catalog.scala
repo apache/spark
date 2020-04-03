@@ -349,7 +349,7 @@ abstract class Catalog {
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If no database identifier is provided, it refers to a table in
    *                  the current database.
-   * @since 2.2.0
+   * @since 3.1.0
    */
   def createTable(
       tableName: String,
@@ -367,7 +367,7 @@ abstract class Catalog {
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If no database identifier is provided, it refers to a table in
    *                  the current database.
-   * @since 2.2.0
+   * @since 3.1.0
    */
   def createTable(
       tableName: String,
@@ -434,7 +434,7 @@ abstract class Catalog {
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If no database identifier is provided, it refers to a table in
    *                  the current database.
-   * @since 2.2.0
+   * @since 3.1.0
    */
   def createTable(
       tableName: String,
@@ -459,7 +459,7 @@ abstract class Catalog {
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If no database identifier is provided, it refers to a table in
    *                  the current database.
-   * @since 2.2.0
+   * @since 3.1.0
    */
   def createTable(
       tableName: String,
