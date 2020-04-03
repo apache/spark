@@ -246,7 +246,11 @@ case class TryExpression(child: Expression) extends UnaryExpression {
           ${ev.isNull} = ${eval.isNull};
           ${ev.value} = ${eval.value};
         } catch (java.lang.Exception e) {
-          ${ev.isNull} = true;
+          if (scala.util.control.NonFatal.apply(e)) {
+            ${ev.isNull} = true;
+          } else {
+            throw e;
+          }
         }""")
   }
 }
