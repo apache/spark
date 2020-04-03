@@ -254,7 +254,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
         withTempDir { dir =>
           val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
             s"$scheme:///${dir.getCanonicalPath}")
-          for (batchId <- 0 to 2) {
+          for (batchId <- 0L to 2L) {
             sinkLog.add(
               batchId,
               Array(newFakeSinkFileStatus("/a/b/" + batchId, FileStreamSinkLog.ADD_ACTION)))
@@ -262,7 +262,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
           def getCountForOpenOnMetadataFile(batchId: Long): Long = {
             val path = sinkLog.batchIdToPath(batchId).toUri.getPath
-            CountOpenLocalFileSystem.pathToNumOpenCalled.get(path).map(_.get()).getOrElse(0)
+            CountOpenLocalFileSystem.pathToNumOpenCalled.get(path).map(_.get()).getOrElse(0L)
           }
 
           CountOpenLocalFileSystem.resetCount()
@@ -270,16 +270,16 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
           assert(sinkLog.getLatestBatchId() === Some(2L))
           // getLatestBatchId doesn't open the latest metadata log file
           (0L to 2L).foreach { batchId =>
-            assert(getCountForOpenOnMetadataFile(batchId) === 0)
+            assert(getCountForOpenOnMetadataFile(batchId) === 0L)
           }
 
           assert(sinkLog.getLatest().map(_._1).getOrElse(-1L) === 2L)
           (0L to 1L).foreach { batchId =>
-            assert(getCountForOpenOnMetadataFile(batchId) === 0)
+            assert(getCountForOpenOnMetadataFile(batchId) === 0L)
           }
           // getLatest opens the latest metadata log file, which explains the needs on
           // having "getLatestBatchId".
-          assert(getCountForOpenOnMetadataFile(2L) === 1)
+          assert(getCountForOpenOnMetadataFile(2L) === 1L)
         }
       }
     }
