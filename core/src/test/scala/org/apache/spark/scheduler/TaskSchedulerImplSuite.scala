@@ -196,7 +196,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
-  def setupTaskScheduler(clock: ManualClock): TaskSchedulerImpl = {
+  private def setupTaskSchedulerForLocalityTests(clock: ManualClock): TaskSchedulerImpl = {
     val conf = new SparkConf()
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     val taskScheduler = new TaskSchedulerImpl(sc,
@@ -243,7 +243,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val clock = new ManualClock()
     // All tasks created here are local to exec1, host1.
     // Locality level starts at PROCESS_LOCAL.
-    val taskScheduler = setupTaskScheduler(clock)
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
     // Locality levels increase at 3000 ms.
     val advanceAmount = 3000
 
@@ -268,12 +268,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       .flatten.isEmpty)
   }
 
-  test("SPARK-18886 - delay scheduling timer is reset when it accepts all resources offered when" +
+  test("SPARK-18886 - delay scheduling timer is reset when it accepts all resources offered when " +
     "isAllFreeResources = true") {
     val clock = new ManualClock()
     // All tasks created here are local to exec1, host1.
     // Locality level starts at PROCESS_LOCAL.
-    val taskScheduler = setupTaskScheduler(clock)
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
     // Locality levels increase at 3000 ms.
     val advanceAmount = 3000
 
@@ -302,7 +302,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val clock = new ManualClock()
     // All tasks created here are local to exec1, host1.
     // Locality level starts at PROCESS_LOCAL.
-    val taskScheduler = setupTaskScheduler(clock)
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
     // Locality levels increase at 3000 ms.
     val advanceAmount = 3000
 
@@ -348,7 +348,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       .flatten.isEmpty)
   }
 
-
   // This tests two cases
   // 1. partial resource offer doesn't reset timer after full resource offer had rejected resources
   // 2. partial resource offer doesn't reset timer after partial resource offer
@@ -358,7 +357,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val clock = new ManualClock()
     // All tasks created here are local to exec1, host1.
     // Locality level starts at PROCESS_LOCAL.
-    val taskScheduler = setupTaskScheduler(clock)
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
     // Locality levels increase at 3000 ms.
     val advanceAmount = 3000
 

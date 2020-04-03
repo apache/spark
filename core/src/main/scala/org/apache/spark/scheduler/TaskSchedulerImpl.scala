@@ -345,7 +345,7 @@ private[spark] class TaskSchedulerImpl(
   /**
    * Offers resources to a single [[TaskSetManager]] at a given max allowed [[TaskLocality]].
    *
-   * @param taskSet task set to offer resources to
+   * @param taskSet task set manager to offer resources to
    * @param maxLocality max locality to allow when scheduling
    * @param shuffledOffers shuffled resource offers to use for scheduling,
    *                       remaining resources are tracked by below fields as tasks are scheduled
@@ -503,7 +503,7 @@ private[spark] class TaskSchedulerImpl(
     }.sum
   }
 
-  def minTaskLocality(
+  private def minTaskLocality(
       l1: Option[TaskLocality],
       l2: Option[TaskLocality]) : Option[TaskLocality] = {
     if (l1.isEmpty) {
