@@ -821,4 +821,20 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       days += 1
     }
   }
+
+  test("SPARK-31328: rebasing overlapped timestamps during daylight saving time") {
+    Seq(
+      LA.getId -> Seq("2019-11-03T08:00:00Z", "2019-11-03T08:30:00Z", "2019-11-03T09:00:00Z"),
+      "Europe/Amsterdam" ->
+        Seq("2019-10-27T00:00:00Z", "2019-10-27T00:30:00Z", "2019-10-27T01:00:00Z")
+    ).foreach { case (tz, ts) =>
+      withDefaultTimeZone(getZoneId(tz)) {
+        ts.foreach { str =>
+          val micros = instantToMicros(Instant.parse(str))
+          assert(rebaseGregorianToJulianMicros(micros) === micros)
+          assert(rebaseJulianToGregorianMicros(micros) === micros)
+        }
+      }
+    }
+  }
 }
