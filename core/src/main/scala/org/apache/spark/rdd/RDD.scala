@@ -1747,7 +1747,7 @@ abstract class RDD[T: ClassTag](
   // =======================================================================
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
-  private var resourceProfile: Option[ResourceProfile] = None
+  @transient private var resourceProfile: Option[ResourceProfile] = None
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = sc.getCallSite()
