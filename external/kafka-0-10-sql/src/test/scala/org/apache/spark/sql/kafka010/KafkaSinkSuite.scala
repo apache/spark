@@ -309,7 +309,7 @@ class KafkaSinkMicroBatchStreamingSuite extends KafkaSinkStreamingSuiteBase {
     val writer = createKafkaWriter(
       input.toDF(),
       withTopic = Some(topic),
-      withOutputMode = Some(OutputMode.Update()))()
+      withOutputMode = Some(OutputMode.Append()))()
 
     try {
       input.addData("1", "2", "3")
