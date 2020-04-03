@@ -51,9 +51,11 @@ private[avro] class AvroOutputWriter(
   private val recordWriter: RecordWriter[AvroKey[GenericRecord], NullWritable] = {
     val sparkVersion = Map(SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT).asJava
     new SparkAvroKeyOutputFormat(sparkVersion) {
+
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         new Path(path)
       }
+
       @throws(classOf[IOException])
       override def getAvroFileOutputStream(c: TaskAttemptContext): OutputStream = {
         val path = getDefaultWorkFile(context, ".avro")
