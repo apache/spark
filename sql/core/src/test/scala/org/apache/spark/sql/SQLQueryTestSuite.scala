@@ -661,7 +661,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     Locale.setDefault(Locale.US)
     RuleExecutor.resetMetrics()
     CodeGenerator.resetCompileTime
-    WholeStageCodegenExec.resetGenerateJavaTime
+    WholeStageCodegenExec.resetCodeGenTime
   }
 
   override def afterAll(): Unit = {
@@ -672,11 +672,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
 
-      val generateJavaTime = WholeStageCodegenExec.generateJavaTime
+      val generateJavaTime = WholeStageCodegenExec.codeGenTime
       val codegenInfo =
         s"""
-           |=== Metrics of Whole Codegen ===
-           |Total generate time: ${generateJavaTime.toDouble / NANOS_PER_SECOND} seconds
+           |=== Metrics of Whole-Stage Codegen ===
+           |Total code generation time: ${generateJavaTime.toDouble / NANOS_PER_SECOND} seconds
            |Total compile time: ${CodeGenerator.compileTime.toDouble / NANOS_PER_SECOND} seconds
          """.stripMargin
       logWarning(codegenInfo)

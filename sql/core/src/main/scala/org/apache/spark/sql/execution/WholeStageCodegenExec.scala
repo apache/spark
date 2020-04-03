@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.{LongAccumulator, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * An interface for those physical operators that support codegen.
@@ -568,25 +568,25 @@ object WholeStageCodegenExec {
     numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
   }
 
-  // The whole stage codegen generates java code on the driver side and sends it to the Executor
-  // side for execution after compilation. The whole codegen can bring significant performance
-  // improvements in large data and distributed environments. However, in the test environment,
+  // The whole-stage codegen generates Java code on the driver side and sends it to the Executors
+  // for compilation and execution. The whole-stage codegen can bring significant performance
+  // improvements with large dataset in distributed environments. However, in the test environment,
   // due to the small amount of data, the time to generate Java code takes up a major part of the
-  // entire runtime. So we summarize the total generation time and output it to the execution log
-  // for easy analysis and view.
-  private val _generateJavaTime = new LongAccumulator
+  // entire runtime. So we summarize the total code generation time and output it to the execution
+  // log for easy analysis and view.
+  private val _codeGenTime = new AtomicLong
 
   // Increase the total generation time of Java source code in nanoseconds.
   // Visible for testing
-  def incrGenerateJavaTime(time: Long): Unit = _generateJavaTime.add(time)
+  def increaseCodeGenTime(time: Long): Unit = _codeGenTime.addAndGet(time)
 
   // Returns the total generation time of Java source code in nanoseconds.
   // Visible for testing
-  def generateJavaTime: Long = _generateJavaTime.sum
+  def codeGenTime: Long = _codeGenTime.get
 
-  // Reset generation time.
+  // Reset generation time of Java source code.
   // Visible for testing
-  def resetGenerateJavaTime: Unit = _generateJavaTime.reset()
+  def resetCodeGenTime: Unit = _codeGenTime.set(0L)
 }
 
 /**
@@ -699,9 +699,10 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     val cleanedSource = CodeFormatter.stripOverlappingComments(
       new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments()))
 
-    logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     val duration = System.nanoTime() - startTime
-    WholeStageCodegenExec.incrGenerateJavaTime(duration)
+    WholeStageCodegenExec.increaseCodeGenTime(duration)
+
+    logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     (ctx, cleanedSource)
   }
 
