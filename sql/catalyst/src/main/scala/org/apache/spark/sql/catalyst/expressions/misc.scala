@@ -201,25 +201,25 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Evaluate an expression and handle certain types of execution errors by" +
-    " returning NULL.\nIn cases where it is preferable that queries produce NULL instead of" +
-    " failing when corrupt or invalid data is encountered, the TRY function may be useful," +
-    " especially when ANSI mode is on and the users need null-tolerant on certain columns or" +
-    " outputs.\nAnalysisExceptions will not handle by this, typically errors handled by TRY" +
-    " function are: " +
-    """
+  usage = """
+    _FUNC_(expr) - Evaluate an expression and handle certain types of execution errors by returning NULL.
+    In cases where it is preferable that queries produce NULL instead of failing when corrupt or invalid data is encountered, the TRY function may be useful, especially when ANSI mode is on and the users need null-tolerant on certain columns or outputs.
+    AnalysisExceptions will not be handled by this, typically errors handled by TRY function are:
+
       * Division by zero,
       * Invalid casting,
       * Numeric value out of range,
       * e.t.c
-      """,
+  """,
   examples = """
       Examples:
       > SELECT _FUNC_(1 / 0);
        NULL
   """,
   since = "3.1.0")
+// scalastyle:on line.size.limit
 case class TryExpression(child: Expression) extends UnaryExpression {
 
   override def nullable: Boolean = true
