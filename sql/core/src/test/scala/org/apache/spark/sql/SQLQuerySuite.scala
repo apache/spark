@@ -3494,7 +3494,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(Row(Map[Int, Int]()), Row(Map(1 -> 2))))
   }
 
-
   test("SPARK-31334: TypeCoercion should before then ResolveAggregateFunctions") {
     Seq(
       (1, 3),
@@ -3531,6 +3530,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         | HAVING sum(a) > 3
       """.stripMargin),
       Row(7, 4.0) :: Row(9, 11.0) :: Nil)
+  }
+
+
+  test("SPARK-31242: clone SparkSession should respect sessionInitWithConfigDefaults") {
+    // Note, only the conf explicitly set in SparkConf(e.g. in SharedSparkSessionBase) would cause
+    // problem before the fix.
+    withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
+      val cloned = spark.cloneSession()
+      SparkSession.setActiveSession(cloned)
+      assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
+    }
   }
 
 }

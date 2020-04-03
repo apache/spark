@@ -131,7 +131,7 @@ private[parquet] class ParquetRowConverter(
   extends ParquetGroupConverter(updater) with Logging {
 
   // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
-  private val rebaseDateTime = SQLConf.get.parquetRebaseDateTimeEnabled
+  private val rebaseDateTime = SQLConf.get.parquetRebaseDateTimeInReadEnabled
 
   assert(
     parquetType.getFieldCount <= catalystType.length,

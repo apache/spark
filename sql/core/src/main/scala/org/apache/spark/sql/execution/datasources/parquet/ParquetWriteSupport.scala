@@ -78,7 +78,8 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     new Array[Byte](Decimal.minBytesForPrecision(DecimalType.MAX_PRECISION))
 
   // Whether to rebase datetimes from Gregorian to Julian calendar in write
-  private val rebaseDateTime: Boolean = SQLConf.get.parquetRebaseDateTimeEnabled
+  private val rebaseDateTime: Boolean =
+    SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE)
 
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)

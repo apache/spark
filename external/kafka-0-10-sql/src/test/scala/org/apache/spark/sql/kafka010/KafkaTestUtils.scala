@@ -168,6 +168,7 @@ class KafkaTestUtils(
 
     kdc.getKrb5conf.delete()
     Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+    logDebug(s"krb5.conf file content: $krb5confStr")
   }
 
   private def addedKrb5Config(key: String, value: String): String = {
@@ -299,6 +300,7 @@ class KafkaTestUtils(
     }
     brokerReady = false
     zkReady = false
+    kdcReady = false
 
     if (producer != null) {
       producer.close()
@@ -307,6 +309,7 @@ class KafkaTestUtils(
 
     if (adminClient != null) {
       adminClient.close()
+      adminClient = null
     }
 
     if (server != null) {
@@ -341,6 +344,7 @@ class KafkaTestUtils(
     Configuration.getConfiguration.refresh()
     if (kdc != null) {
       kdc.stop()
+      kdc = null
     }
     UserGroupInformation.reset()
     SecurityUtils.setGlobalKrbDebug(false)
