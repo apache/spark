@@ -15,25 +15,12 @@
     specific language governing permissions and limitations
     under the License.
 
-Executor
-========
 
-Executors are the mechanism by which task instances get run.
+.. _executor:SequentialExecutor:
 
-Airflow has support for various executors. Current used is determined by the ``executor`` option in the ``core``
-section of the configuration file. This option should contain the name executor e.g. ``KubernetesExecutor``
-if it is a core executor. If it is to load your own executor, then you should specify the
-full path to the module e.g. ``my_acme_company.executors.MyCustomExecutor``.
+Sequential Executor
+===================
 
-.. note::
-    For more information on setting the configuration, see :doc:`../howto/set-config`.
-
-.. toctree::
-    :maxdepth: 1
-
-    sequential
-    debug
-    local
-    dask
-    celery
-    kubernetes
+The :class:`~airflow.executors.sequential_executor.SequentialExecutor` is the default executor when you first install ``airflow``.
+It is the only executor that can be used with ``sqlite`` since ``sqlite`` doesn't support multiple connections.
+This executor will only run one task instance at a time. For production use case, please use other executors.
