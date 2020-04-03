@@ -165,3 +165,7 @@ spark.sql("SELECT twoArgs('test', 1)").show()
 +----------------+
 
 {% endhighlight %}
+
+### Related Statements
+- [User Defined Aggregate Functions (UDAFs)](sql-ref-functions-udf-aggregate.html)
+- [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)

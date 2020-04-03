@@ -127,3 +127,7 @@ sql("SELECT agg(a, b) FROM testUDAF").show()
 +---------------------------------------------+
 
 {% endhighlight %}
+
+### Related Statements
+- [Scalar User Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
+- [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
