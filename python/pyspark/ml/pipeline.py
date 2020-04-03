@@ -242,7 +242,7 @@ class PipelineModelReader(MLReader):
             return JavaMLReader(self.cls).load(path)
         else:
             uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
-            return PipelineModel(stages=stages)._resetUid(uid)
+            return self.cls(stages=stages)._resetUid(uid)
 
 
 @inherit_doc
