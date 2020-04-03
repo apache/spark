@@ -362,6 +362,15 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT inline(explode(array(array(struct(1, 'a'), struct(2, 'b')))))"),
       Row(1, "a") :: Row(2, "b") :: Nil)
+    // More nested explodes
+    checkAnswer(
+      sql("SELECT explode(explode(explode(explode(array(array(array(array(1, 2), " +
+        "array(3, 4))))))))"),
+      Row(1) :: Row(2) :: Row(3) :: Row(4) :: Nil)
+    checkAnswer(
+      sql("SELECT array(array(array(array(0, 4), array(6)))) v")
+        .select(explode_outer(explode(explode_outer(explode($"v"))))),
+      Row(0) :: Row(4) :: Row(6) :: Nil)
 
     // Aggregate cases
     checkAnswer(
@@ -370,6 +379,15 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT array(array(min(v), max(v))) ar FROM VALUES 7, 9 t(v)")
         .select(explode(explode_outer($"ar"))),
+      Row(7) :: Row(9) :: Nil)
+    // More nested explodes
+    checkAnswer(
+      sql("SELECT explode(explode(explode(explode(array(array(array(array(min(v), max(v))))))))) " +
+        "FROM VALUES 1, 2, 3 t(v)"),
+      Row(1) :: Row(3) :: Nil)
+    checkAnswer(
+      sql("SELECT array(array(array(array(min(v), max(v))))) ar FROM VALUES 7, 9 t(v)")
+        .select(explode(explode_outer(explode(explode_outer($"ar"))))),
       Row(7) :: Row(9) :: Nil)
   }
 
