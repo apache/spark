@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import scala.collection.mutable.ArrayBuffer
+
+import scala.collection.mutable
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartit
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-
 
 /**
  * A wrapper of shuffle query stage, which follows the given partition arrangement.
@@ -134,6 +134,31 @@ case class CustomShuffleReaderExec private(
       driverAccumUpdates ++= dataSizes.map(partitionDataSizeMetrics.id -> _)
       // Set sum value to "partitionDataSize" metric.
       partitionDataSizeMetrics.set(dataSizes.sum)
+    
+    if(!isLocalReader) {
+      val partitionMetrics = metrics("partitionDataSize")
+      val mapStats = shuffleStage.get.mapStats
+
+      if (mapStats.isEmpty) {
+        partitionMetrics.set(0)
+        driverAccumUpdates = driverAccumUpdates :+ (partitionMetrics.id, 0L)
+      } else {
+        var sum = 0L
+        partitionSpecs.foreach {
+          case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
+            val dataSize = startReducerIndex.until(endReducerIndex).map(
+              mapStats.get.bytesByPartitionId(_)).sum
+            driverAccumUpdates = driverAccumUpdates :+ (partitionMetrics.id, dataSize)
+            sum += dataSize
+          case p: PartialReducerPartitionSpec =>
+            driverAccumUpdates = driverAccumUpdates :+ (partitionMetrics.id, p.dataSize)
+            sum += p.dataSize
+          case p => throw new IllegalStateException("unexpected " + p)
+        }
+
+        // Set sum value to "partitionDataSize" metric.
+        partitionMetrics.set(sum)
+      }
     }
 
     SQLMetrics.postDriverMetricsUpdatedByValue(sparkContext, executionId, driverAccumUpdates)
