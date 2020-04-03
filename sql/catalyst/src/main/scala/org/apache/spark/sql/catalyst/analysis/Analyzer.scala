@@ -1067,7 +1067,7 @@ class Analyzer(
       }
     }
   }
-  
+
   /**
    * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from
    * a logical plan node's children.
@@ -1392,6 +1392,7 @@ class Analyzer(
         }
 
       case f @ Filter(cond, _) if containsAggregate(cond) => f
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
         q.mapExpressions(resolveExpressionTopDown(_, q))
@@ -1691,7 +1692,7 @@ class Analyzer(
         }
 
       case f @ Filter(cond, child) if (!f.resolved || f.missingInput.nonEmpty) && child.resolved
-        && !containsAggregate(cond) =>
+        && !ResolveReferences.containsAggregate(cond) =>
 
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
         if (child.output == newChild.output) {
@@ -1701,16 +1702,6 @@ class Analyzer(
           val newFilter = Filter(newCond.head, newChild)
           Project(child.output, newFilter)
         }
-    }
-
-    def containsAggregate(e: Expression): Boolean = {
-      e.find {
-        case func: UnresolvedFunction =>
-          v1SessionCatalog.lookupFunction(func.name, func.arguments)
-            .isInstanceOf[AggregateFunction]
-        case _ =>
-          false
-      }.isDefined || e.find(_.isInstanceOf[AggregateExpression]).isDefined
     }
 
     /**
