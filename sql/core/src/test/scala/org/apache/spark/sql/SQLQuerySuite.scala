@@ -3494,7 +3494,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(Row(Map[Int, Int]()), Row(Map(1 -> 2))))
   }
 
-  test("SPARK-31334: TypeCoercion should before then ResolveAggregateFunctions") {
+  test("SPARK-31334: Don't ResolveReference/ResolveMissingReference when " +
+    "Filter condition with aggregate expression") {
     Seq(
       (1, 3),
       (2, 3),
@@ -3542,7 +3543,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
     }
   }
-
 }
 
 case class Foo(bar: Option[String])

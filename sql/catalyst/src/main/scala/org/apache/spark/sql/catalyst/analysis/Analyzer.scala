@@ -1067,7 +1067,7 @@ class Analyzer(
       }
     }
   }
-
+  
   /**
    * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from
    * a logical plan node's children.
@@ -1394,14 +1394,6 @@ class Analyzer(
       case f @ Filter(cond, _) if containsAggregate(cond) => f
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
-        //        q.mapExpressions { e =>
-        //          q match {
-        //            case _: Filter if containsAggregate(e) =>
-        //              e
-        //            case _ =>
-        //              resolveExpressionTopDown(e, q)
-        //          }
-        //        }
         q.mapExpressions(resolveExpressionTopDown(_, q))
     }
 
