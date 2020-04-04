@@ -1401,8 +1401,12 @@ class Analyzer(
     def containsAggregate(e: Expression): Boolean = {
       e.find {
         case func: UnresolvedFunction =>
-          v1SessionCatalog.lookupFunction(func.name, func.arguments)
-            .isInstanceOf[AggregateFunction]
+          try {
+            v1SessionCatalog.lookupFunction(func.name, func.arguments)
+              .isInstanceOf[AggregateFunction]
+          } catch {
+            case _: Exception => true
+          }
         case _ =>
           false
       }.isDefined || e.find(_.isInstanceOf[AggregateExpression]).isDefined
