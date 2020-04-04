@@ -185,7 +185,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
-  testWithAllStateVersions(s"trial $i: state metrics - append mode") {
+  testWithAllStateVersions("state metrics - append mode") {
     val inputData = MemoryStream[Int]
     val aggWithWatermark = inputData.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
