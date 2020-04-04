@@ -19,154 +19,626 @@ license: |
   limitations under the License.
 ---
 
-Aggregate functions
-* Table of contents
-{:toc}
-
 Spark SQL provides build-in Aggregate functions defines in dataset API and SQL interface. Aggregate functions
 operate on a group of rows and return a single value.
 
-Spark SQL Aggregate functions are grouped as "agg_funcs" in spark SQL. Below is the list of functions.
+Spark SQL Aggregate functions are grouped as <code>agg_funcs</code> in spark SQL. Below is the list of functions.
 
-Note: Every below function has another signature which take String as a column name instead of Column.
+**Note:** Every below function has another signature which take String as a column name instead of Column.
 
+* Table of contents
+{:toc}
 <table class="table">
   <thead>
-    <tr><th>Function</th><th>Parameters(s)</th><<th>Description</th><th></tr>
+    <tr><th style="width:25%">Function</th><th>Parameters</th><th>Description</th></tr>
   </thead>
   <tbody>
     <tr>
-      <td>avg(e: Column)</td><td>Column name</td><td> Returns the average of values in the input column.</td> 
+      <td> <b>{avg | mean}</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td> Returns the average of values in the input column.</td> 
     </tr>
     <tr>
-      <td>mean(e: Column)</td><td>Column name</td><td> Returns the average of values in the input column.</td> 
-    </tr>        
-    <tr>
-      <td>bool_and(e: Column) every(e: Column)</td><td>Column name</td><td>Returns true if all values are true</td>
+      <td> <b>{bool_and | every}</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns true if all values are true</td>
     </tr>
     <tr>
-      <td>any(e: Column)  some(e: Column) bool_or(e: Column)</td><td>Column name</td><td>Returns true if at least one value is true</td>
+      <td> <b>{any | some | bool_or}</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns true if at least one value is true</td>
     </tr>
     <tr>
-      <td>approx_count_distinct(e: Column)</td><td>Column name</td><td>Returns the estimated cardinality by HyperLogLog++</td>td>
+      <td> <b>approx_count_distinct</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the estimated cardinality by HyperLogLog++</td>
     </tr>
     <tr>
-      <td>corr(e1: Column, e2: Column)</td><td>Column name</td><td>Returns Pearson coefficient of correlation between a set of number pairs</td>
+      <td> <b>corr</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns Pearson coefficient of correlation between a set of number pairs</td>
     </tr>
     <tr>
-      <td>count(*)</td><td>None</td><td>Returns the total number of retrieved rows, including rows containing null</td>
+      <td> <b>count</b>(<i>*</i>)</td>
+      <td>None</td>
+      <td>Returns the total number of retrieved rows, including rows containing null</td>
     </tr>
     <tr>
-      <td>count(e: Column[, e: Column])</td><td>Column name</td><td>Returns the number of rows for which the supplied column(s) are all not null</td>
+      <td> <b>count</b>(<i>e: Column[, e: Column]</i>)</td>
+      <td>Column name</td>
+      <td>Returns the number of rows for which the supplied column(s) are all not null</td>
     </tr>
     <tr>
-      <td>count(DISTINCT e: Column[, e: Column])</td><td>Column name</td><td>Returns the number of rows for which the supplied column(s) are unique and non-null</td>
+      <td> <b>count</b>(<b>DISTINCT</b> <i> e: Column[, e: Column</i>])</td>
+      <td>Column name</td>
+      <td>Returns the number of rows for which the supplied column(s) are unique and not null</td>
     </tr> 
     <tr>
-      <td>count_if(e: Column)</td><td>Column name</td><td>Returns the number of `TRUE` values for the column</td>
+      <td> <b>count_if</b>(<i>Predicate</i>)</td>
+      <td>Expression that will be used for aggregation calculation</td>
+      <td>Returns the count number from the predicate evaluate to `TRUE` values</td>
     </tr> 
     <tr>
-      <td>covar_pop(e1: Column, e2: Column)</td><td>Column name</td><td>Returns the population covariance of a set of number pairs</td>
+      <td> <b>covar_pop</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the population covariance of a set of number pairs</td>
     </tr> 
     <tr>
-      <td>covar_samp(e1: Column, e2: Column)</td><td>Column name</td><td>Returns the sample covariance of a set of number pairs</td>
+      <td> <b>covar_samp</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the sample covariance of a set of number pairs</td>
     </tr>  
     <tr>
-      <td>first(e: Column[, isIgnoreNull])</td><td>Column name[, True/False(default)]</td><td>Returns the first value of column for a group of rows.
-                                                           If `isIgnoreNull` is true, returns only non-null values, default is false.</td>
+      <td> <b>{first | first_value}</b>(<i>e: Column[, isIgnoreNull]</i>)</td>
+      <td>Column name[, True/False(default)]</td>
+      <td>Returns the first value of column for a group of rows. If `isIgnoreNull` is true, returns only non-null values, default is false. This function is non-deterministic</td>
     </tr>      
     <tr>
-      <td>first_value(e: Column[, isIgnoreNull])</td><td>Column name[, True/False(default)]</td><td>Returns the first value of column for a group of rows.
-                                                               If `isIgnoreNull` is true, returns only non-null values, default is false.</td>
-    </tr>     
-    <tr>
-       <td>skewness(e: Column)</td><td>Column name</td><td>Returns the skewness value calculated from values of a group</td>
+       <td> <b>skewness</b>(<i>e: Column</i>)</td>
+       <td>Column name</td>
+       <td>Returns the skewness value calculated from values of a group</td>
     </tr>    
     <tr>
-       <td>kurtosis(e: Column)</td><td>Column name</td><td>Returns the kurtosis value calculated from values of a group</td>
+       <td> <b>kurtosis</b>(<i>e: Column</i>)</td>
+       <td>Column name</td>
+       <td>Returns the kurtosis value calculated from values of a group</td>
     </tr>    
     <tr>
-      <td>last(e: Column[, isIgnoreNull])</td><td>Column name[, True/False(default)]</td><td>Returns the last value of column for a group of rows.
-                                                               If `isIgnoreNull` is true, returns only non-null values, default is false.</td>
+      <td> <b>{last | last_value}</b>(<i>e: Column[, isIgnoreNull]</i>)</td>
+      <td>Column name[, True/False(default)]</td>
+      <td>Returns the last value of column for a group of rows. If `isIgnoreNull` is true, returns only non-null values, default is false. This function is non-deterministic</td>
     </tr>      
     <tr>
-      <td>last_value(e: Column[, isIgnoreNull])</td><td>Column name[, True/False(default)]</td><td>Returns the last value of column for a group of rows.
-                                                                   If `isIgnoreNull` is true, returns only non-null values, default is false.</td>
-    </tr>     
-    <tr>
-      <td>max(e: Column)</td><td>Column name</td><td>Returns the maximum value of the column.</td>
+      <td> <b>max</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the maximum value of the column.</td>
     </tr>          
     <tr>
-      <td>max_by(e1: Column, e2: Column)</td><td>Column name</td><td>Returns the value of column e1 associated with the maximum value of column e2.</td>
+      <td> <b>max_by</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the value of column e1 associated with the maximum value of column e2.</td>
     </tr>   
     <tr>
-      <td>min(e: Column)</td><td>Column name</td><td>Returns the minimum value of the column.</td>
+      <td> <b>min</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the minimum value of the column.</td>
     </tr>          
     <tr>
-      <td>min_by(e1: Column, e2: Column)</td><td>Column name</td><td>Returns the value of column e1 associated with the minimum value of column e2.</td>
+      <td> <b>min_by</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the value of column e1 associated with the minimum value of column e2.</td>
     </tr>      
     <tr>
-      <td>percentile(e: Column, percentage [, frequency])</td><td>Column name; percentage is a number between 0 and 1; frequency is a positive integer</td><td>Returns the exact percentile value of numeric column
-                       `col` at the given percentage.</td>
+      <td> <b>percentile</b>(<i>e: Column, percentage [, frequency]</i>)</td>
+      <td>Column name; percentage is a number between 0 and 1; frequency is a positive integer</td>
+      <td>Returns the exact percentile value of numeric column at the given percentage.</td>
     </tr>         
     <tr>
-      <td>percentile(e: Column, array(percentage1 [, percentage2]...) [, frequency])</td><td>Column name; percentage array is an array of number between 0 and 1; frequency is a positive integer</td><td>Returns the exact
-                                                                           percentile value array of numeric column `col` at the given percentage(s).</td>
+      <td> <b>percentile</b>(<i>e: Column, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
+      <td>Column name; percentage array is an array of number between 0 and 1; frequency is a positive integer</td>
+      <td>Returns the exact percentile value array of numeric column at the given percentage(s).</td>
     </tr>        
     <tr>
-      <td>percentile_approx(e: Column, percentage [, frequency])</td><td>Column name; percentage is a number between 0 and 1; frequency is a positive integer</td><td>Returns the approximate percentile value of numeric
-                                                                           column `col` at the given percentage.</td>
+      <td> <b>{percentile_approx | percentile_approx}</b>(<i>e: Column, percentage [, frequency]</i>)</td>
+      <td>Column name; percentage is a number between 0 and 1; frequency is a positive integer</td>
+      <td>Returns the approximate percentile value of numeric column at the given percentage.</td>
     </tr>         
     <tr>
-      <td>percentile_approx(e: Column, array(percentage1 [, percentage2]...) [, frequency])</td><td>Column name; percentage array is an array of number between 0 and 1; frequency is a positive integer</td><td>Returns the approximate
-                                                                           percentile value array of numeric column `col` at the given percentage(s).</td>
-    </tr>      
+      <td> <b>{percentile_approx | percentile_approx}</b>(<i>e: Column, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
+      <td>Column name; percentage is a number between 0 and 1; frequency is a positive integer</td>
+      <td>Returns the approximate percentile value of numeric column at the given percentage.</td>
+    </tr>             
     <tr>
-      <td>approx_percentile(e: Column, percentage [, frequency])</td><td>Column name; percentage is a number between 0 and 1; frequency is a positive integer</td><td>Returns the approximate percentile value of numeric
-                                                                           column `col` at the given percentage.</td>
-    </tr>         
-    <tr>
-      <td>approx_percentile(e: Column, array(percentage1 [, percentage2]...) [, frequency])</td><td>Column name; percentage array is an array of number between 0 and 1; frequency is a positive integer</td><td>Returns the approximate
-                                                                           percentile value array of numeric column `col` at the given percentage(s).</td>
-    </tr>        
-    <tr>
-      <td>stddev_samp(e: Column)</td><td>Column name</td><td>Returns the sample standard deviation calculated from values of a group</td>
+      <td> <b>{stddev_samp | stddev | std}</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the sample standard deviation calculated from values of a group</td>
     </tr>  
     <tr>
-      <td>stddev(e: Column)</td><td>Column name</td><td>Returns the sample standard deviation calculated from values of a group</td>
-    </tr>  
-    <tr>
-      <td>std(e: Column)</td><td>Column name</td><td>Returns the sample standard deviation calculated from values of a group</td>
-    </tr>  
-    <tr>
-      <td>stddev_pop(e: Column)</td><td>Column name</td><td>Returns the population standard deviation calculated from values of a group</td>
+      <td> <b>stddev_pop</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the population standard deviation calculated from values of a group</td>
     </tr>
     <tr>
-      <td>stddev_samp(e: Column)</td><td>Column name</td><td>Returns the sum calculated from values of a group</td>
+      <td> <b>{variance | var_samp}</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the sample variance calculated from values of a group</td>
     </tr>    
     <tr>
-      <td>(variance | var_samp)(e: Column)</td><td>Column name</td><td>Returns the sample variance calculated from values of a group</td>
-    </tr>    
-    <tr>
-      <td>sum(e: Column)</td><td>Column name</td><td>Returns the sum calculated from values of a group.</td>
+      <td> <b>sum</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the sum calculated from values of a group.</td>
     </tr>       
     <tr>
-      <td>var_pop(e: Column)</td><td>Column name</td><td>Returns the population variance calculated from values of a group</td>
+      <td> <b>var_pop</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Returns the population variance calculated from values of a group</td>
     </tr>        
     <tr>
-      <td>collect_list(e: Column)</td><td>Column name</td><td>Collects and returns a list of non-unique elements. The function is non-deterministic because the order of collected results depends
-                                                          on the order of the rows which may be non-deterministic after a shuffle</td>
+      <td> <b>collect_list</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Collects and returns a list of non-unique elements. The function is non-deterministic because the order of collected results depends on the order of the rows which may be non-deterministic after a shuffle</td>
     </tr>       
     <tr>
-      <td>collect_set(e: Column)</td><td>Column name</td><td>Collects and returns a set of unique elements. The function is non-deterministic because the order of collected results depends
-                                                         on the order of the rows which may be non-deterministic after a shuffle.</td>
+      <td> <b>collect_set</b>(<i>e: Column</i>)</td>
+      <td>Column name</td>
+      <td>Collects and returns a set of unique elements. The function is non-deterministic because the order of collected results depends on the order of the rows which may be non-deterministic after a shuffle.</td>
     </tr>
     <tr>
-        <td>count_min_sketch(e: Column, eps: double, confidence: double, seed integer)</td><td>Column name; eps is a value between 0.0 and 1.0; confidence is a value between 0.0 and 1.0; seed is a positive integer</td><td>Returns a count-min sketch of a column with the given esp,
-                                                        confidence and seed. The result is an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
-                                                        cardinality estimation using sub-linear space..</td>
+        <td> <b>count_min_sketch</b>(<i>e: Column, eps: double, confidence: double, seed integer</i>)</td>
+        <td>Column name; eps is a value between 0.0 and 1.0; confidence is a value between 0.0 and 1.0; seed is a positive integer</td>
+        <td>Returns a count-min sketch of a column with the given esp, confidence and seed. The result is an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for cardinality estimation using sub-linear space..</td>
     </tr>
-                              
   </tbody>
 </table>
 
+### Example
+{% highlight sql %}
+--base table 
+SELECT * FROM buildin_agg;
++----+----+----+-----+----+
+|  c1|  c2|  c3|   c4|  c5|
++----+----+----+-----+----+
+|   2|   3|agg4| true|true|
+|   1|   2|agg3|false|true|
+|   1|   1|agg1|false|true|
+|   4|   3|agg6|false|true|
+|   3|   3|agg5| true|true|
+|   1|   2|agg2|false|true|
+|   5|null|agg8|false|true|
+|null|   4|agg7|false|true|
++----+----+----+-----+----+
+
+-- AVG and MEAN functions
+SELECT AVG(c1) FROM buildin_agg;
++------------------+
+|           avg(c1)|
++------------------+
+|2.4285714285714284|
++------------------+
+
+SELECT MEAN(c1) FROM buildin_agg;
++------------------+
+|          mean(c1)|
++------------------+
+|2.4285714285714284|
++------------------+
+
+-- BOOL_AND and EVERY 
+SELECT BOOL_AND(c4) FROM buildin_agg;
++------------+
+|bool_and(c4)|
++------------+
+|       false|
++------------+
+
+SELECT EVERY(c5) FROM buildin_agg;
++------------+
+|bool_and(c5)|
++------------+
+|        true|
++------------+
+
+-- ANY, SOME and BOOL_OR
+SELECT ANY(c4) FROM buildin_agg;
++-------+
+|any(c4)|
++-------+
+|   true|
++-------+
+
+SELECT SOME(c4) FROM buildin_agg;
++-------+
+|any(c4)|
++-------+
+|   true|
++-------+
+
+SELECT BOOL_OR(c5) FROM buildin_agg;
++-----------+
+|bool_or(c5)|
++-----------+
+|       true|
++-----------+
+
+-- APPROX_COUNT_DISTINCT
+SELECT APPROX_COUNT_DISTINCT(c1) FROM buildin_agg;
++-------------------------+
+|approx_count_distinct(c1)|
++-------------------------+
+|                        5|
++-------------------------+
+
+-- CORR
+SELECT CORR(c1, c2) FROM buildin_agg;
++--------------------------------------------+
+|corr(CAST(c1 AS DOUBLE), CAST(c2 AS DOUBLE))|
++--------------------------------------------+
+|                          0.7745966692414833|
++--------------------------------------------+
+
+-- COUNT
+SELECT COUNT(c2) FROM buildin_agg;
++---------+
+|count(c2)|
++---------+
+|        7|
++---------+
+
+--COUNT DISTINCT
+SELECT COUNT(DISTINCT c1) FROM buildin_agg;
++------------------+
+|count(DISTINCT c1)|
++------------------+
+|                 5|
++------------------+
+
+SELECT COUNT(DISTINCT c1, c2) FROM buildin_agg;
++----------------------+
+|count(DISTINCT c1, c2)|
++----------------------+
+|                     5|
++----------------------+
+
+SELECT COUNT(*) FROM buildin_agg;
++--------+
+|count(1)|
++--------+
+|       8|
++--------+
+
+--COUNT_IF
+SELECT COUNT_IF(c1 IS NULL) from buildin_agg;
++----------------------+
+|count_if((c1 IS NULL))|
++----------------------+
+|                     1|
++----------------------+
+
+SELECT c1 FROM buildin_agg GROUP BY c1 HAVING COUNT_IF(c2 % 2 = 0);
++----+
+|  c1|
++----+
+|null|
+|   1|
++----+
+
+--COVAR_POP
+SELECT COVAR_POP(c1, c2) FROM buildin_agg;
++-------------------------------------------------+
+|covar_pop(CAST(c1 AS DOUBLE), CAST(c2 AS DOUBLE))|
++-------------------------------------------------+
+|                               0.6666666666666666|
++-------------------------------------------------+
+
+--COVAR_SAMP
+SELECT COVAR_SAMP(c1, c2) FROM buildin_agg;
++--------------------------------------------------+
+|covar_samp(CAST(c1 AS DOUBLE), CAST(c2 AS DOUBLE))|
++--------------------------------------------------+
+|                                               0.8|
++--------------------------------------------------+
+
+
+--FIRST and FIRST_VALUE
+SELECT FIRST(c1) FROM buildin_agg;
++----------------+
+|first(c1, false)|
++----------------+
+|               2|
++----------------+
+
+
+SELECT FIRST(col) FROM VALUES (NULL), (5), (20) AS TAB(col);
++-----------------+
+|first(col, false)|
++-----------------+
+|             null|
++-----------------+
+
+SELECT FIRST(col, true) FROM VALUES (NULL), (5), (20) AS TAB(col);
++----------------+
+|first(col, true)|
++----------------+
+|               5|
++----------------+
+
+SELECT FIRST_VALUE(col) FROM VALUES (NULL), (5), (20) AS TAB(col);
++-----------------------+
+|first_value(col, false)|
++-----------------------+
+|                   null|
++-----------------------+
+
+SELECT FIRST_VALUE(col, true) FROM VALUES (NULL), (5), (20) AS TAB(col);
++----------------------+
+|first_value(col, true)|
++----------------------+
+|                     5|
++----------------------+
+
+
+--SKEWNESS
+SELECT SKEWNESS(c1) FROM buildin_agg;
++----------------------------+
+|skewness(CAST(c1 AS DOUBLE))|
++----------------------------+
+|          0.5200705032248686|
++----------------------------+
+
+SELECT SKEWNESS(col) FROM VALUES (-1000), (-100), (10), (20) AS TAB(col);
++-----------------------------+
+|skewness(CAST(col AS DOUBLE))|
++-----------------------------+
+|          -1.1135657469022011|
++-----------------------------+
+
+--KURTOSIS
+SELECT KURTOSIS(c2) FROM buildin_agg;
++----------------------------+
+|kurtosis(CAST(c2 AS DOUBLE))|
++----------------------------+
+|         -0.7325000000000004|
++----------------------------+
+
+SELECT KURTOSIS(col) FROM VALUES (-1000), (-100), (10), (20) AS TAB(col);
++-----------------------------+
+|kurtosis(CAST(col AS DOUBLE))|
++-----------------------------+
+|          -0.7014368047529627|
++-----------------------------+
+
+--LAST and LAST_VALUE
+SELECT LAST(c1) FROM buildin_agg;
++---------------+
+|last(c1, false)|
++---------------+
+|           null|
++---------------+
+
+SELECT LAST(c1, true) FROM buildin_agg;
++--------------+
+|last(c1, true)|
++--------------+
+|             5|
++--------------+
+
+SELECT LAST_VALUE(c1) FROM buildin_agg;
++---------------------+
+|last_value(c1, false)|
++---------------------+
+|                 null|
++---------------------+
+
+SELECT LAST_VALUE(c1, true) FROM buildin_agg;
++--------------------+
+|last_value(c1, true)|
++--------------------+
+|                   5|
++--------------------+
+
+--MAX
+SELECT MAX(c2) FROM buildin_agg;
++-------+
+|max(c2)|
++-------+
+|      4|
++-------+
+
+--MAX_BY
+SELECT MAX_BY(c1, c3) FROM buildin_agg;
++-------------+
+|maxby(c1, c3)|
++-------------+
+|            5|
++-------------+
+
+--MIN
+SELECT MIN(c1) FROM buildin_agg;
++-------+
+|min(c1)|
++-------+
+|      1|
++-------+
+
+--MIN_BY
+SELECT MIN_BY(c2, c3) FROM buildin_agg;
++-------------+
+|minby(c2, c3)|
++-------------+
+|            1|
++-------------+
+
+--PERCENTILE
+SELECT PERCENTILE(c1, 0.3) FROM buildin_agg;
++--------------------------------------+
+|percentile(c1, CAST(0.3 AS DOUBLE), 1)|
++--------------------------------------+
+|                                   1.0|
++--------------------------------------+
+
+SELECT PERCENTILE(c1, 0.3, 2) FROM buildin_agg;
++--------------------------------------+
+|percentile(c1, CAST(0.3 AS DOUBLE), 2)|
++--------------------------------------+
+|                                   1.0|
++--------------------------------------+
+
+SELECT PERCENTILE(c1, ARRAY(0.25, 0.75)) FROM buildin_agg;
++------------------------------------+
+|percentile(c1, array(0.25, 0.75), 1)|
++------------------------------------+
+|                          [1.0, 3.5]|
++------------------------------------+
+
+SELECT PERCENTILE(c1, ARRAY(0.25, 0.75), 10) FROM buildin_agg;
++-------------------------------------+
+|percentile(c1, array(0.25, 0.75), 10)|
++-------------------------------------+
+|                           [1.0, 4.0]|
++-------------------------------------+
+
+
+--PERCENTILE_APPROX and APPROX_PERCENTILE
+SELECT PERCENTILE_APPROX(c1, 0.25, 100) FROM buildin_agg;
++------------------------------------------------+
+|percentile_approx(c1, CAST(0.25 AS DOUBLE), 100)|
++------------------------------------------------+
+|                                               1|
++------------------------------------------------+
+
+SELECT APPROX_PERCENTILE(c1, 0.25, 100) FROM buildin_agg;
++------------------------------------------------+
+|approx_percentile(c1, CAST(0.25 AS DOUBLE), 100)|
++------------------------------------------------+
+|                                               1|
++------------------------------------------------+
+
+
+SELECT PERCENTILE_APPROX(c1, ARRAY(0.25, 0.85), 100) FROM buildin_agg;
++---------------------------------------------+
+|percentile_approx(c1, array(0.25, 0.85), 100)|
++---------------------------------------------+
+|                                       [1, 4]|
++---------------------------------------------+
+
+
+SELECT APPROX_PERCENTILE(c1, array(0.25, 0.85), 100) FROM buildin_agg;
++---------------------------------------------+
+|approx_percentile(c1, array(0.25, 0.85), 100)|
++---------------------------------------------+
+|                                       [1, 4]|
++---------------------------------------------+
+
+--STDDEV_SAMP, STDDEV and STD
+SELECT STDDEV_SAMP(c1) FROM buildin_agg;
++-------------------------------+
+|stddev_samp(CAST(c1 AS DOUBLE))|
++-------------------------------+
+|              1.618347187425374|
++-------------------------------+
+
+SELECT STDDEV(c1) FROM buildin_agg;
++--------------------------+
+|stddev(CAST(c1 AS DOUBLE))|
++--------------------------+
+|         1.618347187425374|
++--------------------------+
+
+SELECT STD(c1) FROM buildin_agg;
++-----------------------+
+|std(CAST(c1 AS DOUBLE))|
++-----------------------+
+|      1.618347187425374|
++-----------------------+
+
+--STDDEV_POP
+SELECT STDDEV_POP(c1) FROM buildin_agg;
++------------------------------+
+|stddev_pop(CAST(c1 AS DOUBLE))|
++------------------------------+
+|             1.498298354528788|
++------------------------------+
+
+--VARIANCE and VAR_SAMP
+SELECT VARIANCE(c1) FROM buildin_agg;
++----------------------------+
+|variance(CAST(c1 AS DOUBLE))|
++----------------------------+
+|           2.619047619047619|
++----------------------------+
+
+SELECT VAR_SAMP(c1) FROM buildin_agg;
++----------------------------+
+|var_samp(CAST(c1 AS DOUBLE))|
++----------------------------+
+|           2.619047619047619|
++----------------------------+
+
+--SUM
+SELECT SUM(col) FROM VALUES (5), (10), (15) AS TAB(col);
++--------+
+|sum(col)|
++--------+
+|      30|
++--------+
+
+SELECT SUM(c1) FROM buildin_agg;
++-------+
+|sum(c1)|
++-------+
+|     17|
++-------+
+
+SELECT SUM(col) FROM VALUES (NULL), (NULL) AS TAB(col);
++--------+
+|sum(col)|
++--------+
+|    null|
++--------+
+
+--VAR_POP
+SELECT VAR_POP(c1) FROM buildin_agg;
++---------------------------+
+|var_pop(CAST(c1 AS DOUBLE))|
++---------------------------+
+|         2.2448979591836737|
++---------------------------+
+
+--COLLECT_LIST
+SELECT COLLECT_LIST(c2) FROM buildin_agg;
++---------------------+
+|collect_list(c2)     |
++---------------------+
+|[3, 2, 1, 3, 3, 2, 4]|
++---------------------+
+
+SELECT COLLECT_LIST(c4) FROM buildin_agg;
++------------------------------------------------------+
+|collect_list(c4)                                      |
++------------------------------------------------------+
+|[true, false, false, false, true, false, false, false]|
++------------------------------------------------------+
+
+--COLLECT_SET
+SELECT COLLECT_SET(c2) FROM buildin_agg;
++---------------+
+|collect_set(c2)|
++---------------+
+|[1, 2, 3, 4]   |
++---------------+
+
+SELECT COLLECT_SET(c3) FROM buildin_agg;
++------------------------------------------------+
+|collect_set(c3)                                 |
++------------------------------------------------+
+|[agg7, agg8, agg3, agg6, agg4, agg2, agg5, agg1]|
++------------------------------------------------+
+
+--COUNT_MIN_SKETCH
+SELECT COUNT_MIN_SKETCH(c1, 1D, 0.2D, 3) FROM buildin_agg;
++-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|count_min_sketch(c1, 0.9, 0.2, 3)                                                                                                                            |
++-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|[00 00 00 01 00 00 00 00 00 00 00 07 00 00 00 01 00 00 00 03 00 00 00 00 5D 93 49 A6 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 06]|
++-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+{% endhighlight %}
