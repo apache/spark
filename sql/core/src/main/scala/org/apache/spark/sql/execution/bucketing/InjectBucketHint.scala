@@ -33,9 +33,7 @@ object InjectBucketHint extends Rule[LogicalPlan]  {
 
   private def isPlanEligible(plan: LogicalPlan): Boolean = {
     plan.forall {
-      case _: Filter => true
-      case _: Project => true
-      case _: LogicalRelation => true
+      case _: Filter | _: Project | _: LogicalRelation => true
       case _ => false
     }
   }
