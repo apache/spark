@@ -319,7 +319,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
-   * @since 2.2.0
+   * @since 3.1.0
    */
   override def createTable(
       tableName: String,
@@ -351,7 +351,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
-   * @since 2.2.0
+   * @since 3.1.0
    */
   override def createTable(
       tableName: String,
