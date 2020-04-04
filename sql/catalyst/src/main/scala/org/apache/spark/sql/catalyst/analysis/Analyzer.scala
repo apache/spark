@@ -1391,7 +1391,7 @@ class Analyzer(
               notMatchedActions = newNotMatchedActions)
         }
 
-      case f @ Filter(cond, _) if containsAggregate(cond) => f
+      case f @ Filter(cond, agg @ Aggregate(_, _, _)) if containsAggregate(cond) => f
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
