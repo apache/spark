@@ -235,7 +235,7 @@ class BarrierTaskContext(TaskContext):
             raise Exception("Not supported to call barrier() before initialize " +
                             "BarrierTaskContext.")
         else:
-             _load_from_socket(
+            _load_from_socket(
                 self._port,
                 self._secret,
                 ALL_GATHER_FUNCTION,
