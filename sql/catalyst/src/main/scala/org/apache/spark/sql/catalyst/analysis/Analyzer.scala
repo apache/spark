@@ -1391,6 +1391,11 @@ class Analyzer(
               notMatchedActions = newNotMatchedActions)
         }
 
+      // When filter condition is havingConditions, columns haven't been handled by
+      // TypeCoercion, this make a situation that cond isn't resolved because of aggregate
+      // functions's checkInputDataType method. Then it can't be handled by
+      // ResolveAggregateFunctions, finally cause column resolve error.
+      // For this situation, we don't resolve cond's reference here
       case f @ Filter(cond, agg @ Aggregate(_, _, _)) if containsAggregate(cond) => f
 
       case q: LogicalPlan =>
@@ -1400,11 +1405,18 @@ class Analyzer(
 
     def containsAggregate(e: Expression): Boolean = {
       e.find {
+        // In current loop, functions maybe unresolved,
+        // we should judge if it is aggregate function now
         case func: UnresolvedFunction =>
           try {
             v1SessionCatalog.lookupFunction(func.name, func.arguments)
               .isInstanceOf[AggregateFunction]
           } catch {
+            // When UnresolvedFunction is a UDF function, we can't lookup function since
+            // it's arguments is unresolved. If throw exception when lookup functions,
+            // let's assume that we don't deal with this situation right now,
+            // after next loop, this function's arguments will be resolved
+            // then we can judge if this function is aggregate function next time.
             case _: Exception => true
           }
         case _ =>
@@ -1695,6 +1707,11 @@ class Analyzer(
           Project(child.output, newSort)
         }
 
+      // When filter condition is havingConditions, columns haven't been handled by
+      // TypeCoercion, this make a situation that cond isn't resolved because of aggregate
+      // functions's checkInputDataType method. Then it can't be handled by
+      // ResolveAggregateFunctions, finally cause column resolve error.
+      // For this situation, we don't resolve cond's reference here
       case f @ Filter(cond, child) if (!f.resolved || f.missingInput.nonEmpty) && child.resolved
         && (!child.isInstanceOf[Aggregate] || !ResolveReferences.containsAggregate(cond)) =>
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
