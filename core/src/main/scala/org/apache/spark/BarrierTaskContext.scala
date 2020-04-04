@@ -24,9 +24,6 @@ import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.json4s.DefaultFormats
-import org.json4s.jackson.JsonMethods.parse
-
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
