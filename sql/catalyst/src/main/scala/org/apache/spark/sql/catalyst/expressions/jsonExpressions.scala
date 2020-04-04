@@ -20,8 +20,10 @@ package org.apache.spark.sql.catalyst.expressions
 import java.io._
 
 import scala.util.parsing.combinator.RegexParsers
+
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -31,8 +33,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-
-import scala.util.control.NonFatal
 
 private[this] sealed trait PathInstruction
 private[this] object PathInstruction {
