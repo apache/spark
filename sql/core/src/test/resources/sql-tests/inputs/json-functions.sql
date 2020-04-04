@@ -73,6 +73,9 @@ select json_array_length('{"key":"not a json array"}');
 select json_array_length('[1,2,3,4,5');
 
 -- json_object_keys
+select json_object_keys();
+select json_object_keys(null);
+select json_object_keys(200);
 select json_object_keys('');
 select json_object_keys('{"key": 1}');
 select json_object_keys('{}');

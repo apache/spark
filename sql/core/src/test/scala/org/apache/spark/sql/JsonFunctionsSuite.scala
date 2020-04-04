@@ -714,5 +714,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq("""{"a": 1, "b": 2, "c": 3}""").toDF("json")
     val dfKeys = df.selectExpr("json_object_keys(json)")
     checkAnswer(dfKeys, Row(Array("a", "b", "c")))
+
+    val df_int = Seq(2).toDF("json")
+    val errMsg = intercept[AnalysisException](
+      df_int.selectExpr("json_object_keys(json)")
+    ).getMessage
+    assert(errMsg.contains("due to data type mismatch"))
   }
 }

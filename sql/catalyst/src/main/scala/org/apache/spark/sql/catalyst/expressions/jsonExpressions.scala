@@ -877,7 +877,7 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * json_object - A JSON object. If it is an invalid string, the function returns null.
-          If it is a JSON array or null, a runtime exception will be thrown.
+          If it is a JSON array, an illegal argument exception will be thrown.
   """,
   examples = """
     Examples:
@@ -890,14 +890,21 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   """,
   since = "3.1.0"
 )
-case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback {
+case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback
+  with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
   override def dataType: DataType = ArrayType(StringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 
   override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    if(json == null) {
+      return null
+    }
+
     try {
-      val json = child.eval(input).asInstanceOf[UTF8String]
       Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
         parser => getJsonKeys(parser, input)
       }

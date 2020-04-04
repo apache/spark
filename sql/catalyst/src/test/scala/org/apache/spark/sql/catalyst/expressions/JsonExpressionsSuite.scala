@@ -833,40 +833,29 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("json_object_keys") {
-    val null_object = """"""
-    val empty_json_object = """{}"""
-    val simple_json_object = """{"key": 1}"""
-    val another_simple_json_object = """{"key": "value", "key2": 2}"""
-    val json_object_with_array = """{"arrayKey": [1, 2, 3]}"""
-    val another_json_object_with_array = """{"key":[1,2,3,{"key":"value"},[1,2,3]]}"""
-    val complex_json_object = """{"f1":"abc","f2":{"f3":"a", "f4":"b"}}"""
-    val another_complex_json_object = """{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}"""
-    val empty_json_array = """[]"""
-    val invalid_json_object = """{[1,2]}"""
-    val another_invalid_json_object = """{"key": 45, "random_string"}"""
+    Seq(
+      ("""{}""", Seq.empty[UTF8String]),
+      ("""{"key": 1}""", Seq("key")),
+      ("""{"key": "value", "key2": 2}""", Seq("key", "key2")),
+      ("""{"arrayKey": [1, 2, 3]}""", Seq("arrayKey")),
+      ("""{"key":[1,2,3,{"key":"value"},[1,2,3]]}""", Seq("key")),
+      ("""{"f1":"abc","f2":{"f3":"a", "f4":"b"}}""", Seq("f1", "f2")),
+      ("""{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}""", Seq("k1", "k2")),
+      ("""{[1,2]}""", null),
+      ("""{"key": 45, "random_string"}""", null)
+    ).foreach{
+      case (input, expected) =>
+        checkEvaluation(JsonObjectKeys(Literal(input)), expected)
+    }
 
-    checkEvaluation(JsonObjectKeys(Literal(empty_json_object)), Seq.empty[UTF8String])
-    checkEvaluation(JsonObjectKeys(Literal(simple_json_object)), Seq("key"))
-    checkEvaluation(JsonObjectKeys(Literal(another_simple_json_object)), Seq("key", "key2"))
-    checkEvaluation(JsonObjectKeys(Literal(json_object_with_array)), Seq("arrayKey"))
-    checkEvaluation(JsonObjectKeys(Literal(another_json_object_with_array)), Seq("key"))
-    checkEvaluation(JsonObjectKeys(Literal(complex_json_object)), Seq("f1", "f2"))
-    checkEvaluation(JsonObjectKeys(Literal(another_complex_json_object)), Seq("k1", "k2"))
-    checkEvaluation(JsonObjectKeys(Literal(invalid_json_object)), null)
-    checkEvaluation(JsonObjectKeys(Literal(another_invalid_json_object)), null)
+    checkExceptionInExpression[IllegalArgumentException](
+      JsonObjectKeys(Literal("""""")),
+      expectedErrMsg = "json_object_keys expect a JSON object but nothing is provided"
+    )
 
-    val exception = intercept[TestFailedException] {
-      checkEvaluation(JsonObjectKeys(Literal(null_object)), null)
-    }.getCause
-
-    assert(exception.isInstanceOf[IllegalArgumentException])
-    assert(exception.getMessage.contains("expect a JSON object but nothing is provided"))
-
-    val another_exception = intercept[TestFailedException] {
-      checkEvaluation(JsonObjectKeys(Literal(empty_json_array)), null)
-    }.getCause
-
-    assert(another_exception.isInstanceOf[IllegalArgumentException])
-    assert(another_exception.getMessage.contains("can only be called on JSON object"))
+    checkExceptionInExpression[IllegalArgumentException](
+      JsonObjectKeys(Literal("""[]""")),
+      expectedErrMsg = "json_object_keys can only be called on JSON object"
+    )
   }
 }
