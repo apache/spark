@@ -1,7 +1,7 @@
 ---
 layout: global
-title: JOIN
-displayTitle: JOIN
+title: INNER JOIN
+displayTitle: INNER JOIN
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -20,47 +20,54 @@ license: |
 ---
 ### Description
 
-A SQL join is used to combine rows from two relations based on join criteria. The following section describes the overall join syntax and the sub-sections cover different types of joins along with examples.
+The inner join is the default join in Spark. It selects rows that have matching values in both relations.
 
 ### Syntax
 {% highlight sql %}
 
-relation { [ join_type ] JOIN relation [ join_criteria ] | NATURAL join_type JOIN relation }
+relation [ INNER ] JOIN relation [ join_criteria ]
 
 {% endhighlight %}
 
-### Parameters
-<dl>
-  <dt><code><em>relation</em></code></dt>
-  <dd>
-    Specifies the relation to be joined.
-  </dd>
-  <dt><code><em>join_type</em></code></dt>
-  <dd>
-    Specifies the join type.<br><br>
-    <b>Syntax:</b><br>
-      <code>
-        [ INNER ]
-        | CROSS
-        | LEFT [ OUTER ]
-        | [ LEFT ] SEMI
-        | RIGHT [ OUTER ]
-        | FULL [ OUTER ]
-        | [ LEFT ] ANTI
-      </code>
-  </dd>
-  <dt><code><em>join_criteria</em></code></dt>
-  <dd>
-    Specifies how the rows from one relation will be combined with the rows of another relation.<br><br>
-    <b>Syntax:</b>
-      <code>
-      ON booleanExpression | USING ( column_name [ , column_name ... ] )
-      </code>
-  </dd>
-</dl>
+### Examples
+{% highlight sql %}
+-- Use employee and department tables to demonstrate inner join.
 
-### Join Types
-- [INNER JOIN](sql-ref-syntax-qry-select-join-inner.html)
+SELECT * FROM employee;
+
+  +---+-----+-------+
+  |id |name |deptno |
+  +---+-----+-------+
+  |105|Chloe|5      |
+  |103|Paul |3      |
+  |101|John |1      |
+  |102|Lisa |2      |
+  |104|Evan |4      |
+  |106|Amy  |6      |
+  +---+-----+-------+
+
+SELECT * FROM department;
+  +-------+-----------+
+  |deptno |deptname   |
+  +-------+-----------+
+  |3      |Engineering|
+  |2      |Sales      |
+  |1      |Marketing  |
+  +-------+-----------+
+
+SELECT id, name, employee.deptno, deptname
+  FROM employee INNER JOIN department ON employee.deptno = department.deptno;
+  +---+-----+-------+-----------|
+  |id |name |deptno |deptname   |
+  +---+-----+-------+-----------|
+  |103|Paul |3      |Engineering|
+  |101|John |1      |Marketing  |
+  |102|Lisa |2      |Sales      |
+  +---+-----+-------+-----------|
+{% endhighlight %}
+
+### Related Statements
+- [JOIN](sql-ref-syntax-qry-select-join.html)
 - [LEFT JOIN](sql-ref-syntax-qry-select-join-left.html)
 - [RIGHT JOIN](sql-ref-syntax-qry-select-join-right.html)
 - [FULL JOIN](sql-ref-syntax-qry-select-join-full.html)
