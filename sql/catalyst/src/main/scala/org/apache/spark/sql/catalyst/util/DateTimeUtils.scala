@@ -990,9 +990,8 @@ object DateTimeUtils {
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
-  def rebaseGregorianToJulianMicros(micros: Long): Long = {
+  def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
     val instant = microsToInstant(micros)
-    val zoneId = ZoneId.systemDefault
     val ldt = instant.atZone(zoneId).toLocalDateTime
     val cal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
@@ -1005,6 +1004,63 @@ object DateTimeUtils {
       .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
       .build()
     millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
+  }
+
+  /**
+   * Rebases micros/days since the epoch from an original to an target calendar, for instance,
+   * from a hybrid (Julian + Gregorian) to Proleptic Gregorian calendar.
+   *
+   * It finds the latest switch micros/day which is less than `value`, and adds the difference
+   * in micros/days associated with the switch micros/days to the given `value`.
+   * The function is based on linear search which starts from the most recent switch micros/days.
+   * This allows to perform less comparisons for modern dates.
+   *
+   * @param switches The days when difference in micros/days between original and target
+   *                   calendar was changed.
+   * @param diffs The differences in micros/days between calendars.
+   * @param value The number of micros/days since the epoch 1970-01-01 to be rebased to the
+   *             target calendar.
+   * @return The rebased micros/days.
+   */
+  @inline
+  private def rebase[@specialized(Int, Long) T: Numeric](
+      switches: Array[T],
+      diffs: Array[T],
+      value: T): T = {
+    import Numeric.Implicits._
+    import Ordering.Implicits._
+
+    var i = switches.length - 1
+    while (i >= 0 && value < switches(i)) {
+      i -= 1
+    }
+    val rebased = value + diffs(if (i < 0) 0 else i)
+    rebased
+  }
+
+  private val grepJulianDiffsMicros = Map(
+    "America/Los_Angeles" -> Array(
+      -172378000000L, -85978000000L, 422000000L, 86822000000L,
+      173222000000L, 259622000000L, 346022000000L, 432422000000L,
+      518822000000L, 605222000000L, 691622000000L, 778022000000L,
+      864422000000L, 422000000L, 0L))
+  private val gregJulianDiffSwitchMicros = Map(
+    "America/Los_Angeles" -> Array(
+      -62135568422000000L, -59006333222000000L, -55850659622000000L, -52694986022000000L,
+      -46383552422000000L, -43227878822000000L, -40072205222000000L, -33760771622000000L,
+      -30605098022000000L, -27449424422000000L, -21137990822000000L, -17982317222000000L,
+      -14826643622000000L, -12219264422000000L, -2717638622000000L)
+  )
+
+  def rebaseGregorianToJulianMicros(micros: Long): Long = {
+    val timeZone = TimeZone.getDefault
+    val tzId = timeZone.getID
+    val diffs = grepJulianDiffsMicros.get(tzId)
+    if (diffs.isEmpty) {
+      rebaseGregorianToJulianMicros(timeZone.toZoneId, micros)
+    } else {
+      rebase(gregJulianDiffSwitchMicros(tzId), diffs.get, micros)
+    }
   }
 
   /**
@@ -1047,31 +1103,6 @@ object DateTimeUtils {
     instantToMicros(adjustedZdt.toInstant)
   }
 
-  /**
-   * Rebases days since the epoch from an original to an target calendar, from instance
-   * from a hybrid (Julian + Gregorian) to Proleptic Gregorian calendar.
-   *
-   * It finds the latest switch day which is less than `days`, and adds the difference
-   * in days associated with the switch day to the given `days`. The function is based
-   * on linear search which starts from the most recent switch days. This allows to perform
-   * less comparisons for modern dates.
-   *
-   * @param switchDays The days when difference in days between original and target
-   *                   calendar was changed.
-   * @param diffs The differences in days between calendars.
-   * @param days The number of days since the epoch 1970-01-01 to be rebased to the
-   *             target calendar.
-   * @return The rebased day
-   */
-  private def rebaseDays(switchDays: Array[Int], diffs: Array[Int], days: Int): Int = {
-    var i = switchDays.length - 1
-    while (i >= 0 && days < switchDays(i)) {
-      i -= 1
-    }
-    val rebased = days + diffs(if (i < 0) 0 else i)
-    rebased
-  }
-
   // The differences in days between Julian and Proleptic Gregorian dates.
   // The diff at the index `i` is applicable for all days in the date interval:
   // [julianGregDiffSwitchDay(i), julianGregDiffSwitchDay(i+1))
@@ -1095,7 +1126,7 @@ object DateTimeUtils {
    * @return The rebased number of days in Gregorian calendar.
    */
   def rebaseJulianToGregorianDays(days: Int): Int = {
-    rebaseDays(julianGregDiffSwitchDay, julianGregDiffs, days)
+    rebase(julianGregDiffSwitchDay, julianGregDiffs, days)
   }
 
   // The differences in days between Proleptic Gregorian and Julian dates.
@@ -1128,6 +1159,6 @@ object DateTimeUtils {
    * @return The rebased number of days since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianDays(days: Int): Int = {
-    rebaseDays(gregJulianDiffSwitchDay, grepJulianDiffs, days)
+    rebase(gregJulianDiffSwitchDay, grepJulianDiffs, days)
   }
 }
