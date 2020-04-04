@@ -118,8 +118,6 @@ private[r] object LinearRegressionWrapper
 
   override def read: MLReader[LinearRegressionWrapper] = new LinearRegressionWrapperReader
 
-  override def load(path: String): LinearRegressionWrapper = super.load(path)
-
   class LinearRegressionWrapperWriter(instance: LinearRegressionWrapper) extends MLWriter {
     override protected def saveImpl(path: String): Unit = {
       val rMetadataPath = new Path(path, "rMetadata").toString
