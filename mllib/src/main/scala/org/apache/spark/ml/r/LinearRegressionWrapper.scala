@@ -33,7 +33,6 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 private[r] class LinearRegressionWrapper private (
     val pipeline: PipelineModel,
     val features: Array[String]) extends MLWritable {
-  import LinearRegressionWrapper._
 
   private val linearRegressionModel: LinearRegressionModel =
     pipeline.stages(1).asInstanceOf[LinearRegressionModel]
