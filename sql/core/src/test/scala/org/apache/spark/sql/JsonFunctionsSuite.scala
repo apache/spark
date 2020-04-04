@@ -709,12 +709,4 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
           options.asJava)),
       Seq(Row("string")))
   }
-
-  test("json_array_length") {
-    val df = Seq(1).toDF("json")
-    val errMsg = intercept[AnalysisException] {
-      df.selectExpr("json_array_length(json)")
-    }.getMessage
-    assert(errMsg.contains("due to data type mismatch"))
-  }
 }

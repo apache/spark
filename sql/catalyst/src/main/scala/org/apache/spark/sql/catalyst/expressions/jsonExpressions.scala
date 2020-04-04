@@ -798,14 +798,14 @@ case class SchemaOfJson(
 }
 
 /**
- * A function that returns the number of elements in outer JSON array.
+ * A function that returns the number of elements in the outmost JSON array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(jsonArray) - Returns the number of elements in outer JSON array.",
+  usage = "_FUNC_(jsonArray) - Returns the number of elements in the outmost JSON array.",
   arguments = """
     Arguments:
       * jsonArray - A JSON array. An exception is thrown if any other valid JSON strings are passed.
-          `NULL` is returned in case of an invalid JSON.
+          `NULL` is returned in case of `NULL` or an invalid JSON.
   """,
   examples = """
     Examples:
@@ -821,7 +821,7 @@ case class SchemaOfJson(
 case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   with CodegenFallback with ExpectsInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override def prettyName: String = "json_array_length"
@@ -850,7 +850,7 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   }
 
   private def parseCounter(parser: JsonParser, input: InternalRow): Int = {
-    var length = 0;
+    var length = 0
     // Only JSON array are supported for this function.
     if (parser.currentToken != JsonToken.START_ARRAY) {
       throw new IllegalArgumentException(s"$prettyName can only be called on JSON array.")
