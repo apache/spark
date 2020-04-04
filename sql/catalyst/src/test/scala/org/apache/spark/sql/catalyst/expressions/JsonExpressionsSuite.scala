@@ -792,28 +792,25 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("Length of JSON array") {
-    val null_json_array = """"""
-    val simple_json_array = """[1,2,3]"""
-    val empty_json_array = """[]"""
-    val json_array_of_array = """[[1],[2,3],[]]"""
-    val json_array_of_objects = """[{"a":123},{"b":"hello"}]"""
-    val complex_json_array = """[1,2,3,[33,44],{"key":[2,3,4]}]"""
+    Seq(
+      ("""""", null),
+      ("""[1,2,3]""", 3),
+      ("""[]""", 0),
+      ("""[[1],[2,3],[]]""", 3),
+      ("""[{"a":123},{"b":"hello"}]""", 2),
+      ("""[1,2,3,[33,44],{"key":[2,3,4]}]""", 5),
+      ("""[1,2,3,4,5""", null),
+      ("""Random String""", null)
+    ).foreach{
+      case(literal, expectedValue) =>
+        checkEvaluation(LengthOfJsonArray(Literal(literal)), expectedValue)
+    }
+
     val not_a_json_array = """{"key":"not a json array"}"""
-    val invalid_json_array = """[1,2,3,4,5"""
 
-    checkEvaluation(LengthOfJsonArray(Literal(null_json_array)), null)
-    checkEvaluation(LengthOfJsonArray(Literal(simple_json_array)), 3)
-    checkEvaluation(LengthOfJsonArray(Literal(empty_json_array)), 0)
-    checkEvaluation(LengthOfJsonArray(Literal(json_array_of_array)), 3)
-    checkEvaluation(LengthOfJsonArray(Literal(json_array_of_objects)), 2)
-    checkEvaluation(LengthOfJsonArray(Literal(complex_json_array)), 5)
-    checkEvaluation(LengthOfJsonArray(Literal(invalid_json_array)), null)
-
-    val exception = intercept[TestFailedException]{
-      checkEvaluation(LengthOfJsonArray(Literal(not_a_json_array)), null)
-    }.getCause
-
-    assert(exception.isInstanceOf[IllegalArgumentException])
-    assert(exception.getMessage.contains("can only be called on JSON array"))
+    checkExceptionInExpression[IllegalArgumentException](
+      LengthOfJsonArray(Literal(not_a_json_array)),
+      expectedErrMsg = "json_array_length can only be called on JSON array"
+    )
   }
 }

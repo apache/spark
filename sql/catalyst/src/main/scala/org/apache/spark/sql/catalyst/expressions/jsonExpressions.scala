@@ -20,10 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.io._
 
 import scala.util.parsing.combinator.RegexParsers
-
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -33,6 +31,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
+
+import scala.util.control.NonFatal
 
 private[this] sealed trait PathInstruction
 private[this] object PathInstruction {
@@ -804,8 +804,8 @@ case class SchemaOfJson(
   usage = "_FUNC_(jsonArray) - Returns the number of elements in outer JSON array.",
   arguments = """
     Arguments:
-      * jsonArray - A JSON array. An Exception is thrown if any other valid JSON strings are passed.
-          `NULL` is returned in case of invalid JSON.
+      * jsonArray - A JSON array. An exception is thrown if any other valid JSON strings are passed.
+          `NULL` is returned in case of an invalid JSON.
   """,
   examples = """
     Examples:
@@ -818,14 +818,21 @@ case class SchemaOfJson(
   """,
   since = "3.1.0"
 )
-case class LengthOfJsonArray(child: Expression)
-  extends UnaryExpression with CodegenFallback {
+case class LengthOfJsonArray(child: Expression) extends UnaryExpression
+  with CodegenFallback with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override def prettyName: String = "json_array_length"
 
   override def eval(input: InternalRow): Any = {
     val json = child.eval(input).asInstanceOf[UTF8String]
+    // return null for null input
+    if (json == null) {
+      return null
+    }
+
     try {
       Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
         parser => {
@@ -843,7 +850,7 @@ case class LengthOfJsonArray(child: Expression)
   }
 
   private def parseCounter(parser: JsonParser, input: InternalRow): Int = {
-    var length: Int = 0;
+    var length = 0;
     // Only JSON array are supported for this function.
     if (parser.currentToken != JsonToken.START_ARRAY) {
       throw new IllegalArgumentException(s"$prettyName can only be called on JSON array.")

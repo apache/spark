@@ -60,6 +60,9 @@ CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1,
 SELECT schema_of_json(jsonField) FROM jsonTable;
 
 -- json_array_length
+select json_array_length(null);
+select json_array_length(2);
+select json_array_length();
 select json_array_length('');
 select json_array_length('[]');
 select json_array_length('[1,2,3]');
