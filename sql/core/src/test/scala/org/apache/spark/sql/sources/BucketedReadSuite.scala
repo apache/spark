@@ -332,7 +332,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       bucketSpec: Option[BucketSpec],
       numPartitions: Int = 10,
       expectedShuffle: Boolean = true,
-      expectedSort: Boolean = true)
+      expectedSort: Boolean = true,
+      expectedNumOutputPartitions: Option[Int] = None)
 
   /**
    * A helper method to test the bucket read functionality using join.  It will save `df1` and `df2`
@@ -345,10 +346,18 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       bucketedTableTestSpecRight: BucketedTableTestSpec,
       joinType: String = "inner",
       joinCondition: (DataFrame, DataFrame) => Column): Unit = {
-    val BucketedTableTestSpec(bucketSpecLeft, numPartitionsLeft, shuffleLeft, sortLeft) =
-      bucketedTableTestSpecLeft
-    val BucketedTableTestSpec(bucketSpecRight, numPartitionsRight, shuffleRight, sortRight) =
-      bucketedTableTestSpecRight
+    val BucketedTableTestSpec(
+      bucketSpecLeft,
+      numPartitionsLeft,
+      shuffleLeft,
+      sortLeft,
+      numOutputPartitionsLeft) = bucketedTableTestSpecLeft
+    val BucketedTableTestSpec(
+      bucketSpecRight,
+      numPartitionsRight,
+      shuffleRight,
+      sortRight,
+      numOutputPartitionsRight) = bucketedTableTestSpecRight
 
     withTable("bucketed_table1", "bucketed_table2") {
       def withBucket(
@@ -413,6 +422,16 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         assert(
           joinOperator.right.find(_.isInstanceOf[SortExec]).isDefined == sortRight,
           s"expected sort in the right child to be $sortRight but found\n${joinOperator.right}")
+
+        // check the output partitioning
+        if (numOutputPartitionsLeft.isDefined) {
+          assert(joinOperator.left.outputPartitioning.numPartitions ===
+            numOutputPartitionsLeft.get)
+        }
+        if (numOutputPartitionsRight.isDefined) {
+          assert(joinOperator.right.outputPartitioning.numPartitions ===
+            numOutputPartitionsRight.get)
+        }
       }
     }
   }
@@ -853,6 +872,30 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           )
         }
       }
+    }
+  }
+
+  test("bucket coalescing eliminates shuffle") {
+    withSQLConf(SQLConf.BUCKETING_COALESCE_ENABLED.key -> "true") {
+      // Left side will be coalesced to have 4 output partitions.
+      // Currently, sort will be introduced for the side that is coalesced.
+      val bucketedTableTestSpecLeft = BucketedTableTestSpec(
+        Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = true,
+        expectedNumOutputPartitions = Some(4))
+      val bucketedTableTestSpecRight = BucketedTableTestSpec(
+        Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = false,
+        expectedNumOutputPartitions = Some(4))
+
+      testBucketing(
+        bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+        bucketedTableTestSpecRight = bucketedTableTestSpecRight,
+        joinCondition = joinCondition(Seq("i", "j")))
     }
   }
 }
