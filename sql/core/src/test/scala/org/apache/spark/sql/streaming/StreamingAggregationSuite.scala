@@ -185,7 +185,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
-  (1 to 50).foreach { i =>
   testWithAllStateVersions(s"trial $i: state metrics - append mode") {
     val inputData = MemoryStream[Int]
     val aggWithWatermark = inputData.toDF()
@@ -253,7 +252,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
       AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 1 }
     )
-  }
   }
 
   testWithAllStateVersions("state metrics - update/complete mode") {
