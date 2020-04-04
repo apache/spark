@@ -140,8 +140,6 @@ private[r] object FMClassifierWrapper
 
   override def read: MLReader[FMClassifierWrapper] = new FMClassifierWrapperReader
 
-  override def load(path: String): FMClassifierWrapper = super.load(path)
-
   class FMClassifierWrapperWriter(instance: FMClassifierWrapper) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
