@@ -870,14 +870,16 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
 }
 
 /**
- * A function which returns all the keys of outer JSON object.
+ * A function which returns all the keys of the outmost JSON object.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(json_object) - returns all the keys of outer JSON object.",
+  usage = "_FUNC_(json_object) - returns all the keys of the outmost JSON object as an array.",
   arguments = """
     Arguments:
-      * json_object - A JSON object. If it is an invalid string, the function returns null.
-          If it is a JSON array, an illegal argument exception will be thrown.
+      * json_object - A JSON object. If a valid JSON object is given, all the keys of the outmost
+          object will be returned as an array. If it is an invalid JSON string, the function
+          returns null. If it is a JSON array or empty string, an illegal argument exception
+          will be thrown.
   """,
   examples = """
     Examples:
@@ -900,6 +902,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
 
   override def eval(input: InternalRow): Any = {
     val json = child.eval(input).asInstanceOf[UTF8String]
+    // return null for `NULL` input
     if(json == null) {
       return null
     }
@@ -915,10 +918,10 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
 
   private def getJsonKeys(parser: JsonParser, input: InternalRow): Any = {
     var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
-    // this handles `NULL` case
+    // this handles empty string case
     if (parser.nextToken() == null) {
       throw new IllegalArgumentException(
-        s"$prettyName expect a JSON object but nothing is provided.")
+        s"$prettyName expects a JSON object but nothing is provided.")
     }
 
     // when a JSON array is found, throw a runtime exception

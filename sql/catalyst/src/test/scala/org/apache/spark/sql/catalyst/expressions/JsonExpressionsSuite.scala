@@ -850,7 +850,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
     checkExceptionInExpression[IllegalArgumentException](
       JsonObjectKeys(Literal("""""")),
-      expectedErrMsg = "json_object_keys expect a JSON object but nothing is provided"
+      expectedErrMsg = "json_object_keys expects a JSON object but nothing is provided"
     )
 
     checkExceptionInExpression[IllegalArgumentException](
