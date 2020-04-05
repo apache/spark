@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
@@ -220,12 +220,22 @@ object StatFunctions extends Logging {
     crossTabulateColumns(df, Column(col1), Column(col2))
   }
 
+  private def columnName(col: Column): Option[String] = {
+    if col.expr.isInstanceOf[NamedExpression] {
+      Some(col.expr.toString)
+    } else {
+      None
+    }
+  }
+
   /** Helper method to provide Column-type API for stat functions SPARK-31156).
    *  Overloading the same function to provide both Seq[String] and Seq[Column]
    *  arguments is not possible because of type erasure
    */
   private[sql] def crossTabulateColumns(df: DataFrame, col1: Column, col2: Column): DataFrame = {
-    val tableName = s"${col1}_$col2"
+    val colName1 = columnName(col1).getOrElse("col1")
+    val colName2 = columnName(col2).getOrElse("col2")
+    val tableName = s"${colName1}_$colName2"
     val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
     if (counts.length == 1e6.toInt) {
       logWarning("The maximum limit of 1e6 pairs have been collected, which may not be all of " +
