@@ -492,7 +492,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
             assert_frame_equal(agg1.toPandas(), agg2.toPandas())
 
     def test_no_predicate_pushdown_through(self):
-        # SPARK-12345: We should not pushdown predicates of PythonUDFs through Aggregate.
+        # SPARK-30921: We should not pushdown predicates of PythonUDFs through Aggregate.
         import numpy as np
 
         @pandas_udf('float', PandasUDFType.GROUPED_AGG)
