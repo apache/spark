@@ -1164,7 +1164,6 @@ object SparkSession extends Logging {
 
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
-
       case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
     }
@@ -1172,7 +1171,6 @@ object SparkSession extends Logging {
 
   private def assertOnDriver(): Unit = {
     if (Utils.isTesting && TaskContext.get != null) {
-      defaultSession.get().sessionListener
       // we're accessing it during task execution, fail.
       throw new IllegalStateException(
         "SparkSession should only be created and accessed on the driver.")

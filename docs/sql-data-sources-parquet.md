@@ -258,7 +258,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
 `SET key=value` commands using SQL.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.sql.parquet.binaryAsString</code></td>
   <td>false</td>
@@ -267,6 +267,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     not differentiate between binary data and strings when writing out the Parquet schema. This
     flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.int96AsTimestamp</code></td>
@@ -275,6 +276,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     Some Parquet-producing systems, in particular Impala and Hive, store Timestamp into INT96. This
     flag tells Spark SQL to interpret INT96 data as a timestamp to provide compatibility with these systems.
   </td>
+  <td>1.3.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
@@ -287,11 +289,13 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     Note that <code>zstd</code> requires <code>ZStandardCodec</code> to be installed before Hadoop 2.9.0, <code>brotli</code> requires
     <code>BrotliCodec</code> to be installed.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.filterPushdown</code></td>
   <td>true</td>
   <td>Enables Parquet filter push-down optimization when set to true.</td>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
@@ -300,6 +304,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of the built in
     support.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.mergeSchema</code></td>
@@ -310,6 +315,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
       schema is picked from the summary file or a random data file if no summary file is available.
     </p>
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.writeLegacyFormat</code></td>
@@ -321,5 +327,6 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     example, decimals will be written in int-based format. If Parquet output is intended for use
     with systems that do not support this newer format, set to true.
   </td>
+  <td>1.6.0</td>
 </tr>
 </table>

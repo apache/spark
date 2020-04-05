@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -63,6 +64,7 @@ object TypeCoercion {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
+      StringLiteralCoercion ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -158,7 +160,7 @@ object TypeCoercion {
       }
     case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
       findTypeFunc(kt1, kt2)
-        .filter { kt => Cast.canCastMapKeyNullSafe(kt1, kt) && Cast.canCastMapKeyNullSafe(kt2, kt) }
+        .filter { kt => !Cast.forceNullable(kt1, kt) && !Cast.forceNullable(kt2, kt) }
         .flatMap { kt =>
           findTypeFunc(vt1, vt2).map { vt =>
             MapType(kt, vt, valueContainsNull1 || valueContainsNull2 ||
@@ -1041,6 +1043,34 @@ object TypeCoercion {
           Cast(e, t)
         case _ => boundary
       }
+    }
+  }
+
+  /**
+   * A special rule to support string literal as the second argument of date_add/date_sub functions,
+   * to keep backward compatibility as a temporary workaround.
+   * TODO(SPARK-28589): implement ANSI type type coercion and handle string literals.
+   */
+  object StringLiteralCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+      case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
+        val days = try {
+          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+        } catch {
+          case e: NumberFormatException => throw new AnalysisException(
+            "The second argument of 'date_add' function needs to be an integer.", cause = Some(e))
+        }
+        DateAdd(l, Literal(days))
+      case DateSub(l, r) if r.dataType == StringType && r.foldable =>
+        val days = try {
+          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+        } catch {
+          case e: NumberFormatException => throw new AnalysisException(
+            "The second argument of 'date_sub' function needs to be an integer.", cause = Some(e))
+        }
+        DateSub(l, Literal(days))
     }
   }
 }
