@@ -35,6 +35,7 @@ import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseGregorianToJulianDays
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -153,7 +154,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case DateType if rebaseDateTime =>
         (row: SpecializedGetters, ordinal: Int) =>
-          val rebasedDays = DateTimeUtils.rebaseGregorianToJulianDays(row.getInt(ordinal))
+          val rebasedDays = rebaseGregorianToJulianDays(row.getInt(ordinal))
           recordConsumer.addInteger(rebasedDays)
 
       case IntegerType | DateType =>

@@ -35,6 +35,7 @@ import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.internal.SQLConf;
@@ -426,7 +427,7 @@ public class VectorizedColumnReader {
           if (defColumn.readInteger() == maxDefLevel) {
             column.putInt(
               rowId + i,
-              DateTimeUtils.rebaseJulianToGregorianDays(dataColumn.readInteger()));
+              RebaseDateTime.rebaseJulianToGregorianDays(dataColumn.readInteger()));
           } else {
             column.putNull(rowId + i);
           }

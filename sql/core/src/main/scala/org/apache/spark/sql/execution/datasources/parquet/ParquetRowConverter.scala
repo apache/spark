@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianDays
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -330,7 +331,7 @@ private[parquet] class ParquetRowConverter(
         if (rebaseDateTime) {
           new ParquetPrimitiveConverter(updater) {
             override def addInt(value: Int): Unit = {
-              updater.set(DateTimeUtils.rebaseJulianToGregorianDays(value))
+              updater.set(rebaseJulianToGregorianDays(value))
             }
           }
         } else {

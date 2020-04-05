@@ -35,6 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseGregorianToJulianDays
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -142,7 +143,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
 
       case (DateType, INT) if rebaseDateTime =>
-        (getter, ordinal) => DateTimeUtils.rebaseGregorianToJulianDays(getter.getInt(ordinal))
+        (getter, ordinal) => rebaseGregorianToJulianDays(getter.getInt(ordinal))
 
       case (DateType, INT) =>
         (getter, ordinal) => getter.getInt(ordinal)

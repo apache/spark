@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianDays
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -95,7 +96,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
 
       case (INT, DateType) if rebaseDateTime => (updater, ordinal, value) =>
         val days = value.asInstanceOf[Int]
-        val rebasedDays = DateTimeUtils.rebaseJulianToGregorianDays(days)
+        val rebasedDays = rebaseJulianToGregorianDays(days)
         updater.setInt(ordinal, rebasedDays)
 
       case (INT, DateType) => (updater, ordinal, value) =>
