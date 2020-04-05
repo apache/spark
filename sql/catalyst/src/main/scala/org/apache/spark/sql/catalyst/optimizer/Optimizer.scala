@@ -1191,7 +1191,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // AggregateExpression or PythonUDF, and create a map from the alias to the expression
     val aliasMap = plan.aggregateExpressions.collect {
       case a: Alias if a.child.find(e => e.isInstanceOf[AggregateExpression] ||
-          e.isInstanceOf[PythonUDF]).isEmpty =>
+          PythonUDF.isGroupedAggPandasUDF(e)).isEmpty =>
         (a.toAttribute, a.child)
     }
     AttributeMap(aliasMap)

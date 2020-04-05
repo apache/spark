@@ -492,7 +492,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
             assert_frame_equal(agg1.toPandas(), agg2.toPandas())
 
     def test_no_predicate_pushdown_through(self):
-        from pyspark.sql.functions import monotonically_increasing_id, explode_outer
+        # SPARK-12345: We should not pushdown predicates of PythonUDFs through Aggregate.
         import numpy as np
 
         @pandas_udf('float', PandasUDFType.GROUPED_AGG)
@@ -500,18 +500,13 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
             return np.mean(x)
 
         df = self.spark.createDataFrame([
-            Row(foo=[Row(bar=42), Row(bar=43), Row(bar=44)]),
+            Row(id=1, foo=42), Row(id=2, foo=1), Row(id=2, foo=2)
         ])
 
-        df_with_id = df.withColumn('id', monotonically_increasing_id())
-        exploded = df_with_id.select('id', explode_outer('foo').alias('foos'))
+        agg = df.groupBy('id').agg(mean('foo').alias("mean"))
+        filtered = agg.filter(agg['mean'] > 40.0)
 
-        agg = exploded.groupBy('id').agg(mean('foos.bar').alias("mean"))
-
-        joined = df_with_id.join(agg, 'id', 'left').select(df_with_id['id'], 'mean')
-        filtered = joined.filter(joined['mean'] > 1.0)
-
-        assert(filtered.collect()[0]["mean"] == 43.0)
+        assert(filtered.collect()[0]["mean"] == 42.0)
 
 
 if __name__ == "__main__":
