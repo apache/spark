@@ -69,10 +69,10 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def approxQuantile(
-      col: String,
+      colName: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    approxQuantile(Array(col), probabilities, relativeError).head
+    approxQuantile(Array(col(colName)), probabilities, relativeError).head
   }
 
   /**
@@ -97,13 +97,37 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
-    StatFunctions.multipleApproxQuantiles(
-      df.select(cols.map(col): _*),
+    approxQuantile(cols.map(col), probabilities, relativeError)
+  }
+
+  /**
+   * Calculates the approximate quantiles of numerical columns of a DataFrame.
+   * @see `approxQuantile(col:Str* approxQuantile)` for detailed description.
+   *
+   * @param cols the numerical columns
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (greater than or equal to 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
+   * @return the approximate quantiles at the given probabilities of each column
+   *
+   * @note null and NaN values will be ignored in numerical columns before calculation. For
+   *   columns only containing null or NaN values, an empty array is returned.
+   *
+   * @since 3.0.0
+   */
+  def approxQuantile(
+      cols: Array[Column],
+      probabilities: Array[Double],
+      relativeError: Double): Array[Array[Double]] = {
+    StatFunctions.multipleApproxQuantilesColumns(
+      df.select(cols: _*),
       cols,
       probabilities,
       relativeError).map(_.toArray).toArray
   }
-
 
   /**
    * Python-friendly version of [[approxQuantile()]]
@@ -132,7 +156,26 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def cov(col1: String, col2: String): Double = {
-    StatFunctions.calculateCov(df, Seq(col1, col2))
+    cov(Column(col1), Column(col2))
+  }
+
+  /**
+   * Calculate the sample covariance of two numerical columns of a DataFrame.
+   * @param col1 the first column
+   * @param col2 the second column
+   * @return the covariance of the two columns.
+   *
+   * {{{
+   *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
+   *      .withColumn("rand2", rand(seed=27))
+   *    df.stat.cov(df("rand1"), df("rand2"))
+   *    res1: Double = 0.065...
+   * }}}
+   *
+   * @since 3.0.0
+   */
+  def cov(col1: Column, col2: Column): Double = {
+    StatFunctions.calculateCovColumns(df, Seq(col1, col2))
   }
 
   /**
@@ -154,9 +197,31 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def corr(col1: String, col2: String, method: String): Double = {
+    corr(Column(col1), Column(col2), method)
+  }
+
+  /**
+   * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
+   * MLlib's Statistics.
+   *
+   * @param col1 the first column
+   * @param col2 the column to calculate the correlation against
+   * @return The Pearson Correlation Coefficient as a Double.
+   *
+   * {{{
+   *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
+   *      .withColumn("rand2", rand(seed=27))
+   *    df.stat.corr(df("rand1"), df("rand2"), "pearson")
+   *    res1: Double = 0.613...
+   * }}}
+   *
+   * @since 3.0.0
+   */
+  def corr(col1: Column, col2: Column, method: String): Double = {
     require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
       "coefficient is supported.")
-    StatFunctions.pearsonCorrelation(df, Seq(col1, col2))
+    StatFunctions.pearsonCorrelationColumns(df, Seq(col1, col2))
   }
 
   /**
@@ -176,6 +241,26 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def corr(col1: String, col2: String): Double = {
+    corr(col1, col2, "pearson")
+  }
+
+  /**
+   * Calculates the Pearson Correlation Coefficient of two columns of a DataFrame.
+   *
+   * @param col1 the first column
+   * @param col2 the column to calculate the correlation against
+   * @return The Pearson Correlation Coefficient as a Double.
+   *
+   * {{{
+   *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
+   *      .withColumn("rand2", rand(seed=27))
+   *    df.stat.corr(df("rand1"), df("rand2"), "pearson")
+   *    res1: Double = 0.613...
+   * }}}
+   *
+   * @since 3.0.0
+   */
+  def corr(col1: Column, col2: Column): Double = {
     corr(col1, col2, "pearson")
   }
 
@@ -212,7 +297,37 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def crosstab(col1: String, col2: String): DataFrame = {
-    StatFunctions.crossTabulate(df, col1, col2)
+    crosstab(Column(col1), Column(col2))
+  }
+
+  /**
+   * Computes a pair-wise frequency table of the given columns.
+   * @see `crosstab(col1:String, col2:String)` for detailed description.
+   *
+   * @param col1 The first column. Distinct items will make the first item of
+   *             each row.
+   * @param col2 The second column. Distinct items will make the column names
+   *             of the DataFrame.
+   * @return A DataFrame containing for the contingency table.
+   *
+   * {{{
+   *    val df = spark.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2), (3, 3)))
+   *      .toDF("key", "value")
+   *    val ct = df.stat.crosstab(df("key"), df("value"))
+   *    ct.show()
+   *    +---------+---+---+---+
+   *    |key_value|  1|  2|  3|
+   *    +---------+---+---+---+
+   *    |        2|  2|  0|  1|
+   *    |        1|  1|  1|  0|
+   *    |        3|  0|  1|  1|
+   *    +---------+---+---+---+
+   * }}}
+   *
+   * @since 3.0.0
+   */
+  def crosstab(col1: Column, col2: Column): DataFrame = {
+    StatFunctions.crossTabulateColumns(df, col1, col2)
   }
 
   /**

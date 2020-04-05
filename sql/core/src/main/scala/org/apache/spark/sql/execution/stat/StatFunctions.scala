@@ -67,16 +67,24 @@ object StatFunctions extends Logging {
       cols: Seq[String],
       probabilities: Seq[Double],
       relativeError: Double): Seq[Seq[Double]] = {
+    multipleApproxQuantilesColumns(df, cols.map(Column(_)), probabilities, relativeError)
+  }
+
+  private[sql] def multipleApproxQuantilesColumns(
+      df: DataFrame,
+      cols: Seq[Column],
+      probabilities: Seq[Double],
+      relativeError: Double): Seq[Seq[Double]] = {
     require(relativeError >= 0,
       s"Relative Error must be non-negative but got $relativeError")
-    val columns: Seq[Column] = cols.map { colName =>
-      val field = df.resolve(colName)
-      require(field.dataType.isInstanceOf[NumericType],
-        s"Quantile calculation for column $colName with data type ${field.dataType}" +
+    val columns: Seq[Column] = cols.map { col =>
+      val dataType = col.expr.dataType
+      require(dataType.isInstanceOf[NumericType],
+        s"Quantile calculation for column $col with data type $dataType" +
         " is not supported.")
-      Column(Cast(Column(colName).expr, DoubleType))
+      Column(Cast(col.expr, DoubleType))
     }
-    val emptySummaries = Array.fill(cols.size)(
+    val emptySummaries = Array.fill(columns.size)(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
 
     // Note that it works more or less by accident as `rdd.aggregate` is not a pure function:
@@ -106,7 +114,15 @@ object StatFunctions extends Logging {
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
-    val counts = collectStatisticalData(df, cols, "correlation")
+    pearsonCorrelationColumns(df, cols.map(Column(_)))
+  }
+
+  /** Helper method to provide Column-type API for stat functions SPARK-31156).
+   *  Overloading the same function to provide both Seq[String] and Seq[Column]
+   *  arguments is not possible because of type erasure
+   */
+  private[sql] def pearsonCorrelationColumns(df: DataFrame, cols: Seq[Column]): Double = {
+    val counts = collectStatisticalDataColumns(df, cols, "correlation")
     counts.Ck / math.sqrt(counts.MkX * counts.MkY)
   }
 
@@ -152,13 +168,22 @@ object StatFunctions extends Logging {
 
   private def collectStatisticalData(df: DataFrame, cols: Seq[String],
               functionName: String): CovarianceCounter = {
+    collectStatisticalDataColumns(df, cols.map(Column(_)), functionName)
+  }
+
+  /** Helper method to provide Column-type API for stat functions SPARK-31156).
+   *  Overloading the same function to provide both Seq[String] and Seq[Column]
+   *  arguments is not possible because of type erasure
+   */
+  private def collectStatisticalDataColumns(df: DataFrame, cols: Seq[Column],
+              functionName: String): CovarianceCounter = {
     require(cols.length == 2, s"Currently $functionName calculation is supported " +
       "between two columns.")
-    cols.map(name => (name, df.resolve(name))).foreach { case (name, data) =>
-      require(data.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
-        s"for columns with dataType ${data.dataType.catalogString} not supported.")
+    cols.foreach { col =>
+      require(col.expr.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
+        s"for columns with dataType ${col.expr.dataType.catalogString} not supported.")
     }
-    val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
+    val columns = cols.map(col => Column(Cast(col.expr, DoubleType)))
     df.select(columns: _*).queryExecution.toRdd.treeAggregate(new CovarianceCounter)(
       seqOp = (counter, row) => {
         counter.add(row.getDouble(0), row.getDouble(1))
@@ -179,8 +204,27 @@ object StatFunctions extends Logging {
     counts.cov
   }
 
+  /**
+   * Calculate the covariance of two numerical columns of a DataFrame.
+   * @param df The DataFrame
+   * @param cols the columns
+   * @return the covariance of the two columns.
+   */
+  def calculateCovColumns(df: DataFrame, cols: Seq[Column]): Double = {
+    val counts = collectStatisticalDataColumns(df, cols, "covariance")
+    counts.cov
+  }
+
   /** Generate a table of frequencies for the elements of two columns. */
   def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
+    crossTabulateColumns(df, Column(col1), Column(col2))
+  }
+
+  /** Helper method to provide Column-type API for stat functions SPARK-31156).
+   *  Overloading the same function to provide both Seq[String] and Seq[Column]
+   *  arguments is not possible because of type erasure
+   */
+  private[sql] def crossTabulateColumns(df: DataFrame, col1: Column, col2: Column): DataFrame = {
     val tableName = s"${col1}_$col2"
     val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
     if (counts.length == 1e6.toInt) {
