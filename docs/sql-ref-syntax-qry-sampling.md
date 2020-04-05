@@ -19,4 +19,69 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+
+The `TABLESAMPLE` statement is used to sample the input data. It supports the following sampling methods:
+- Sample a percentage of a table.
+- Sample a fixed, specified number of rows of a table.
+- Sample a fraction of bucket of a table.
+
+### Syntax
+{% highlight sql %}
+    TABLESAMPLE ((integer_expression | decimal_expression) PERCENT)
+    | TABLESAMPLE (integer_expression ROWS)
+    | TABLESAMPLE (BUCKET integer_expression OUT OF integer_expression)
+{% endhighlight %}
+
+### Examples
+{% highlight sql %}
+SELECT * FROM test;
++--+----+
+|id|name|
++--+----+
+|5 |Alex|
+|8 |Lucy|
+|2 |Mary|
+|4 |Fred|
+|1 |Lisa|
+|9 |Eric|
+|10|Adam|
+|6 |Mark|
+|7 |Lily|
+|3 |Evan|
++--+----+
+
+SELECT * FROM test TABLESAMPLE (50 PERCENT);
++--+----+
+|id|name|
++--+----+
+|5 |Alex|
+|2 |Mary|
+|4 |Fred|
+|9 |Eric|
+|10|Adam|
+|3 |Evan|
++--+----+
+
+SELECT * FROM test TABLESAMPLE (5 ROWS);
++--+----+
+|id|name|
++--+----+
+|5 |Alex|
+|8 |Lucy|
+|2 |Mary|
+|4 |Fred|
+|1 |Lisa|
++--+----+
+
+SELECT * FROM test TABLESAMPLE (bucket 4 out of 10);
++--+----+
+|id|name|
++--+----+
+|8 |Lucy|
+|2 |Mary|
+|9 |Eric|
+|6 |Mark|
++--+----+
+{% endhighlight %}
+
