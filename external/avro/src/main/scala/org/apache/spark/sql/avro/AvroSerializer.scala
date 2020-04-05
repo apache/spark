@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseGregorianToJulianDays
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -153,12 +153,12 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
           // (the `null` case), output the timestamp value as with millisecond precision.
           case null | _: TimestampMillis if rebaseDateTime => (getter, ordinal) =>
             val micros = getter.getLong(ordinal)
-            val rebasedMicros = DateTimeUtils.rebaseGregorianToJulianMicros(micros)
+            val rebasedMicros = rebaseGregorianToJulianMicros(micros)
             DateTimeUtils.microsToMillis(rebasedMicros)
           case null | _: TimestampMillis => (getter, ordinal) =>
             DateTimeUtils.microsToMillis(getter.getLong(ordinal))
           case _: TimestampMicros if rebaseDateTime => (getter, ordinal) =>
-            DateTimeUtils.rebaseGregorianToJulianMicros(getter.getLong(ordinal))
+            rebaseGregorianToJulianMicros(getter.getLong(ordinal))
           case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
           case other => throw new IncompatibleSchemaException(
             s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")

@@ -453,7 +453,7 @@ public class VectorizedColumnReader {
           if (defColumn.readInteger() == maxDefLevel) {
             column.putLong(
               rowId + i,
-              DateTimeUtils.rebaseJulianToGregorianMicros(dataColumn.readLong()));
+              RebaseDateTime.rebaseJulianToGregorianMicros(dataColumn.readLong()));
           } else {
             column.putNull(rowId + i);
           }
@@ -467,7 +467,7 @@ public class VectorizedColumnReader {
         for (int i = 0; i < num; i++) {
           if (defColumn.readInteger() == maxDefLevel) {
             long micros = DateTimeUtils.millisToMicros(dataColumn.readLong());
-            column.putLong(rowId + i, DateTimeUtils.rebaseJulianToGregorianMicros(micros));
+            column.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(micros));
           } else {
             column.putNull(rowId + i);
           }

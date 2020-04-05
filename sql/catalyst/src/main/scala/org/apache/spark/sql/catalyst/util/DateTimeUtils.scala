@@ -21,12 +21,13 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
-import java.util.{Calendar, Locale, TimeZone}
+import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -980,143 +981,5 @@ object DateTimeUtils {
     val months = period.getMonths + 12 * period.getYears
     val days = period.getDays
     new CalendarInterval(months, days, 0)
-  }
-
-  /**
-   * Converts the given microseconds to a local date-time in UTC time zone in Proleptic Gregorian
-   * calendar, interprets the result as a local date-time in Julian calendar in UTC time zone.
-   * And takes microseconds since the epoch from the Julian timestamp.
-   *
-   * @param zoneId The time zone ID at which the rebasing should be performed.
-   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
-   * @return The rebased microseconds since the epoch in Julian calendar.
-   */
-  def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
-    val instant = microsToInstant(micros)
-    val ldt = instant.atZone(zoneId).toLocalDateTime
-    val cal = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
-      .setCalendarType("gregory")
-      .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
-      .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
-      // Local time-line can overlaps, such as at an autumn daylight savings cutover.
-      // This setting selects the original local timestamp mapped to the given `micros`.
-      .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
-      .build()
-    millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
-  }
-
-  /**
-   * Rebases micros/days since the epoch from an original to an target calendar, for instance,
-   * from a hybrid (Julian + Gregorian) to Proleptic Gregorian calendar.
-   *
-   * It finds the latest switch micros/day which is less than `value`, and adds the difference
-   * in micros/days associated with the switch micros/days to the given `value`.
-   * The function is based on linear search which starts from the most recent switch micros/days.
-   * This allows to perform less comparisons for modern dates.
-   *
-   * @param switches The days when difference in micros/days between original and target
-   *                   calendar was changed.
-   * @param diffs The differences in micros/days between calendars.
-   * @param value The number of micros/days since the epoch 1970-01-01 to be rebased to the
-   *             target calendar.
-   * @return The rebased micros/days.
-   */
-  private def rebaseMicros(switches: Array[Long], diffs: Array[Long], value: Long): Long = {
-    var i = switches.length
-    do { i -= 1 } while (i > 0 && value < switches(i))
-    value + diffs(i)
-  }
-
-  private val grepJulianDiffsMicros = Map(
-    "America/Los_Angeles" -> Array(
-      -172378000000L, -85978000000L, 422000000L, 86822000000L,
-      173222000000L, 259622000000L, 346022000000L, 432422000000L,
-      518822000000L, 605222000000L, 691622000000L, 778022000000L,
-      864422000000L, 422000000L, 0L))
-  private val gregJulianDiffSwitchMicros = Map(
-    "America/Los_Angeles" -> Array(
-      -62135568422000000L, -59006333222000000L, -55850659622000000L, -52694986022000000L,
-      -46383552422000000L, -43227878822000000L, -40072205222000000L, -33760771622000000L,
-      -30605098022000000L, -27449424422000000L, -21137990822000000L, -17982317222000000L,
-      -14826643622000000L, -12219264422000000L, -2717638622000000L)
-  )
-
-  def rebaseGregorianToJulianMicros(micros: Long): Long = {
-    val timeZone = TimeZone.getDefault
-    val tzId = timeZone.getID
-    val diffs = grepJulianDiffsMicros.get(tzId)
-    if (diffs.isEmpty) {
-      rebaseGregorianToJulianMicros(timeZone.toZoneId, micros)
-    } else {
-      rebaseMicros(gregJulianDiffSwitchMicros(tzId), diffs.get, micros)
-    }
-  }
-
-  /**
-   * Converts the given microseconds to a local date-time in UTC time zone in Julian calendar,
-   * interprets the result as a local date-time in Proleptic Gregorian calendar in UTC time zone.
-   * And takes microseconds since the epoch from the Gregorian timestamp.
-   *
-   * @param zoneId The time zone ID at which the rebasing should be performed.
-   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
-   * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
-   */
-  def rebaseJulianToGregorianMicros(zoneId: ZoneId, micros: Long): Long = {
-    val cal = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
-      .setCalendarType("gregory")
-      .setInstant(microsToMillis(micros))
-      .build()
-    val localDateTime = LocalDateTime.of(
-      cal.get(Calendar.YEAR),
-      cal.get(Calendar.MONTH) + 1,
-      // The number of days will be added later to handle non-existing
-      // Julian dates in Proleptic Gregorian calendar.
-      // For example, 1000-02-29 exists in Julian calendar because 1000
-      // is a leap year but it is not a leap year in Gregorian calendar.
-      1,
-      cal.get(Calendar.HOUR_OF_DAY),
-      cal.get(Calendar.MINUTE),
-      cal.get(Calendar.SECOND),
-      (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
-      .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
-    val zonedDateTime = localDateTime.atZone(zoneId)
-    // Zero DST offset means that local clocks have switched to the winter time already.
-    // So, clocks go back one hour. We should correct zoned date-time and change
-    // the zone offset to the later of the two valid offsets at a local time-line overlap.
-    val adjustedZdt = if (cal.get(Calendar.DST_OFFSET) == 0) {
-      zonedDateTime.withLaterOffsetAtOverlap()
-    } else {
-      zonedDateTime
-    }
-    instantToMicros(adjustedZdt.toInstant)
-  }
-
-  private val julianGrepDiffsMicros = Map(
-    "America/Los_Angeles" -> Array(
-      172378000000L, 85978000000L, -422000000L, -86822000000L,
-      -173222000000L, -259622000000L, -346022000000L, -432422000000L,
-      -518822000000L, -605222000000L, -691622000000L, -778022000000L,
-      -864422000000L, -422000000L, 0L))
-  private val julianGrepDiffSwitchMicros = Map(
-    "America/Los_Angeles" -> Array(
-      -62135740800000000L, -59006419200000000L, -55850659200000000L, -52694899200000000L,
-      -46383379200000000L, -43227619200000000L, -40071859200000000L, -33760339200000000L,
-      -30604579200000000L, -27448819200000000L, -21137299200000000L, -17981539200000000L,
-      -14825779200000000L, -12219264000000000L, -2717640000000000L)
-  )
-
-  def rebaseJulianToGregorianMicros(micros: Long): Long = {
-    val timeZone = TimeZone.getDefault
-    val tzId = timeZone.getID
-    val diffs = julianGrepDiffsMicros.get(tzId)
-    if (diffs.isEmpty) {
-      rebaseJulianToGregorianMicros(timeZone.toZoneId, micros)
-    } else {
-      rebaseMicros(julianGrepDiffSwitchMicros(tzId), diffs.get, micros)
-    }
   }
 }
