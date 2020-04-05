@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -31,6 +32,16 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 object StatFunctions extends Logging {
+
+  /** Helper function to resolve column to expr (if not yet) */
+  private def resolveColumn(df: DataFrame, col: Column): Expression = {
+    col match {
+      case Column(u: UnresolvedAttribute) =>
+        df.queryExecution.analyzed.resolveQuoted(
+          u.name, df.sparkSession.sessionState.analyzer.resolver).getOrElse(u)
+        case Column(expr: Expression) => expr
+    }
+  }
 
   /**
    * Calculates the approximate quantiles of multiple numerical columns of a DataFrame in one pass.
@@ -67,7 +78,7 @@ object StatFunctions extends Logging {
       cols: Seq[String],
       probabilities: Seq[Double],
       relativeError: Double): Seq[Seq[Double]] = {
-    multipleApproxQuantilesColumns(df, cols.map(Column(_)), probabilities, relativeError)
+    multipleApproxQuantilesColumns(df, cols.map(df.col), probabilities, relativeError)
   }
 
   private[sql] def multipleApproxQuantilesColumns(
@@ -78,7 +89,7 @@ object StatFunctions extends Logging {
     require(relativeError >= 0,
       s"Relative Error must be non-negative but got $relativeError")
     val columns: Seq[Column] = cols.map { col =>
-      val dataType = col.expr.dataType
+      val dataType = resolveColumn(df, col).dataType
       require(dataType.isInstanceOf[NumericType],
         s"Quantile calculation for column $col with data type $dataType" +
         " is not supported.")
@@ -114,12 +125,13 @@ object StatFunctions extends Logging {
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
-    pearsonCorrelationColumns(df, cols.map(Column(_)))
+    pearsonCorrelationColumns(df, cols.map(df.col))
   }
 
-  /** Helper method to provide Column-type API for stat functions SPARK-31156).
+  /**
+   *  Helper method to provide Column-type API for stat functions SPARK-31156).
    *  Overloading the same function to provide both Seq[String] and Seq[Column]
-   *  arguments is not possible because of type erasure
+   *  arguments is not possible because of type erasure.
    */
   private[sql] def pearsonCorrelationColumns(df: DataFrame, cols: Seq[Column]): Double = {
     val counts = collectStatisticalDataColumns(df, cols, "correlation")
@@ -168,20 +180,23 @@ object StatFunctions extends Logging {
 
   private def collectStatisticalData(df: DataFrame, cols: Seq[String],
               functionName: String): CovarianceCounter = {
-    collectStatisticalDataColumns(df, cols.map(Column(_)), functionName)
+    collectStatisticalDataColumns(df, cols.map(df.col), functionName)
   }
 
-  /** Helper method to provide Column-type API for stat functions SPARK-31156).
+
+  /**
+   *  Helper method to provide Column-type API for stat functions SPARK-31156).
    *  Overloading the same function to provide both Seq[String] and Seq[Column]
-   *  arguments is not possible because of type erasure
+   *  arguments is not possible because of type erasure.
    */
   private def collectStatisticalDataColumns(df: DataFrame, cols: Seq[Column],
               functionName: String): CovarianceCounter = {
     require(cols.length == 2, s"Currently $functionName calculation is supported " +
       "between two columns.")
     cols.foreach { col =>
-      require(col.expr.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
-        s"for columns with dataType ${col.expr.dataType.catalogString} not supported.")
+      val dataType = resolveColumn(df, col).dataType
+      require(dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
+        s"for columns with dataType ${dataType.catalogString} not supported.")
     }
     val columns = cols.map(col => Column(Cast(col.expr, DoubleType)))
     df.select(columns: _*).queryExecution.toRdd.treeAggregate(new CovarianceCounter)(
@@ -217,21 +232,17 @@ object StatFunctions extends Logging {
 
   /** Generate a table of frequencies for the elements of two columns. */
   def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
-    crossTabulateColumns(df, Column(col1), Column(col2))
+    crossTabulateColumns(df, df.col(col1), df.col(col2))
   }
 
-  private def columnName(col: Column): Option[String] = {
-    if (col.expr.isInstanceOf[NamedExpression]) Some(col.expr.toString)
-    else None
-  }
-
-  /** Helper method to provide Column-type API for stat functions SPARK-31156).
+  /**
+   *  Helper method to provide Column-type API for stat functions SPARK-31156).
    *  Overloading the same function to provide both Seq[String] and Seq[Column]
-   *  arguments is not possible because of type erasure
+   *  arguments is not possible because of type erasure.
    */
   private[sql] def crossTabulateColumns(df: DataFrame, col1: Column, col2: Column): DataFrame = {
-    val colName1 = columnName(col1).getOrElse("col1")
-    val colName2 = columnName(col2).getOrElse("col2")
+    val colName1 = col1.named.name
+    val colName2 = col2.named.name
     val tableName = s"${colName1}_$colName2"
     val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
     if (counts.length == 1e6.toInt) {

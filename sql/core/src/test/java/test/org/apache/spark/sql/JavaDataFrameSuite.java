@@ -301,9 +301,23 @@ public class JavaDataFrameSuite {
   }
 
   @Test
+  public void testCorrelationByColumn() {
+    Dataset<Row> df = spark.table("testData2");
+    Double pearsonCorr = df.stat().corr(col("a"), col("b"), "pearson");
+    Assert.assertTrue(Math.abs(pearsonCorr) < 1.0e-6);
+  }
+
+  @Test
   public void testCovariance() {
     Dataset<Row> df = spark.table("testData2");
     Double result = df.stat().cov("a", "b");
+    Assert.assertTrue(Math.abs(result) < 1.0e-6);
+  }
+
+  @Test
+  public void testCovarianceByColumn() {
+    Dataset<Row> df = spark.table("testData2");
+    Double result = df.stat().cov(col("a"), col("b"));
     Assert.assertTrue(Math.abs(result) < 1.0e-6);
   }
 

@@ -156,11 +156,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def cov(col1: String, col2: String): Double = {
-    cov(Column(col1), Column(col2))
+    cov(df.col(col1), df.col(col2))
   }
 
   /**
    * Calculate the sample covariance of two numerical columns of a DataFrame.
+   * This version of cov accepts [[Column]] rather than names.
+   *
    * @param col1 the first column
    * @param col2 the second column
    * @return the covariance of the two columns.
@@ -197,13 +199,14 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def corr(col1: String, col2: String, method: String): Double = {
-    corr(Column(col1), Column(col2), method)
+    corr(df.col(col1), df.col(col2), method)
   }
 
   /**
    * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
    * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
    * MLlib's Statistics.
+   * This version of corr accepts [[Column]] rather than names.
    *
    * @param col1 the first column
    * @param col2 the column to calculate the correlation against
@@ -246,6 +249,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Calculates the Pearson Correlation Coefficient of two columns of a DataFrame.
+   * This version of corr accepts [[Column]] rather than names.
    *
    * @param col1 the first column
    * @param col2 the column to calculate the correlation against
