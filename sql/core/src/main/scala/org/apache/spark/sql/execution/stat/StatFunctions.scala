@@ -34,6 +34,9 @@ import org.apache.spark.unsafe.types.UTF8String
 object StatFunctions extends Logging {
 
   /** Helper function to resolve column to expr (if not yet) */
+  // TODO: it might be helpful to have this helper in Dataset.scala,
+  // e.g. `drop` function uses exactly the same flow to deal with
+  // `Column` arguments
   private def resolveColumn(df: DataFrame, col: Column): Expression = {
     col match {
       case Column(u: UnresolvedAttribute) =>
