@@ -784,6 +784,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val HIVE_CONFIRM_TEMPORARY_DIRECTORY_DELETED =
+    buildConf("spark.sql.hive.confirmTempDirDeleted")
+      .doc("When set true, keep deleteOnExit of the temporary directory to ensure that " +
+        "the temporary directory can be cleaned. Sometimes (e.g., when speculative task is enabled), " +
+        "temporary directories may be left uncleaned, thus we use this config to confirm " +
+        "temporary directories to be deleted.")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
          "when reading data stored in HDFS. This configuration will be deprecated in the future " +
@@ -2786,6 +2795,8 @@ class SQLConf extends Serializable with Logging {
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
   def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
+
+  def confirmTempDirDeleted: Boolean = getConf(HIVE_CONFIRM_TEMPORARY_DIRECTORY_DELETED)
 
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
