@@ -1023,20 +1023,10 @@ object DateTimeUtils {
    *             target calendar.
    * @return The rebased micros/days.
    */
-  @inline
-  private def rebase[@specialized(Int, Long) T: Numeric](
-      switches: Array[T],
-      diffs: Array[T],
-      value: T): T = {
-    import Numeric.Implicits._
-    import Ordering.Implicits._
-
-    var i = switches.length - 1
-    while (i >= 0 && value < switches(i)) {
-      i -= 1
-    }
-    val rebased = value + diffs(if (i < 0) 0 else i)
-    rebased
+  private def rebaseMicros(switches: Array[Long], diffs: Array[Long], value: Long): Long = {
+    var i = switches.length
+    do { i -= 1 } while (i > 0 && value < switches(i))
+    value + diffs(i)
   }
 
   private val grepJulianDiffsMicros = Map(
@@ -1060,7 +1050,7 @@ object DateTimeUtils {
     if (diffs.isEmpty) {
       rebaseGregorianToJulianMicros(timeZone.toZoneId, micros)
     } else {
-      rebase(gregJulianDiffSwitchMicros(tzId), diffs.get, micros)
+      rebaseMicros(gregJulianDiffSwitchMicros(tzId), diffs.get, micros)
     }
   }
 
@@ -1126,8 +1116,14 @@ object DateTimeUtils {
     if (diffs.isEmpty) {
       rebaseJulianToGregorianMicros(timeZone.toZoneId, micros)
     } else {
-      rebase(julianGrepDiffSwitchMicros(tzId), diffs.get, micros)
+      rebaseMicros(julianGrepDiffSwitchMicros(tzId), diffs.get, micros)
     }
+  }
+
+  private def rebaseDays(switches: Array[Int], diffs: Array[Int], value: Int): Int = {
+    var i = switches.length
+    do { i -= 1 } while (i > 0 && value < switches(i))
+    value + diffs(i)
   }
 
   // The differences in days between Julian and Proleptic Gregorian dates.
@@ -1153,7 +1149,7 @@ object DateTimeUtils {
    * @return The rebased number of days in Gregorian calendar.
    */
   def rebaseJulianToGregorianDays(days: Int): Int = {
-    rebase(julianGregDiffSwitchDay, julianGregDiffs, days)
+    rebaseDays(julianGregDiffSwitchDay, julianGregDiffs, days)
   }
 
   // The differences in days between Proleptic Gregorian and Julian dates.
@@ -1186,6 +1182,6 @@ object DateTimeUtils {
    * @return The rebased number of days since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianDays(days: Int): Int = {
-    rebase(gregJulianDiffSwitchDay, grepJulianDiffs, days)
+    rebaseDays(gregJulianDiffSwitchDay, grepJulianDiffs, days)
   }
 }
