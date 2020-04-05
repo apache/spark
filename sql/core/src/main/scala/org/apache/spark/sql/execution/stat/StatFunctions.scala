@@ -221,11 +221,8 @@ object StatFunctions extends Logging {
   }
 
   private def columnName(col: Column): Option[String] = {
-    if col.expr.isInstanceOf[NamedExpression] {
-      Some(col.expr.toString)
-    } else {
-      None
-    }
+    if (col.expr.isInstanceOf[NamedExpression]) Some(col.expr.toString)
+    else None
   }
 
   /** Helper method to provide Column-type API for stat functions SPARK-31156).
