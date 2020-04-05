@@ -21,6 +21,9 @@ import java.time.{LocalDateTime, ZoneId}
 import java.time.temporal.ChronoField
 import java.util.{Calendar, TimeZone}
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
+
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 
@@ -154,19 +157,26 @@ object RebaseDateTime {
     value + diffs(i)
   }
 
-  private val grepJulianDiffsMicros = Map(
-    "America/Los_Angeles" -> Array(
-      -172378000000L, -85978000000L, 422000000L, 86822000000L,
-      173222000000L, 259622000000L, 346022000000L, 432422000000L,
-      518822000000L, 605222000000L, 691622000000L, 778022000000L,
-      864422000000L, 422000000L, 0L))
-  private val gregJulianDiffSwitchMicros = Map(
-    "America/Los_Angeles" -> Array(
-      -62135568422000000L, -59006333222000000L, -55850659622000000L, -52694986022000000L,
-      -46383552422000000L, -43227878822000000L, -40072205222000000L, -33760771622000000L,
-      -30605098022000000L, -27449424422000000L, -21137990822000000L, -17982317222000000L,
-      -14826643622000000L, -12219264422000000L, -2717638622000000L)
-  )
+  private case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
+
+  private def loadRebaseRecords(fileName: String) = {
+    val file = Thread.currentThread().getContextClassLoader.getResource(fileName)
+    val mapper = new ObjectMapper() with ScalaObjectMapper
+    mapper.registerModule(DefaultScalaModule)
+    val rebaseInfo = mapper.readValue[Seq[RebaseRecord]](file)
+    val diffInfo = rebaseInfo
+      .map { case RebaseRecord(tz, _, diffs) => tz -> diffs }
+      .toMap
+    val switchInfo = rebaseInfo
+      .map { case RebaseRecord(tz, switches, _) => tz -> switches }
+      .toMap
+
+    (diffInfo, switchInfo)
+  }
+
+  private val (grepJulianDiffsMicros, gregJulianDiffSwitchMicros) = {
+    loadRebaseRecords("gregorian-julian-rebase-micros.json")
+  }
 
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
     val timeZone = TimeZone.getDefault
@@ -220,19 +230,9 @@ object RebaseDateTime {
     instantToMicros(adjustedZdt.toInstant)
   }
 
-  private val julianGrepDiffsMicros = Map(
-    "America/Los_Angeles" -> Array(
-      172378000000L, 85978000000L, -422000000L, -86822000000L,
-      -173222000000L, -259622000000L, -346022000000L, -432422000000L,
-      -518822000000L, -605222000000L, -691622000000L, -778022000000L,
-      -864422000000L, -422000000L, 0L))
-  private val julianGrepDiffSwitchMicros = Map(
-    "America/Los_Angeles" -> Array(
-      -62135740800000000L, -59006419200000000L, -55850659200000000L, -52694899200000000L,
-      -46383379200000000L, -43227619200000000L, -40071859200000000L, -33760339200000000L,
-      -30604579200000000L, -27448819200000000L, -21137299200000000L, -17981539200000000L,
-      -14825779200000000L, -12219264000000000L, -2717640000000000L)
-  )
+  private val (julianGrepDiffsMicros, julianGrepDiffSwitchMicros) = {
+    loadRebaseRecords("julian-gregorian-rebase-micros.json")
+  }
 
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
     val timeZone = TimeZone.getDefault
