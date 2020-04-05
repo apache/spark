@@ -88,18 +88,18 @@ class SparkSession private(
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
-  private val sessionListener: SparkListener = new SparkListener {
+  private val _sessionListener: SparkListener = new SparkListener {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       defaultSession.set(null)
     }
   }
   // Used to manage state in the the `SparkSession` singleton
-  private[spark] val sessionId: UUID = UUID.randomUUID
-  private[spark] val terminated: AtomicBoolean = new AtomicBoolean(false)
-  sparkContext.addSparkListener(sessionListener)
+  private[spark] val _sessionId: UUID = UUID.randomUUID
+  private[spark] val _terminated: AtomicBoolean = new AtomicBoolean(false)
+  sparkContext.addSparkListener(_sessionListener)
 
   private[spark] def assertNotTerminated(): Unit = {
-    if (terminated.get()) {
+    if (_terminated.get()) {
       throw new IllegalStateException(
         s"""Cannot call methods on a terminated SparkSession.
            |This terminated SparkSession was created at:
@@ -108,7 +108,6 @@ class SparkSession private(
          """.stripMargin)
     }
   }
-
 
   /**
    * Constructor used in Pyspark. Contains explicit application of Spark Session Extensions
@@ -131,7 +130,7 @@ class SparkSession private(
       .getOrElse(SQLConf.getFallbackConf)
   })
 
-  def removeListener(): Unit = sparkContext.removeSparkListener(sessionListener)
+  def removeListener(): Unit = sparkContext.removeSparkListener(_sessionListener)
 
   /**
    * The version of Spark on which this application is running.
@@ -301,7 +300,10 @@ class SparkSession private(
    * @since 2.0.0
    */
   @transient
-  lazy val emptyDataFrame: DataFrame = Dataset.ofRows(self, LocalRelation())
+  lazy val emptyDataFrame: DataFrame = {
+    assertNotTerminated()
+    Dataset.ofRows(self, LocalRelation())
+  }
 
   /**
    * Creates a new [[Dataset]] of type T containing zero elements.
@@ -754,10 +756,10 @@ class SparkSession private(
 
   def terminate(): Unit = {
     // Session is still active
-    if (!terminated.get()) {
-      sparkContext.removeSparkListener(this.sessionListener)
-      SparkSession.removeTerminatedSession(sessionId)
-      terminated.set(true)
+    if (!_terminated.get()) {
+      sparkContext.removeSparkListener(this._sessionListener)
+      SparkSession.removeTerminatedSession(_sessionId)
+      _terminated.set(true)
     }
     else {
       throw new IllegalStateException(
@@ -773,10 +775,10 @@ class SparkSession private(
    * @since 2.0.0
    */
   def stopContext(): Unit = {
-    if (!terminated.get()) {
+    if (!_terminated.get()) {
       // stopping the context should also terminate this session
       terminate()
-      SparkSession.removeTerminatedSession(sessionId)
+      SparkSession.removeTerminatedSession(_sessionId)
       SparkSession.clearDefaultSession()
       SparkSession.clearActiveSession()
     }
@@ -1053,14 +1055,14 @@ object SparkSession extends Logging {
     // clean up active session
     if (getActiveSession.isDefined) {
       val activeSession = getActiveSession.get
-        if(sessionId.equals(activeSession.sessionId)) {
+        if(sessionId.equals(activeSession._sessionId)) {
           clearActiveSession()
       }
     }
     // clean up default session
     if (getDefaultSession.isDefined) {
       val defaultSession = getDefaultSession.get
-      if(sessionId.equals(defaultSession.sessionId)) {
+      if(sessionId.equals(defaultSession._sessionId)) {
         clearDefaultSession()
       }
     }
@@ -1085,7 +1087,6 @@ object SparkSession extends Logging {
    */
   def clearActiveSession(): Unit = {
     activeThreadSession.remove()
-
   }
 
   /**
