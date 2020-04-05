@@ -37,12 +37,12 @@ object StatFunctions extends Logging {
   // TODO: it might be helpful to have this helper in Dataset.scala,
   // e.g. `drop` function uses exactly the same flow to deal with
   // `Column` arguments
-  private def resolveColumn(df: DataFrame, col: Column): Expression = {
+  private def resolveColumn(df: DataFrame, col: Column): Column = {
     col match {
       case Column(u: UnresolvedAttribute) =>
-        df.queryExecution.analyzed.resolveQuoted(
-          u.name, df.sparkSession.sessionState.analyzer.resolver).getOrElse(u)
-        case Column(expr: Expression) => expr
+        Column(df.queryExecution.analyzed.resolveQuoted(
+          u.name, df.sparkSession.sessionState.analyzer.resolver).getOrElse(u))
+      case Column(_expr: Expression) => col
     }
   }
 
@@ -92,7 +92,7 @@ object StatFunctions extends Logging {
     require(relativeError >= 0,
       s"Relative Error must be non-negative but got $relativeError")
     val columns: Seq[Column] = cols.map { col =>
-      val dataType = resolveColumn(df, col).dataType
+      val dataType = resolveColumn(df, col).expr.dataType
       require(dataType.isInstanceOf[NumericType],
         s"Quantile calculation for column $col with data type $dataType" +
         " is not supported.")
@@ -197,7 +197,7 @@ object StatFunctions extends Logging {
     require(cols.length == 2, s"Currently $functionName calculation is supported " +
       "between two columns.")
     cols.foreach { col =>
-      val dataType = resolveColumn(df, col).dataType
+      val dataType = resolveColumn(df, col).expr.dataType
       require(dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
         s"for columns with dataType ${dataType.catalogString} not supported.")
     }
@@ -244,8 +244,8 @@ object StatFunctions extends Logging {
    *  arguments is not possible because of type erasure.
    */
   private[sql] def crossTabulateColumns(df: DataFrame, col1: Column, col2: Column): DataFrame = {
-    val colName1 = col1.named.name
-    val colName2 = col2.named.name
+    val colName1 = resolveColumn(df, col1).named.name
+    val colName2 = resolveColumn(df, col2).named.name
     val tableName = s"${colName1}_$colName2"
     val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
     if (counts.length == 1e6.toInt) {

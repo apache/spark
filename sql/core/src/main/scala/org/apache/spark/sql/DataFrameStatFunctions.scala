@@ -206,6 +206,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
    * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
    * MLlib's Statistics.
+   *
    * This version of corr accepts [[Column]] rather than names.
    *
    * @param col1 the first column
@@ -301,11 +302,12 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def crosstab(col1: String, col2: String): DataFrame = {
-    crosstab(Column(col1), Column(col2))
+    crosstab(df.col(col1), df.col(col2))
   }
 
   /**
    * Computes a pair-wise frequency table of the given columns.
+   * This version of crosstab accepts [[Column]] rather than names.
    * @see `crosstab(col1:String, col2:String)` for detailed description.
    *
    * @param col1 The first column. Distinct items will make the first item of
