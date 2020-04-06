@@ -179,7 +179,8 @@ object RebaseDateTime {
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
   // `RebaseRecord`. It splits and places JSON records to 2 separate maps with arrays as values
   // for performance reasons - to avoid unnecessary indirect memory accesses.
-  private def loadRebaseRecords(fileName: String) = {
+  def loadRebaseRecords(
+      fileName: String): (Map[String, Array[Long]], Map[String, Array[Long]]) = {
     val file = Thread.currentThread().getContextClassLoader.getResource(fileName)
     val mapper = new ObjectMapper() with ScalaObjectMapper
     mapper.registerModule(DefaultScalaModule)

@@ -211,4 +211,23 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
   }
+
+  test("validate rebase records in JSON files") {
+    Seq(
+      "gregorian-julian-rebase-micros.json",
+      "julian-gregorian-rebase-micros.json").foreach { json =>
+      withClue(s"JSON file = $json") {
+        val (diffs, switches) = loadRebaseRecords(json)
+        assert(diffs.size === switches.size)
+        assert(switches.keySet === diffs.keySet)
+        switches.foreach { case (key, value) =>
+          assert(diffs(key).size === value.size)
+        }
+        // Check ascending order of switches values
+        assert(switches.forall { case (_, xs) => xs.toSeq == xs.sorted.toSeq })
+        // Time zone IDs must be resolvable
+        switches.foreach { case (tzId, _) => ZoneId.of(tzId) }
+      }
+    }
+  }
 }
