@@ -787,9 +787,8 @@ object SQLConf {
   val HIVE_CONFIRM_TEMPORARY_DIRECTORY_DELETED =
     buildConf("spark.sql.hive.confirmTempDirDeleted")
       .doc("When set true, keep deleteOnExit of the temporary directory to ensure that " +
-        "the temporary directory can be cleaned. Sometimes (e.g., when speculative task is enabled), " +
-        "temporary directories may be left uncleaned, thus we use this config to confirm " +
-        "temporary directories to be deleted.")
+        "the temporary directory, which is generated while inserting into hive dir or " +
+        "hive table, can be cleaned.")
       .booleanConf
       .createWithDefault(false)
 
