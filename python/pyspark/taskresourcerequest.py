@@ -24,7 +24,7 @@ class TaskResourceRequest(object):
     programmatically specify the resources needed for an RDD that will be applied at the
     stage level. The amount is specified as a Double to allow for saying you want more then
     1 task per resource. Valid values are less than or equal to 0.5 or whole numbers.
-    Use TaskResourceRequests class as a convenience API.
+    Use `pyspark.TaskResourceRequests` class as a convenience API.
 
     :param resourceName: Name of the resource
     :param amount: Amount requesting as a Double to support fractional resource requests.

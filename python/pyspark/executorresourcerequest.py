@@ -39,7 +39,7 @@ class ExecutorResourceRequest(object):
 
     See the configuration and cluster specific docs for more details.
 
-    Use ExecutorResourceRequests class as a convenience API.
+    Use `pyspark.ExecutorResourceRequests` class as a convenience API.
 
     :param resourceName: Name of the resource
     :param amount: Amount requesting

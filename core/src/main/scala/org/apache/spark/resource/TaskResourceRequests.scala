@@ -38,7 +38,7 @@ private[spark] class TaskResourceRequests() extends Serializable {
 
   def requests: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
 
-  def requestsJMap: JMap[String, TaskResourceRequest] = _taskResources.asScala.toMap.asJava
+  def requestsJMap: JMap[String, TaskResourceRequest] = requests.asJava
 
   /**
    * Specify number of cpus per Task.

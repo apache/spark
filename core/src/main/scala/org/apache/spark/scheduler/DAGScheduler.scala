@@ -1138,8 +1138,8 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * PythonRunner needs to know what the pyspark memory setting is for the profile being run.
-   *  Pass it in the local properties of the task if it's set for the stage profile.
+   * `PythonRunner` needs to know what the pyspark memory setting is for the profile being run.
+   * Pass it in the local properties of the task if it's set for the stage profile.
    */
   private def addPysparkMemToProperties(stage: Stage, properties: Properties): Unit = {
     val pysparkMem = if (stage.resourceProfileId == DEFAULT_RESOURCE_PROFILE_ID) {

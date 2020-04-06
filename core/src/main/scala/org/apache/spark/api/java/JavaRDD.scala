@@ -56,7 +56,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * It will result in new executors with the resources specified being acquired to
    * calculate the RDD.
    */
-  def withResources(prof: ResourceProfile): JavaRDD[T] = wrapRDD(rdd.withResources(prof))
+  def withResources(rp: ResourceProfile): JavaRDD[T] = wrapRDD(rdd.withResources(rp))
 
   /**
    * Get the ResourceProfile specified with this RDD or None if it wasn't specified.
