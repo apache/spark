@@ -69,10 +69,10 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def approxQuantile(
-      colName: String,
+      col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    approxQuantile(Array(df.col(colName)), probabilities, relativeError).head
+    approxQuantile(Array(df.col(col)), probabilities, relativeError).head
   }
 
   /**
