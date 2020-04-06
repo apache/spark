@@ -286,7 +286,7 @@ public class JavaDataFrameSuite {
   }
 
   @Test
-  public void testCrosstabByColumn() {
+  public void testCrosstabByColumns() {
     Dataset<Row> df = spark.table("testData2");
     Dataset<Row> crosstab = df.stat().crosstab(col("a"), col("b"));
     String[] columnNames = crosstab.schema().fieldNames();
@@ -320,7 +320,7 @@ public class JavaDataFrameSuite {
   }
 
   @Test
-  public void testCorrelationByColumn() {
+  public void testCorrelationByColumns() {
     Dataset<Row> df = spark.table("testData2");
     Double pearsonCorr = df.stat().corr(col("a"), col("b"), "pearson");
     Assert.assertTrue(Math.abs(pearsonCorr) < 1.0e-6);
@@ -334,7 +334,7 @@ public class JavaDataFrameSuite {
   }
 
   @Test
-  public void testCovarianceByColumn() {
+  public void testCovarianceByColumns() {
     Dataset<Row> df = spark.table("testData2");
     Double result = df.stat().cov(col("a"), col("b"));
     Assert.assertTrue(Math.abs(result) < 1.0e-6);
