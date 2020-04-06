@@ -286,6 +286,25 @@ public class JavaDataFrameSuite {
   }
 
   @Test
+  public void testCrosstabByColumn() {
+    Dataset<Row> df = spark.table("testData2");
+    Dataset<Row> crosstab = df.stat().crosstab(col("a"), col("b"));
+    String[] columnNames = crosstab.schema().fieldNames();
+    Assert.assertEquals("a_b", columnNames[0]);
+    Assert.assertEquals("1", columnNames[1]);
+    Assert.assertEquals("2", columnNames[2]);
+    List<Row> rows = crosstab.collectAsList();
+    rows.sort(crosstabRowComparator);
+    Integer count = 1;
+    for (Row row : rows) {
+      Assert.assertEquals(row.get(0).toString(), count.toString());
+      Assert.assertEquals(1L, row.getLong(1));
+      Assert.assertEquals(1L, row.getLong(2));
+      count++;
+    }
+  }
+
+  @Test
   public void testFrequentItems() {
     Dataset<Row> df = spark.table("testData2");
     String[] cols = {"a"};
