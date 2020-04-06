@@ -793,15 +793,15 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("Length of JSON array") {
     Seq(
-      ("""""", null),
-      ("""[1,2,3]""", 3),
-      ("""[]""", 0),
-      ("""[[1],[2,3],[]]""", 3),
+      ("", null),
+      ("[1,2,3]", 3),
+      ("[]", 0),
+      ("[[1],[2,3],[]]", 3),
       ("""[{"a":123},{"b":"hello"}]""", 2),
       ("""[1,2,3,[33,44],{"key":[2,3,4]}]""", 5),
       ("""[1,2,3,4,5""", null),
-      ("""Random String""", null)
-    ).foreach{
+      ("Random String", null)
+    ).foreach {
       case(literal, expectedValue) =>
         checkEvaluation(LengthOfJsonArray(Literal(literal)), expectedValue)
     }

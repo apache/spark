@@ -709,4 +709,5 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
           options.asJava)),
       Seq(Row("string")))
   }
+
 }
