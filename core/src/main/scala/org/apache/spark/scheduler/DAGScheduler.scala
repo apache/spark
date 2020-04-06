@@ -40,7 +40,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, PYSPARK_MEMORY_PROPERTY}
+import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -1142,15 +1142,18 @@ private[spark] class DAGScheduler(
    * Pass it in the local properties of the task if it's set for the stage profile.
    */
   private def addPysparkMemToProperties(stage: Stage, properties: Properties): Unit = {
-    val pysparkMem = if (stage.resourceProfileId == DEFAULT_RESOURCE_PROFILE_ID) {
+    val (pysparkMem, execCores) = if (stage.resourceProfileId == DEFAULT_RESOURCE_PROFILE_ID) {
       logDebug("Using the default pyspark executor memory")
-      sc.conf.get(PYSPARK_EXECUTOR_MEMORY)
+      // use the getOption on spark.executor.cores instead of using the EXECUTOR_CORES config
+      // because the default for this config isn't correct for standalone mode
+      (sc.conf.get(PYSPARK_EXECUTOR_MEMORY), sc.conf.getOption("spark.executor.cores"))
     } else {
       val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
       logDebug(s"Using profile ${stage.resourceProfileId} pyspark executor memory")
-      rp.getPysparkMemory
+      (rp.getPysparkMemory, rp.getExecutorCores.map(_.toString))
     }
-    pysparkMem.map(m => properties.setProperty(PYSPARK_MEMORY_PROPERTY, m.toString))
+    pysparkMem.map(mem => properties.setProperty(PYSPARK_MEMORY_LOCAL_PROPERTY, mem.toString))
+    execCores.map(cores => properties.setProperty(EXECUTOR_CORES_LOCAL_PROPERTY, cores))
   }
 
   /** Called when stage's parents are available and we can now do its task. */

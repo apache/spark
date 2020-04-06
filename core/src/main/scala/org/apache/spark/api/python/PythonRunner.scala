@@ -35,7 +35,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.resource.ResourceProfile.PYSPARK_MEMORY_PROPERTY
+import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
@@ -106,8 +106,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
   // each python worker gets an equal part of the allocation. the worker pool will grow to the
   // number of concurrent tasks, which is determined by the number of cores in this executor.
-  private def getWorkerMemoryMb(mem: Option[Long]): Option[Long] = {
-    mem.map(_ / conf.get(EXECUTOR_CORES))
+  private def getWorkerMemoryMb(mem: Option[Long], cores: Int): Option[Long] = {
+    mem.map(_ / cores)
   }
 
   def compute(
@@ -116,20 +116,28 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       context: TaskContext): Iterator[OUT] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
+
+    // Get the executor cores and pyspark memory, they are passed via the local properties when
+    // the user specified them in a ResourceProfile
+    val execCoresProp = Option(context.getLocalProperty(EXECUTOR_CORES_LOCAL_PROPERTY))
+    val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_LOCAL_PROPERTY)).map(_.toLong)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     // if OMP_NUM_THREADS is not explicitly set, override it with the number of cores
     if (conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
       // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to this executor
       // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
       // see https://github.com/numpy/numpy/issues/10455
-      conf.getOption("spark.executor.cores").foreach(envVars.put("OMP_NUM_THREADS", _))
+      val coresOption = if (execCoresProp.isEmpty) conf.getOption("spark.executor.cores") else execCoresProp
+      coresOption.foreach(envVars.put("OMP_NUM_THREADS", _))
     }
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
-    val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_PROPERTY)).map(_.toLong)
-    val workerMemoryMb = getWorkerMemoryMb(memoryMb)
+    // SPARK-30299 this could be wrong with standalone mode when executor
+    // cores might not be correct because it defaults to all cores on the box.
+    val execCores = execCoresProp.map(_.toInt).getOrElse(conf.get(EXECUTOR_CORES))
+    val workerMemoryMb = getWorkerMemoryMb(memoryMb, execCores)
     if (workerMemoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)
     }

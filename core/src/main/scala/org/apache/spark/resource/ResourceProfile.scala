@@ -329,5 +329,6 @@ object ResourceProfile extends Logging {
     rp.getTaskCpus.getOrElse(conf.get(CPUS_PER_TASK))
   }
 
-  private[spark] val PYSPARK_MEMORY_PROPERTY = "resource.pyspark.memory"
+  private[spark] val PYSPARK_MEMORY_LOCAL_PROPERTY = "resource.pyspark.memory"
+  private[spark] val EXECUTOR_CORES_LOCAL_PROPERTY = "resource.executor.cores"
 }
