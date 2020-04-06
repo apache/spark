@@ -341,7 +341,7 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
         def func(_, iterator):
-            num_input_rows = [0]
+            num_input_rows = [0]  # TODO(SPARK-29909): Use nonlocal after we drop Python 2.
 
             def map_batch(batch):
                 udf_args = [batch[offset] for offset in arg_offsets]
@@ -357,8 +357,14 @@ def read_udfs(pickleSer, infile, eval_type):
             num_output_rows = 0
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
-                assert is_map_iter or num_output_rows <= num_input_rows[0], \
-                    "Pandas MAP_ITER UDF outputted more rows than input rows."
+
+                if is_scalar_iter and num_output_rows > num_input_rows[0]:
+                    raise RuntimeError(
+                        "The length of each output series (or frame) in Scalar iterator pandas "
+                        "UDF should be the same with the input's; however, the length of output "
+                        "series (or frame) was %d and the length of the input's was %d." % (
+                            num_output_rows, num_input_rows[0]))
+
                 yield (result_batch, result_type)
 
             if is_scalar_iter:
@@ -367,14 +373,14 @@ def read_udfs(pickleSer, infile, eval_type):
                 except StopIteration:
                     pass
                 else:
-                    raise RuntimeError("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input "
+                    raise RuntimeError("pandas iterator UDF should exhaust the input "
                                        "iterator.")
 
-            if is_scalar_iter and num_output_rows != num_input_rows[0]:
-                raise RuntimeError("The number of output rows of pandas iterator UDF should be "
-                                   "the same with input rows. The input rows number is %d but the "
-                                   "output rows number is %d." %
-                                   (num_input_rows[0], num_output_rows))
+                if num_output_rows != num_input_rows[0]:
+                    raise RuntimeError(
+                        "The length of output in Scalar iterator pandas UDF should be "
+                        "the same with the input's; however, the length of output was %d and the "
+                        "length of input was %d." % (num_output_rows, num_input_rows[0]))
 
         # profiling is not supported for UDF
         return func, None, ser, ser
