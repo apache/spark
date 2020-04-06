@@ -158,6 +158,8 @@
                   url: sql-ref-syntax-qry-select-hints.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
+            - text: AGGREGATION
+              url: sql-ref-syntax-qry-aggregation.html
         - text: Auxiliary Statements
           url: sql-ref-syntax-aux.html
           subitems:

@@ -25,6 +25,7 @@ and brief description of supported clauses are explained in
 [SELECT](sql-ref-syntax-qry-select.html) section. Spark also provides the
 ability to generate logical and physical plan for a given query using
 [EXPLAIN](sql-ref-syntax-qry-explain.html) statement.
+Spark has support for a rich set of [aggregations](sql-ref-syntax-qry-aggregation.html).
 
 
 - [WHERE Clause](sql-ref-syntax-qry-select-where.html)
@@ -36,3 +37,4 @@ ability to generate logical and physical plan for a given query using
 - [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 - [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
 - [EXPLAIN Statement](sql-ref-syntax-qry-explain.html)
+- [AGGREGATION](sql-ref-syntax-qry-aggregation.html)

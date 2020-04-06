@@ -45,6 +45,7 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
 - [LOAD](sql-ref-syntax-dml-load.html)
 
 ### Data Retrieval Statements
+- [AGGREGATION](sql-ref-syntax-qry-aggregation.html)
 - [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
 - [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 - [EXPLAIN](sql-ref-syntax-qry-explain.html)
