@@ -877,9 +877,8 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * json_object - A JSON object. If a valid JSON object is given, all the keys of the outmost
-          object will be returned as an array. If it is an invalid JSON string, the function
-          returns null. If it is a JSON array or empty string, an illegal argument exception
-          will be thrown.
+          object will be returned as an array. If it is any other valid JSON string, an invalid JSON
+          string or an empty string, the function returns null.
   """,
   examples = """
     Examples:
@@ -918,15 +917,9 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
 
   private def getJsonKeys(parser: JsonParser, input: InternalRow): Any = {
     var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
-    // this handles empty string case
-    if (parser.nextToken() == null) {
-      throw new IllegalArgumentException(
-        s"$prettyName expects a JSON object but nothing is provided.")
-    }
-
-    // when a JSON array is found, throw a runtime exception
-    if (parser.currentToken() == JsonToken.START_ARRAY) {
-      throw new IllegalArgumentException(s"$prettyName can only be called on JSON object.")
+    // return null if an empty string or any other valid JSON string is encountered
+    if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
+      return null
     }
 
     // traverse until the end of input and ensure it returns valid key

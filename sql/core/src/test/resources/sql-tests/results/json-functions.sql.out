@@ -475,10 +475,9 @@ cannot resolve 'json_object_keys(200)' due to data type mismatch: argument 1 req
 -- !query
 select json_object_keys('')
 -- !query schema
-struct<json_object_keys():int>
+struct<json_object_keys():array<string>>
 -- !query output
-java.lang.IllegalArgumentException
-json_object_keys expects a JSON object but nothing is provided.
+NULL
 
 
 -- !query
@@ -556,10 +555,9 @@ NULL
 -- !query
 select json_object_keys('[1, 2, 3]')
 -- !query schema
-struct<>
+struct<json_object_keys([1, 2, 3]):array<string>>
 -- !query output
-java.lang.IllegalArgumentException
-json_object_keys can only be called on JSON object.
+NULL
 
 
 -- !query

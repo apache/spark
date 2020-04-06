@@ -834,28 +834,21 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("json_object_keys") {
     Seq(
-      ("""{}""", Seq.empty[UTF8String]),
+      ("{}", Seq.empty[UTF8String]),
       ("""{"key": 1}""", Seq("key")),
       ("""{"key": "value", "key2": 2}""", Seq("key", "key2")),
       ("""{"arrayKey": [1, 2, 3]}""", Seq("arrayKey")),
       ("""{"key":[1,2,3,{"key":"value"},[1,2,3]]}""", Seq("key")),
       ("""{"f1":"abc","f2":{"f3":"a", "f4":"b"}}""", Seq("f1", "f2")),
       ("""{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}""", Seq("k1", "k2")),
-      ("""{[1,2]}""", null),
-      ("""{"key": 45, "random_string"}""", null)
+      ("{[1,2]}", null),
+      ("""{"key": 45, "random_string"}""", null),
+      ("", null),
+      ("[]", null),
+      ("""[{"key": "JSON"}]""", null)
     ).foreach{
       case (input, expected) =>
         checkEvaluation(JsonObjectKeys(Literal(input)), expected)
     }
-
-    checkExceptionInExpression[IllegalArgumentException](
-      JsonObjectKeys(Literal("""""")),
-      expectedErrMsg = "json_object_keys expects a JSON object but nothing is provided"
-    )
-
-    checkExceptionInExpression[IllegalArgumentException](
-      JsonObjectKeys(Literal("""[]""")),
-      expectedErrMsg = "json_object_keys can only be called on JSON object"
-    )
   }
 }
