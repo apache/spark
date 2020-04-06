@@ -97,7 +97,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
-    approxQuantile(cols.map(col), probabilities, relativeError)
+    approxQuantile(cols.map(df.col), probabilities, relativeError)
   }
 
   /**
