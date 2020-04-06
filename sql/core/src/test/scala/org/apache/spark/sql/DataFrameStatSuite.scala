@@ -109,6 +109,8 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     assert(math.abs(corr1 - 1.0) < 1e-12)
     val corr2 = df.stat.corr("a", "c", "pearson")
     assert(math.abs(corr2 + 1.0) < 1e-12)
+    val corr3 = df.stat.corr(col("a"), col("c"), "pearson")
+    assert(math.abs(corr3 + 1.0) < 1e-12)
     // non-trivial example. To reproduce in python, use:
     // >>> from scipy.stats import pearsonr
     // >>> import numpy as np
@@ -157,6 +159,8 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
 
     val results = df.stat.cov("singles", "doubles")
     assert(math.abs(results - 55.0 / 3) < 1e-12)
+    val results2 = df.stat.cov(df("singles"), df("doubles"))
+    assert(math.abs(results2 - 55.0 / 3) < 1e-12)
     intercept[IllegalArgumentException] {
       df.stat.cov("singles", "letters") // doesn't accept non-numerical dataTypes
     }
