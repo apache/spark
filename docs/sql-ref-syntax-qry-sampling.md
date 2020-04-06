@@ -88,3 +88,5 @@ SELECT * FROM test TABLESAMPLE (bucket 4 out of 10);
 +--+----+
 {% endhighlight %}
 
+### Related Statement
+- [SELECT](sql-ref-syntax-qry-select.html)
