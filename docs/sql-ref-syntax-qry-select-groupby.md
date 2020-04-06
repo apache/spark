@@ -80,6 +80,10 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
   <dd>
     Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).
   </dd>
+  <dt><code><em>DISTINCT</em></code></dt>
+  <dd>
+    Removes duplicates in input rows before they are passed to aggregate functions.
+  </dd>
   <dt><code><em>FILTER</em></code></dt>
   <dd>
     Filters the input rows for which the <code>boolean_expression</code> in the <code>WHERE</code> clause evaluates
