@@ -1706,31 +1706,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     verify(liveListenerBus, never()).post(SparkListenerBlockUpdated(BlockUpdatedInfo(updateInfo)))
   }
 
-  test("test decommissioning block manager should not accept any new block directly " +
-    "or indirectly (via replication)") {
-    val store = makeBlockManager(2000, "exec1")
-    val store2 = makeBlockManager(2000, "exec2")
-
-    val data1 = new Array[Byte](400)
-    val block1 = rdd(0, 0)
-    store.putSingle(block1, data1, StorageLevel.DISK_ONLY_2)
-    assert(master.getLocations(block1).size === 2, "master did not report 2 locations for a1")
-
-    store.decommissionBlockManager()
-    val data2 = new Array[Byte](400)
-    val block2 = rdd(0, 1)
-    intercept[Exception] {
-      store.putSingle(block2, data2, StorageLevel.DISK_ONLY_2)
-    }
-    assert(master.getLocations(block2).size === 0, "block manager accepted blocks even" +
-      " after decommissioning")
-
-    val data3 = new Array[Byte](400)
-    val block3 = rdd(0, 2)
-    store2.putSingle(block3, data3, StorageLevel.DISK_ONLY_2)
-    assert(master.getLocations(block3).size === 1)
-  }
-
   test("test decommission block manager should not be part of peers") {
     val exec1 = "exec1"
     val exec2 = "exec2"
