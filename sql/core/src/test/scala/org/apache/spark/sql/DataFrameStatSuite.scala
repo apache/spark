@@ -316,6 +316,9 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
           assert(row.getLong(col) === expected.getOrElse((i, j), 0).toLong)
         }
       }
+      val crosstabByColumns = df.stat.crosstab(col("a"), col("b"))
+      val columnNamesByColumns = crosstabByColumns.schema.fieldNames
+      assert(columnNamesByColumns(0) === "a_b")
     }
   }
 
