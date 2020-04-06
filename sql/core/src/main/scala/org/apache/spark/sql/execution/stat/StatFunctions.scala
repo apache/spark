@@ -218,8 +218,7 @@ object StatFunctions extends Logging {
    * @return the covariance of the two columns.
    */
   def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
-    val counts = collectStatisticalData(df, cols, "covariance")
-    counts.cov
+    calculateCovByColumns(df, cols.map(df.col))
   }
 
   /**
