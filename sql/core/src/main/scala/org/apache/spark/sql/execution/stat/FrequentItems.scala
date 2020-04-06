@@ -21,6 +21,8 @@ import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
 
@@ -66,6 +68,19 @@ object FrequentItems extends Logging {
     }
   }
 
+  /** Helper function to resolve column to expr (if not yet) */
+  // TODO: it might be helpful to have this helper in Dataset.scala,
+  // e.g. `drop` function uses exactly the same flow to deal with
+  // `Column` arguments
+  private def resolveColumn(df: DataFrame, col: Column): Column = {
+    col match {
+      case Column(u: UnresolvedAttribute) =>
+        Column(df.queryExecution.analyzed.resolveQuoted(
+          u.name, df.sparkSession.sessionState.analyzer.resolver).getOrElse(u))
+      case Column(_expr: Expression) => col
+    }
+  }
+
   /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
@@ -84,13 +99,30 @@ object FrequentItems extends Logging {
       df: DataFrame,
       cols: Seq[String],
       support: Double): DataFrame = {
+    singlePassFreqItemsByColumns(df, cols.map(df.col), support)
+  }
+
+  /**
+   * Finding frequent items for columns, possibly with false positives.
+   * This version of singlePassFreqItems except [[Column]] rather than names.
+   *
+   * @param df The input DataFrame
+   * @param cols the columns to search frequent items in
+   * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
+   *                than 1e-4.
+   * @return A Local DataFrame with the Array of frequent items for each column.
+   */
+  def singlePassFreqItemsByColumns(
+      df: DataFrame,
+      cols: Seq[Column],
+      support: Double): DataFrame = {
     require(support >= 1e-4 && support <= 1.0, s"Support must be in [1e-4, 1], but got $support.")
     val numCols = cols.length
     // number of max items to keep counts for
     val sizeOfMap = (1 / support).toInt
     val countMaps = Seq.tabulate(numCols)(i => new FreqItemCounter(sizeOfMap))
 
-    val freqItems = df.select(cols.map(Column(_)) : _*).rdd.treeAggregate(countMaps)(
+    val freqItems = df.select(cols: _*).rdd.treeAggregate(countMaps)(
       seqOp = (counts, row) => {
         var i = 0
         while (i < numCols) {
@@ -113,8 +145,10 @@ object FrequentItems extends Logging {
     val justItems = freqItems.map(m => m.baseMap.keys.toArray)
     val resultRow = Row(justItems : _*)
 
-    val outputCols = cols.map { name =>
-      val originalField = df.resolve(name)
+    val outputCols = cols.map { col =>
+      val originalColumn = resolveColumn(df, col)
+      val originalField = originalColumn.expr
+      val name = originalColumn.named.name
 
       // append frequent Items to the column name for easy debugging
       StructField(name + "_freqItems", ArrayType(originalField.dataType, originalField.nullable))

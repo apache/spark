@@ -380,7 +380,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def freqItems(cols: Array[String], support: Double): DataFrame = {
-    FrequentItems.singlePassFreqItems(df, cols, support)
+    freqItems(cols.map(df.col), support)
   }
 
   /**
@@ -399,7 +399,37 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def freqItems(cols: Array[String]): DataFrame = {
-    FrequentItems.singlePassFreqItems(df, cols, 0.01)
+    freqItems(cols.map(df.col), 0.01)
+  }
+
+  /**
+   * Finding frequent items for columns, possibly with false positives.
+   * This version of freqItems accepts [[Column]] rather than names.
+   * @see `freqItesm(cols: Array[String])` for detailed description.
+   *
+   * @param cols the columns to search frequent items in.
+   * @return A Local DataFrame with the Array of frequent items for each column.
+   *
+   * @since 3.0.0
+   */
+  def freqItems(cols: Array[Column]): DataFrame = {
+    FrequentItems.singlePassFreqItemsByColumns(df, cols, 0.01)
+  }
+
+  /**
+   * Finding frequent items for columns, possibly with false positives.
+   * This version of freqItems accepts [[Column]] rather than names.
+   * @see `freqItesm(cols: Array[String], support:Double)` for detailed description.
+   *
+   * @param cols the columns to search frequent items in.
+   * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
+   *                than 1e-4.
+   * @return A Local DataFrame with the Array of frequent items for each column.
+   *
+   * @since 3.0.0
+   */
+  def freqItems(cols: Array[Column], support: Double): DataFrame = {
+    FrequentItems.singlePassFreqItemsByColumns(df, cols, support)
   }
 
   /**
