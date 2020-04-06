@@ -25,6 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
@@ -48,6 +49,10 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   /* invalid json with leading nulls would trigger java.io.CharConversionException
    in Jackson's JsonFactory.createParser(byte[]) due to RFC-4627 encoding detection */
   val badJson = "\u0000\u0000\u0000A\u0001AAA"
+
+  test("get_json_object escaping") {
+    GenerateUnsafeProjection.generate(GetJsonObject(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
 
   test("$.store.bicycle") {
     checkEvaluation(
@@ -265,6 +270,11 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     assert(jt.eval(null).toSeq.head === expected)
   }
 
+  test("json_tuple escaping") {
+    GenerateUnsafeProjection.generate(
+      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil) :: Nil)
+  }
+
   test("json_tuple - hive key 1") {
     checkJsonTuple(
       JsonTuple(
@@ -394,6 +404,12 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         NonFoldableLiteral("f1") ::
         Nil),
       InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("1")))
+  }
+
+  test("from_json escaping") {
+    val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      JsonToStructs(schema, Map.empty, Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("from_json") {
@@ -547,6 +563,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       JsonToStructs(schema, Map.empty, Literal.create(" ", StringType), UTC_OPT),
       null
     )
+  }
+
+  test("to_json escaping") {
+    val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(1), schema)
+    GenerateUnsafeProjection.generate(
+      StructsToJson(Map.empty, struct, UTC_OPT) :: Nil)
   }
 
   test("to_json - struct") {
