@@ -19,12 +19,12 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL provides build-in Aggregate functions defined in the dataset API and SQL interface. Aggregate functions
+Spark SQL provides build-in aggregate functions defined in the dataset API and SQL interface. Aggregate functions
 operate on a group of rows and return a single value.
 
-Spark SQL Aggregate functions are grouped as <code>agg_funcs</code> in spark SQL. Below is the list of functions.
+Spark SQL aggregate functions are grouped as <code>agg_funcs</code> in Spark SQL. Below is the list of functions.
 
-**Note:** Every below function has another signature which takes String as a column name instead of Column.
+**Note:** All functions below have another signature which takes String as a column name instead of Column.
 
 * Table of contents
 {:toc}
@@ -34,37 +34,37 @@ Spark SQL Aggregate functions are grouped as <code>agg_funcs</code> in spark SQL
   </thead>
   <tbody>
     <tr>
-      <td> <b>{any | some | bool_or}</b>(<i>e: Column</i>)</td>
+      <td> <b>{any | some | bool_or}</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Returns true if at least one value is true</td>
     </tr>
     <tr>
-      <td> <b>approx_count_distinct</b>(<i>e: Column[, relativeSD: Double]]</i>)</td>
+      <td> <b>approx_count_distinct</b>(<i>c: Column[, relativeSD: Double]]</i>)</td>
       <td>Column name; relativeSD: the maximum estimation error allowed.</td>
       <td>Returns the estimated cardinality by HyperLogLog++</td>
     </tr>   
     <tr>
-      <td> <b>{avg | mean}</b>(<i>e: Column</i>)</td>
+      <td> <b>{avg | mean}</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td> Returns the average of values in the input column.</td> 
     </tr>
     <tr>
-      <td> <b>{bool_and | every}</b>(<i>e: Column</i>)</td>
+      <td> <b>{bool_and | every}</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Returns true if all values are true</td>
     </tr>
     <tr>
-      <td> <b>collect_list</b>(<i>e: Column</i>)</td>
+      <td> <b>collect_list</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Collects and returns a list of non-unique elements. The function is non-deterministic because the order of collected results depends on the order of the rows which may be non-deterministic after a shuffle</td>
     </tr>       
     <tr>
-      <td> <b>collect_set</b>(<i>e: Column</i>)</td>
+      <td> <b>collect_set</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Collects and returns a set of unique elements. The function is non-deterministic because the order of collected results depends on the order of the rows which may be non-deterministic after a shuffle.</td>
     </tr>
     <tr>
-      <td> <b>corr</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td> <b>corr</b>(<i>c1: Column, c2: Column</i>)</td>
       <td>Column name</td>
       <td>Returns Pearson coefficient of correlation between a set of number pairs</td>
     </tr>
@@ -74,12 +74,12 @@ Spark SQL Aggregate functions are grouped as <code>agg_funcs</code> in spark SQL
       <td>Returns the total number of retrieved rows, including rows containing null</td>
     </tr>
     <tr>
-      <td> <b>count</b>(<i>e: Column[, e: Column]</i>)</td>
+      <td> <b>count</b>(<i>c: Column[, c: Column]</i>)</td>
       <td>Column name</td>
       <td>Returns the number of rows for which the supplied column(s) are all not null</td>
     </tr>
     <tr>
-      <td> <b>count</b>(<b>DISTINCT</b> <i> e: Column[, e: Column</i>])</td>
+      <td> <b>count</b>(<b>DISTINCT</b> <i> c: Column[, c: Column</i>])</td>
       <td>Column name</td>
       <td>Returns the number of rows for which the supplied column(s) are unique and not null</td>
     </tr> 
@@ -89,102 +89,102 @@ Spark SQL Aggregate functions are grouped as <code>agg_funcs</code> in spark SQL
       <td>Returns the count number from the predicate evaluate to <code>TRUE</code> values</td>
     </tr> 
     <tr>
-        <td> <b>count_min_sketch</b>(<i>e: Column, eps: double, confidence: double, seed integer</i>)</td>
+        <td> <b>count_min_sketch</b>(<i>c: Column, eps: double, confidence: double, seed integer</i>)</td>
         <td>Column name; eps is a value between 0.0 and 1.0; confidence is a value between 0.0 and 1.0; seed is a positive integer</td>
         <td>Returns a count-min sketch of a column with the given esp, confidence and seed. The result is an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for cardinality estimation using sub-linear space..</td>
     </tr>
     <tr>
-      <td> <b>covar_pop</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td> <b>covar_pop</b>(<i>c1: Column, c2: Column</i>)</td>
       <td>Column name</td>
       <td>Returns the population covariance of a set of number pairs</td>
     </tr> 
     <tr>
-      <td> <b>covar_samp</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td> <b>covar_samp</b>(<i>c1: Column, c2: Column</i>)</td>
       <td>Column name</td>
       <td>Returns the sample covariance of a set of number pairs</td>
     </tr>  
     <tr>
-      <td> <b>{first | first_value}</b>(<i>e: Column[, isIgnoreNull]</i>)</td>
+      <td> <b>{first | first_value}</b>(<i>c: Column[, isIgnoreNull]</i>)</td>
       <td>Column name[, True/False(default)]</td>
       <td>Returns the first value of column for a group of rows. If <code>isIgnoreNull</code> is true, returns only non-null values, default is false. This function is non-deterministic</td>
     </tr>      
     <tr>
-       <td> <b>kurtosis</b>(<i>e: Column</i>)</td>
+       <td> <b>kurtosis</b>(<i>c: Column</i>)</td>
        <td>Column name</td>
        <td>Returns the kurtosis value calculated from values of a group</td>
     </tr>    
     <tr>
-      <td> <b>{last | last_value}</b>(<i>e: Column[, isIgnoreNull]</i>)</td>
+      <td> <b>{last | last_value}</b>(<i>c: Column[, isIgnoreNull]</i>)</td>
       <td>Column name[, True/False(default)]</td>
       <td>Returns the last value of column for a group of rows. If <code>isIgnoreNull</code> is true, returns only non-null values, default is false. This function is non-deterministic</td>
     </tr>      
     <tr>
-      <td> <b>max</b>(<i>e: Column</i>)</td>
+      <td> <b>max</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Returns the maximum value of the column.</td>
     </tr>          
     <tr>
-      <td> <b>max_by</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td> <b>max_by</b>(<i>c1: Column, c2: Column</i>)</td>
       <td>Column name</td>
-      <td>Returns the value of column e1 associated with the maximum value of column e2.</td>
+      <td>Returns the value of column c1 associated with the maximum value of column c2.</td>
     </tr>   
     <tr>
-      <td> <b>min</b>(<i>e: Column</i>)</td>
+      <td> <b>min</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Returns the minimum value of the column.</td>
     </tr>          
     <tr>
-      <td> <b>min_by</b>(<i>e1: Column, e2: Column</i>)</td>
+      <td> <b>min_by</b>(<i>c1: Column, c2: Column</i>)</td>
       <td>Column name</td>
-      <td>Returns the value of column e1 associated with the minimum value of column e2.</td>
+      <td>Returns the value of column c1 associated with the minimum value of column c2.</td>
     </tr>      
     <tr>
-      <td> <b>percentile</b>(<i>e: Column, percentage [, frequency]</i>)</td>
+      <td> <b>percentile</b>(<i>c: Column, percentage [, frequency]</i>)</td>
       <td>Column name; percentage is a number between 0 and 1; frequency is a positive integer</td>
       <td>Returns the exact percentile value of numeric column at the given percentage.</td>
     </tr>         
     <tr>
-      <td> <b>percentile</b>(<i>e: Column, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
+      <td> <b>percentile</b>(<i>c: Column, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
       <td>Column name; percentage array is an array of number between 0 and 1; frequency is a positive integer</td>
       <td>Returns the exact percentile value array of numeric column at the given percentage(s).</td>
     </tr>        
     <tr>
-      <td> <b>{percentile_approx | percentile_approx}</b>(<i>e: Column, percentage [, frequency]</i>)</td>
+      <td> <b>{percentile_approx | percentile_approx}</b>(<i>c: Column, percentage [, frequency]</i>)</td>
       <td>Column name; percentage is a number between 0 and 1; frequency is a positive integer</td>
       <td>Returns the approximate percentile value of numeric column at the given percentage.</td>
     </tr>         
     <tr>
-      <td> <b>{percentile_approx | percentile_approx}</b>(<i>e: Column, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
+      <td> <b>{percentile_approx | percentile_approx}</b>(<i>c: Column, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
       <td>Column name; percentage is a number between 0 and 1; frequency is a positive integer</td>
       <td>Returns the approximate percentile value of numeric column at the given percentage.</td>
     </tr>             
     <tr>
-       <td> <b>skewness</b>(<i>e: Column</i>)</td>
+       <td> <b>skewness</b>(<i>c: Column</i>)</td>
        <td>Column name</td>
        <td>Returns the skewness value calculated from values of a group</td>
     </tr>    
     <tr>
-      <td> <b>{stddev_samp | stddev | std}</b>(<i>e: Column</i>)</td>
+      <td> <b>{stddev_samp | stddev | std}</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Returns the sample standard deviation calculated from values of a group</td>
     </tr>  
     <tr>
-      <td> <b>stddev_pop</b>(<i>e: Column</i>)</td>
+      <td> <b>stddev_pop</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Returns the population standard deviation calculated from values of a group</td>
     </tr>
     <tr>
-      <td> <b>sum</b>(<i>e: Column</i>)</td>
+      <td> <b>sum</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Returns the sum calculated from values of a group.</td>
     </tr>       
     <tr>
-      <td> <b>{variance | var_samp}</b>(<i>e: Column</i>)</td>
+      <td> <b>{variance | var_samp}</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Returns the sample variance calculated from values of a group</td>
     </tr>    
     <tr>
-      <td> <b>var_pop</b>(<i>e: Column</i>)</td>
+      <td> <b>var_pop</b>(<i>c: Column</i>)</td>
       <td>Column name</td>
       <td>Returns the population variance calculated from values of a group</td>
     </tr>        
@@ -362,11 +362,11 @@ SELECT c1 FROM buildin_agg GROUP BY c1 HAVING COUNT_IF(c2 % 2 = 0);
 
 --COUNT_MIN_SKETCH
 SELECT COUNT_MIN_SKETCH(c1, 1D, 0.2D, 3) FROM buildin_agg;
-+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
-|count_min_sketch(c1, 0.9, 0.2, 3)                                                                                                                            |
-+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
-|[00 00 00 01 00 00 00 00 00 00 00 07 00 00 00 01 00 00 00 03 00 00 00 00 5D 93 49 A6 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 06]|
-+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
++----------------------------------------------------------+
+|count_min_sketch(c1, 0.9, 0.2, 3)                         |
++----------------------------------------------------------+
+|[00 00 00 01 00 00 00 00 00 00 00 07 00 00 00 01 00 00...]|
++----------------------------------------------------------+
 
 --COVAR_POP
 SELECT COVAR_POP(c1, c2) FROM buildin_agg;
