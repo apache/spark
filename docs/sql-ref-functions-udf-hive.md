@@ -25,7 +25,6 @@ Spark SQL supports integration of Hive UDFs, UDAFs and UDTFs. Similar to Spark U
 
 ### Examples
 
-
 <pre><code>
 // Register a Hive UDF and use it in Spark SQL
 // Scala
