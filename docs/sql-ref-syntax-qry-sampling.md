@@ -21,10 +21,13 @@ license: |
 
 ### Description
 
-The `TABLESAMPLE` statement is used to sample the input data. It supports the following sampling methods:
-- Sample a percentage of a table.
-- Sample a fixed, specified number of rows of a table.
-- Sample a fraction of bucket of a table.
+The `TABLESAMPLE` statement is used to sample the table. It supports the following sampling methods:
+- `TABLESAMPLE`(x `ROWS`): Sample the table down to the given number of rows.
+- `TABLESAMPLE`(x `PERCENT`): Sample the table down to the given percentage. Note that percentages are defined as a number between 0 and 100.
+- `TABLESAMPLE`(`BUCKET` x `OUT OF` y): Sample the table down to a `x` out of `y` fraction.
+
+Note: `TABLESAMPLE` returns the approximate number of rows or fraction requested.
+
 
 ### Syntax
 {% highlight sql %}
