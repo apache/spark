@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSparkSession {
@@ -54,23 +55,5 @@ class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSpark
       testReadFooters(false)
     }.getCause
     assert(exception.getMessage().contains("Could not read footer for file"))
-  }
-
-  test("read parquet map invaild key type") {
-    withTempDir { dir =>
-      val spark_session = spark
-      import spark_session.implicits._
-      val df = Seq(Map(Map(1 -> 1) -> 1L)).toDF("map")
-      val exception = intercept[AnalysisException] {
-        df.write.mode("overwrite").parquet(dir.getPath)
-      }
-      assert(exception.getMessage().contains("Parquet data source does not support"))
-
-      val df2 = Seq(Map(Array(1) -> 1L)).toDF("map")
-      val exception2 = intercept[AnalysisException] {
-        df2.write.mode("overwrite").parquet(dir.getPath)
-      }
-      assert(exception2.getMessage().contains("Parquet data source does not support"))
-    }
   }
 }

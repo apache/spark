@@ -818,6 +818,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
     }
   }
+
+  test("SPARK-30996: nested map in array element then cannot read") {
+    withTempDir { dir =>
+      val df = Seq(Seq(Map(Map(1 -> 2) -> 1L))).toDF("array_col")
+      df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+      checkAnswer(spark.read.parquet(dir.getAbsolutePath), df)
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
