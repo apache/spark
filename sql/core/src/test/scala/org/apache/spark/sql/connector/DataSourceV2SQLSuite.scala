@@ -971,17 +971,15 @@ class DataSourceV2SQLSuite
   private def runShowTablesSql(
       sqlText: String,
       expected: Seq[Row],
-      expectV2Catalog: Boolean = true,
-      isShowView: Boolean = false): Unit = {
-    val colName = if (isShowView) "viewName" else "tableName"
+      expectV2Catalog: Boolean = true): Unit = {
     val schema = if (expectV2Catalog) {
       new StructType()
         .add("namespace", StringType, nullable = false)
-        .add(colName, StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
     } else {
       new StructType()
         .add("database", StringType, nullable = false)
-        .add(colName, StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
         .add("isTemporary", BooleanType, nullable = false)
     }
 
