@@ -26,11 +26,12 @@ User-Defined Aggregate Functions (UDAFs) are user-programmable routines that act
 ### Aggregator[-IN, BUF, OUT]
 
 A base class for user-defined aggregations, which can be used in Dataset operations to take all of the elements of a group and reduce them to a single value.
-- IN The input type for the aggregation.
 
-- BUF The type of the intermediate value of the reduction.
+- IN - The input type for the aggregation.
 
-- OUT The type of the final output result.
+- BUF - The type of the intermediate value of the reduction.
+
+- OUT - The type of the final output result.
 
 <dl>
   <dt><code><em>bufferEncoder: Encoder[BUF]</em></code></dt>
