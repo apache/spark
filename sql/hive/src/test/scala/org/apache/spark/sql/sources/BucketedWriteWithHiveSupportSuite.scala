@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 class BucketedWriteWithHiveSupportSuite extends BucketedWriteSuite with TestHiveSingleton {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
   }
 
   override protected def fileFormatsToTest: Seq[String] = Seq("parquet", "orc")

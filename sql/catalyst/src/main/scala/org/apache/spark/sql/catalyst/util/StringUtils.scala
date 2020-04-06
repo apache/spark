@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.regex.{Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
@@ -39,9 +38,10 @@ object StringUtils extends Logging {
    * throw an [[AnalysisException]].
    *
    * @param pattern the SQL pattern to convert
+   * @param escapeChar the escape string contains one character.
    * @return the equivalent Java regular expression of the pattern
    */
-  def escapeLikeRegex(pattern: String): String = {
+  def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
     val in = pattern.toIterator
     val out = new StringBuilder()
 
@@ -50,13 +50,14 @@ object StringUtils extends Logging {
 
     while (in.hasNext) {
       in.next match {
-        case '\\' if in.hasNext =>
+        case c1 if c1 == escapeChar && in.hasNext =>
           val c = in.next
           c match {
-            case '_' | '%' | '\\' => out ++= Pattern.quote(Character.toString(c))
+            case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
+            case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
             case _ => fail(s"the escape character is not allowed to precede '$c'")
           }
-        case '\\' => fail("it is not allowed to end with the escape character")
+        case c if c == escapeChar => fail("it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
         case c => out ++= Pattern.quote(Character.toString(c))
@@ -72,9 +73,9 @@ object StringUtils extends Logging {
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
 
   // scalastyle:off caselocale
-  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.toLowerCase)
+  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.trimAll().toLowerCase)
 
-  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.toLowerCase)
+  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.trimAll().toLowerCase)
   // scalastyle:on caselocale
 
   /**

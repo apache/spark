@@ -22,13 +22,13 @@ license: |
 ### Description
 Returns the list of functions after applying an optional regex pattern.
 Given number of functions supported by Spark is quite large, this statement
-in conjuction with [describe function](sql-ref-syntax-aux-describe-function.html)
+in conjunction with [describe function](sql-ref-syntax-aux-describe-function.html)
 may be used to quickly find the function and understand its usage. The `LIKE` 
 clause is optional and supported only for compatibility with other systems.
 
 ### Syntax
 {% highlight sql %}
-SHOW [ function_kind ] FUNCTIONS ([LIKE] function_name | regex_pattern)
+SHOW [ function_kind ] FUNCTIONS ( [ LIKE ] function_name | regex_pattern )
 {% endhighlight %}
 
 ### Parameters

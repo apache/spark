@@ -48,7 +48,7 @@ object SortBenchmark extends BenchmarkBase {
 
   private def generateKeyPrefixTestData(size: Int, rand: => Long): (LongArray, LongArray) = {
     val ref = Array.tabulate[Long](size * 2) { i => rand }
-    val extended = ref ++ Array.fill[Long](size * 2)(0)
+    val extended = ref ++ Array.ofDim[Long](size * 2)
     (new LongArray(MemoryBlock.fromLongArray(ref)),
       new LongArray(MemoryBlock.fromLongArray(extended)))
   }

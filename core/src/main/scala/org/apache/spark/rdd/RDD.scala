@@ -42,6 +42,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
@@ -234,10 +235,10 @@ abstract class RDD[T: ClassTag](
    * because DAGs are acyclic, and we only ever hold locks for one path in that DAG, there is no
    * chance of deadlock.
    *
-   * The use of Integer is simply so this is serializable -- executors may reference the shared
-   * fields (though they should never mutate them, that only happens on the driver).
+   * Executors may reference the shared fields (though they should never mutate them,
+   * that only happens on the driver).
    */
-  private val stateLock = new Integer(0)
+  private val stateLock = new Serializable {}
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
@@ -361,6 +362,7 @@ abstract class RDD[T: ClassTag](
       readCachedBlock = false
       computeOrReadCheckpoint(partition, context)
     }) match {
+      // Block hit.
       case Left(blockResult) =>
         if (readCachedBlock) {
           val existingMetrics = context.taskMetrics().inputMetrics
@@ -374,6 +376,7 @@ abstract class RDD[T: ClassTag](
         } else {
           new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
         }
+      // Need to compute the block.
       case Right(iter) =>
         new InterruptibleIterator(context, iter.asInstanceOf[Iterator[T]])
     }
@@ -1714,11 +1717,37 @@ abstract class RDD[T: ClassTag](
   @Since("2.4.0")
   def barrier(): RDDBarrier[T] = withScope(new RDDBarrier[T](this))
 
+  /**
+   * Specify a ResourceProfile to use when calculating this RDD. This is only supported on
+   * certain cluster managers and currently requires dynamic allocation to be enabled.
+   * It will result in new executors with the resources specified being acquired to
+   * calculate the RDD.
+   */
+  // PRIVATE for now, added for testing purposes, will be made public with SPARK-29150
+  @Experimental
+  @Since("3.0.0")
+  private[spark] def withResources(rp: ResourceProfile): this.type = {
+    resourceProfile = Option(rp)
+    sc.resourceProfileManager.addResourceProfile(resourceProfile.get)
+    this
+  }
+
+  /**
+   * Get the ResourceProfile specified with this RDD or null if it wasn't specified.
+   * @return the user specified ResourceProfile or null (for Java compatibility) if
+   *         none was specified
+   */
+  // PRIVATE for now, added for testing purposes, will be made public with SPARK-29150
+  @Experimental
+  @Since("3.0.0")
+  private[spark] def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
+
   // =======================================================================
   // Other internal methods and fields
   // =======================================================================
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
+  @transient private var resourceProfile: Option[ResourceProfile] = None
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = sc.getCallSite()

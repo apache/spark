@@ -24,7 +24,12 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
+
+import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -238,13 +243,18 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                   sock.setSoTimeout(10000)
                   authHelper.authClient(sock)
                   val input = new DataInputStream(sock.getInputStream())
-                  input.readInt() match {
+                  val requestMethod = input.readInt()
+                  // The BarrierTaskContext function may wait infinitely, socket shall not timeout
+                  // before the function finishes.
+                  sock.setSoTimeout(0)
+                  requestMethod match {
                     case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
-                      // The barrier() function may wait infinitely, socket shall not timeout
-                      // before the function finishes.
-                      sock.setSoTimeout(0)
-                      barrierAndServe(sock)
-
+                      barrierAndServe(requestMethod, sock)
+                    case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
+                      val length = input.readInt()
+                      val message = new Array[Byte](length)
+                      input.readFully(message)
+                      barrierAndServe(requestMethod, sock, new String(message, UTF_8))
                     case _ =>
                       val out = new DataOutputStream(new BufferedOutputStream(
                         sock.getOutputStream))
@@ -395,15 +405,31 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     /**
-     * Gateway to call BarrierTaskContext.barrier().
+     * Gateway to call BarrierTaskContext methods.
      */
-    def barrierAndServe(sock: Socket): Unit = {
-      require(serverSocket.isDefined, "No available ServerSocket to redirect the barrier() call.")
-
+    def barrierAndServe(requestMethod: Int, sock: Socket, message: String = ""): Unit = {
+      require(
+        serverSocket.isDefined,
+        "No available ServerSocket to redirect the BarrierTaskContext method call."
+      )
       val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
       try {
-        context.asInstanceOf[BarrierTaskContext].barrier()
-        writeUTF(BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS, out)
+        var result: String = ""
+        requestMethod match {
+          case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
+            context.asInstanceOf[BarrierTaskContext].barrier()
+            result = BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS
+          case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
+            val messages: Array[String] = context.asInstanceOf[BarrierTaskContext].allGather(
+              message
+            )
+            result = compact(render(JArray(
+              messages.map(
+                (message) => JString(message)
+              ).toList
+            )))
+        }
+        writeUTF(result, out)
       } catch {
         case e: SparkException =>
           writeUTF(e.getMessage, out)
@@ -611,7 +637,7 @@ private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
               val obj = new Array[Byte](length)
               stream.readFully(obj)
               obj
-            case 0 => Array.empty[Byte]
+            case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
@@ -638,6 +664,7 @@ private[spark] object SpecialLengths {
 
 private[spark] object BarrierTaskContextMessageProtocol {
   val BARRIER_FUNCTION = 1
+  val ALL_GATHER_FUNCTION = 2
   val BARRIER_RESULT_SUCCESS = "success"
   val ERROR_UNRECOGNIZED_FUNCTION = "Not recognized function call from python side."
 }

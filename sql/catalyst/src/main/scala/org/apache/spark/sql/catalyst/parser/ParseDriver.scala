@@ -40,6 +40,11 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     astBuilder.visitSingleDataType(parser.singleDataType())
   }
 
+  /** Similar to `parseDataType`, but without CHAR/VARCHAR replacement. */
+  override def parseRawDataType(sqlText: String): DataType = parse(sqlText) { parser =>
+    astBuilder.parseRawDataType(parser.singleDataType())
+  }
+
   /** Creates Expression for a given SQL string. */
   override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
     astBuilder.visitSingleExpression(parser.singleExpression())
@@ -92,7 +97,9 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.ansi = conf.ansiEnabled
+    lexer.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    lexer.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
+    lexer.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -100,7 +107,9 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    parser.ansi = conf.ansiEnabled
+    parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    parser.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
+    parser.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     try {
       try {

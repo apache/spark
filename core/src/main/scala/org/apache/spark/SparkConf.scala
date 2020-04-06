@@ -619,7 +619,9 @@ private[spark] object SparkConf extends Logging {
         "Not used anymore. Please use spark.shuffle.service.index.cache.size"),
       DeprecatedConfig("spark.yarn.credentials.file.retention.count", "2.4.0", "Not used anymore."),
       DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore."),
-      DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available.")
+      DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available."),
+      DeprecatedConfig("spark.executor.plugins", "3.0.0",
+        "Feature replaced with new plugin API. See Monitoring documentation.")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -682,7 +684,8 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
     MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
-      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3"),
+      AlternateConfig("spark.maxRemoteBlockSizeFetchToMem", "3.0")),
     LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
       AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
     DRIVER_MEMORY_OVERHEAD.key -> Seq(

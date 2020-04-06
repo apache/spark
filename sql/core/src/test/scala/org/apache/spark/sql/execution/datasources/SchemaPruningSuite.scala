@@ -25,6 +25,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -34,7 +35,8 @@ abstract class SchemaPruningSuite
   extends QueryTest
   with FileBasedDataSourceTest
   with SchemaPruningTest
-  with SharedSparkSession {
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   case class FullName(first: String, middle: String, last: String)
   case class Company(name: String, address: String)
   case class Employer(id: Int, company: Company)
@@ -89,6 +91,36 @@ abstract class SchemaPruningSuite
   val briefContactsWithDataPartitionColumn =
     briefContacts.map { case BriefContact(id, name, address) =>
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
+
+  testSchemaPruning("select only top-level fields") {
+    val query = sql("select address from contacts")
+    checkScan(query, "struct<address:string>")
+    checkAnswer(query.orderBy("id"),
+      Row("123 Main Street") ::
+      Row("321 Wall Street") ::
+      Row("567 Maple Drive") ::
+      Row("6242 Ash Street") ::
+      Nil)
+  }
+
+  testSchemaPruning("select a single complex field with disabled nested schema pruning") {
+    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "false") {
+      val query = sql("select name.middle from contacts")
+      checkScan(query, "struct<name:struct<first:string,middle:string,last:string>>")
+      checkAnswer(query.orderBy("id"), Row("X.") :: Row("Y.") :: Row(null) :: Row(null) :: Nil)
+    }
+  }
+
+  testSchemaPruning("select only input_file_name()") {
+    val query = sql("select input_file_name() from contacts")
+    checkScan(query, "struct<>")
+  }
+
+  testSchemaPruning("select only expressions without references") {
+    val query = sql("select count(*) from contacts")
+    checkScan(query, "struct<>")
+    checkAnswer(query, Row(4))
+  }
 
   testSchemaPruning("select a single complex field") {
     val query = sql("select name.middle from contacts")
@@ -269,6 +301,43 @@ abstract class SchemaPruningSuite
     checkAnswer(query, Row("Y.", 1) :: Row("X.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
   }
 
+  testSchemaPruning("select explode of nested field of array of struct") {
+    // Config combinations
+    val configs = Seq((true, true), (true, false), (false, true), (false, false))
+
+    configs.foreach { case (nestedPruning, nestedPruningOnExpr) =>
+      withSQLConf(
+          SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedPruning.toString,
+          SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> nestedPruningOnExpr.toString) {
+        val query1 = spark.table("contacts")
+          .select(explode(col("friends.first")))
+        if (nestedPruning) {
+          // If `NESTED_SCHEMA_PRUNING_ENABLED` is enabled,
+          // even disabling `NESTED_PRUNING_ON_EXPRESSIONS`,
+          // nested schema is still pruned at scan node.
+          checkScan(query1, "struct<friends:array<struct<first:string>>>")
+        } else {
+          checkScan(query1, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+        }
+        checkAnswer(query1, Row("Susan") :: Nil)
+
+        val query2 = spark.table("contacts")
+          .select(explode(col("friends.first")), col("friends.middle"))
+        if (nestedPruning) {
+          checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+        } else {
+          checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+        }
+        checkAnswer(query2, Row("Susan", Array("Z.")) :: Nil)
+
+        val query3 = spark.table("contacts")
+          .select(explode(col("friends.first")), col("friends.middle"), col("friends.last"))
+        checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+        checkAnswer(query3, Row("Susan", Array("Z."), Array("Smith")) :: Nil)
+      }
+    }
+  }
+
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {
     test(s"Spark vectorized reader - without partition data column - $testName") {
       withSQLConf(vectorizedReaderEnabledKey -> "true") {
@@ -378,6 +447,20 @@ abstract class SchemaPruningSuite
     checkAnswer(query.orderBy("id"), Row(1) :: Nil)
   }
 
+  testMixedCaseQueryPruning("subquery filter with different-case column names") {
+    withTempView("temp") {
+      val spark = this.spark
+      import spark.implicits._
+
+      val df = Seq(2).toDF("col2")
+      df.createOrReplaceTempView("temp")
+
+      val query = sql("select id from mixedcase where Col2.b IN (select col2 from temp)")
+      checkScan(query, "struct<id:int,coL2:struct<B:int>>")
+      checkAnswer(query.orderBy("id"), Row(1) :: Nil)
+    }
+  }
+
   // Tests schema pruning for a query whose column and field names are exactly the same as the table
   // schema's column and field names. N.B. this implies that `testThunk` should pass using either a
   // case-sensitive or case-insensitive query parser
@@ -424,7 +507,7 @@ abstract class SchemaPruningSuite
 
   protected def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
-      df.queryExecution.executedPlan.collect {
+      collect(df.queryExecution.executedPlan) {
         case scan: FileSourceScanExec => scan.requiredSchema
       }
     assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,

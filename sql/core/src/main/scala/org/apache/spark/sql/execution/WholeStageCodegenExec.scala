@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -54,6 +54,7 @@ trait CodegenSupport extends SparkPlan {
     case _: RDDScanExec => "rdd"
     case _: DataSourceScanExec => "scan"
     case _: InMemoryTableScanExec => "memoryScan"
+    case _: WholeStageCodegenExec => "wholestagecodegen"
     case _ => nodeName.toLowerCase(Locale.ROOT)
   }
 
@@ -566,6 +567,26 @@ object WholeStageCodegenExec {
   def isTooManyFields(conf: SQLConf, dataType: DataType): Boolean = {
     numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
   }
+
+  // The whole-stage codegen generates Java code on the driver side and sends it to the Executors
+  // for compilation and execution. The whole-stage codegen can bring significant performance
+  // improvements with large dataset in distributed environments. However, in the test environment,
+  // due to the small amount of data, the time to generate Java code takes up a major part of the
+  // entire runtime. So we summarize the total code generation time and output it to the execution
+  // log for easy analysis and view.
+  private val _codeGenTime = new AtomicLong
+
+  // Increase the total generation time of Java source code in nanoseconds.
+  // Visible for testing
+  def increaseCodeGenTime(time: Long): Unit = _codeGenTime.addAndGet(time)
+
+  // Returns the total generation time of Java source code in nanoseconds.
+  // Visible for testing
+  def codeGenTime: Long = _codeGenTime.get
+
+  // Reset generation time of Java source code.
+  // Visible for testing
+  def resetCodeGenTime: Unit = _codeGenTime.set(0L)
 }
 
 /**
@@ -613,6 +634,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
       WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
 
+  override def nodeName: String = s"WholeStageCodegen (${codegenStageId})"
+
   def generatedClassName(): String = if (conf.wholeStageUseIdInClassName) {
     s"GeneratedIteratorForCodegenStage$codegenStageId"
   } else {
@@ -625,6 +648,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * @return the tuple of the codegen context and the actual generated source.
    */
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
+    val startTime = System.nanoTime()
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
 
@@ -674,6 +698,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     // try to compile, helpful for debug
     val cleanedSource = CodeFormatter.stripOverlappingComments(
       new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments()))
+
+    val duration = System.nanoTime() - startTime
+    WholeStageCodegenExec.increaseCodeGenTime(duration)
 
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     (ctx, cleanedSource)

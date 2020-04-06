@@ -27,7 +27,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.sql.catalyst.IdentifierWithDatabase
+import org.apache.spark.sql.catalyst.{AliasIdentifier, IdentifierWithDatabase}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.errors._
@@ -114,7 +114,30 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   lazy val containsChild: Set[TreeNode[_]] = children.toSet
 
-  private lazy val _hashCode: Int = scala.util.hashing.MurmurHash3.productHash(this)
+  // Copied from Scala 2.13.1
+  // github.com/scala/scala/blob/v2.13.1/src/library/scala/util/hashing/MurmurHash3.scala#L56-L73
+  // to prevent the issue https://github.com/scala/bug/issues/10495
+  // TODO(SPARK-30848): Remove this once we drop Scala 2.12.
+  private final def productHash(x: Product, seed: Int, ignorePrefix: Boolean = false): Int = {
+    val arr = x.productArity
+    // Case objects have the hashCode inlined directly into the
+    // synthetic hashCode method, but this method should still give
+    // a correct result if passed a case object.
+    if (arr == 0) {
+      x.productPrefix.hashCode
+    } else {
+      var h = seed
+      if (!ignorePrefix) h = scala.util.hashing.MurmurHash3.mix(h, x.productPrefix.hashCode)
+      var i = 0
+      while (i < arr) {
+        h = scala.util.hashing.MurmurHash3.mix(h, x.productElement(i).##)
+        i += 1
+      }
+      scala.util.hashing.MurmurHash3.finalizeHash(h, arr)
+    }
+  }
+
+  private lazy val _hashCode: Int = productHash(this, scala.util.hashing.MurmurHash3.productSeed)
   override def hashCode(): Int = _hashCode
 
   /**
@@ -780,6 +803,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case exprId: ExprId => true
     case field: StructField => true
     case id: IdentifierWithDatabase => true
+    case alias: AliasIdentifier => true
     case join: JoinType => true
     case spec: BucketSpec => true
     case catalog: CatalogTable => true

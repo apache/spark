@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -46,7 +46,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   test("duplicated metastore relations") {
     val df = spark.sql("SELECT * FROM src")
     logInfo(df.queryExecution.toString)
-    df.as('a).join(df.as('b), $"a.key" === $"b.key")
+    df.as("a").join(df.as("b"), $"a.key" === $"b.key")
   }
 
   test("should not truncate struct type catalog string") {
@@ -62,7 +62,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
       spark.sql("create view vw1 as select 1 as id")
       val plan = spark.sql("select id from vw1").queryExecution.analyzed
       val aliases = plan.collect {
-        case x @ SubqueryAlias(AliasIdentifier("vw1", Some("default")), _) => x
+        case x @ SubqueryAlias(AliasIdentifier("vw1", Seq("spark_catalog", "default")), _) => x
       }
       assert(aliases.size == 1)
     }
@@ -97,7 +97,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
           |c22 map<int,char(10)>,
           |c23 struct<a:int,b:int>,
           |c24 struct<c:varchar(10),d:int>
-          |)
+          |) USING hive
         """.stripMargin)
 
       val schema = hiveClient.getTable("default", "t").schema
@@ -142,8 +142,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
   import testImplicits._
 
   private val testDF = range(1, 3).select(
-    ('id + 0.1) cast DecimalType(10, 3) as 'd1,
-    'id cast StringType as 'd2
+    ($"id" + 0.1) cast DecimalType(10, 3) as "d1",
+    $"id" cast StringType as "d2"
   ).coalesce(1)
 
   override def beforeAll(): Unit = {
@@ -357,5 +357,25 @@ class DataSourceWithHiveMetastoreCatalogSuite
       assert(sparkSession.metadataHive.runSqlHive("SELECT count(*) FROM t") ===
         Seq(table("src").count().toString))
     }
+  }
+
+  test("SPARK-29869: Fix convertToLogicalRelation throws unclear AssertionError") {
+    withTempPath(dir => {
+      val baseDir = s"${dir.getCanonicalFile.toURI.toString}/non_partition_table"
+      val partitionLikeDir = s"$baseDir/dt=20191113"
+      spark.range(3).selectExpr("id").write.parquet(partitionLikeDir)
+      withTable("non_partition_table") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
+          spark.sql(
+            s"""
+               |CREATE TABLE non_partition_table (id bigint)
+               |STORED AS PARQUET LOCATION '$baseDir'
+               |""".stripMargin)
+          val e = intercept[AnalysisException](
+            spark.table("non_partition_table")).getMessage
+          assert(e.contains("Converted table has 2 columns, but source Hive table has 1 columns."))
+        }
+      }
+    })
   }
 }

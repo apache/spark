@@ -1063,7 +1063,7 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
             // todo: remove it?
             val newActual = Dataset.ofRows(spark, actual.logicalPlan)
 
-            QueryTest.checkAnswer(newActual, expectedAnswer) match {
+            QueryTest.getErrorMessageInCheckAnswer(newActual, expectedAnswer) match {
               case Some(errorMessage) =>
                 val newErrorMessage =
                   s"""

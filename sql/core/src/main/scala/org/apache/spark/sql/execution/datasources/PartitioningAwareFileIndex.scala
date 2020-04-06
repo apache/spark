@@ -171,7 +171,7 @@ abstract class PartitioningAwareFileIndex(
     if (partitionPruningPredicates.nonEmpty) {
       val predicate = partitionPruningPredicates.reduce(expressions.And)
 
-      val boundPredicate = InterpretedPredicate.create(predicate.transform {
+      val boundPredicate = Predicate.createInterpreted(predicate.transform {
         case a: AttributeReference =>
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
@@ -221,7 +221,15 @@ abstract class PartitioningAwareFileIndex(
         if (!fs.isDirectory(userDefinedBasePath)) {
           throw new IllegalArgumentException(s"Option '$BASE_PATH_PARAM' must be a directory")
         }
-        Set(fs.makeQualified(userDefinedBasePath))
+        val qualifiedBasePath = fs.makeQualified(userDefinedBasePath)
+        val qualifiedBasePathStr = qualifiedBasePath.toString
+        rootPaths
+          .find(!fs.makeQualified(_).toString.startsWith(qualifiedBasePathStr))
+          .foreach { rp =>
+            throw new IllegalArgumentException(
+              s"Wrong basePath $userDefinedBasePath for the root path: $rp")
+          }
+        Set(qualifiedBasePath)
 
       case None =>
         rootPaths.map { path =>

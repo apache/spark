@@ -98,7 +98,6 @@ SELECT boolean('f') <= boolean('t') AS true;
 
 -- explicit casts to/from text
 SELECT boolean(string('TrUe')) AS true, boolean(string('fAlse')) AS `false`;
-
 SELECT boolean(string('    true   ')) AS true,
        boolean(string('     FALSE')) AS `false`;
 SELECT string(boolean(true)) AS true, string(boolean(false)) AS `false`;

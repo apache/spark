@@ -26,7 +26,7 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.orc._
+import org.apache.orc.{OrcUtils => _, _}
 import org.apache.orc.OrcConf.{COMPRESS, MAPRED_OUTPUT_SCHEMA}
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._

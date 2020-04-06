@@ -21,7 +21,6 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -45,10 +44,9 @@ object IntervalBenchmark extends SqlBasedBenchmark {
       spark
         .range(0, cardinality, 1, 1)
         .select(exprs: _*)
-        .write
-        .format("noop")
-        .mode(Overwrite)
-        .save()
+        .queryExecution
+        .toRdd
+        .foreach(_ => ())
     }
   }
 
@@ -83,13 +81,15 @@ object IntervalBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 1000000
     val timeUnits = Seq(
-      "13 months", "100 weeks", "9 days", "12 hours",
+      "13 months", "                      1                     months",
+      "100 weeks", "9 days", "12 hours", "-                    3 hours",
       "5 minutes", "45 seconds", "123 milliseconds", "567 microseconds")
     val intervalToTest = ListBuffer[String]()
 
     val benchmark = new Benchmark("cast strings to intervals", N, output = output)
-    addCase(benchmark, N, "string w/ interval", buildString(true, timeUnits))
-    addCase(benchmark, N, "string w/o interval", buildString(false, timeUnits))
+    // The first 2 cases are used to show the overhead of preparing the interval string.
+    addCase(benchmark, N, "prepare string w/ interval", buildString(true, timeUnits))
+    addCase(benchmark, N, "prepare string w/o interval", buildString(false, timeUnits))
     addCase(benchmark, N, intervalToTest) // Only years
 
     for (unit <- timeUnits) {

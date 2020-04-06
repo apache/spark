@@ -141,7 +141,7 @@ private[ui] class StagePagedTable(
   override def tableId: String = stageTag + "-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
+    "table table-bordered table-sm table-striped " +
       "table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = stageTag + ".pageSize"
@@ -179,18 +179,20 @@ private[ui] class StagePagedTable(
     // stageHeadersAndCssClasses has three parts: header title, tooltip information, and sortable.
     // The tooltip information could be None, which indicates it does not have a tooltip.
     // Otherwise, it has two parts: tooltip text, and position (true for left, false for default).
-    val stageHeadersAndCssClasses: Seq[(String, Option[(String, Boolean)], Boolean)] =
-      Seq(("Stage Id", None, true)) ++
-      {if (isFairScheduler) {Seq(("Pool Name", None, true))} else Seq.empty} ++
+    val stageHeadersAndCssClasses: Seq[(String, String, Boolean)] =
+      Seq(("Stage Id", null, true)) ++
+      {if (isFairScheduler) {Seq(("Pool Name", null, true))} else Seq.empty} ++
       Seq(
-        ("Description", None, true), ("Submitted", None, true), ("Duration", None, true),
-        ("Tasks: Succeeded/Total", None, false),
-        ("Input", Some((ToolTips.INPUT, false)), true),
-        ("Output", Some((ToolTips.OUTPUT, false)), true),
-        ("Shuffle Read", Some((ToolTips.SHUFFLE_READ, false)), true),
-        ("Shuffle Write", Some((ToolTips.SHUFFLE_WRITE, true)), true)
+        ("Description", null, true),
+        ("Submitted", null, true),
+        ("Duration", ToolTips.DURATION, true),
+        ("Tasks: Succeeded/Total", null, false),
+        ("Input", ToolTips.INPUT, true),
+        ("Output", ToolTips.OUTPUT, true),
+        ("Shuffle Read", ToolTips.SHUFFLE_READ, true),
+        ("Shuffle Write", ToolTips.SHUFFLE_WRITE, true)
       ) ++
-      {if (isFailedStage) {Seq(("Failure Reason", None, false))} else Seq.empty}
+      {if (isFailedStage) {Seq(("Failure Reason", null, false))} else Seq.empty}
 
     if (!stageHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
       throw new IllegalArgumentException(s"Unknown column: $sortColumn")
@@ -198,22 +200,13 @@ private[ui] class StagePagedTable(
 
     val headerRow: Seq[Node] = {
       stageHeadersAndCssClasses.map { case (header, tooltip, sortable) =>
-        val headerSpan = tooltip.map { case (title, left) =>
-          if (left) {
-            /* Place the shuffle write tooltip on the left (rather than the default position
-            of on top) because the shuffle write column is the last column on the right side and
-            the tooltip is wider than the column, so it doesn't fit on top. */
-            <span data-toggle="tooltip" data-placement="left" title={title}>
+        val headerSpan = if (null != tooltip && !tooltip.isEmpty) {
+            <span data-toggle="tooltip" data-placement="top" title={tooltip}>
               {header}
             </span>
-          } else {
-            <span data-toggle="tooltip" title={title}>
-              {header}
-            </span>
-          }
-        }.getOrElse(
+        } else {
           {header}
-        )
+        }
 
         if (header == sortColumn) {
           val headerLink = Unparsed(
@@ -316,19 +309,7 @@ private[ui] class StagePagedTable(
       } else {
         failureReason
       })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{failureReason}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = UIUtils.detailsUINode(isMultiline, failureReason)
     <td valign="middle">{failureReasonSummary}{details}</td>
   }
 

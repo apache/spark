@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
-import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
@@ -57,21 +53,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
             val prunedHadoopRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
             buildPrunedRelation(l, prunedHadoopRelation)
-          }).getOrElse(op)
-
-      case op @ PhysicalOperation(projects, filters,
-          d @ DataSourceV2Relation(table: FileTable, output, _)) if canPruneTable(table) =>
-
-        prunePhysicalColumns(output, projects, filters, table.dataSchema,
-          prunedDataSchema => {
-            val prunedFileTable = table match {
-              case o: OrcTable => o.copy(userSpecifiedSchema = Some(prunedDataSchema))
-              case p: ParquetTable => p.copy(userSpecifiedSchema = Some(prunedDataSchema))
-              case _ =>
-                val message = s"${table.formatName} data source doesn't support schema pruning."
-                throw new AnalysisException(message)
-            }
-            buildPrunedRelationV2(d, prunedFileTable)
           }).getOrElse(op)
     }
 
@@ -118,12 +99,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
   private def canPruneRelation(fsRelation: HadoopFsRelation) =
     fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
       fsRelation.fileFormat.isInstanceOf[OrcFileFormat]
-
-  /**
-   * Checks to see if the given [[FileTable]] can be pruned. Currently we support ORC v2.
-   */
-  private def canPruneTable(table: FileTable) =
-    table.isInstanceOf[OrcTable] || table.isInstanceOf[ParquetTable]
 
   /**
    * Normalizes the names of the attribute references in the given projects and filters to reflect
@@ -189,17 +164,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
       prunedBaseRelation: HadoopFsRelation) = {
     val prunedOutput = getPrunedOutput(outputRelation.output, prunedBaseRelation.schema)
     outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput)
-  }
-
-  /**
-   * Builds a pruned data source V2 relation from the output of the relation and the schema
-   * of the pruned [[FileTable]].
-   */
-  private def buildPrunedRelationV2(
-      outputRelation: DataSourceV2Relation,
-      prunedFileTable: FileTable) = {
-    val prunedOutput = getPrunedOutput(outputRelation.output, prunedFileTable.schema)
-    outputRelation.copy(table = prunedFileTable, output = prunedOutput)
   }
 
   // Prune the given output to make it consistent with `requiredSchema`.

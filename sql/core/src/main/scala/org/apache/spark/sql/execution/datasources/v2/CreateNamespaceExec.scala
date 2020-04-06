@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.util.Utils
 
 /**
  * Physical plan node for creating a namespace.
@@ -35,11 +36,14 @@ case class CreateNamespaceExec(
     extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 
     val ns = namespace.toArray
     if (!catalog.namespaceExists(ns)) {
       try {
-        catalog.createNamespace(ns, properties.asJava)
+        val ownership =
+          Map(PROP_OWNER -> Utils.getCurrentUserName())
+        catalog.createNamespace(ns, (properties ++ ownership).asJava)
       } catch {
         case _: NamespaceAlreadyExistsException if ifNotExists =>
           logWarning(s"Namespace ${namespace.quoted} was created concurrently. Ignoring.")

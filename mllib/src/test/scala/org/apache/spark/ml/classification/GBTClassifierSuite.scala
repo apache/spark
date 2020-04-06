@@ -20,7 +20,8 @@ package org.apache.spark.ml.classification
 import com.github.fommil.netlib.BLAS
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -52,8 +53,10 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   private var data: RDD[LabeledPoint] = _
   private var trainData: RDD[LabeledPoint] = _
   private var validationData: RDD[LabeledPoint] = _
+  private var binaryDataset: DataFrame = _
   private val eps: Double = 1e-5
   private val absEps: Double = 1e-8
+  private val seed = 42
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -65,6 +68,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     validationData =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
         .map(_.asML)
+    binaryDataset = generateSVMInput(0.01, Array[Double](-1.5, 1.0), 1000, seed).toDF()
   }
 
   test("params") {
@@ -175,7 +179,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
         assert(raw.size === 2)
         // check that raw prediction is tree predictions dot tree weights
         val treePredictions = gbtModel.trees.map(_.rootNode.predictImpl(features).prediction)
-        val prediction = blas.ddot(gbtModel.numTrees, treePredictions, 1, gbtModel.treeWeights, 1)
+        val prediction = blas.ddot(gbtModel.getNumTrees, treePredictions, 1,
+          gbtModel.treeWeights, 1)
         assert(raw ~== Vectors.dense(-prediction, prediction) relTol eps)
 
         // Compare rawPrediction with probability
@@ -202,6 +207,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val gbtModel = gbt.fit(trainingDataset)
 
     testPredictionModelSinglePrediction(gbtModel, trainingDataset)
+    testClassificationModelSingleRawPrediction(gbtModel, trainingDataset)
+    testProbClassificationModelSingleProbPrediction(gbtModel, trainingDataset)
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {
@@ -362,7 +369,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("Tests of feature subset strategy") {
     val numClasses = 2
     val gbt = new GBTClassifier()
-      .setSeed(42)
+      .setSeed(seed)
       .setMaxDepth(3)
       .setMaxIter(5)
       .setFeatureSubsetStrategy("all")
@@ -397,13 +404,15 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures, model3.numClasses)
 
     val evalArr = model3.evaluateEachIteration(validationData.toDF)
-    val remappedValidationData = validationData.map(
-      x => new LabeledPoint((x.label * 2) - 1, x.features))
-    val lossErr1 = GradientBoostedTrees.computeError(remappedValidationData,
+    val remappedValidationData = validationData.map {
+      case LabeledPoint(label, features) =>
+        Instance(label * 2 - 1, 1.0, features)
+    }
+    val lossErr1 = GradientBoostedTrees.computeWeightedError(remappedValidationData,
       model1.trees, model1.treeWeights, model1.getOldLossType)
-    val lossErr2 = GradientBoostedTrees.computeError(remappedValidationData,
+    val lossErr2 = GradientBoostedTrees.computeWeightedError(remappedValidationData,
       model2.trees, model2.treeWeights, model2.getOldLossType)
-    val lossErr3 = GradientBoostedTrees.computeError(remappedValidationData,
+    val lossErr3 = GradientBoostedTrees.computeWeightedError(remappedValidationData,
       model3.trees, model3.treeWeights, model3.getOldLossType)
 
     assert(evalArr(0) ~== lossErr1 relTol 1E-3)
@@ -428,28 +437,31 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       gbt.setValidationIndicatorCol(validationIndicatorCol)
       val modelWithValidation = gbt.fit(trainDF.union(validationDF))
 
-      assert(modelWithoutValidation.numTrees === numIter)
+      assert(modelWithoutValidation.getNumTrees === numIter)
       // early stop
-      assert(modelWithValidation.numTrees < numIter)
+      assert(modelWithValidation.getNumTrees < numIter)
 
       val (errorWithoutValidation, errorWithValidation) = {
-        val remappedRdd = validationData.map(x => new LabeledPoint(2 * x.label - 1, x.features))
-        (GradientBoostedTrees.computeError(remappedRdd, modelWithoutValidation.trees,
+        val remappedRdd = validationData.map {
+          case LabeledPoint(label, features) =>
+            Instance(label * 2 - 1, 1.0, features)
+        }
+        (GradientBoostedTrees.computeWeightedError(remappedRdd, modelWithoutValidation.trees,
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType),
-          GradientBoostedTrees.computeError(remappedRdd, modelWithValidation.trees,
+          GradientBoostedTrees.computeWeightedError(remappedRdd, modelWithValidation.trees,
             modelWithValidation.treeWeights, modelWithValidation.getOldLossType))
       }
       assert(errorWithValidation < errorWithoutValidation)
 
       val evaluationArray = GradientBoostedTrees
-        .evaluateEachIteration(validationData, modelWithoutValidation.trees,
+        .evaluateEachIteration(validationData.map(_.toInstance), modelWithoutValidation.trees,
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
           OldAlgo.Classification)
       assert(evaluationArray.length === numIter)
-      assert(evaluationArray(modelWithValidation.numTrees) >
-        evaluationArray(modelWithValidation.numTrees - 1))
+      assert(evaluationArray(modelWithValidation.getNumTrees) >
+        evaluationArray(modelWithValidation.getNumTrees - 1))
       var i = 1
-      while (i < modelWithValidation.numTrees) {
+      while (i < modelWithValidation.getNumTrees) {
         assert(evaluationArray(i) <= evaluationArray(i - 1))
         i += 1
       }
@@ -464,12 +476,50 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       .setCheckpointInterval(5)
       .setSeed(123)
     val model = gbt.fit(df)
+    model.setLeafCol("predictedLeafId")
+
+    val transformed = model.transform(df)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "predictedLeafId", model.trees.length)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
 
     model.trees.foreach (i => {
       assert(i.getMaxDepth === model.getMaxDepth)
       assert(i.getCheckpointInterval === model.getCheckpointInterval)
       assert(i.getSeed === model.getSeed)
     })
+  }
+
+  test("training with sample weights") {
+    val df = binaryDataset
+    val numClasses = 2
+    // (maxIter, maxDepth, subsamplingRate, fractionInTol)
+    val testParams = Seq(
+      (5, 5, 1.0, 0.99),
+      (5, 10, 1.0, 0.99),
+      (5, 10, 0.95, 0.9)
+    )
+
+    for ((maxIter, maxDepth, subsamplingRate, tol) <- testParams) {
+      val estimator = new GBTClassifier()
+        .setMaxIter(maxIter)
+        .setMaxDepth(maxDepth)
+        .setSubsamplingRate(subsamplingRate)
+        .setSeed(seed)
+        .setMinWeightFractionPerNode(0.049)
+
+      MLTestingUtils.testArbitrarilyScaledWeights[GBTClassificationModel,
+        GBTClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol))
+      MLTestingUtils.testOutliersWithSmallWeights[GBTClassificationModel,
+        GBTClassifier](df.as[LabeledPoint], estimator,
+        numClasses, MLTestingUtils.modelPredictionEquals(df, _ == _, tol),
+        outlierRatio = 2)
+      MLTestingUtils.testOversamplingVsWeighting[GBTClassificationModel,
+        GBTClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol), seed)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

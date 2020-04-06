@@ -212,7 +212,7 @@ private[hive] class TestHiveSparkSession(
     }
   }
 
-  assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+  assert(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
 
   @transient
   override lazy val sharedState: TestHiveSharedState = {
@@ -328,10 +328,10 @@ private[hive] class TestHiveSparkSession(
     @transient
     val hiveQTestUtilTables: Seq[TestTable] = Seq(
       TestTable("src",
-        "CREATE TABLE src (key INT, value STRING)".cmd,
+        "CREATE TABLE src (key INT, value STRING) STORED AS TEXTFILE".cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
       TestTable("src1",
-        "CREATE TABLE src1 (key INT, value STRING)".cmd,
+        "CREATE TABLE src1 (key INT, value STRING) STORED AS TEXTFILE".cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
       TestTable("srcpart", () => {
         "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)"
@@ -501,7 +501,7 @@ private[hive] class TestHiveSparkSession(
       // has already set the execution id.
       if (sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
         // We don't actually have a `QueryExecution` here, use a fake one instead.
-        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation())) {
+        SQLExecution.withNewExecutionId(new QueryExecution(this, OneRowRelation())) {
           createCmds.foreach(_())
         }
       } else {

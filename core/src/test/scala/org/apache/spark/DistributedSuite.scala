@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import org.scalatest.Assertions._
 import org.scalatest.Matchers
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
@@ -173,7 +174,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
     sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
-    TestUtils.waitUntilExecutorsUp(sc, 2, 30000)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val data = sc.parallelize(1 to 1000, 10)
     val cachedData = data.persist(storageLevel)
     assert(cachedData.count === 1000)

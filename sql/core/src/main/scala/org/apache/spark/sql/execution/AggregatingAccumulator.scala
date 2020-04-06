@@ -43,7 +43,8 @@ class AggregatingAccumulator private(
   assert(bufferSchema.size == updateExpressions.size)
   assert(mergeExpressions == null || bufferSchema.size == mergeExpressions.size)
 
-  private[this] var joinedRow: JoinedRow = _
+  @transient
+  private var joinedRow: JoinedRow = _
 
   private var buffer: SpecificInternalRow = _
 
@@ -184,7 +185,6 @@ class AggregatingAccumulator private(
     resultProjection(input)
   }
 
-
   /**
    * Get the output schema of the aggregating accumulator.
    */
@@ -193,6 +193,17 @@ class AggregatingAccumulator private(
       case (e: NamedExpression, _) => StructField(e.name, e.dataType, e.nullable, e.metadata)
       case (e, i) => StructField(s"c_$i", e.dataType, e.nullable)
     })
+  }
+
+  /**
+   * Set the state of the accumulator to the state of another accumulator. This is used in cases
+   * where we only want to publish the state of the accumulator when the task completes, see
+   * [[CollectMetricsExec]] for an example.
+   */
+  private[execution] def setState(other: AggregatingAccumulator): Unit = {
+    assert(buffer == null || (buffer eq other.buffer))
+    buffer = other.buffer
+    joinedRow = other.joinedRow
   }
 }
 
@@ -219,14 +230,14 @@ object AggregatingAccumulator {
     val typedImperatives = mutable.Buffer.empty[TypedImperativeAggregate[_]]
     val inputAttributeSeq: AttributeSeq = inputAttributes
     val resultExpressions = functions.map(_.transform {
-      case AggregateExpression(agg: DeclarativeAggregate, _, _, _) =>
+      case AggregateExpression(agg: DeclarativeAggregate, _, _, _, _) =>
         aggBufferAttributes ++= agg.aggBufferAttributes
         inputAggBufferAttributes ++= agg.inputAggBufferAttributes
         initialValues ++= agg.initialValues
         updateExpressions ++= agg.updateExpressions
         mergeExpressions ++= agg.mergeExpressions
         agg.evaluateExpression
-      case AggregateExpression(agg: ImperativeAggregate, _, _, _) =>
+      case AggregateExpression(agg: ImperativeAggregate, _, _, _, _) =>
         val imperative = BindReferences.bindReference(agg
           .withNewMutableAggBufferOffset(aggBufferAttributes.size)
           .withNewInputAggBufferOffset(inputAggBufferAttributes.size),

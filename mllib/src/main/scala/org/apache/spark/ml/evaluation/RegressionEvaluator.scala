@@ -27,7 +27,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, FloatType}
 
 /**
- * Evaluator for regression, which expects two input columns: prediction and label.
+ * Evaluator for regression, which expects input columns prediction, label and
+ * an optional weight column.
  */
 @Since("1.4.0")
 final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
@@ -124,6 +125,12 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): RegressionEvaluator = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"RegressionEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"throughOrigin=${$(throughOrigin)}"
+  }
 }
 
 @Since("1.6.0")

@@ -148,6 +148,8 @@ public class OneForOneBlockFetcher {
   /** Split the shuffleBlockId and return shuffleId, mapId and reduceIds. */
   private String[] splitBlockId(String blockId) {
     String[] blockIdParts = blockId.split("_");
+    // For batch block id, the format contains shuffleId, mapId, begin reduceId, end reduceId.
+    // For single block id, the format contains shuffleId, mapId, educeId.
     if (blockIdParts.length < 4 || blockIdParts.length > 5 || !blockIdParts[0].equals("shuffle")) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);

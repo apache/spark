@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Reference
-displayTitle: Reference
+title: Data Definition Statements
+displayTitle: Data Definition Statements
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,7 +19,21 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL is a Apache Spark's module for working with structured data.
-This guide is a reference for Structured Query Language (SQL) for Apache 
-Spark. This document describes the SQL constructs supported by Spark in detail
-along with usage examples when applicable.
+
+Data Definition Statements are used to create or modify the structure of database objects in a database. Spark SQL supports the following Data Definition Statements:
+
+
+- [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)
+- [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
+- [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
+- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+- [CREATE FUNCTION](sql-ref-syntax-ddl-create-function.html)
+- [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+- [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
+- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+- [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)
+- [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
+- [DROP VIEW](sql-ref-syntax-ddl-drop-view.html)
+- [TRUNCATE TABLE](sql-ref-syntax-ddl-truncate-table.html)
+- [REPAIR TABLE](sql-ref-syntax-ddl-repair-table.html)
+- [USE DATABASE](sql-ref-syntax-qry-select-usedb.html)
