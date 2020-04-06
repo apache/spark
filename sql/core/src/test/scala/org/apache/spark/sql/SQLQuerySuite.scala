@@ -3497,24 +3497,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-31334: Don't ResolveReference/ResolveMissingReference when " +
     "Filter condition with aggregate expression") {
     Seq(
-      (1, 3),
-      (2, 3),
-      (3, 6),
-      (4, 7),
-      (5, 9),
-      (6, 9)
-    ).toDF("a", "b").createOrReplaceTempView("testData1")
-
-    checkAnswer(sql(
-      """
-        | SELECT b, sum(a) as a
-        | FROM testData1
-        | GROUP BY b
-        | HAVING sum(a) > 3
-      """.stripMargin),
-      Row(7, 4) :: Row(9, 11) :: Nil)
-
-    Seq(
       ("1", 3),
       ("2", 3),
       ("3", 6),
