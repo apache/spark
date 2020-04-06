@@ -43,8 +43,6 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override def getEntryPoint: Option[String] =
       Some("/docker-entrypoint/mariadb_docker_entrypoint.sh")
 
-    override def getStartupProcessName: Option[String] = None
-
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig.Builder,
         containerConfigBuilder: ContainerConfig.Builder): Unit = {

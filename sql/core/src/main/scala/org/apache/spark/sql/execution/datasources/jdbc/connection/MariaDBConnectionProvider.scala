@@ -38,8 +38,8 @@ private[jdbc] class MariaDBConnectionProvider(driver: Driver, options: JDBCOptio
      * 1. MariaDB doesn't support JAAS application name configuration
      * 2. MariaDB sets a default JAAS config if "java.security.auth.login.config" is not set
      */
-    val entryUsesKeytab = configEntry != null && configEntry
-      .exists(_.getOptions.asScala.exists(o => o._1 == "useKeyTab" && o._2 == "true"))
+    val entryUsesKeytab = configEntry != null &&
+      configEntry.exists(_.getOptions().get("useKeyTab") == "true")
     if (configEntry == null || configEntry.isEmpty || !entryUsesKeytab) {
       val config = new SecureConnectionProvider.JDBCConfiguration(
         parent, appEntry, options.keytab, options.principal)

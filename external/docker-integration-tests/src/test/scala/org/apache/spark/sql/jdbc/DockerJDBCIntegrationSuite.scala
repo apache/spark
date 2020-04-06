@@ -65,12 +65,12 @@ abstract class DatabaseOnDocker {
    * startup. Prefer entry point to startup process when you need a command always to be executed or
    * you want to change the initialization order.
    */
-  def getEntryPoint: Option[String]
+  def getEntryPoint: Option[String] = None
 
   /**
    * Optional process to run when container starts
    */
-  def getStartupProcessName: Option[String]
+  def getStartupProcessName: Option[String] = None
 
   /**
    * Optional step before container starts
@@ -128,10 +128,10 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
         .networkDisabled(false)
         .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
         .exposedPorts(s"${db.jdbcPort}/tcp")
-      if(db.getEntryPoint.isDefined) {
+      if (db.getEntryPoint.isDefined) {
         containerConfigBuilder.entrypoint(db.getEntryPoint.get)
       }
-      if(db.getStartupProcessName.isDefined) {
+      if (db.getStartupProcessName.isDefined) {
         containerConfigBuilder.cmd(db.getStartupProcessName.get)
       }
       db.beforeContainerStart(hostConfigBuilder, containerConfigBuilder)

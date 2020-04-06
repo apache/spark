@@ -40,10 +40,6 @@ class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:postgresql://$ip:$port/postgres?user=$principal&gsslib=gssapi"
 
-    override def getEntryPoint: Option[String] = None
-
-    override def getStartupProcessName: Option[String] = None
-
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig.Builder,
         containerConfigBuilder: ContainerConfig.Builder): Unit = {
