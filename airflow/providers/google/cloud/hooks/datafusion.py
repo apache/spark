@@ -87,6 +87,7 @@ class DataFusionHook(GoogleBaseHook):
         )
 
         payload = json.dumps(body) if body else None
+
         response = request(method=method, url=url, headers=headers, body=payload)
         return response
 
@@ -372,7 +373,10 @@ class DataFusionHook(GoogleBaseHook):
         return json.loads(response.data)
 
     def start_pipeline(
-        self, pipeline_name: str, instance_url: str, namespace: str = "default"
+        self, pipeline_name: str,
+        instance_url: str,
+        namespace: str = "default",
+        runtime_args: Optional[Dict[str, Any]] = None
     ) -> None:
         """
         Starts a Cloud Data Fusion pipeline. Works for both batch and stream pipelines.
@@ -381,6 +385,8 @@ class DataFusionHook(GoogleBaseHook):
         :type pipeline_name: str
         :param instance_url: Endpoint on which the REST APIs is accessible for the instance.
         :type instance_url: str
+        :param runtime_args: Optional runtime JSON args to be passed to the pipeline
+        :type runtime_args: Optional[Dict[str, Any]]
         :param namespace: f your pipeline belongs to a Basic edition instance, the namespace ID
             is always default. If your pipeline belongs to an Enterprise edition instance, you
             can create a namespace.
@@ -395,9 +401,10 @@ class DataFusionHook(GoogleBaseHook):
             pipeline_name,
             "workflows",
             "DataPipelineWorkflow",
-            "start",
+            "start"
         )
-        response = self._cdap_request(url=url, method="POST")
+
+        response = self._cdap_request(url=url, method="POST", body=runtime_args)
         if response.status != 200:
             raise AirflowException(
                 f"Starting a pipeline failed with code {response.status}"
