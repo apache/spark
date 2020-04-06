@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.sql.{Date, Timestamp}
+import java.time._
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -720,7 +721,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -739,7 +740,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -757,7 +758,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -776,7 +777,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0
@@ -817,7 +818,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val schema = StructType(StructField("pcol", dt) :: Nil)
         val conf = sqlContext.conf
         val vectorizedReader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         val partitionValues = new GenericInternalRow(Array(v))
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
 
@@ -885,16 +886,55 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     Seq(false, true).foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "true") {
-          checkAnswer(
-            readResourceParquetFile("test-data/before_1582_date_v2_4.snappy.parquet"),
-            Row(java.sql.Date.valueOf("1001-01-01")))
-          checkAnswer(readResourceParquetFile(
-            "test-data/before_1582_timestamp_micros_v2_4.snappy.parquet"),
-            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
-          checkAnswer(readResourceParquetFile(
-            "test-data/before_1582_timestamp_millis_v2_4.snappy.parquet"),
-            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123")))
+          // test reading the existing 2.4 files and 3.0 newly written files together.
+          withTempPath { path =>
+            val path2_4 = getResourceParquetFilePath(
+              "test-data/before_1582_date_v2_4.snappy.parquet")
+            val path3_0 = path.getCanonicalPath
+            val dateStr = "1001-01-01"
+            Seq(dateStr).toDF("str").select($"str".cast("date").as("date"))
+              .write.parquet(path3_0)
+            checkAnswer(
+              spark.read.format("parquet").load(path2_4, path3_0),
+              Seq(
+                Row(java.sql.Date.valueOf(dateStr)),
+                Row(java.sql.Date.valueOf(dateStr))))
+          }
+
+          withTempPath { path =>
+            withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
+              val path2_4 = getResourceParquetFilePath(
+                "test-data/before_1582_timestamp_micros_v2_4.snappy.parquet")
+              val path3_0 = path.getCanonicalPath
+              val tsStr = "1001-01-01 01:02:03.123456"
+              Seq(tsStr).toDF("str").select($"str".cast("timestamp").as("ts"))
+                .write.parquet(path3_0)
+              checkAnswer(
+                spark.read.format("parquet").load(path2_4, path3_0),
+                Seq(
+                  Row(java.sql.Timestamp.valueOf(tsStr)),
+                  Row(java.sql.Timestamp.valueOf(tsStr))))
+            }
+          }
+
+          withTempPath { path =>
+            withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MILLIS") {
+              val path2_4 = getResourceParquetFilePath(
+                "test-data/before_1582_timestamp_millis_v2_4.snappy.parquet")
+              val path3_0 = path.getCanonicalPath
+              val tsStr = "1001-01-01 01:02:03.123"
+              Seq(tsStr).toDF("str").select($"str".cast("timestamp").as("ts"))
+                .write.parquet(path3_0)
+              checkAnswer(
+                spark.read.format("parquet").load(path2_4, path3_0),
+                Seq(
+                  Row(java.sql.Timestamp.valueOf(tsStr)),
+                  Row(java.sql.Timestamp.valueOf(tsStr))))
+            }
+          }
         }
+
+        // INT96 is a legacy timestamp format and we always rebase the seconds for it.
         checkAnswer(readResourceParquetFile(
           "test-data/before_1582_timestamp_int96_v2_4.snappy.parquet"),
           Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
@@ -918,10 +958,17 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
                 .write
                 .parquet(path)
             }
-            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "true") {
-              checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(tsStr)))
+            // The file metadata indicates if it needs rebase or not, so we can always get the
+            // correct result regardless of the "rebaseInRead" config.
+            Seq(true, false).foreach { rebase =>
+              withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+                checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(tsStr)))
+              }
             }
-            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "false") {
+
+            // Force to not rebase to prove the written datetime values are rebased and we will get
+            // wrong result if we don't rebase while reading.
+            withSQLConf("spark.test.forceNoRebase" -> "true") {
               checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(nonRebased)))
             }
           }
@@ -939,10 +986,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           .write
           .parquet(path)
       }
-      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "true") {
-        checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-01")))
+
+      // The file metadata indicates if it needs rebase or not, so we can always get the correct
+      // result regardless of the "rebaseInRead" config.
+      Seq(true, false).foreach { rebase =>
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+          checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-01")))
+        }
       }
-      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "false") {
+
+      // Force to not rebase to prove the written datetime values are rebased and we will get
+      // wrong result if we don't rebase while reading.
+      withSQLConf("spark.test.forceNoRebase" -> "true") {
         checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-07")))
       }
     }

@@ -84,9 +84,8 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
     }, new GenericDatumReader[Any]()).getSchema.toString(false)
   }
 
-  private def readResourceAvroFile(name: String): DataFrame = {
-    val url = Thread.currentThread().getContextClassLoader.getResource(name)
-    spark.read.format("avro").load(url.toString)
+  private def getResourceAvroFilePath(name: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(name).toString
   }
 
   test("resolve avro data source") {
@@ -1531,15 +1530,63 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-31183: compatibility with Spark 2.4 in reading dates/timestamps") {
     withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "true") {
-      checkAnswer(
-        readResourceAvroFile("before_1582_date_v2_4.avro"),
-        Row(java.sql.Date.valueOf("1001-01-01")))
-      checkAnswer(
-        readResourceAvroFile("before_1582_ts_micros_v2_4.avro"),
-        Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
-      checkAnswer(
-        readResourceAvroFile("before_1582_ts_millis_v2_4.avro"),
-        Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.124")))
+      // test reading the existing 2.4 files and 3.0 newly written files together.
+      withTempPath { path =>
+        val path2_4 = getResourceAvroFilePath("before_1582_date_v2_4.avro")
+        val path3_0 = path.getCanonicalPath
+        val dateStr = "1001-01-01"
+        Seq(dateStr).toDF("str").select($"str".cast("date").as("date"))
+          .write.format("avro").save(path3_0)
+        checkAnswer(
+          spark.read.format("avro").load(path2_4, path3_0),
+          Seq(
+            Row(java.sql.Date.valueOf(dateStr)),
+            Row(java.sql.Date.valueOf(dateStr))))
+      }
+
+      withTempPath { path =>
+        val path2_4 = getResourceAvroFilePath("before_1582_ts_micros_v2_4.avro")
+        val path3_0 = path.getCanonicalPath
+        val avroSchema =
+          """
+            |{
+            |  "type" : "record",
+            |  "name" : "test_schema",
+            |  "fields" : [
+            |    {"name": "ts", "type": {"type": "long", "logicalType": "timestamp-micros"}}
+            |  ]
+            |}""".stripMargin
+        val tsStr = "1001-01-01 01:02:03.123456"
+        Seq(tsStr).toDF("str").select($"str".cast("timestamp").as("ts"))
+          .write.format("avro").option("avroSchema", avroSchema).save(path3_0)
+        checkAnswer(
+          spark.read.format("avro").load(path2_4, path3_0),
+          Seq(
+            Row(java.sql.Timestamp.valueOf(tsStr)),
+            Row(java.sql.Timestamp.valueOf(tsStr))))
+      }
+
+      withTempPath { path =>
+        val path2_4 = getResourceAvroFilePath("before_1582_ts_millis_v2_4.avro")
+        val path3_0 = path.getCanonicalPath
+        val avroSchema =
+          """
+            |{
+            |  "type" : "record",
+            |  "name" : "test_schema",
+            |  "fields" : [
+            |    {"name": "ts", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+            |  ]
+            |}""".stripMargin
+        val tsStr = "1001-01-01 01:02:03.124"
+        Seq(tsStr).toDF("str").select($"str".cast("timestamp").as("ts"))
+          .write.format("avro").option("avroSchema", avroSchema).save(path3_0)
+        checkAnswer(
+          spark.read.format("avro").load(path2_4, path3_0),
+          Seq(
+            Row(java.sql.Timestamp.valueOf(tsStr)),
+            Row(java.sql.Timestamp.valueOf(tsStr))))
+      }
     }
   }
 
@@ -1554,10 +1601,18 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
           .write.format("avro")
           .save(path)
       }
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "true") {
-        checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(tsStr)))
+
+      // The file metadata indicates if it needs rebase or not, so we can always get the correct
+      // result regardless of the "rebaseInRead" config.
+      Seq(true, false).foreach { rebase =>
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+          checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(tsStr)))
+        }
       }
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "false") {
+
+      // Force to not rebase to prove the written datetime values are rebased and we will get
+      // wrong result if we don't rebase while reading.
+      withSQLConf("spark.test.forceNoRebase" -> "true") {
         checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(nonRebased)))
       }
     }
@@ -1589,12 +1644,20 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
             .format("avro")
             .save(path)
         }
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "true") {
-          checkAnswer(
-            spark.read.schema("ts timestamp").format("avro").load(path),
-            Row(Timestamp.valueOf(rebased)))
+
+        // The file metadata indicates if it needs rebase or not, so we can always get the correct
+        // result regardless of the "rebaseInRead" config.
+        Seq(true, false).foreach { rebase =>
+          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+            checkAnswer(
+              spark.read.schema("ts timestamp").format("avro").load(path),
+              Row(Timestamp.valueOf(rebased)))
+          }
         }
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "false") {
+
+        // Force to not rebase to prove the written datetime values are rebased and we will get
+        // wrong result if we don't rebase while reading.
+        withSQLConf("spark.test.forceNoRebase" -> "true") {
           checkAnswer(
             spark.read.schema("ts timestamp").format("avro").load(path),
             Row(Timestamp.valueOf(nonRebased)))
@@ -1612,10 +1675,18 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
           .write.format("avro")
           .save(path)
       }
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "true") {
-        checkAnswer(spark.read.format("avro").load(path), Row(Date.valueOf("1001-01-01")))
+
+      // The file metadata indicates if it needs rebase or not, so we can always get the correct
+      // result regardless of the "rebaseInRead" config.
+      Seq(true, false).foreach { rebase =>
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+          checkAnswer(spark.read.format("avro").load(path), Row(Date.valueOf("1001-01-01")))
+        }
       }
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "false") {
+
+      // Force to not rebase to prove the written datetime values are rebased and we will get
+      // wrong result if we don't rebase while reading.
+      withSQLConf("spark.test.forceNoRebase" -> "true") {
         checkAnswer(spark.read.format("avro").load(path), Row(Date.valueOf("1001-01-07")))
       }
     }
