@@ -800,17 +800,12 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       ("""[{"a":123},{"b":"hello"}]""", 2),
       ("""[1,2,3,[33,44],{"key":[2,3,4]}]""", 5),
       ("""[1,2,3,4,5""", null),
-      ("Random String", null)
+      ("Random String", null),
+      ("""{"key":"not a json array"}""", null),
+      ("""{"key": 25}""", null)
     ).foreach {
       case(literal, expectedValue) =>
         checkEvaluation(LengthOfJsonArray(Literal(literal)), expectedValue)
     }
-
-    val not_a_json_array = """{"key":"not a json array"}"""
-
-    checkExceptionInExpression[IllegalArgumentException](
-      LengthOfJsonArray(Literal(not_a_json_array)),
-      expectedErrMsg = "json_array_length can only be called on JSON array"
-    )
   }
 }

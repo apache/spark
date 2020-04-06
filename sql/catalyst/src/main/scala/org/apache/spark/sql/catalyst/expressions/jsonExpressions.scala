@@ -804,8 +804,8 @@ case class SchemaOfJson(
   usage = "_FUNC_(jsonArray) - Returns the number of elements in the outmost JSON array.",
   arguments = """
     Arguments:
-      * jsonArray - A JSON array. An exception is thrown if any other valid JSON strings are passed.
-          `NULL` is returned in case of `NULL` or an invalid JSON.
+      * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
+          `NULL` or an invalid JSON.
   """,
   examples = """
     Examples:
@@ -849,11 +849,11 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
     }
   }
 
-  private def parseCounter(parser: JsonParser, input: InternalRow): Int = {
+  private def parseCounter(parser: JsonParser, input: InternalRow): Any = {
     var length = 0
     // Only JSON array are supported for this function.
     if (parser.currentToken != JsonToken.START_ARRAY) {
-      throw new IllegalArgumentException(s"$prettyName can only be called on JSON array.")
+      return null
     }
     // Keep traversing until the end of JSON array
     while(parser.nextToken() != JsonToken.END_ARRAY) {

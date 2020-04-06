@@ -423,10 +423,9 @@ struct<json_array_length([1,2,3,[33,44],{"key":[2,3,4]}]):int>
 -- !query
 select json_array_length('{"key":"not a json array"}')
 -- !query schema
-struct<>
+struct<json_array_length({"key":"not a json array"}):int>
 -- !query output
-java.lang.IllegalArgumentException
-json_array_length can only be called on JSON array.
+NULL
 
 
 -- !query
