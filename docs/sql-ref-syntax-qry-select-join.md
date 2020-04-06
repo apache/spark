@@ -235,5 +235,5 @@ SELECT * FROM employee ANTI JOIN department ON employee.deptno = department.dept
 {% endhighlight %}
 
 
-### Related Clauses
+### Related Statement
 - [SELECT](sql-ref-syntax-qry-select.html)
