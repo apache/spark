@@ -21,6 +21,6 @@ license: |
 
 Spark SQL defines built-in functions to use, a complete list of which can be found [here](api/sql/). Among them, Spark SQL has several special categories of built-in functions: [Aggregate Functions](sql-ref-functions-builtin-aggregate.html) to operate on a group of rows, [Array Functions](sql-ref-functions-builtin-array.html) to operate on Array columns, and [Date and Time Functions](sql-ref-functions-builtin-date-time.html) to operate on Date and Time.
 
-* [Aggregate Functions](sql-ref-functions-builtin-aggregate.html)
-* [Array Functions](sql-ref-functions-builtin-array.html)
-* [Date and Time Functions](sql-ref-functions-builtin-date-time.html)
+ * [Aggregate Functions](sql-ref-functions-builtin-aggregate.html)
+ * [Array Functions](sql-ref-functions-builtin-array.html)
+ * [Date and Time Functions](sql-ref-functions-builtin-date-time.html)
