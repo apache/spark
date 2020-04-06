@@ -79,7 +79,7 @@ object RebaseDateTime {
   // The differences in days between Proleptic Gregorian and Julian dates.
   // The diff at the index `i` is applicable for all days in the date interval:
   // [gregJulianDiffSwitchDay(i), gregJulianDiffSwitchDay(i+1))
-  private val grepJulianDiffs = Array(-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0)
+  private val gregJulianDiffs = Array(-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0)
   // The sorted days in Proleptic Gregorian calendar when difference in days between
   // Proleptic Gregorian and Julian was changed.
   // The starting point is the `0001-01-01` (-719162 days since the epoch in
@@ -106,7 +106,7 @@ object RebaseDateTime {
    * @return The rebased number of days since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianDays(days: Int): Int = {
-    rebaseDays(gregJulianDiffSwitchDay, grepJulianDiffs, days)
+    rebaseDays(gregJulianDiffSwitchDay, gregJulianDiffs, days)
   }
 
   /**
@@ -199,11 +199,11 @@ object RebaseDateTime {
    * (instants in microseconds since the epoch) when the difference between 2 instances
    * associated with the same local timestamp in Proleptic Gregorian and the hybrid calendar
    * was changed.
-   * `grepJulianDiffsMicros` maps time zone IDs to diffs between Proleptic Gregorian
+   * `gregJulianDiffsMicros` maps time zone IDs to diffs between Proleptic Gregorian
    * and the hybrid calendars. The diff at the index `i` is applicable for all microseconds
    * in the time interval: [gregJulianDiffSwitchMicros(i), gregJulianDiffSwitchMicros(i+1))
    */
-  private val (grepJulianDiffsMicros, gregJulianDiffSwitchMicros) = {
+  private val (gregJulianDiffsMicros, gregJulianDiffSwitchMicros) = {
     loadRebaseRecords("gregorian-julian-rebase-micros.json")
   }
 
@@ -224,7 +224,7 @@ object RebaseDateTime {
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
     val timeZone = TimeZone.getDefault
     val tzId = timeZone.getID
-    val diffs = grepJulianDiffsMicros.get(tzId)
+    val diffs = gregJulianDiffsMicros.get(tzId)
     if (diffs.isEmpty) {
       rebaseGregorianToJulianMicros(timeZone.toZoneId, micros)
     } else {
@@ -273,18 +273,40 @@ object RebaseDateTime {
     instantToMicros(adjustedZdt.toInstant)
   }
 
-  private val (julianGrepDiffsMicros, julianGrepDiffSwitchMicros) = {
+  // The rebasing maps to convert microseconds from the hybrid calendar (Julian + Gregorian)
+  // to Proleptic Gregorian calendar.
+  // `julianGregDiffSwitchMicros` maps time zone IDs to ordered timestamps (ascending order)
+  // where at every timestamps the difference between 2 calendars was changed.
+  // `julianGregDiffsMicros` maps time zone IDs to ordered differences between 2 calendars.
+  // The diff at the index `i` is applicable for all timestamps in the interval:
+  // [julianGregDiffSwitchMicros(i), julianGregDiffSwitchMicros(i+1))
+  private val (julianGregDiffsMicros, julianGregDiffSwitchMicros) = {
     loadRebaseRecords("julian-gregorian-rebase-micros.json")
   }
 
+  /**
+   * This is an opposite to `rebaseGregorianToJulianMicros` function which rebases the given
+   * microseconds since the epoch 1970-01-01T00:00:00.000000Z via local timestamps from the
+   * hybrid calendar (Julian + Gregorian) to Proleptic Gregorian calendar.
+   * For example, the input `micros` -12243196799876544 is mapped to 1582-01-01 00:00:00.123456 in
+   * Julian calendar. The same local timestamp in Proleptic Gregorian calendar is mapped to
+   * the different number of micros -12244061221876544 since the epoch. Semantically, the function
+   * performs such conversion either via direct conversion to local timestamps,
+   * or via pre-calculated rebasing tables.
+   *
+   * @param micros The number of microseconds since the epoch.
+   * @return The rebased number of microseconds since the epoch which is mapped to the same
+   *         local timestamp in Proleptic Gregorian calendar as `micros` in the hybrid calendar
+   *         at the system time zone.
+   */
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
     val timeZone = TimeZone.getDefault
     val tzId = timeZone.getID
-    val diffs = julianGrepDiffsMicros.get(tzId)
+    val diffs = julianGregDiffsMicros.get(tzId)
     if (diffs.isEmpty) {
       rebaseJulianToGregorianMicros(timeZone.toZoneId, micros)
     } else {
-      rebaseMicros(julianGrepDiffSwitchMicros(tzId), diffs.get, micros)
+      rebaseMicros(julianGregDiffSwitchMicros(tzId), diffs.get, micros)
     }
   }
 }
