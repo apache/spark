@@ -128,7 +128,7 @@ object StatFunctions extends Logging {
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
-    pearsonCorrelationColumns(df, cols.map(df.col))
+    pearsonCorrelationByColumns(df, cols.map(df.col))
   }
 
   /**
@@ -136,8 +136,8 @@ object StatFunctions extends Logging {
    *  Overloading the same function to provide both Seq[String] and Seq[Column]
    *  arguments is not possible because of type erasure.
    */
-  private[sql] def pearsonCorrelationColumns(df: DataFrame, cols: Seq[Column]): Double = {
-    val counts = collectStatisticalDataColumns(df, cols, "correlation")
+  private[sql] def pearsonCorrelationByColumns(df: DataFrame, cols: Seq[Column]): Double = {
+    val counts = collectStatisticalDataByColumns(df, cols, "correlation")
     counts.Ck / math.sqrt(counts.MkX * counts.MkY)
   }
 
@@ -183,7 +183,7 @@ object StatFunctions extends Logging {
 
   private def collectStatisticalData(df: DataFrame, cols: Seq[String],
               functionName: String): CovarianceCounter = {
-    collectStatisticalDataColumns(df, cols.map(df.col), functionName)
+    collectStatisticalDataByColumns(df, cols.map(df.col), functionName)
   }
 
 
@@ -192,7 +192,7 @@ object StatFunctions extends Logging {
    *  Overloading the same function to provide both Seq[String] and Seq[Column]
    *  arguments is not possible because of type erasure.
    */
-  private def collectStatisticalDataColumns(df: DataFrame, cols: Seq[Column],
+  private def collectStatisticalDataByColumns(df: DataFrame, cols: Seq[Column],
               functionName: String): CovarianceCounter = {
     require(cols.length == 2, s"Currently $functionName calculation is supported " +
       "between two columns.")
@@ -228,14 +228,14 @@ object StatFunctions extends Logging {
    * @param cols the columns
    * @return the covariance of the two columns.
    */
-  def calculateCovColumns(df: DataFrame, cols: Seq[Column]): Double = {
-    val counts = collectStatisticalDataColumns(df, cols, "covariance")
+  def calculateCovByColumns(df: DataFrame, cols: Seq[Column]): Double = {
+    val counts = collectStatisticalDataByColumns(df, cols, "covariance")
     counts.cov
   }
 
   /** Generate a table of frequencies for the elements of two columns. */
   def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
-    crossTabulateColumns(df, df.col(col1), df.col(col2))
+    crossTabulateByColumns(df, df.col(col1), df.col(col2))
   }
 
   /**
@@ -243,7 +243,7 @@ object StatFunctions extends Logging {
    *  Overloading the same function to provide both Seq[String] and Seq[Column]
    *  arguments is not possible because of type erasure.
    */
-  private[sql] def crossTabulateColumns(df: DataFrame, col1: Column, col2: Column): DataFrame = {
+  private[sql] def crossTabulateByColumns(df: DataFrame, col1: Column, col2: Column): DataFrame = {
     val colName1 = resolveColumn(df, col1).named.name
     val colName2 = resolveColumn(df, col2).named.name
     val tableName = s"${colName1}_$colName2"

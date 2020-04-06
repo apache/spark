@@ -177,7 +177,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 3.0.0
    */
   def cov(col1: Column, col2: Column): Double = {
-    StatFunctions.calculateCovColumns(df, Seq(col1, col2))
+    StatFunctions.calculateCovByColumns(df, Seq(col1, col2))
   }
 
   /**
@@ -225,7 +225,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   def corr(col1: Column, col2: Column, method: String): Double = {
     require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
       "coefficient is supported.")
-    StatFunctions.pearsonCorrelationColumns(df, Seq(col1, col2))
+    StatFunctions.pearsonCorrelationByColumns(df, Seq(col1, col2))
   }
 
   /**
@@ -333,7 +333,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 3.0.0
    */
   def crosstab(col1: Column, col2: Column): DataFrame = {
-    StatFunctions.crossTabulateColumns(df, col1, col2)
+    StatFunctions.crossTabulateByColumns(df, col1, col2)
   }
 
   /**
