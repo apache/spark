@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{LocalDateTime, ZoneId}
 import java.time.temporal.ChronoField
-import java.util
 import java.util.{Calendar, TimeZone}
 
 import scala.collection.mutable.AnyRefMap
@@ -181,13 +180,12 @@ object RebaseDateTime {
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
   // `RebaseRecord`. It splits and places JSON records to 2 separate maps with arrays as values
   // for performance reasons - to avoid unnecessary indirect memory accesses.
-  def loadRebaseRecords(fileName: String): util.HashMap[String, RebaseRecord] = {
+  def loadRebaseRecords(fileName: String): AnyRefMap[String, RebaseRecord] = {
     val file = Thread.currentThread().getContextClassLoader.getResource(fileName)
     val mapper = new ObjectMapper() with ScalaObjectMapper
     mapper.registerModule(DefaultScalaModule)
     val rebaseInfo = mapper.readValue[Seq[RebaseRecord]](file)
-    // val anyRefMap = new AnyRefMap[String, RebaseRecord]((3 * rebaseInfo.size) / 2)
-    val javaHashMap = new util.HashMap[String, RebaseRecord](rebaseInfo.size, 1)
+    val anyRefMap = new AnyRefMap[String, RebaseRecord]((3 * rebaseInfo.size) / 2)
     rebaseInfo.foreach { record =>
       var i = 0
       while (i < record.switches.length) {
@@ -195,11 +193,9 @@ object RebaseDateTime {
         record.diffs(i) = record.diffs(i) * MICROS_PER_SECOND
         i += 1
       }
-      // anyRefMap.update(record.tz, record)
-      javaHashMap.put(record.tz, record)
+      anyRefMap.update(record.tz, record)
     }
-    // anyRefMap
-    javaHashMap
+    anyRefMap
   }
 
   /**
@@ -230,8 +226,7 @@ object RebaseDateTime {
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
     val timeZone = TimeZone.getDefault
     val tzId = timeZone.getID
-    // val rebaseRecord = gregJulianRebaseMap.getOrNull(tzId)
-    val rebaseRecord = gregJulianRebaseMap.get(tzId)
+    val rebaseRecord = gregJulianRebaseMap.getOrNull(tzId)
     if (rebaseRecord == null) {
       rebaseGregorianToJulianMicros(timeZone.toZoneId, micros)
     } else {
@@ -307,7 +302,7 @@ object RebaseDateTime {
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
     val timeZone = TimeZone.getDefault
     val tzId = timeZone.getID
-    val rebaseRecord = julianGregRebaseMap.get(tzId)
+    val rebaseRecord = julianGregRebaseMap.getOrNull(tzId)
     if (rebaseRecord == null) {
       rebaseJulianToGregorianMicros(timeZone.toZoneId, micros)
     } else {
