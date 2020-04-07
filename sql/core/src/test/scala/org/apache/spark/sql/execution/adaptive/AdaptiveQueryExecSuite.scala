@@ -891,7 +891,7 @@ class AdaptiveQueryExecSuite
           assert(!reader.hasCoalescedPartition) // 0-size partitions are ignored.
           assert(reader.metrics.contains("numSkewedPartitions"))
           assert(reader.metrics("numSkewedPartitions").value > 0)
-          assert(reader.metrics("numSplitTasks").value > 0)
+          assert(reader.metrics("numSkewedSplits").value > 0)
         }
       }
     }
