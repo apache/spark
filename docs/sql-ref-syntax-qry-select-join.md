@@ -54,7 +54,7 @@ relation { [ join_type ] JOIN relation [ join_criteria ] | NATURAL join_type JOI
     Specifies how the rows from one relation will be combined with the rows of another relation.<br><br>
     <b>Syntax:</b>
       <code>
-      ON boolean_expression | USING ( column_name [ , column_name ... ] )
+        ON boolean_expression | USING ( column_name [ , column_name ... ] )
       </code> <br><br>
       <code>boolean_expression</code><br>
       Specifies an expression with a return type of boolean.
@@ -153,7 +153,7 @@ SELECT * FROM department;
 
 -- Use employee and department tables to demonstrate inner join.
 SELECT id, name, employee.deptno, deptname
-  FROM employee INNER JOIN department ON employee.deptno = department.deptno;
+    FROM employee INNER JOIN department ON employee.deptno = department.deptno;
   +---+-----+------+-----------|
   | id| name|deptno|   deptname|
   +---+-----+------+-----------|
@@ -164,7 +164,7 @@ SELECT id, name, employee.deptno, deptname
 
 -- Use employee and department tables to demonstrate left join.
 SELECT id, name, employee.deptno, deptname
-  FROM employee LEFT JOIN department ON employee.deptno = department.deptno;
+    FROM employee LEFT JOIN department ON employee.deptno = department.deptno;
   +---+-----+------+-----------|
   | id| name|deptno|   deptname|
   +---+-----+------+-----------|
@@ -178,7 +178,7 @@ SELECT id, name, employee.deptno, deptname
 
 -- Use employee and department tables to demonstrate right join.
 SELECT id, name, employee.deptno, deptname
-  FROM employee RIGHT JOIN department ON employee.deptno = department.deptno;
+    FROM employee RIGHT JOIN department ON employee.deptno = department.deptno;
   +---+-----+------+-----------|
   | id| name|deptno|   deptname|
   +---+-----+------+-----------|
@@ -189,7 +189,7 @@ SELECT id, name, employee.deptno, deptname
 
 -- Use employee and department tables to demonstrate full join.
 SELECT id, name, employee.deptno, deptname
-  FROM employee FULL JOIN department ON employee.deptno = department.deptno;
+    FROM employee FULL JOIN department ON employee.deptno = department.deptno;
   +---+-----+------+-----------|
   | id| name|deptno|   deptname|
   +---+-----+------+-----------|
