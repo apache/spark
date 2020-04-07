@@ -150,4 +150,5 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
 - [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
 - [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 - [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+- [TABLESAMPLE](sql-ref-syntax-qry-sampling.html)
 - [SET Operators](sql-ref-syntax-qry-select-setops.html)
