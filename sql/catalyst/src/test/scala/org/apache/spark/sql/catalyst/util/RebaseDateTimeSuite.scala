@@ -272,4 +272,84 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
   }
+
+  private def generateRebaseJson(
+      adjustFunc: Long => Long,
+      rebaseFunc: (ZoneId, Long) => Long,
+      dir: String,
+      fileName: String): Unit = {
+    import java.nio.file.{Files, Paths}
+    import java.nio.file.StandardOpenOption
+
+    import scala.collection.mutable.ArrayBuffer
+
+    import com.fasterxml.jackson.databind.ObjectMapper
+    import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
+
+    case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
+
+    val result = new ArrayBuffer[RebaseRecord]()
+    ALL_TIMEZONES.foreach { zid =>
+      withDefaultTimeZone(zid) {
+        val start = adjustFunc(instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0)
+          .atZone(zid)
+          .toInstant))
+        val end = adjustFunc(instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0)
+          .atZone(zid)
+          .toInstant))
+
+        var micros = start
+        var diff = Long.MaxValue
+        var counter = 0
+        val maxStep = MICROS_PER_MONTH
+        var step: Long = MICROS_PER_SECOND
+        val switches = new ArrayBuffer[Long]()
+        val diffs = new ArrayBuffer[Long]()
+        while (micros < end) {
+          val rebased = rebaseFunc(zid, micros)
+          val curDiff = rebased - micros
+          if (curDiff != diff) {
+            if (step > MICROS_PER_SECOND) {
+              micros -= step
+              step = (Math.max(MICROS_PER_SECOND, step / 2) / MICROS_PER_SECOND) * MICROS_PER_SECOND
+            } else {
+              counter += 1
+              diff = curDiff
+              step = maxStep
+              assert(diff % MICROS_PER_SECOND == 0)
+              diffs.append(diff / MICROS_PER_SECOND)
+              assert(micros % MICROS_PER_SECOND == 0)
+              switches.append(micros / MICROS_PER_SECOND)
+            }
+          }
+          micros += step
+        }
+        result.append(RebaseRecord(zid.getId, switches.toArray, diffs.toArray))
+      }
+    }
+    val mapper = (new ObjectMapper() with ScalaObjectMapper)
+      .registerModule(DefaultScalaModule)
+      .writerWithDefaultPrettyPrinter()
+    mapper.writeValue(
+      Files.newOutputStream(
+        Paths.get(dir, fileName),
+        StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING),
+      result.toArray)
+  }
+
+  ignore("generate 'gregorian-julian-rebase-micros.json'") {
+    generateRebaseJson(
+      adjustFunc = identity[Long],
+      rebaseFunc = rebaseGregorianToJulianMicros,
+      dir = "/Users/maximgekk/tmp",
+      fileName = "gregorian-julian-rebase-micros.json")
+  }
+
+  ignore("generate 'julian-gregorian-rebase-micros.json'") {
+    generateRebaseJson(
+      adjustFunc = rebaseGregorianToJulianMicros,
+      rebaseFunc = rebaseJulianToGregorianMicros,
+      dir = "/Users/maximgekk/tmp",
+      fileName = "julian-gregorian-rebase-micros.json")
+  }
 }
