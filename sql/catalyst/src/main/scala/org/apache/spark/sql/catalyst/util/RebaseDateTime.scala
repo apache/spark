@@ -120,7 +120,7 @@ object RebaseDateTime {
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
-  def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
+  private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
     val instant = microsToInstant(micros)
     val ldt = instant.atZone(zoneId).toLocalDateTime
     val cal = new Calendar.Builder()
@@ -151,11 +151,20 @@ object RebaseDateTime {
    * }}}
    *
    * @param tz One of time zone ID which is expected to be acceptable by `ZoneId.of`.
+   * @param switches An ordered array of seconds since the epoch when the diff between
+   *                 two calendars are changed.
+   * @param diffs Differences in seconds associated with elements of `switches`.
+   */
+  private case class JsonRebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
+
+  /**
+   * Rebasing info used to convert microseconds from an original to a target calendar.
+   *
    * @param switches An ordered array of microseconds since the epoch when the diff between
    *                 two calendars are changed.
    * @param diffs Differences in microseconds associated with elements of `switches`.
    */
-  case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
+  private[sql] case class RebaseInfo(switches: Array[Long], diffs: Array[Long])
 
   /**
    * Rebases micros since the epoch from an original to an target calendar, for instance,
@@ -166,37 +175,38 @@ object RebaseDateTime {
    * The function is based on linear search which starts from the most recent switch micros.
    * This allows to perform less comparisons for modern timestamps.
    *
-   * @param rebaseRecord The rebasing info contains an ordered micros when difference in micros
-   *                     between original and target calendar was changed,
-   *                     and differences in micros between calendars
-   * @param value        The number of micros since the epoch 1970-01-01 to be rebased to the
-   *                     target calendar.
+   * @param rebaseInfo The rebasing info contains an ordered micros when difference in micros
+   *                   between original and target calendar was changed,
+   *                   and differences in micros between calendars
+   * @param value The number of micros since the epoch 1970-01-01 to be rebased to the
+   *              target calendar.
    * @return The rebased micros.
    */
-  private def rebaseMicros(rebaseRecord: RebaseRecord, value: Long): Long = {
-    val switches = rebaseRecord.switches
+  private def rebaseMicros(rebaseInfo: RebaseInfo, value: Long): Long = {
+    val switches = rebaseInfo.switches
     var i = switches.length
     do { i -= 1 } while (i > 0 && value < switches(i))
-    value + rebaseRecord.diffs(i)
+    value + rebaseInfo.diffs(i)
   }
 
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
-  // `RebaseRecord`. AnyRefMap is used here instead of Scala's immutable map because
+  // `JsonRebaseRecord`. AnyRefMap is used here instead of Scala's immutable map because
   // it is 2 times faster in DateTimeRebaseBenchmark.
-  def loadRebaseRecords(fileName: String): AnyRefMap[String, RebaseRecord] = {
+  private[sql] def loadRebaseRecords(fileName: String): AnyRefMap[String, RebaseInfo] = {
     val file = Thread.currentThread().getContextClassLoader.getResource(fileName)
     val mapper = new ObjectMapper() with ScalaObjectMapper
     mapper.registerModule(DefaultScalaModule)
-    val rebaseInfo = mapper.readValue[Seq[RebaseRecord]](file)
-    val anyRefMap = new AnyRefMap[String, RebaseRecord]((3 * rebaseInfo.size) / 2)
-    rebaseInfo.foreach { record =>
+    val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)
+    val anyRefMap = new AnyRefMap[String, RebaseInfo]((3 * jsonRebaseRecords.size) / 2)
+    jsonRebaseRecords.foreach { jsonRecord =>
+      val rebaseInfo = RebaseInfo(jsonRecord.switches, jsonRecord.diffs)
       var i = 0
-      while (i < record.switches.length) {
-        record.switches(i) = record.switches(i) * MICROS_PER_SECOND
-        record.diffs(i) = record.diffs(i) * MICROS_PER_SECOND
+      while (i < rebaseInfo.switches.length) {
+        rebaseInfo.switches(i) = rebaseInfo.switches(i) * MICROS_PER_SECOND
+        rebaseInfo.diffs(i) = rebaseInfo.diffs(i) * MICROS_PER_SECOND
         i += 1
       }
-      anyRefMap.update(record.tz, record)
+      anyRefMap.update(jsonRecord.tz, rebaseInfo)
     }
     anyRefMap
   }
@@ -244,7 +254,7 @@ object RebaseDateTime {
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
    * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
-  def rebaseJulianToGregorianMicros(zoneId: ZoneId, micros: Long): Long = {
+  private[sql] def rebaseJulianToGregorianMicros(zoneId: ZoneId, micros: Long): Long = {
     val cal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
