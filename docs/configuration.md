@@ -2393,7 +2393,7 @@ Spark subsystems.
 ### Spark Streaming
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.streaming.backpressure.enabled</code></td>
   <td>false</td>
@@ -2406,6 +2406,7 @@ Spark subsystems.
     <code>spark.streaming.receiver.maxRate</code> and <code>spark.streaming.kafka.maxRatePerPartition</code>
     if they are set (see below).
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.backpressure.initialRate</code></td>
@@ -2414,6 +2415,7 @@ Spark subsystems.
     This is the initial maximum receiving rate at which each receiver will receive data for the
     first batch when the backpressure mechanism is enabled.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.blockInterval</code></td>
@@ -2424,6 +2426,7 @@ Spark subsystems.
     <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
      tuning</a> section in the Spark Streaming programming guide for more details.
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.receiver.maxRate</code></td>
@@ -2435,6 +2438,7 @@ Spark subsystems.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
     in the Spark Streaming programming guide for mode details.
   </td>
+  <td>1.0.2</td>
 </tr>
 <tr>
   <td><code>spark.streaming.receiver.writeAheadLog.enable</code></td>
@@ -2445,6 +2449,7 @@ Spark subsystems.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
     in the Spark Streaming programming guide for more details.
   </td>
+  <td>1.2.1</td>
 </tr>
 <tr>
   <td><code>spark.streaming.unpersist</code></td>
@@ -2456,6 +2461,7 @@ Spark subsystems.
     streaming application as they will not be cleared automatically. But it comes at the cost of
     higher memory usage in Spark.
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.stopGracefullyOnShutdown</code></td>
@@ -2464,6 +2470,7 @@ Spark subsystems.
     If <code>true</code>, Spark shuts down the <code>StreamingContext</code> gracefully on JVM
     shutdown rather than immediately.
   </td>
+  <td>1.4.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.kafka.maxRatePerPartition</code></td>
@@ -2474,14 +2481,16 @@ Spark subsystems.
     <a href="streaming-kafka-0-10-integration.html">Kafka Integration guide</a>
     for more details.
   </td>
+  <td>1.3.0</td>
 </tr>
 <tr>
-    <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
-    <td>1</td>
-    <td>
-      Minimum rate (number of records per second) at which data will be read from each Kafka
-      partition when using the new Kafka direct stream API.
-    </td>
+  <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
+  <td>1</td>
+  <td>
+    Minimum rate (number of records per second) at which data will be read from each Kafka
+    partition when using the new Kafka direct stream API.
+  </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.ui.retainedBatches</code></td>
@@ -2489,6 +2498,7 @@ Spark subsystems.
   <td>
     How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.driver.writeAheadLog.closeFileAfterWrite</code></td>
@@ -2498,6 +2508,7 @@ Spark subsystems.
     when you want to use S3 (or any file system that does not support flushing) for the metadata WAL
     on the driver.
   </td>
+  <td>1.6.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.receiver.writeAheadLog.closeFileAfterWrite</code></td>
@@ -2507,6 +2518,7 @@ Spark subsystems.
     when you want to use S3 (or any file system that does not support flushing) for the data WAL
     on the receivers.
   </td>
+  <td>1.6.0</td>
 </tr>
 </table>
 
