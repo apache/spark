@@ -29,6 +29,12 @@ import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 
+/**
+ * The collection of functions for rebasing days and microseconds from/to Proleptic Gregorian
+ * calendar used by default in Spark SQL since version 3.0, see SPARK-26651 to/from
+ * the hybrid calendar (Julian + Gregorian since 1582-10-15) which is used by Spark 2.4
+ * and earlier versions.
+ */
 object RebaseDateTime {
   /**
    * Rebases days since the epoch from an original to an target calendar, for instance,
