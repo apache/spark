@@ -230,4 +230,46 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
   }
+
+  test("optimization of micros rebasing - Gregorian to Julian") {
+    outstandingZoneIds.foreach { zid =>
+      withClue(s"zone id = $zid") {
+        withDefaultTimeZone(zid) {
+          val start = instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0)
+            .atZone(zid)
+            .toInstant)
+          val end = instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0)
+            .atZone(zid)
+            .toInstant)
+          var micros = start
+          do {
+            val rebased = rebaseGregorianToJulianMicros(zid, micros)
+            val rebasedAndOptimized = rebaseGregorianToJulianMicros(micros)
+            assert(rebasedAndOptimized === rebased)
+            micros += MICROS_PER_MONTH
+          } while (micros <= end)
+        }
+      }
+    }
+  }
+
+  test("optimization of micros rebasing - Julian to Gregorian") {
+    outstandingZoneIds.foreach { zid =>
+      withClue(s"zone id = $zid") {
+        withDefaultTimeZone(zid) {
+          val start = rebaseGregorianToJulianMicros(
+            instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0).atZone(zid).toInstant))
+          val end = rebaseGregorianToJulianMicros(
+            instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0).atZone(zid).toInstant))
+          var micros = start
+          do {
+            val rebased = rebaseJulianToGregorianMicros(zid, micros)
+            val rebasedAndOptimized = rebaseJulianToGregorianMicros(micros)
+            assert(rebasedAndOptimized === rebased)
+            micros += MICROS_PER_MONTH
+          } while (micros <= end)
+        }
+      }
+    }
+  }
 }
