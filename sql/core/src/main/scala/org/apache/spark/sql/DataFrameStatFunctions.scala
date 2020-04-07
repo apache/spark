@@ -116,7 +116,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @note null and NaN values will be ignored in numerical columns before calculation. For
    *   columns only containing null or NaN values, an empty array is returned.
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def approxQuantile(
       cols: Array[Column],
@@ -174,7 +174,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    res1: Double = 0.065...
    * }}}
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def cov(col1: Column, col2: Column): Double = {
     StatFunctions.calculateCovByColumns(df, Seq(col1, col2))
@@ -220,7 +220,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    res1: Double = 0.613...
    * }}}
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def corr(col1: Column, col2: Column, method: String): Double = {
     require(method == "pearson", "Currently only the calculation of the Pearson Correlation " +
@@ -263,7 +263,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    res1: Double = 0.613...
    * }}}
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def corr(col1: Column, col2: Column): Double = {
     corr(col1, col2, "pearson")
@@ -330,7 +330,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    +---------+---+---+---+
    * }}}
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def crosstab(col1: Column, col2: Column): DataFrame = {
     StatFunctions.crossTabulateByColumns(df, col1, col2)
@@ -410,7 +410,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param cols the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def freqItems(cols: Array[Column]): DataFrame = {
     FrequentItems.singlePassFreqItemsByColumns(df, cols, 0.01)
@@ -426,7 +426,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *                than 1e-4.
    * @return A Local DataFrame with the Array of frequent items for each column.
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def freqItems(cols: Array[Column], support: Double): DataFrame = {
     FrequentItems.singlePassFreqItemsByColumns(df, cols, support)
@@ -565,7 +565,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    +-----+---+
    * }}}
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = {
     require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
@@ -588,7 +588,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @tparam T stratum type
    * @return a new `DataFrame` that represents the stratified sample
    *
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
