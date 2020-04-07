@@ -225,8 +225,6 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
         }
         // Check ascending order of switches values
         assert(switches.forall { case (_, xs) => xs.toSeq == xs.sorted.toSeq })
-        // Time zone IDs must be resolvable
-        switches.foreach { case (tzId, _) => ZoneId.of(tzId) }
       }
     }
   }
