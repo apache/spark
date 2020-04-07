@@ -578,7 +578,6 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
 #'                               as R when encoding strings.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.lm} returns a fitted Linear Regression Model.
-#'
 #' @rdname spark.lm
 #' @aliases spark.lm,SparkDataFrame,formula-method
 #' @name spark.lm
