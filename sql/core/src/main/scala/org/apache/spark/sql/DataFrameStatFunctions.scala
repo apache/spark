@@ -161,7 +161,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Calculate the sample covariance of two numerical columns of a DataFrame.
-   * This version of cov accepts [[Column]] rather than names.
    *
    * @param col1 the first column
    * @param col2 the second column
@@ -207,8 +206,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
    * MLlib's Statistics.
    *
-   * This version of corr accepts [[Column]] rather than names.
-   *
    * @param col1 the first column
    * @param col2 the column to calculate the correlation against
    * @return The Pearson Correlation Coefficient as a Double.
@@ -250,7 +247,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Calculates the Pearson Correlation Coefficient of two columns of a DataFrame.
-   * This version of corr accepts [[Column]] rather than names.
    *
    * @param col1 the first column
    * @param col2 the column to calculate the correlation against
@@ -307,7 +303,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Computes a pair-wise frequency table of the given columns.
-   * This version of crosstab accepts [[Column]] rather than names.
    * @see `crosstab(col1:String, col2:String)` for detailed description.
    *
    * @param col1 The first column. Distinct items will make the first item of
@@ -404,7 +399,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Finding frequent items for columns, possibly with false positives.
-   * This version of freqItems accepts [[Column]] rather than names.
    * @see `freqItesm(cols: Array[String])` for detailed description.
    *
    * @param cols the columns to search frequent items in.
@@ -418,7 +412,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Finding frequent items for columns, possibly with false positives.
-   * This version of freqItems accepts [[Column]] rather than names.
    * @see `freqItesm(cols: Array[String], support:Double)` for detailed description.
    *
    * @param cols the columns to search frequent items in.
