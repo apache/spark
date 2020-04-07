@@ -229,6 +229,9 @@ object RebaseDateTime {
    * don't contains information about the current JVM system time zone, the functions falls back
    * to regular conversion mechanism via building local timestamps.
    *
+   * Note: The function assumes that the input micros was derived from a local timestamp
+   *       at the default system JVM time zone in Proleptic Gregorian calendar.
+   *
    * @param micros The microseconds since the epoch 1970-01-01T00:00:00.000000Z.
    * @return The microseconds since the epoch that have the same local timestamp representation
    *         in the hybrid calendar (Julian + Gregorian) as the original `micros` in
@@ -302,6 +305,10 @@ object RebaseDateTime {
    * the different number of micros -12244061221876544 since the epoch. Semantically, the function
    * performs such conversion either via direct conversion to local timestamps,
    * or via pre-calculated rebasing tables.
+   *
+   * Note: The function assumes that the input micros was derived from a local timestamp
+   *       at the default system JVM time zone in the hybrid calendar (Julian and Gregorian
+   *       since 1582-10-15)
    *
    * @param micros The number of microseconds since the epoch.
    * @return The rebased number of microseconds since the epoch which is mapped to the same
