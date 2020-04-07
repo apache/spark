@@ -58,5 +58,19 @@ select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'tr
 select schema_of_json(null);
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a');
 SELECT schema_of_json(jsonField) FROM jsonTable;
+
+-- json_array_length
+select json_array_length(null);
+select json_array_length(2);
+select json_array_length();
+select json_array_length('');
+select json_array_length('[]');
+select json_array_length('[1,2,3]');
+select json_array_length('[[1,2],[5,6,7]]');
+select json_array_length('[{"a":123},{"b":"hello"}]');
+select json_array_length('[1,2,3,[33,44],{"key":[2,3,4]}]');
+select json_array_length('{"key":"not a json array"}');
+select json_array_length('[1,2,3,4,5');
+
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;

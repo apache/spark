@@ -796,3 +796,71 @@ case class SchemaOfJson(
 
   override def prettyName: String = "schema_of_json"
 }
+
+/**
+ * A function that returns the number of elements in the outmost JSON array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(jsonArray) - Returns the number of elements in the outmost JSON array.",
+  arguments = """
+    Arguments:
+      * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
+          `NULL` or an invalid JSON.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('[1,2,3,4]');
+        4
+      > SELECT _FUNC_('[1,2,3,{"f1":1,"f2":[5,6]},4]');
+        5
+      > SELECT _FUNC_('[1,2');
+        NULL
+  """,
+  since = "3.1.0"
+)
+case class LengthOfJsonArray(child: Expression) extends UnaryExpression
+  with CodegenFallback with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = IntegerType
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_array_length"
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // return null for null input
+    if (json == null) {
+      return null
+    }
+
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => {
+          // return null if null array is encountered.
+          if (parser.nextToken() == null) {
+            return null
+          }
+          // Parse the array to compute its length.
+          parseCounter(parser, input)
+        }
+      }
+    } catch {
+      case _: JsonProcessingException | _: IOException => null
+    }
+  }
+
+  private def parseCounter(parser: JsonParser, input: InternalRow): Any = {
+    var length = 0
+    // Only JSON array are supported for this function.
+    if (parser.currentToken != JsonToken.START_ARRAY) {
+      return null
+    }
+    // Keep traversing until the end of JSON array
+    while(parser.nextToken() != JsonToken.END_ARRAY) {
+      length += 1
+      // skip all the child of inner object or array
+      parser.skipChildren()
+    }
+    length
+  }
+}
