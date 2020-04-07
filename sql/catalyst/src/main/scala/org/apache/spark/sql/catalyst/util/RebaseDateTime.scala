@@ -166,8 +166,11 @@ object RebaseDateTime {
    * The function is based on linear search which starts from the most recent switch micros.
    * This allows to perform less comparisons for modern timestamps.
    *
-   * @param value The number of micros since the epoch 1970-01-01 to be rebased to the
-   *             target calendar.
+   * @param rebaseRecord The rebasing info contains an ordered micros when difference in micros
+   *                     between original and target calendar was changed,
+   *                     and differences in micros between calendars
+   * @param value        The number of micros since the epoch 1970-01-01 to be rebased to the
+   *                     target calendar.
    * @return The rebased micros.
    */
   private def rebaseMicros(rebaseRecord: RebaseRecord, value: Long): Long = {
@@ -178,8 +181,8 @@ object RebaseDateTime {
   }
 
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
-  // `RebaseRecord`. It splits and places JSON records to 2 separate maps with arrays as values
-  // for performance reasons - to avoid unnecessary indirect memory accesses.
+  // `RebaseRecord`. AnyRefMap is used here instead of Scala's immutable map because
+  // it is 2 times faster in DateTimeRebaseBenchmark.
   def loadRebaseRecords(fileName: String): AnyRefMap[String, RebaseRecord] = {
     val file = Thread.currentThread().getContextClassLoader.getResource(fileName)
     val mapper = new ObjectMapper() with ScalaObjectMapper
@@ -199,13 +202,11 @@ object RebaseDateTime {
   }
 
   /**
-   * `gregJulianDiffSwitchMicros` is a map of time zone IDs to its ordered time points
-   * (instants in microseconds since the epoch) when the difference between 2 instances
-   * associated with the same local timestamp in Proleptic Gregorian and the hybrid calendar
-   * was changed.
-   * `gregJulianDiffsMicros` maps time zone IDs to diffs between Proleptic Gregorian
-   * and the hybrid calendars. The diff at the index `i` is applicable for all microseconds
-   * in the time interval: [gregJulianDiffSwitchMicros(i), gregJulianDiffSwitchMicros(i+1))
+   * A map of time zone IDs to its ordered time points (instants in microseconds since the epoch)
+   * when the difference between 2 instances associated with the same local timestamp in
+   * Proleptic Gregorian and the hybrid calendar was changed, and to the diff at the index `i` is
+   * applicable for all microseconds in the time interval:
+   *   [gregJulianDiffSwitchMicros(i), gregJulianDiffSwitchMicros(i+1))
    */
   private val gregJulianRebaseMap = loadRebaseRecords("gregorian-julian-rebase-micros.json")
 
@@ -276,12 +277,10 @@ object RebaseDateTime {
   }
 
   // The rebasing maps to convert microseconds from the hybrid calendar (Julian + Gregorian)
-  // to Proleptic Gregorian calendar.
-  // `julianGregDiffSwitchMicros` maps time zone IDs to ordered timestamps (ascending order)
-  // where at every timestamps the difference between 2 calendars was changed.
-  // `julianGregDiffsMicros` maps time zone IDs to ordered differences between 2 calendars.
-  // The diff at the index `i` is applicable for all timestamps in the interval:
-  // [julianGregDiffSwitchMicros(i), julianGregDiffSwitchMicros(i+1))
+  // to Proleptic Gregorian calendar. It maps time zone IDs to ordered timestamps (ascending order)
+  // where at every timestamps the difference between 2 calendars was changed, and to ordered
+  // differences between 2 calendars. The diff at the index `i` is applicable for all timestamps
+  // in the interval: [julianGregDiffSwitchMicros(i), julianGregDiffSwitchMicros(i+1))
   private val julianGregRebaseMap = loadRebaseRecords("julian-gregorian-rebase-micros.json")
 
   /**
