@@ -291,6 +291,8 @@ license: |
     - `now` - current query start time
   For example `SELECT timestamp 'tomorrow';`.
 
+  - Since Spark 3.0, when using `EXTRACT` expression to extract the second field from date/timestamp values, the result will be a `DecimalType(8, 6)` value with 2 digits for second part, and 6 digits for the fractional part with microsecond precision. e.g. `extract(second from to_timestamp('2019-09-20 10:10:10.1'))` results `10.100000`.  In Spark version 2.4 and earlier, it returns an `IntegerType` value and the result for the former example is `10`.
+
 ### Data Sources
 
   - In Spark version 2.4 and earlier, when reading a Hive Serde table with Spark native data sources(parquet/orc), Spark will infer the actual file schema and update the table schema in metastore. Since Spark 3.0, Spark doesn't infer the schema anymore. This should not cause any problems to end users, but if it does, please set `spark.sql.hive.caseSensitiveInferenceMode` to `INFER_AND_SAVE`.
