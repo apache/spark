@@ -93,7 +93,7 @@ Partition Values    	[ds=2017-08-01, hr=10]
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=10	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1121 bytes, 3 rows  	                    
+Partition Statistics	1189 bytes, 3 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -128,7 +128,7 @@ Partition Values    	[ds=2017-08-01, hr=10]
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=10	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1121 bytes, 3 rows  	                    
+Partition Statistics	1189 bytes, 3 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -155,7 +155,7 @@ Partition Values    	[ds=2017-08-01, hr=11]
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=11	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1098 bytes, 4 rows  	                    
+Partition Statistics	1166 bytes, 4 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -190,7 +190,7 @@ Partition Values    	[ds=2017-08-01, hr=10]
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=10	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1121 bytes, 3 rows  	                    
+Partition Statistics	1189 bytes, 3 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -217,7 +217,7 @@ Partition Values    	[ds=2017-08-01, hr=11]
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=11	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1098 bytes, 4 rows  	                    
+Partition Statistics	1166 bytes, 4 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -244,7 +244,7 @@ Partition Values    	[ds=2017-09-01, hr=5]
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-09-01/hr=5	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1144 bytes, 2 rows  	                    
+Partition Statistics	1212 bytes, 2 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
