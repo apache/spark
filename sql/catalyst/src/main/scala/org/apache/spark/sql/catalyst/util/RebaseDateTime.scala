@@ -170,30 +170,30 @@ object RebaseDateTime {
    *             target calendar.
    * @return The rebased micros.
    */
-  private def rebaseMicros(rebaseRecords: Array[Long], value: Long): Long = {
-    var i = rebaseRecords.length
-    do { i -= 2 } while (i > 0 && value < rebaseRecords(i))
-    value + rebaseRecords(i + 1)
+  private def rebaseMicros(rebaseRecord: RebaseRecord, value: Long): Long = {
+    val switches = rebaseRecord.switches
+    var i = switches.length
+    do { i -= 1 } while (i > 0 && value < switches(i))
+    value + rebaseRecord.diffs(i)
   }
 
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
   // `RebaseRecord`. It splits and places JSON records to 2 separate maps with arrays as values
   // for performance reasons - to avoid unnecessary indirect memory accesses.
-  def loadRebaseRecords(fileName: String): AnyRefMap[String, Array[Long]] = {
+  def loadRebaseRecords(fileName: String): AnyRefMap[String, RebaseRecord] = {
     val file = Thread.currentThread().getContextClassLoader.getResource(fileName)
     val mapper = new ObjectMapper() with ScalaObjectMapper
     mapper.registerModule(DefaultScalaModule)
     val rebaseInfo = mapper.readValue[Seq[RebaseRecord]](file)
-    val anyRefMap = new AnyRefMap[String, Array[Long]]((3 * rebaseInfo.size) / 2)
+    val anyRefMap = new AnyRefMap[String, RebaseRecord]((3 * rebaseInfo.size) / 2)
     rebaseInfo.foreach { record =>
-      val values = new Array[Long](2 * record.switches.length)
       var i = 0
       while (i < record.switches.length) {
-        values(2 * i) = record.switches(i) * MICROS_PER_SECOND
-        values(2 * i + 1) = record.diffs(i) * MICROS_PER_SECOND
+        record.switches(i) = record.switches(i) * MICROS_PER_SECOND
+        record.diffs(i) = record.diffs(i) * MICROS_PER_SECOND
         i += 1
       }
-      anyRefMap.update(record.tz, values)
+      anyRefMap.update(record.tz, record)
     }
     anyRefMap
   }
