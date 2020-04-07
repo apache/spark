@@ -181,16 +181,27 @@ object RebaseDateTime {
   // for performance reasons - to avoid unnecessary indirect memory accesses.
   def loadRebaseRecords(
       fileName: String): (Map[String, Array[Long]], Map[String, Array[Long]]) = {
+    def convertSecondsToMicros(secs: Array[Long]): Unit = {
+      var i = 0
+      while (i < secs.length) {
+        secs(i) = secs(i) * MICROS_PER_SECOND
+        i += 1
+      }
+    }
     val file = Thread.currentThread().getContextClassLoader.getResource(fileName)
     val mapper = new ObjectMapper() with ScalaObjectMapper
     mapper.registerModule(DefaultScalaModule)
     val rebaseInfo = mapper.readValue[Seq[RebaseRecord]](file)
     val diffInfo = rebaseInfo
-      .map { case RebaseRecord(tz, _, diffs) => tz -> diffs }
-      .toMap
+      .map { case RebaseRecord(tz, _, diffs) =>
+        convertSecondsToMicros(diffs)
+        tz -> diffs
+      }.toMap
     val switchInfo = rebaseInfo
-      .map { case RebaseRecord(tz, switches, _) => tz -> switches }
-      .toMap
+      .map { case RebaseRecord(tz, switches, _) =>
+        convertSecondsToMicros(switches)
+        tz -> switches
+      }.toMap
 
     (diffInfo, switchInfo)
   }
