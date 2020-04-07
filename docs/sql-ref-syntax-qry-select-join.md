@@ -250,4 +250,4 @@ SELECT * FROM employee ANTI JOIN department ON employee.deptno = department.dept
 
 ### Related Statement
 - [SELECT](sql-ref-syntax-qry-select.html)
-- [JOIN HINTS](sql-ref-syntax-qry-select-hints.html)
+- [JOIN hints](sql-ref-syntax-qry-select-hints.html)
