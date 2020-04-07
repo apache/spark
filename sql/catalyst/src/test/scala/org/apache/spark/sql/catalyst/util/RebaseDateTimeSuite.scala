@@ -242,7 +242,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
             val rebased = rebaseGregorianToJulianMicros(zid, micros)
             val rebasedAndOptimized = rebaseGregorianToJulianMicros(micros)
             assert(rebasedAndOptimized === rebased)
-            micros += MICROS_PER_MONTH
+            micros += (MICROS_PER_MONTH * (0.5 + Math.random())).toLong
           } while (micros <= end)
         }
       }
@@ -262,7 +262,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
             val rebased = rebaseJulianToGregorianMicros(zid, micros)
             val rebasedAndOptimized = rebaseJulianToGregorianMicros(micros)
             assert(rebasedAndOptimized === rebased)
-            micros += MICROS_PER_MONTH
+            micros += (MICROS_PER_MONTH * (0.5 + Math.random())).toLong
           } while (micros <= end)
         }
       }
