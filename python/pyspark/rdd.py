@@ -47,7 +47,7 @@ from pyspark.join import python_join, python_left_outer_join, \
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
-from pyspark.resourceprofile import ResourceProfile
+from pyspark.resource.resourceprofile import ResourceProfile
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy

@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-from pyspark.executorresourcerequest import ExecutorResourceRequest
-from pyspark.resourceprofile import ResourceProfile
-from pyspark.taskresourcerequest import TaskResourceRequest
-from pyspark.taskresourcerequests import TaskResourceRequests
+from pyspark.resource.executorresourcerequest import ExecutorResourceRequest
+from pyspark.resource.resourceprofile import ResourceProfile
+from pyspark.resource.taskresourcerequest import TaskResourceRequest
+from pyspark.resource.taskresourcerequests import TaskResourceRequests
 
 
 class ResourceProfileBuilder(object):

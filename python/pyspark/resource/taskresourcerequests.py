@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.taskresourcerequest import TaskResourceRequest
+from pyspark.resource.taskresourcerequest import TaskResourceRequest
 
 
 class TaskResourceRequests(object):

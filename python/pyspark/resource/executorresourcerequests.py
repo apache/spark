@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.executorresourcerequest import ExecutorResourceRequest
+from pyspark.resource.executorresourcerequest import ExecutorResourceRequest
 
 
 class ExecutorResourceRequests(object):
