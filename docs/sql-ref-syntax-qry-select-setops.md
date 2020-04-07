@@ -19,35 +19,35 @@ license: |
   limitations under the License.
 ---
 
-Set operators are used to combine the results of two queries into a single result. Spark SQL supports three types of set operators:
+Set operators are used to combine two input relations into a single one. Spark SQL supports three types of set operators:
 - `EXCEPT` and `EXCEPT ALL`
 - `INTERSECT` and `INTERSECT ALL`
 - `UNION` and `UNION ALL`
 
-Note that the queries' result sets must have the same number of columns and compatible data types for the respective columns.
+Note that input relations must have the same number of columns and compatible data types for the respective columns.
 
 ### EXCEPT and EXCEPT ALL
-`EXCEPT` and `EXCEPT ALL` return the rows that are found in one query but not the other query. `EXCEPT` takes only distinct rows while `EXCEPT ALL` does not remove duplicates.
+`EXCEPT` and `EXCEPT ALL` return the rows that are found in one relation but not the other. `EXCEPT` takes only distinct rows while `EXCEPT ALL` does not remove duplicates.
 
 #### Syntax
 {% highlight sql %}
-[ ( ] query [ ) ] EXCEPT [ ALL ] [ ( ] query[ ) ]
+[ ( ] relation [ ) ] EXCEPT [ ALL ] [ ( ] relation [ ) ]
 {% endhighlight %}
 
 ### INTERSECT and INTERSECT ALL
-`INTERSECT` and `INTERSECT ALL` return the rows that are found in both queries. `INTERSECT` takes only distinct rows while `INTERSECT ALL` does not remove duplicates.
+`INTERSECT` and `INTERSECT ALL` return the rows that are found in both relations. `INTERSECT` takes only distinct rows while `INTERSECT ALL` does not remove duplicates.
 
 #### Syntax
 {% highlight sql %}
-[ ( ] query [ ) ] INTERSECT [ ALL ] [ ( ] query [ ) ]
+[ ( ] relation [ ) ] INTERSECT [ ALL ] [ ( ] relation [ ) ]
 {% endhighlight %}
 
 ### UNION and UNION ALL
-`UNION` and `UNION ALL` return the rows that are found in either query. `UNION` takes only distinct rows while `UNION ALL` does not remove duplicates.
+`UNION` and `UNION ALL` return the rows that are found in either relation. `UNION` takes only distinct rows while `UNION ALL` does not remove duplicates.
 
 #### Syntax
 {% highlight sql %}
-[ ( ] query [ ) ] UNION [ ALL ] [ ( ] query [ ) ]
+[ ( ] relation [ ) ] UNION [ ALL ] [ ( ] relation [ ) ]
 {% endhighlight %}
 
 ### Examples
@@ -55,7 +55,7 @@ Note that the queries' result sets must have the same number of columns and comp
 -- Use number1 and number2 tables to demonstrate set operators.
 SELECT * FROM number1;
 +---+
-|  C|
+|  c|
 +---+
 |  3|
 |  1|
@@ -67,7 +67,7 @@ SELECT * FROM number1;
 
 SELECT * FROM number2;
 +---+
-|  C|
+|  c|
 +---+
 |  5|
 |  1|
@@ -75,43 +75,43 @@ SELECT * FROM number2;
 |  2|
 +---+
 
-SELECT C from number1 EXCEPT SELECT C FROM number2;
+SELECT c FROM number1 EXCEPT SELECT c FROM number2;
 +---+
-|  C|
+|  c|
 +---+
 |  3|
 |  4|
 +---+
 
-SELECT C from number1 EXCEPT ALL (SELECT C FROM number2);
+SELECT c FROM number1 EXCEPT ALL (SELECT c FROM number2);
 +---+
-|  C|
+|  c|
 +---+
 |  3|
 |  3|
 |  4|
 +---+
 
-(SELECT C from number1) INTERSECT (SELECT C FROM number2);
+(SELECT c FROM number1) INTERSECT (SELECT c FROM number2);
 +---+
-|  C|
+|  c|
 +---+
 |  1|
 |  2|
 +---+
 
-(SELECT C from number1) INTERSECT ALL (SELECT C FROM number2);
+(SELECT c FROM number1) INTERSECT ALL (SELECT c FROM number2);
 +---+
-|  C|
+|  c|
 +---+
 |  1|
 |  2|
 |  2|
 +---+
 
-(SELECT C from number1) UNION (SELECT C FROM number2);
+(SELECT c FROM number1) UNION (SELECT c FROM number2);
 +---+
-|  C|
+|  c|
 +---+
 |  1|
 |  3|
@@ -120,9 +120,9 @@ SELECT C from number1 EXCEPT ALL (SELECT C FROM number2);
 |  2|
 +---+
 
-SELECT C from number1 UNION ALL (SELECT C FROM number2);
+SELECT c FROM number1 UNION ALL (SELECT c FROM number2);
 +---+
-|  C|
+|  c|
 +---+
 |  3|
 |  1|
