@@ -118,7 +118,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show views") {
-    withView("default1a", "default2b", "temp1", "global_temp.temp2") {
+    withView("show1a", "show2b", "global_temp.temp1", "temp2") {
       sql("CREATE VIEW show1a AS SELECT 1 AS id")
       sql("CREATE VIEW show2b AS SELECT 1 AS id")
       sql("CREATE GLOBAL TEMP VIEW temp1 AS SELECT 1 AS id")
