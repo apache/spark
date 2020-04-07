@@ -102,10 +102,12 @@ private[spark] class BarrierCoordinator(
     // An Array of RPCCallContexts for barrier tasks that have made a blocking runBarrier() call
     private val requesters: ArrayBuffer[RpcCallContext] = new ArrayBuffer[RpcCallContext](numTasks)
 
-    // Messages from each barrier task that have made a blocking runBarrier() call. And it will be
-    // replied to all tasks once sync finished.
+    // Messages from each barrier task that have made a blocking runBarrier() call.
+    // The messages will be replied to all tasks once sync finished.
     private val messages = Array.ofDim[String](numTasks)
 
+    // The request method which is called inside this barrier sync. All tasks should make sure
+    // that they're calling the same method within the same barrier sync phase.
     private var requestMethod: RequestMethod.Value = _
 
     // A timer task that ensures we may timeout for a barrier() call.
@@ -249,4 +251,3 @@ private[spark] case class RequestToSync(
 private[spark] object RequestMethod extends Enumeration {
   val BARRIER, ALL_GATHER = Value
 }
-

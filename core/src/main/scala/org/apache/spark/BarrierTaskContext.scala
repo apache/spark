@@ -171,7 +171,6 @@ class BarrierTaskContext private[spark] (
   @Since("2.4.0")
   def barrier(): Unit = runBarrier("", RequestMethod.BARRIER)
 
-
   /**
    * :: Experimental ::
    * Blocks until all tasks in the same stage have reached this routine. Each task passes in
