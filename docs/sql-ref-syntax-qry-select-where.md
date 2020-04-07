@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -31,7 +31,7 @@ WHERE boolean_expression
   <dt><code><em>boolean_expression</em></code></dt>
   <dd>
     Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
-    more expressions may be combined together using the logical 
+    more expressions may be combined together using the logical
     operators ( <code>AND</code>, <code>OR</code> ).
   </dd>
 </dl>
@@ -99,8 +99,8 @@ SELECT * FROM person WHERE age > (SELECT avg(age) FROM person);
   |300|Mike|80 |
   +---+----+---+
 
--- Correlated column reference in `WHERE` clause of subquery.
-SELECT * FROM person AS parent 
+-- Correlated Subquery in `WHERE` clause.
+SELECT * FROM person AS parent
 WHERE EXISTS (
               SELECT 1 FROM person AS child
               WHERE parent.id = child.id AND child.age IS NULL

@@ -23,11 +23,10 @@ import java.net.URI
 import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.OptimizeLocalShuffleReader.LOCAL_SHUFFLE_READER_DESCRIPTION
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -113,7 +112,7 @@ class AdaptiveQueryExecSuite
     }.length
 
     val numLocalReaders = collect(plan) {
-      case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
+      case reader: CustomShuffleReaderExec if reader.isLocalReader => reader
     }
     numLocalReaders.foreach { r =>
       val rdd = r.execute()
@@ -149,7 +148,7 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       val localReaders = collect(adaptivePlan) {
-        case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
+        case reader: CustomShuffleReaderExec if reader.isLocalReader => reader
       }
       assert(localReaders.length == 2)
       val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]
@@ -181,7 +180,7 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       val localReaders = collect(adaptivePlan) {
-        case reader @ CustomShuffleReaderExec(_, _, LOCAL_SHUFFLE_READER_DESCRIPTION) => reader
+        case reader: CustomShuffleReaderExec if reader.isLocalReader => reader
       }
       assert(localReaders.length == 2)
       val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]
@@ -615,6 +614,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "2000",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000") {
       withTempView("skewData1", "skewData2") {
         spark
@@ -645,11 +645,11 @@ class AdaptiveQueryExecSuite
         //              into 2 splits and right side is divided into 4 splits, so
         //              2 x 4 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 3 splits, so
-        //              3 sub-partitions.
+        // Partition 4: only left side is skewed, and divide into 2 splits, so
+        //              2 sub-partitions.
         // So total (8 + 1 + 3) partitions.
         val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        checkSkewJoin(innerSmj, 8 + 1 + 3)
+        checkSkewJoin(innerSmj, 8 + 1 + 2)
 
         // skewed left outer join optimization
         val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
@@ -659,11 +659,11 @@ class AdaptiveQueryExecSuite
         // Partition 0: both left and right sides are skewed, but left join can't split right side,
         //              so only left side is divided into 2 splits, and thus 2 sub-partitions.
         // Partition 1, 2, 3: not skewed, and coalesced into 1 partition.
-        // Partition 4: only left side is skewed, and divide into 3 splits, so
-        //              3 sub-partitions.
-        // So total (2 + 1 + 3) partitions.
+        // Partition 4: only left side is skewed, and divide into 2 splits, so
+        //              2 sub-partitions.
+        // So total (2 + 1 + 2) partitions.
         val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
-        checkSkewJoin(leftSmj, 2 + 1 + 3)
+        checkSkewJoin(leftSmj, 2 + 1 + 2)
 
         // skewed right outer join optimization
         val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
@@ -780,5 +780,109 @@ class AdaptiveQueryExecSuite
       }
     }
   }
-}
 
+  test("metrics of the shuffle reader") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT key FROM testData GROUP BY key")
+      val readers = collect(adaptivePlan) {
+        case r: CustomShuffleReaderExec => r
+      }
+      assert(readers.length == 1)
+      val reader = readers.head
+      assert(!reader.isLocalReader)
+      assert(!reader.hasSkewedPartition)
+      assert(reader.hasCoalescedPartition)
+      assert(reader.metrics.keys.toSeq.sorted == Seq(
+        "avgPartitionDataSize", "maxPartitionDataSize", "minPartitionDataSize", "numPartitions"))
+      assert(reader.metrics("numPartitions").value == reader.partitionSpecs.length)
+      assert(reader.metrics("avgPartitionDataSize").value > 0)
+      assert(reader.metrics("maxPartitionDataSize").value > 0)
+      assert(reader.metrics("minPartitionDataSize").value > 0)
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+        val join = collect(adaptivePlan) {
+          case j: BroadcastHashJoinExec => j
+        }.head
+        assert(join.buildSide == BuildLeft)
+
+        val readers = collect(join.right) {
+          case r: CustomShuffleReaderExec => r
+        }
+        assert(readers.length == 1)
+        val reader = readers.head
+        assert(reader.isLocalReader)
+        assert(reader.metrics.keys.toSeq == Seq("numPartitions"))
+        assert(reader.metrics("numPartitions").value == reader.partitionSpecs.length)
+      }
+
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000",
+        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "2000") {
+        withTempView("skewData1", "skewData2") {
+          spark
+            .range(0, 1000, 1, 10)
+            .selectExpr("id % 2 as key1", "id as value1")
+            .createOrReplaceTempView("skewData1")
+          spark
+            .range(0, 1000, 1, 10)
+            .selectExpr("id % 1 as key2", "id as value2")
+            .createOrReplaceTempView("skewData2")
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
+          val reader = collect(adaptivePlan) {
+            case r: CustomShuffleReaderExec => r
+          }.head
+          assert(!reader.isLocalReader)
+          assert(reader.hasSkewedPartition)
+          assert(reader.hasCoalescedPartition)
+          assert(reader.metrics.contains("numSkewedPartitions"))
+          assert(reader.metrics("numSkewedPartitions").value > 0)
+        }
+      }
+    }
+  }
+
+  test("control a plan explain mode in listeners via SQLConf") {
+
+    def checkPlanDescription(mode: String, expected: Seq[String]): Unit = {
+      var checkDone = false
+      val listener = new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case SparkListenerSQLAdaptiveExecutionUpdate(_, planDescription, _) =>
+              assert(expected.forall(planDescription.contains))
+              checkDone = true
+            case _ => // ignore other events
+          }
+        }
+      }
+      spark.sparkContext.addSparkListener(listener)
+      withSQLConf(SQLConf.UI_EXPLAIN_MODE.key -> mode,
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        val dfApdaptive = sql("SELECT * FROM testData JOIN testData2 ON key = a WHERE value = '1'")
+        try {
+          checkAnswer(dfApdaptive, Row(1, "1", 1, 1) :: Row(1, "1", 1, 2) :: Nil)
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          assert(checkDone)
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
+        }
+      }
+    }
+
+    Seq(("simple", Seq("== Physical Plan ==")),
+        ("extended", Seq("== Parsed Logical Plan ==", "== Analyzed Logical Plan ==",
+          "== Optimized Logical Plan ==", "== Physical Plan ==")),
+        ("codegen", Seq("WholeStageCodegen subtrees")),
+        ("cost", Seq("== Optimized Logical Plan ==", "Statistics(sizeInBytes")),
+        ("formatted", Seq("== Physical Plan ==", "Output", "Arguments"))).foreach {
+      case (mode, expected) =>
+        checkPlanDescription(mode, expected)
+    }
+  }
+}

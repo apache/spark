@@ -25,12 +25,14 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.execution.{SQLExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -256,12 +258,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     def splitWithSemicolon(seq: Seq[String]) = {
       seq.mkString("\n").split("(?<=[^\\\\]);")
     }
-    val input = fileToString(new File(testCase.inputFile))
 
-    val (comments, code) = input.split("\n").partition { line =>
+    def splitCommentsAndCodes(input: String) = input.split("\n").partition { line =>
       val newLine = line.trim
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
     }
+
+    val input = fileToString(new File(testCase.inputFile))
+
+    val (comments, code) = splitCommentsAndCodes(input)
 
     // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
@@ -269,7 +274,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     val importedCode = importedTestCaseName.flatMap { testCaseName =>
       listTestCases.find(_.name == testCaseName).map { testCase =>
         val input = fileToString(new File(testCase.inputFile))
-        val (_, code) = input.split("\n").partition(_.trim.startsWith("--"))
+        val (_, code) = splitCommentsAndCodes(input)
         code
       }
     }.flatten
@@ -655,6 +660,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     // Add Locale setting
     Locale.setDefault(Locale.US)
     RuleExecutor.resetMetrics()
+    CodeGenerator.resetCompileTime
+    WholeStageCodegenExec.resetCodeGenTime
   }
 
   override def afterAll(): Unit = {
@@ -664,6 +671,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
+
+      val generateJavaTime = WholeStageCodegenExec.codeGenTime
+      val codegenInfo =
+        s"""
+           |=== Metrics of Whole-Stage Codegen ===
+           |Total code generation time: ${generateJavaTime.toDouble / NANOS_PER_SECOND} seconds
+           |Total compile time: ${CodeGenerator.compileTime.toDouble / NANOS_PER_SECOND} seconds
+         """.stripMargin
+      logWarning(codegenInfo)
     } finally {
       super.afterAll()
     }

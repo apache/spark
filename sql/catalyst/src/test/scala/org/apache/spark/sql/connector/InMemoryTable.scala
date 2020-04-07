@@ -116,6 +116,7 @@ class InMemoryTable(
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    InMemoryTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
     InMemoryTable.maybeSimulateFailedTableWrite(info.options)
 
     new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {

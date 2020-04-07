@@ -159,10 +159,14 @@ function get_release_info {
   export SPARK_PACKAGE_VERSION="$RELEASE_TAG"
 
   # Gather some user information.
-  export ASF_USERNAME=$(read_config "ASF user" "$LOGNAME")
+  if [ -z "$ASF_USERNAME" ]; then
+    export ASF_USERNAME=$(read_config "ASF user" "$LOGNAME")
+  fi
 
-  GIT_NAME=$(git config user.name || echo "")
-  export GIT_NAME=$(read_config "Full name" "$GIT_NAME")
+  if [ -z "$GIT_NAME" ]; then
+    GIT_NAME=$(git config user.name || echo "")
+    export GIT_NAME=$(read_config "Full name" "$GIT_NAME")
+  fi
 
   export GIT_EMAIL="$ASF_USERNAME@apache.org"
   export GPG_KEY=$(read_config "GPG key" "$GIT_EMAIL")

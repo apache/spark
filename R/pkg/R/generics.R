@@ -528,6 +528,9 @@ setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 #' @rdname printSchema
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
+#' @rdname registerTempTable-deprecated
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
+
 #' @rdname rename
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
@@ -1188,6 +1191,11 @@ setGeneric("overlay", function(x, replace, pos, ...) { standardGeneric("overlay"
 #' @rdname column_window_functions
 #' @name NULL
 setGeneric("percent_rank", function(x = "missing") { standardGeneric("percent_rank") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("percentile_approx",
+           function(x, percentage, ...) { standardGeneric("percentile_approx") })
 
 #' @rdname column_math_functions
 #' @name NULL

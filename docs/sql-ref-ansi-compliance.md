@@ -21,14 +21,14 @@ license: |
 
 Since Spark 3.0, Spark SQL introduces two experimental options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
 
-When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, and SQL parsing).
+When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, SQL functions and SQL parsing).
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
 
 When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules. This is a separate configuration because its default value is `ANSI`, while the configuration `spark.sql.ansi.enabled` is disabled by default.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.sql.ansi.enabled</code></td>
   <td>false</td>
@@ -37,6 +37,7 @@ When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with
     1. Spark will throw a runtime exception if an overflow occurs in any operation on integral/decimal field.
     2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in the SQL parser.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.storeAssignmentPolicy</code></td>
@@ -52,6 +53,7 @@ When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with
     With strict policy, Spark doesn't allow any possible precision loss or data truncation in type coercion,
     e.g. converting double to int or decimal to double is not allowed.
   </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
@@ -139,6 +141,11 @@ SELECT * FROM t;
   +---+
 
 {% endhighlight %}
+
+### SQL Functions
+
+The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
+  - `size`: This function returns null for null input under ANSI mode.
 
 ### SQL Keywords
 

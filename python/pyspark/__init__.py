@@ -113,7 +113,7 @@ def keyword_only(func):
 
 
 # for back compatibility
-from pyspark.sql import SQLContext, Row
+from pyspark.sql import SQLContext, HiveContext, Row
 
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",

@@ -258,7 +258,7 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
     val ts = "2012-12-31 16:00:10.011"
     val tsWithZone = "2013-01-01 00:00:10.011"
 
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val df = Seq(java.sql.Timestamp.valueOf(ts)).toDF("a").groupBy("a").pivot("a").count()
       val expected = StructType(
         StructField("a", TimestampType) ::
