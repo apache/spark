@@ -27,7 +27,7 @@ Set operators are used to combine two input relations into a single one. Spark S
 Note that input relations must have the same number of columns and compatible data types for the respective columns.
 
 ### EXCEPT and EXCEPT ALL
-`EXCEPT` and `EXCEPT ALL` return the rows that are found in one relation but not the other. `EXCEPT` takes only distinct rows while `EXCEPT ALL` does not remove duplicates.
+`EXCEPT` and `EXCEPT ALL` return the rows that are found in one relation but not the other. `EXCEPT` takes only distinct rows while `EXCEPT ALL` does not remove duplicates from the result rows.
 
 #### Syntax
 {% highlight sql %}
@@ -35,7 +35,7 @@ Note that input relations must have the same number of columns and compatible da
 {% endhighlight %}
 
 ### INTERSECT and INTERSECT ALL
-`INTERSECT` and `INTERSECT ALL` return the rows that are found in both relations. `INTERSECT` takes only distinct rows while `INTERSECT ALL` does not remove duplicates.
+`INTERSECT` and `INTERSECT ALL` return the rows that are found in both relations. `INTERSECT` takes only distinct rows while `INTERSECT ALL` does not remove duplicates from the result rows.
 
 #### Syntax
 {% highlight sql %}
@@ -43,7 +43,7 @@ Note that input relations must have the same number of columns and compatible da
 {% endhighlight %}
 
 ### UNION and UNION ALL
-`UNION` and `UNION ALL` return the rows that are found in either relation. `UNION` takes only distinct rows while `UNION ALL` does not remove duplicates.
+`UNION` and `UNION ALL` return the rows that are found in either relation. `UNION` takes only distinct rows while `UNION ALL` does not remove duplicates from the result rows.
 
 #### Syntax
 {% highlight sql %}
