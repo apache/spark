@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDate}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand}
+import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -49,6 +49,10 @@ object HiveResult {
     // SHOW TABLES in Hive only output table names while our v2 command outputs
     // namespace and table name.
     case command : ShowTablesExec =>
+      command.executeCollect().map(_.getString(1))
+    // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
+    // namespace, viewName, and isTemporary.
+    case command @ ExecutedCommandExec(_: ShowViewsCommand) =>
       command.executeCollect().map(_.getString(1))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
