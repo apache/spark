@@ -217,14 +217,12 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       "gregorian-julian-rebase-micros.json",
       "julian-gregorian-rebase-micros.json").foreach { json =>
       withClue(s"JSON file = $json") {
-        val (diffs, switches) = loadRebaseRecords(json)
-        assert(diffs.size === switches.size)
-        assert(switches.keySet === diffs.keySet)
-        switches.foreach { case (key, value) =>
-          assert(diffs(key).size === value.size)
+        val rebaseRecords = loadRebaseRecords(json)
+        rebaseRecords.foreach { case (_, rebaseRecord) =>
+          assert(rebaseRecord.switches.size === rebaseRecord.diffs.size)
+          // Check ascending order of switches values
+          assert(rebaseRecord.switches.toSeq === rebaseRecord.switches.sorted.toSeq)
         }
-        // Check ascending order of switches values
-        assert(switches.forall { case (_, xs) => xs.toSeq == xs.sorted.toSeq })
       }
     }
   }
