@@ -827,7 +827,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       ("""{"key":"not a json array"}""", null),
       ("""{"key": 25}""", null)
     ).foreach {
-      case (literal, expectedValue) =>
+      case(literal, expectedValue) =>
         checkEvaluation(LengthOfJsonArray(Literal(literal)), expectedValue)
     }
   }

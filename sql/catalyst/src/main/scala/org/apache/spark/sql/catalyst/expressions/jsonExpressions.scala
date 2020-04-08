@@ -857,7 +857,7 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
       return null
     }
     // Keep traversing until the end of JSON array
-    while (parser.nextToken() != JsonToken.END_ARRAY) {
+    while(parser.nextToken() != JsonToken.END_ARRAY) {
       length += 1
       // skip all the child of inner object or array
       parser.skipChildren()
