@@ -1915,11 +1915,11 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterTable: renaming views are not supported") {
+  test("AlterView: not a ViewCatalog") {
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
-    assert(e.getMessage.contains("Renaming view is not supported in v2 catalogs"))
+    assert(e.getMessage.contains("Cannot use catalog testcat: not a ViewCatalog"))
   }
 
   test("ANALYZE TABLE") {
@@ -2103,7 +2103,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
     }
-    assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
+    assert(e.message.contains("Cannot use catalog testcat: not a ViewCatalog"))
   }
 
   test("SHOW TBLPROPERTIES: v2 table") {
