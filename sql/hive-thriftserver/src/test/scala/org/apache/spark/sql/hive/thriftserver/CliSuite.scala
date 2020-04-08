@@ -87,9 +87,19 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       useExternalHiveFile: Boolean = false)(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
-    val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
     // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
-    val queriesString = queries.map(_ + "\n").mkString
+    val queriesString = queriesAndExpectedAnswers.map(_._1 + "\n").mkString
+    // spark-sql echoes the queries on STDOUT, expect first an echo of the query, then the answer.
+    val expectedAnswers = queriesAndExpectedAnswers.flatMap {
+      case (query, answer) =>
+        if (query == "") {
+          // empty query means a command launched with -e
+          Seq(answer)
+        } else {
+          // spark-sql echoes the submitted queries
+          Seq(s"spark-sql> $query", answer)
+        }
+    }
 
     val extraHive = if (useExternalHiveFile) {
       s"--driver-class-path ${System.getProperty("user.dir")}/src/test/noclasspath"
@@ -119,13 +129,17 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     val buffer = new ArrayBuffer[String]()
     val lock = new Object
 
+
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
       // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
       // add a timestamp to provide more diagnosis information.
-      buffer += s"${new Timestamp(new Date().getTime)} - $source> $line"
+      val newLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
+      log.info(newLine)
+      buffer += newLine
 
       // If we haven't found all expected answers and another expected answer comes up...
       if (next < expectedAnswers.size && line.contains(expectedAnswers(next))) {
+        log.info(s"$source> found expected output line $next")
         next += 1
         // If all expected answers have been found...
         if (next == expectedAnswers.size) {
@@ -153,6 +167,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
 
     try {
       ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeout)
+      log.info("Found all expected output.")
     } catch { case cause: Throwable =>
       val message =
         s"""
@@ -161,8 +176,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
            |=======================
            |Spark SQL CLI command line: ${command.mkString(" ")}
            |Exception: $cause
-           |Executed query $next "${queries(next)}",
-           |But failed to capture expected output "${expectedAnswers(next)}" within $timeout.
+           |Failed to capture next expected output "${expectedAnswers(next)}" within $timeout.
            |
            |${buffer.mkString("\n")}
            |===========================
@@ -250,18 +264,18 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
 
   test("Single command with --database") {
     runCliWithin(2.minute)(
-      "CREATE DATABASE hive_test_db;"
+      "CREATE DATABASE hive_db_test;"
         -> "",
-      "USE hive_test_db;"
+      "USE hive_db_test;"
         -> "",
-      "CREATE TABLE hive_test(key INT, val STRING);"
+      "CREATE TABLE hive_table_test(key INT, val STRING);"
         -> "",
       "SHOW TABLES;"
-        -> "hive_test"
+        -> "hive_table_test"
     )
 
-    runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
-      "" -> "hive_test"
+    runCliWithin(2.minute, Seq("--database", "hive_db_test", "-e", "SHOW TABLES;"))(
+      "" -> "hive_table_test"
     )
   }
 
