@@ -129,7 +129,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     val buffer = new ArrayBuffer[String]()
     val lock = new Object
 
-
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
       // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
       // add a timestamp to provide more diagnosis information.
