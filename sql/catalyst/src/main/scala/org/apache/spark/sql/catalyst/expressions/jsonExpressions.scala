@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
@@ -862,5 +863,73 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
       parser.skipChildren()
     }
     length
+  }
+}
+
+/**
+ * A function which returns all the keys of the outmost JSON object.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(json_object) - Returns all the keys of the outmost JSON object as an array.",
+  arguments = """
+    Arguments:
+      * json_object - A JSON object. If a valid JSON object is given, all the keys of the outmost
+          object will be returned as an array. If it is any other valid JSON string, an invalid JSON
+          string or an empty string, the function returns null.
+  """,
+  examples = """
+    Examples:
+      > Select _FUNC_('{}');
+        []
+      > Select _FUNC_('{"key": "value"}');
+        ["key"]
+      > Select _FUNC_('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
+        ["f1","f2"]
+  """,
+  since = "3.1.0"
+)
+case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback
+  with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = ArrayType(StringType)
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_object_keys"
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // return null for `NULL` input
+    if(json == null) {
+      return null
+    }
+
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => {
+          // return null if an empty string or any other valid JSON string is encountered
+          if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
+            return null
+          }
+          // Parse the JSON string to get all the keys of outmost JSON object
+          getJsonKeys(parser, input)
+        }
+      }
+    } catch {
+      case _: JsonProcessingException | _: IOException => null
+    }
+  }
+
+  private def getJsonKeys(parser: JsonParser, input: InternalRow): GenericArrayData = {
+    var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
+
+    // traverse until the end of input and ensure it returns valid key
+    while(parser.nextValue() != null && parser.currentName() != null) {
+      // add current fieldName to the ArrayBuffer
+      arrayBufferOfKeys += UTF8String.fromString(parser.getCurrentName)
+
+      // skip all the children of inner object or array
+      parser.skipChildren()
+    }
+    new GenericArrayData(arrayBufferOfKeys.toArray)
   }
 }
