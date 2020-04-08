@@ -44,17 +44,17 @@ object RebaseDateTime {
    * The function is based on linear search which starts from the most recent switch days.
    * This allows to perform less comparisons for modern dates.
    *
-   * @param switches The days when difference in days between original and target
-   *                   calendar was changed.
+   * @param switches The days when difference in days between original
+   *                 and target calendar was changed.
    * @param diffs The differences in days between calendars.
-   * @param value The number of days since the epoch 1970-01-01 to be rebased to the
-   *             target calendar.
+   * @param days The number of days since the epoch 1970-01-01 to be rebased
+   *             to the target calendar.
    * @return The rebased days.
    */
-  private def rebaseDays(switches: Array[Int], diffs: Array[Int], value: Int): Int = {
+  private def rebaseDays(switches: Array[Int], diffs: Array[Int], days: Int): Int = {
     var i = switches.length
-    do { i -= 1 } while (i > 0 && value < switches(i))
-    value + diffs(i)
+    do { i -= 1 } while (i > 0 && days < switches(i))
+    days + diffs(i)
   }
 
   // The differences in days between Julian and Proleptic Gregorian dates.
@@ -183,15 +183,15 @@ object RebaseDateTime {
    * @param rebaseInfo The rebasing info contains an ordered micros when difference in micros
    *                   between original and target calendar was changed,
    *                   and differences in micros between calendars
-   * @param value The number of micros since the epoch 1970-01-01 to be rebased to the
+   * @param micros The number of micros since the epoch 1970-01-01 to be rebased to the
    *              target calendar.
    * @return The rebased micros.
    */
-  private def rebaseMicros(rebaseInfo: RebaseInfo, value: Long): Long = {
+  private def rebaseMicros(rebaseInfo: RebaseInfo, micros: Long): Long = {
     val switches = rebaseInfo.switches
     var i = switches.length
-    do { i -= 1 } while (i > 0 && value < switches(i))
-    value + rebaseInfo.diffs(i)
+    do { i -= 1 } while (i > 0 && micros < switches(i))
+    micros + rebaseInfo.diffs(i)
   }
 
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
