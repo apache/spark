@@ -54,7 +54,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
     if (!shuffleStages.forall(_.shuffle.canChangeNumPartitions)) {
       plan
     } else {
-      // `ShuffleQueryStageExec` gives empty mapOutputStatistics when the input RDD
+      // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD
       // has 0 partitions, we should skip it when calculating the `partitionStartIndices`.
       val validMetrics = shuffleStages.flatMap(ExtractMapStats.unapply)
 
