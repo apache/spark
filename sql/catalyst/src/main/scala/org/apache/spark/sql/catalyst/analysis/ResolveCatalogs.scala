@@ -140,16 +140,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val changes = keys.map(ViewChange.removeProperty)
       AlterView(catalog.asViewCatalog, ident, changes)
 
-    case RenameTableStatement(NonSessionCatalogAndTable(oldCatalog, oldName),
-        NonSessionCatalogAndTable(newCatalog, newName), isView) =>
-      if (oldCatalog.name != newCatalog.name) {
-        throw new AnalysisException(
-          s"Cannot move table or view between catalogs: from=$oldCatalog and to=$newCatalog")
-      }
+    case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>
       if (isView) {
-        RenameView(oldCatalog.asViewCatalog, oldName.asIdentifier, newName.asIdentifier)
+        RenameView(catalog.asViewCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
       } else {
-        RenameTable(oldCatalog.asTableCatalog, oldName.asIdentifier, newName.asIdentifier)
+        RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
       }
 
     case DescribeColumnStatement(
