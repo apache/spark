@@ -30,10 +30,9 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 
 /**
- * The collection of functions for rebasing days and microseconds from/to Proleptic Gregorian
- * calendar used by default in Spark SQL since version 3.0, see SPARK-26651 to/from
- * the hybrid calendar (Julian + Gregorian since 1582-10-15) which is used by Spark 2.4
- * and earlier versions.
+ * The collection of functions for rebasing days and microseconds from/to the hybrid calendar
+ * (Julian + Gregorian since 1582-10-15) which is used by Spark 2.4 and earlier versions
+ * to/from Proleptic Gregorian calendar used in Spark SQL since version 3.0, see SPARK-26651.
  */
 object RebaseDateTime {
   /**
