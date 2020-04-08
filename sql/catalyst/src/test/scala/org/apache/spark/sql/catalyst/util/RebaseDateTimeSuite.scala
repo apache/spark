@@ -341,7 +341,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       result.toArray)
   }
 
-  test("generate 'gregorian-julian-rebase-micros.json'") {
+  ignore("generate 'gregorian-julian-rebase-micros.json'") {
     generateRebaseJson(
       adjustFunc = identity[Long],
       rebaseFunc = rebaseGregorianToJulianMicros,
@@ -349,7 +349,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       fileName = "gregorian-julian-rebase-micros.json")
   }
 
-  test("generate 'julian-gregorian-rebase-micros.json'") {
+  ignore("generate 'julian-gregorian-rebase-micros.json'") {
     generateRebaseJson(
       adjustFunc = rebaseGregorianToJulianMicros,
       rebaseFunc = rebaseJulianToGregorianMicros,
