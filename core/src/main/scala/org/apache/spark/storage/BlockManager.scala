@@ -1924,7 +1924,7 @@ private[spark] class BlockManager(
     blockReplicationThread.setName("block-replication-thread")
 
     def start(): Unit = {
-      logInfo("Starting block replication thread ")
+      logInfo("Starting block replication thread")
       blockReplicationThread.start()
     }
 

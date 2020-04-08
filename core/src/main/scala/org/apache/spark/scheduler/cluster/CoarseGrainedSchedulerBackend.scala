@@ -446,7 +446,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             scheduler.sc.env.blockManager.master.decommissionBlockManagers(Seq(executorId))
           } catch {
             case e: Exception =>
-              logError(s"Unexpected error during block manager " +
+              logError("Unexpected error during block manager " +
                 s"decommissioning for executor $executorId: ${e.toString}", e)
           }
           logInfo(s"Finished decommissioning block manager corresponding to $executorId.")
