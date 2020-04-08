@@ -782,7 +782,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("avoid NPE in OptimizeSkewedJoin when there's 0 partition plan") {
+  test("SPARK-31384: avoid NPE in OptimizeSkewedJoin when there's 0 partition plan") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("t2") {
