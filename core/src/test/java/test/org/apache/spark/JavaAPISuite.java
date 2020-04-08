@@ -73,6 +73,10 @@ import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.rdd.RDD;
+import org.apache.spark.resource.ExecutorResourceRequests;
+import org.apache.spark.resource.ResourceProfile;
+import org.apache.spark.resource.ResourceProfileBuilder;
+import org.apache.spark.resource.TaskResourceRequests;
 import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.LongAccumulator;
@@ -895,6 +899,16 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     rdd = rdd.persist(StorageLevel.DISK_ONLY());
     assertEquals(1, rdd.first().intValue());
+  }
+
+  @Test
+  public void withResources() {
+    ExecutorResourceRequests ereqs = new ExecutorResourceRequests().cores(4);
+    TaskResourceRequests treqs = new TaskResourceRequests().cpus(1);
+    ResourceProfile rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build();
+    JavaRDD<Integer> in1 = sc.parallelize(Arrays.asList(1, 2, 3, 4));
+    in1.withResources(rp1);
+    assertEquals(rp1, in1.getResourceProfile());
   }
 
   @Test
