@@ -54,14 +54,10 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
     if (!shuffleStages.forall(_.shuffle.canChangeNumPartitions)) {
       plan
     } else {
-      val shuffleMetrics = shuffleStages.map { stage =>
-        assert(stage.resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
-        stage.resultOption.get.asInstanceOf[MapOutputStatistics]
-      }
+      // `ShuffleQueryStageExec` gives empty mapOutputStatistics when the input RDD
+      // has 0 partitions, we should skip it when calculating the `partitionStartIndices`.
+      val validMetrics = shuffleStages.flatMap(ExtractMapStats.unapply)
 
-      // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD has 0 partitions,
-      // we should skip it when calculating the `partitionStartIndices`.
-      val validMetrics = shuffleMetrics.filter(_ != null)
       // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
       // in that case. For example when we union fully aggregated data (data is arranged to a single
       // partition) and a result of a SortMergeJoin (multiple partitions).
