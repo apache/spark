@@ -253,7 +253,7 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Log]("ln"),
     expression[Remainder]("mod", true),
-    expression[UnaryMinus]("negative"),
+    expression[UnaryMinus]("negative", true),
     expression[Pi]("pi"),
     expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
@@ -572,6 +572,18 @@ object FunctionRegistry {
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
+  /**
+   * Check whether the alias specified by the developer for the function can be displayed
+   * correctly in the output information. For more information, please refer to Spark-30184.
+   */
+  private def checkFunctionAlias(expr: Expression, name: String) = {
+    if (!name.equalsIgnoreCase(expr.prettyName)) {
+      throw new AnalysisException(s"The specified alias $name is different from the function " +
+        s"name ${expr.prettyName}. In order to display the alias correctly in the output, the " +
+        "developer should set setAlias to true.")
+    }
+  }
+
   /** See usage above. */
   private def expression[T <: Expression](name: String, setAlias: Boolean = false)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
@@ -592,11 +604,16 @@ object FunctionRegistry {
         // If there is an apply method that accepts Seq[Expression], use that one.
         try {
           val exp = varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
-          if (setAlias) exp.setTagValue(FUNC_ALIAS, name)
+          if (setAlias) {
+            exp.setTagValue(FUNC_ALIAS, name)
+          } else {
+            checkFunctionAlias(exp, name)
+          }
           exp
         } catch {
           // the exception is an invocation exception. To get a meaningful message, we need the
           // cause.
+          case ae: AnalysisException => throw ae
           case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       } else {
@@ -622,11 +639,16 @@ object FunctionRegistry {
         }
         try {
           val exp = f.newInstance(expressions : _*).asInstanceOf[Expression]
-          if (setAlias) exp.setTagValue(FUNC_ALIAS, name)
+          if (setAlias) {
+            exp.setTagValue(FUNC_ALIAS, name)
+          } else {
+            checkFunctionAlias(exp, name)
+          }
           exp
         } catch {
           // the exception is an invocation exception. To get a meaningful message, we need the
           // cause.
+          case ae: AnalysisException => throw ae
           case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       }
