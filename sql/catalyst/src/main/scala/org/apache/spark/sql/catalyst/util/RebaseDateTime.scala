@@ -122,7 +122,8 @@ object RebaseDateTime {
    * And takes microseconds since the epoch from the Julian timestamp.
    *
    * @param zoneId The time zone ID at which the rebasing should be performed.
-   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
+   *               in Proleptic Gregorian calendar. It can be negative.
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
   private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
@@ -183,8 +184,8 @@ object RebaseDateTime {
    * @param rebaseInfo The rebasing info contains an ordered micros when difference in micros
    *                   between original and target calendar was changed,
    *                   and differences in micros between calendars
-   * @param micros The number of micros since the epoch 1970-01-01 to be rebased to the
-   *              target calendar.
+   * @param micros The number of micros since the epoch 1970-01-01T00:00:00Z to be rebased
+   *               to the target calendar. It can be negative.
    * @return The rebased micros.
    */
   private def rebaseMicros(rebaseInfo: RebaseInfo, micros: Long): Long = {
@@ -237,7 +238,8 @@ object RebaseDateTime {
    * Note: The function assumes that the input micros was derived from a local timestamp
    *       at the default system JVM time zone in Proleptic Gregorian calendar.
    *
-   * @param micros The microseconds since the epoch 1970-01-01T00:00:00.000000Z.
+   * @param micros The microseconds since the epoch 1970-01-01T00:00:00Z
+   *               in Proleptic Gregorian calendar. It can be negative.
    * @return The microseconds since the epoch that have the same local timestamp representation
    *         in the hybrid calendar (Julian + Gregorian) as the original `micros` in
    *         Proleptic Gregorian calendar.
@@ -254,12 +256,14 @@ object RebaseDateTime {
   }
 
   /**
-   * Converts the given microseconds to a local date-time in UTC time zone in Julian calendar,
-   * interprets the result as a local date-time in Proleptic Gregorian calendar in UTC time zone.
-   * And takes microseconds since the epoch from the Gregorian timestamp.
+   * Converts the given microseconds to a local date-time in UTC time zone in the hybrid
+   * calendar (Julian + Gregorian since 1582-10-15), interprets the result as a local date-time
+   * in Proleptic Gregorian calendar in UTC time zone. And takes microseconds since the epoch
+   * from the Gregorian timestamp.
    *
    * @param zoneId The time zone ID at which the rebasing should be performed.
-   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'.
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
+   *               in the hybrid calendar (Julian + Gregorian). It can be negative.
    * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
   private[sql] def rebaseJulianToGregorianMicros(zoneId: ZoneId, micros: Long): Long = {
@@ -303,7 +307,7 @@ object RebaseDateTime {
 
   /**
    * This is an opposite to `rebaseGregorianToJulianMicros` function which rebases the given
-   * microseconds since the epoch 1970-01-01T00:00:00.000000Z via local timestamps from the
+   * microseconds since the epoch 1970-01-01T00:00:00Z via local timestamps from the
    * hybrid calendar (Julian + Gregorian) to Proleptic Gregorian calendar.
    * For example, the input `micros` -12243196799876544 is mapped to 1582-01-01 00:00:00.123456 in
    * Julian calendar. The same local timestamp in Proleptic Gregorian calendar is mapped to
@@ -315,7 +319,8 @@ object RebaseDateTime {
    *       at the default system JVM time zone in the hybrid calendar (Julian and Gregorian
    *       since 1582-10-15)
    *
-   * @param micros The number of microseconds since the epoch.
+   * @param micros The number of microseconds since the epoch 1970-01-01T00:00:00Z
+   *               in the hybrid calendar (Julian + Gregorian). It can be negative.
    * @return The rebased number of microseconds since the epoch which is mapped to the same
    *         local timestamp in Proleptic Gregorian calendar as `micros` in the hybrid calendar
    *         at the system time zone.
