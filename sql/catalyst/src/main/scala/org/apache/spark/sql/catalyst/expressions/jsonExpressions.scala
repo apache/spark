@@ -823,11 +823,8 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   with CodegenFallback with ExpectsInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
-
   override def dataType: DataType = IntegerType
-
   override def nullable: Boolean = true
-
   override def prettyName: String = "json_array_length"
 
   override def eval(input: InternalRow): Any = {
@@ -873,7 +870,7 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
  * A function which returns all the keys of the outmost JSON object.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(json_object) - returns all the keys of the outmost JSON object as an array.",
+  usage = "_FUNC_(json_object) - Returns all the keys of the outmost JSON object as an array.",
   arguments = """
     Arguments:
       * json_object - A JSON object. If a valid JSON object is given, all the keys of the outmost
@@ -908,19 +905,22 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
 
     try {
       Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
-        parser => getJsonKeys(parser, input)
+        parser => {
+          // return null if an empty string or any other valid JSON string is encountered
+          if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
+            return null
+          }
+          // Parse the JSON string to get all the keys of outmost JSON object
+          getJsonKeys(parser, input)
+        }
       }
     } catch {
-      case _: JsonProcessingException => null
+      case _: JsonProcessingException | _: IOException => null
     }
   }
 
-  private def getJsonKeys(parser: JsonParser, input: InternalRow): Any = {
+  private def getJsonKeys(parser: JsonParser, input: InternalRow): GenericArrayData = {
     var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
-    // return null if an empty string or any other valid JSON string is encountered
-    if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
-      return null
-    }
 
     // traverse until the end of input and ensure it returns valid key
     while(parser.nextValue() != null && parser.currentName() != null) {
