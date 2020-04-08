@@ -7,8 +7,8 @@ SELECT * FROM testdata LIMIT 2
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-1	1
-2	2
+51	51
+52	52
 
 
 -- !query
@@ -34,9 +34,9 @@ SELECT * FROM testdata LIMIT 2 + 1
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-1	1
-2	2
-3	3
+51	51
+52	52
+53	53
 
 
 -- !query
@@ -44,7 +44,7 @@ SELECT * FROM testdata LIMIT CAST(1 AS int)
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-1	1
+51	51
 
 
 -- !query
@@ -70,7 +70,7 @@ SELECT * FROM testdata LIMIT CAST(1 AS INT)
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-1	1
+51	51
 
 
 -- !query
@@ -88,7 +88,7 @@ SELECT * FROM testdata LIMIT key > 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must evaluate to a constant value, but got (testdata.`key` > 3);
+The limit expression must evaluate to a constant value, but got (spark_catalog.default.testdata.`key` > 3);
 
 
 -- !query
