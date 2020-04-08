@@ -200,47 +200,98 @@ class DataFrameSuite extends QueryTest
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
-        if (!ansiEnabled) {
-          checkAnswer(structDf, Row(null))
-        } else {
-          val e = intercept[SparkException] {
-            structDf.collect
+        checkAnsi(structDf, ansiEnabled)
+      }
+    }
+  }
+
+  private def checkAnsi(df: DataFrame, ansiEnabled: Boolean): Unit = {
+    if (!ansiEnabled) {
+    checkAnswer(df, Row(null))
+    } else {
+      val e = intercept[SparkException] {
+        df.collect()
+      }
+      assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
+      assert(e.getCause.getMessage.contains("Arithmetic Operation overflow"))
+    }
+  }
+
+  test("test sum on null decimal values") {
+    Seq("true", "false").foreach { wholeStageEnabled =>
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
+        Seq("true", "false").foreach { ansiEnabled =>
+          withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled)) {
+            val df = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
+            checkAnswer(df.agg(sum($"d")), Row(null))
+            df.agg(sum($"d")).show
           }
-          assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
-          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
         }
       }
     }
   }
 
   test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
-    Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
-        val df = Seq(
-          (BigDecimal("10000000000000000000"), 1),
-          (BigDecimal("10000000000000000000"), 1),
-          (BigDecimal("10000000000000000000"), 2),
-          (BigDecimal("10000000000000000000"), 2),
-          (BigDecimal("10000000000000000000"), 2),
-          (BigDecimal("10000000000000000000"), 2),
-          (BigDecimal("10000000000000000000"), 2),
-          (BigDecimal("10000000000000000000"), 2),
-          (BigDecimal("10000000000000000000"), 2),
-          (BigDecimal("10000000000000000000"), 2),
-          (BigDecimal("10000000000000000000"), 2),
-          (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
-        val df2 = df.withColumnRenamed("decNum", "decNum2").join(df, "intNum").agg(sum("decNum"))
-        if (!ansiEnabled) {
-          checkAnswer(df2, Row(null))
-        } else {
-          val e = intercept[SparkException] {
-            df2.collect()
+    Seq("true", "false").foreach { wholeStageEnabled =>
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
+        Seq(true, false).foreach { ansiEnabled =>
+          withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+            val df0 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+            val df1 = Seq(
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+            val df = df0.union(df1)
+            val df2 = df.withColumnRenamed("decNum", "decNum2").
+              join(df, "intNum").agg(sum("decNum"))
+            checkAnsi(df2, ansiEnabled)
+
+            val decStr = "1" + "0" * 19
+            val d1 = spark.range(0, 12, 1, 1)
+            val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
+            checkAnsi(d2, ansiEnabled)
+
+            val d3 = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
+            val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
+            checkAnsi(d4, ansiEnabled)
+
+            val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
+              lit(1).as("key")).groupBy("key").agg(sum($"d").alias("sumd")).select($"sumd")
+            checkAnsi(d5, ansiEnabled)
           }
-          assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
-          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
         }
       }
     }
+  }
+
+  test("Star Expansion - ds.explode should fail with a meaningful message if it takes a star") {
+    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
+    val e = intercept[AnalysisException] {
+      df.explode($"*") { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      }.queryExecution.assertAnalyzed()
+    }
+    assert(e.getMessage.contains("Invalid usage of '*' in explode/json_tuple/UDTF"))
+
+    checkAnswer(
+      df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      },
+      Row("1", "1,2", "1:1") ::
+        Row("1", "1,2", "1:2") ::
+        Row("2", "4", "2:4") ::
+        Row("3", "7,8,9", "3:7") ::
+        Row("3", "7,8,9", "3:8") ::
+        Row("3", "7,8,9", "3:9") :: Nil)
   }
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {

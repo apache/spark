@@ -61,104 +61,38 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   private lazy val sumDataType = resultType
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
-  private lazy val overflow = AttributeReference("overflow", BooleanType, false)()
 
   private lazy val zero = Literal.default(sumDataType)
 
-  override lazy val aggBufferAttributes = sum :: overflow :: Nil
+  override lazy val aggBufferAttributes = sum :: Nil
 
   override lazy val initialValues: Seq[Expression] = Seq(
-    /* sum = */ Literal.create(null, sumDataType),
-    /* overflow = */ Literal.create(false, BooleanType)
+    /* sum = */ Literal.create(null, sumDataType)
   )
 
   override lazy val updateExpressions: Seq[Expression] = {
-    if (!SQLConf.get.ansiEnabled) {
-      if (child.nullable) {
-        Seq(
-          /* sum = */
-          coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum),
-          /* overflow = */
-          resultType match {
-            case d: DecimalType =>
-              If(overflow, true,
-                HasOverflow(coalesce(sum, zero) + child.cast(sumDataType), d))
-            case _ => false
-          })
-      } else {
-        Seq(
-          /* sum = */
-          coalesce(sum, zero) + child.cast(sumDataType),
-          /* overflow = */
-          resultType match {
-            case d: DecimalType =>
-              If(overflow, true, HasOverflow(coalesce(sum, zero) + child.cast(sumDataType), d))
-            case _ => false
-          })
-      }
+    if (child.nullable) {
+      Seq(
+        /* sum = */
+        coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
+      )
     } else {
-      if (child.nullable) {
-        Seq(
-          /* sum = */
-          resultType match {
-            case d: DecimalType => coalesce(
-              CheckOverflow(
-                coalesce(sum, zero) + child.cast(sumDataType), d, !SQLConf.get.ansiEnabled), sum)
-            case _ => coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
-          },
-          /* overflow = */
-          // overflow flag doesnt need any updates since CheckOverflow will throw exception
-          // if overflow happens
-          false
-        )
-      } else {
-        Seq(
-          /* sum = */
-          resultType match {
-            case d: DecimalType => CheckOverflow(
-              coalesce(sum, zero) + child.cast(sumDataType), d, !SQLConf.get.ansiEnabled)
-            case _ => coalesce(sum, zero) + child.cast(sumDataType)
-          },
-          /* overflow = */
-          false
-        )
-      }
+      Seq(
+        /* sum = */
+        coalesce(sum, zero) + child.cast(sumDataType)
+      )
     }
   }
 
   override lazy val mergeExpressions: Seq[Expression] = {
-    if (!SQLConf.get.ansiEnabled) {
-      Seq(
-        /* sum = */
-        coalesce(coalesce(sum.left, zero) + sum.right, sum.left),
-        /* overflow = */
-        resultType match {
-          case d: DecimalType =>
-            If(coalesce(overflow.left, false) || coalesce(overflow.right, false),
-              true, HasOverflow(coalesce(sum.left, zero) + sum.right, d))
-          case _ =>
-            If(coalesce(overflow.left, false) || coalesce(overflow.right, false), true, false)
-        }
-      )
-    } else {
-      Seq(
-        /* sum = */
-        resultType match {
-          case d: DecimalType =>
-            coalesce(
-              CheckOverflow(coalesce(sum.left, zero) + sum.right, d, !SQLConf.get.ansiEnabled),
-              sum.left)
-          case _ => coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
-        },
-        /* overflow = */
-        If(coalesce(overflow.left, false) || coalesce(overflow.right, false), true, false)
-      )
-    }
+    Seq(
+      /* sum = */
+      coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
+    )
   }
 
   override lazy val evaluateExpression: Expression = resultType match {
-    case d: DecimalType =>
-      If(overflow && !SQLConf.get.ansiEnabled, Literal.create(null, resultType), sum)
+    case d: DecimalType => CheckOverflow(sum, d, !SQLConf.get.ansiEnabled)
     case _ => sum
   }
 

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, EmptyBlock, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -172,4 +173,24 @@ case class HasOverflow(
   override def toString: String = s"HasOverflow($child, $inputType)"
 
   override def sql: String = child.sql
+}
+
+case class OverflowException(dtype: DataType, msg: String) extends LeafExpression {
+
+  override def dataType: DataType = dtype
+
+  override def nullable: Boolean = false
+
+  def eval(input: InternalRow): Any = {
+    Decimal.throwArithmeticException(msg)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ev.copy(code = code"""
+      |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      |${ev.value} = Decimal.throwArithmeticException("${msg}");
+      |""", isNull = FalseLiteral)
+  }
+
+  override def toString: String = "OverflowException"
 }
