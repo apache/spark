@@ -97,7 +97,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
           Seq(answer)
         } else {
           // spark-sql echoes the submitted queries
-          Seq(s"spark-sql> $query", answer)
+          val queryEcho = query.split("\n").toList match {
+            case firstLine :: tail =>
+              s"spark-sql> $firstLine" :: tail.map(l => s"         > $l")
+          }
+          queryEcho :+ answer
         }
     }
 
@@ -286,8 +290,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
 
     runCliWithin(3.minute, Seq("--jars", s"$jarFile"))(
       """CREATE TABLE t1(key string, val string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
-      """.stripMargin
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
         -> "",
       "CREATE TABLE sourceTable (key INT, val STRING) USING hive;"
         -> "",
@@ -312,8 +315,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       3.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
       """CREATE TABLE addJarWithHiveAux(key string, val string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
-      """.stripMargin
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
         -> "",
       "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING) USING hive;"
         -> "",
@@ -432,8 +434,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       3.minute)(
       s"ADD JAR ${hiveContribJar};" -> "",
       """CREATE TABLE addJarWithSQL(key string, val string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
-      """.stripMargin
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
         -> "",
       "CREATE TABLE sourceTableForWithSQL(key INT, val STRING) USING hive;"
         -> "",
