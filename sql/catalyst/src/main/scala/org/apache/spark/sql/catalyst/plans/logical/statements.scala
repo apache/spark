@@ -480,10 +480,3 @@ case class CreateFunctionStatement(
     isTemp: Boolean,
     ignoreIfExists: Boolean,
     replace: Boolean) extends ParsedStatement
-
-/**
- * A SHOW TBLPROPERTIES statement, as parsed from SQL
- */
-case class ShowTablePropertiesStatement(
-    tableName: Seq[String],
-    propertyKey: Option[String]) extends ParsedStatement
