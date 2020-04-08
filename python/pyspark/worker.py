@@ -19,17 +19,14 @@
 Worker that receives input from Piped RDD.
 """
 from __future__ import print_function
+from __future__ import absolute_import
 import os
 import sys
 import time
 # 'resource' is a Unix specific module.
 has_resource_module = True
 try:
-    from resource import RLIMIT_AS
-    from resource import RLIM_INFINITY
-    from resource import getrlimit
-    from resource import setrlimit
-    from resource import error
+    import resource
 except ImportError:
     has_resource_module = False
 import traceback
@@ -482,21 +479,21 @@ def main(infile, outfile):
         # set up memory limits
         memory_limit_mb = int(os.environ.get('PYSPARK_EXECUTOR_MEMORY_MB', "-1"))
         if memory_limit_mb > 0 and has_resource_module:
-            total_memory = RLIMIT_AS
+            total_memory = resource.RLIMIT_AS
             try:
-                (soft_limit, hard_limit) = getrlimit(total_memory)
+                (soft_limit, hard_limit) = resource.getrlimit(total_memory)
                 msg = "Current mem limits: {0} of max {1}\n".format(soft_limit, hard_limit)
                 print(msg, file=sys.stderr)
 
                 # convert to bytes
                 new_limit = memory_limit_mb * 1024 * 1024
 
-                if soft_limit == RLIM_INFINITY or new_limit < soft_limit:
+                if soft_limit == resource.RLIM_INFINITY or new_limit < soft_limit:
                     msg = "Setting mem limits to {0} of max {1}\n".format(new_limit, new_limit)
                     print(msg, file=sys.stderr)
-                    setrlimit(total_memory, (new_limit, new_limit))
+                    resource.setrlimit(total_memory, (new_limit, new_limit))
 
-            except (error, OSError, ValueError) as e:
+            except (resource.error, OSError, ValueError) as e:
                 # not all systems support resource limits, so warn instead of failing
                 print("WARN: Failed to set memory limit: {0}\n".format(e), file=sys.stderr)
 
