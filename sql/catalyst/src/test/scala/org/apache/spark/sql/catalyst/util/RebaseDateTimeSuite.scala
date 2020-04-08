@@ -285,7 +285,17 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
 
     val result = new ArrayBuffer[RebaseRecord]()
-    ALL_TIMEZONES.foreach { zid =>
+    // The time zones are excluded because:
+    // 1. Julian to Gregorian rebasing doesn't match to the opposite rebasing from
+    //    Gregorian to Julian rebasing.
+    // 2. Linear searching over switch points might be slow.
+    // 3. Results after the end time point 2100-01-01 are wrong.
+    // See SPARK-31385
+    val blacklist = Set("Asia/Tehran", "Iran", "Africa/Casablanca", "Africa/El_Aaiun")
+    ALL_TIMEZONES
+      .filterNot(zid => blacklist.contains(zid.getId))
+      .sortBy(_.getId)
+      .foreach { zid =>
       withDefaultTimeZone(zid) {
         val start = adjustFunc(instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0)
           .atZone(zid)
@@ -296,8 +306,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
         var micros = start
         var diff = Long.MaxValue
-        var counter = 0
-        val maxStep = MICROS_PER_MONTH
+        val maxStep = DAYS_PER_WEEK * MICROS_PER_DAY
         var step: Long = MICROS_PER_SECOND
         val switches = new ArrayBuffer[Long]()
         val diffs = new ArrayBuffer[Long]()
@@ -309,7 +318,6 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
               micros -= step
               step = (Math.max(MICROS_PER_SECOND, step / 2) / MICROS_PER_SECOND) * MICROS_PER_SECOND
             } else {
-              counter += 1
               diff = curDiff
               step = maxStep
               assert(diff % MICROS_PER_SECOND == 0)
@@ -333,7 +341,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       result.toArray)
   }
 
-  ignore("generate 'gregorian-julian-rebase-micros.json'") {
+  test("generate 'gregorian-julian-rebase-micros.json'") {
     generateRebaseJson(
       adjustFunc = identity[Long],
       rebaseFunc = rebaseGregorianToJulianMicros,
@@ -341,7 +349,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       fileName = "gregorian-julian-rebase-micros.json")
   }
 
-  ignore("generate 'julian-gregorian-rebase-micros.json'") {
+  test("generate 'julian-gregorian-rebase-micros.json'") {
     generateRebaseJson(
       adjustFunc = rebaseGregorianToJulianMicros,
       rebaseFunc = rebaseJulianToGregorianMicros,
