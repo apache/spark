@@ -20,7 +20,7 @@ license: |
 ---
 
 Spark SQL provides build-in aggregate functions defined in the dataset API and SQL interface. Aggregate functions
-operate on a group of rows and return a single value.
+operate on a group of rows and return a single aggregated value.
 
 <table class="table">
   <thead>
@@ -39,7 +39,7 @@ operate on a group of rows and return a single value.
     </tr>   
     <tr>
       <td><b>{avg | mean}</b>(<i>expression</i>)</td>
-      <td>numeric or string</td>
+      <td>short, float, byte, decimal, double, int, long or string</td>
       <td>Returns the average of values in the input expression.</td> 
     </tr>
     <tr>
@@ -79,7 +79,7 @@ operate on a group of rows and return a single value.
     </tr> 
     <tr>
       <td><b>count_min_sketch</b>(<i>expression, eps, confidence, seed</i>)</td>
-      <td>(integer or string or binary, double,  double, integer)</td>
+      <td>(byte, short, int, long, string or binary, double,  double, integer)</td>
       <td>`eps` and `confidence` are the double values between 0.0 and 1.0, `seed` is a positive integer. Returns a count-min sketch of a expression with the given `esp`, `confidence` and `seed`. The result is an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for cardinality estimation using sub-linear space.</td>
     </tr>
     <tr>
@@ -109,52 +109,52 @@ operate on a group of rows and return a single value.
     </tr>      
     <tr>
       <td><b>max</b>(<i>expression</i>)</td>
-      <td>any numeric, string, datetime or arrays of these types</td>
+      <td>short, float, byte, decimal, double, int, long, string, date, timestamp or arrays of these types</td>
       <td>Returns the maximum value of the expression.</td>
     </tr>          
     <tr>
       <td><b>max_by</b>(<i>expression1, expression2</i>)</td>
-      <td>any numeric, string, datetime or arrays of these types</td>
+      <td>short, float, byte, decimal, double, int, long, string, date, timestamp or arrays of these types</td>
       <td>Returns the value of expression1 associated with the maximum value of expression2.</td>
     </tr>   
     <tr>
       <td><b>min</b>(<i>expression</i>)</td>
-      <td>any numeric, string, datetime or arrays of these types</td>
+      <td>short, float, byte, decimal, double, int, long, string, date, timestamp or arrays of these types</td>
       <td>Returns the minimum value of the expression.</td>
     </tr>          
     <tr>
       <td><b>min_by</b>(<i>expression1, expression2</i>)</td>
-      <td>any numeric, string, datetime or arrays of these types</td>
+      <td>short, float, byte, decimal, double, int, long, string, date, timestamp or arrays of these types</td>
       <td>Returns the value of expression1 associated with the minimum value of expression2.</td>
     </tr>      
     <tr>
       <td><b>percentile</b>(<i>expression, percentage [, frequency]</i>)</td>
-      <td>numeric, double, integer</td>
+      <td>short, float, byte, decimal, double, int, or long, double, int</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the exact percentile value of numeric expression at the given percentage.</td>
     </tr>         
     <tr>
       <td><b>percentile</b>(<i>expression, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
-      <td>numeric, double, integer</td>
+      <td>short, float, byte, decimal, double, int, or long, double, int</td>
       <td>Percentage array is an array of number between 0 and 1; `frequency` is a positive integer. Returns the exact percentile value array of numeric expression at the given percentage(s).</td>
     </tr>        
     <tr>
       <td><b>{percentile_approx | percentile_approx}</b>(<i>expression, percentage [, frequency]</i>)</td>
-      <td>numeric, double, integer</td>
+      <td>short, float, byte, decimal, double, int, or long, double, int</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the approximate percentile value of numeric expression at the given percentage.</td>
     </tr>    
    <tr>
       <td><b>{percentile_approx | percentile_approx}</b>(<i>expression, percentage [, frequency]</i>)</td>
-      <td>datetime, double, integer</td>
+      <td>date or timestamp, double, int</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the approximate percentile value of numeric expression at the given percentage.</td>
     </tr>                  
     <tr>
       <td><b>{percentile_approx | percentile_approx}</b>(<i>expression, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
-      <td>numeric, double, integer</td>
+      <td>short, float, byte, decimal, double, int, or long, double, int</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the approximate percentile value of numeric expression at the given percentage.</td>
     </tr>             
     <tr>
       <td><b>{percentile_approx | percentile_approx}</b>(<i>expression, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
-      <td>datetime , double, integer</td>
+      <td>date or timestamp, double, int</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the approximate percentile value of numeric expression at the given percentage.</td>
     </tr>             
     <tr>
@@ -174,7 +174,7 @@ operate on a group of rows and return a single value.
     </tr>
     <tr>
       <td><b>sum</b>(<i>expression</i>)</td>
-      <td>numeric</td>
+      <td>short, float, byte, decimal, double, int, or long</td>
       <td>Returns the sum calculated from values of a group.</td>
     </tr>       
     <tr>
