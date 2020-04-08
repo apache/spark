@@ -422,11 +422,23 @@ package object config {
 
   private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
     ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
+      .internal()
       .doc("Maximum number of failures to tolerate for offloading " +
         "one block in single decommission cache blocks iteration")
       .version("3.1.0")
       .intConf
       .createWithDefault(3)
+
+  private[spark] val STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL =
+    ConfigBuilder("spark.storage.decommission.replicationReattemptInterval")
+      .internal()
+      .doc("The interval of time between consecutive cache block replication reattempts " +
+        "happening on each decommissioning executor (due to storage decommissioning).")
+      .version("3.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "Time interval between two consecutive attempts of " +
+        "cache block replication should be positive.")
+      .createWithDefaultString("30s")
 
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")

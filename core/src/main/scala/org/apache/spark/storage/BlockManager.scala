@@ -1779,10 +1779,10 @@ private[spark] class BlockManager(
     if (!blockManagerDecommissioning) {
       logInfo("Starting block manager decommissioning process")
       blockManagerDecommissioning = true
-      decommissionManager = Some(new BlockManagerDecommissionManager)
+      decommissionManager = Some(new BlockManagerDecommissionManager(conf))
       decommissionManager.foreach(_.start())
     } else {
-      logDebug(s"Block manager already in decommissioning state")
+      logDebug("Block manager already in decommissioning state")
     }
   }
 
@@ -1795,11 +1795,10 @@ private[spark] class BlockManager(
 
     if (replicateBlocksInfo.nonEmpty) {
       logInfo(s"Need to replicate ${replicateBlocksInfo.size} blocks " +
-        s"for block manager decommissioning")
+        "for block manager decommissioning")
     }
 
     // Maximum number of storage replication failure which replicateBlock can handle
-    // before giving up for one block
     val maxReplicationFailures = conf.get(
       config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
 
@@ -1822,7 +1821,7 @@ private[spark] class BlockManager(
         replicatedSuccessfully
     }
     if (blocksFailedReplication.nonEmpty) {
-      logWarning(s"Blocks failed replication in cache decommissioning " +
+      logWarning("Blocks failed replication in cache decommissioning " +
         s"process: ${blocksFailedReplication.mkString(",")}")
     }
   }
@@ -1899,20 +1898,21 @@ private[spark] class BlockManager(
    * Class to handle block manager decommissioning retries
    * It creates a Thread to retry offloading all RDD cache blocks
    */
-  private class BlockManagerDecommissionManager {
+  private class BlockManagerDecommissionManager(conf: SparkConf) {
     @volatile private var stopped = false
-    private val cacheReplicationThread = new Thread {
+    private val blockReplicationThread = new Thread {
       override def run(): Unit = {
         while (blockManagerDecommissioning && !stopped) {
           try {
-            logDebug(s"Attempting to replicate all cached RDD blocks")
+            logDebug("Attempting to replicate all cached RDD blocks")
             offloadRddCacheBlocks()
-            logInfo(s"Attempt to replicate all cached blocks done")
-            val sleepInterval = if (Utils.isTesting) 100 else 30000
+            logInfo("Attempt to replicate all cached blocks done")
+            val sleepInterval = conf.get(
+              config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
             Thread.sleep(sleepInterval)
           } catch {
             case _: InterruptedException =>
-            // no-op
+              // no-op
             case NonFatal(e) =>
               logError("Error occurred while trying to " +
                 "replicate cached RDD blocks for block manager decommissioning", e)
@@ -1920,19 +1920,20 @@ private[spark] class BlockManager(
         }
       }
     }
-    cacheReplicationThread.setDaemon(true)
-    cacheReplicationThread.setName("cache-replication-thread")
+    blockReplicationThread.setDaemon(true)
+    blockReplicationThread.setName("block-replication-thread")
 
     def start(): Unit = {
-      cacheReplicationThread.start()
+      logInfo("Starting block replication thread ")
+      blockReplicationThread.start()
     }
 
     def stop(): Unit = {
       if (!stopped) {
         stopped = true
-        logInfo("Stopping cache replication thread")
-        cacheReplicationThread.interrupt()
-        cacheReplicationThread.join()
+        logInfo("Stopping block replication thread")
+        blockReplicationThread.interrupt()
+        blockReplicationThread.join()
       }
     }
   }

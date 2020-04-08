@@ -441,7 +441,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
         if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
           try {
-            logInfo(s"Starting decommissioning block manager corresponding to " +
+            logInfo("Starting decommissioning block manager corresponding to " +
               s"executor $executorId.")
             scheduler.sc.env.blockManager.master.decommissionBlockManagers(Seq(executorId))
           } catch {

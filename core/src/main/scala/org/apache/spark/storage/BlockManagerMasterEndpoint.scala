@@ -157,8 +157,7 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case DecommissionBlockManagers(executorIds) =>
-      val bmIds = executorIds.flatMap(blockManagerIdByExecutor.get)
-      decommissionBlockManagers(bmIds)
+      decommissionBlockManagers(executorIds.flatMap(blockManagerIdByExecutor.get))
       context.reply(true)
 
     case GetReplicateInfoForRDDBlocks(blockManagerId) =>

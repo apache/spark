@@ -33,6 +33,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
   override def beforeEach(): Unit = {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
+      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 100L)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
 
     sc = new SparkContext("local-cluster[3, 1, 1024]", "test", conf)
