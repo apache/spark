@@ -7,8 +7,8 @@ SELECT * FROM testdata LIMIT 2
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-51	51
-52	52
+1	1
+2	2
 
 
 -- !query
@@ -34,9 +34,9 @@ SELECT * FROM testdata LIMIT 2 + 1
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-51	51
-52	52
-53	53
+1	1
+2	2
+3	3
 
 
 -- !query
@@ -44,7 +44,7 @@ SELECT * FROM testdata LIMIT CAST(1 AS int)
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-51	51
+1	1
 
 
 -- !query
@@ -70,7 +70,7 @@ SELECT * FROM testdata LIMIT CAST(1 AS INT)
 -- !query schema
 struct<key:int,value:string>
 -- !query output
-51	51
+1	1
 
 
 -- !query

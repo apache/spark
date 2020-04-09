@@ -575,6 +575,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     import session.implicits._
 
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+      .repartition(1)
       .write
       .format("parquet")
       .saveAsTable("testdata")
