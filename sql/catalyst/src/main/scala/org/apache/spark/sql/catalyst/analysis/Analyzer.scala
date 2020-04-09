@@ -240,7 +240,6 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
-      UseDecimalSum ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
       ResolveHigherOrderFunctions(v1SessionCatalog) ::
@@ -3064,15 +3063,6 @@ class Analyzer(
 
         case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
       }
-    }
-  }
-
-  /**
-   * Substitute Sum on decimal type to use DecimalSum implementation as it handles overflow
-   */
-  object UseDecimalSum extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-      case Sum(e) if e.resolved && e.dataType.isInstanceOf[DecimalType] => DecimalSum(e)
     }
   }
 
