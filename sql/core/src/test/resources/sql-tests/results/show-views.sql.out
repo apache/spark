@@ -63,12 +63,6 @@ SHOW VIEWS
 -- !query schema
 struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
-aggtest
-arraydata
-mapdata
-onek
-tenk1
-testdata
 view_1
 view_2
 view_4
@@ -79,12 +73,6 @@ SHOW VIEWS FROM showdb
 -- !query schema
 struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
-aggtest
-arraydata
-mapdata
-onek
-tenk1
-testdata
 view_1
 view_2
 view_4
@@ -95,12 +83,6 @@ SHOW VIEWS IN showdb
 -- !query schema
 struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
-aggtest
-arraydata
-mapdata
-onek
-tenk1
-testdata
 view_1
 view_2
 view_4
@@ -111,12 +93,6 @@ SHOW VIEWS IN global_temp
 -- !query schema
 struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
-aggtest
-arraydata
-mapdata
-onek
-tenk1
-testdata
 view_3
 view_4
 
