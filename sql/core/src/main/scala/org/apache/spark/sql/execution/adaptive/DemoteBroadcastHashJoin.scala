@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.MapOutputStatistics
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, LogicalPlan, NO_BROADCAST_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -30,7 +29,8 @@ case class DemoteBroadcastHashJoin(conf: SQLConf) extends Rule[LogicalPlan] {
 
   private def shouldDemote(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, s: ShuffleQueryStageExec) if s.resultOption.isEmpty => false
-    case LogicalQueryStage(_, ExtractMapStats(mapStats)) =>
+    case LogicalQueryStage(_, s: ShuffleQueryStageExec) if s.mapStats.isDefined =>
+      val mapStats = s.mapStats.get
       val partitionCnt = mapStats.bytesByPartitionId.length
       val nonZeroCnt = mapStats.bytesByPartitionId.count(_ > 0)
       partitionCnt > 0 && nonZeroCnt > 0 &&

@@ -161,14 +161,12 @@ case class ShuffleQueryStageExec(
       case _ =>
     }
   }
-}
 
-private object ExtractMapStats {
-  def unapply(s: ShuffleQueryStageExec): Option[MapOutputStatistics] = {
-    assert(s.resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
-    val mapStats = s.resultOption.get.asInstanceOf[MapOutputStatistics]
+  def mapStats: Option[MapOutputStatistics] = {
+    assert(resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
+    val stats = resultOption.get.asInstanceOf[MapOutputStatistics]
     // mapStats can be null when the input RDD of a plan has 0 partition
-    Option(mapStats)
+    Option(stats)
   }
 }
 

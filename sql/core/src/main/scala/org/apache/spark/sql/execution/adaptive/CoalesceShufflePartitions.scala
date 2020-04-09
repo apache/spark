@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.MapOutputStatistics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
@@ -54,9 +53,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
     if (!shuffleStages.forall(_.shuffle.canChangeNumPartitions)) {
       plan
     } else {
-      // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD
+      // `ShuffleQueryStageExec` returns None MapOutputStatistics when the input RDD
       // has 0 partitions, we should skip it when calculating the `partitionStartIndices`.
-      val validMetrics = shuffleStages.flatMap(ExtractMapStats.unapply)
+      val validMetrics = shuffleStages.flatMap(_.mapStats)
 
       // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
       // in that case. For example when we union fully aggregated data (data is arranged to a single

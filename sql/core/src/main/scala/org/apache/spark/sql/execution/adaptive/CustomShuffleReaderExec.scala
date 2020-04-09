@@ -99,17 +99,17 @@ case class CustomShuffleReaderExec private(
     val maxSize = SQLMetrics.createSizeMetric(sparkContext, "maximum partition data size")
     val minSize = SQLMetrics.createSizeMetric(sparkContext, "minimum partition data size")
     val avgSize = SQLMetrics.createSizeMetric(sparkContext, "average partition data size")
-    val sizes = shuffleStage.get match {
-      case ExtractMapStats(mapStats) =>
-        val sizes = mapStats.bytesByPartitionId
-        partitionSpecs.map {
-          case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
-            startReducerIndex.until(endReducerIndex).map(sizes(_)).sum
-          case p: PartialReducerPartitionSpec => p.dataSize
-          case p => throw new IllegalStateException("unexpected " + p)
-        }
-
-      case _ => Seq(0L)
+    val mapStats = shuffleStage.get.mapStats
+    val sizes = if (mapStats.isDefined) {
+      val mapSizes = mapStats.get.bytesByPartitionId
+      partitionSpecs.map {
+        case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
+          startReducerIndex.until(endReducerIndex).map(mapSizes).sum
+        case p: PartialReducerPartitionSpec => p.dataSize
+        case p => throw new IllegalStateException("unexpected " + p)
+      }
+    } else {
+      Seq(0L)
     }
     maxSize.set(sizes.max)
     minSize.set(sizes.min)
