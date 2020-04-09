@@ -719,11 +719,39 @@ object DataSource extends Logging {
   }
 
   /**
+   * Returns an optional [[TableProvider]] instance for the given provider registered via [[DataSourceRegisterV2]].
+   */
+  def lookupDataSourceViaRegistrationV2(provider: String, conf: SQLConf): Class[_] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoader = ServiceLoader.load(classOf[DataSourceRegisterV2], loader)
+    serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider)).toList match {
+      case Nil =>
+        null
+      // the provider format did not match any given registered aliases
+      case head :: Nil =>
+        // there is exactly one registered alias
+        head.getImplementation()
+      case sources =>
+        // There are multiple registered aliases for the input
+        val sourceNames = sources.map(_.getClass.getName)
+        throw new AnalysisException(s"Multiple sources found for $provider " +
+          s"(${sourceNames.mkString(", ")}), please specify the fully qualified class name.")
+    }
+  }
+
+  /**
    * Returns an optional [[TableProvider]] instance for the given provider. It returns None if
    * there is no corresponding Data Source V2 implementation, or the provider is configured to
    * fallback to Data Source V1 code path.
    */
   def lookupDataSourceV2(provider: String, conf: SQLConf): Option[TableProvider] = {
+    // First look up provider registered by DataSourceRegisterV2
+    val registerv2 = lookupDataSourceViaRegistrationV2(provider, conf)
+    if (registerv2 != null) {
+      return Some(registerv2.newInstance().asInstanceOf[TableProvider])
+    }
+
+    // Then follow up with DataSourceRegister and fully-qualified classes
     val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
       .split(",").map(_.trim)
     val cls = lookupDataSource(provider, conf)

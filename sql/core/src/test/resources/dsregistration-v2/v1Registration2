@@ -1,0 +1,2 @@
+org.apache.spark.sql.execution.datasources.v1TableProvider1
+org.apache.spark.sql.execution.datasources.v1TableProvider2

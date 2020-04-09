@@ -51,6 +51,38 @@ trait DataSourceRegister {
 }
 
 /**
+ * Extended version of [[DataSourceRegister]] which allows a data source to select an implementing class at runtime.
+ * This allows plugin developers to choose the correct implementation at runtime, depending on the version of Spark the
+ * user is using.
+ *
+ *  A new instance of this class will be instantiated each time a DDL call is made.
+ *
+ */
+trait DataSourceRegisterV2 {
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def shortName(): String = "parquet"
+   * }}}
+   *
+   */
+  def shortName(): String
+
+  /**
+   * The class that implements the appropriate top-level DSv2 interface (e.g. DataSourceV2 in Spark2.4, or TableProvider
+   * in Spark3.0).
+   *
+   * @note The return type of Class is on purpose to avoid tying the registration interface to the underlying
+   *       implementation type. Users of this interface are expected to return a class which can be successfully casted
+   *       to the type required by the currently-running version of spark
+   */
+  def getImplementation(): Class[_]
+}
+
+/**
  * Implemented by objects that produce relations for a specific kind of data source.  When
  * Spark SQL is given a DDL operation with a USING clause specified (to specify the implemented
  * RelationProvider), this interface is used to pass in the parameters specified by a user.
