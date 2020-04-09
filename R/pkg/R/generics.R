@@ -1551,6 +1551,10 @@ setGeneric("spark.findFrequentSequentialPatterns",
 setGeneric("spark.assignClusters",
             function(data, ...) { standardGeneric("spark.assignClusters") })
 
+#' @rdname spark.lm
+setGeneric("spark.lm",
+           function(data, formula, ...) { standardGeneric("spark.lm") })
+
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.
 #' @param ... additional argument(s) passed to the method.

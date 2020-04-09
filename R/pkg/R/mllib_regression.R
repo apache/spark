@@ -36,6 +36,12 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 #' @note IsotonicRegressionModel since 2.1.0
 setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
+#' S4 class that represents a LinearRegressionModel
+#'
+#' @param jobj a Java object reference to the backing Scala LinearRegressionWrapper
+#' @note LinearRegressionModel since 3.1.0
+setClass("LinearRegressionModel", representation(jobj = "jobj"))
+
 #' Generalized Linear Models
 #'
 #' Fits generalized linear model against a SparkDataFrame.
@@ -537,6 +543,151 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
 #' @seealso \link{write.ml}
 setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#' Linear Regression Model
+#'
+#' \code{spark.lm} fits a linear regression model against a SparkDataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model,
+#' \code{predict} to make predictions on new data,
+#' and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#'
+#' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
+#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param maxIter maximum iteration number.
+#' @param regParam the regularization parameter.
+#' @param elasticNetParam the ElasticNet mixing parameter, in range [0, 1].
+#'        For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
+#' @param tol convergence tolerance of iterations.
+#' @param standardization whether to standardize the training features before fitting the model.
+#' @param weightCol weight column name.
+#' @param aggregationDepth suggested depth for treeAggregate (>= 2).
+#' @param loss the loss function to be optimized. Supported options: "squaredError" and "huber".
+#' @param epsilon the shape parameter to control the amount of robustness.
+#' @param solver The solver algorithm for optimization.
+#'        Supported options: "l-bfgs", "normal" and "auto".
+#' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
+#'                               decide the base level of a string feature as the last category
+#'                               after ordering is dropped when encoding strings. Supported options
+#'                               are "frequencyDesc", "frequencyAsc", "alphabetDesc", and
+#'                               "alphabetAsc". The default value is "frequencyDesc". When the
+#'                               ordering is set to "alphabetDesc", this drops the same category
+#'                               as R when encoding strings.
+#' @param ... additional arguments passed to the method.
+#' @return \code{spark.lm} returns a fitted Linear Regression Model.
+#' @rdname spark.lm
+#' @aliases spark.lm,SparkDataFrame,formula-method
+#' @name spark.lm
+#' @seealso \link{read.ml}
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_linear_regression_data.txt", source = "libsvm")
+#'
+#' # fit Linear Regression Model
+#' model <- spark.lm(df, label ~ features, regParam = 0.01, maxIter = 1)
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.lm since 3.1.0
+setMethod("spark.lm", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula,
+                   maxIter = 100L, regParam = 0.0, elasticNetParam = 0.0,
+                   tol = 1e-6, standardization = TRUE,
+                   solver = c("auto", "l-bfgs", "normal"),
+                   weightCol = NULL, aggregationDepth = 2L,
+                   loss = c("squaredError", "huber"), epsilon = 1.35,
+                   stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
+                                              "alphabetDesc", "alphabetAsc")) {
+
+            formula <- paste(deparse(formula), collapse = "")
+
+            solver <- match.arg(solver)
+            loss <- match.arg(loss)
+            stringIndexerOrderType <- match.arg(stringIndexerOrderType)
+
+            if (!is.null(weightCol) && weightCol == "") {
+              weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
+            }
+
+            jobj <- callJStatic("org.apache.spark.ml.r.LinearRegressionWrapper",
+                                "fit",
+                                data@sdf,
+                                formula,
+                                as.integer(maxIter),
+                                as.numeric(regParam),
+                                as.numeric(elasticNetParam),
+                                as.numeric(tol),
+                                as.logical(standardization),
+                                solver,
+                                weightCol,
+                                as.integer(aggregationDepth),
+                                loss,
+                                as.numeric(epsilon),
+                                stringIndexerOrderType)
+            new("LinearRegressionModel", jobj = jobj)
+          })
+
+#  Returns the summary of a Linear Regression model produced by \code{spark.lm}
+
+#' @param object a Linear Regression Model model fitted by \code{spark.lm}.
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'
+#' @rdname spark.lm
+#' @note summary(LinearRegressionModel) since 3.1.0
+setMethod("summary", signature(object = "LinearRegressionModel"),
+          function(object) {
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "rFeatures")
+            coefficients <- callJMethod(jobj, "rCoefficients")
+            coefficients <- as.matrix(unlist(coefficients))
+            colnames(coefficients) <- c("Estimate")
+            rownames(coefficients) <- unlist(features)
+            numFeatures <- callJMethod(jobj, "numFeatures")
+
+            list(
+              coefficients = coefficients,
+              numFeatures = numFeatures
+            )
+          })
+
+#  Predicted values based on an LinearRegressionModel model
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns the predicted values based on a LinearRegressionModel.
+#'
+#' @rdname spark.lm
+#' @aliases predict,LinearRegressionModel,SparkDataFrame-method
+#' @note predict(LinearRegressionModel) since 3.1.0
+setMethod("predict", signature(object = "LinearRegressionModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+#  Save fitted LinearRegressionModel to the input path
+
+#' @param path The directory where the model is saved.
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.lm
+#' @aliases write.ml,LinearRegressionModel,character-method
+#' @note write.ml(LinearRegressionModel, character) since 3.1.0
+setMethod("write.ml", signature(object = "LinearRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
           })

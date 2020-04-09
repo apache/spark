@@ -614,6 +614,13 @@ More details on parameters can be found in the [Python API documentation](api/py
 {% include_example python/ml/linear_regression_with_elastic_net.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+More details on parameters can be found in the [R API documentation](api/R/spark.lm.html).
+
+{% include_example r/ml/lm_with_elastic_net.R %}
+</div>
+
 </div>
 
 ## Generalized linear regression
