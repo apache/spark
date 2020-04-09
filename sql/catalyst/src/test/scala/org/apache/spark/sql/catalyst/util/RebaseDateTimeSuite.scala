@@ -34,7 +34,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   private def parseToJulianMicros(s: String): Long = {
     val ts = Timestamp.valueOf(s)
-    val julianMicros = millisToMicros(ts.getTime) +
+    val julianMicros = fromMillis(ts.getTime) +
       ((ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
     julianMicros
   }

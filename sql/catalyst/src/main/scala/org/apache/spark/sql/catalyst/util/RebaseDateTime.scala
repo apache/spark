@@ -139,7 +139,7 @@ object RebaseDateTime {
       // This setting selects the original local timestamp mapped to the given `micros`.
       .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
       .build()
-    millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
+    fromMillis(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
 
 
@@ -271,7 +271,7 @@ object RebaseDateTime {
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
-      .setInstant(microsToMillis(micros))
+      .setInstant(toMillis(micros))
       .build()
     val localDateTime = LocalDateTime.of(
       cal.get(Calendar.YEAR),
