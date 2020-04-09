@@ -933,3 +933,58 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
     new GenericArrayData(arrayBufferOfKeys.toArray)
   }
 }
+
+/**
+ * A function which checks whether the given JSON string is valid JSON string or not.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(json_string) - Returns `true` if `json_string` is valid JSON, `false` if `json_string` is
+      invalid. `NULL` is returned in case of `NULL`.
+  """,
+  examples = """
+    Examples:
+      > Select _FUNC_(null);
+        NULL
+      > Select _FUNC_('{"key" : "valid JSON"}');
+        true
+      > Select _FUNC_('{"invalid JSON"}');
+        false
+  """,
+  since = "3.1.0"
+)
+case class IsJson(child: Expression) extends UnaryExpression with CodegenFallback
+  with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+
+  override def dataType: DataType = BooleanType
+
+  override def prettyName: String = "is_json"
+
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // return null for null input
+    if (json == null) {
+      return null
+    }
+
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => {
+          // parse the JSON string
+          while (parser.nextToken() != null) {
+            parser.skipChildren()
+          }
+          return true
+        }
+      }
+    } catch {
+      // return false, as JsonProcessingException is thrown when parsed JSON string is invalid
+      case _: JsonProcessingException => false
+      case _: IOException => null
+    }
+  }
+}
