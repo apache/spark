@@ -101,7 +101,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
             case firstLine :: tail =>
               s"spark-sql> $firstLine" :: tail.map(l => s"         > $l")
           }
-          queryEcho :+ answer
+          // longer lines sometimes get split in the output,
+          // match the first 60 characters of each query line
+          queryEcho.map(_.take(60)) :+ answer
         }
     }
 
