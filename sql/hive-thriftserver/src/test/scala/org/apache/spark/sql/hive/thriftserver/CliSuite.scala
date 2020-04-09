@@ -190,8 +190,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       fail(message, cause)
     } finally {
       if (!process.waitFor(1, MINUTES)) {
-        log.warn("spark-sql did not exit. Killing process.")
-        process.destroy()
+        try {
+          fail("spark-sql did not exit gracefully.")
+        } finally {
+          process.destroy()
+        }
       }
     }
   }
