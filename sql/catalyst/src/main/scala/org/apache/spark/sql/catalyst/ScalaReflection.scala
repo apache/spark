@@ -700,6 +700,8 @@ object ScalaReflection extends ScalaReflection {
         Schema(TimestampType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.LocalDate]) => Schema(DateType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.sql.Date]) => Schema(DateType, nullable = true)
+      case t if isSubtype(t, localTypeOf[CalendarInterval]) =>
+        Schema(CalendarIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
