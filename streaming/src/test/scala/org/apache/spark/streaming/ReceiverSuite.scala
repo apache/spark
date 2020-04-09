@@ -288,7 +288,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
         blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
       null
     }
-  } 
+  }
 }
 
 
