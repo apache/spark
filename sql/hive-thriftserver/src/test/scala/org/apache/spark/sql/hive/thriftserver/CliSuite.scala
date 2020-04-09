@@ -256,7 +256,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
         -> "",
       "SHOW TABLES;"
         -> "hive_test",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE hive_test;"
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
+         |OVERWRITE INTO TABLE hive_test;""".stripMargin
         -> "",
       "CACHE TABLE hive_test;"
         -> "",
@@ -300,7 +301,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
         -> "",
       "CREATE TABLE sourceTable (key INT, val STRING) USING hive;"
         -> "",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
+         |OVERWRITE INTO TABLE sourceTable;""".stripMargin
         -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
@@ -325,7 +327,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
         -> "",
       "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING) USING hive;"
         -> "",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithHiveAux;"
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
+         |OVERWRITE INTO TABLE sourceTableForWithHiveAux;""".stripMargin
         -> "",
       "INSERT INTO TABLE addJarWithHiveAux SELECT key, val FROM sourceTableForWithHiveAux;"
         -> "",
@@ -444,7 +447,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
         -> "",
       "CREATE TABLE sourceTableForWithSQL(key INT, val STRING) USING hive;"
         -> "",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithSQL;"
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
+         |OVERWRITE INTO TABLE sourceTableForWithSQL;""".stripMargin
         -> "",
       "INSERT INTO TABLE addJarWithSQL SELECT key, val FROM sourceTableForWithSQL;"
         -> "",
