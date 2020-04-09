@@ -2,7 +2,7 @@
 -- Number of queries: 21
 
 
--- !query 0
+-- !query
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", 10),
   (200, "emp 2", NULL),
@@ -12,13 +12,13 @@ CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (600, "emp 6", 100),
   (800, "emp 8", 70)
 AS EMP(id, emp_name, dept_id)
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 CREATE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
   (10, "dept 1", "CA"),
   (20, "dept 2", "NY"),
@@ -27,13 +27,13 @@ CREATE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
   (50, "dept 5 - unassigned", "NJ"),
   (70, "dept 7", "FL")
 AS DEPT(dept_id, dept_name, state)
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 CREATE TEMPORARY VIEW BONUS AS SELECT * FROM VALUES
   ("emp 1", 10.00D),
   ("emp 1", 20.00D),
@@ -44,13 +44,13 @@ CREATE TEMPORARY VIEW BONUS AS SELECT * FROM VALUES
   ("emp 5", 1000.00D),
   ("emp 6 - no dept", 500.00D)
 AS BONUS(emp_name, bonus_amt)
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 CREATE TEMPORARY VIEW ADDRESS AS SELECT * FROM VALUES
   (100, "emp 1", "addr1"),
   (200, null, "addr2"),
@@ -59,31 +59,31 @@ CREATE TEMPORARY VIEW ADDRESS AS SELECT * FROM VALUES
   (600, "emp 6", "addr6"),
   (800, "emp 8", "addr8")
 AS ADDRESS(id, emp_name, address)
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 CREATE TEMPORARY VIEW S1 AS SELECT * FROM VALUES
   (null, null), (5, 5), (8, 8), (11, 11) AS s1(a, b)
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 CREATE TEMPORARY VIEW S2 AS SELECT * FROM VALUES
   (7, 7), (8, 8), (11, 11), (null, null) AS s2(c, d)
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 SELECT id, 
        dept_id 
 FROM   emp 
@@ -91,14 +91,14 @@ WHERE  id = 600
        OR id = 500 
        OR dept_id NOT IN (SELECT dept_id 
                           FROM   emp)
--- !query 6 schema
+-- !query schema
 struct<id:int,dept_id:int>
--- !query 6 output
+-- !query output
 500	NULL
 600	100
 
 
--- !query 7
+-- !query
 SELECT id, 
        dept_id 
 FROM   emp 
@@ -106,13 +106,13 @@ WHERE  id = 800
        OR (dept_id IS NOT NULL 
            AND dept_id NOT IN (SELECT dept_id 
                                 FROM   emp))
--- !query 7 schema
+-- !query schema
 struct<id:int,dept_id:int>
--- !query 7 output
+-- !query output
 800	70
 
 
--- !query 8
+-- !query
 SELECT id,
        dept_id
 FROM   emp
@@ -120,13 +120,13 @@ WHERE  id = 100
        OR dept_id NOT IN (SELECT dept_id
                            FROM   emp
                            WHERE dept_id IS NOT NULL)
--- !query 8 schema
+-- !query schema
 struct<id:int,dept_id:int>
--- !query 8 output
+-- !query output
 100	10
 
 
--- !query 9
+-- !query
 SELECT id, 
        dept_id 
 FROM   emp 
@@ -135,9 +135,9 @@ WHERE  id = 200
        AND dept_id + 100 NOT IN (SELECT dept_id 
                            FROM   emp
                            WHERE dept_id IS NOT NULL))
--- !query 9 schema
+-- !query schema
 struct<id:int,dept_id:int>
--- !query 9 output
+-- !query output
 100	10
 200	NULL
 300	20
@@ -146,7 +146,7 @@ struct<id:int,dept_id:int>
 800	70
 
 
--- !query 10
+-- !query
 SELECT id, 
        dept_id, 
        emp_name 
@@ -156,9 +156,9 @@ WHERE  emp_name IN (SELECT emp_name
         OR (dept_id IS NOT NULL 
             AND dept_id NOT IN (SELECT dept_id 
                                 FROM   dept))
--- !query 10 schema
+-- !query schema
 struct<id:int,dept_id:int,emp_name:string>
--- !query 10 output
+-- !query output
 100	10	emp 1
 200	NULL	emp 2
 300	20	emp 3
@@ -167,7 +167,7 @@ struct<id:int,dept_id:int,emp_name:string>
 600	100	emp 6
 
 
--- !query 11
+-- !query
 SELECT id, 
        dept_id, 
        emp_name 
@@ -178,9 +178,9 @@ WHERE  EXISTS (SELECT emp_name
        OR (dept_id IS NOT NULL 
            AND dept_id NOT IN (SELECT dept_id 
                                FROM   dept))
--- !query 11 schema
+-- !query schema
 struct<id:int,dept_id:int,emp_name:string>
--- !query 11 output
+-- !query output
 100	10	emp 1
 200	NULL	emp 2
 300	20	emp 3
@@ -189,20 +189,20 @@ struct<id:int,dept_id:int,emp_name:string>
 600	100	emp 6
 
 
--- !query 12
+-- !query
 SELECT id,
        dept_id,
        emp_name
 FROM   emp
 WHERE  dept_id = 10
 OR (id, emp_name) NOT IN (SELECT id, emp_name FROM address)
--- !query 12 schema
+-- !query schema
 struct<id:int,dept_id:int,emp_name:string>
--- !query 12 output
+-- !query output
 100	10	emp 1
 
 
--- !query 13
+-- !query
 SELECT id, 
        dept_id, 
        emp_name 
@@ -214,14 +214,14 @@ WHERE  dept_id = 10
                                       WHERE  id IS NOT NULL 
                                              AND emp_name IS NOT NULL) 
              AND id > 400 )
--- !query 13 schema
+-- !query schema
 struct<id:int,dept_id:int,emp_name:string>
--- !query 13 output
+-- !query output
 100	10	emp 1
 500	NULL	emp 5
 
 
--- !query 14
+-- !query
 SELECT id, 
        dept_id, 
        emp_name 
@@ -232,9 +232,9 @@ WHERE  dept_id = 10
                                   WHERE  id IS NOT NULL 
                                   AND emp_name IS NOT NULL
                                   AND emp.id = address.id)
--- !query 14 schema
+-- !query schema
 struct<id:int,dept_id:int,emp_name:string>
--- !query 14 output
+-- !query output
 100	10	emp 1
 200	NULL	emp 2
 300	20	emp 3
@@ -242,7 +242,7 @@ struct<id:int,dept_id:int,emp_name:string>
 500	NULL	emp 5
 
 
--- !query 15
+-- !query
 SELECT id, 
        dept_id, 
        emp_name 
@@ -258,9 +258,9 @@ WHERE  id NOT IN (SELECT id
                                   AND emp_name IS NOT NULL
                                   AND emp.id = address.id
                                   AND id < 400)
--- !query 15 schema
+-- !query schema
 struct<id:int,dept_id:int,emp_name:string>
--- !query 15 output
+-- !query output
 100	10	emp 1
 200	NULL	emp 2
 300	20	emp 3
@@ -270,63 +270,63 @@ struct<id:int,dept_id:int,emp_name:string>
 800	70	emp 8
 
 
--- !query 16
+-- !query
 SELECT * 
 FROM   s1 
 WHERE  NOT (a NOT IN (SELECT c 
                       FROM   s2))
--- !query 16 schema
+-- !query schema
 struct<a:int,b:int>
--- !query 16 output
+-- !query output
 11	11
 8	8
 
 
--- !query 17
+-- !query
 SELECT * 
 FROM   s1 
 WHERE  NOT (a > 5 
             OR a IN (SELECT c 
                      FROM   s2))
--- !query 17 schema
+-- !query schema
 struct<a:int,b:int>
--- !query 17 output
+-- !query output
 
 
 
--- !query 18
+-- !query
 SELECT * 
 FROM   s1 
 WHERE  NOT (a > 5 
             OR a NOT IN (SELECT c 
                          FROM   s2))
--- !query 18 schema
+-- !query schema
 struct<a:int,b:int>
--- !query 18 output
+-- !query output
 
 
 
--- !query 19
+-- !query
 SELECT * 
 FROM   s1 
 WHERE  NOT (a > 5 
             AND a IN (SELECT c 
                       FROM   s2))
--- !query 19 schema
+-- !query schema
 struct<a:int,b:int>
--- !query 19 output
+-- !query output
 5	5
 
 
--- !query 20
+-- !query
 SELECT * 
 FROM   s1 
 WHERE  NOT (a > 5 
             AND a NOT IN (SELECT c 
                           FROM   s2))
--- !query 20 schema
+-- !query schema
 struct<a:int,b:int>
--- !query 20 output
+-- !query output
 11	11
 5	5
 8	8
