@@ -191,6 +191,9 @@ private[hive] class TestHiveSparkSession(
       loadTestTables)
   }
 
+  SparkSession.setDefaultSession(this)
+  SparkSession.setActiveSession(this)
+
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
@@ -230,16 +233,16 @@ private[hive] class TestHiveSparkSession(
    * Dataset.ofRows that creates a TestHiveQueryExecution (rather than a normal QueryExecution
    * which wouldn't load all the test tables).
    */
-  override def sql(sqlText: String): DataFrame = {
+  override def sql(sqlText: String): DataFrame = withActive {
     val plan = sessionState.sqlParser.parsePlan(sqlText)
     Dataset.ofRows(self, plan)
   }
 
-  override def newSession(): TestHiveSparkSession = {
+  override def newSession(): TestHiveSparkSession = withActive {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
   }
 
-  override def cloneSession(): SparkSession = {
+  override def cloneSession(): SparkSession = withActive {
     val result = new TestHiveSparkSession(
       sparkContext,
       Some(sharedState),
@@ -583,7 +586,7 @@ private[hive] class TestHiveQueryExecution(
     this(TestHive.sparkSession, sql)
   }
 
-  override lazy val analyzed: LogicalPlan = {
+  override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     val describedTables = logical match {
       case CacheTableCommand(tbl, _, _, _) => tbl.table :: Nil
       case _ => Nil
