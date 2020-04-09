@@ -571,7 +571,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   }
 
   /** Load built-in test tables into the SparkSession. */
-  private def loadTestData(session: SparkSession): Unit = {
+  private def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
 
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
@@ -663,7 +663,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       .saveAsTable("tenk1")
   }
 
-  private def unloadTestData(session: SparkSession): Unit = {
+  private def removeTestTables(session: SparkSession): Unit = {
     session.sql("DROP TABLE IF EXISTS testdata")
     session.sql("DROP TABLE IF EXISTS arraydata")
     session.sql("DROP TABLE IF EXISTS mapdata")
@@ -677,7 +677,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    loadTestData(spark)
+    createTestTables(spark)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -691,7 +691,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     try {
       TimeZone.setDefault(originalTimeZone)
       Locale.setDefault(originalLocale)
-      unloadTestData(spark)
+      removeTestTables(spark)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
