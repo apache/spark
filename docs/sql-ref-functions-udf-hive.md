@@ -25,45 +25,88 @@ Spark SQL supports integration of Hive UDFs, UDAFs and UDTFs. Similar to Spark U
 
 ### Examples
 
+Hive has two UDF interfaces: [UDF](https://github.com/apache/hive/blob/master/udf/src/java/org/apache/hadoop/hive/ql/exec/UDF.java) and [GenericUDF](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDF.java).
+An example below uses [GenericUDFAbs](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDFAbs.java) derived from `GenericUDF`.
+
 <pre><code>
-// Register a Hive UDF and use it in Spark SQL
-// Scala
-// include the JAR file containing mytest.hiveUDF implementation
-spark.sql("ADD JAR myHiveUDF.jar")
-spark.sql("CREATE TEMPORARY FUNCTION testUDF AS 'mytest.hiveUDF'")
-spark.sql("SELECT testUDF(value) FROM hiveUDFTestTable")
+// Register `GenericUDFAbs` and use it in Spark SQL.
+// Note that, if you use your own programmed one, you need to add a JAR containig it into a classpath,
+// e.g., `spark.sql("ADD JAR yourHiveUDF.jar")`.
+spark.sql("CREATE TEMPORARY FUNCTION testUDF AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFAbs'")
 
-// Register a Hive UDAF and use it in Spark SQL
-// Scala
-// include the JAR file containing
-// org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMax
-spark.sql("ADD JAR myHiveUDAF.jar")
+spark.sql("SELECT * FROM hiveUDFTestTable").show()
+// +-----+
+// |value|
+// +-----+
+// | -1.0|
+// |  2.0|
+// | -3.0|
+// +-----+
+
+spark.sql("SELECT testUDF(value) FROM t").show()
+// +--------------+
+// |testUDF(value)|
+// +--------------+
+// |           1.0|
+// |           2.0|
+// |           3.0|
+// +--------------+
+</code></pre>
+
+An example below uses [GenericUDTFExplode](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDTFExplode.java) derived from [GenericUDTF](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDF.java).
+
+<pre><code>
+// Register `GenericUDTFExplode` and use it in Spark SQL
 spark.sql(
-          """
-            |CREATE TEMPORARY FUNCTION hive_max
-            |AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMax'
-          """.stripMargin)
-spark.sql("SELECT key % 2, hive_max(key) FROM t GROUP BY key % 2")
+  """
+    |CREATE TEMPORARY FUNCTION hiveUDTF
+    |    AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDTFExplode'
+  """.stripMargin)
 
-// Register a Hive UDTF and use it in Spark SQL
-// Scala
-// GenericUDTFCount2 outputs the number of rows seen, twice.
-// The function source code can be found at:
-// https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
-// include the JAR file containing GenericUDTFCount2 implementation
-spark.sql("ADD JAR myHiveUDTF.jar")
+spark.sql("SELECT * FROM t").show()
+// +------+
+// | value|
+// +------+
+// |[1, 2]|
+// |[3, 4]|
+// +------+
+
+spark.sql("SELECT hiveUDTF(value) FROM t").show()
+// +---+
+// |col|
+// +---+
+// |  1|
+// |  2|
+// |  3|
+// |  4|
+// +---+
+</code></pre>
+
+Hive has two UDAF interfaces: [UDAF](https://github.com/apache/hive/blob/master/udf/src/java/org/apache/hadoop/hive/ql/exec/UDAF.java) and [GenericUDAFResolver](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDAFResolver.java).
+An example below uses [GenericUDAFSum](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDAFSum.java) derived from `GenericUDAFResolver`.
+
+<pre><code>
+// Register `GenericUDAFSum` and use it in Spark SQL
 spark.sql(
-          """
-            |CREATE TEMPORARY FUNCTION udtf_count2
-            |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-          """.stripMargin)
-spark.sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a)").show
+  """
+    |CREATE TEMPORARY FUNCTION hiveUDAF
+    |    AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFSum'
+  """.stripMargin)
 
-+----+
-|col1|
-+----+
-|   1|
-|   1|
-+----+
+spark.sql("SELECT * FROM t").show()
+// +---+-----+
+// |key|value|
+// +---+-----+
+// |  a|    1|
+// |  a|    2|
+// |  b|    3|
+// +---+-----+
 
+spark.sql("SELECT key, hiveUDAF(value) FROM t GROUP BY key").show()
+// +---+---------------+
+// |key|hiveUDAF(value)|
+// +---+---------------+
+// |  b|              3|
+// |  a|              3|
+// +---+---------------+
 </code></pre>
