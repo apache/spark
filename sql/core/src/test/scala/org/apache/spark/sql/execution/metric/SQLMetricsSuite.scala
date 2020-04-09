@@ -87,6 +87,13 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       0L -> (("Filter", Map(
         "number of output rows" -> 1L))))
     )
+
+    val df1 = person.filter('age < 25)
+    testSparkPlanMetrics(df1, 1, Map(
+      1L -> (("Filter", Map(
+        "number of output rows" -> 1L)))),
+      true
+    )
   }
 
   test("WholeStageCodegen metrics") {
@@ -268,6 +275,20 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
           "remote blocks read" -> 0L,
           "shuffle records written" -> 2L))))
       )
+
+      val df1 = spark.sql(
+        "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+      testSparkPlanMetrics(df1, 1, Map(
+        1L -> (("SortMergeJoin", Map(
+          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          "number of output rows" -> 4L))),
+        4L -> (("Exchange", Map(
+          "records read" -> 4L,
+          "local blocks read" -> 2L,
+          "remote blocks read" -> 0L,
+          "shuffle records written" -> 2L)))),
+        true
+      )
     }
   }
 
@@ -287,12 +308,29 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
           "number of output rows" -> 8L))))
       )
 
+      val df1 = spark.sql(
+        "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+      testSparkPlanMetrics(df1, 1, Map(
+        0L -> (("SortMergeJoin", Map(
+          // It's 8 because we read 6 rows in the left and 2 rows in the right one
+          "number of output rows" -> 8L)))),
+        true
+      )
+
       val df2 = spark.sql(
         "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df2, 1, Map(
         0L -> (("SortMergeJoin", Map(
-          // It's 8 because we read 6 rows in the left and 2 row in the right one
-          "number of output rows" -> 8L))))
+          // It's 8 because we read 6 rows in the left and 2 rows in the right one
+          "number of output rows" -> 8L)))))
+
+      val df3 = spark.sql(
+        "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
+      testSparkPlanMetrics(df3, 1, Map(
+        0L -> (("SortMergeJoin", Map(
+          // It's 8 because we read 6 rows in the left and 2 rows in the right one
+          "number of output rows" -> 8L)))),
+        true
       )
     }
   }
@@ -306,6 +344,13 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     testSparkPlanMetrics(df, 2, Map(
       1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L))))
+    )
+
+    val df3 = df1.join(broadcast(df2), "key")
+    testSparkPlanMetrics(df3, 2, Map(
+      2L -> (("BroadcastHashJoin", Map(
+        "number of output rows" -> 2L)))),
+      true
     )
   }
 
@@ -335,6 +380,19 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
           "shuffle records written" -> 10L,
           "records read" -> 10L))))
       )
+
+      val df3 = df1.join(df2, "key")
+      testSparkPlanMetrics(df3, 1, Map(
+        2L -> (("ShuffledHashJoin", Map(
+          "number of output rows" -> 2L))),
+        3L -> (("Exchange", Map(
+          "shuffle records written" -> 2L,
+          "records read" -> 2L))),
+        7L -> (("Exchange", Map(
+          "shuffle records written" -> 10L,
+          "records read" -> 10L)))),
+        true
+      )
     }
   }
 
@@ -354,6 +412,20 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       0L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 6L))))
     )
+
+    val df4 = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
+    testSparkPlanMetrics(df4, 2, Map(
+      1L -> (("BroadcastHashJoin", Map(
+        "number of output rows" -> 5L)))),
+      true
+    )
+
+    val df5 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
+    testSparkPlanMetrics(df5, 2, Map(
+      1L -> (("BroadcastHashJoin", Map(
+        "number of output rows" -> 6L)))),
+      true
+    )
   }
 
   test("BroadcastNestedLoopJoin metrics") {
@@ -370,6 +442,15 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
           1L -> (("BroadcastNestedLoopJoin", Map(
             "number of output rows" -> 12L))))
         )
+
+        val df1 = spark.sql(
+          "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+            "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
+        testSparkPlanMetrics(df1, 3, Map(
+          0L -> (("BroadcastNestedLoopJoin", Map(
+            "number of output rows" -> 12L)))),
+          true
+        )
       }
     }
   }
@@ -383,6 +464,13 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     testSparkPlanMetrics(df, 2, Map(
       1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L))))
+    )
+
+    val df3 = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
+    testSparkPlanMetrics(df3, 2, Map(
+      2L -> (("BroadcastHashJoin", Map(
+        "number of output rows" -> 2L)))),
+      true
     )
   }
 
@@ -398,6 +486,13 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
         testSparkPlanMetrics(df, 1, Map(
           0L -> (("CartesianProduct", Map("number of output rows" -> 12L))))
         )
+
+        val df1 = spark.sql(
+          "SELECT * FROM testData2 JOIN testDataForJoin")
+        testSparkPlanMetrics(df1, 1, Map(
+          0L -> (("CartesianProduct", Map("number of output rows" -> 12L)))),
+          true
+        )
       }
     }
   }
@@ -409,6 +504,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       val df = spark.sql(
         "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a")
       testSparkPlanMetrics(df, 1, Map(
+        0L -> (("SortMergeJoin", Map("number of output rows" -> 4L))))
+      )
+
+      val df1 = spark.sql(
+        "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a")
+      testSparkPlanMetrics(df1, 1, Map(
         0L -> (("SortMergeJoin", Map("number of output rows" -> 4L))))
       )
     }
