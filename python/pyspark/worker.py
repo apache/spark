@@ -357,14 +357,8 @@ def read_udfs(pickleSer, infile, eval_type):
             num_output_rows = 0
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
-
-                if is_scalar_iter and num_output_rows > num_input_rows[0]:
-                    raise RuntimeError(
-                        "The length of each output series (or frame) in Scalar iterator pandas "
-                        "UDF should be the same with the input's; however, the length of output "
-                        "series (or frame) was %d and the length of the input's was %d." % (
-                            num_output_rows, num_input_rows[0]))
-
+                assert is_map_iter or num_output_rows <= num_input_rows[0], \
+                    "Pandas SCALAR_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
 
             if is_scalar_iter:
