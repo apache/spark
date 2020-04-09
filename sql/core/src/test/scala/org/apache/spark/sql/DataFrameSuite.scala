@@ -26,8 +26,8 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.util.Random
 
 import org.scalatest.Matchers._
-import org.apache.spark.SparkException
 
+import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
