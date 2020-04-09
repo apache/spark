@@ -240,7 +240,7 @@ private[spark] class TaskSetManager(
     // A zombie TaskSetManager may reach here while handling failed task.
     if (isZombie) return
     val pendingTaskSetToAddTo = if (speculatable) pendingSpeculatableTasks else pendingTasks
-    for (loc <- tasks(index).preferredLocations) {
+    for (loc <- tasks(index).preferredLocations.reverse) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
           pendingTaskSetToAddTo.forExecutor.getOrElseUpdate(e.executorId, new ArrayBuffer) += index
