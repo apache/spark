@@ -119,8 +119,10 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
     if (testTags.exists(_.isInstanceOf[IgnoreIfAdaptiveExecution])) {
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        testFun
+      super.test(testName, testTags: _*) {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          testFun
+        }
       }
     } else {
       super.test(testName, testTags: _*)(testFun)
