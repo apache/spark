@@ -263,8 +263,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     withTempView("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = spark.sql(
-        "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+      val query = "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a"
+      val df = spark.sql(query)
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
@@ -276,8 +276,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
           "shuffle records written" -> 2L))))
       )
 
-      val df1 = spark.sql(
-        "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+      val df1 = spark.sql(query)
       testSparkPlanMetrics(df1, 1, Map(
         1L -> (("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
@@ -300,16 +299,16 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     withTempView("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = spark.sql(
-        "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+      val leftJoinQuery = "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+        "testData2.a = testDataForJoin.a"
+      val df = spark.sql(leftJoinQuery)
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map(
           // It's 8 because we read 6 rows in the left and 2 row in the right one
           "number of output rows" -> 8L))))
       )
 
-      val df1 = spark.sql(
-        "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+      val df1 = spark.sql(leftJoinQuery)
       testSparkPlanMetrics(df1, 1, Map(
         0L -> (("SortMergeJoin", Map(
           // It's 8 because we read 6 rows in the left and 2 rows in the right one
@@ -317,15 +316,15 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
         true
       )
 
-      val df2 = spark.sql(
-        "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
+      val rightJoinQuery = "SELECT * FROM testDataForJoin right JOIN testData2 ON " +
+        "testData2.a = testDataForJoin.a"
+      val df2 = spark.sql(rightJoinQuery)
       testSparkPlanMetrics(df2, 1, Map(
         0L -> (("SortMergeJoin", Map(
           // It's 8 because we read 6 rows in the left and 2 rows in the right one
           "number of output rows" -> 8L)))))
 
-      val df3 = spark.sql(
-        "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
+      val df3 = spark.sql(rightJoinQuery)
       testSparkPlanMetrics(df3, 1, Map(
         0L -> (("SortMergeJoin", Map(
           // It's 8 because we read 6 rows in the left and 2 rows in the right one
@@ -435,17 +434,15 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       withTempView("testDataForJoin") {
         // Assume the execution plan is
         // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-        val df = spark.sql(
-          "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
-            "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
+        val query = "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+          "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a"
+        val df = spark.sql(query)
         testSparkPlanMetrics(df, 3, Map(
           1L -> (("BroadcastNestedLoopJoin", Map(
             "number of output rows" -> 12L))))
         )
 
-        val df1 = spark.sql(
-          "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
-            "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
+        val df1 = spark.sql(query)
         testSparkPlanMetrics(df1, 3, Map(
           0L -> (("BroadcastNestedLoopJoin", Map(
             "number of output rows" -> 12L)))),
@@ -501,14 +498,13 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     val anti = testData2.filter("a > 2")
     withTempView("antiData") {
       anti.createOrReplaceTempView("antiData")
-      val df = spark.sql(
-        "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a")
+      val query = "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a"
+      val df = spark.sql(query)
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map("number of output rows" -> 4L))))
       )
 
-      val df1 = spark.sql(
-        "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a")
+      val df1 = spark.sql(query)
       testSparkPlanMetrics(df1, 1, Map(
         0L -> (("SortMergeJoin", Map("number of output rows" -> 4L))))
       )
