@@ -19,6 +19,8 @@ license: |
   limitations under the License.
 ---
 
+### Description
+
 Spark SQL provides build-in aggregate functions defined in the dataset API and SQL interface. Aggregate functions
 operate on a group of rows and return a single aggregated value.
 
@@ -34,12 +36,12 @@ operate on a group of rows and return a single aggregated value.
     </tr>
     <tr>
       <td><b>approx_count_distinct</b>(<i>expression[, relativeSD]</i>)</td>
-      <td>(long, double)</td>
+      <td>(bigint[, double])</td>
       <td>`relativeSD` is the maximum estimation error allowed. Returns the estimated cardinality by HyperLogLog++.</td>
     </tr>   
     <tr>
       <td><b>{avg | mean}</b>(<i>expression</i>)</td>
-      <td>short, float, byte, decimal, double, int, long or string</td>
+      <td>tinyint|smallint|int|bigint|float|double|decimal|string</td>
       <td>Returns the average of values in the input expression.</td> 
     </tr>
     <tr>
@@ -65,21 +67,21 @@ operate on a group of rows and return a single aggregated value.
     <tr>
       <td><b>count</b>([<b>DISTINCT</b>] <i>*</i>)</td>
       <td>none</td>
-      <td>If specified <code>DISTINCT</code>, returns the total number of retrieved rows are unique and not null; Otherwise, returns the total number of retrieved rows, including rows containing null.</td>
+      <td>If specified <code>DISTINCT</code>, returns the total number of retrieved rows are unique and not null; otherwise, returns the total number of retrieved rows, including rows containing null.</td>
     </tr>
     <tr>
       <td><b>count</b>([<b>DISTINCT</b>] <i>expression1[, expression2</i>])</td>
-      <td>(any, any)</td>
-      <td>If specified <code>DISTINCT</code>, returns the number of rows for which the supplied expression(s) are unique and not null; Otherwise, returns the number of rows for which the supplied expression(s) are all not null.</td>
+      <td>(any[, any])</td>
+      <td>If specified <code>DISTINCT</code>, returns the number of rows for which the supplied expression(s) are unique and not null; otherwise, returns the number of rows for which the supplied expression(s) are all not null.</td>
     </tr>
     <tr>
       <td><b>count_if</b>(<i>predicate</i>)</td>
-      <td>expression that will be used for aggregation calculation</td>
+      <td>expression that returns a boolean value</td>
       <td>Returns the count number from the predicate evaluate to `TRUE` values.</td>
     </tr> 
     <tr>
       <td><b>count_min_sketch</b>(<i>expression, eps, confidence, seed</i>)</td>
-      <td>(byte, short, int, long, string or binary, double,  double, integer)</td>
+      <td>(tinyint|int|bigint|smallint|string|binary, double, double, int)</td>
       <td>`eps` and `confidence` are the double values between 0.0 and 1.0, `seed` is a positive integer. Returns a count-min sketch of a expression with the given `esp`, `confidence` and `seed`. The result is an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for cardinality estimation using sub-linear space.</td>
     </tr>
     <tr>
@@ -93,9 +95,9 @@ operate on a group of rows and return a single aggregated value.
       <td>Returns the sample covariance of a set of number pairs.</td>
     </tr>  
     <tr>
-      <td><b>{first | first_value}</b>(<i>expression[, isIgnoreNull]</i>)</td>
-      <td>(any, boolean)</td>
-      <td>Returns the first value of expression for a group of rows. If <code>isIgnoreNull</code> is true, returns only non-null values, default is false. This function is non-deterministic.</td>
+      <td><b>{first | first_value}</b>(<i>expression[, `isIgnoreNull`]</i>)</td>
+      <td>(any[, boolean])</td>
+      <td>Returns the first value of expression for a group of rows. If isIgnoreNull is true, returns only non-null values, default is false. This function is non-deterministic.</td>
     </tr>      
     <tr>
       <td><b>kurtosis</b>(<i>expression</i>)</td>
@@ -103,58 +105,58 @@ operate on a group of rows and return a single aggregated value.
       <td>Returns the kurtosis value calculated from values of a group.</td>
     </tr>    
     <tr>
-      <td><b>{last | last_value}</b>(<i>expression[, isIgnoreNull]</i>)</td>
-      <td>(any, boolean)</td>
-      <td>Returns the last value of expression for a group of rows. If <code>isIgnoreNull</code> is true, returns only non-null values, default is false. This function is non-deterministic.</td>
+      <td><b>{last | last_value}</b>(<i>expression[, `isIgnoreNull`]</i>)</td>
+      <td>(any[, boolean])</td>
+      <td>Returns the last value of expression for a group of rows. If isIgnoreNull is true, returns only non-null values, default is false. This function is non-deterministic.</td>
     </tr>      
     <tr>
       <td><b>max</b>(<i>expression</i>)</td>
-      <td>short, float, byte, decimal, double, int, long, string, date, timestamp or arrays of these types</td>
+      <td>tinyint|short|int|bigint|float|double|date|timestamp|string, or arrays of these types</td>
       <td>Returns the maximum value of the expression.</td>
     </tr>          
     <tr>
       <td><b>max_by</b>(<i>expression1, expression2</i>)</td>
-      <td>short, float, byte, decimal, double, int, long, string, date, timestamp or arrays of these types</td>
+      <td>tinyint|short|int|bigint|float|double|date|timestamp|string, or arrays of these types</td>
       <td>Returns the value of expression1 associated with the maximum value of expression2.</td>
     </tr>   
     <tr>
       <td><b>min</b>(<i>expression</i>)</td>
-      <td>short, float, byte, decimal, double, int, long, string, date, timestamp or arrays of these types</td>
+      <td>tinyint|short|int|bigint|float|double|date|timestamp|string, or arrays of these types</td>
       <td>Returns the minimum value of the expression.</td>
     </tr>          
     <tr>
       <td><b>min_by</b>(<i>expression1, expression2</i>)</td>
-      <td>short, float, byte, decimal, double, int, long, string, date, timestamp or arrays of these types</td>
+      <td>tinyint|short|int|bigint|float|double|date|timestamp|string, or arrays of these types</td>
       <td>Returns the value of expression1 associated with the minimum value of expression2.</td>
     </tr>      
     <tr>
       <td><b>percentile</b>(<i>expression, percentage [, frequency]</i>)</td>
-      <td>short, float, byte, decimal, double, int, or long, double, int</td>
+      <td>(short|float|byte|decimal|double|int|bigint, double[, int])</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the exact percentile value of numeric expression at the given percentage.</td>
     </tr>         
     <tr>
       <td><b>percentile</b>(<i>expression, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
-      <td>short, float, byte, decimal, double, int, or long, double, int</td>
+      <td>(short|float|byte|decimal|double|int|bigint, array of double[, int])</td>
       <td>Percentage array is an array of number between 0 and 1; `frequency` is a positive integer. Returns the exact percentile value array of numeric expression at the given percentage(s).</td>
     </tr>        
     <tr>
       <td><b>{percentile_approx | percentile_approx}</b>(<i>expression, percentage [, frequency]</i>)</td>
-      <td>short, float, byte, decimal, double, int, or long, double, int</td>
+      <td>(short|float|byte|decimal|double|int|bigint, double[, int])</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the approximate percentile value of numeric expression at the given percentage.</td>
     </tr>    
    <tr>
       <td><b>{percentile_approx | percentile_approx}</b>(<i>expression, percentage [, frequency]</i>)</td>
-      <td>date or timestamp, double, int</td>
+      <td>(date|timestamp, double[, int])</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the approximate percentile value of numeric expression at the given percentage.</td>
     </tr>                  
     <tr>
       <td><b>{percentile_approx | percentile_approx}</b>(<i>expression, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
-      <td>short, float, byte, decimal, double, int, or long, double, int</td>
+      <td>(short|float|byte|decimal|double|int|bigint, array of double[, int])</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the approximate percentile value of numeric expression at the given percentage.</td>
     </tr>             
     <tr>
       <td><b>{percentile_approx | percentile_approx}</b>(<i>expression, <b>array</b>(percentage1 [, percentage2]...) [, frequency]</i>)</td>
-      <td>date or timestamp, double, int</td>
+      <td>(date|timestamp, array of double[, int])</td>
       <td>`percentage` is a number between 0 and 1; `frequency` is a positive integer. Returns the approximate percentile value of numeric expression at the given percentage.</td>
     </tr>             
     <tr>
@@ -174,7 +176,7 @@ operate on a group of rows and return a single aggregated value.
     </tr>
     <tr>
       <td><b>sum</b>(<i>expression</i>)</td>
-      <td>short, float, byte, decimal, double, int, or long</td>
+      <td>tinyint|smallint|int|bigint|float|double|decimal</td>
       <td>Returns the sum calculated from values of a group.</td>
     </tr>       
     <tr>
@@ -191,485 +193,457 @@ operate on a group of rows and return a single aggregated value.
 </table>
 
 ### Examples
+
 {% highlight sql %}
---base table 
+--A test table used in the following examples
 
 SELECT * FROM buildin_agg;
-+----+----+----+-----+----+
-|  c1|  c2|  c3|   c4|  c5|
-+----+----+----+-----+----+
-|   2|   3|agg4| true|true|
-|   1|   2|agg3|false|true|
-|   1|   1|agg1|false|true|
-|   4|   3|agg6|false|true|
-|   3|   3|agg5| true|true|
-|   1|   2|agg2|false|true|
-|   5|null|agg8|false|true|
-|null|   4|agg7|false|true|
-+----+----+----+-----+----+
+  +----+----+----+-----+----+
+  |  c1|  c2|  c3|   c4|  c5|
+  +----+----+----+-----+----+
+  |   2|   3|agg4| true|true|
+  |   1|   2|agg3|false|true|
+  |   1|   1|agg1|false|true|
+  |   4|   3|agg6|false|true|
+  |   3|   3|agg5| true|true|
+  |   1|   2|agg2|false|true|
+  |   5|null|agg8|false|true|
+  |null|   4|agg7|false|true|
+  +----+----+----+-----+----+
 
 -- any, some and bool_or
-
 SELECT ANY(c4) FROM buildin_agg;
-+-------+
-|any(c4)|
-+-------+
-|   true|
-+-------+
+  +-------+
+  |any(c4)|
+  +-------+
+  |   true|
+  +-------+
 
 SELECT SOME(c4) FROM buildin_agg;
-+-------+
-|any(c4)|
-+-------+
-|   true|
-+-------+
+  +-------+
+  |any(c4)|
+  +-------+
+  |   true|
+  +-------+
 
 SELECT BOOL_OR(c5) FROM buildin_agg;
-+-----------+
-|bool_or(c5)|
-+-----------+
-|       true|
-+-----------+
+  +-----------+
+  |bool_or(c5)|
+  +-----------+
+  |       true|
+  +-----------+
 
 -- approx_count_distinct
-
 SELECT APPROX_COUNT_DISTINCT(c1) FROM buildin_agg;
-+-------------------------+
-|approx_count_distinct(c1)|
-+-------------------------+
-|                        5|
-+-------------------------+
+  +-------------------------+
+  |approx_count_distinct(c1)|
+  +-------------------------+
+  |                        5|
+  +-------------------------+
 
 SELECT APPROX_COUNT_DISTINCT(c1,0.39) FROM buildin_agg;
-+-------------------------+
-|approx_count_distinct(c1)|
-+-------------------------+
-|                        6|
-+-------------------------+
+  +-------------------------+
+  |approx_count_distinct(c1)|
+  +-------------------------+
+  |                        6|
+  +-------------------------+
 
 -- avg and mean
-
 SELECT AVG(c1) FROM buildin_agg;
-+------------------+
-|           avg(c1)|
-+------------------+
-|2.4285714285714284|
-+------------------+
+  +------------------+
+  |           avg(c1)|
+  +------------------+
+  |2.4285714285714284|
+  +------------------+
 
 SELECT MEAN(c1) FROM buildin_agg;
-+------------------+
-|          mean(c1)|
-+------------------+
-|2.4285714285714284|
-+------------------+
+  +------------------+
+  |          mean(c1)|
+  +------------------+
+  |2.4285714285714284|
+  +------------------+
 
 -- bool_and and every
- 
 SELECT BOOL_AND(c4) FROM buildin_agg;
-+------------+
-|bool_and(c4)|
-+------------+
-|       false|
-+------------+
+  +------------+
+  |bool_and(c4)|
+  +------------+
+  |       false|
+  +------------+
 
 SELECT EVERY(c5) FROM buildin_agg;
-+------------+
-|bool_and(c5)|
-+------------+
-|        true|
-+------------+
+  +------------+
+  |bool_and(c5)|
+  +------------+
+  |        true|
+  +------------+
 
 --collect_list
-
 SELECT COLLECT_LIST(c2) FROM buildin_agg;
-+---------------------+
-|collect_list(c2)     |
-+---------------------+
-|[3, 2, 1, 3, 3, 2, 4]|
-+---------------------+
+  +---------------------+
+  |     collect_list(c2)|
+  +---------------------+
+  |[3, 2, 1, 3, 3, 2, 4]|
+  +---------------------+
 
 SELECT COLLECT_LIST(c4) FROM buildin_agg;
-+------------------------------------------------------+
-|collect_list(c4)                                      |
-+------------------------------------------------------+
-|[true, false, false, false, true, false, false, false]|
-+------------------------------------------------------+
+  +------------------------------------------------------+
+  |                                     collect_list(c4) |
+  +------------------------------------------------------+
+  |[true, false, false, false, true, false, false, false]|
+  +------------------------------------------------------+
 
 --collect_set
- 
 SELECT COLLECT_SET(c2) FROM buildin_agg;
-+---------------+
-|collect_set(c2)|
-+---------------+
-|[1, 2, 3, 4]   |
-+---------------+
+  +---------------+
+  |collect_set(c2)|
+  +---------------+
+  |   [1, 2, 3, 4]|
+  +---------------+
 
 SELECT COLLECT_SET(c3) FROM buildin_agg;
-+------------------------------------------------+
-|collect_set(c3)                                 |
-+------------------------------------------------+
-|[agg7, agg8, agg3, agg6, agg4, agg2, agg5, agg1]|
-+------------------------------------------------+
+  +------------------------------------------------+
+  |                                 collect_set(c3)|
+  +------------------------------------------------+
+  |[agg7, agg8, agg3, agg6, agg4, agg2, agg5, agg1]|
+  +------------------------------------------------+
 
 --corr
-
 SELECT CORR(c1, c2) FROM buildin_agg;
-+--------------------------------------------+
-|corr(CAST(c1 AS DOUBLE), CAST(c2 AS DOUBLE))|
-+--------------------------------------------+
-|                          0.7745966692414833|
-+--------------------------------------------+
+  +--------------------------------------------+
+  |corr(CAST(c1 AS DOUBLE), CAST(c2 AS DOUBLE))|
+  +--------------------------------------------+
+  |                          0.7745966692414833|
+  +--------------------------------------------+
 
 --count(*)
-
 SELECT COUNT(*) FROM buildin_agg;
-+--------+
-|count(1)|
-+--------+
-|       8|
-+--------+
+  +--------+
+  |count(1)|
+  +--------+
+  |       8|
+  +--------+
 
 --count
-
 SELECT COUNT(c2) FROM buildin_agg;
-+---------+
-|count(c2)|
-+---------+
-|        7|
-+---------+
+  +---------+
+  |count(c2)|
+  +---------+
+  |        7|
+  +---------+
 
 --count distinct
-
 SELECT COUNT(DISTINCT c1) FROM buildin_agg;
-+------------------+
-|count(DISTINCT c1)|
-+------------------+
-|                 5|
-+------------------+
+  +------------------+
+  |count(DISTINCT c1)|
+  +------------------+
+  |                 5|
+  +------------------+
 
 SELECT COUNT(DISTINCT c1, c2) FROM buildin_agg;
-+----------------------+
-|count(DISTINCT c1, c2)|
-+----------------------+
-|                     5|
-+----------------------+
+  +----------------------+
+  |count(DISTINCT c1, c2)|
+  +----------------------+
+  |                     5|
+  +----------------------+
 
 --count_if
-
 SELECT COUNT_IF(c1 IS NULL) from buildin_agg;
-+----------------------+
-|count_if((c1 IS NULL))|
-+----------------------+
-|                     1|
-+----------------------+
+  +----------------------+
+  |count_if((c1 IS NULL))|
+  +----------------------+
+  |                     1|
+  +----------------------+
 
 SELECT c1 FROM buildin_agg GROUP BY c1 HAVING COUNT_IF(c2 % 2 = 0);
-+----+
-|  c1|
-+----+
-|null|
-|   1|
-+----+
+  +----+
+  |  c1|
+  +----+
+  |null|
+  |   1|
+  +----+
 
 --count_min_sketch
-
 SELECT COUNT_MIN_SKETCH(c1, 1D, 0.2D, 3) FROM buildin_agg;
-+----------------------------------------------------------+
-|count_min_sketch(c1, 0.9, 0.2, 3)                         |
-+----------------------------------------------------------+
-|[00 00 00 01 00 00 00 00 00 00 00 07 00 00 00 01 00 00...]|
-+----------------------------------------------------------+
+  +----------------------------------------------------------+
+  |                         count_min_sketch(c1, 0.9, 0.2, 3)|
+  +----------------------------------------------------------+
+  |[00 00 00 01 00 00 00 00 00 00 00 07 00 00 00 01 00 00...]|
+  +----------------------------------------------------------+
 
 --covar_pop
-
 SELECT COVAR_POP(c1, c2) FROM buildin_agg;
-+-------------------------------------------------+
-|covar_pop(CAST(c1 AS DOUBLE), CAST(c2 AS DOUBLE))|
-+-------------------------------------------------+
-|                               0.6666666666666666|
-+-------------------------------------------------+
+  +-------------------------------------------------+
+  |covar_pop(CAST(c1 AS DOUBLE), CAST(c2 AS DOUBLE))|
+  +-------------------------------------------------+
+  |                               0.6666666666666666|
+  +-------------------------------------------------+
 
 --covar_samp
-
 SELECT COVAR_SAMP(c1, c2) FROM buildin_agg;
-+--------------------------------------------------+
-|covar_samp(CAST(c1 AS DOUBLE), CAST(c2 AS DOUBLE))|
-+--------------------------------------------------+
-|                                               0.8|
-+--------------------------------------------------+
+  +--------------------------------------------------+
+  |covar_samp(CAST(c1 AS DOUBLE), CAST(c2 AS DOUBLE))|
+  +--------------------------------------------------+
+  |                                               0.8|
+  +--------------------------------------------------+
 
 --first and first_value
-
 SELECT FIRST(c1) FROM buildin_agg;
-+----------------+
-|first(c1, false)|
-+----------------+
-|               2|
-+----------------+
+  +----------------+
+  |first(c1, false)|
+  +----------------+
+  |               2|
+  +----------------+
 
 SELECT FIRST(col) FROM VALUES (NULL), (5), (20) AS t(col);
-+-----------------+
-|first(col, false)|
-+-----------------+
-|             null|
-+-----------------+
+  +-----------------+
+  |first(col, false)|
+  +-----------------+
+  |             null|
+  +-----------------+
 
 SELECT FIRST(col, true) FROM VALUES (NULL), (5), (20) AS t(col);
-+----------------+
-|first(col, true)|
-+----------------+
-|               5|
-+----------------+
+  +----------------+
+  |first(col, true)|
+  +----------------+
+  |               5|
+  +----------------+
 
 SELECT FIRST_VALUE(col) FROM VALUES (NULL), (5), (20) AS t(col);
-+-----------------------+
-|first_value(col, false)|
-+-----------------------+
-|                   null|
-+-----------------------+
+  +-----------------------+
+  |first_value(col, false)|
+  +-----------------------+
+  |                   null|
+  +-----------------------+
 
 SELECT FIRST_VALUE(col, true) FROM VALUES (NULL), (5), (20) AS t(col);
-+----------------------+
-|first_value(col, true)|
-+----------------------+
-|                     5|
-+----------------------+
+  +----------------------+
+  |first_value(col, true)|
+  +----------------------+
+  |                     5|
+  +----------------------+
 
 --kurtosis
-
 SELECT KURTOSIS(c2) FROM buildin_agg;
-+----------------------------+
-|kurtosis(CAST(c2 AS DOUBLE))|
-+----------------------------+
-|         -0.7325000000000004|
-+----------------------------+
+  +----------------------------+
+  |kurtosis(CAST(c2 AS DOUBLE))|
+  +----------------------------+
+  |         -0.7325000000000004|
+  +----------------------------+
 
 SELECT KURTOSIS(col) FROM VALUES (-1000), (-100), (10), (20) AS t(col);
-+-----------------------------+
-|kurtosis(CAST(col AS DOUBLE))|
-+-----------------------------+
-|          -0.7014368047529627|
-+-----------------------------+
+  +-----------------------------+
+  |kurtosis(CAST(col AS DOUBLE))|
+  +-----------------------------+
+  |          -0.7014368047529627|
+  +-----------------------------+
 
 --last and last_value
-
 SELECT LAST(c1) FROM buildin_agg;
-+---------------+
-|last(c1, false)|
-+---------------+
-|           null|
-+---------------+
+  +---------------+
+  |last(c1, false)|
+  +---------------+
+  |           null|
+  +---------------+
 
 SELECT LAST(c1, true) FROM buildin_agg;
-+--------------+
-|last(c1, true)|
-+--------------+
-|             5|
-+--------------+
+  +--------------+
+  |last(c1, true)|
+  +--------------+
+  |             5|
+  +--------------+
 
 SELECT LAST_VALUE(c1) FROM buildin_agg;
-+---------------------+
-|last_value(c1, false)|
-+---------------------+
-|                 null|
-+---------------------+
+  +---------------------+
+  |last_value(c1, false)|
+  +---------------------+
+  |                 null|
+  +---------------------+
 
 SELECT LAST_VALUE(c1, true) FROM buildin_agg;
-+--------------------+
-|last_value(c1, true)|
-+--------------------+
-|                   5|
-+--------------------+
+  +--------------------+
+  |last_value(c1, true)|
+  +--------------------+
+  |                   5|
+  +--------------------+
 
 --max
-
 SELECT MAX(c2) FROM buildin_agg;
-+-------+
-|max(c2)|
-+-------+
-|      4|
-+-------+
+  +-------+
+  |max(c2)|
+  +-------+
+  |      4|
+  +-------+
 
 --max_by
-
 SELECT MAX_BY(c1, c3) FROM buildin_agg;
-+-------------+
-|maxby(c1, c3)|
-+-------------+
-|            5|
-+-------------+
+  +-------------+
+  |maxby(c1, c3)|
+  +-------------+
+  |            5|
+  +-------------+
 
 --min
-
 SELECT MIN(c1) FROM buildin_agg;
-+-------+
-|min(c1)|
-+-------+
-|      1|
-+-------+
+  +-------+
+  |min(c1)|
+  +-------+
+  |      1|
+  +-------+
 
 --min_by
-
 SELECT MIN_BY(c2, c3) FROM buildin_agg;
-+-------------+
-|minby(c2, c3)|
-+-------------+
-|            1|
-+-------------+
+  +-------------+
+  |minby(c2, c3)|
+  +-------------+
+  |            1|
+  +-------------+
 
 --percentile
-
 SELECT PERCENTILE(c1, 0.3) FROM buildin_agg;
-+--------------------------------------+
-|percentile(c1, CAST(0.3 AS DOUBLE), 1)|
-+--------------------------------------+
-|                                   1.0|
-+--------------------------------------+
+  +--------------------------------------+
+  |percentile(c1, CAST(0.3 AS DOUBLE), 1)|
+  +--------------------------------------+
+  |                                   1.0|
+  +--------------------------------------+
 
 SELECT PERCENTILE(c1, 0.3, 2) FROM buildin_agg;
-+--------------------------------------+
-|percentile(c1, CAST(0.3 AS DOUBLE), 2)|
-+--------------------------------------+
-|                                   1.0|
-+--------------------------------------+
+  +--------------------------------------+
+  |percentile(c1, CAST(0.3 AS DOUBLE), 2)|
+  +--------------------------------------+
+  |                                   1.0|
+  +--------------------------------------+
 
 SELECT PERCENTILE(c1, ARRAY(0.25, 0.75)) FROM buildin_agg;
-+------------------------------------+
-|percentile(c1, array(0.25, 0.75), 1)|
-+------------------------------------+
-|                          [1.0, 3.5]|
-+------------------------------------+
+  +------------------------------------+
+  |percentile(c1, array(0.25, 0.75), 1)|
+  +------------------------------------+
+  |                          [1.0, 3.5]|
+  +------------------------------------+
 
 SELECT PERCENTILE(c1, ARRAY(0.25, 0.75), 10) FROM buildin_agg;
-+-------------------------------------+
-|percentile(c1, array(0.25, 0.75), 10)|
-+-------------------------------------+
-|                           [1.0, 4.0]|
-+-------------------------------------+
+  +-------------------------------------+
+  |percentile(c1, array(0.25, 0.75), 10)|
+  +-------------------------------------+
+  |                           [1.0, 4.0]|
+  +-------------------------------------+
 
 --PERCENTILE_APPROX and APPROX_PERCENTILE
-
 SELECT PERCENTILE_APPROX(c1, 0.25, 100) FROM buildin_agg;
-+------------------------------------------------+
-|percentile_approx(c1, CAST(0.25 AS DOUBLE), 100)|
-+------------------------------------------------+
-|                                               1|
-+------------------------------------------------+
+  +------------------------------------------------+
+  |percentile_approx(c1, CAST(0.25 AS DOUBLE), 100)|
+  +------------------------------------------------+
+  |                                               1|
+  +------------------------------------------------+
 
 SELECT APPROX_PERCENTILE(c1, 0.25, 100) FROM buildin_agg;
-+------------------------------------------------+
-|approx_percentile(c1, CAST(0.25 AS DOUBLE), 100)|
-+------------------------------------------------+
-|                                               1|
-+------------------------------------------------+
+  +------------------------------------------------+
+  |approx_percentile(c1, CAST(0.25 AS DOUBLE), 100)|
+  +------------------------------------------------+
+  |                                               1|
+  +------------------------------------------------+
 
 SELECT PERCENTILE_APPROX(c1, ARRAY(0.25, 0.85), 100) FROM buildin_agg;
-+---------------------------------------------+
-|percentile_approx(c1, array(0.25, 0.85), 100)|
-+---------------------------------------------+
-|                                       [1, 4]|
-+---------------------------------------------+
+  +---------------------------------------------+
+  |percentile_approx(c1, array(0.25, 0.85), 100)|
+  +---------------------------------------------+
+  |                                       [1, 4]|
+  +---------------------------------------------+
 
 SELECT APPROX_PERCENTILE(c1, array(0.25, 0.85), 100) FROM buildin_agg;
-+---------------------------------------------+
-|approx_percentile(c1, array(0.25, 0.85), 100)|
-+---------------------------------------------+
-|                                       [1, 4]|
-+---------------------------------------------+
+  +---------------------------------------------+
+  |approx_percentile(c1, array(0.25, 0.85), 100)|
+  +---------------------------------------------+
+  |                                       [1, 4]|
+  +---------------------------------------------+
 
 --skewness
-
 SELECT SKEWNESS(c1) FROM buildin_agg;
-+----------------------------+
-|skewness(CAST(c1 AS DOUBLE))|
-+----------------------------+
-|          0.5200705032248686|
-+----------------------------+
+  +----------------------------+
+  |skewness(CAST(c1 AS DOUBLE))|
+  +----------------------------+
+  |          0.5200705032248686|
+  +----------------------------+
 
 SELECT SKEWNESS(col) FROM VALUES (-1000), (-100), (10), (20) AS t(col);
-+-----------------------------+
-|skewness(CAST(col AS DOUBLE))|
-+-----------------------------+
-|          -1.1135657469022011|
-+-----------------------------+
+  +-----------------------------+
+  |skewness(CAST(col AS DOUBLE))|
+  +-----------------------------+
+  |          -1.1135657469022011|
+  +-----------------------------+
 
 --stddev_samp, stddev and std
-
 SELECT STDDEV_SAMP(c1) FROM buildin_agg;
-+-------------------------------+
-|stddev_samp(CAST(c1 AS DOUBLE))|
-+-------------------------------+
-|              1.618347187425374|
-+-------------------------------+
+  +-------------------------------+
+  |stddev_samp(CAST(c1 AS DOUBLE))|
+  +-------------------------------+
+  |              1.618347187425374|
+  +-------------------------------+
 
 SELECT STDDEV(c1) FROM buildin_agg;
-+--------------------------+
-|stddev(CAST(c1 AS DOUBLE))|
-+--------------------------+
-|         1.618347187425374|
-+--------------------------+
+  +--------------------------+
+  |stddev(CAST(c1 AS DOUBLE))|
+  +--------------------------+
+  |         1.618347187425374|
+  +--------------------------+
 
 SELECT STD(c1) FROM buildin_agg;
-+-----------------------+
-|std(CAST(c1 AS DOUBLE))|
-+-----------------------+
-|      1.618347187425374|
-+-----------------------+
+  +-----------------------+
+  |std(CAST(c1 AS DOUBLE))|
+  +-----------------------+
+  |      1.618347187425374|
+  +-----------------------+
 
 --stddev_pop
-
 SELECT STDDEV_POP(c1) FROM buildin_agg;
-+------------------------------+
-|stddev_pop(CAST(c1 AS DOUBLE))|
-+------------------------------+
-|             1.498298354528788|
-+------------------------------+
+  +------------------------------+
+  |stddev_pop(CAST(c1 AS DOUBLE))|
+  +------------------------------+
+  |             1.498298354528788|
+  +------------------------------+
 
 --sum
-
 SELECT SUM(col) FROM VALUES (5), (10), (15) AS t(col);
-+--------+
-|sum(col)|
-+--------+
-|      30|
-+--------+
+  +--------+
+  |sum(col)|
+  +--------+
+  |      30|
+  +--------+
 
 SELECT SUM(c1) FROM buildin_agg;
-+-------+
-|sum(c1)|
-+-------+
-|     17|
-+-------+
+  +-------+
+  |sum(c1)|
+  +-------+
+  |     17|
+  +-------+
 
 SELECT SUM(col) FROM VALUES (NULL), (NULL) AS t(col);
-+--------+
-|sum(col)|
-+--------+
-|    null|
-+--------+
+  +--------+
+  |sum(col)|
+  +--------+
+  |    null|
+  +--------+
 
 --variance and var_samp
-
 SELECT VARIANCE(c1) FROM buildin_agg;
-+----------------------------+
-|variance(CAST(c1 AS DOUBLE))|
-+----------------------------+
-|           2.619047619047619|
-+----------------------------+
+  +----------------------------+
+  |variance(CAST(c1 AS DOUBLE))|
+  +----------------------------+
+  |           2.619047619047619|
+  +----------------------------+
 
 SELECT VAR_SAMP(c1) FROM buildin_agg;
-+----------------------------+
-|var_samp(CAST(c1 AS DOUBLE))|
-+----------------------------+
-|           2.619047619047619|
-+----------------------------+
+  +----------------------------+
+  |var_samp(CAST(c1 AS DOUBLE))|
+  +----------------------------+
+  |           2.619047619047619|
+  +----------------------------+
 
 --var_pop
-
 SELECT VAR_POP(c1) FROM buildin_agg;
-+---------------------------+
-|var_pop(CAST(c1 AS DOUBLE))|
-+---------------------------+
-|         2.2448979591836737|
-+---------------------------+
+  +---------------------------+
+  |var_pop(CAST(c1 AS DOUBLE))|
+  +---------------------------+
+  |         2.2448979591836737|
+  +---------------------------+
 {% endhighlight %}
