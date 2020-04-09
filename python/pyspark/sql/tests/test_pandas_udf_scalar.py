@@ -445,8 +445,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     Exception,
-                    "The length of each output series.*"
-                    "the length of output series \\(or frame\\) was 1"):
+                    "The length of output in Scalar iterator.*"
+                    "the length of output was 1"):
                 df.select(iter_udf_wong_output_size(col('id'))).collect()
 
         @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
