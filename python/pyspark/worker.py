@@ -357,6 +357,11 @@ def read_udfs(pickleSer, infile, eval_type):
             num_output_rows = 0
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
+                # This assert is for Scalar Iterator UDF to fail fast.
+                # The length of the entire input can only be explicitly known
+                # by consuming the input iterator in user side. Therefore,
+                # it's very unlikely the output length is higher than
+                # input length.
                 assert is_map_iter or num_output_rows <= num_input_rows[0], \
                     "Pandas MAP_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
