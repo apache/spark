@@ -25,7 +25,7 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.streaming.FakeBlockGeneratorListener
+import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.TestSuiteBase
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.util.Utils
@@ -135,4 +135,26 @@ class ReceiverCongestionSuite extends TestSuiteBase with Timeouts with Serializa
     testBlockGeneratorCongestion(throttlingWithoutCongestion, 100, 20, 0.05, true)
   }
 
+  /**
+   * An implementation of BlockGeneratorListener that is used to test the BlockGenerator.
+   */
+  class FakeBlockGeneratorListener(pushDelay: Long = 0) extends BlockGeneratorListener {
+    // buffer of data received as ArrayBuffers
+    val arrayBuffers = new ArrayBuffer[ArrayBuffer[Int]]
+    val errors = new ArrayBuffer[Throwable]
+
+    def onAddData(data: Any, metadata: Any): Unit = { }
+
+    def onGenerateBlock(blockId: StreamBlockId): Unit = { }
+
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]): Unit = {
+      val bufferOfInts = arrayBuffer.map(_.asInstanceOf[Int])
+      arrayBuffers += bufferOfInts
+      Thread.sleep(0)
+    }
+
+    def onError(message: String, throwable: Throwable): Unit = {
+      errors += throwable
+    }
+  }
 }
