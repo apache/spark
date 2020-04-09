@@ -27,11 +27,11 @@ import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.stat.{ChiSquareTest, SelectionTestResult}
+import org.apache.spark.ml.stat.ChiSquareTest
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Params for [[ChiSqSelector]] and [[ChiSqSelectorModel]].
@@ -197,50 +197,48 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
-    }
+    val spark = dataset.sparkSession
+    import spark.implicits._
 
-    val testResult = ChiSquareTest.testChiSquare(dataset, getFeaturesCol, getLabelCol)
-      .zipWithIndex
-    val features = $(selectorType) match {
+    val resultDF = ChiSquareTest.test(dataset.toDF, $(featuresCol), $(labelCol), true)
+
+    val indices = $(selectorType) match {
       case "numTopFeatures" =>
-        testResult
-          .sortBy { case (res, _) => res.pValue }
-          .take(getNumTopFeatures)
+        resultDF.sort("pValue").select("featureIndex")
+          .as[Int].take($(numTopFeatures))
       case "percentile" =>
-        testResult
-          .sortBy { case (res, _) => res.pValue }
-          .take((testResult.length * getPercentile).toInt)
+        val numFeatures = resultDF.count
+        resultDF.sort("pValue").select("featureIndex")
+          .as[Int].take((numFeatures * getPercentile).toInt)
       case "fpr" =>
-        testResult
-          .filter { case (res, _) => res.pValue < getFpr }
+        resultDF.select("featureIndex").where(col("pValue").lt($(fpr)))
+          .as[Int].collect()
       case "fdr" =>
         // This uses the Benjamini-Hochberg procedure.
         // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
-        val tempRes = testResult
-          .sortBy { case (res, _) => res.pValue }
-        val selected = tempRes
+        val numFeatures = resultDF.count
+        val maxIndex = resultDF.sort("pValue")
+          .select("featureIndex", "pValue")
+          .as[(Int, Double)].rdd
           .zipWithIndex
-          .filter { case ((res, _), index) =>
-            res.pValue <= getFdr * (index + 1) / testResult.length
-          }
-        if (selected.isEmpty) {
-          Array.empty[(SelectionTestResult, Int)]
-        } else {
-          val maxIndex = selected.map(_._2).max
-          tempRes.take(maxIndex + 1)
-        }
+          .flatMap { case ((featureIndex, pValue), index) =>
+            if (pValue <= $(fdr) * (index + 1) / numFeatures) {
+              Iterator.single(featureIndex)
+            } else Iterator.empty
+          }.fold(-1)(math.max)
+        if (maxIndex >= 0) {
+          resultDF.sort("pValue").select("featureIndex")
+            .as[Int].take(maxIndex + 1)
+        } else Array.emptyIntArray
       case "fwe" =>
-        testResult
-          .filter { case (res, _) => res.pValue < getFwe / testResult.length }
+        val numFeatures = resultDF.count
+        resultDF.select("featureIndex").where(col("pValue").lt($(fwe) / numFeatures))
+          .as[Int].collect()
       case errorType =>
         throw new IllegalStateException(s"Unknown Selector Type: $errorType")
     }
-    val indices = features.map { case (_, index) => index }
-    copyValues(new ChiSqSelectorModel(uid, indices.sorted)
-      .setParent(this))
+
+    copyValues(new ChiSqSelectorModel(uid, indices.sorted).setParent(this))
   }
 
   @Since("1.6.0")
