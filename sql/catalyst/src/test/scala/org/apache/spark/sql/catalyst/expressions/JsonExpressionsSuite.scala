@@ -864,12 +864,15 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       ("""{"key": 1}""", true),
       ("""[1, 2, {"key" : "valid JSON array"}]""", true),
       ("""{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}""", true),
+      ("""{"k1": {"k2": {"k3": {"k4": {"k5": {"k6": "value"}}}}}, "key2": "outer_value"}""", true),
       // invalid JSON strings
       ("{[]}", false),
       ("[1, 2, 3, 4", false),
       ("""{"invalid"}""", false),
+      ("""{"key": 45, "random_string"}""", false),
       ("""{[1, 2, {"Key": "Invalid JSON"}]}""", false),
-      ("""{"key": 45, "random_string"}""", false)
+      ("""[1, 2, 3, {"inner_json": ["1", "2", {"key": [5, 6, 7}]}]""", false),
+      ("""{"key": {"k2": {"k3": {"k4": {"k5": {[]}}}}}, "key2": "outer_value"}""", false)
     ).foreach {
       case (input, expected) =>
         checkEvaluation(IsJson(Literal(input)), expected)
