@@ -18,23 +18,29 @@
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.Driver
-import java.util.Properties
 import javax.security.auth.login.Configuration
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOptions)
+private[jdbc] class MariaDBConnectionProvider(driver: Driver, options: JDBCOptions)
     extends SecureConnectionProvider(driver, options) {
   override val appEntry: String = {
-    val parseURL = driver.getClass.getMethod("parseURL", classOf[String], classOf[Properties])
-    val properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
-    properties.getProperty("jaasApplicationName", "pgjdbc")
+    "Krb5ConnectorContext"
   }
 
   override def setAuthenticationConfigIfNeeded(): Unit = {
     val parent = Configuration.getConfiguration
     val configEntry = parent.getAppConfigurationEntry(appEntry)
-    if (configEntry == null || configEntry.isEmpty) {
+    /**
+     * Couple of things to mention here:
+     * 1. MariaDB doesn't support JAAS application name configuration
+     * 2. MariaDB sets a default JAAS config if "java.security.auth.login.config" is not set
+     */
+    val entryUsesKeytab = configEntry != null &&
+      configEntry.exists(_.getOptions().get("useKeyTab") == "true")
+    if (configEntry == null || configEntry.isEmpty || !entryUsesKeytab) {
       val config = new SecureConnectionProvider.JDBCConfiguration(
         parent, appEntry, options.keytab, options.principal)
       logDebug("Adding database specific security configuration")
@@ -43,6 +49,6 @@ private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOpti
   }
 }
 
-private[sql] object PostgresConnectionProvider {
-  val driverClass = "org.postgresql.Driver"
+private[sql] object MariaDBConnectionProvider {
+  val driverClass = "org.mariadb.jdbc.Driver"
 }
