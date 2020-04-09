@@ -20,15 +20,15 @@ package org.apache.spark.sql.execution.datasources
 import java.net.URL
 import java.util
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, DataSourceRegisterV2}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
-import org.junit.Assert
 
 class DataSourceRegistrationSuite extends SharedSparkSession {
   private var cl = null : DataSourceRegistrationSuiteTestingClassLoader
@@ -86,19 +86,33 @@ class DataSourceRegistrationSuite extends SharedSparkSession {
 }
 
 class v1TableProvider1 extends TableProvider with DataSourceRegister {
-  override def getTable(options: CaseInsensitiveStringMap): Table = return null
 
   override def shortName(): String = "testProvider"
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = null
+
+  override def getTable(schema: StructType,
+                        partitioning: Array[Transform],
+                        properties: util.Map[String, String]): Table = null
 }
 
 class v1TableProvider2 extends TableProvider with DataSourceRegister {
-  override def getTable(options: CaseInsensitiveStringMap): Table = return null
 
   override def shortName(): String = "testProvider"
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = null
+
+  override def getTable(schema: StructType,
+                        partitioning: Array[Transform],
+                        properties: util.Map[String, String]): Table = null
 }
 
 class v2TableProvider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = return null
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = null
+
+  override def getTable(schema: StructType,
+                        partitioning: Array[Transform],
+                        properties: util.Map[String, String]): Table = null
 }
 
 class v2Registration1 extends DataSourceRegisterV2 {
