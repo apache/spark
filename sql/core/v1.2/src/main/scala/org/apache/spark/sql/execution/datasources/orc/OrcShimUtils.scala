@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.orc.storage.common.`type`.HiveDecimal
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch
 import org.apache.orc.storage.ql.io.sarg.{SearchArgument => OrcSearchArgument}
