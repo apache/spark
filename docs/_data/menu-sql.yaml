@@ -156,21 +156,6 @@
                   url: sql-ref-syntax-qry-select-limit.html
                 - text: JOIN
                   url: sql-ref-syntax-qry-select-join.html
-                  subitems:
-                    - text: INNER JOIN
-                      url: sql-ref-syntax-qry-select-join-inner.html
-                    - text: LEFT JOIN
-                      url: sql-ref-syntax-qry-select-join-left.html
-                    - text: RIGHT JOIN
-                      url: sql-ref-syntax-qry-select-join-right.html
-                    - text: FULL JOIN
-                      url: sql-ref-syntax-qry-select-join-full.html
-                    - text: CROSS JOIN
-                      url: sql-ref-syntax-qry-select-join-cross.html
-                    - text: SEMI JOIN
-                      url: sql-ref-syntax-qry-select-join-semi.html
-                    - text: ANTI JOIN
-                      url: sql-ref-syntax-qry-select-join-anti.html
                 - text: Join Hints
                   url: sql-ref-syntax-qry-select-hints.html
                 - text: Set Operators

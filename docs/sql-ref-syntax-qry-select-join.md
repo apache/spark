@@ -23,13 +23,13 @@ license: |
 A SQL join is used to combine rows from two relations based on join criteria. The following section describes the overall join syntax and the sub-sections cover different types of joins along with examples.
 
 ### Syntax
+
 {% highlight sql %}
-
 relation { [ join_type ] JOIN relation [ join_criteria ] | NATURAL join_type JOIN relation }
-
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>relation</em></code></dt>
   <dd>
@@ -64,6 +64,7 @@ relation { [ join_type ] JOIN relation [ join_criteria ] | NATURAL join_type JOI
 ### Join Types
 
 #### <b>Inner Join</b>
+
 <dd>
 The inner join is the default join in Spark SQL. It selects rows that have matching values in both relations.<br><br>
   <b>Syntax:</b><br>
@@ -73,6 +74,7 @@ The inner join is the default join in Spark SQL. It selects rows that have match
 </dd>
 
 #### <b>Left Join </b>
+
 <dd>
 A left join returns all values from the left relation and the matched values from the right relation, or appends NULL if there is no match. It is also referred to as a left outer join.<br><br>
   <b>Syntax:</b><br>
@@ -91,6 +93,7 @@ A right join returns all values from the right relation and the matched values f
 </dd>
 
 #### <b>Full Join </b>
+
 <dd>
 A full join returns all values from both relations, appending NULL values on the side that does not have a match. It is also referred to as a full outer join.<br><br>
   <b>Syntax:</b><br>
@@ -100,6 +103,7 @@ A full join returns all values from both relations, appending NULL values on the
 </dd>
 
 #### <b>Cross Join </b>
+
 <dd>
 A cross join returns the Cartesian product of two relations.<br><br>
   <b>Syntax:</b><br>
@@ -109,6 +113,7 @@ A cross join returns the Cartesian product of two relations.<br><br>
 </dd>
 
 #### <b>Semi Join </b>
+
 <dd>
 A semi join returns values from the left side of the relation that has a match with the right. It is also referred to as a left semi join.<br><br>
   <b>Syntax:</b><br>
@@ -118,6 +123,7 @@ A semi join returns values from the left side of the relation that has a match w
 </dd>
 
 #### <b>Anti Join </b>
+
 <dd>
 An anti join returns values from the left relation that has no match with the right. It is also referred to as a left anti join.<br><br>
   <b>Syntax:</b><br>
@@ -127,6 +133,7 @@ An anti join returns values from the left relation that has no match with the ri
 </dd>
 
 ### Examples
+
 {% highlight sql %}
 -- Use employee and department tables to demonstrate different type of joins.
 SELECT * FROM employee;
@@ -247,7 +254,6 @@ SELECT * FROM employee ANTI JOIN department ON employee.deptno = department.dept
   +---+-----+------+
 {% endhighlight %}
 
-
 ### Related Statement
-- [SELECT](sql-ref-syntax-qry-select.html)
-- [JOIN hints](sql-ref-syntax-qry-select-hints.html)
+  * [SELECT](sql-ref-syntax-qry-select.html)
+  * [Join Hints](sql-ref-syntax-qry-select-hints.html)
