@@ -100,6 +100,9 @@ abstract class MaxMinBy extends DeclarativeAggregate {
   """,
   since = "3.0.0")
 case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMinBy {
+
+  override def prettyName: String = "max_by"
+
   override protected def funcName: String = "max_by"
 
   override protected def predicate(oldExpr: Expression, newExpr: Expression): Expression =
@@ -118,6 +121,9 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   """,
   since = "3.0.0")
 case class MinBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMinBy {
+
+  override def prettyName: String = "min_by"
+
   override protected def funcName: String = "min_by"
 
   override protected def predicate(oldExpr: Expression, newExpr: Expression): Expression =

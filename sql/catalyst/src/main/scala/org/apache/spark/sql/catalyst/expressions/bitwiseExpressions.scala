@@ -172,6 +172,8 @@ case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsI
 
   override def toString: String = s"bit_count($child)"
 
+  override def prettyName: String = "bit_count"
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
     case BooleanType => defineCodeGen(ctx, ev, c => s"if ($c) 1 else 0")
     case _ => defineCodeGen(ctx, ev, c => s"java.lang.Long.bitCount($c)")
@@ -184,6 +186,4 @@ case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsI
     case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
     case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
   }
-
-  override def sql: String = s"bit_count(${child.sql})"
 }
