@@ -28,9 +28,9 @@ import org.apache.spark.sql.internal.SQLConf
 case class DemoteBroadcastHashJoin(conf: SQLConf) extends Rule[LogicalPlan] {
 
   private def shouldDemote(plan: LogicalPlan): Boolean = plan match {
-    case LogicalQueryStage(_, s: ShuffleQueryStageExec) if s.resultOption.isEmpty => false
-    case LogicalQueryStage(_, s: ShuffleQueryStageExec) if s.mapStats.isDefined =>
-      val mapStats = s.mapStats.get
+    case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.resultOption.isDefined
+      && stage.mapStats.isDefined =>
+      val mapStats = stage.mapStats.get
       val partitionCnt = mapStats.bytesByPartitionId.length
       val nonZeroCnt = mapStats.bytesByPartitionId.count(_ > 0)
       partitionCnt > 0 && nonZeroCnt > 0 &&
