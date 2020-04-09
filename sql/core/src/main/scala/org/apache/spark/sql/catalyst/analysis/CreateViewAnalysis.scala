@@ -18,12 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterView, AlterViewAsStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateView, CreateViewStatement, DropView, DropViewStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAsStatement, CreateView, CreateViewStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, LookupCatalog, ViewCatalog, ViewChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, LookupCatalog, ViewCatalog}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.ViewHelper
 import org.apache.spark.sql.internal.SQLConf
@@ -31,7 +29,7 @@ import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
- * Resolve persisted views in parsed plans and convert them to logical plans.
+ * Resolve views in CREATE VIEW and ALTER VIEW AS plans and convert them to logical plans.
  */
 case class CreateViewAnalysis(
     override val catalogManager: CatalogManager,

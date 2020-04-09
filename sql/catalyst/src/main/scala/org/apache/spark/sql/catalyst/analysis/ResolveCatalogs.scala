@@ -129,15 +129,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       AlterView(catalog.asViewCatalog, ident, changes)
 
     case AlterViewUnsetPropertiesStatement(
-        NonSessionCatalogAndIdentifier(catalog, ident), keys, ifExists) =>
+        NonSessionCatalogAndIdentifier(catalog, ident), propertyKeys, ifExists) =>
       if (!ifExists) {
         val view = catalog.asViewCatalog.loadView(ident)
-        keys.find(!view.properties.containsKey(_)).foreach { k =>
+        propertyKeys.filterNot(view.properties.containsKey).foreach { property =>
           throw new AnalysisException(
-            s"Attempted to unset non-existent property '$k' in view $ident")
+            s"Attempted to unset non-existent property '$property' in view $ident")
         }
       }
-      val changes = keys.map(ViewChange.removeProperty)
+      val changes = propertyKeys.map(ViewChange.removeProperty)
       AlterView(catalog.asViewCatalog, ident, changes)
 
     case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>

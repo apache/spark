@@ -370,7 +370,7 @@ class Analyzer(
     }
 
     /**
-     * Qualify table identifiers with default catalog and database if necessary.
+     * Qualify table identifiers with default catalog and namespace if necessary.
      */
     private def qualifyTableIdentifiers(
         child: LogicalPlan,

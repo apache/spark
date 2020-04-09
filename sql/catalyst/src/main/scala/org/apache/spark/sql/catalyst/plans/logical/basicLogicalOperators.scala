@@ -448,17 +448,15 @@ case class V2ViewDescription(
 }
 
 /**
- * A container for holding the view description(CatalogTable), and the output of the view. The
- * child should be a logical plan parsed from the `CatalogTable.viewText`, should throw an error
- * if the `viewText` is not defined.
+ * A container for holding the view description, and the output of the view. The
+ * child should be a logical plan parsed from the view text.
  * This operator will be removed at the end of analysis stage.
  *
- * @param desc A view description(CatalogTable) that provides necessary information to resolve the
- *             view.
+ * @param desc A view description that provides necessary information to resolve the view.
  * @param output The output of a view operator, this is generated during planning the view, so that
  *               we are able to decouple the output from the underlying structure.
  * @param child The logical plan of a view operator, it should be a logical plan parsed from the
- *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
+ *              view text, should throw an error if the view text is not defined.
  */
 case class View(
     desc: ViewDescription,
