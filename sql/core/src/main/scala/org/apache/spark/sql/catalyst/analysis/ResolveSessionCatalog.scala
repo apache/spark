@@ -545,6 +545,20 @@ class ResolveSessionCatalog(
         replace,
         viewType)
 
+    case ShowViews(resolved: ResolvedNamespace, pattern) =>
+      resolved match {
+        case SessionCatalogAndNamespace(_, ns) =>
+          // Fallback to v1 ShowViewsCommand since there is no view API in v2 catalog
+          assert(ns.nonEmpty)
+          if (ns.length != 1) {
+            throw new AnalysisException(s"The database name is not valid: ${ns.quoted}")
+          }
+          ShowViewsCommand(ns.head, pattern)
+        case _ =>
+          throw new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
+            "SHOW VIEWS, only SessionCatalog supports this command.")
+      }
+
     case ShowTableProperties(r: ResolvedTable, propertyKey) if isSessionCatalog(r.catalog) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 

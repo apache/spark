@@ -25,12 +25,14 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.execution.{SQLExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -658,6 +660,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     // Add Locale setting
     Locale.setDefault(Locale.US)
     RuleExecutor.resetMetrics()
+    CodeGenerator.resetCompileTime
+    WholeStageCodegenExec.resetCodeGenTime
   }
 
   override def afterAll(): Unit = {
@@ -667,6 +671,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
+
+      val generateJavaTime = WholeStageCodegenExec.codeGenTime
+      val codegenInfo =
+        s"""
+           |=== Metrics of Whole-Stage Codegen ===
+           |Total code generation time: ${generateJavaTime.toDouble / NANOS_PER_SECOND} seconds
+           |Total compile time: ${CodeGenerator.compileTime.toDouble / NANOS_PER_SECOND} seconds
+         """.stripMargin
+      logWarning(codegenInfo)
     } finally {
       super.afterAll()
     }

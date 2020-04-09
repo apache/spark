@@ -302,6 +302,17 @@ AS SELECT a, b FROM tbl
 
 
 -- !query
+SHOW CREATE TABLE view_SPARK_30302
+-- !query schema
+struct<createtab_stmt:string>
+-- !query output
+CREATE VIEW `default`.`view_SPARK_30302` (
+  `aaa`,
+  `bbb`)
+AS SELECT a, b FROM tbl
+
+
+-- !query
 DROP VIEW view_SPARK_30302
 -- !query schema
 struct<>
@@ -325,6 +336,18 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 struct<createtab_stmt:string>
 -- !query output
 CREATE VIEW `default`.`view_SPARK_30302`(
+  `aaa` COMMENT 'comment with \'quoted text\' for aaa',
+  `bbb`)
+COMMENT 'This is a comment with \'quoted text\' for view'
+AS SELECT a, b FROM tbl
+
+
+-- !query
+SHOW CREATE TABLE view_SPARK_30302
+-- !query schema
+struct<createtab_stmt:string>
+-- !query output
+CREATE VIEW `default`.`view_SPARK_30302` (
   `aaa` COMMENT 'comment with \'quoted text\' for aaa',
   `bbb`)
 COMMENT 'This is a comment with \'quoted text\' for view'
@@ -364,29 +387,17 @@ AS SELECT a, b FROM tbl
 
 
 -- !query
-DROP VIEW view_SPARK_30302
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE VIEW view_SPARK_30302 (aaa, bbb)
-AS SELECT a, b FROM tbl
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 SHOW CREATE TABLE view_SPARK_30302
 -- !query schema
-struct<>
+struct<createtab_stmt:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Hive view isn't supported by SHOW CREATE TABLE;
+CREATE VIEW `default`.`view_SPARK_30302` (
+  `aaa`,
+  `bbb`)
+TBLPROPERTIES (
+  'a' = '1',
+  'b' = '2')
+AS SELECT a, b FROM tbl
 
 
 -- !query
