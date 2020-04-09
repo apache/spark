@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.1.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -50,6 +50,7 @@
       <groupId>com.spotify</groupId>
       <artifactId>docker-client</artifactId>
       <scope>test</scope>
+      <classifier>shaded</classifier>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
@@ -106,6 +107,11 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
+      <scope>test</scope>
+    </dependency>
     <!-- Although SPARK-28737 upgraded Jersey to 2.29 for JDK11, 'com.spotify.docker-client' still
       uses this repackaged 'jersey-guava'. We add this back for JDK8/JDK11 testing. -->
     <dependency>
@@ -115,8 +121,8 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>mysql</groupId>
-      <artifactId>mysql-connector-java</artifactId>
+      <groupId>org.mariadb.jdbc</groupId>
+      <artifactId>mariadb-java-client</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

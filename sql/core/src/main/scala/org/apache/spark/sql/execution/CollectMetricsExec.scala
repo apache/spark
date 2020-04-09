@@ -87,7 +87,7 @@ object CollectMetricsExec {
    * Recursively collect all collected metrics from a query tree.
    */
   def collect(plan: SparkPlan): Map[String, Row] = {
-    val metrics = plan.collectInPlanAndSubqueries {
+    val metrics = plan.collectWithSubqueries {
       case collector: CollectMetricsExec => collector.name -> collector.collectedMetrics
     }
     metrics.toMap

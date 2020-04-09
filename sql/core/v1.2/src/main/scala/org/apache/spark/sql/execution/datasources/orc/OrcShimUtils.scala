@@ -47,13 +47,13 @@ private[sql] object OrcShimUtils {
 
   def getDateWritable(reuseObj: Boolean): (SpecializedGetters, Int) => DateWritable = {
     if (reuseObj) {
-      val result = new DateWritable()
+      val result = new DaysWritable()
       (getter, ordinal) =>
         result.set(getter.getInt(ordinal))
         result
     } else {
       (getter: SpecializedGetters, ordinal: Int) =>
-        new DateWritable(getter.getInt(ordinal))
+        new DaysWritable(getter.getInt(ordinal))
     }
   }
 

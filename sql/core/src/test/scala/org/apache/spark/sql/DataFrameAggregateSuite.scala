@@ -957,17 +957,4 @@ class DataFrameAggregateSuite extends QueryTest
       assert(error.message.contains("function count_if requires boolean type"))
     }
   }
-
-  test("calendar interval agg support hash aggregate") {
-    val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df2, Row(new CalendarInterval(0, 2, 0)) :: Nil)
-    assert(find(df2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-    val df3 = df1.groupBy($"a").agg(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df3,
-      Row(1, new CalendarInterval(0, 1, 0)) ::
-        Row(2, new CalendarInterval(0, 2, 0)) ::
-        Row(3, new CalendarInterval(0, 3, 0)) :: Nil)
-    assert(find(df3.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-  }
 }

@@ -81,6 +81,14 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("3.0.0")
   def setProbabilityCol(value: String): this.type = set(probabilityCol, value)
 
+  /**
+   * The class whose metric will be computed in `"truePositiveRateByLabel"`,
+   * `"falsePositiveRateByLabel"`, `"precisionByLabel"`, `"recallByLabel"`,
+   * `"fMeasureByLabel"`.
+   * Must be greater than or equal to 0. The default value is 0.
+   *
+   * @group param
+   */
   @Since("3.0.0")
   final val metricLabel: DoubleParam = new DoubleParam(this, "metricLabel",
     "The class whose metric will be computed in " +
@@ -98,6 +106,13 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   setDefault(metricLabel -> 0.0)
 
+  /**
+   * The beta value, which controls precision vs recall weighting,
+   * used in `"weightedFMeasure"`, `"fMeasureByLabel"`.
+   * Must be greater than 0. The default value is 1.
+   *
+   * @group param
+   */
   @Since("3.0.0")
   final val beta: DoubleParam = new DoubleParam(this, "beta",
     "The beta value, which controls precision vs recall weighting, " +
@@ -114,6 +129,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   setDefault(beta -> 1.0)
 
+  /**
+   * param for eps. log-loss is undefined for p=0 or p=1, so probabilities are clipped to
+   * max(eps, min(1 - eps, p)). Must be in range (0, 0.5). The default value is 1e-15.
+   *
+   * @group param
+   */
   @Since("3.0.0")
   final val eps: DoubleParam = new DoubleParam(this, "eps",
     "log-loss is undefined for p=0 or p=1, so probabilities are clipped to " +

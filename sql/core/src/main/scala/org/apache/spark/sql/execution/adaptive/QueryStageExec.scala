@@ -161,6 +161,11 @@ case class ShuffleQueryStageExec(
       case _ =>
     }
   }
+
+  def mapStats: MapOutputStatistics = {
+    assert(resultOption.isDefined)
+    resultOption.get.asInstanceOf[MapOutputStatistics]
+  }
 }
 
 /**

@@ -238,10 +238,10 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> gm = GaussianMixture(k=3, tol=0.0001, seed=10)
     >>> gm.getMaxIter()
     100
-    >>> gm.setMaxIter(10)
+    >>> gm.setMaxIter(30)
     GaussianMixture...
     >>> gm.getMaxIter()
-    10
+    30
     >>> model = gm.fit(df)
     >>> model.getAggregationDepth()
     2
@@ -252,7 +252,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> model.predict(df.head().features)
     2
     >>> model.predictProbability(df.head().features)
-    DenseVector([0.0, 0.4736, 0.5264])
+    DenseVector([0.0, 0.0, 1.0])
     >>> model.hasSummary
     True
     >>> summary = model.summary
@@ -261,7 +261,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> summary.clusterSizes
     [2, 2, 2]
     >>> summary.logLikelihood
-    8.14636...
+    65.02945...
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -270,19 +270,16 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     3
     >>> gaussians[0].mean
     DenseVector([0.825, 0.8675])
-    >>> gaussians[0].cov.toArray()
-    array([[ 0.005625  , -0.0050625 ],
-           [-0.0050625 ,  0.00455625]])
+    >>> gaussians[0].cov
+    DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], 0)
     >>> gaussians[1].mean
-    DenseVector([-0.4777, -0.4096])
-    >>> gaussians[1].cov.toArray()
-    array([[ 0.1679695 ,  0.13181786],
-           [ 0.13181786,  0.10524592]])
+    DenseVector([-0.87, -0.72])
+    >>> gaussians[1].cov
+    DenseMatrix(2, 2, [0.0016, 0.0016, 0.0016, 0.0016], 0)
     >>> gaussians[2].mean
-    DenseVector([-0.4473, -0.3853])
-    >>> gaussians[2].cov.toArray()
-    array([[ 0.16730412,  0.13112435],
-           [ 0.13112435,  0.10469614]])
+    DenseVector([-0.055, -0.075])
+    >>> gaussians[2].cov
+    DenseMatrix(2, 2, [0.002, -0.0011, -0.0011, 0.0006], 0)
     >>> model.gaussiansDF.select("mean").head()
     Row(mean=DenseVector([0.825, 0.8675]))
     >>> model.gaussiansDF.select("cov").head()

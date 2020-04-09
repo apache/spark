@@ -34,6 +34,9 @@ import org.apache.avro.util.Utf8
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -41,6 +44,10 @@ import org.apache.spark.sql.types._
  */
 class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean)
   extends Logging {
+
+  // Whether to rebase datetimes from Gregorian to Julian calendar in write
+  private val rebaseDateTime: Boolean =
+    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_WRITE)
 
   def serialize(catalystData: Any): Any = {
     converter.apply(catalystData)
@@ -135,15 +142,24 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       case (BinaryType, BYTES) =>
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
 
+      case (DateType, INT) if rebaseDateTime =>
+        (getter, ordinal) => rebaseGregorianToJulianDays(getter.getInt(ordinal))
+
       case (DateType, INT) =>
         (getter, ordinal) => getter.getInt(ordinal)
 
       case (TimestampType, LONG) => avroType.getLogicalType match {
-          case _: TimestampMillis => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          // For backward compatibility, if the Avro type is Long and it is not logical type
+          // (the `null` case), output the timestamp value as with millisecond precision.
+          case null | _: TimestampMillis if rebaseDateTime => (getter, ordinal) =>
+            val micros = getter.getLong(ordinal)
+            val rebasedMicros = rebaseGregorianToJulianMicros(micros)
+            DateTimeUtils.microsToMillis(rebasedMicros)
+          case null | _: TimestampMillis => (getter, ordinal) =>
+            DateTimeUtils.microsToMillis(getter.getLong(ordinal))
+          case _: TimestampMicros if rebaseDateTime => (getter, ordinal) =>
+            rebaseGregorianToJulianMicros(getter.getLong(ordinal))
           case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
-          // For backward compatibility, if the Avro type is Long and it is not logical type,
-          // output the timestamp value as with millisecond precision.
-          case null => (getter, ordinal) => getter.getLong(ordinal) / 1000
           case other => throw new IncompatibleSchemaException(
             s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
         }

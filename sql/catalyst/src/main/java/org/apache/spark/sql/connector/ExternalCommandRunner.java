@@ -27,6 +27,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * cores for Solr and so on.
  * <p>
  * This interface will be instantiated when end users call `SparkSession#executeCommand`.
+ *
+ * @since 3.0.0
  */
 @Unstable
 public interface ExternalCommandRunner {

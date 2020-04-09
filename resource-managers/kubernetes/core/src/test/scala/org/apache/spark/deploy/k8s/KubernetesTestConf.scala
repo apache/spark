@@ -50,7 +50,8 @@ object KubernetesTestConf {
       annotations: Map[String, String] = Map.empty,
       secretEnvNamesToKeyRefs: Map[String, String] = Map.empty,
       secretNamesToMountPaths: Map[String, String] = Map.empty,
-      volumes: Seq[KubernetesVolumeSpec] = Seq.empty): KubernetesDriverConf = {
+      volumes: Seq[KubernetesVolumeSpec] = Seq.empty,
+      proxyUser: Option[String] = None): KubernetesDriverConf = {
     val conf = sparkConf.clone()
 
     resourceNamePrefix.foreach { prefix =>
@@ -63,7 +64,7 @@ object KubernetesTestConf {
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX, secretEnvNamesToKeyRefs)
     setVolumeSpecs(conf, KUBERNETES_DRIVER_VOLUMES_PREFIX, volumes)
 
-    new KubernetesDriverConf(conf, appId, mainAppResource, mainClass, appArgs)
+    new KubernetesDriverConf(conf, appId, mainAppResource, mainClass, appArgs, proxyUser)
   }
   // scalastyle:on argcount
 

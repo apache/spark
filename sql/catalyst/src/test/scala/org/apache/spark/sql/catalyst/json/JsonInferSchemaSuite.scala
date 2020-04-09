@@ -40,8 +40,8 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("inferring timestamp type") {
-    Seq(true, false).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         checkTimestampType("yyyy", """{"a": "2018"}""")
         checkTimestampType("yyyy=MM", """{"a": "2018=12"}""")
         checkTimestampType("yyyy MM dd", """{"a": "2018 12 02"}""")
@@ -56,8 +56,8 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("prefer decimals over timestamps") {
-    Seq(true, false).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParser =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParser) {
         checkType(
           options = Map(
             "prefersDecimal" -> "true",
@@ -71,8 +71,8 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("skip decimal type inferring") {
-    Seq(true, false).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         checkType(
           options = Map(
             "prefersDecimal" -> "false",
@@ -86,8 +86,8 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("fallback to string type") {
-    Seq(true, false).foreach { legacyParser =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         checkType(
           options = Map("timestampFormat" -> "yyyy,MM,dd.HHmmssSSS"),
           json = """{"a": "20181202.210400123"}""",

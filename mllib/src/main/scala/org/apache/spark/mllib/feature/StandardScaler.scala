@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.{StandardScalerModel => NewStandardScalerModel}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
@@ -96,22 +96,14 @@ class StandardScalerModel @Since("1.3.0") (
   @Since("1.3.0")
   def this(std: Vector) = this(std, null)
 
-  /**
-   * :: DeveloperApi ::
-   */
   @Since("1.3.0")
-  @DeveloperApi
   def setWithMean(withMean: Boolean): this.type = {
     require(!(withMean && this.mean == null), "cannot set withMean to true while mean is null")
     this.withMean = withMean
     this
   }
 
-  /**
-   * :: DeveloperApi ::
-   */
   @Since("1.3.0")
-  @DeveloperApi
   def setWithStd(withStd: Boolean): this.type = {
     require(!(withStd && this.std == null),
       "cannot set withStd to true while std is null")

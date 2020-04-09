@@ -53,6 +53,13 @@ object HiveStringType {
     case _: HiveStringType => StringType
     case _ => dt
   }
+
+  def containsCharType(dt: DataType): Boolean = dt match {
+    case ArrayType(et, _) => containsCharType(et)
+    case MapType(kt, vt, _) => containsCharType(kt) || containsCharType(vt)
+    case StructType(fields) => fields.exists(f => containsCharType(f.dataType))
+    case _ => dt.isInstanceOf[CharType]
+  }
 }
 
 /**

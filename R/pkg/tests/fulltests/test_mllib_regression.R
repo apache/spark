@@ -549,6 +549,35 @@ test_that("spark.survreg", {
     coefs <- as.vector(summary(model)$coefficients[, 1])
     expect_true(all(abs(rCoefs[o] - coefs[o]) < 1e-4))
   }
+
+  test_that("spark.lm", {
+    df <- suppressWarnings(createDataFrame(iris))
+
+    model <- spark.lm(
+      df,  Sepal_Width ~ .,
+      regParam = 0.01, maxIter = 10
+    )
+
+    prediction1 <- predict(model, df)
+    expect_is(prediction1, "SparkDataFrame")
+
+    # Test model save/load
+    if (windows_with_hadoop()) {
+      modelPath <- tempfile(pattern = "spark-lm", fileext = ".tmp")
+      write.ml(model, modelPath)
+      model2 <- read.ml(modelPath)
+
+      expect_is(model2, "LinearRegressionModel")
+      expect_equal(summary(model), summary(model2))
+
+      prediction2 <- predict(model2, df)
+      expect_equal(
+        collect(prediction1),
+        collect(prediction2)
+      )
+      unlink(modelPath)
+    }
+  })
 })
 
 sparkR.session.stop()

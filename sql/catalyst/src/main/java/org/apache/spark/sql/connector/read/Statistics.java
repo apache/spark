@@ -24,6 +24,8 @@ import org.apache.spark.annotation.Evolving;
 /**
  * An interface to represent statistics for a data source, which is returned by
  * {@link SupportsReportStatistics#estimateStatistics()}.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface Statistics {
