@@ -72,7 +72,7 @@ object RebaseDateTime {
 
   /**
    * Converts the given number of days since the epoch day 1970-01-01 to a local date in Julian
-   * calendar, interprets the result as a local date in Proleptic Gregorian calendar, and take the
+   * calendar, interprets the result as a local date in Proleptic Gregorian calendar, and takes the
    * number of days since the epoch from the Gregorian local date.
    *
    * This is used to guarantee backward compatibility, as Spark 2.4 and earlier versions use
@@ -106,7 +106,7 @@ object RebaseDateTime {
 
   /**
    * Converts the given number of days since the epoch day 1970-01-01 to a local date in Proleptic
-   * Gregorian calendar, interprets the result as a local date in Julian calendar, and take the
+   * Gregorian calendar, interprets the result as a local date in Julian calendar, and takes the
    * number of days since the epoch from the Julian local date.
    *
    * This is used to guarantee backward compatibility, as Spark 2.4 and earlier versions use
