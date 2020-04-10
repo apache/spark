@@ -710,7 +710,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row("string")))
   }
 
-  test("optional datetime parser does not affect formatting") {
+  test("optional datetime parser does not affect json time formatting") {
     val s = "2015-08-26 12:34:46"
     def toDF(p: String): DataFrame = sql(
       s"""
