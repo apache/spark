@@ -25,28 +25,34 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.SecureConnecti
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
-  override protected val userName = s"postgres/$dockerIp"
-  override protected val keytabFileName = "postgres.keytab"
+class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
+  override protected val userName = s"mariadb/$dockerIp"
+  override protected val keytabFileName = "mariadb.keytab"
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "postgres:12.0"
+    override val imageName = "mariadb:10.4"
     override val env = Map(
-      "POSTGRES_PASSWORD" -> "rootpass"
+      "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
     override val usesIpc = false
-    override val jdbcPort = 5432
+    override val jdbcPort = 3306
 
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=$principal&gsslib=gssapi"
+      s"jdbc:mysql://$ip:$port/mysql?user=$principal"
+
+    override def getEntryPoint: Option[String] =
+      Some("/docker-entrypoint/mariadb_docker_entrypoint.sh")
 
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig.Builder,
         containerConfigBuilder: ContainerConfig.Builder): Unit = {
       def replaceIp(s: String): String = s.replace("__IP_ADDRESS_REPLACE_ME__", dockerIp)
-      copyExecutableResource("postgres_krb_setup.sh", initDbDir, replaceIp)
+      copyExecutableResource("mariadb_docker_entrypoint.sh", entryPointDir, replaceIp)
+      copyExecutableResource("mariadb_krb_setup.sh", initDbDir, replaceIp)
 
       hostConfigBuilder.appendBinds(
+        HostConfig.Bind.from(entryPointDir.getAbsolutePath)
+          .to("/docker-entrypoint").readOnly(true).build(),
         HostConfig.Bind.from(initDbDir.getAbsolutePath)
           .to("/docker-entrypoint-initdb.d").readOnly(true).build()
       )
@@ -55,7 +61,7 @@ class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
 
   override protected def setAuthentication(keytabFile: String, principal: String): Unit = {
     val config = new SecureConnectionProvider.JDBCConfiguration(
-      Configuration.getConfiguration, "pgjdbc", keytabFile, principal)
+      Configuration.getConfiguration, "Krb5ConnectorContext", keytabFile, principal)
     Configuration.setConfiguration(config)
   }
 }

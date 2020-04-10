@@ -42,6 +42,12 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @note LinearRegressionModel since 3.1.0
 setClass("LinearRegressionModel", representation(jobj = "jobj"))
 
+#' S4 class that represents a FMRegressionModel
+#'
+#' @param jobj a Java object reference to the backing Scala FMRegressorWrapper
+#' @note FMRegressionModel since 3.1.0
+setClass("FMRegressionModel", representation(jobj = "jobj"))
+
 #' Generalized Linear Models
 #'
 #' Fits generalized linear model against a SparkDataFrame.
@@ -612,17 +618,21 @@ setMethod("spark.lm", signature(data = "SparkDataFrame", formula = "formula"),
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
                                               "alphabetDesc", "alphabetAsc")) {
 
+
             formula <- paste(deparse(formula), collapse = "")
+
 
             solver <- match.arg(solver)
             loss <- match.arg(loss)
             stringIndexerOrderType <- match.arg(stringIndexerOrderType)
+
 
             if (!is.null(weightCol) && weightCol == "") {
               weightCol <- NULL
             } else if (!is.null(weightCol)) {
               weightCol <- as.character(weightCol)
             }
+
 
             jobj <- callJStatic("org.apache.spark.ml.r.LinearRegressionWrapper",
                                 "fit",
@@ -642,7 +652,9 @@ setMethod("spark.lm", signature(data = "SparkDataFrame", formula = "formula"),
             new("LinearRegressionModel", jobj = jobj)
           })
 
+
 #  Returns the summary of a Linear Regression model produced by \code{spark.lm}
+
 
 #' @param object a Linear Regression Model model fitted by \code{spark.lm}.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
@@ -659,13 +671,16 @@ setMethod("summary", signature(object = "LinearRegressionModel"),
             rownames(coefficients) <- unlist(features)
             numFeatures <- callJMethod(jobj, "numFeatures")
 
+
             list(
               coefficients = coefficients,
               numFeatures = numFeatures
             )
           })
 
+
 #  Predicted values based on an LinearRegressionModel model
+
 
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns the predicted values based on a LinearRegressionModel.
@@ -678,7 +693,9 @@ setMethod("predict", signature(object = "LinearRegressionModel"),
             predict_internal(object, newData)
           })
 
+
 #  Save fitted LinearRegressionModel to the input path
+
 
 #' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
@@ -688,6 +705,161 @@ setMethod("predict", signature(object = "LinearRegressionModel"),
 #' @aliases write.ml,LinearRegressionModel,character-method
 #' @note write.ml(LinearRegressionModel, character) since 3.1.0
 setMethod("write.ml", signature(object = "LinearRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#' Factorization Machines Regression Model
+#'
+#' \code{spark.fmRegressor} fits a factorization regression model against a SparkDataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#'
+#' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
+#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param factorSize dimensionality of the factors.
+#' @param fitLinear whether to fit linear term.  # TODO Can we express this with formula?
+#' @param regParam the regularization parameter.
+#' @param miniBatchFraction the mini-batch fraction parameter.
+#' @param initStd the standard deviation of initial coefficients.
+#' @param maxIter maximum iteration number.
+#' @param stepSize stepSize parameter.
+#' @param tol convergence tolerance of iterations.
+#' @param solver solver parameter, supported options: "gd" (minibatch gradient descent) or "adamW".
+#' @param seed seed parameter for weights initialization.
+#' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
+#'                               decide the base level of a string feature as the last category
+#'                               after ordering is dropped when encoding strings. Supported options
+#'                               are "frequencyDesc", "frequencyAsc", "alphabetDesc", and
+#'                               "alphabetAsc". The default value is "frequencyDesc". When the
+#'                               ordering is set to "alphabetDesc", this drops the same category
+#'                               as R when encoding strings.
+#' @param ... additional arguments passed to the method.
+#' @return \code{spark.fmRegressor} returns a fitted Factorization Machines Regression Model.
+#'
+#' @rdname spark.fmRegressor
+#' @aliases spark.fmRegressor,SparkDataFrame,formula-method
+#' @name spark.fmRegressor
+#' @seealso \link{read.ml}
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_linear_regression_data.txt", source = "libsvm")
+#'
+#' # fit Factorization Machines Regression Model
+#' model <- spark.fmRegressor(
+#'   df, label ~ features,
+#'   regParam = 0.01, maxIter = 10, fitLinear = TRUE
+#' )
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.fmRegressor since 3.1.0
+setMethod("spark.fmRegressor", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, factorSize = 8, fitLinear = TRUE, regParam = 0.0,
+                   miniBatchFraction = 1.0, initStd = 0.01, maxIter = 100, stepSize=1.0,
+                   tol = 1e-6, solver = c("adamW", "gd"), seed = NULL,
+                   stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
+                                              "alphabetDesc", "alphabetAsc")) {
+
+
+            formula <- paste(deparse(formula), collapse = "")
+
+
+            if (!is.null(seed)) {
+              seed <- as.character(as.integer(seed))
+            }
+
+
+            solver <- match.arg(solver)
+            stringIndexerOrderType <- match.arg(stringIndexerOrderType)
+
+
+            jobj <- callJStatic("org.apache.spark.ml.r.FMRegressorWrapper",
+                                "fit",
+                                data@sdf,
+                                formula,
+                                as.integer(factorSize),
+                                as.logical(fitLinear),
+                                as.numeric(regParam),
+                                as.numeric(miniBatchFraction),
+                                as.numeric(initStd),
+                                as.integer(maxIter),
+                                as.numeric(stepSize),
+                                as.numeric(tol),
+                                solver,
+                                seed,
+                                stringIndexerOrderType)
+            new("FMRegressionModel", jobj = jobj)
+          })
+
+
+#  Returns the summary of a FM Regression model produced by \code{spark.fmRegressor}
+
+
+#' @param object a FM Regression Model model fitted by \code{spark.fmRegressor}.
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#'
+#' @rdname spark.fmRegressor
+#' @note summary(FMRegressionModel) since 3.1.0
+setMethod("summary", signature(object = "FMRegressionModel"),
+          function(object) {
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "rFeatures")
+            coefficients <- callJMethod(jobj, "rCoefficients")
+            coefficients <- as.matrix(unlist(coefficients))
+            colnames(coefficients) <- c("Estimate")
+            rownames(coefficients) <- unlist(features)
+            numFeatures <- callJMethod(jobj, "numFeatures")
+            raw_factors <- unlist(callJMethod(jobj, "rFactors"))
+            factor_size <- callJMethod(jobj, "factorSize")
+
+
+            list(
+              coefficients = coefficients,
+              factors = matrix(raw_factors, ncol = factor_size),
+              numFeatures = numFeatures,
+              factorSize = factor_size
+            )
+          })
+
+
+#  Predicted values based on an FMRegressionModel model
+
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns the predicted values based on an FMRegressionModel.
+#'
+#' @rdname spark.fmRegressor
+#' @aliases predict,FMRegressionModel,SparkDataFrame-method
+#' @note predict(FMRegressionModel) since 3.1.0
+setMethod("predict", signature(object = "FMRegressionModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+
+#  Save fitted FMRegressionModel to the input path
+
+
+#' @param path The directory where the model is saved.
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.fmRegressor
+#' @aliases write.ml,FMRegressionModel,character-method
+#' @note write.ml(FMRegressionModel, character) since 3.1.0
+setMethod("write.ml", signature(object = "FMRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
           })
