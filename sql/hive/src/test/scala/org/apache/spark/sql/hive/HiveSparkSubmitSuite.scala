@@ -705,6 +705,9 @@ object SPARK_9757 extends QueryTest {
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
         hiveContext.sql("DROP TABLE t")
+        if (dir.exists()) {
+          dir.delete()
+        }
       }
 
       {
@@ -717,11 +720,11 @@ object SPARK_9757 extends QueryTest {
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
         hiveContext.sql("DROP TABLE t")
+        if (dir.exists()) {
+          dir.delete()
+        }
       }
     } finally {
-      if (dir.exists()) {
-        dir.delete()
-      }
       if (hiveContext.tableNames().contains("t")) {
         hiveContext.sql("DROP TABLE t")
       }
