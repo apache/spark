@@ -72,5 +72,10 @@ package object kafka010 { //scalastyle:ignore
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val KAFKA_PARTITION_MULTIPLIER =
+    ConfigBuilder("spark.streaming.kafka.partition.multiplier")
+      .version("3.1.0")
+      .intConf
+      .createWithDefault(1)
 }
 

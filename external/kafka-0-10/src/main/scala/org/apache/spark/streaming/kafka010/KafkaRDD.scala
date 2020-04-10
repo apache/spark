@@ -70,6 +70,7 @@ private[spark] class KafkaRDD[K, V](
   private val cacheMaxCapacity = conf.get(CONSUMER_CACHE_MAX_CAPACITY)
   private val cacheLoadFactor = conf.get(CONSUMER_CACHE_LOAD_FACTOR).toFloat
   private val compacted = conf.get(ALLOW_NON_CONSECUTIVE_OFFSETS)
+  private val partitionMultiplier = conf.get(KAFKA_PARTITION_MULTIPLIER)
 
   override def persist(newLevel: StorageLevel): this.type = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -78,9 +79,28 @@ private[spark] class KafkaRDD[K, V](
   }
 
   override def getPartitions: Array[Partition] = {
-    offsetRanges.zipWithIndex.map { case (o, i) =>
+      if (partitionMultiplier <= 1) {
+        offsetRanges.zipWithIndex.map { case (o, i) =>
         new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset)
-    }.toArray
+        }.toArray
+      } else {
+        val totalPartitionNum = offsetRanges.size * partitionMultiplier
+        val resultPartitions = new Array[KafkaRDDPartition](totalPartitionNum)
+        offsetRanges.zipWithIndex.map { case (o, i) =>
+          for (index <- 0 until partitionMultiplier) {
+            val offsetStep = Math.ceil((o.untilOffset.toDouble - o.fromOffset.toDouble) /
+              partitionMultiplier.toDouble).toLong
+            val fromOffset = o.fromOffset + offsetStep * index
+            var untilOffset = o.fromOffset + offsetStep * (index + 1)
+            if (untilOffset > o.untilOffset) {
+              untilOffset = o.untilOffset
+            }
+            resultPartitions(i * partitionMultiplier + index) = new KafkaRDDPartition(
+              i * partitionMultiplier + index, o.topic, o.partition, fromOffset, untilOffset)
+          }
+        }
+        resultPartitions.toArray
+      }
   }
 
   override def count(): Long =
