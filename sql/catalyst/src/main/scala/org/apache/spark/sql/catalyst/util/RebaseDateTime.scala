@@ -32,20 +32,20 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 /**
  * The collection of functions for rebasing days and microseconds from/to the hybrid calendar
  * (Julian + Gregorian since 1582-10-15) which is used by Spark 2.4 and earlier versions
- * to/from Proleptic Gregorian calendar used in Spark SQL since version 3.0, see SPARK-26651.
+ * to/from Proleptic Gregorian calendar which is used by Spark since version 3.0. See SPARK-26651.
  */
 object RebaseDateTime {
   /**
    * Rebases days since the epoch from an original to an target calendar, for instance,
    * from a hybrid (Julian + Gregorian) to Proleptic Gregorian calendar.
    *
-   * It finds the latest switch day which is less than `value`, and adds the difference
-   * in days associated with the switch days to the given `value`.
+   * It finds the latest switch day which is less than the given `days`, and adds the difference
+   * in days associated with the switch days to the given `days`.
    * The function is based on linear search which starts from the most recent switch days.
    * This allows to perform less comparisons for modern dates.
    *
-   * @param switches The days when difference in days between original
-   *                 and target calendar was changed.
+   * @param switches The days when difference in days between original and target calendar
+   *                 was changed.
    * @param diffs The differences in days between calendars.
    * @param days The number of days since the epoch 1970-01-01 to be rebased
    *             to the target calendar.
@@ -71,12 +71,20 @@ object RebaseDateTime {
     -390745, -354220, -317695, -244645, -208120, -171595, -141427)
 
   /**
-   * Converts the given number of days since the epoch day 1970-01-01 to
-   * a local date in Julian calendar, interprets the result as a local
-   * date in Proleptic Gregorian calendar, and take the number of days
-   * since the epoch from the Gregorian date.
+   * Converts the given number of days since the epoch day 1970-01-01 to a local date in Julian
+   * calendar, interprets the result as a local date in Proleptic Gregorian calendar, and takes the
+   * number of days since the epoch from the Gregorian local date.
    *
-   * @param days The number of days since the epoch in Julian calendar.
+   * This is used to guarantee backward compatibility, as Spark 2.4 and earlier versions use
+   * Julian calendar for dates before 1582-10-15, while Spark 3.0 and later use Proleptic Gregorian
+   * calendar. See SPARK-26651.
+   *
+   * For example:
+   *   Julian calendar: 1582-01-01 -> -141704
+   *   Proleptic Gregorian calendar: 1582-01-01 -> -141714
+   * The code below converts -141704 to -141714.
+   *
+   * @param days The number of days since the epoch in Julian calendar. It can be negative.
    * @return The rebased number of days in Gregorian calendar.
    */
   def rebaseJulianToGregorianDays(days: Int): Int = {
@@ -97,49 +105,24 @@ object RebaseDateTime {
     -390750, -354226, -317702, -244653, -208129, -171605, -141427)
 
   /**
-   * Rebasing days since the epoch to store the same number of days
-   * as by Spark 2.4 and earlier versions. Spark 3.0 switched to
-   * Proleptic Gregorian calendar (see SPARK-26651), and as a consequence of that,
-   * this affects dates before 1582-10-15. Spark 2.4 and earlier versions use
-   * Julian calendar for dates before 1582-10-15. So, the same local date may
-   * be mapped to different number of days since the epoch in different calendars.
+   * Converts the given number of days since the epoch day 1970-01-01 to a local date in Proleptic
+   * Gregorian calendar, interprets the result as a local date in Julian calendar, and takes the
+   * number of days since the epoch from the Julian local date.
+   *
+   * This is used to guarantee backward compatibility, as Spark 2.4 and earlier versions use
+   * Julian calendar for dates before 1582-10-15, while Spark 3.0 and later use Proleptic Gregorian
+   * calendar. See SPARK-26651.
    *
    * For example:
    *   Proleptic Gregorian calendar: 1582-01-01 -> -141714
    *   Julian calendar: 1582-01-01 -> -141704
    * The code below converts -141714 to -141704.
    *
-   * @param days The number of days since the epoch 1970-01-01. It can be negative.
+   * @param days The number of days since the epoch in Gregorian calendar. It can be negative.
    * @return The rebased number of days since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianDays(days: Int): Int = {
     rebaseDays(gregJulianDiffSwitchDay, gregJulianDiffs, days)
-  }
-
-  /**
-   * Converts the given microseconds to a local date-time in UTC time zone in Proleptic Gregorian
-   * calendar, interprets the result as a local date-time in Julian calendar in UTC time zone.
-   * And takes microseconds since the epoch from the Julian timestamp.
-   *
-   * @param zoneId The time zone ID at which the rebasing should be performed.
-   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
-   *               in Proleptic Gregorian calendar. It can be negative.
-   * @return The rebased microseconds since the epoch in Julian calendar.
-   */
-  private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
-    val instant = microsToInstant(micros)
-    val ldt = instant.atZone(zoneId).toLocalDateTime
-    val cal = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
-      .setCalendarType("gregory")
-      .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
-      .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
-      // Local time-line can overlaps, such as at an autumn daylight savings cutover.
-      // This setting selects the original local timestamp mapped to the given `micros`.
-      .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
-      .build()
-    millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
 
 
@@ -176,8 +159,8 @@ object RebaseDateTime {
    * Rebases micros since the epoch from an original to an target calendar, for instance,
    * from a hybrid (Julian + Gregorian) to Proleptic Gregorian calendar.
    *
-   * It finds the latest switch micros which is less than `value`, and adds the difference
-   * in micros associated with the switch micros to the given `value`.
+   * It finds the latest switch micros which is less than the given `micros`, and adds the
+   * difference in micros associated with the switch micros to the given `micros`.
    * The function is based on linear search which starts from the most recent switch micros.
    * This allows to perform less comparisons for modern timestamps.
    *
@@ -227,22 +210,53 @@ object RebaseDateTime {
   private val gregJulianRebaseMap = loadRebaseRecords("gregorian-julian-rebase-micros.json")
 
   /**
-   * Rebases the given `micros` to the number of microseconds since the epoch via a local
-   * timestamp that have the same date-time fields in Proleptic Gregorian and in the hybrid
-   * calendars.
+   * Converts the given number of microseconds since the epoch '1970-01-01T00:00:00Z', to a local
+   * date-time in Proleptic Gregorian calendar with timezone identified by `zoneId`, interprets the
+   * result as a local date-time in Julian calendar with the same timezone, and takes microseconds
+   * since the epoch from the Julian local date-time.
    *
-   * The function may optimize the rebasing by using pre-calculated rebasing maps. If the maps
-   * don't contains information about the current JVM system time zone, the functions falls back
-   * to regular conversion mechanism via building local timestamps.
+   * This is used to guarantee backward compatibility, as Spark 2.4 and earlier versions use
+   * Julian calendar for dates before 1582-10-15, while Spark 3.0 and later use Proleptic Gregorian
+   * calendar. See SPARK-26651.
+   *
+   * For example:
+   *   Proleptic Gregorian calendar: 1582-01-01 00:00:00.123456 -> -12244061221876544
+   *   Julian calendar: 1582-01-01 00:00:00.123456 -> -12243196799876544
+   * The code below converts -12244061221876544 to -12243196799876544.
+   *
+   * @param zoneId The time zone ID at which the rebasing should be performed.
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
+   *               in Proleptic Gregorian calendar. It can be negative.
+   * @return The rebased microseconds since the epoch in Julian calendar.
+   */
+  private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
+    val instant = microsToInstant(micros)
+    val ldt = instant.atZone(zoneId).toLocalDateTime
+    val cal = new Calendar.Builder()
+      // `gregory` is a hybrid calendar that supports both
+      // the Julian and Gregorian calendar systems
+      .setCalendarType("gregory")
+      .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
+      .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
+      // Local time-line can overlaps, such as at an autumn daylight savings cutover.
+      // This setting selects the original local timestamp mapped to the given `micros`.
+      .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
+      .build()
+    millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
+  }
+
+  /**
+   * An optimized version of [[rebaseGregorianToJulianMicros(ZoneId, Long)]]. This method leverages
+   * the pre-calculated rebasing maps to save calculation. If the rebasing map doesn't contain
+   * information about the current JVM system time zone, the function falls back to the regular
+   * unoptimized version.
    *
    * Note: The function assumes that the input micros was derived from a local timestamp
    *       at the default system JVM time zone in Proleptic Gregorian calendar.
    *
-   * @param micros The microseconds since the epoch 1970-01-01T00:00:00Z
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
    *               in Proleptic Gregorian calendar. It can be negative.
-   * @return The microseconds since the epoch that have the same local timestamp representation
-   *         in the hybrid calendar (Julian + Gregorian) as the original `micros` in
-   *         Proleptic Gregorian calendar.
+   * @return The rebased microseconds since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
     val timeZone = TimeZone.getDefault
@@ -256,14 +270,23 @@ object RebaseDateTime {
   }
 
   /**
-   * Converts the given microseconds to a local date-time in UTC time zone in the hybrid
-   * calendar (Julian + Gregorian since 1582-10-15), interprets the result as a local date-time
-   * in Proleptic Gregorian calendar in UTC time zone. And takes microseconds since the epoch
-   * from the Gregorian timestamp.
+   * Converts the given number of microseconds since the epoch '1970-01-01T00:00:00Z', to a local
+   * date-time in Julian calendar with timezone identified by `zoneId`, interprets the result as a
+   * local date-time in Proleptic Gregorian calendar with the same timezone, and takes microseconds
+   * since the epoch from the Gregorian local date-time.
+   *
+   * This is used to guarantee backward compatibility, as Spark 2.4 and earlier versions use
+   * Julian calendar for dates before 1582-10-15, while Spark 3.0 and later use Proleptic Gregorian
+   * calendar. See SPARK-26651.
+   *
+   * For example:
+   *   Julian calendar: 1582-01-01 00:00:00.123456 -> -12243196799876544
+   *   Proleptic Gregorian calendar: 1582-01-01 00:00:00.123456 -> -12244061221876544
+   * The code below converts -12243196799876544 to -12244061221876544.
    *
    * @param zoneId The time zone ID at which the rebasing should be performed.
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
-   *               in the hybrid calendar (Julian + Gregorian). It can be negative.
+   *               in the Julian calendar. It can be negative.
    * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
   private[sql] def rebaseJulianToGregorianMicros(zoneId: ZoneId, micros: Long): Long = {
@@ -287,9 +310,13 @@ object RebaseDateTime {
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
       .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
     val zonedDateTime = localDateTime.atZone(zoneId)
-    // Zero DST offset means that local clocks have switched to the winter time already.
-    // So, clocks go back one hour. We should correct zoned date-time and change
-    // the zone offset to the later of the two valid offsets at a local time-line overlap.
+    // Assuming the daylight saving switchover time is 2:00, the local clock will go back to
+    // 2:00 after hitting 2:59. This means the local time between [2:00, 3:00) appears twice, and
+    // can map to two different physical times (seconds from the UTC epoch).
+    // Java 8 time API resolves the ambiguity by picking the earlier physical time. This is the same
+    // as Java 7 time API, except for 2:00 where Java 7 picks the later physical time.
+    // Here we detect the "2:00" case and pick the latter physical time, to be compatible with the
+    // Java 7 date-time.
     val adjustedZdt = if (cal.get(Calendar.DST_OFFSET) == 0) {
       zonedDateTime.withLaterOffsetAtOverlap()
     } else {
@@ -306,24 +333,17 @@ object RebaseDateTime {
   private val julianGregRebaseMap = loadRebaseRecords("julian-gregorian-rebase-micros.json")
 
   /**
-   * This is an opposite to `rebaseGregorianToJulianMicros` function which rebases the given
-   * microseconds since the epoch 1970-01-01T00:00:00Z via local timestamps from the
-   * hybrid calendar (Julian + Gregorian) to Proleptic Gregorian calendar.
-   * For example, the input `micros` -12243196799876544 is mapped to 1582-01-01 00:00:00.123456 in
-   * Julian calendar. The same local timestamp in Proleptic Gregorian calendar is mapped to
-   * the different number of micros -12244061221876544 since the epoch. Semantically, the function
-   * performs such conversion either via direct conversion to local timestamps,
-   * or via pre-calculated rebasing tables.
+   * An optimized version of [[rebaseJulianToGregorianMicros(ZoneId, Long)]]. This method leverages
+   * the pre-calculated rebasing maps to save calculation. If the rebasing map doesn't contain
+   * information about the current JVM system time zone, the function falls back to the regular
+   * unoptimized version.
    *
    * Note: The function assumes that the input micros was derived from a local timestamp
-   *       at the default system JVM time zone in the hybrid calendar (Julian and Gregorian
-   *       since 1582-10-15)
+   *       at the default system JVM time zone in the Julian calendar.
    *
-   * @param micros The number of microseconds since the epoch 1970-01-01T00:00:00Z
-   *               in the hybrid calendar (Julian + Gregorian). It can be negative.
-   * @return The rebased number of microseconds since the epoch which is mapped to the same
-   *         local timestamp in Proleptic Gregorian calendar as `micros` in the hybrid calendar
-   *         at the system time zone.
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
+   *               in the Julian calendar. It can be negative.
+   * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
     val timeZone = TimeZone.getDefault
