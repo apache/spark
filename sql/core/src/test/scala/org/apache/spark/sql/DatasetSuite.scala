@@ -59,6 +59,9 @@ class DatasetSuite extends QueryTest
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
 
+  // To avoid syntax error thrown by genjavadoc, make this case class non-top level and private.
+  private case class InvalidInJava2(`0`: Int)
+
   test("checkAnswer should compare map correctly") {
     val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
     checkAnswer(
@@ -1971,7 +1974,6 @@ case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
 
 case class InvalidInJava(`abstract`: Int)
-case class InvalidInJava2(`0`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
