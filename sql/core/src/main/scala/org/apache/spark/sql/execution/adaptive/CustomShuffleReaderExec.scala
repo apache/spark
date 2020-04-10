@@ -95,30 +95,6 @@ case class CustomShuffleReaderExec private(
     case _ => None
   }
 
-  private def partitionDataSizeMetrics = {
-    val maxSize = SQLMetrics.createSizeMetric(sparkContext, "maximum partition data size")
-    val minSize = SQLMetrics.createSizeMetric(sparkContext, "minimum partition data size")
-    val avgSize = SQLMetrics.createSizeMetric(sparkContext, "average partition data size")
-    val mapStatsOpt = shuffleStage.get.mapStats
-    val sizes = mapStatsOpt.map { mapStats =>
-      val mapSizes = mapStats.bytesByPartitionId
-      partitionSpecs.map {
-        case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
-          startReducerIndex.until(endReducerIndex).map(mapSizes).sum
-        case p: PartialReducerPartitionSpec => p.dataSize
-        case p => throw new IllegalStateException("unexpected " + p)
-      }
-    }.getOrElse(Seq(0L))
-
-    maxSize.set(sizes.max)
-    minSize.set(sizes.min)
-    avgSize.set(sizes.sum / sizes.length)
-    Map(
-      "maxPartitionDataSize" -> maxSize,
-      "minPartitionDataSize" -> minSize,
-      "avgPartitionDataSize" -> avgSize)
-  }
-
   private def skewedPartitionMetrics = {
     val metrics = SQLMetrics.createMetric(sparkContext, "number of skewed partitions")
     val numSkewedPartitions = partitionSpecs.collect {
@@ -126,6 +102,24 @@ case class CustomShuffleReaderExec private(
     }.distinct.length
     metrics.set(numSkewedPartitions)
     Map("numSkewedPartitions" -> metrics)
+  }
+
+  private def sendPartitionDataSizeMetrics(executionId: String): Unit = {
+    val mapStats = shuffleStage.get.mapStats.bytesByPartitionId
+    partitionSpecs.foreach {
+      case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
+        val dataSize = startReducerIndex.until(endReducerIndex).map(mapStats(_)).sum
+        metrics("partitionDataSize").set(dataSize)
+        SQLMetrics.postDriverMetricUpdates(
+          sparkContext, executionId,
+          metrics.filter(_._1 == "partitionDataSize").values.toSeq)
+      case p: PartialReducerPartitionSpec =>
+        metrics("partitionDataSize").set(p.dataSize)
+        SQLMetrics.postDriverMetricUpdates(
+          sparkContext, executionId,
+          metrics.filter(_._1 == "partitionDataSize").values.toSeq)
+      case p => throw new IllegalStateException("unexpected " + p)
+    }
   }
 
   @transient override lazy val metrics: Map[String, SQLMetric] = {
@@ -138,7 +132,8 @@ case class CustomShuffleReaderExec private(
           // data size info is available.
           Map.empty
         } else {
-          partitionDataSizeMetrics
+          Map("partitionDataSize" ->
+            SQLMetrics.createSizeMetric(sparkContext, "partition data size"))
         }
       } ++ {
         if (hasSkewedPartition) {
@@ -155,7 +150,12 @@ case class CustomShuffleReaderExec private(
 
   private lazy val cachedShuffleRDD: RDD[InternalRow] = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      metrics.filter(_._1 != "partitionDataSize").values.toSeq)
+
+    if(!isLocalReader) {
+      sendPartitionDataSizeMetrics(executionId)
+    }
     shuffleStage.map { stage =>
       new ShuffledRowRDD(
         stage.shuffle.shuffleDependency, stage.shuffle.readMetrics, partitionSpecs.toArray)
