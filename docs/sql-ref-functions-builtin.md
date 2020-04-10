@@ -19,6 +19,6 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL defines built-in functions to use, a complete list of which can be found [here](api/sql/). Among them, Spark SQL has several special categories of built-in functions: [Aggregate Functions](sql-ref-functions-builtin-aggregate.html) to operate on a group of rows and return a single value, and [Window Functions](sql-ref-functions-builtin-window.html) to operate on a group of rows but return values for each row in the group.
+Spark SQL defines built-in functions to use, a complete list of which can be found [here](api/sql/). Among them, Spark SQL has several special categories of built-in functions: [Aggregate Functions](sql-ref-functions-builtin-aggregate.html) to operate on a group of rows and return a single value, while [Window Functions](sql-ref-functions-builtin-window.html) to operate on a group of rows but return values for each row in the group.
   * [Aggregate Functions](sql-ref-functions-builtin-aggregate.html)
   * [Window Functions](sql-ref-functions-builtin-window.html)
