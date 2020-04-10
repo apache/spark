@@ -876,8 +876,8 @@ class AdaptiveQueryExecSuite
       }
       spark.sparkContext.addSparkListener(listener)
       withSQLConf(SQLConf.UI_EXPLAIN_MODE.key -> mode,
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
         val dfApdaptive = sql("SELECT * FROM testData JOIN testData2 ON key = a WHERE value = '1'")
         try {
           checkAnswer(dfApdaptive, Row(1, "1", 1, 1) :: Row(1, "1", 1, 2) :: Nil)
@@ -890,13 +890,13 @@ class AdaptiveQueryExecSuite
     }
 
     Seq(("simple", Seq("== Physical Plan ==")),
-        ("extended", Seq("== Parsed Logical Plan ==", "== Analyzed Logical Plan ==",
-          "== Optimized Logical Plan ==", "== Physical Plan ==")),
-        ("codegen", Seq("WholeStageCodegen subtrees")),
-        ("cost", Seq("== Optimized Logical Plan ==", "Statistics(sizeInBytes")),
-        ("formatted", Seq("== Physical Plan ==", "Output", "Arguments"))).foreach {
+      ("extended", Seq("== Parsed Logical Plan ==", "== Analyzed Logical Plan ==",
+        "== Optimized Logical Plan ==", "== Physical Plan ==")),
+      ("codegen", Seq("WholeStageCodegen subtrees")),
+      ("cost", Seq("== Optimized Logical Plan ==", "Statistics(sizeInBytes")),
+      ("formatted", Seq("== Physical Plan ==", "Output", "Arguments"))).foreach {
       case (mode, expected) =>
         checkPlanDescription(mode, expected)
+    }
   }
-  
 }
