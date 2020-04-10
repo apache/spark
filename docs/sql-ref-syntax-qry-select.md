@@ -78,9 +78,9 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
     Specifies a source of input for the query. It can be one of the following:
     <ol>
       <li>Table relation</li>
-      <li>Join relation</li>
-      <li>Table valued function</li>
-      <li>Inlined table</li>
+      <li><a href="sql-ref-syntax-qry-select-join.html">Join relation</a></li>
+      <li><a href="sql-ref-syntax-qry-select-tvf.html">Table-value function</a></li>
+      <li><a href="sql-ref-syntax-qry-select-inline-table.html">Inline table</a></li>
       <li>Subquery</li>
     </ol>
   </dd>
