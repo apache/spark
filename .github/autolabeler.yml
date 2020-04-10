@@ -72,18 +72,14 @@ SQL:
   - "/bin/beeline*"
   - "/sbin/*thriftserver*.sh"
 AVRO:
-  - /external/avro"
+  - "/external/avro"
   - "/python/pyspark/sql/avro"
 DSTREAM:
   - "/streaming/"
   - "/data/streaming"
-  - "/external/flume/"
-  - "/external/flume-assembly/"
-  - "/external/flume-sink/"
-  - "/external/kinesis-asl/"
-  - "/external/kinesis-asl-assembly/"
-  - "/external/kafka-0-10/"
-  - "/external/kafka-0-10-assembly/"
+  - "/external/flume*"
+  - "/external/kinesis*"
+  - "/external/kafka*"
   - "/python/pyspark/streaming"
 GRAPHX:
   - "/graphx/"
