@@ -203,15 +203,20 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
     val resultDF = ChiSquareTest.test(dataset.toDF, $(featuresCol), $(labelCol), true)
 
+    def getTopIndices(k: Int): Array[Int] = {
+      resultDF.select(-col("pValue"), col("featureIndex"))
+        .as[(Double, Int)].rdd
+        .top(k).map(_._2)
+    }
+
     val indices = $(selectorType) match {
       case "numTopFeatures" =>
-        resultDF.sort("pValue").select("featureIndex")
-          .as[Int].take($(numTopFeatures))
+        getTopIndices($(numTopFeatures))
       case "percentile" =>
-        resultDF.sort("pValue").select("featureIndex")
-          .as[Int].take((numFeatures * getPercentile).toInt)
+        getTopIndices((numFeatures * getPercentile).toInt)
       case "fpr" =>
-        resultDF.select("featureIndex").where(col("pValue").lt($(fpr)))
+        resultDF.select("featureIndex")
+          .where(col("pValue").lt($(fpr)))
           .as[Int].collect()
       case "fdr" =>
         // This uses the Benjamini-Hochberg procedure.
@@ -226,11 +231,11 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
             } else Iterator.empty
           }.fold(-1)(math.max)
         if (maxIndex >= 0) {
-          resultDF.sort("pValue").select("featureIndex")
-            .as[Int].take(maxIndex + 1)
+          getTopIndices(maxIndex + 1)
         } else Array.emptyIntArray
       case "fwe" =>
-        resultDF.select("featureIndex").where(col("pValue").lt($(fwe) / numFeatures))
+        resultDF.select("featureIndex")
+          .where(col("pValue").lt($(fwe) / numFeatures))
           .as[Int].collect()
       case errorType =>
         throw new IllegalStateException(s"Unknown Selector Type: $errorType")
