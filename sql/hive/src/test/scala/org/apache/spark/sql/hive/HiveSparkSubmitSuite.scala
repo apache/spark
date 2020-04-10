@@ -692,30 +692,39 @@ object SPARK_9757 extends QueryTest {
     spark = hiveContext.sparkSession
     import hiveContext.implicits._
 
-    val dir = Utils.createTempDir()
-    dir.delete()
+    var dir: File = null
 
     try {
       {
+        dir = Utils.createTempDir()
+        dir.delete()
         val df =
           hiveContext
             .range(10)
             .select(($"id" + 0.1) cast DecimalType(10, 3) as "dec")
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
+        hiveContext.sql("DROP TABLE t")
       }
 
       {
+        dir = Utils.createTempDir()
+        dir.delete()
         val df =
           hiveContext
             .range(10)
             .select(callUDF("struct", ($"id" + 0.2) cast DecimalType(10, 3)) as "dec_struct")
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
+        hiveContext.sql("DROP TABLE t")
       }
     } finally {
-      dir.delete()
-      hiveContext.sql("DROP TABLE t")
+      if (dir.exists()) {
+        dir.delete()
+      }
+      if (hiveContext.tableNames().contains("t")) {
+        hiveContext.sql("DROP TABLE t")
+      }
       sparkContext.stop()
     }
   }
