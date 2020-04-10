@@ -90,7 +90,7 @@ object RebaseDateTime {
       // For example, 1000-02-29 exists in Julian calendar because 1000
       // is a leap year but it is not a leap year in Gregorian calendar.
       1)
-      .`with`(ChronoField.ERA, if (days < julianCommonEraStartDay) 0 else 1)
+      .`with`(ChronoField.ERA, utcCal.get(Calendar.ERA))
       .plusDays(utcCal.get(Calendar.DAY_OF_MONTH) - 1)
     Math.toIntExact(localDate.toEpochDay)
   }
