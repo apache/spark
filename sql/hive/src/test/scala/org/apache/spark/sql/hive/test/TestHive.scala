@@ -263,7 +263,10 @@ private[hive] class TestHiveSparkSession(
   System.clearProperty("spark.hostPort")
 
   // For some hive test case which contain ${system:test.tmp.dir}
-  System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
+  // Make sure it is not called again when cloning sessions.
+  if (parentSessionState.isEmpty) {
+    System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
+  }
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
