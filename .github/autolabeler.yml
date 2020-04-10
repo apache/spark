@@ -28,7 +28,6 @@ INFRA:
   - ".asf.yaml"
   - ".gitattributes"
   - ".gitignore"
-  - "scalastyle-config.xml"
 BUILD:
   - "/dev/"
   - "/build/"
@@ -37,6 +36,7 @@ BUILD:
   - "*pom.xml"
   - "/bin/docker-image-tool.sh"
   - "/bin/find-spark-home*"
+  - "scalastyle-config.xml"
 DOCS:
   - "docs/"
   - "/README.md"
