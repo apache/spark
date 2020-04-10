@@ -265,29 +265,20 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
       val query = "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a"
       val df = spark.sql(query)
-      testSparkPlanMetrics(df, 1, Map(
-        0L -> (("SortMergeJoin", Map(
-          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of output rows" -> 4L))),
-        2L -> (("Exchange", Map(
-          "records read" -> 4L,
-          "local blocks read" -> 2L,
-          "remote blocks read" -> 0L,
-          "shuffle records written" -> 2L))))
-      )
 
-      val df1 = spark.sql(query)
-      testSparkPlanMetrics(df1, 1, Map(
-        1L -> (("SortMergeJoin", Map(
-          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of output rows" -> 4L))),
-        4L -> (("Exchange", Map(
-          "records read" -> 4L,
-          "local blocks read" -> 2L,
-          "remote blocks read" -> 0L,
-          "shuffle records written" -> 2L)))),
-        true
-      )
+      Seq((0L, 2L, false), (0L, 2L, true)).foreach(args => {
+        testSparkPlanMetrics(df, 1, Map(
+          args._1 -> (("SortMergeJoin", Map(
+            // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+            "number of output rows" -> 4L))),
+          args._2 -> (("Exchange", Map(
+            "records read" -> 4L,
+            "local blocks read" -> 2L,
+            "remote blocks read" -> 0L,
+            "shuffle records written" -> 2L)))),
+          args._3
+        )
+      })
     }
   }
 
