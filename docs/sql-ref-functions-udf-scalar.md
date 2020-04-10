@@ -62,109 +62,15 @@ Functions for registering user-defined functions. Use `SparkSession.udf` to acce
 
 ### Examples
 
-{% highlight sql %}
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example udf_scalar scala/org/apache/spark/examples/sql/UserDefinedScalar.scala%}
+</div>
+<div data-lang="java"  markdown="1">
+{% include_example udf_scalar java/org/apache/spark/examples/sql/JavaUserDefinedScalar.java%}
+</div>
+</div>
 
-// Define and register a zero-argument non-deterministic UDF
-// UDF is deterministic by default, i.e. produces the same result for the same input.
-// Scala
-import org.apache.spark.sql.functions.udf
-
-val foo = udf(() => Math.random())
-spark.udf.register("random", foo.asNondeterministic())
-
-sql("SELECT random()").show()
-
-+------------------+
-|UDF()             |
-+------------------+
-|0.9199799737037972|
-+------------------+
-
-// Define and register a one-argument UDF
-// Scala
-import org.apache.spark.sql.functions.udf
-
-val plusOne = udf((x: Int) => x + 1)
-spark.udf.register("plusOne", plusOne)
-
-sql("SELECT plusOne(5)").show()
-
-+------+
-|UDF(5)|
-+------+
-|     6|
-+------+
-
-// Define a two-argument UDF and register it with Spark in one step
-// Scala
-import import org.apache.spark.sql.functions.udf
-
-spark.udf.register("strLenScala", (_: String).length + (_: Int))
-
-sql("SELECT strLenScala('test', 1))").show()
-
-+--------------------+
-|strLenScala(test, 1)|
-+--------------------+
-|                   5|
-+--------------------+
-
-// UDF in a WHERE clause
-// Scala
-import org.apache.spark.sql.functions.udf
-
-spark.udf.register("oneArgFilter", (n: Int) => { n > 5 })
-spark.range(1, 10).createOrReplaceTempView("test")
-
-sql("SELECT * FROM test WHERE oneArgFilter(id)").show()
-
-+---+
-|id |
-+---+
-|6  |
-|7  |
-|8  |
-|9  |
-+---+
-
-// UDF in a GROUP BY clause
-// Scala
-import org.apache.spark.sql.functions.udf
-
-spark.udf.register("groupFunction", (n: Int) => { n > 10 })
-
-val df = Seq(("red", 1),
-             ("red", 2),
-             ("blue", 10),
-             ("green", 100),
-             ("green", 200))
-             .toDF("color", "value")
-df.createOrReplaceTempView("groupData")
-
-sql("SELECT SUM(value) FROM groupData GROUP BY groupFunction(value)").show()
-
-+----------+
-|sum(value)|
-+----------+
-|13        |
-|300       |
-+----------+
-
-# Define and register a UDF using Python
-from pyspark.sql.functions import udf
-from pyspark.sql.types import IntegerType
-
-spark.udf.register("twoArgs", lambda x, y: len(x) + y, IntegerType())
-
-spark.sql("SELECT twoArgs('test', 1)").show()
-
-+----------------+
-|twoArgs(test, 1)|
-+----------------+
-|               5|
-+----------------+
-
-{% endhighlight %}
 
 ### Related Statements
 - [User Defined Aggregate Functions (UDAFs)](sql-ref-functions-udf-aggregate.html)

@@ -89,45 +89,32 @@ Functions for registering user-defined functions. Use `SparkSession.udf` to acce
 
 ### Examples
 
-{% highlight sql %}
+#### Type-Safe User-Defined Aggregate Functions
 
-// Define and register a UDAF to calculate the sum of product of two columns
-// Scala
-import org.apache.spark.sql.expressions.Aggregator
-import org.apache.spark.sql.functions.udaf
+User-defined aggregations for strongly typed Datasets revolve around the [Aggregator](api/scala/org/apache/spark/sql/expressions/Aggregator.html) abstract class.
+For example, a type-safe user-defined average can look like:
 
-val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
-  def zero: Long = 0L
-  def reduce(b: Long, a: (Long, Long)): Long = b + (a._1 * a._2)
-  def merge(b1: Long, b2: Long): Long = b1 + b2
-  def finish(r: Long): Long = r
-  def bufferEncoder: Encoder[Long] = Encoders.scalaLong
-  def outputEncoder: Encoder[Long] = Encoders.scalaLong
-})
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example typed_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedTypedAggregation.scala%}
+</div>
+<div data-lang="java"  markdown="1">
+{% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
+</div>
+</div>
 
-spark.udf.register("agg", agg)
+#### Untyped User-Defined Aggregate Functions
+Typed aggregations, as described above, may also be registered as untyped aggregating UDFs for use with DataFrames.
+For example, a user-defined average for untyped DataFrames can look like:
 
-val df = Seq(
-  (1, 1),
-  (1, 5),
-  (2, 10),
-  (2, -1),
-  (4, 7),
-  (3, 8),
-  (2, 4))
-  .toDF("a", "b")
-
-df.createOrReplaceTempView("testUDAF")
-
-sql("SELECT agg(a, b) FROM testUDAF").show()
-
-+---------------------------------------------+
-|$anon$2(CAST(a AS BIGINT), CAST(b AS BIGINT))|
-+---------------------------------------------+
-|84                                           |
-+---------------------------------------------+
-
-{% endhighlight %}
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example untyped_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedUntypedAggregation.scala%}
+</div>
+<div data-lang="java"  markdown="1">
+{% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
+</div>
+</div>
 
 ### Related Statements
 - [Scalar User Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
