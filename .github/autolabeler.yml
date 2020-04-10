@@ -59,7 +59,6 @@ CORE:
   - "/sbin/*mesos*.sh"
 SPARK SUBMIT:
   - "/bin/spark-submit*"
-  - "/bin/sparkR*"
 SPARK SHELL:
   - "/repl"
 SQL:
@@ -107,6 +106,7 @@ PYTHON:
 R:
   - "r/"
   - "R/"
+  - "/bin/sparkR*"
 YARN:
   - "/resource-managers/yarn/"
 MESOS:
