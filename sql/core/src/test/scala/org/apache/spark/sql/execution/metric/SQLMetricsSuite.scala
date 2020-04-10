@@ -266,7 +266,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       val query = "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a"
       val df = spark.sql(query)
 
-      Seq((0L, 2L, false), (0L, 2L, true)).foreach(args => {
+      Seq((0L, 2L, false), (1L, 4L, true)).foreach(args => {
         testSparkPlanMetrics(df, 1, Map(
           args._1 -> (("SortMergeJoin", Map(
             // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
