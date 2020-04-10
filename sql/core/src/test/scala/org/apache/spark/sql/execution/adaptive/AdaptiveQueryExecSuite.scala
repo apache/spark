@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, B
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
@@ -777,6 +778,19 @@ class AdaptiveQueryExecSuite
     levels.foreach { level =>
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_LOG_LEVEL.key -> level._1) {
         verifyLog(level._2)
+      }
+    }
+  }
+
+  test("SPARK-31384: avoid NPE in OptimizeSkewedJoin when there's 0 partition plan") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t2") {
+        // create DataFrame with 0 partition
+        spark.createDataFrame(sparkContext.emptyRDD[Row], new StructType().add("b", IntegerType))
+          .createOrReplaceTempView("t2")
+        // should run successfully without NPE
+        runAdaptiveAndVerifyResult("SELECT * FROM testData2 t1 left semi join t2 ON t1.a=t2.b")
       }
     }
   }
