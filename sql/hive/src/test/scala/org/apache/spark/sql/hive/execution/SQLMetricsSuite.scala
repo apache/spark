@@ -21,6 +21,7 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
+// Disable AQE because metric info is different with AQE on/off
 class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
   with DisableAdaptiveExecution {
 

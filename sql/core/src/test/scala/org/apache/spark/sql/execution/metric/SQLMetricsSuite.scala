@@ -34,6 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
+// Disable AQE because metric info is different with AQE on/off
 class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   with DisableAdaptiveExecution {
   import testImplicits._

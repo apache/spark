@@ -29,6 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
+// Disable AQE because the WholeStageCodegenExec rule is applied when running QueryStageExec
 class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   with DisableAdaptiveExecution {
 

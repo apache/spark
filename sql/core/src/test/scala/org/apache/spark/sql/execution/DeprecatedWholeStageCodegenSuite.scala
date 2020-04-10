@@ -23,6 +23,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.test.SharedSparkSession
 
+// Disable AQE because the WholeStageCodegenExec rule is applied when running QueryStageExec
 @deprecated("This test suite will be removed.", "3.0.0")
 class DeprecatedWholeStageCodegenSuite extends QueryTest
   with SharedSparkSession

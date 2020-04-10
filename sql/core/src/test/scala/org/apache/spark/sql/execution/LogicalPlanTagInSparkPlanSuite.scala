@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExc
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.window.WindowExec
 
+// Disable AQE because AdaptiveSparkPlanExec does not have a logical plan link
 class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite with DisableAdaptiveExecution {
 
   override protected def checkGeneratedCode(
