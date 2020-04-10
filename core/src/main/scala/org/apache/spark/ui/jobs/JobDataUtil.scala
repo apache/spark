@@ -26,6 +26,7 @@ private[ui] object JobDataUtil {
         end - start.getTime()
     }
   }
+
   def getFormattedDuration(jobData: JobData): String = {
     val duration = getDuration(jobData)
     duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
