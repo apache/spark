@@ -92,6 +92,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
   <dd>
     Specifies the expressions that are used to group the rows. This is used in conjunction with aggregate functions
     (MIN, MAX, COUNT, SUM, AVG, etc.) to group rows based on the grouping expressions and aggregate values in each group.
+    When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
   </dd>
   <dt><code><em>HAVING</em></code></dt>
   <dd>
@@ -149,3 +150,5 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
 - [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
 - [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 - [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+- [TABLESAMPLE](sql-ref-syntax-qry-sampling.html)
+- [SET Operators](sql-ref-syntax-qry-select-setops.html)

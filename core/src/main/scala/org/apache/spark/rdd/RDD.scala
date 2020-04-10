@@ -23,6 +23,7 @@ import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Codec
 import scala.language.implicitConversions
+import scala.ref.WeakReference
 import scala.reflect.{classTag, ClassTag}
 import scala.util.hashing
 
@@ -243,6 +244,9 @@ abstract class RDD[T: ClassTag](
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
   @volatile private var dependencies_ : Seq[Dependency[_]] = _
+  // When we overwrite the dependencies we keep a weak reference to the old dependencies
+  // for user controlled cleanup.
+  @volatile @transient private var legacyDependencies: WeakReference[Seq[Dependency[_]]] = _
   @volatile @transient private var partitions_ : Array[Partition] = _
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
@@ -262,6 +266,25 @@ abstract class RDD[T: ClassTag](
         }
       }
       dependencies_
+    }
+  }
+
+  /**
+   * Get the list of dependencies of this RDD ignoring checkpointing.
+   */
+  final private def internalDependencies: Option[Seq[Dependency[_]]] = {
+    if (legacyDependencies != null) {
+      legacyDependencies.get
+    } else if (dependencies_ != null) {
+      Some(dependencies_)
+    } else {
+      // This case should be infrequent.
+      stateLock.synchronized {
+        if (dependencies_ == null) {
+          dependencies_ = getDependencies
+        }
+        Some(dependencies_)
+      }
     }
   }
 
@@ -1703,6 +1726,40 @@ abstract class RDD[T: ClassTag](
 
   /**
    * :: Experimental ::
+   * Removes an RDD's shuffles and it's non-persisted ancestors.
+   * When running without a shuffle service, cleaning up shuffle files enables downscaling.
+   * If you use the RDD after this call, you should checkpoint and materialize it first.
+   * If you are uncertain of what you are doing, please do not use this feature.
+   * Additional techniques for mitigating orphaned shuffle files:
+   *   * Tuning the driver GC to be more aggressive, so the regular context cleaner is triggered
+   *   * Setting an appropriate TTL for shuffle files to be auto cleaned
+   */
+  @Experimental
+  @DeveloperApi
+  @Since("3.1.0")
+  def cleanShuffleDependencies(blocking: Boolean = false): Unit = {
+    sc.cleaner.foreach { cleaner =>
+      /**
+       * Clean the shuffles & all of its parents.
+       */
+      def cleanEagerly(dep: Dependency[_]): Unit = {
+        if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
+          val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
+          cleaner.doCleanupShuffle(shuffleId, blocking)
+        }
+        val rdd = dep.rdd
+        val rddDepsOpt = rdd.internalDependencies
+        if (rdd.getStorageLevel == StorageLevel.NONE) {
+          rddDepsOpt.foreach(deps => deps.foreach(cleanEagerly))
+        }
+      }
+      internalDependencies.foreach(deps => deps.foreach(cleanEagerly))
+    }
+  }
+
+
+  /**
+   * :: Experimental ::
    * Marks the current stage as a barrier stage, where Spark must launch all tasks together.
    * In case of a task failure, instead of only restarting the failed task, Spark will abort the
    * entire stage and re-launch all tasks for this stage.
@@ -1747,7 +1804,7 @@ abstract class RDD[T: ClassTag](
   // =======================================================================
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
-  private var resourceProfile: Option[ResourceProfile] = None
+  @transient private var resourceProfile: Option[ResourceProfile] = None
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = sc.getCallSite()
@@ -1840,6 +1897,7 @@ abstract class RDD[T: ClassTag](
    * created from the checkpoint file, and forget its old dependencies and partitions.
    */
   private[spark] def markCheckpointed(): Unit = stateLock.synchronized {
+    legacyDependencies = new WeakReference(dependencies_)
     clearDependencies()
     partitions_ = null
     deps = null    // Forget the constructor argument for dependencies too

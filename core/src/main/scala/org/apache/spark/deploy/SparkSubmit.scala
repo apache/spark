@@ -474,10 +474,12 @@ private[spark] class SparkSubmit extends Logging {
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
         args.childArgs = ArrayBuffer(localPrimaryResource, localPyFiles) ++ args.childArgs
       }
-      if (clusterManager != YARN) {
-        // The YARN backend handles python files differently, so don't merge the lists.
-        args.files = mergeFileLists(args.files, args.pyFiles)
-      }
+    }
+
+    // Non-PySpark applications can need Python dependencies.
+    if (deployMode == CLIENT && clusterManager != YARN) {
+      // The YARN backend handles python files differently, so don't merge the lists.
+      args.files = mergeFileLists(args.files, args.pyFiles)
     }
 
     if (localPyFiles != null) {

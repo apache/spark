@@ -523,6 +523,8 @@ SparkR supports the following machine learning models and algorithms.
 
 * Naive Bayes
 
+* Factorization Machines (FM) Classifier
+
 #### Regression
 
 * Accelerated Failure Time (AFT) Survival Model
@@ -530,6 +532,10 @@ SparkR supports the following machine learning models and algorithms.
 * Generalized Linear Model (GLM)
 
 * Isotonic Regression
+
+* Linear Regression
+
+* Factorization Machines (FM) Regressor
 
 #### Tree - Classification and Regression
 
@@ -705,6 +711,24 @@ naiveBayesPrediction <- predict(naiveBayesModel, titanicDF)
 head(select(naiveBayesPrediction, "Class", "Sex", "Age", "Survived", "prediction"))
 ```
 
+#### Factorization Machines Classifier
+
+Factorization Machines for classification problems.
+
+For background and details about the implementation of factorization machines,
+refer to the [Factorization Machines section](https://spark.apache.org/docs/latest/ml-classification-regression.html#factorization-machines).
+
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+
+model <- spark.fmClassifier(training, Survived ~ Age + Sex)
+summary(model)
+
+predictions <- predict(model, training)
+head(select(predictions, predictions$prediction))
+```
+
 #### Accelerated Failure Time Survival Model
 
 Survival analysis studies the expected duration of time until an event happens, and often the relationship with risk factors or treatment taken on the subject. In contrast to standard regression analysis, survival modeling has to deal with special characteristics in the data including non-negative survival time and censoring.
@@ -811,6 +835,32 @@ For example, when the input is $3.2$, the two closest feature values are $3.0$ a
 ```{r}
 newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
 head(predict(isoregModel, newDF))
+```
+
+#### Linear Regression
+
+Linear regression model.
+
+```{r}
+model <- spark.lm(carsDF, mpg ~ wt + hp)
+
+summary(model)
+predictions <- predict(model, carsDF)
+head(select(predictions, predictions$prediction))
+```
+
+#### Factorization Machines Regressor
+
+Factorization Machines for regression problems.
+
+For background and details about the implementation of factorization machines,
+refer to the [Factorization Machines section](https://spark.apache.org/docs/latest/ml-classification-regression.html#factorization-machines).
+
+```{r}
+model <- spark.fmRegressor(carsDF, mpg ~ wt + hp)
+summary(model)
+predictions <- predict(model, carsDF)
+head(select(predictions, predictions$prediction))
 ```
 
 #### Decision Tree

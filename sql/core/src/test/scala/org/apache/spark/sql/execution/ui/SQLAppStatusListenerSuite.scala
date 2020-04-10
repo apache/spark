@@ -317,6 +317,43 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     checkAnswer(statusStore.executionMetrics(executionId), accumulatorUpdates.mapValues(_ * 11))
   }
 
+  test("control a plan explain mode in listeners via SQLConf") {
+
+    def checkPlanDescription(mode: String, expected: Seq[String]): Unit = {
+      var checkDone = false
+      val listener = new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case SparkListenerSQLExecutionStart(_, _, _, planDescription, _, _) =>
+              assert(expected.forall(planDescription.contains))
+              checkDone = true
+            case _ => // ignore other events
+          }
+        }
+      }
+      spark.sparkContext.addSparkListener(listener)
+      withSQLConf(SQLConf.UI_EXPLAIN_MODE.key -> mode) {
+        createTestDataFrame.collect()
+        try {
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          assert(checkDone)
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
+        }
+      }
+    }
+
+    Seq(("simple", Seq("== Physical Plan ==")),
+        ("extended", Seq("== Parsed Logical Plan ==", "== Analyzed Logical Plan ==",
+          "== Optimized Logical Plan ==", "== Physical Plan ==")),
+        ("codegen", Seq("WholeStageCodegen subtrees")),
+        ("cost", Seq("== Optimized Logical Plan ==", "Statistics(sizeInBytes")),
+        ("formatted", Seq("== Physical Plan ==", "Output", "Arguments"))).foreach {
+      case (mode, expected) =>
+        checkPlanDescription(mode, expected)
+    }
+  }
+
   test("onExecutionEnd happens before onJobEnd(JobSucceeded)") {
     val statusStore = createStatusStore()
     val listener = statusStore.listener.get

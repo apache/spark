@@ -77,7 +77,13 @@ NULL
 #'          days to be added to or subtracted from \code{y}. For class \code{character}, it is
 #'          \itemize{
 #'          \item \code{date_format}: date format specification.
-#'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: time zone to use.
+#'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: A string detailing
+#'            the time zone ID that the input should be adjusted to. It should be in the format
+#'            of either region-based zone IDs or zone offsets. Region IDs must have the form
+#'            'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
+#'            (+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported
+#'            as aliases of '+00:00'. Other short names are not recommended to use
+#'            because they can be ambiguous.
 #'          \item \code{next_day}: day of the week string.
 #'          }
 #' @param ... additional argument(s).
@@ -2969,7 +2975,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 
 #' @details
 #' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
-#' samples from U[0.0, 1.0].
+#' samples uniformly distributed in [0.0, 1.0).
 #' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions

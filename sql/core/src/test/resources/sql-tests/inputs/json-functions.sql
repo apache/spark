@@ -58,5 +58,35 @@ select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'tr
 select schema_of_json(null);
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a');
 SELECT schema_of_json(jsonField) FROM jsonTable;
+
+-- json_array_length
+select json_array_length(null);
+select json_array_length(2);
+select json_array_length();
+select json_array_length('');
+select json_array_length('[]');
+select json_array_length('[1,2,3]');
+select json_array_length('[[1,2],[5,6,7]]');
+select json_array_length('[{"a":123},{"b":"hello"}]');
+select json_array_length('[1,2,3,[33,44],{"key":[2,3,4]}]');
+select json_array_length('{"key":"not a json array"}');
+select json_array_length('[1,2,3,4,5');
+
+-- json_object_keys
+select json_object_keys();
+select json_object_keys(null);
+select json_object_keys(200);
+select json_object_keys('');
+select json_object_keys('{}');
+select json_object_keys('{"key": 1}');
+select json_object_keys('{"key": "value", "key2": 2}');
+select json_object_keys('{"arrayKey": [1, 2, 3]}');
+select json_object_keys('{"key":[1,2,3,{"key":"value"},[1,2,3]]}');
+select json_object_keys('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
+select json_object_keys('{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}');
+select json_object_keys('{[1,2]}');
+select json_object_keys('{"key": 45, "random_string"}');
+select json_object_keys('[1, 2, 3]');
+
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;
