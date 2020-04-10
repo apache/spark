@@ -83,11 +83,11 @@ object ChiSquareTest {
     val resultRDD = OldChiSqTest.computeChiSquared(data)
 
     if (flatten) {
-      resultRDD.map { case (col, (pValue, degreesOfFreedom, statistic, _)) =>
+      resultRDD.map { case (col, pValue, degreesOfFreedom, statistic, _) =>
         (col, pValue, degreesOfFreedom, statistic)
       }.toDF("featureIndex", "pValue", "degreesOfFreedom", "statistic")
     } else {
-      resultRDD.map { case (col, (pValue, degreesOfFreedom, statistic, _)) =>
+      resultRDD.map { case (col, pValue, degreesOfFreedom, statistic, _) =>
         (0, (col, pValue, degreesOfFreedom, statistic))
       }.groupByKey().map { case (_, seq) =>
         val results = seq.toArray.sortBy(_._1)
