@@ -173,10 +173,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
           val inConditions = values.zip(sub.output).map(EqualTo.tupled)
-          // To handle null-aware predicate sub-queries in nested conditions,
-          // we transform `inConditon` into ((`inCondition`) OR ISNULL(`inCondition`)).
+          // To handle a null-aware predicate not-in-subquery in nested conditions
+          // (e.g., `v > 0 OR t1.id NOT IN (SELECT id FROM t2)`), we transform
+          // `inConditon` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
           //
-          // For example, `SELECT * FROM t1 WHERE v > 0 OR t1.id NOT IN (SELECT id from t2)`
+          // For example, `SELECT * FROM t1 WHERE v > 0 OR t1.id NOT IN (SELECT id FROM t2)`
           // is transformed into a plan below;
           // == Optimized Logical Plan ==
           // Project [id#78, v#79]
