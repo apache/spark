@@ -200,6 +200,8 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
     val spark = dataset.sparkSession
     import spark.implicits._
 
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+
     val resultDF = ChiSquareTest.test(dataset.toDF, $(featuresCol), $(labelCol), true)
 
     val indices = $(selectorType) match {
@@ -207,7 +209,6 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         resultDF.sort("pValue").select("featureIndex")
           .as[Int].take($(numTopFeatures))
       case "percentile" =>
-        val numFeatures = resultDF.count
         resultDF.sort("pValue").select("featureIndex")
           .as[Int].take((numFeatures * getPercentile).toInt)
       case "fpr" =>
@@ -216,7 +217,6 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
       case "fdr" =>
         // This uses the Benjamini-Hochberg procedure.
         // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
-        val numFeatures = resultDF.count
         val maxIndex = resultDF.sort("pValue")
           .select("featureIndex", "pValue")
           .as[(Int, Double)].rdd
@@ -231,7 +231,6 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
             .as[Int].take(maxIndex + 1)
         } else Array.emptyIntArray
       case "fwe" =>
-        val numFeatures = resultDF.count
         resultDF.select("featureIndex").where(col("pValue").lt($(fwe) / numFeatures))
           .as[Int].collect()
       case errorType =>
