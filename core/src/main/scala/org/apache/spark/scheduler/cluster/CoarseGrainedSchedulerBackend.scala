@@ -115,6 +115,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
+  protected val virtualMultiplier = conf.get(EXECUTOR_CORES_VIRTUAL_MULTIPLIER)
+
   class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
@@ -230,8 +232,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             }
           logInfo(s"Registered executor $executorRef ($executorAddress) with ID $executorId, " +
             s" ResourceProfileId $resourceProfileId")
+          val virtualCores = cores * virtualMultiplier
           addressToExecutorId(executorAddress) = executorId
-          totalCoreCount.addAndGet(cores)
+          totalCoreCount.addAndGet(virtualCores)
           totalRegisteredExecutors.addAndGet(1)
           val resourcesInfo = resources.map { case (rName, info) =>
             // tell the executor it can schedule resources up to numSlotsPerAddress times,
@@ -241,7 +244,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
           }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
-            0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
+            0, virtualCores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
             resourcesInfo, resourceProfileId)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors

@@ -1836,4 +1836,10 @@ package object config {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val EXECUTOR_CORES_VIRTUAL_MULTIPLIER =
+    ConfigBuilder("spark.executor.cores.virtual.multiplier")
+      .version("3.1.0")
+      .intConf
+      .createWithDefault(1)
 }

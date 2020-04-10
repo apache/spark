@@ -186,7 +186,7 @@ private[spark] class StandaloneSchedulerBackend(
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
-    totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
+    totalCoreCount.get() >= totalExpectedCores * virtualMultiplier * minRegisteredRatio
   }
 
   override def applicationId(): String =

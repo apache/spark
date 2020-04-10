@@ -75,6 +75,20 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 12)
   }
 
+  test("compute max number of concurrent tasks can be launched when" +
+    " spark.executor.cores.virtual.multiplier > 1") {
+    val conf = new SparkConf()
+      .set(EXECUTOR_CORES_VIRTUAL_MULTIPLIER, 2)
+      .setMaster("local-cluster[4, 3, 1024]")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+    eventually(timeout(executorUpTimeout)) {
+      // Ensure all executors have been launched.
+      assert(sc.getExecutorIds().length == 4)
+    }
+    assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 24)
+  }
+
   test("compute max number of concurrent tasks can be launched when spark.task.cpus > 1") {
     val conf = new SparkConf()
       .set(CPUS_PER_TASK, 2)
