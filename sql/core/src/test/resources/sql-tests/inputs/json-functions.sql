@@ -88,16 +88,16 @@ select json_object_keys('{[1,2]}');
 select json_object_keys('{"key": 45, "random_string"}');
 select json_object_keys('[1, 2, 3]');
 
--- is_json
-select is_json();
-select is_json(null);
-select is_json(20);
-select is_json('[1, 2, 3, 4]');
-select is_json('[1, 2, {"key" : "valid JSON array"}]');
-select is_json('{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}');
-select is_json('{[]}');
-select is_json('[1, 2, 3');
-select is_json('{[1, 2, {"Key": "Invalid JSON"}]}');
+-- valid_json
+select valid_json();
+select valid_json(null);
+select valid_json(20);
+select valid_json('[1, 2, 3, 4]');
+select valid_json('[1, 2, {"key" : "valid JSON array"}]');
+select valid_json('{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}');
+select valid_json('{[]}');
+select valid_json('[1, 2, 3');
+select valid_json('{[1, 2, {"Key": "Invalid JSON"}]}');
 
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;

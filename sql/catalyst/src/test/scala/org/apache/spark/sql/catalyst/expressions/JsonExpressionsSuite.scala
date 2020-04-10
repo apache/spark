@@ -854,7 +854,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     }
   }
 
-  test("is_json") {
+  test("valid_json") {
     Seq(
       // valid JSON strings
       ("", true),
@@ -875,7 +875,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       ("""{"key": {"k2": {"k3": {"k4": {"k5": {[]}}}}}, "key2": "outer_value"}""", false)
     ).foreach {
       case (input, expected) =>
-        checkEvaluation(IsJson(Literal(input)), expected)
+        checkEvaluation(ValidJson(Literal(input)), expected)
     }
   }
 }

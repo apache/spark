@@ -950,17 +950,21 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
         true
       > Select _FUNC_('{"invalid JSON"}');
         false
+      > Select _FUNC_('{"jobj": {"id": 1}}');
+        true
+      > Select _FUNC_('{"jobj": {"invalid"}}');
+        false
   """,
   since = "3.1.0"
 )
-case class IsJson(child: Expression) extends UnaryExpression with CodegenFallback
+case class ValidJson(child: Expression) extends UnaryExpression with CodegenFallback
   with ExpectsInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def dataType: DataType = BooleanType
 
-  override def prettyName: String = "is_json"
+  override def prettyName: String = "valid_json"
 
   override def nullable: Boolean = true
 
