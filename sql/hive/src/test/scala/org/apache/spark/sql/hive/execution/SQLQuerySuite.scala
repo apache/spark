@@ -1616,11 +1616,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     sql(
       """
         |INSERT OVERWRITE TABLE test_table PARTITION (part = '1')
-        |SELECT * FROM default.src
+        |SELECT * FROM src
       """.stripMargin)
      checkAnswer(
        sql("select part, key, value from test_table"),
-       sql("select '1' as part, key, value from default.src")
+       sql("select '1' as part, key, value from src")
      )
     val path = new Path(
       new Path(s"file:$tempDir"),
