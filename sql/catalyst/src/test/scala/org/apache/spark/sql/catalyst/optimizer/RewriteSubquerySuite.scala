@@ -58,8 +58,6 @@ class RewriteSubquerySuite extends PlanTest {
     val exists = 'exists.boolean.notNull
 
     val query = relation1.where('b === 1 || Not('a.in(ListQuery(relation2.select('c))))).select('a)
-
-    val plan = relation1.select('a).where('b === 1 || Not('exists))
     val correctAnswer = relation1
       .join(relation2.select('c), ExistenceJoin(exists), Some('a === 'c || IsNull('a === 'c)))
       .where('b === 1 || Not(exists))
