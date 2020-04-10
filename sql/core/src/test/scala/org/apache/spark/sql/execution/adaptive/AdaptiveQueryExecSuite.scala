@@ -897,7 +897,6 @@ class AdaptiveQueryExecSuite
         ("formatted", Seq("== Physical Plan ==", "Output", "Arguments"))).foreach {
       case (mode, expected) =>
         checkPlanDescription(mode, expected)
-    }
   }
   
 }
