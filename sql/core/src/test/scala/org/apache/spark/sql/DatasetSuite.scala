@@ -1222,12 +1222,18 @@ class DatasetSuite extends QueryTest
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
 
-  test("better error message when use java reserved keyword as field name") {
+  test("better error message when use invalid java identifier as field name") {
     val e = intercept[UnsupportedOperationException] {
       Seq(InvalidInJava(1)).toDS()
     }
     assert(e.getMessage.contains(
-      "`abstract` is a reserved keyword and cannot be used as field name"))
+      "`abstract` is not a valid identifier of Java and cannot be used as field name"))
+
+    val e2 = intercept[UnsupportedOperationException] {
+      Seq(InvalidInJava2(1)).toDS()
+    }
+    assert(e2.getMessage.contains(
+      "`0` is not a valid identifier of Java and cannot be used as field name"))
   }
 
   test("Dataset should support flat input object to be null") {
@@ -1965,6 +1971,7 @@ case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
 
 case class InvalidInJava(`abstract`: Int)
+case class InvalidInJava2(`0`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
