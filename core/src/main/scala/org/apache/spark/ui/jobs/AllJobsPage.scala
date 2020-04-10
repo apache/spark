@@ -442,15 +442,10 @@ private[ui] class JobDataSource(
   }
 
   private def jobRow(jobData: v1.JobData): JobTableRowData = {
-    val duration: Option[Long] = {
-      jobData.submissionTime.map { start =>
-        val end = jobData.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
-        end - start.getTime()
-      }
-    }
-    val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
+    val duration: Option[Long] = JobDataUtil.getDuration(jobData)
+    val formattedDuration = JobDataUtil.getFormattedDuration(jobData)
     val submissionTime = jobData.submissionTime
-    val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
+    val formattedSubmissionTime = JobDataUtil.getFormattedSubmissionTime(jobData)
     val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store, jobData)
 
     val jobDescription =
