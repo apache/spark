@@ -107,7 +107,7 @@ case class CustomShuffleReaderExec private(
   private def sendPartitionDataSizeMetrics(
       executionId: String,
       partitionMetrics: SQLMetric): Unit = {
-    val mapStats = shuffleStage.get.mapStats.bytesByPartitionId
+    val mapStats = shuffleStage.get.mapStats.get.bytesByPartitionId
     var sum = 0L
     partitionSpecs.foreach {
       case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
