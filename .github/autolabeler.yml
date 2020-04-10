@@ -18,37 +18,98 @@
 # Bot page: https://github.com/apps/probot-autolabeler
 # The matching patterns follow the .gitignore spec.
 # See: https://git-scm.com/docs/gitignore#_pattern_format
-
-infra:
+# Also, note that the plugin uses 'ignore' package. See also
+# https://github.com/kaelzhang/node-ignore
+INFRA:
   - ".github/"
   - "appveyor.yml"
   - "/tools/"
-build:
+  - "/dev/create-release/"
+  - ".asf.yaml"
+  - ".gitattributes"
+  - ".gitignore"
+  - "scalastyle-config.xml"
+BUILD:
   - "/dev/"
   - "/build/"
   - "/project/"
-release:
-  - "/dev/create-release/"
-docs:
+  - "/assembly/"
+  - "*pom.xml"
+  - "/bin/docker-image-tool.sh"
+  - "/bin/find-spark-home*"
+DOCS:
   - "docs/"
-  - "examples/"
   - "/README.md"
   - "/CONTRIBUTING.md"
-core:
+EXAMPLES:
+  - "examples/"
+  - "/bin/run-example*"
+CORE:
   - "/core/"
-sql:
+  - "/common/kvstore"
+  - "/common/network-common"
+  - "/common/network-shuffle"
+  - "/python/pyspark/*.py"
+  - "/python/pyspark/tests/*.py"
+  - "/sbin/*master*.sh"
+  - "/sbin/*slave*.sh"
+  - "/sbin/spark-config.sh"
+  - "/sbin/*daemon*.sh"
+  - "/sbin/*history*.sh"
+  - "/sbin/*mesos*.sh"
+SPARK SUBMIT:
+  - "/bin/spark-submit*"
+  - "/bin/sparkR*"
+SPARK SHELL:
+  - "/repl"
+SQL:
   - "sql/"
-ml:
+  - "/common/unsafe"
+  - "/python/pyspark/sql"
+  - "!/python/pyspark/sql/avro"
+  - "!/python/pyspark/sql/streaming.py"
+  - "!/python/pyspark/sql/tests/test_streaming.py"
+  - "/bin/spark-sql*"
+  - "/bin/beeline*"
+  - "/sbin/*thriftserver*.sh"
+AVRO:
+  - /external/avro"
+  - "/python/pyspark/sql/avro"
+DSTREAM:
+  - "/streaming/"
+  - "/data/streaming"
+  - "/external/flume/"
+  - "/external/flume-assembly/"
+  - "/external/flume-sink/"
+  - "/external/kinesis-asl/"
+  - "/external/kinesis-asl-assembly/"
+  - "/external/kafka-0-10/"
+  - "/external/kafka-0-10-assembly/"
+  - "/python/pyspark/streaming"
+GRAPHX:
+  - "/graphx/"
+  - "/data/graphx"
+ML:
   - "ml/"
-  - "mllib/"
-  - "mllib-local/"
-streaming:
-  - "streaming/"
-python:
+  - "/python/pyspark/ml"
+MLLIB:
+  - "spark/mllib/"
+  - "/mllib-local"
+  - "/python/pyspark/mllib"
+STRUCTURED STREAMING:
+  - "sql/**/streaming/"
+  - "/external/kafka-0-10-sql/"
+  - "/python/pyspark/sql/streaming.py"
+  - "/python/pyspark/sql/tests/test_streaming.py"
+PYTHON:
+  - "/bin/pyspark*"
   - "python/"
-java:
-  - "/common/"
-  - "java/"
 R:
   - "r/"
   - "R/"
+YARN:
+  - "/resource-managers/yarn/"
+MESOS:
+  - "/resource-managers/mesos/"
+KUBERNETES:
+  - "/resource-managers/kubernetes/"
