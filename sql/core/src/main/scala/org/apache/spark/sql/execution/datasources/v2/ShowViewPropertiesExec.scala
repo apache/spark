@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.V2ViewDescription
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.V2ViewDescription
 
 /**
  * Physical plan node for showing view properties.
@@ -32,14 +30,13 @@ case class ShowViewPropertiesExec(
     propertyKey: Option[String]) extends V2CommandExec with CatalystRowHelper {
 
   override protected def run(): Seq[InternalRow] = {
-    val view = desc.view
     propertyKey match {
       case Some(p) =>
-        val propValue = view.properties.getOrDefault(p,
+        val propValue = desc.properties.getOrElse(p,
           s"View ${desc.identifier} does not have property: $p")
         Seq(toCatalystRow(p, propValue))
       case None =>
-        ViewReservedProperties.removeReserved(view.properties).asScala.map {
+        desc.properties.map {
           case (k, v) => toCatalystRow(k, v)
         }.toSeq
     }

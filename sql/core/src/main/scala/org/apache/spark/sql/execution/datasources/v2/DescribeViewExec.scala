@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.V2ViewDescription
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.V2ViewDescription
 
 case class DescribeViewExec(
     output: Seq[Attribute],
@@ -29,15 +27,6 @@ case class DescribeViewExec(
     isExtended: Boolean) extends V2CommandExec with CatalystRowHelper {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-  private lazy val view = desc.view
-
-  private lazy val viewProperties = ViewReservedProperties.extract(view.properties)
-
-  private lazy val tableProperties =
-    ViewReservedProperties.removeReserved(view.properties).asScala.toMap
-        .map(p => p._1 + "=" + p._2)
-        .mkString("[", ", ", "]")
 
   override protected def run(): Seq[InternalRow] =
     if (isExtended) {
@@ -47,23 +36,27 @@ case class DescribeViewExec(
     }
 
   private def describeSchema: Seq[InternalRow] =
-    view.schema.map { column =>
+    desc.schema.map { column =>
       toCatalystRow(
         column.name,
         column.dataType.simpleString,
         column.getComment().getOrElse(""))
     }
 
-  private def describeExtended(): Seq[InternalRow] =
+  private def describeExtended: Seq[InternalRow] = {
+    val outputColumns = desc.viewQueryColumnNames.mkString("[", ", ", "]")
+    val tableProperties = desc.properties
+        .map(p => p._1 + "=" + p._2)
+        .mkString("[", ", ", "]")
+
     toCatalystRow("# Detailed View Information", "", "") ::
-        toCatalystRow("Owner", viewProperties.owner, "") ::
-        toCatalystRow("Comment", viewProperties.comment, "") ::
-        toCatalystRow("View Text", view.sql, "") ::
-        toCatalystRow("View Catalog and Namespace",
-          desc.viewCatalogAndNamespace.quoted, "") ::
-        toCatalystRow("View Query Output Columns",
-          desc.viewQueryColumnNames.mkString("[", ", ", "]"), "") ::
+        toCatalystRow("Owner", desc.owner.getOrElse(""), "") ::
+        toCatalystRow("Comment", desc.comment.getOrElse(""), "") ::
+        toCatalystRow("View Text", desc.sql, "") ::
+        toCatalystRow("View Catalog and Namespace", desc.viewCatalogAndNamespace.quoted, "") ::
+        toCatalystRow("View Query Output Columns", outputColumns, "") ::
         toCatalystRow("Table Properties", tableProperties, "") ::
-        toCatalystRow("Created By", viewProperties.createEngineVersion, "") ::
+        toCatalystRow("Created By", desc.createEngineVersion.getOrElse(""), "") ::
         Nil
+  }
 }

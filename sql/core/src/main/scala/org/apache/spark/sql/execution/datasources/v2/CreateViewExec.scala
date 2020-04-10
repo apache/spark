@@ -40,13 +40,10 @@ case class CreateViewExec(
     replace: Boolean) extends V2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
-    val engineVersion = "Spark " + sparkContext.version
-    val updater = ViewReservedProperties.updater(properties.asJava)
-    if (!replace) {
-      updater.createEngineVersion(engineVersion)
-    }
-    comment.foreach(updater.comment)
-    val newProperties = updater.update()
+    val createEngineVersion = if (replace) None else Some("Spark " + sparkContext.version)
+    val newProperties = properties ++
+      comment.map(ViewCatalog.PROP_COMMENT -> _) ++
+      createEngineVersion.map(ViewCatalog.PROP_CREATE_ENGINE_VERSION -> _)
 
     if (replace) {
       // CREATE OR REPLACE VIEW
@@ -55,7 +52,7 @@ case class CreateViewExec(
         sql,
         viewSchema,
         catalogAndNamespace.toArray,
-        newProperties)
+        newProperties.asJava)
     } else {
       try {
         // CREATE VIEW [IF NOT EXISTS]
@@ -64,7 +61,7 @@ case class CreateViewExec(
           sql,
           viewSchema,
           catalogAndNamespace.toArray,
-          newProperties)
+          newProperties.asJava)
       } catch {
         case _: ViewAlreadyExistsException if allowExisting => // Ignore
       }

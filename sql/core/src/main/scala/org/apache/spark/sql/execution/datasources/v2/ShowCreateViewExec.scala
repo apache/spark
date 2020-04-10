@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.V2ViewDescription
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.V2ViewDescription
 
 /**
  * Physical plan node for showing view create statement.
@@ -28,9 +28,8 @@ case class ShowCreateViewExec(output: Seq[Attribute], desc: V2ViewDescription)
     extends V2CommandExec with CatalystRowHelper {
 
   override protected def run(): Seq[InternalRow] = {
-    val view = desc.view
-    val schema = view.schema.map(_.name).mkString("(", ", ", ")")
-    val create = s"CREATE VIEW ${desc.identifier} $schema AS\n${view.sql}\n"
+    val schema = desc.schema.map(_.name).mkString("(", ", ", ")")
+    val create = s"CREATE VIEW ${desc.identifier} $schema AS\n${desc.sql}\n"
     Seq(toCatalystRow(create))
   }
 }

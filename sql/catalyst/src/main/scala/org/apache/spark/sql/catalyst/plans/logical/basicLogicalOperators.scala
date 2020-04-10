@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{View => V2View}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -432,19 +431,6 @@ case class CatalogViewDescription(metadata: CatalogTable) extends ViewDescriptio
   override val identifier: String = metadata.identifier.quotedString
   override val viewCatalogAndNamespace: Seq[String] = metadata.viewCatalogAndNamespace
   override val viewQueryColumnNames: Seq[String] = metadata.viewQueryColumnNames
-}
-
-/**
- * View description backed by a View in V2 catalog.
- *
- * @param view a view in V2 catalog
- */
-case class V2ViewDescription(
-    override val identifier: String,
-    view: V2View) extends ViewDescription {
-  override val viewCatalogAndNamespace: Seq[String] =
-    view.currentCatalog +: view.currentNamespace.toSeq
-  override val viewQueryColumnNames: Seq[String] = view.schema.fieldNames
 }
 
 /**
