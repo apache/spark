@@ -1915,7 +1915,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterView: not a ViewCatalog") {
+  test("ALTER VIEW RENAME: not a view catalog") {
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
@@ -2098,7 +2098,7 @@ class DataSourceV2SQLSuite
     assert(e.message.contains("ALTER VIEW QUERY is only supported with temp views or v1 tables"))
   }
 
-  test("CREATE VIEW") {
+  test("CREATE VIEW: not a view catalog") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
       sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
