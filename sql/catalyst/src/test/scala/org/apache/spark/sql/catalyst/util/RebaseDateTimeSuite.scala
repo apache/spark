@@ -32,15 +32,18 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 
 class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
-  private def parseToJulianMicros(s: String): Long = {
-    val ts = Timestamp.valueOf(s)
+  private def toJulianMicros(ts: Timestamp): Long = {
     val julianMicros = millisToMicros(ts.getTime) +
       ((ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
     julianMicros
   }
+  private def parseToJulianMicros(s: String): Long = toJulianMicros(Timestamp.valueOf(s))
 
+  private def toGregorianMicros(ldt: LocalDateTime, zoneId: ZoneId): Long = {
+    instantToMicros(ldt.atZone(zoneId).toInstant)
+  }
   private def parseToGregMicros(s: String, zoneId: ZoneId): Long = {
-    instantToMicros(LocalDateTime.parse(s).atZone(zoneId).toInstant)
+    toGregorianMicros(LocalDateTime.parse(s), zoneId)
   }
 
   test("rebase julian to/from gregorian micros") {
@@ -337,6 +340,26 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
           assert(rebaseGregorianToJulianDays(gregorianDays) === julianDays)
           assert(rebaseJulianToGregorianDays(julianDays) === gregorianDays)
+        }
+      }
+    }
+  }
+
+  test("rebase gregorian to/from julian micros - BCE era") {
+    outstandingZoneIds.foreach { zid =>
+      withDefaultTimeZone(zid) {
+        Seq(
+          (-1100, 1, 1, 1, 2, 3, 0),
+          (-1044, 3, 5, 0, 0, 0, 123456000),
+          (-44, 3, 5, 23, 59, 59, 99999000)
+        ).foreach { case (year, month, day, hour, minute, second, nanos) =>
+          val julianMicros = toJulianMicros(new Timestamp(
+            year - 1900, month - 1, day, hour, minute, second, nanos))
+          val gregorianMicros = toGregorianMicros(LocalDateTime.of(
+            year, month, day, hour, minute, second, nanos), zid)
+
+          assert(rebaseGregorianToJulianMicros(gregorianMicros) === julianMicros)
+          assert(rebaseJulianToGregorianMicros(julianMicros) === gregorianMicros)
         }
       }
     }

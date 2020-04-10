@@ -311,7 +311,7 @@ object RebaseDateTime {
     val timeZone = TimeZone.getDefault
     val tzId = timeZone.getID
     val rebaseRecord = gregJulianRebaseMap.getOrNull(tzId)
-    if (rebaseRecord == null) {
+    if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
       rebaseGregorianToJulianMicros(timeZone.toZoneId, micros)
     } else {
       rebaseMicros(rebaseRecord, micros)
@@ -357,6 +357,7 @@ object RebaseDateTime {
       cal.get(Calendar.MINUTE),
       cal.get(Calendar.SECOND),
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
+      .`with`(ChronoField.ERA, cal.get(Calendar.ERA))
       .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
     val zonedDateTime = localDateTime.atZone(zoneId)
     // Assuming the daylight saving switchover time is 2:00, the local clock will go back to
@@ -398,7 +399,7 @@ object RebaseDateTime {
     val timeZone = TimeZone.getDefault
     val tzId = timeZone.getID
     val rebaseRecord = julianGregRebaseMap.getOrNull(tzId)
-    if (rebaseRecord == null) {
+    if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
       rebaseJulianToGregorianMicros(timeZone.toZoneId, micros)
     } else {
       rebaseMicros(rebaseRecord, micros)
