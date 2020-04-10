@@ -51,9 +51,10 @@ trait DataSourceRegister {
 }
 
 /**
- * Extended version of [[DataSourceRegister]] which allows a data source to select an implementing class at runtime.
- * This allows plugin developers to choose the correct implementation at runtime, depending on the version of Spark the
- * user is using.
+ * Extended version of [[DataSourceRegister]] which allows a data source to
+ * select an implementing class at runtime.  This allows plugin developers to
+ * choose the correct implementation at runtime, depending on the version of
+ * Spark the user is using.
  *
  *  A new instance of this class will be instantiated each time a DDL call is made.
  *
@@ -72,12 +73,13 @@ trait DataSourceRegisterV2 {
   def shortName(): String
 
   /**
-   * The class that implements the appropriate top-level DSv2 interface (e.g. DataSourceV2 in Spark2.4, or TableProvider
-   * in Spark3.0).
+   * The class that implements the appropriate top-level DSv2 interface (e.g.
+   * DataSourceV2 in Spark2.4, or TableProvider in Spark3.0).
    *
-   * @note The return type of Class is on purpose to avoid tying the registration interface to the underlying
-   *       implementation type. Users of this interface are expected to return a class which can be successfully casted
-   *       to the type required by the currently-running version of spark
+   * @note The return type of Class is on purpose to avoid tying the
+   *       registration interface to the underlying implementation type. Users of
+   *       this interface are expected to return a class which can be successfully
+   *       casted to the type required by the currently-running version of spark
    */
   def getImplementation(): Class[_]
 }

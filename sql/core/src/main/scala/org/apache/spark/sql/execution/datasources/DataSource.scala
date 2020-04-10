@@ -719,7 +719,8 @@ object DataSource extends Logging {
   }
 
   /**
-   * Returns an optional [[TableProvider]] instance for the given provider registered via [[DataSourceRegisterV2]].
+   * Returns an optional [[TableProvider]] instance for the given provider
+   * registered via [[DataSourceRegisterV2]].
    */
   def lookupDataSourceViaRegistrationV2(provider: String, conf: SQLConf): Class[_] = {
     val loader = Utils.getContextOrSparkClassLoader
