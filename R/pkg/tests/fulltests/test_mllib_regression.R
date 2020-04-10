@@ -580,4 +580,34 @@ test_that("spark.survreg", {
   })
 })
 
+
+test_that("spark.fmRegressor", {
+  df <- suppressWarnings(createDataFrame(iris))
+
+  model <- spark.fmRegressor(
+    df,  Sepal_Width ~ .,
+    regParam = 0.01, maxIter = 10, fitLinear = TRUE
+  )
+
+  prediction1 <- predict(model, df)
+  expect_is(prediction1, "SparkDataFrame")
+
+  # Test model save/load
+  if (windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-fmregressor", fileext = ".tmp")
+    write.ml(model, modelPath)
+    model2 <- read.ml(modelPath)
+
+    expect_is(model2, "FMRegressionModel")
+    expect_equal(summary(model), summary(model2))
+
+    prediction2 <- predict(model2, df)
+    expect_equal(
+      collect(prediction1),
+      collect(prediction2)
+    )
+    unlink(modelPath)
+  }
+})
+
 sparkR.session.stop()

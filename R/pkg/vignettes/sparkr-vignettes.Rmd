@@ -535,6 +535,8 @@ SparkR supports the following machine learning models and algorithms.
 
 * Linear Regression
 
+* Factorization Machines (FM) Regressor
+
 #### Tree - Classification and Regression
 
 * Decision Tree
@@ -842,6 +844,20 @@ Linear regression model.
 ```{r}
 model <- spark.lm(carsDF, mpg ~ wt + hp)
 
+summary(model)
+predictions <- predict(model, carsDF)
+head(select(predictions, predictions$prediction))
+```
+
+#### Factorization Machines Regressor
+
+Factorization Machines for regression problems.
+
+For background and details about the implementation of factorization machines,
+refer to the [Factorization Machines section](https://spark.apache.org/docs/latest/ml-classification-regression.html#factorization-machines).
+
+```{r}
+model <- spark.fmRegressor(carsDF, mpg ~ wt + hp)
 summary(model)
 predictions <- predict(model, carsDF)
 head(select(predictions, predictions$prediction))
