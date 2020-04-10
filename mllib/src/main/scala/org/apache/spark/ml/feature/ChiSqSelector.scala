@@ -200,9 +200,8 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
     val spark = dataset.sparkSession
     import spark.implicits._
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
-
     val resultDF = ChiSquareTest.test(dataset.toDF, $(featuresCol), $(labelCol), true)
+    val numFeatures = resultDF.count()
 
     val indices = $(selectorType) match {
       case "numTopFeatures" =>
