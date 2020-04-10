@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.util.control.NonFatal
+import java.io.UnsupportedEncodingException
+import java.time.DateTimeException
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -230,7 +231,7 @@ case class TryExpression(child: Expression) extends UnaryExpression {
     try {
       child.eval(input)
     } catch {
-      case NonFatal(_) => null
+      case e if TryExpression.canSuppress(e) => null
     }
   }
 
@@ -246,11 +247,23 @@ case class TryExpression(child: Expression) extends UnaryExpression {
           ${ev.isNull} = ${eval.isNull};
           ${ev.value} = ${eval.value};
         } catch (java.lang.Exception e) {
-          if (scala.util.control.NonFatal.apply(e)) {
+          if (org.apache.spark.sql.catalyst.expressions.TryExpression.canSuppress(e)) {
             ${ev.isNull} = true;
           } else {
             throw e;
           }
         }""")
+  }
+}
+
+object TryExpression {
+
+  def canSuppress(e: Throwable): Boolean = e match {
+    case _: IllegalArgumentException |
+         _: ArithmeticException |
+         _: DateTimeException |
+         _: NumberFormatException |
+         _: UnsupportedEncodingException => true
+    case _ => false
   }
 }
