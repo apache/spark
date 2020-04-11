@@ -68,16 +68,6 @@ A base class for user-defined aggregations, which can be used in Dataset operati
   </dd>
 </dl>
 
-### UDFRegistration
-
-Functions for registering user-defined functions. Use `SparkSession.udf` to access this.
-<dl>
-  <dt><code><em>register(name: String, udf: UserDefinedFunction): UserDefinedFunction</em></code></dt>
-  <dd>
-    Registers a user-defined function (UDF).
-  </dd>
-</dl>
-
 ### Examples
 
 #### Type-Safe User-Defined Aggregate Functions

@@ -45,16 +45,6 @@ To define the properties of a user-defined function, the user can use some of th
   </dd>
 </dl>
 
-### UDFRegistration
-
-Functions for registering user-defined functions. Use `SparkSession.udf` to access this.
-<dl>
-  <dt><code><em>register(name: String, udf: UserDefinedFunction): UserDefinedFunction</em></code></dt>
-  <dd>
-    Registers a user-defined function (UDF).
-  </dd>
-</dl>
-
 ### Examples
 
 <div class="codetabs">
