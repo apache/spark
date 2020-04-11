@@ -28,8 +28,14 @@ INFRA:
   - ".asf.yaml"
   - ".gitattributes"
   - ".gitignore"
+  - "/dev/github_jira_sync.py"
+  - "/dev/merge_spark_pr.py"
+  - "/dev/run-tests-jenkins*"
 BUILD:
   - "/dev/"
+  - "!/dev/github_jira_sync.py"
+  - "!/dev/merge_spark_pr.py"
+  - "!/dev/run-tests-jenkins*"
   - "/build/"
   - "/project/"
   - "/assembly/"
@@ -46,9 +52,9 @@ EXAMPLES:
   - "/bin/run-example*"
 CORE:
   - "/core/"
-  - "/common/kvstore"
-  - "/common/network-common"
-  - "/common/network-shuffle"
+  - "/common/kvstore/"
+  - "/common/network-common/"
+  - "/common/network-shuffle/"
   - "/python/pyspark/*.py"
   - "/python/pyspark/tests/*.py"
   - "/sbin/*master*.sh"
@@ -60,37 +66,35 @@ CORE:
 SPARK SUBMIT:
   - "/bin/spark-submit*"
 SPARK SHELL:
-  - "/repl"
+  - "/repl/"
 SQL:
   - "sql/"
-  - "/common/unsafe"
-  - "/python/pyspark/sql"
-  - "!/python/pyspark/sql/avro"
+  - "/common/unsafe/"
+  - "!/python/pyspark/sql/avro/"
   - "!/python/pyspark/sql/streaming.py"
   - "!/python/pyspark/sql/tests/test_streaming.py"
   - "/bin/spark-sql*"
   - "/bin/beeline*"
   - "/sbin/*thriftserver*.sh"
 AVRO:
-  - "/external/avro"
-  - "/python/pyspark/sql/avro"
+  - "/external/avro/"
+  - "/python/pyspark/sql/avro/"
 DSTREAM:
   - "/streaming/"
-  - "/data/streaming"
+  - "/data/streaming/"
   - "/external/flume*"
   - "/external/kinesis*"
   - "/external/kafka*"
-  - "/python/pyspark/streaming"
+  - "/python/pyspark/streaming/"
 GRAPHX:
   - "/graphx/"
-  - "/data/graphx"
+  - "/data/graphx/"
 ML:
   - "ml/"
-  - "/python/pyspark/ml"
 MLLIB:
   - "spark/mllib/"
-  - "/mllib-local"
-  - "/python/pyspark/mllib"
+  - "/mllib-local/"
+  - "/python/pyspark/mllib/"
 STRUCTURED STREAMING:
   - "sql/**/streaming/"
   - "/external/kafka-0-10-sql/"
@@ -109,3 +113,8 @@ MESOS:
   - "/resource-managers/mesos/"
 KUBERNETES:
   - "/resource-managers/kubernetes/"
+WINDOWS:
+  - "*.cmd"
+  - "/R/pkg/tests/fulltests/test_Windows.R"
+WEB UI:
+  - "ui/"
