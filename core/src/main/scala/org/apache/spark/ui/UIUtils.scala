@@ -235,6 +235,9 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/bootstrap.bundle.min.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
+    // Note that we use a custom release of vis.js
+    // (https://github.com/sarutak/vis/tree/v4.16.1-fix-redrawing-issue) to fix
+    // a infinite redrawing issue. See SPARK-31420).
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
