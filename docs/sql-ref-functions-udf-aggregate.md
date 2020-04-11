@@ -27,11 +27,9 @@ User-Defined Aggregate Functions (UDAFs) are user-programmable routines that act
 
 A base class for user-defined aggregations, which can be used in Dataset operations to take all of the elements of a group and reduce them to a single value.
 
-- IN - The input type for the aggregation.
-
-- BUF - The type of the intermediate value of the reduction.
-
-- OUT - The type of the final output result.
+ * IN - The input type for the aggregation.
+ * BUF - The type of the intermediate value of the reduction.
+ * OUT - The type of the final output result.
 
 <dl>
   <dt><code><em>bufferEncoder: Encoder[BUF]</em></code></dt>
@@ -39,36 +37,30 @@ A base class for user-defined aggregations, which can be used in Dataset operati
     Specifies the Encoder for the intermediate value type.
   </dd>
 </dl>
-
-
 <dl>
   <dt><code><em>finish(reduction: BUF): OUT</em></code></dt>
   <dd>
     Transform the output of the reduction.
   </dd>
 </dl>
-
 <dl>
   <dt><code><em>merge(b1: BUF, b2: BUF): BUF</em></code></dt>
   <dd>
     Merge two intermediate values.
   </dd>
 </dl>
-
 <dl>
   <dt><code><em>outputEncoder: Encoder[OUT]</em></code></dt>
   <dd>
     Specifies the Encoder for the final output value type.
   </dd>
 </dl>
-
 <dl>
   <dt><code><em>reduce(b: BUF, a: IN): BUF</em></code></dt>
   <dd>
      Aggregate input value <code>a</code> into current intermediate value. For performance, the function may modify <code>b</code> and return it instead of constructing new object for <code>b</code>.
   </dd>
 </dl>
-
 <dl>
   <dt><code><em>zero: BUF</em></code></dt>
   <dd>
@@ -79,7 +71,6 @@ A base class for user-defined aggregations, which can be used in Dataset operati
 ### UDFRegistration
 
 Functions for registering user-defined functions. Use `SparkSession.udf` to access this.
-
 <dl>
   <dt><code><em>register(name: String, udf: UserDefinedFunction): UserDefinedFunction</em></code></dt>
   <dd>
@@ -93,29 +84,28 @@ Functions for registering user-defined functions. Use `SparkSession.udf` to acce
 
 User-defined aggregations for strongly typed Datasets revolve around the [Aggregator](api/scala/org/apache/spark/sql/expressions/Aggregator.html) abstract class.
 For example, a type-safe user-defined average can look like:
-
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example typed_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedTypedAggregation.scala%}
+  {% include_example typed_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedTypedAggregation.scala%}
 </div>
 <div data-lang="java"  markdown="1">
-{% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
+  {% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
 </div>
 </div>
 
 #### Untyped User-Defined Aggregate Functions
+
 Typed aggregations, as described above, may also be registered as untyped aggregating UDFs for use with DataFrames.
 For example, a user-defined average for untyped DataFrames can look like:
-
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example untyped_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedUntypedAggregation.scala%}
+  {% include_example untyped_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedUntypedAggregation.scala%}
 </div>
 <div data-lang="java"  markdown="1">
-{% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
+  {% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
 </div>
 </div>
 
 ### Related Statements
-- [Scalar User Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
-- [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
+ * [Scalar User Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
+ * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)

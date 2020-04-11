@@ -23,25 +23,21 @@ license: |
 
 User-Defined Functions (UDFs) are user-programmable routines that act on one row. This documentation lists the classes that are required for creating and registering UDFs. It also contains examples that demonstrate how to define and register UDFs and invoke them in Spark SQL.
 
-
 ### UserDefinedFunction
 
 To define the properties of a user-defined function, the user can use some of the methods defined in this class.
-
 <dl>
   <dt><code><em>asNonNullable(): UserDefinedFunction</em></code></dt>
   <dd>
     Updates UserDefinedFunction to non-nullable.
   </dd>
 </dl>
-
 <dl>
   <dt><code><em>asNondeterministic(): UserDefinedFunction</em></code></dt>
   <dd>
     Updates UserDefinedFunction to nondeterministic.
   </dd>
 </dl>
-
 <dl>
   <dt><code><em>withName(name: String): UserDefinedFunction</em></code></dt>
   <dd>
@@ -52,7 +48,6 @@ To define the properties of a user-defined function, the user can use some of th
 ### UDFRegistration
 
 Functions for registering user-defined functions. Use `SparkSession.udf` to access this.
-
 <dl>
   <dt><code><em>register(name: String, udf: UserDefinedFunction): UserDefinedFunction</em></code></dt>
   <dd>
@@ -67,11 +62,10 @@ Functions for registering user-defined functions. Use `SparkSession.udf` to acce
 {% include_example udf_scalar scala/org/apache/spark/examples/sql/UserDefinedScalar.scala%}
 </div>
 <div data-lang="java"  markdown="1">
-{% include_example udf_scalar java/org/apache/spark/examples/sql/JavaUserDefinedScalar.java%}
+  {% include_example udf_scalar java/org/apache/spark/examples/sql/JavaUserDefinedScalar.java%}
 </div>
 </div>
-
 
 ### Related Statements
-- [User Defined Aggregate Functions (UDAFs)](sql-ref-functions-udf-aggregate.html)
-- [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
+ * [User Defined Aggregate Functions (UDAFs)](sql-ref-functions-udf-aggregate.html)
+ * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)

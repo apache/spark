@@ -77,5 +77,4 @@ object UserDefinedScalar {
 
     spark.stop()
   }
-
 }
