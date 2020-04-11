@@ -148,8 +148,12 @@ object DateTimeUtils {
    * @return A `java.sql.Timestamp` from number of micros since epoch.
    */
   def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
-    val ldt = microsToInstant(us).atZone(ZoneId.systemDefault()).toLocalDateTime
-    Timestamp.valueOf(ldt)
+    val rebasedMicros = rebaseGregorianToJulianMicros(us)
+    val seconds = Math.floorDiv(rebasedMicros, MICROS_PER_SECOND)
+    val ts = new Timestamp(seconds * MILLIS_PER_SECOND)
+    val nanos = (rebasedMicros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
+    ts.setNanos(nanos.toInt)
+    ts
   }
 
   /**
@@ -172,17 +176,8 @@ object DateTimeUtils {
    * @return The number of micros since epoch from `java.sql.Timestamp`.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
-    val era = if (t.before(julianCommonEraStart)) 0 else 1
-    val localDateTime = LocalDateTime.of(
-      t.getYear + 1900, t.getMonth + 1, 1,
-      t.getHours, t.getMinutes, t.getSeconds, t.getNanos)
-      .`with`(ChronoField.ERA, era)
-      // Add days separately to convert dates existed in Julian calendar but not
-      // in Proleptic Gregorian calendar. For example, 1000-02-29 is valid date
-      // in Julian calendar because 1000 is a leap year but 1000 is not a leap
-      // year in Proleptic Gregorian calendar. And 1000-02-29 doesn't exist in it.
-      .plusDays(t.getDate - 1) // Returns the next valid date after `date.getDate - 1` days
-    instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
+    val micros = millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
+    rebaseJulianToGregorianMicros(micros)
   }
 
   /**
