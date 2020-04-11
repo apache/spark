@@ -56,7 +56,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
 
   override protected def testFile(fileName: String): String = {
     val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
-    // Copy to avoid URISyntaxException when `sql/hive-thriftserver` accesses the resources in `sql/core`
+    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
     val file = File.createTempFile("thriftserver-test", ".data")
     file.deleteOnExit()
     FileUtils.copyURLToFile(url, file)
