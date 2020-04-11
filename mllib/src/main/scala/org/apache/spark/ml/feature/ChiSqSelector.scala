@@ -204,9 +204,9 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
     val resultDF = ChiSquareTest.test(dataset.toDF, $(featuresCol), $(labelCol), true)
 
     def getTopIndices(k: Int): Array[Int] = {
-      resultDF.select(-col("pValue"), col("featureIndex"))
-        .as[(Double, Int)].rdd
-        .top(k).map(_._2)
+      resultDF.sort("pValue", "featureIndex")
+        .select("featureIndex")
+        .as[Int].take(k)
     }
 
     val indices = $(selectorType) match {
