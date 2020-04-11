@@ -26,6 +26,8 @@ SELECT company FROM like_all_table WHERE company LIKE ALL ('%oo%', pat);
 -- not like all test
 SELECT company FROM like_all_table WHERE company NOT LIKE ALL ('%oo%', '%in', 'fa%');
 SELECT company FROM like_all_table WHERE company NOT LIKE ALL ('microsoft', '%yoo%');
+SELECT company FROM like_all_table WHERE company NOT LIKE ALL ('%oo%', 'fa%');
+SELECT company FROM like_all_table WHERE NOT company LIKE ALL ('%oo%', 'fa%');
 
 -- null test
 SELECT company FROM like_all_table WHERE company LIKE ALL ('%oo%', NULL);

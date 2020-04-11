@@ -208,6 +208,15 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
   }
 
+  test("(NOT) LIKE (ANY | ALL) expressions") {
+    assertEqual("a like any ('foo%', 'bar%')", ('a like "foo%") || ('a like "bar%"))
+    assertEqual("a not like any ('foo%', 'bar%')", !('a like "foo%") || !('a like "bar%"))
+    assertEqual("not (a like any ('foo%', 'bar%'))", !(('a like "foo%") || ('a like "bar%")))
+    assertEqual("a like all ('foo%', 'bar%')", ('a like "foo%") && ('a like "bar%"))
+    assertEqual("a not like all ('foo%', 'bar%')", !('a like "foo%") && !('a like "bar%"))
+    assertEqual("not (a like all ('foo%', 'bar%'))", !(('a like "foo%") && ('a like "bar%")))
+  }
+
   test("is null expressions") {
     assertEqual("a is null", 'a.isNull)
     assertEqual("a is not null", 'a.isNotNull)

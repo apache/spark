@@ -26,6 +26,8 @@ SELECT company FROM like_any_table WHERE company LIKE ANY ('%zz%', pat);
 -- not like any test
 SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', '%in', 'fa%');
 SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('microsoft', '%yoo%');
+SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', 'fa%');
+SELECT company FROM like_any_table WHERE NOT company LIKE ANY ('%oo%', 'fa%');
 
 -- null test
 SELECT company FROM like_any_table WHERE company LIKE ANY ('%oo%', NULL);
