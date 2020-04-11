@@ -206,7 +206,9 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
     def getTopIndices(k: Int): Array[Int] = {
       resultDF.sort("pValue", "featureIndex")
         .select("featureIndex")
-        .as[Int].take(k)
+        .limit(k)
+        .as[Int]
+        .collect()
     }
 
     val indices = $(selectorType) match {

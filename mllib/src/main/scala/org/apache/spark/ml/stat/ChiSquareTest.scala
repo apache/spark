@@ -90,7 +90,7 @@ object ChiSquareTest {
       resultDF
     } else {
       resultDF.groupBy()
-        .agg(collect_list(struct("featureIndex", "pValue", "degreesOfFreedom", "statistic")))
+        .agg(collect_list(struct("*")))
         .as[Seq[(Int, Double, Int, Double)]]
         .map { seq =>
           val results = seq.toArray.sortBy(_._1)
