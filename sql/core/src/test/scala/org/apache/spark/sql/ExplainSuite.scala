@@ -116,8 +116,8 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
       // plan should show the rewritten aggregate expression.
       val df = sql("SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k")
       checkKeywordsExistsInExplain(df,
-        "Aggregate [k#x], [k#x, min(v#x) AS every(v)#x, max(v#x) AS some(v)#x, " +
-          "max(v#x) AS any(v)#x]")
+        "Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, " +
+          "any(v#x) AS any(v)#x]")
     }
   }
 
@@ -239,7 +239,8 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
   test("explain formatted - check presence of subquery in case of DPP") {
     withTable("df1", "df2") {
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
         withTable("df1", "df2") {
           spark.range(1000).select(col("id"), col("id").as("k"))
             .write

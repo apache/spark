@@ -26,6 +26,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -50,7 +51,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -739,30 +740,53 @@ object DataSource extends Logging {
    * Checks and returns files in all the paths.
    */
   private[sql] def checkAndGlobPathIfNecessary(
-      paths: Seq[String],
+      pathStrings: Seq[String],
       hadoopConf: Configuration,
       checkEmptyGlobPath: Boolean,
-      checkFilesExist: Boolean): Seq[Path] = {
-    val allGlobPath = paths.flatMap { path =>
-      val hdfsPath = new Path(path)
-      val fs = hdfsPath.getFileSystem(hadoopConf)
-      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
-
-      if (checkEmptyGlobPath && globPath.isEmpty) {
-        throw new AnalysisException(s"Path does not exist: $qualified")
-      }
-
-      // Sufficient to check head of the globPath seq for non-glob scenario
-      // Don't need to check once again if files exist in streaming mode
-      if (checkFilesExist && !fs.exists(globPath.head)) {
-        throw new AnalysisException(s"Path does not exist: ${globPath.head}")
-      }
-      globPath
+      checkFilesExist: Boolean,
+      numThreads: Integer = 40): Seq[Path] = {
+    val qualifiedPaths = pathStrings.map { pathString =>
+      val path = new Path(pathString)
+      val fs = path.getFileSystem(hadoopConf)
+      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
     }
 
+    // Split the paths into glob and non glob paths, because we don't need to do an existence check
+    // for globbed paths.
+    val (globPaths, nonGlobPaths) = qualifiedPaths.partition(SparkHadoopUtil.get.isGlobPath)
+
+    val globbedPaths =
+      try {
+        ThreadUtils.parmap(globPaths, "globPath", numThreads) { globPath =>
+          val fs = globPath.getFileSystem(hadoopConf)
+          val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
+
+          if (checkEmptyGlobPath && globResult.isEmpty) {
+            throw new AnalysisException(s"Path does not exist: $globPath")
+          }
+
+          globResult
+        }.flatten
+      } catch {
+        case e: SparkException => throw e.getCause
+      }
+
     if (checkFilesExist) {
-      val (filteredOut, filteredIn) = allGlobPath.partition { path =>
+      try {
+        ThreadUtils.parmap(nonGlobPaths, "checkPathsExist", numThreads) { path =>
+          val fs = path.getFileSystem(hadoopConf)
+          if (!fs.exists(path)) {
+            throw new AnalysisException(s"Path does not exist: $path")
+          }
+        }
+      } catch {
+        case e: SparkException => throw e.getCause
+      }
+    }
+
+    val allPaths = globbedPaths ++ nonGlobPaths
+    if (checkFilesExist) {
+      val (filteredOut, filteredIn) = allPaths.partition { path =>
         InMemoryFileIndex.shouldFilterOut(path.getName)
       }
       if (filteredIn.isEmpty) {
@@ -774,7 +798,7 @@ object DataSource extends Logging {
       }
     }
 
-    allGlobPath
+    allPaths.toSeq
   }
 
   /**

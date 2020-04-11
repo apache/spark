@@ -258,21 +258,34 @@ Data source options of Avro can be set via:
 ## Configuration
 Configuration of Avro can be done using the `setConf` method on SparkSession or by running `SET key=value` commands using SQL.
 <table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th></tr>
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr>
   <tr>
     <td>spark.sql.legacy.replaceDatabricksSparkAvro.enabled</td>
     <td>true</td>
-    <td>If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped to the built-in but external Avro data source module for backward compatibility.</td>
+    <td>
+      If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped
+      to the built-in but external Avro data source module for backward compatibility.
+    </td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td>spark.sql.avro.compression.codec</td>
     <td>snappy</td>
-    <td>Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.</td>
+    <td>
+      Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate,
+      snappy, bzip2 and xz. Default codec is snappy.
+    </td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td>spark.sql.avro.deflate.level</td>
     <td>-1</td>
-    <td>Compression level for the deflate codec used in writing of AVRO files. Valid value must be in the range of from 1 to 9 inclusive or -1. The default value is -1 which corresponds to 6 level in the current implementation.</td>
+    <td>
+      Compression level for the deflate codec used in writing of AVRO files. Valid value must be in
+      the range of from 1 to 9 inclusive or -1. The default value is -1 which corresponds to 6 level
+      in the current implementation.
+    </td>
+    <td>2.4.0</td>
   </tr>
 </table>
 

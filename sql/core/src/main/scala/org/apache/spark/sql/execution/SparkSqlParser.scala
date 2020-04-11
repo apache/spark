@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.util.Locale
+import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
 
@@ -753,7 +754,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *
    * Expected format:
    * {{{
-   *   INSERT OVERWRITE DIRECTORY
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY
    *   [path]
    *   [OPTIONS table_property_list]
    *   select_statement;
@@ -761,11 +762,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitInsertOverwriteDir(
       ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
-    if (ctx.LOCAL != null) {
-      throw new ParseException(
-        "LOCAL is not supported in INSERT OVERWRITE DIRECTORY to data source", ctx)
-    }
-
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     var storage = DataSource.buildStorageFormatFromOptions(options)
 
@@ -779,6 +775,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     if (!path.isEmpty) {
       val customLocation = Some(CatalogUtils.stringToURI(path))
       storage = storage.copy(locationUri = customLocation)
+    }
+
+    if (ctx.LOCAL() != null) {
+      // assert if directory is local when LOCAL keyword is mentioned
+      val scheme = Option(storage.locationUri.get.getScheme)
+      scheme match {
+        case None =>
+          // force scheme to be file rather than fs.default.name
+          val loc = Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())
+          storage = storage.copy(locationUri = loc)
+        case Some(pathScheme) if (!pathScheme.equals("file")) =>
+          throw new ParseException("LOCAL is supported only with file: scheme", ctx)
+      }
     }
 
     val provider = ctx.tableProvider.multipartIdentifier.getText

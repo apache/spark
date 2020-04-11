@@ -540,7 +540,8 @@ class Column(object):
 
         :param alias: strings of desired column names (collects all positional arguments passed)
         :param metadata: a dict of information to be stored in ``metadata`` attribute of the
-            corresponding :class: `StructField` (optional, keyword only argument)
+            corresponding :class:`StructField <pyspark.sql.types.StructField>` (optional, keyword
+            only argument)
 
         .. versionchanged:: 2.2
            Added optional ``metadata`` argument.

@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -63,6 +64,7 @@ object TypeCoercion {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
+      StringLiteralCoercion ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -553,10 +555,10 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ CreateArray(children) if !haveSameType(children.map(_.dataType)) =>
+      case a @ CreateArray(children, _) if !haveSameType(children.map(_.dataType)) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
-          case Some(finalDataType) => CreateArray(children.map(castIfNotSameType(_, finalDataType)))
+          case Some(finalDataType) => a.copy(children.map(castIfNotSameType(_, finalDataType)))
           case None => a
         }
 
@@ -592,7 +594,7 @@ object TypeCoercion {
           case None => m
         }
 
-      case m @ CreateMap(children) if m.keys.length == m.values.length &&
+      case m @ CreateMap(children, _) if m.keys.length == m.values.length &&
           (!haveSameType(m.keys.map(_.dataType)) || !haveSameType(m.values.map(_.dataType))) =>
         val keyTypes = m.keys.map(_.dataType)
         val newKeys = findWiderCommonType(keyTypes) match {
@@ -606,7 +608,7 @@ object TypeCoercion {
           case None => m.values
         }
 
-        CreateMap(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
+        m.copy(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
@@ -1041,6 +1043,34 @@ object TypeCoercion {
           Cast(e, t)
         case _ => boundary
       }
+    }
+  }
+
+  /**
+   * A special rule to support string literal as the second argument of date_add/date_sub functions,
+   * to keep backward compatibility as a temporary workaround.
+   * TODO(SPARK-28589): implement ANSI type type coercion and handle string literals.
+   */
+  object StringLiteralCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+      case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
+        val days = try {
+          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+        } catch {
+          case e: NumberFormatException => throw new AnalysisException(
+            "The second argument of 'date_add' function needs to be an integer.", cause = Some(e))
+        }
+        DateAdd(l, Literal(days))
+      case DateSub(l, r) if r.dataType == StringType && r.foldable =>
+        val days = try {
+          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+        } catch {
+          case e: NumberFormatException => throw new AnalysisException(
+            "The second argument of 'date_sub' function needs to be an integer.", cause = Some(e))
+        }
+        DateSub(l, Literal(days))
     }
   }
 }

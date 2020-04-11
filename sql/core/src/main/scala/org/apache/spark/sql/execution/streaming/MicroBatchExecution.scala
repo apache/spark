@@ -226,7 +226,8 @@ class MicroBatchExecution(
           }
         }
 
-        finishTrigger(currentBatchHasNewData)  // Must be outside reportTimeTaken so it is recorded
+        // Must be outside reportTimeTaken so it is recorded
+        finishTrigger(currentBatchHasNewData, isCurrentBatchConstructed)
 
         // Signal waiting threads. Note this must be after finishTrigger() to ensure all
         // activities (progress generation, etc.) have completed before signaling.
@@ -563,11 +564,11 @@ class MicroBatchExecution(
     }
 
     val nextBatch =
-      new Dataset(sparkSessionToRunBatch, lastExecution, RowEncoder(lastExecution.analyzed.schema))
+      new Dataset(lastExecution, RowEncoder(lastExecution.analyzed.schema))
 
     val batchSinkProgress: Option[StreamWriterCommitProgress] =
       reportTimeTaken("addBatch") {
-      SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
+      SQLExecution.withNewExecutionId(lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
           case _: SupportsWrite =>

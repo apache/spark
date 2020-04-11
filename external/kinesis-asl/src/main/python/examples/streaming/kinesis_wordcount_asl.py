@@ -26,6 +26,7 @@
     <stream-name> name of the Kinesis stream (ie. mySparkStream)
     <endpoint-url> endpoint of the Kinesis service
       (e.g. https://kinesis.us-east-1.amazonaws.com)
+    <region-name> region name of the Kinesis endpoint (e.g. us-east-1)
 
 
   Example:
@@ -34,10 +35,10 @@
       $ export AWS_SECRET_KEY=<your-secret-key>
 
       # run the example
-      $ bin/spark-submit -jars external/kinesis-asl/target/scala-*/\
-        spark-streaming-kinesis-asl-assembly_*.jar \
+      $ bin/spark-submit --jars \
+        'external/kinesis-asl-assembly/target/spark-streaming-kinesis-asl-assembly_*.jar' \
         external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
-        myAppName mySparkStream https://kinesis.us-east-1.amazonaws.com
+        myAppName mySparkStream https://kinesis.us-east-1.amazonaws.com us-east-1
 
   There is a companion helper class called KinesisWordProducerASL which puts dummy data
   onto the Kinesis stream.

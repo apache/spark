@@ -33,9 +33,11 @@ working with Arrow-enabled data.
 
 ### Ensure PyArrow Installed
 
+To use Apache Arrow in PySpark, [the recommended version of PyArrow](#recommended-pandas-and-pyarrow-versions)
+should be installed.
 If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
 SQL module with the command `pip install pyspark[sql]`. Otherwise, you must ensure that PyArrow
-is installed and available on all cluster nodes. The current supported version is 0.15.1+.
+is installed and available on all cluster nodes.
 You can install using pip or conda from the conda-forge channel. See PyArrow
 [installation](https://arrow.apache.org/docs/python/install.html) for details.
 
@@ -89,14 +91,14 @@ specify the type hints of `pandas.Series` and `pandas.DataFrame` as below:
 </div>
 </p>
 
-In the following sections, it describes the cominations of the supported type hints. For simplicity,
+In the following sections, it describes the combinations of the supported type hints. For simplicity,
 `pandas.DataFrame` variant is omitted.
 
 ### Series to Series
 
 The type hint can be expressed as `pandas.Series`, ... -> `pandas.Series`.
 
-By using `pandas_udf` with the function having such type hints, it creates a Pandas UDF where the given
+By using `pandas_udf` with the function having such type hints above, it creates a Pandas UDF where the given
 function takes one or more `pandas.Series` and outputs one `pandas.Series`. The output of the function should
 always be of the same length as the input. Internally, PySpark will execute a Pandas UDF by splitting
 columns into batches and calling the function for each batch as a subset of the data, then concatenating
@@ -116,13 +118,15 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 The type hint can be expressed as `Iterator[pandas.Series]` -> `Iterator[pandas.Series]`.
 
-By using `pandas_udf` with the function having such type hints, it creates a Pandas UDF where the given
-function takes an iterator of `pandas.Series` and outputs an iterator of `pandas.Series`. The output of each
-series from the function should always be of the same length as the input. In this case, the created
-Pandas UDF requires one input column when the Pandas UDF is called. To use multiple input columns,
-a different type hint is required. See Iterator of Multiple Series to Iterator of Series.
+By using `pandas_udf` with the function having such type hints above, it creates a Pandas UDF where the given
+function takes an iterator of `pandas.Series` and outputs an iterator of `pandas.Series`. The
+length of the entire output from the function should be the same length of the entire input; therefore, it can
+prefetch the data from the input iterator as long as the lengths are the same.
+In this case, the created Pandas UDF requires one input column when the Pandas UDF is called. To use
+multiple input columns, a different type hint is required. See Iterator of Multiple Series to Iterator
+of Series.
 
-It is useful when the UDF execution requires initializing some states although internally it works
+It is also useful when the UDF execution requires initializing some states although internally it works
 identically as Series to Series case. The pseudocode below illustrates the example.
 
 {% highlight python %}
@@ -151,10 +155,11 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 The type hint can be expressed as `Iterator[Tuple[pandas.Series, ...]]` -> `Iterator[pandas.Series]`.
 
-By using `pandas_udf` with the function having such type hints, it creates a Pandas UDF where the
+By using `pandas_udf` with the function having such type hints above, it creates a Pandas UDF where the
 given function takes an iterator of a tuple of multiple `pandas.Series` and outputs an iterator of `pandas.Series`.
 In this case, the created pandas UDF requires multiple input columns as many as the series in the tuple
-when the Pandas UDF is called. It works identically as Iterator of Series to Iterator of Series case except the parameter difference.
+when the Pandas UDF is called. Otherwise, it has the same characteristics and restrictions as Iterator of Series
+to Iterator of Series case.
 
 The following example shows how to create this Pandas UDF:
 
@@ -170,7 +175,7 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 The type hint can be expressed as `pandas.Series`, ... -> `Any`.
 
-By using `pandas_udf` with the function having such type hints, it creates a Pandas UDF similar
+By using `pandas_udf` with the function having such type hints above, it creates a Pandas UDF similar
 to PySpark's aggregate functions. The given function takes `pandas.Series` and returns a scalar value.
 The return type should be a primitive data type, and the returned scalar can be either a python
 primitive type, e.g., `int` or `float` or a numpy data type, e.g., `numpy.int64` or `numpy.float64`.
@@ -196,12 +201,14 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 ## Pandas Function APIs
 
-Pandas function APIs can directly apply a Python native function against the whole DataFrame by
-using Pandas instances. Internally it works similarly with Pandas UDFs by Spark using Arrow to transfer
-data and Pandas to work with the data, which allows vectorized operations. A Pandas function API behaves
-as a regular API under PySpark `DataFrame` in general.
+Pandas Function APIs can directly apply a Python native function against the whole `DataFrame` by
+using Pandas instances. Internally it works similarly with Pandas UDFs by using Arrow to transfer
+data and Pandas to work with the data, which allows vectorized operations. However, A Pandas Function
+API behaves as a regular API under PySpark `DataFrame` instead of `Column`, and Python type hints in Pandas
+Functions APIs are optional and do not affect how it works internally at this moment although they
+might be required in the future.
 
-From Spark 3.0, Grouped map pandas UDF is now categorized as a separate Pandas Function API,
+From Spark 3.0, grouped map pandas UDF is now categorized as a separate Pandas Function API,
 `DataFrame.groupby().applyInPandas()`. It is still possible to use it with `PandasUDFType`
 and `DataFrame.groupby().apply()` as it was; however, it is preferred to use
 `DataFrame.groupby().applyInPandas()` directly. Using `PandasUDFType` will be deprecated
@@ -337,6 +344,12 @@ Note that a standard UDF (non-Pandas) will load timestamp data as Python datetim
 different than a Pandas timestamp. It is recommended to use Pandas time series functionality when
 working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
+
+### Recommended Pandas and PyArrow Versions
+
+For usage with pyspark.sql, the supported versions of Pandas is 0.24.2 and PyArrow is 0.15.1. Higher
+versions may be used, however, compatibility and data correctness can not be guaranteed and should
+be verified by the user.
 
 ### Compatibility Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
 

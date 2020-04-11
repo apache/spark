@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.types.StructType;
@@ -36,8 +36,10 @@ import org.apache.spark.sql.types.StructType;
  * write will be committed. The job concludes with a call to {@link #commitStagedChanges()}, at
  * which point implementations are expected to commit the table's metadata into the metastore along
  * with the data that was written by the writes from the write builder this table created.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface StagedTable extends Table {
 
   /**

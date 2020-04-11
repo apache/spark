@@ -67,6 +67,8 @@
       url: sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
     - text: "Pandas UDFs (a.k.a. Vectorized UDFs)"
       url: sql-pyspark-pandas-with-arrow.html#pandas-udfs-aka-vectorized-udfs
+    - text: "Pandas Function APIs"
+      url: sql-pyspark-pandas-with-arrow.html#pandas-function-apis
     - text: Usage Notes
       url: sql-pyspark-pandas-with-arrow.html#usage-notes
 - text: Migration Guide
@@ -80,6 +82,15 @@
       url: sql-ref-null-semantics.html
     - text: NaN Semantics
       url: sql-ref-nan-semantics.html
+    - text: ANSI Compliance
+      url: sql-ref-ansi-compliance.html
+      subitems:
+        - text: Arithmetic Operations
+          url: sql-ref-ansi-compliance.html#arithmetic-operations
+        - text: Type Conversion
+          url: sql-ref-ansi-compliance.html#type-conversion
+        - text: SQL Keywords
+          url: sql-ref-ansi-compliance.html#sql-keywords
     - text: SQL Syntax
       url: sql-ref-syntax.html
       subitems:
@@ -112,6 +123,8 @@
               url: sql-ref-syntax-ddl-truncate-table.html
             - text: REPAIR TABLE
               url: sql-ref-syntax-ddl-repair-table.html
+            - text: USE DATABASE
+              url: sql-ref-syntax-qry-select-usedb.html
         - text: Data Manipulation Statements
           url: sql-ref-syntax-dml.html
           subitems:
@@ -141,19 +154,23 @@
                   url: sql-ref-syntax-qry-select-distribute-by.html
                 - text: LIMIT Clause 
                   url: sql-ref-syntax-qry-select-limit.html
-                - text: USE database
-                  url: sql-ref-syntax-qry-select-usedb.html
+                - text: Join Hints
+                  url: sql-ref-syntax-qry-select-hints.html
+                - text: Set Operators
+                  url: sql-ref-syntax-qry-select-setops.html
+                - text: TABLESAMPLE
+                  url: sql-ref-syntax-qry-sampling.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements
           url: sql-ref-syntax-aux.html
           subitems:
-            - text: Analyze statement
+            - text: ANALYZE
               url: sql-ref-syntax-aux-analyze.html
               subitems: 
                 - text: ANALYZE TABLE
                   url: sql-ref-syntax-aux-analyze-table.html
-            - text: Caching statements 
+            - text: CACHE
               url: sql-ref-syntax-aux-cache.html
               subitems:
                 - text: CACHE TABLE
@@ -165,8 +182,8 @@
                 - text: REFRESH TABLE
                   url: sql-ref-syntax-aux-refresh-table.html
                 - text: REFRESH
-                  url: sql-ref-syntax-aux-cache-refresh.md
-            - text: Describe Commands
+                  url: sql-ref-syntax-aux-cache-refresh.html
+            - text: DESCRIBE
               url: sql-ref-syntax-aux-describe.html
               subitems:
                 - text: DESCRIBE DATABASE
@@ -177,7 +194,7 @@
                   url: sql-ref-syntax-aux-describe-function.html
                 - text: DESCRIBE QUERY
                   url: sql-ref-syntax-aux-describe-query.html
-            - text: Show commands
+            - text: SHOW
               url: sql-ref-syntax-aux-show.html
               subitems:
                 - text: SHOW COLUMNS 
@@ -196,14 +213,16 @@
                   url: sql-ref-syntax-aux-show-partitions.html
                 - text: SHOW CREATE TABLE
                   url: sql-ref-syntax-aux-show-create-table.html
-            - text: Configuration Management Commands
+                - text: SHOW VIEWS
+                  url: sql-ref-syntax-aux-show-views.html
+            - text: CONFIGURATION MANAGEMENT
               url: sql-ref-syntax-aux-conf-mgmt.html
               subitems:
                 - text: SET 
                   url: sql-ref-syntax-aux-conf-mgmt-set.html
                 - text: RESET
                   url: sql-ref-syntax-aux-conf-mgmt-reset.html
-            - text: Resource Management Commands
+            - text: RESOURCE MANAGEMENT
               url: sql-ref-syntax-aux-resource-mgmt.html
               subitems:
                 - text: ADD FILE
@@ -214,5 +233,26 @@
                   url: sql-ref-syntax-aux-resource-mgmt-list-file.html
                 - text: LIST JAR
                   url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
-    - text: Arithmetic operations
-      url: sql-ref-arithmetic-ops.html
+    - text: Functions
+      url: sql-ref-functions.html
+      subitems:
+      - text: Build-in Functions
+        url: sql-ref-functions-builtin.html
+        subitems:
+        - text: Build-in Aggregate Functions
+          url: sql-ref-functions-builtin-aggregate.html
+        - text: Build-in Array Functions
+          url: sql-ref-functions-builtin-array.html
+        - text: Build-in Date Time Functions
+          url: sql-ref-functions-builtin-date-time.html
+      - text: UDFs (User-Defined Functions)
+        url: sql-ref-functions-udf.html
+        subitems:
+        - text: Scalar UDFs (User-Defined Functions)
+          url: sql-ref-functions-udf-scalar.html
+        - text: UDAFs (User-Defined Aggregate Functions)
+          url: sql-ref-functions-udf-aggregate.html
+        - text: Integration with Hive UDFs/UDAFs/UDTFs
+          url: sql-ref-functions-udf-hive.html
+    - text: Datetime Pattern
+      url: sql-ref-datetime-pattern.html

@@ -611,10 +611,39 @@ object ScalaReflection extends ScalaReflection {
     }
   }
 
+  private def erasure(tpe: Type): Type = {
+    // For user-defined AnyVal classes, we should not erasure it. Otherwise, it will
+    // resolve to underlying type which wrapped by this class, e.g erasure
+    // `case class Foo(i: Int) extends AnyVal` will return type `Int` instead of `Foo`.
+    // But, for other types, we do need to erasure it. For example, we need to erasure
+    // `scala.Any` to `java.lang.Object` in order to load it from Java ClassLoader.
+    // Please see SPARK-17368 & SPARK-31190 for more details.
+    if (isSubtype(tpe, localTypeOf[AnyVal]) && !tpe.toString.startsWith("scala")) {
+      tpe
+    } else {
+      tpe.erasure
+    }
+  }
+
+  /**
+   * Returns the full class name for a type. The returned name is the canonical
+   * Scala name, where each component is separated by a period. It is NOT the
+   * Java-equivalent runtime name (no dollar signs).
+   *
+   * In simple cases, both the Scala and Java names are the same, however when Scala
+   * generates constructs that do not map to a Java equivalent, such as singleton objects
+   * or nested classes in package objects, it uses the dollar sign ($) to create
+   * synthetic classes, emulating behaviour in Java bytecode.
+   */
+  def getClassNameFromType(tpe: `Type`): String = {
+    erasure(tpe).dealias.typeSymbol.asClass.fullName
+  }
+
   /*
    * Retrieves the runtime class corresponding to the provided type.
    */
-  def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.dealias.typeSymbol.asClass)
+  def getClassFromType(tpe: Type): Class[_] =
+    mirror.runtimeClass(erasure(tpe).dealias.typeSymbol.asClass)
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
@@ -671,6 +700,8 @@ object ScalaReflection extends ScalaReflection {
         Schema(TimestampType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.LocalDate]) => Schema(DateType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.sql.Date]) => Schema(DateType, nullable = true)
+      case t if isSubtype(t, localTypeOf[CalendarInterval]) =>
+        Schema(CalendarIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
@@ -861,20 +892,6 @@ trait ScalaReflection extends Logging {
   def localTypeOf[T: TypeTag]: `Type` = {
     val tag = implicitly[TypeTag[T]]
     tag.in(mirror).tpe.dealias
-  }
-
-  /**
-   * Returns the full class name for a type. The returned name is the canonical
-   * Scala name, where each component is separated by a period. It is NOT the
-   * Java-equivalent runtime name (no dollar signs).
-   *
-   * In simple cases, both the Scala and Java names are the same, however when Scala
-   * generates constructs that do not map to a Java equivalent, such as singleton objects
-   * or nested classes in package objects, it uses the dollar sign ($) to create
-   * synthetic classes, emulating behaviour in Java bytecode.
-   */
-  def getClassNameFromType(tpe: `Type`): String = {
-    tpe.dealias.erasure.typeSymbol.asClass.fullName
   }
 
   /**

@@ -165,10 +165,14 @@ case class SchemaOfCsv(
   @transient
   private lazy val csv = child.eval().asInstanceOf[UTF8String]
 
-  override def checkInputDataTypes(): TypeCheckResult = child match {
-    case Literal(s, StringType) if s != null => super.checkInputDataTypes()
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"The input csv should be a string literal and not null; however, got ${child.sql}.")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.foldable && csv != null) {
+      super.checkInputDataTypes()
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        "The input csv should be a foldable string expression and not null; " +
+        s"however, got ${child.sql}.")
+    }
   }
 
   override def eval(v: InternalRow): Any = {

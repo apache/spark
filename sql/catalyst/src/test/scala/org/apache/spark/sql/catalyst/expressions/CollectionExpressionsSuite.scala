@@ -27,8 +27,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -72,6 +73,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("Array and Map Size") {
     withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSize(sizeOfNull = null)
+    }
+    // size(null) should return null under ansi mode.
+    withSQLConf(
+      SQLConf.LEGACY_SIZE_OF_NULL.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "true") {
       testSize(sizeOfNull = null)
     }
   }
@@ -139,8 +146,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
-    // overlapping maps should remove duplicated map keys w.r.t. last win policy.
-    checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
+    checkExceptionInExpression[RuntimeException](
+      MapConcat(Seq(m0, m1)), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // overlapping maps should remove duplicated map keys w.r.t. last win policy.
+      checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
+    }
 
     // maps with no overlap
     checkEvaluation(MapConcat(Seq(m0, m2)),
@@ -272,8 +283,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(ai1), create_map(1 -> null, 2 -> 20, 3 -> null))
     checkEvaluation(MapFromEntries(ai2), Map.empty)
     checkEvaluation(MapFromEntries(ai3), null)
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
+
+    checkExceptionInExpression[RuntimeException](
+      MapFromEntries(ai4), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
+    }
     // Map key can't be null
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(ai5),
@@ -294,8 +310,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(as1), create_map("a" -> null, "b" -> "bb", "c" -> null))
     checkEvaluation(MapFromEntries(as2), Map.empty)
     checkEvaluation(MapFromEntries(as3), null)
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
+
+    checkExceptionInExpression[RuntimeException](
+      MapFromEntries(as4), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
+    }
     // Map key can't be null
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(as5),
@@ -825,20 +846,22 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("Sequence on DST boundaries") {
     val timeZone = TimeZone.getTimeZone("Europe/Prague")
-    val dstOffset = timeZone.getDSTSavings
 
-    def noDST(t: Timestamp): Timestamp = new Timestamp(t.getTime - dstOffset)
+    def ts(s: String, noDST: Boolean = false): Long = {
+      val offset = if (noDST) timeZone.getDSTSavings else 0
+      DateTimeUtils.millisToMicros(Timestamp.valueOf(s).getTime - offset)
+    }
 
-    DateTimeTestUtils.withDefaultTimeZone(timeZone) {
+    DateTimeTestUtils.withDefaultTimeZone(timeZone.toZoneId) {
       // Spring time change
       checkEvaluation(new Sequence(
         Literal(Timestamp.valueOf("2018-03-25 01:30:00")),
         Literal(Timestamp.valueOf("2018-03-25 03:30:00")),
         Literal(stringToInterval("interval 30 minutes"))),
         Seq(
-          Timestamp.valueOf("2018-03-25 01:30:00"),
-          Timestamp.valueOf("2018-03-25 03:00:00"),
-          Timestamp.valueOf("2018-03-25 03:30:00")))
+          ts("2018-03-25 01:30:00"),
+          ts("2018-03-25 03:00:00"),
+          ts("2018-03-25 03:30:00")))
 
       // Autumn time change
       checkEvaluation(new Sequence(
@@ -846,18 +869,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal(Timestamp.valueOf("2018-10-28 03:30:00")),
         Literal(stringToInterval("interval 30 minutes"))),
         Seq(
-          Timestamp.valueOf("2018-10-28 01:30:00"),
-          noDST(Timestamp.valueOf("2018-10-28 02:00:00")),
-          noDST(Timestamp.valueOf("2018-10-28 02:30:00")),
-          Timestamp.valueOf("2018-10-28 02:00:00"),
-          Timestamp.valueOf("2018-10-28 02:30:00"),
-          Timestamp.valueOf("2018-10-28 03:00:00"),
-          Timestamp.valueOf("2018-10-28 03:30:00")))
+          ts("2018-10-28 01:30:00"),
+          ts("2018-10-28 02:00:00", noDST = true),
+          ts("2018-10-28 02:30:00", noDST = true),
+          ts("2018-10-28 02:00:00"),
+          ts("2018-10-28 02:30:00"),
+          ts("2018-10-28 03:00:00"),
+          ts("2018-10-28 03:30:00")))
     }
   }
 
   test("Sequence of dates") {
-    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+    DateTimeTestUtils.withDefaultTimeZone(UTC) {
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2018-01-01")),
         Literal(Date.valueOf("2018-01-05")),

@@ -104,6 +104,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
+  def parseRawDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
+    typedVisit[DataType](ctx.dataType())
+  }
+
   /* ********************************************************************************************
    * Plan parsing
    * ******************************************************************************************** */
@@ -459,6 +463,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
             clause.notMatchedAction())
         }
       }
+    }
+    if (matchedActions.isEmpty && notMatchedActions.isEmpty) {
+      throw new ParseException("There must be at least one WHEN clause in a MERGE statement", ctx)
+    }
+    // children being empty means that the condition is not set
+    if (matchedActions.length == 2 && matchedActions.head.children.isEmpty) {
+      throw new ParseException("When there are 2 MATCHED clauses in a MERGE statement, " +
+        "the first MATCHED clause must have a condition", ctx)
+    }
+    if (matchedActions.groupBy(_.getClass).mapValues(_.size).exists(_._2 > 1)) {
+      throw new ParseException(
+        "UPDATE and DELETE can appear at most once in MATCHED clauses in a MERGE statement", ctx)
     }
 
     MergeIntoTable(
@@ -1417,12 +1433,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.NULL =>
         IsNull(e)
       case SqlBaseParser.TRUE => ctx.NOT match {
-        case null => IsTrue(e)
-        case _ => IsNotTrue(e)
+        case null => EqualNullSafe(e, Literal(true))
+        case _ => Not(EqualNullSafe(e, Literal(true)))
       }
       case SqlBaseParser.FALSE => ctx.NOT match {
-        case null => IsFalse(e)
-        case _ => IsNotFalse(e)
+        case null => EqualNullSafe(e, Literal(false))
+        case _ => Not(EqualNullSafe(e, Literal(false)))
       }
       case SqlBaseParser.UNKNOWN => ctx.NOT match {
         case null => IsUnknown(e)
@@ -1548,12 +1564,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Extract expression.
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
-    val fieldStr = ctx.field.getText
-    val source = expression(ctx.source)
-    val extractField = DatePart.parseExtractField(fieldStr, source, {
-      throw new ParseException(s"Literals of type '$fieldStr' are currently not supported.", ctx)
-    })
-    new DatePart(Literal(fieldStr), expression(ctx.source), extractField)
+    val arguments = Seq(Literal(ctx.field.getText), expression(ctx.source))
+    UnresolvedFunction("date_part", arguments, isDistinct = false)
   }
 
   /**
@@ -2766,9 +2778,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed("CREATE EXTERNAL TABLE ...", ctx)
     }
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val defaultProvider = conf.defaultDataSourceName
-    val provider =
-      Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(defaultProvider)
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())
 
@@ -2784,7 +2794,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case Some(query) =>
         CreateTableAsSelectStatement(
           table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
-          ifNotExists = ifNotExists)
+          writeOptions = Map.empty, ifNotExists = ifNotExists)
 
       case None if temp =>
         // CREATE TEMPORARY TABLE ... USING ... is not supported by the catalyst parser.
@@ -2828,7 +2838,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val provider = ctx.tableProvider.multipartIdentifier.getText
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
 
     Option(ctx.query).map(plan) match {
@@ -2839,7 +2849,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
       case Some(query) =>
         ReplaceTableAsSelectStatement(table, query, partitioning, bucketSpec, properties,
-          provider, options, location, comment, orCreate = orCreate)
+          provider, options, location, comment, writeOptions = Map.empty, orCreate = orCreate)
 
       case _ =>
         ReplaceTableStatement(table, schema.getOrElse(new StructType), partitioning,
@@ -2900,6 +2910,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Option(ctx.ns).map(visitMultipartIdentifier),
       string(ctx.pattern),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+  }
+
+  /**
+   * Create a [[ShowViews]] command.
+   */
+  override def visitShowViews(ctx: ShowViewsContext): LogicalPlan = withOrigin(ctx) {
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowViews(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
+      Option(ctx.pattern).map(string))
   }
 
   override def visitColPosition(ctx: ColPositionContext): ColumnPosition = {
@@ -3045,6 +3065,27 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
   }
 
+  override def visitHiveReplaceColumns(
+      ctx: HiveReplaceColumnsContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed("ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS", ctx)
+    }
+    AlterTableReplaceColumnsStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
+        if (colType.NULL != null) {
+          throw new AnalysisException(
+            "NOT NULL is not supported in Hive-style REPLACE COLUMNS")
+        }
+        if (colType.colPosition != null) {
+          throw new AnalysisException(
+            "Column position is not supported in Hive-style REPLACE COLUMNS")
+        }
+        typedVisit[QualifiedColType](colType)
+      }
+    )
+  }
+
   /**
    * Parse a [[AlterTableDropColumnsStatement]] command.
    *
@@ -3180,7 +3221,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     if (ctx.identifier != null &&
         ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`",
+        ctx.identifier())
     }
 
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier())
