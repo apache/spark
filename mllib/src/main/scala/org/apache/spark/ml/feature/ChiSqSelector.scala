@@ -221,11 +221,11 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
       case "fdr" =>
         // This uses the Benjamini-Hochberg procedure.
         // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
-        val maxIndex = resultDF.sort("pValue")
-          .select("featureIndex", "pValue")
-          .as[(Int, Double)].rdd
+        val maxIndex = resultDF.sort("pValue", "featureIndex")
+          .select("pValue", "featureIndex")
+          .as[(Double, Int)].rdd
           .zipWithIndex
-          .flatMap { case ((featureIndex, pValue), index) =>
+          .flatMap { case ((pValue, featureIndex), index) =>
             if (pValue <= $(fdr) * (index + 1) / numFeatures) {
               Iterator.single(featureIndex)
             } else Iterator.empty

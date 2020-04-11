@@ -23,7 +23,7 @@ import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.stat.test.{ChiSqTest => OldChiSqTest}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
 
 
 /**
@@ -80,22 +80,25 @@ object ChiSquareTest {
 
     val data = dataset.select(col(labelCol).cast("double"), col(featuresCol)).rdd
       .map { case Row(label: Double, vec: Vector) => (label, OldVectors.fromML(vec)) }
-    val resultRDD = OldChiSqTest.computeChiSquared(data)
 
-    if (flatten) {
-      resultRDD.map { case (col, pValue, degreesOfFreedom, statistic, _) =>
+    val resultDF = OldChiSqTest.computeChiSquared(data)
+      .map { case (col, pValue, degreesOfFreedom, statistic, _) =>
         (col, pValue, degreesOfFreedom, statistic)
       }.toDF("featureIndex", "pValue", "degreesOfFreedom", "statistic")
+
+    if (flatten) {
+      resultDF
     } else {
-      resultRDD.map { case (col, pValue, degreesOfFreedom, statistic, _) =>
-        (0, (col, pValue, degreesOfFreedom, statistic))
-      }.groupByKey().map { case (_, seq) =>
-        val results = seq.toArray.sortBy(_._1)
-        val pValues = Vectors.dense(results.map(_._2))
-        val degreesOfFreedom = results.map(_._3)
-        val statistics = Vectors.dense(results.map(_._4))
-        (pValues, degreesOfFreedom, statistics)
-      }.toDF("pValues", "degreesOfFreedom", "statistics")
+      resultDF.groupBy()
+        .agg(collect_list(struct("featureIndex", "pValue", "degreesOfFreedom", "statistic")))
+        .as[Seq[(Int, Double, Int, Double)]]
+        .map { seq =>
+          val results = seq.toArray.sortBy(_._1)
+          val pValues = Vectors.dense(results.map(_._2))
+          val degreesOfFreedom = results.map(_._3)
+          val statistics = Vectors.dense(results.map(_._4))
+          (pValues, degreesOfFreedom, statistics)
+        }.toDF("pValues", "degreesOfFreedom", "statistics")
     }
   }
 }
