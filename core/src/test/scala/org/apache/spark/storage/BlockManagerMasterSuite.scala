@@ -24,12 +24,12 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 class BlockManagerMasterSuite extends SparkFunSuite {
 
   test("SPARK-31422: getMemoryStatus should not fail after BlockManagerMaster stops") {
-    val bmm = new BlockManagerMaster(null, null, new SparkConf, true)
+    val bmm = new BlockManagerMaster(null, new SparkConf, true)
     assertTrue(bmm.getMemoryStatus.isEmpty)
   }
 
   test("SPARK-31422: getStorageStatus should not fail after BlockManagerMaster stops") {
-    val bmm = new BlockManagerMaster(null, null, new SparkConf, true)
+    val bmm = new BlockManagerMaster(null, new SparkConf, true)
     assertTrue(bmm.getStorageStatus.isEmpty)
   }
 }
