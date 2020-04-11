@@ -225,10 +225,10 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
         val f = $(fdr) / numFeatures
         val maxIndex = resultDF.sort("pValue", "featureIndex")
-          .select("pValue", "featureIndex")
-          .as[(Double, Int)].rdd
+          .select("pValue")
+          .as[Double].rdd
           .zipWithIndex
-          .flatMap { case ((pValue, featureIndex), index) =>
+          .flatMap { case (pValue, index) =>
             if (pValue <= f * (index + 1)) {
               Iterator.single(index.toInt)
             } else Iterator.empty
