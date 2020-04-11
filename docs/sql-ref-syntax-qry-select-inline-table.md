@@ -26,7 +26,7 @@ An inline table is a temporary table created using a VALUES clause.
 ### Syntax
 
 {% highlight sql %}
-VALUES ( expression [ , ... ] ) [ [ AS ] table_alias ]
+VALUES ( expression [ , ... ] ) [ table_alias ]
 {% endhighlight %}
 
 ### Parameters
@@ -40,7 +40,11 @@ VALUES ( expression [ , ... ] ) [ [ AS ] table_alias ]
 <dl>
   <dt><code><em>table_alias</em></code></dt>
   <dd>
-    Specifies a temporary name given to a table.
+    Specifies a temporary name with an optional column name list. <br><br>
+    <b>Syntax:</b>
+      <code>
+        [ AS ] table_name [ ( column_name [ , ... ] ) ]
+      </code>
   </dd>
 </dl>
 
@@ -75,6 +79,6 @@ SELECT * FROM VALUES ("one", array(0, 1)), ("two", array(2, 3)) AS data(a, b);
   +---+------+
 {% endhighlight %}
 
-### Related Clauses
+### Related Statement
 
  * [SELECT](sql-ref-syntax-qry-select.html)

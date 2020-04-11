@@ -26,7 +26,7 @@ A table-valued function (TVF) is a function that returns a relation or a set of 
 ### Syntax
 
 {% highlight sql %}
-function_name ( expression [ , ... ] ) [ [ AS ] table_alias ]
+function_name ( expression [ , ... ] ) [ table_alias ]
 {% endhighlight %}
 
 ### Parameters
@@ -40,60 +40,92 @@ function_name ( expression [ , ... ] ) [ [ AS ] table_alias ]
 <dl>
   <dt><code><em>table_alias</em></code></dt>
   <dd>
-    Specifies a temporary name given to a table.
+    Specifies a temporary name with an optional column name list. <br><br>
+    <b>Syntax:</b>
+      <code>
+        [ AS ] table_name [ ( column_name [ , ... ] ) ]
+      </code>
   </dd>
 </dl>
+
+### Supported Table-valued Functions
+
+<table class="table">
+  <thead>
+    <tr><th style="width:25%">Function</th><th>Argument Type(s)</th><th>Description</th></tr>
+  </thead>
+    <tr>
+      <td><b> range </b>( <i>end</i> )</td>
+      <td> Long </td>
+      <td>Creates a table with a single <code>LongType</code> column named <code>id</code>, containing rows in a range from 0 to <code>end</code> (exclusive) with step value 1.</td>
+    </tr>
+    <tr>
+      <td><b> range </b>( <i> start, end</i> )</td>
+      <td> Long, Long </td>
+      <td width="60%">Creates a table with a single <code>LongType</code> column named <code>id</code>, containing rows in a range from <code>start</code> to <code>end</code> (exclusive) with step value 1.</td>
+    </tr>
+    <tr>
+      <td><b> range </b>( <i> start, end, step</i> )</td>
+      <td> Long, Long, Long </td>
+      <td width="60%">Creates a table with a single <code>LongType</code> column named <code>id</code>, containing rows in a range from <code>start</code> to <code>end</code> (exclusive) with <code>step</code> value.</td>
+     </tr>
+    <tr>
+      <td><b> range </b>( <i> start, end, step, numPartitions</i> )</td>
+      <td> Long, Long, Long, Int </td>
+      <td width="60%">Creates a table with a single <code>LongType</code> column named <code>id</code>, containing rows in a range from <code>start</code> to <code>end</code> (exclusive) with <code>step</code> value, with partition number <code>numPartitions</code> specified. </td>
+    </tr>
+</table>
 
 ### Examples
 
 {% highlight sql %}
 -- range call with end
 SELECT * FROM range(6 + cos(3));
-+---+
-| id|
-+---+
-|  0|
-|  1|
-|  2|
-|  3|
-|  4|
-+---+
+  +---+
+  | id|
+  +---+
+  |  0|
+  |  1|
+  |  2|
+  |  3|
+  |  4|
+  +---+
 
 -- range call with start and end
 SELECT * FROM range(5, 10);
-+---+
-| id|
-+---+
-|  5|
-|  6|
-|  7|
-|  8|
-|  9|
-+---+
+  +---+
+  | id|
+  +---+
+  |  5|
+  |  6|
+  |  7|
+  |  8|
+  |  9|
+  +---+
 
 -- range call with numPartitions
 SELECT * FROM range(0, 10, 1, 200);
-+---+
-| id|
-+---+
-|  0|
-|  2|
-|  4|
-|  6|
-|  8|
-+---+
+  +---+
+  | id|
+  +---+
+  |  0|
+  |  2|
+  |  4|
+  |  6|
+  |  8|
+  +---+
 
 -- range call with a table alias
 SELECT * FROM range(5, 10) AS test;
-+---+
-| id|
-+---+
-|  5|
-|  6|
-|  7|
-+---+
+  +---+
+  | id|
+  +---+
+  |  5|
+  |  6|
+  |  7|
+  +---+
 {% endhighlight %}
 
-### Related Clauses
+### Related Statement
 
  * [SELECT](sql-ref-syntax-qry-select.html)
