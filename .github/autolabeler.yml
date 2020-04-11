@@ -91,6 +91,7 @@ GRAPHX:
   - "/data/graphx/"
 ML:
   - "ml/"
+  - "*mllib_*.R"
 MLLIB:
   - "spark/mllib/"
   - "/mllib-local/"
@@ -100,6 +101,7 @@ STRUCTURED STREAMING:
   - "/external/kafka-0-10-sql/"
   - "/python/pyspark/sql/streaming.py"
   - "/python/pyspark/sql/tests/test_streaming.py"
+  - "*streaming.R"
 PYTHON:
   - "/bin/pyspark*"
   - "python/"
