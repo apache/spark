@@ -81,3 +81,7 @@ SELECT /*+ SHUFFLE_REPLICATE_NL(t1) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.ke
 SELECT /*+ BROADCAST(t1) */ /*+ MERGE(t1, t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
 
 {% endhighlight %}
+
+### Related Statements
+- [JOIN](sql-ref-syntax-qry-select-join.html)
+- [SELECT](sql-ref-syntax-qry-select.html)
