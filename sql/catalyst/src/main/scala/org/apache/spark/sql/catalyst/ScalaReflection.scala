@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import javax.lang.model.SourceVersion
+
 import org.apache.commons.lang3.reflect.ConstructorUtils
 
 import org.apache.spark.internal.Logging
@@ -539,9 +541,10 @@ object ScalaReflection extends ScalaReflection {
 
         val params = getConstructorParameters(t)
         val fields = params.map { case (fieldName, fieldType) =>
-          if (javaKeywords.contains(fieldName)) {
-            throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
-              "cannot be used as field name\n" + walkedTypePath)
+          if (SourceVersion.isKeyword(fieldName) ||
+              !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
+            throw new UnsupportedOperationException(s"`$fieldName` is not a valid identifier of " +
+              "Java and cannot be used as field name\n" + walkedTypePath)
           }
 
           // SPARK-26730 inputObject won't be null with If's guard below. And KnownNotNul
@@ -784,13 +787,6 @@ object ScalaReflection extends ScalaReflection {
     }
   }
 
-  private val javaKeywords = Set("abstract", "assert", "boolean", "break", "byte", "case", "catch",
-    "char", "class", "const", "continue", "default", "do", "double", "else", "extends", "false",
-    "final", "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int",
-    "interface", "long", "native", "new", "null", "package", "private", "protected", "public",
-    "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw",
-    "throws", "transient", "true", "try", "void", "volatile", "while")
-
   val typeJavaMapping = Map[DataType, Class[_]](
     BooleanType -> classOf[Boolean],
     ByteType -> classOf[Byte],
@@ -848,6 +844,10 @@ object ScalaReflection extends ScalaReflection {
     } else {
       Seq.empty
     }
+  }
+
+  def encodeFieldNameToIdentifier(fieldName: String): String = {
+    TermName(fieldName).encodedName.toString
   }
 }
 
