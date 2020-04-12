@@ -154,6 +154,8 @@
                   url: sql-ref-syntax-qry-select-distribute-by.html
                 - text: LIMIT Clause 
                   url: sql-ref-syntax-qry-select-limit.html
+                - text: JOIN
+                  url: sql-ref-syntax-qry-select-join.html
                 - text: Join Hints
                   url: sql-ref-syntax-qry-select-hints.html
                 - text: Set Operators
