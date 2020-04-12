@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ClosureCleaner
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
@@ -107,6 +107,8 @@ class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
   }
 }
 
+case class Bar(i: Any)
+case class Foo(i: Bar) extends AnyVal
 case class PrimitiveValueClass(wrapped: Int) extends AnyVal
 case class ReferenceValueClass(wrapped: ReferenceValueClass.Container) extends AnyVal
 object ReferenceValueClass {
@@ -207,9 +209,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   productTest(
     OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true))))
+      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true)), Some(new CalendarInterval(1, 2, 3))))
 
-  productTest(OptionalData(None, None, None, None, None, None, None, None))
+  productTest(OptionalData(None, None, None, None, None, None, None, None, None))
 
   encodeDecodeTest(Seq(Some(1), None), "Option in array")
   encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map")
@@ -310,6 +312,13 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Option.empty[String], "empty option of string")
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
+
+  test("AnyVal class with Any fields") {
+    val exception = intercept[UnsupportedOperationException](implicitly[ExpressionEncoder[Foo]])
+    val errorMsg = exception.getMessage
+    assert(errorMsg.contains("root class: \"org.apache.spark.sql.catalyst.encoders.Foo\""))
+    assert(errorMsg.contains("No Encoder found for Any"))
+  }
 
   test("nullable of encoder schema") {
     def checkNullable[T: ExpressionEncoder](nullable: Boolean*): Unit = {

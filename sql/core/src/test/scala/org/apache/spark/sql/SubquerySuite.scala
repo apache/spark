@@ -288,10 +288,10 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         " or l.a in (select c from r where l.b < r.d)"),
       Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
 
-    intercept[AnalysisException] {
+    checkAnswer(
       sql("select * from l where a not in (select c from r)" +
-        " or a not in (select c from r where c is not null)")
-    }
+        " or a not in (select c from r where c is not null)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Nil)
   }
 
   test("complex IN predicate subquery") {

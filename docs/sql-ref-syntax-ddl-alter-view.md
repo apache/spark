@@ -228,6 +228,7 @@ DESC TABLE EXTENDED tempdb1.v2;
 - [describe-table](sql-ref-syntax-aux-describe-table.html)
 - [create-view](sql-ref-syntax-ddl-create-view.html)
 - [drop-view](sql-ref-syntax-ddl-drop-view.html)
+- [show-views](sql-ref-syntax-aux-show-views.html)
 
 #### Note:
 

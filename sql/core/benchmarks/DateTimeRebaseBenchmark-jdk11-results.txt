@@ -1,0 +1,94 @@
+================================================================================================
+Rebasing dates/timestamps in Parquet datasource
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1063-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Save dates to parquet:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+after 1582, noop                                  19037          19037           0          5.3         190.4       1.0X
+before 1582, noop                                 11543          11543           0          8.7         115.4       1.6X
+after 1582, rebase off                            31999          31999           0          3.1         320.0       0.6X
+after 1582, rebase on                             31657          31657           0          3.2         316.6       0.6X
+before 1582, rebase off                           23777          23777           0          4.2         237.8       0.8X
+before 1582, rebase on                            24767          24767           0          4.0         247.7       0.8X
+
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1063-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Load dates from parquet:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+after 1582, vec off, rebase off                   12901          13119         211          7.8         129.0       1.0X
+after 1582, vec off, rebase on                    12968          13078         153          7.7         129.7       1.0X
+after 1582, vec on, rebase off                     3633           3673          37         27.5          36.3       3.6X
+after 1582, vec on, rebase on                      4988           5035          42         20.0          49.9       2.6X
+before 1582, vec off, rebase off                  12767          12856          77          7.8         127.7       1.0X
+before 1582, vec off, rebase on                   14012          14051          41          7.1         140.1       0.9X
+before 1582, vec on, rebase off                    3626           3641          15         27.6          36.3       3.6X
+before 1582, vec on, rebase on                     5388           5458         114         18.6          53.9       2.4X
+
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1063-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Save timestamps to parquet:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+after 1582, noop                                   3075           3075           0         32.5          30.7       1.0X
+before 1582, noop                                  3058           3058           0         32.7          30.6       1.0X
+after 1582, rebase off                            17236          17236           0          5.8         172.4       0.2X
+after 1582, rebase on                             19237          19237           0          5.2         192.4       0.2X
+before 1582, rebase off                           17317          17317           0          5.8         173.2       0.2X
+before 1582, rebase on                            19982          19982           0          5.0         199.8       0.2X
+
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1063-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Load timestamps from parquet:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+after 1582, vec off, rebase off                   14865          14957         142          6.7         148.6       1.0X
+after 1582, vec off, rebase on                    17154          17190          45          5.8         171.5       0.9X
+after 1582, vec on, rebase off                     4878           4912          56         20.5          48.8       3.0X
+after 1582, vec on, rebase on                      8604           8653          42         11.6          86.0       1.7X
+before 1582, vec off, rebase off                  14891          14929          33          6.7         148.9       1.0X
+before 1582, vec off, rebase on                   17708          17758          68          5.6         177.1       0.8X
+before 1582, vec on, rebase off                    4928           4946          17         20.3          49.3       3.0X
+before 1582, vec on, rebase on                     9147           9152           7         10.9          91.5       1.6X
+
+
+================================================================================================
+Rebasing dates/timestamps in ORC datasource
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1063-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Save dates to ORC:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+after 1582, noop                                  18943          18943           0          5.3         189.4       1.0X
+before 1582, noop                                 11151          11151           0          9.0         111.5       1.7X
+after 1582                                        26738          26738           0          3.7         267.4       0.7X
+before 1582                                       19636          19636           0          5.1         196.4       1.0X
+
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1063-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Load dates from ORC:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+after 1582, vec off                               36176          36378         206          2.8         361.8       1.0X
+after 1582, vec on                                 3802           3829          29         26.3          38.0       9.5X
+before 1582, vec off                              35815          35882          74          2.8         358.1       1.0X
+before 1582, vec on                                4163           4174          10         24.0          41.6       8.7X
+
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1063-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Save timestamps to ORC:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+after 1582, noop                                   3033           3033           0         33.0          30.3       1.0X
+before 1582, noop                                  3004           3004           0         33.3          30.0       1.0X
+after 1582                                        53907          53907           0          1.9         539.1       0.1X
+before 1582                                       57241          57241           0          1.7         572.4       0.1X
+
+OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1063-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Load timestamps from ORC:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+after 1582, vec off                               38266          38306          66          2.6         382.7       1.0X
+after 1582, vec on                                30233          30339         162          3.3         302.3       1.3X
+before 1582, vec off                              43584          43753         259          2.3         435.8       0.9X
+before 1582, vec on                               35681          35832         140          2.8         356.8       1.1X
+
+

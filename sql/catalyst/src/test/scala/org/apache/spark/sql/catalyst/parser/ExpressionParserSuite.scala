@@ -772,10 +772,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("timestamp literals") {
-    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone.getID) {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
         def toMicros(time: LocalDateTime): Long = {
-          val seconds = time.atZone(timeZone.toZoneId).toInstant.getEpochSecond
+          val seconds = time.atZone(zid).toInstant.getEpochSecond
           TimeUnit.SECONDS.toMicros(seconds)
         }
         assertEval(

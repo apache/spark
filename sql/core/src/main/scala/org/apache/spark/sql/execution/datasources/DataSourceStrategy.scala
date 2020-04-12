@@ -652,10 +652,19 @@ object DataSourceStrategy {
  */
 object PushableColumn {
   def unapply(e: Expression): Option[String] = {
-    def helper(e: Expression) = e match {
-      case a: Attribute => Some(a.name)
+    val nestedPredicatePushdownEnabled = SQLConf.get.nestedPredicatePushdownEnabled
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    def helper(e: Expression): Option[Seq[String]] = e match {
+      case a: Attribute =>
+        if (nestedPredicatePushdownEnabled || !a.name.contains(".")) {
+          Some(Seq(a.name))
+        } else {
+          None
+        }
+      case s: GetStructField if nestedPredicatePushdownEnabled =>
+        helper(s.child).map(_ :+ s.childSchema(s.ordinal).name)
       case _ => None
     }
-    helper(e)
+    helper(e).map(_.quoted)
   }
 }

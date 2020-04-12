@@ -28,6 +28,9 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
  * the parameters.
  */
 private[jdbc] trait ConnectionProvider {
+  /**
+   * Opens connection toward the database.
+   */
   def getConnection(): Connection
 }
 
@@ -42,6 +45,10 @@ private[jdbc] object ConnectionProvider extends Logging {
         case PostgresConnectionProvider.driverClass =>
           logDebug("Postgres connection provider found")
           new PostgresConnectionProvider(driver, options)
+
+        case MariaDBConnectionProvider.driverClass =>
+          logDebug("MariaDB connection provider found")
+          new MariaDBConnectionProvider(driver, options)
 
         case _ =>
           throw new IllegalArgumentException(s"Driver ${options.driverClass} does not support " +
