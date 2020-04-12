@@ -293,8 +293,8 @@ public final class UnsafeKVExternalSorter {
           int recordLen = underlying.getRecordLength();
 
           // Note that recordLen = keyLen + valueLen + uaoSize (for the keyLen itself)
-          int keyLen = Platform.getInt(baseObj, recordOffset);
           int uaoSize = UnsafeAlignedOffset.getUaoSize();
+          int keyLen = Platform.getInt(baseObj, recordOffset);
           int valueLen = recordLen - keyLen - uaoSize;
           key.pointTo(baseObj, recordOffset + uaoSize, keyLen);
           value.pointTo(baseObj, recordOffset + uaoSize + keyLen, valueLen);
