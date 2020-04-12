@@ -25,6 +25,7 @@ import org.apache.log4j.Level
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -897,6 +898,18 @@ class AdaptiveQueryExecSuite
         ("formatted", Seq("== Physical Plan ==", "Output", "Arguments"))).foreach {
       case (mode, expected) =>
         checkPlanDescription(mode, expected)
+    }
+  }
+
+  test("SPARK-30953: InsertAdaptiveSparkPlan should apply AQE on child plan of write commands") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      spark.range(10).repartition(1).selectExpr("id as a", "id * 2 as b")
+        .createOrReplaceTempView("t0")
+      val df = spark.sql("CREATE TABLE t1 AS SELECT a FROM t0")
+      val cmd = collect(df.queryExecution.executedPlan) {
+        case cmd: DataWritingCommandExec => cmd
+      }.head
+      assert(cmd.child.isInstanceOf[AdaptiveSparkPlanExec])
     }
   }
 }
