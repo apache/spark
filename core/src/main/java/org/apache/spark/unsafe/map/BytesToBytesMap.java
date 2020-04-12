@@ -53,7 +53,7 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  * The map can support up to 2^29 keys. If the key cardinality is higher than this, you should
  * probably be using sorting instead of hashing for better cache locality.
  *
- * The key and values under the hood are stored together, in the following format:
+ * The key and values under the hood are stored together, in the following format(uaoSize = 4):
  *   Bytes 0 to 4: len(k) (key length in bytes) + len(v) (value length in bytes) + 4
  *   Bytes 4 to 8: len(k)
  *   Bytes 8 to 8 + len(k): key data
@@ -706,7 +706,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
-      // (8 byte key length) (key) (value) (8 byte pointer to next value)
+      // (uao: klen + vlen + uaolen) (uao: klen) (key) (value) (8 byte pointer to next value)
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
       final long recordLength = (2L * uaoSize) + klen + vlen + 8;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
