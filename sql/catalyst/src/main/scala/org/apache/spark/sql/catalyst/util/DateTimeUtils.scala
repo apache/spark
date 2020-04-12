@@ -101,16 +101,10 @@ object DateTimeUtils {
    * @return The number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    val era = if (date.before(julianCommonEraStart)) 0 else 1
-    val localDate = LocalDate
-      .of(date.getYear + 1900, date.getMonth + 1, 1)
-      .`with`(ChronoField.ERA, era)
-      // Add days separately to convert dates existed in Julian calendar but not
-      // in Proleptic Gregorian calendar. For example, 1000-02-29 is valid date
-      // in Julian calendar because 1000 is a leap year but 1000 is not a leap
-      // year in Proleptic Gregorian calendar. And 1000-02-29 doesn't exist in it.
-      .plusDays(date.getDate - 1) // Returns the next valid date after `date.getDate - 1` days
-    localDateToDays(localDate)
+    val millisUtc = date.getTime
+    val millisLocal = millisUtc + TimeZone.getDefault.getOffset(millisUtc)
+    val julianDays = Math.toIntExact(Math.floorDiv(millisLocal, MILLIS_PER_DAY))
+    rebaseJulianToGregorianDays(julianDays)
   }
 
   /**
