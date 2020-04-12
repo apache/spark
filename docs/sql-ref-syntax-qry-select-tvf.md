@@ -104,7 +104,7 @@ SELECT * FROM range(5, 10);
   +---+
 
 -- range call with numPartitions
-SELECT * FROM range(0, 10, 1, 200);
+SELECT * FROM range(0, 10, 2, 200);
   +---+
   | id|
   +---+
@@ -116,7 +116,7 @@ SELECT * FROM range(0, 10, 1, 200);
   +---+
 
 -- range call with a table alias
-SELECT * FROM range(5, 10) AS test;
+SELECT * FROM range(5, 8) AS test;
   +---+
   | id|
   +---+
