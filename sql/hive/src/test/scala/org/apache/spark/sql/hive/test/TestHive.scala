@@ -588,20 +588,29 @@ private[hive] class TestHiveQueryExecution(
 
   override lazy val analyzed: LogicalPlan = {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _, _) => tbl.table :: Nil
+      case CacheTableCommand(tbl, _, _, _) => (tbl.table, tbl.database) :: Nil
       case _ => Nil
     }
 
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(ident) => ident.last }
+        logical.collect { case UnresolvedRelation(ident) => (ident.last, ident.init.lastOption) }
     val resolver = sparkSession.sessionState.conf.resolver
-    val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
-      referencedTables.exists(resolver(_, testTable))
+    val referencedTestTables = referencedTables.flatMap { case (table, dbOpt) =>
+      val testTableOpt = sparkSession.testTables.keys.find(resolver(_, table))
+      testTableOpt.map(testTable => Seq((testTable, dbOpt))).getOrElse(Seq.empty)
     }
-    logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
-    referencedTestTables.foreach(sparkSession.loadTestTable)
+    logDebug(s"Query references test tables: ${referencedTestTables.map(_._1).mkString(", ")}")
+    referencedTestTables.foreach { case (table, dbOpt) =>
+      val curDB = sparkSession.catalog.currentDatabase
+      try {
+        dbOpt.foreach(db => sparkSession.catalog.setCurrentDatabase(db))
+        sparkSession.loadTestTable(table)
+      } finally {
+        dbOpt.foreach(_ => sparkSession.catalog.setCurrentDatabase(curDB))
+      }
+    }
     // Proceed with analysis.
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
