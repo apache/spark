@@ -542,7 +542,7 @@ object ScalaReflection extends ScalaReflection {
         val params = getConstructorParameters(t)
         val fields = params.map { case (fieldName, fieldType) =>
           if (SourceVersion.isKeyword(fieldName) ||
-            !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
+              !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
             throw new UnsupportedOperationException(s"`$fieldName` is not a valid identifier of " +
               "Java and cannot be used as field name\n" + walkedTypePath)
           }
