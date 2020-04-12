@@ -218,7 +218,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         getTopIndices((numFeatures * getPercentile).toInt)
       case "fpr" =>
         resultDF.select("featureIndex")
-          .where(col("pValue").lt($(fpr)))
+          .where(col("pValue") < $(fpr))
           .as[Int].collect()
       case "fdr" =>
         // This uses the Benjamini-Hochberg procedure.
@@ -238,7 +238,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
         } else Array.emptyIntArray
       case "fwe" =>
         resultDF.select("featureIndex")
-          .where(col("pValue").lt($(fwe) / numFeatures))
+          .where(col("pValue") < $(fwe) / numFeatures)
           .as[Int].collect()
       case errorType =>
         throw new IllegalStateException(s"Unknown Selector Type: $errorType")
