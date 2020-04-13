@@ -137,7 +137,7 @@ object Encoders {
   def BINARY: Encoder[Array[Byte]] = ExpressionEncoder()
 
   /**
-   * An encoder for [[CalendarInterval]]
+   * An encoder for `CalendarInterval`
    *
    * @since 3.1.0
    */
