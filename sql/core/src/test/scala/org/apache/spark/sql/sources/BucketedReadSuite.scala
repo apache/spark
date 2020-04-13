@@ -876,26 +876,28 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   }
 
   test("bucket coalescing eliminates shuffle") {
-    withSQLConf(SQLConf.BUCKETING_COALESCE_ENABLED.key -> "true") {
-      // Left side will be coalesced to have 4 output partitions.
+    withSQLConf(SQLConf.COALESCE_BUCKET_IN_JOIN_ENABLED.key -> "true") {
+      // The side with bucketedTableTestSpec1 will be coalesced to have 4 output partitions.
       // Currently, sort will be introduced for the side that is coalesced.
-      val bucketedTableTestSpecLeft = BucketedTableTestSpec(
+      val testSpec1 = BucketedTableTestSpec(
         Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
         numPartitions = 1,
         expectedShuffle = false,
         expectedSort = true,
         expectedNumOutputPartitions = Some(4))
-      val bucketedTableTestSpecRight = BucketedTableTestSpec(
+      val testSpec2 = BucketedTableTestSpec(
         Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))),
         numPartitions = 1,
         expectedShuffle = false,
         expectedSort = false,
         expectedNumOutputPartitions = Some(4))
 
-      testBucketing(
-        bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
-        bucketedTableTestSpecRight = bucketedTableTestSpecRight,
-        joinCondition = joinCondition(Seq("i", "j")))
+      Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
+        testBucketing(
+          bucketedTableTestSpecLeft = specs._1,
+          bucketedTableTestSpecRight = specs._2,
+          joinCondition = joinCondition(Seq("i", "j")))
+      }
     }
   }
 }

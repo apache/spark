@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.bucketing.InjectBucketHint
+import org.apache.spark.sql.execution.bucketing.CoalesceBucketInJoin
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -154,7 +154,8 @@ case class RowDataSourceScanExec(
  * @param output Output attributes of the scan, including data attributes and partition attributes.
  * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
  * @param partitionFilters Predicates to use for partition pruning.
- * @param optionalBucketSet Bucket ids for bucket pruning
+ * @param optionalBucketSet Bucket ids for bucket pruning.
+ * @param optionalCoalescedNumBuckets Coalesced number of buckets.
  * @param dataFilters Filters on non-partition columns.
  * @param tableIdentifier identifier for the table in the metastore.
  */
@@ -164,6 +165,7 @@ case class FileSourceScanExec(
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],
     optionalBucketSet: Option[BitSet],
+    optionalCoalescedNumBuckets: Option[Int],
     dataFilters: Seq[Expression],
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
@@ -268,23 +270,6 @@ case class FileSourceScanExec(
     }
   }
 
-  /**
-   * A bucket can be coalesced if the number of buckets for this relation is divisible
-   * by the number of buckets on the other side of table for join.
-   */
-  private lazy val coalescedNumBuckets: Option[Int] = {
-    val joinHintNumBuckets = relation.options.get(InjectBucketHint.JOIN_HINT_NUM_BUCKETS)
-    if (relation.bucketSpec.isDefined &&
-      SQLConf.get.getConf(SQLConf.BUCKETING_COALESCE_ENABLED) &&
-      joinHintNumBuckets.isDefined &&
-      joinHintNumBuckets.get.toInt < relation.bucketSpec.get.numBuckets &&
-      relation.bucketSpec.get.numBuckets % joinHintNumBuckets.get.toInt == 0) {
-      Some(joinHintNumBuckets.get.toInt)
-    } else {
-      None
-    }
-  }
-
   override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     if (bucketedScan) {
       // For bucketed columns:
@@ -307,7 +292,7 @@ case class FileSourceScanExec(
       // above
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
-      val numPartitions = coalescedNumBuckets.getOrElse(spec.numBuckets)
+      val numPartitions = optionalCoalescedNumBuckets.getOrElse(spec.numBuckets)
       val partitioning = HashPartitioning(bucketColumns, numPartitions)
       val sortColumns =
         spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
@@ -329,7 +314,7 @@ case class FileSourceScanExec(
         val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
 
         // TODO Sort order is currently ignored if buckets are coalesced.
-        if (singleFilePartitions && coalescedNumBuckets.isEmpty) {
+        if (singleFilePartitions && optionalCoalescedNumBuckets.isEmpty) {
           // TODO Currently Spark does not support writing columns sorting in descending order
           // so using Ascending order. This can be fixed in future
           sortColumns.map(attribute => SortOrder(attribute, Ascending))
@@ -558,8 +543,8 @@ case class FileSourceScanExec(
       filesGroupedToBuckets
     }
 
-    val filePartitions = if (coalescedNumBuckets.isDefined) {
-      val newNumBuckets = coalescedNumBuckets.get
+    val filePartitions = if (optionalCoalescedNumBuckets.isDefined) {
+      val newNumBuckets = optionalCoalescedNumBuckets.get
       logInfo(s"Coalescing to ${newNumBuckets} buckets")
       val coalescedBuckets = prunedFilesGroupedToBuckets.groupBy(_._1 % newNumBuckets)
       Seq.tabulate(newNumBuckets) { bucketId =>
@@ -625,6 +610,7 @@ case class FileSourceScanExec(
       requiredSchema,
       QueryPlan.normalizePredicates(partitionFilters, output),
       optionalBucketSet,
+      optionalCoalescedNumBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
       None)
   }

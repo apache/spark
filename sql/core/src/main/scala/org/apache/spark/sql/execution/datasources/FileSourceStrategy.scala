@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.bucketing.CoalesceBucketInJoin
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -205,6 +206,7 @@ object FileSourceStrategy extends Strategy with Logging {
           outputSchema,
           partitionKeyFilters.toSeq,
           bucketSet,
+          fsRelation.options.get(CoalesceBucketInJoin.JOIN_HINT_COALESCED_NUM_BUCKETS).map(_.toInt),
           dataFilters,
           table.map(_.identifier))
 

@@ -2574,8 +2574,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val BUCKETING_COALESCE_ENABLED =
-    buildConf("spark.sql.bucketing.coalesce")
+  val COALESCE_BUCKET_IN_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.coalesceBucketInJoin.enabled")
       .internal()
       .doc("When true, if two bucketed tables with a different number of buckets are joined, " +
         "the side with a bigger number of buckets will be coalesced to have the same number " +
@@ -2584,6 +2584,16 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val COALESCE_BUCKET_IN_JOIN_MAX_NUM_BUCKETS_DIFF =
+    buildConf("spark.sql.bucketing.coalesceBucketInJoin.maxNumBucketsDiff")
+      .doc("The difference in count of two buckets being coalesced should be less than or " +
+        "equal to this value for bucket coalescing to be applied. This configuration only " +
+        s"has an effect when '${COALESCE_BUCKET_IN_JOIN_ENABLED.key}' is set to true.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ > 0, "The minimum number of partitions must be positive.")
+      .createWithDefault(256)
 
   /**
    * Holds information about keys that have been deprecated.
