@@ -74,9 +74,9 @@ class MinHashLSHModel private[ml](
     val yIter = y.nonZeroIterator.map(_._1)
     if (xIter.isEmpty) {
       assert(yIter.hasNext, "The union of two input sets must have at least 1 elements")
-      return 0.0
+      return 1.0
     } else if (yIter.isEmpty) {
-      return 0.0
+      return 1.0
     }
 
     var xIndex = xIter.next
