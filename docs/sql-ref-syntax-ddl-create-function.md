@@ -20,6 +20,7 @@ license: |
 ---
 
 ### Description
+
 The `CREATE FUNCTION` statement is used to create a temporary or permanent function
 in Spark. Temporary functions are scoped at a session level where as permanent
 functions are created in the persistent catalog and are made available to
@@ -31,12 +32,14 @@ aggregate functions using Scala, Python and Java APIs. Please refer to
 [aggregate functions](sql-getting-started#aggregations) for more information.
 
 ### Syntax
+
 {% highlight sql %}
 CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     function_name AS class_name [ resource_locations ]
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>OR REPLACE</em></code></dt>
   <dd>
@@ -90,6 +93,7 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- 1. Create a simple UDF `SimpleUdf` that increments the supplied integral value by 10.
 --    import org.apache.hadoop.hive.ql.exec.UDF;
@@ -106,7 +110,7 @@ INSERT INTO test VALUES (1), (2);
 
 -- Create a permanent function called `simple_udf`. 
 CREATE FUNCTION simple_udf AS 'SimpleUdf'
-  USING JAR '/tmp/SimpleUdf.jar';
+    USING JAR '/tmp/SimpleUdf.jar';
 
 -- Verify that the function is in the registry.
 SHOW USER FUNCTIONS;
@@ -127,7 +131,7 @@ SELECT simple_udf(c1) AS function_return_value FROM t1;
 
 -- Created a temporary function.
 CREATE TEMPORARY FUNCTION simple_temp_udf AS 'SimpleUdf' 
-  USING JAR '/tmp/SimpleUdf.jar';
+    USING JAR '/tmp/SimpleUdf.jar';
 
 -- Verify that the newly created temporary function is in the registry.
 -- Please note that the temporary function does not have a qualified
@@ -152,20 +156,20 @@ SHOW USER FUNCTIONS;
 
 -- Replace the implementation of `simple_udf`
 CREATE OR REPLACE FUNCTION simple_udf AS 'SimpleUdfR'
-  USING JAR '/tmp/SimpleUdfR.jar';
+    USING JAR '/tmp/SimpleUdfR.jar';
 
 -- Invoke the function. Every selected value should be incremented by 20.
 SELECT simple_udf(c1) AS function_return_value FROM t1;
-+---------------------+                                                         
-|function_return_value|
-+---------------------+
-|                   21|
-|                   22|
-+---------------------+
-
+  +---------------------+                                                         
+  |function_return_value|
+  +---------------------+
+  |                   21|
+  |                   22|
+  +---------------------+
 {% endhighlight %}
 
-### Related statements
-- [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
-- [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
-- [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)
+### Related Statements
+
+ * [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
+ * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+ * [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)

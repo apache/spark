@@ -19,7 +19,6 @@ license: |
   limitations under the License.
 ---
 
-
 Spark SQL and DataFrames support the following data types:
 
 * Numeric types

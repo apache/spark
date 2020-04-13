@@ -20,14 +20,17 @@ license: |
 ---
 
 ### Description
+
 `LIST FILE` lists the resources added by [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html).
 
 ### Syntax
+
 {% highlight sql %}
 LIST FILE
 {% endhighlight %}
 
 ### Examples
+
 {% highlight sql %}
 ADD FILE /tmp/test;
 ADD FILE /tmp/test_2;
@@ -42,6 +45,7 @@ file:/private/tmp/test
 {% endhighlight %}
 
 ### Related Statements
+
  * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
  * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
  * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
