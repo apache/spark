@@ -24,6 +24,7 @@ import pickle
 import re
 import sys
 import traceback
+import warnings
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Callable, Collection, Dict, FrozenSet, Iterable, List, Optional, Set, Type, Union
@@ -591,7 +592,11 @@ class DAG(BaseDag, LoggingMixin):
             fallback=False) and self.schedule_interval is None
 
     @provide_session
-    def _get_concurrency_reached(self, session=None) -> bool:
+    def get_concurrency_reached(self, session=None) -> bool:
+        """
+        Returns a boolean indicating whether the concurrency limit for this DAG
+        has been reached
+        """
         TI = TaskInstance
         qry = session.query(func.count(TI.task_id)).filter(
             TI.dag_id == self.dag_id,
@@ -600,25 +605,37 @@ class DAG(BaseDag, LoggingMixin):
         return qry.scalar() >= self.concurrency
 
     @property
-    def concurrency_reached(self) -> bool:
+    def concurrency_reached(self):
         """
-        Returns a boolean indicating whether the concurrency limit for this DAG
-        has been reached
+        This attribute is deprecated. Please use `airflow.models.DAG.get_concurrency_reached` method.
         """
-        return self._get_concurrency_reached()
+        warnings.warn(
+            "This attribute is deprecated. Please use `airflow.models.DAG.get_concurrency_reached` method.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_concurrency_reached()
 
     @provide_session
-    def _get_is_paused(self, session=None):
+    def get_is_paused(self, session=None):
+        """
+        Returns a boolean indicating whether this DAG is paused
+        """
         qry = session.query(DagModel).filter(
             DagModel.dag_id == self.dag_id)
         return qry.value(DagModel.is_paused)
 
     @property
-    def is_paused(self) -> bool:
+    def is_paused(self):
         """
-        Returns a boolean indicating whether this DAG is paused
+        This attribute is deprecated. Please use `airflow.models.DAG.get_is_paused` method.
         """
-        return self._get_is_paused()
+        warnings.warn(
+            "This attribute is deprecated. Please use `airflow.models.DAG.get_is_paused` method.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_is_paused()
 
     @property
     def normalized_schedule_interval(self) -> Optional[ScheduleInterval]:
@@ -739,7 +756,10 @@ class DAG(BaseDag, LoggingMixin):
         return dagruns
 
     @provide_session
-    def _get_latest_execution_date(self, session=None):
+    def get_latest_execution_date(self, session=None):
+        """
+        Returns the latest date for which at least one dag run exists
+        """
         return session.query(func.max(DagRun.execution_date)).filter(
             DagRun.dag_id == self.dag_id
         ).scalar()
@@ -747,9 +767,14 @@ class DAG(BaseDag, LoggingMixin):
     @property
     def latest_execution_date(self):
         """
-        Returns the latest date for which at least one dag run exists
+        This attribute is deprecated. Please use `airflow.models.DAG.get_latest_execution_date` method.
         """
-        return self._get_latest_execution_date()
+        warnings.warn(
+            "This attribute is deprecated. Please use `airflow.models.DAG.get_latest_execution_date` method.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_latest_execution_date()
 
     @property
     def subdags(self):
