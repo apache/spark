@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -50,7 +52,9 @@ object TestForTypeAlias {
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
 }
 
-class DatasetSuite extends QueryTest with SharedSparkSession {
+class DatasetSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
@@ -193,6 +197,11 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("as case class - take") {
     val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
     assert(ds.take(2) === Array(ClassData("a", 1), ClassData("b", 2)))
+  }
+
+  test("as case class - tail") {
+    val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
+    assert(ds.tail(2) === Array(ClassData("b", 2), ClassData("c", 3)))
   }
 
   test("as seq of case class - reorder fields by name") {
@@ -519,7 +528,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val agged = grouped.mapGroups { case (g, iter) => (g._1, iter.map(_._2).sum) }
+    val agged = grouped.mapGroups { (g, iter) => (g._1, iter.map(_._2).sum) }
 
     checkDatasetUnorderly(
       agged,
@@ -529,7 +538,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val agged = grouped.flatMapGroups { case (g, iter) =>
+    val agged = grouped.flatMapGroups { (g, iter) =>
       Iterator(g._1, iter.map(_._2).sum.toString)
     }
 
@@ -541,11 +550,11 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, mapValues, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val keyValue = ds.groupByKey(_._1).mapValues(_._2)
-    val agged = keyValue.mapGroups { case (g, iter) => (g, iter.sum) }
+    val agged = keyValue.mapGroups { (g, iter) => (g, iter.sum) }
     checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
 
     val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
-    val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
+    val agged1 = keyValue1.mapGroups { (g, iter) => (g._1, iter.map(_._1).sum) }
     checkDataset(agged1, ("a", 30), ("b", 3), ("c", 1))
   }
 
@@ -906,7 +915,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("grouping key and grouped value has field with same name") {
     val ds = Seq(ClassData("a", 1), ClassData("a", 2)).toDS()
     val agged = ds.groupByKey(d => ClassNullableData(d.a, null)).mapGroups {
-      case (key, values) => key.a + values.map(_.b).sum
+      (key, values) => key.a + values.map(_.b).sum
     }
 
     checkDataset(agged, "a3")
@@ -979,7 +988,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
-    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ($"id" + i).as(s"c$i")} : _*)
     // Make sure the generated code for this plan can compile and execute.
     checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
   }
@@ -1001,7 +1010,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       .select("user", "item")
       .as[(Int, Int)]
       .groupByKey(_._1)
-      .mapGroups { case (src, ids) => (src, ids.map(_._2).toArray) }
+      .mapGroups { (src, ids) => (src, ids.map(_._2).toArray) }
       .toDF("id", "actual")
 
     dataset.join(actual, dataset("user") === actual("id")).collect()
@@ -1213,14 +1222,6 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
 
-  test("better error message when use java reserved keyword as field name") {
-    val e = intercept[UnsupportedOperationException] {
-      Seq(InvalidInJava(1)).toDS()
-    }
-    assert(e.getMessage.contains(
-      "`abstract` is a reserved keyword and cannot be used as field name"))
-  }
-
   test("Dataset should support flat input object to be null") {
     checkDataset(Seq("a", null).toDS(), "a", null)
   }
@@ -1268,10 +1269,10 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
 
     checkDataset(
       df.withColumn("b", lit(0)).as[ClassData]
-        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+        .groupByKey(_.a).flatMapGroups { (_, _) => List[Int]() })
     checkDataset(
       df.withColumn("b", expr("0")).as[ClassData]
-        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+        .groupByKey(_.a).flatMapGroups { (_, _) => List[Int]() })
   }
 
   test("SPARK-18125: Spark generated code causes CompileException") {
@@ -1389,7 +1390,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       }
 
       testCheckpointing("basic") {
-        val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
+        val ds = spark.range(10).repartition($"id" % 2).filter($"id" > 5).orderBy($"id".desc)
         val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
 
         val logicalRDD = cp.logicalPlan match {
@@ -1424,10 +1425,10 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       }
 
       testCheckpointing("should preserve partitioning information") {
-        val ds = spark.range(10).repartition('id % 2)
+        val ds = spark.range(10).repartition($"id" % 2)
         val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
 
-        val agg = cp.groupBy('id % 2).agg(count('id))
+        val agg = cp.groupBy($"id" % 2).agg(count($"id"))
 
         agg.queryExecution.executedPlan.collectFirst {
           case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
@@ -1439,7 +1440,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
           )
         }
 
-        checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
+        checkAnswer(agg, ds.groupBy($"id" % 2).agg(count($"id")))
       }
     }
   }
@@ -1537,11 +1538,9 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.sort("id"), expected)
     checkAnswer(df.sort(col("id")), expected)
     checkAnswer(df.sort($"id"), expected)
-    checkAnswer(df.sort('id), expected)
     checkAnswer(df.orderBy("id"), expected)
     checkAnswer(df.orderBy(col("id")), expected)
     checkAnswer(df.orderBy($"id"), expected)
-    checkAnswer(df.orderBy('id), expected)
   }
 
   test("SPARK-21567: Dataset should work with type alias") {
@@ -1696,7 +1695,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-24571: filtering of string values by char literal") {
     val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
-    checkAnswer(df.where('city === 'X'), Seq(Row("X")))
+    checkAnswer(df.where($"city" === 'X'), Seq(Row("X")))
     checkAnswer(
       df.where($"city".contains(java.lang.Character.valueOf('A'))),
       Seq(Row("Amsterdam")))
@@ -1860,6 +1859,63 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("groupBy.as") {
+    val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData(3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+    val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData(3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+
+    val df3 = df1.groupBy("id").as[Int, DoubleData]
+      .cogroup(df2.groupBy("id").as[Int, DoubleData]) { case (key, data1, data2) =>
+        if (key == 1) {
+          Iterator(DoubleData(key, (data1 ++ data2).foldLeft("")((cur, next) => cur + next.val1)))
+        } else Iterator.empty
+      }
+    checkDataset(df3, DoubleData(1, "onetwo"))
+
+    // Assert that no extra shuffle introduced by cogroup.
+    val exchanges = collect(df3.queryExecution.executedPlan) {
+      case h: ShuffleExchangeExec => h
+    }
+    assert(exchanges.size == 2)
+  }
+
+  test("tail with different numbers") {
+    Seq(0, 2, 5, 10, 50, 100, 1000).foreach { n =>
+      assert(spark.range(n).tail(6) === (math.max(n - 6, 0) until n))
+    }
+  }
+
+  test("tail should not accept minus value") {
+    val e = intercept[AnalysisException](spark.range(1).tail(-1))
+    e.getMessage.contains("tail expression must be equal to or greater than 0")
+  }
+
+  test("SparkSession.active should be the same instance after dataset operations") {
+    val active = SparkSession.getActiveSession.get
+    val clone = active.cloneSession()
+    val ds = new Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
+
+    ds.queryExecution.analyzed
+
+    assert(active eq SparkSession.getActiveSession.get)
+  }
+
+  test("SPARK-30791: sameSemantics and semanticHash work") {
+    val df1 = Seq((1, 2), (4, 5)).toDF("col1", "col2")
+    val df2 = Seq((1, 2), (4, 5)).toDF("col1", "col2")
+    val df3 = Seq((0, 2), (4, 5)).toDF("col1", "col2")
+    val df4 = Seq((0, 2), (4, 5)).toDF("col0", "col2")
+
+    assert(df1.sameSemantics(df2) === true)
+    assert(df1.sameSemantics(df3) === false)
+    assert(df3.sameSemantics(df4) === true)
+
+    assert(df1.semanticHash === df2.semanticHash)
+    assert(df1.semanticHash !== df3.semanticHash)
+    assert(df3.semanticHash === df4.semanticHash)
+  }
 }
 
 object AssertExecutionId {
@@ -1899,8 +1955,6 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
-
-case class InvalidInJava(`abstract`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

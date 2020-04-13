@@ -46,7 +46,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param dataSchema Schema of AVRO files.
  * @param readDataSchema Required data schema of AVRO files.
  * @param partitionSchema Schema of partitions.
- * @param options Options for parsing AVRO files.
+ * @param parsedOptions Options for parsing AVRO files.
  */
 case class AvroPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -54,11 +54,10 @@ case class AvroPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    options: Map[String, String]) extends FilePartitionReaderFactory with Logging {
+    parsedOptions: AvroOptions) extends FilePartitionReaderFactory with Logging {
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-    val parsedOptions = new AvroOptions(options, conf)
     val userProvidedSchema = parsedOptions.schema.map(new Schema.Parser().parse)
 
     if (parsedOptions.ignoreExtension || partitionedFile.filePath.endsWith(".avro")) {

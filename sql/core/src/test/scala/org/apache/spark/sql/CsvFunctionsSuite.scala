@@ -59,10 +59,22 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     val df2 = df
       .select(from_csv($"value", schemaWithCorrField1, Map(
         "mode" -> "Permissive", "columnNameOfCorruptRecord" -> columnNameOfCorruptRecord)))
-
-    checkAnswer(df2, Seq(
-      Row(Row(0, null, "0,2013-111-11 12:13:14")),
-      Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
+      checkAnswer(df2, Seq(
+        Row(Row(0, null, "0,2013-111-11 12:13:14")),
+        Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
+      checkAnswer(df2, Seq(
+        Row(Row(0, java.sql.Date.valueOf("2022-03-11"), null)),
+        Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
+      val msg = intercept[SparkException] {
+        df2.collect()
+      }.getCause.getMessage
+      assert(msg.contains("Fail to parse"))
+    }
   }
 
   test("schema_of_csv - infers schemas") {
@@ -153,7 +165,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   test("infers schemas of a CSV string and pass to to from_csv") {
     val in = Seq("""0.123456789,987654321,"San Francisco"""").toDS()
     val options = Map.empty[String, String].asJava
-    val out = in.select(from_csv('value, schema_of_csv("0.1,1,a"), options) as "parsed")
+    val out = in.select(from_csv($"value", schema_of_csv("0.1,1,a"), options) as "parsed")
     val expected = StructType(Seq(StructField(
       "parsed",
       StructType(Seq(
@@ -199,5 +211,43 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         Map.empty[String, String].asJava)).collect()
       assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
     }
+  }
+
+  test("support foldable schema by from_csv") {
+    val options = Map[String, String]().asJava
+    val schema = concat_ws(",", lit("i int"), lit("s string"))
+    checkAnswer(
+      Seq("""1,"a"""").toDS().select(from_csv($"value", schema, options)),
+      Row(Row(1, "a")))
+
+    val errMsg = intercept[AnalysisException] {
+      Seq(("1", "i int")).toDF("csv", "schema")
+        .select(from_csv($"csv", $"schema", options)).collect()
+    }.getMessage
+    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+
+    val errMsg2 = intercept[AnalysisException] {
+      Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
+    }.getMessage
+    assert(errMsg2.contains("The expression '1' is not a valid schema string"))
+  }
+
+  test("schema_of_csv - infers the schema of foldable CSV string") {
+    val input = concat_ws(",", lit(0.1), lit(1))
+    checkAnswer(
+      spark.range(1).select(schema_of_csv(input)),
+      Seq(Row("struct<_c0:double,_c1:int>")))
+  }
+
+  test("optional datetime parser does not affect csv time formatting") {
+    val s = "2015-08-26 12:34:46"
+    def toDF(p: String): DataFrame = sql(
+      s"""
+         |SELECT
+         | to_csv(
+         |   named_struct('time', timestamp'$s'), map('timestampFormat', "$p")
+         | )
+         | """.stripMargin)
+    checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
   }
 }

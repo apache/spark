@@ -88,8 +88,14 @@ class ParamGridBuilder(object):
     def addGrid(self, param, values):
         """
         Sets the given parameters in this grid to fixed values.
+
+        param must be an instance of Param associated with an instance of Params
+        (such as Estimator or Transformer).
         """
-        self._param_grid[param] = values
+        if isinstance(param, Param):
+            self._param_grid[param] = values
+        else:
+            raise TypeError("param must be an instance of Param")
 
         return self
 
@@ -449,27 +455,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         #: sub model list from cross validation
         self.subModels = subModels
 
-    @since("2.0.0")
-    def setEstimator(self, value):
-        """
-        Sets the value of :py:attr:`estimator`.
-        """
-        return self._set(estimator=value)
-
-    @since("2.0.0")
-    def setEstimatorParamMaps(self, value):
-        """
-        Sets the value of :py:attr:`estimatorParamMaps`.
-        """
-        return self._set(estimatorParamMaps=value)
-
-    @since("2.0.0")
-    def setEvaluator(self, value):
-        """
-        Sets the value of :py:attr:`evaluator`.
-        """
-        return self._set(evaluator=value)
-
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
@@ -514,8 +499,8 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         avgMetrics = _java2py(sc, java_stage.avgMetrics())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
-        py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics).setEstimator(estimator)
-        py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
+        py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics)._set(estimator=estimator)
+        py_stage = py_stage._set(estimatorParamMaps=epms)._set(evaluator=evaluator)
 
         if java_stage.hasSubModels():
             py_stage.subModels = [[JavaParams._from_java(sub_model)
@@ -801,27 +786,6 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
         #: sub models from train validation split
         self.subModels = subModels
 
-    @since("2.0.0")
-    def setEstimator(self, value):
-        """
-        Sets the value of :py:attr:`estimator`.
-        """
-        return self._set(estimator=value)
-
-    @since("2.0.0")
-    def setEstimatorParamMaps(self, value):
-        """
-        Sets the value of :py:attr:`estimatorParamMaps`.
-        """
-        return self._set(estimatorParamMaps=value)
-
-    @since("2.0.0")
-    def setEvaluator(self, value):
-        """
-        Sets the value of :py:attr:`evaluator`.
-        """
-        return self._set(evaluator=value)
-
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
@@ -871,8 +835,8 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
                                            cls)._from_java_impl(java_stage)
         # Create a new instance of this stage.
         py_stage = cls(bestModel=bestModel,
-                       validationMetrics=validationMetrics).setEstimator(estimator)
-        py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
+                       validationMetrics=validationMetrics)._set(estimator=estimator)
+        py_stage = py_stage._set(estimatorParamMaps=epms)._set(evaluator=evaluator)
 
         if java_stage.hasSubModels():
             py_stage.subModels = [JavaParams._from_java(sub_model)

@@ -2,21 +2,21 @@
 -- Number of queries: 2
 
 
--- !query 0
+-- !query
 select udf(max(min(unique1))) from tenk1
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.;
 
 
--- !query 1
+-- !query
 select udf((select udf(count(*))
         from (values (1)) t0(inner_c))) as col
 from (values (2),(3)) t1(outer_c)
--- !query 1 schema
+-- !query schema
 struct<col:bigint>
--- !query 1 output
+-- !query output
 1
 1

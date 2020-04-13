@@ -26,7 +26,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg._
@@ -459,12 +459,13 @@ abstract class LDAModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val func = getTopicDistributionMethod
     val transformer = udf(func)
     dataset.withColumn($(topicDistributionCol),
-      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
+      outputSchema($(topicDistributionCol)).metadata)
   }
 
   /**
@@ -504,7 +505,12 @@ abstract class LDAModel private[ml] (
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(topicDistributionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(topicDistributionCol), oldLocalModel.k)
+    }
+    outputSchema
   }
 
   /**
@@ -620,6 +626,11 @@ class LocalLDAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new LocalLDAModel.LocalLDAModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"LocalLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
+  }
 }
 
 
@@ -751,8 +762,6 @@ class DistributedLDAModel private[ml] (
   private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
 
   /**
-   * :: DeveloperApi ::
-   *
    * If using checkpointing and `LDA.keepLastCheckpoint` is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
@@ -762,18 +771,14 @@ class DistributedLDAModel private[ml] (
    *
    * @return  Checkpoint files from training
    */
-  @DeveloperApi
   @Since("2.0.0")
   def getCheckpointFiles: Array[String] = _checkpointFiles
 
   /**
-   * :: DeveloperApi ::
-   *
    * Remove any remaining checkpoint files from training.
    *
    * @see [[getCheckpointFiles]]
    */
-  @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
     val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
@@ -783,6 +788,11 @@ class DistributedLDAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new DistributedLDAModel.DistributedWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"DistributedLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
+  }
 }
 
 

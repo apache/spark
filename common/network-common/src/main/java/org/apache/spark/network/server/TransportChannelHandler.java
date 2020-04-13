@@ -58,6 +58,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   private final TransportRequestHandler requestHandler;
   private final long requestTimeoutNs;
   private final boolean closeIdleConnections;
+  private final boolean skipChunkFetchRequest;
   private final TransportContext transportContext;
 
   public TransportChannelHandler(
@@ -65,12 +66,14 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
       TransportResponseHandler responseHandler,
       TransportRequestHandler requestHandler,
       long requestTimeoutMs,
+      boolean skipChunkFetchRequest,
       boolean closeIdleConnections,
       TransportContext transportContext) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
     this.requestTimeoutNs = requestTimeoutMs * 1000L * 1000;
+    this.skipChunkFetchRequest = skipChunkFetchRequest;
     this.closeIdleConnections = closeIdleConnections;
     this.transportContext = transportContext;
   }
@@ -124,7 +127,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
    */
   @Override
   public boolean acceptInboundMessage(Object msg) throws Exception {
-    if (msg instanceof ChunkFetchRequest) {
+    if (skipChunkFetchRequest && msg instanceof ChunkFetchRequest) {
       return false;
     } else {
       return super.acceptInboundMessage(msg);

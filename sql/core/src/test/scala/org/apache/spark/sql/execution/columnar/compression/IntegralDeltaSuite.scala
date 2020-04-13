@@ -34,7 +34,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
       columnType: NativeColumnType[I],
       scheme: CompressionScheme): Unit = {
 
-    def skeleton(input: Seq[I#InternalType]): Unit = {
+    def skeleton(input: Seq[Any]): Unit = {
       // -------------
       // Tests encoder
       // -------------
@@ -52,7 +52,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
 
       input.foreach { value =>
         val row = new GenericInternalRow(1)
-        columnType.setField(row, 0, value)
+        columnType.setField(row, 0, value.asInstanceOf[I#InternalType])
         builder.appendFrom(row, 0)
       }
 
@@ -173,9 +173,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
     }
 
     test(s"$scheme: long random series") {
-      // Have to workaround with `Any` since no `ClassTag[I#JvmType]` available here.
-      val input = Array.fill[Any](10000)(makeRandomValue(columnType))
-      skeleton(input.map(_.asInstanceOf[I#InternalType]))
+      skeleton(Seq.fill[I#InternalType](10000)(makeRandomValue(columnType)))
     }
 
 

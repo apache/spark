@@ -179,7 +179,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
         assert(raw.size === 2)
         // check that raw prediction is tree predictions dot tree weights
         val treePredictions = gbtModel.trees.map(_.rootNode.predictImpl(features).prediction)
-        val prediction = blas.ddot(gbtModel.numTrees, treePredictions, 1, gbtModel.treeWeights, 1)
+        val prediction = blas.ddot(gbtModel.getNumTrees, treePredictions, 1,
+          gbtModel.treeWeights, 1)
         assert(raw ~== Vectors.dense(-prediction, prediction) relTol eps)
 
         // Compare rawPrediction with probability
@@ -206,6 +207,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val gbtModel = gbt.fit(trainingDataset)
 
     testPredictionModelSinglePrediction(gbtModel, trainingDataset)
+    testClassificationModelSingleRawPrediction(gbtModel, trainingDataset)
+    testProbClassificationModelSingleProbPrediction(gbtModel, trainingDataset)
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {
@@ -434,9 +437,9 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       gbt.setValidationIndicatorCol(validationIndicatorCol)
       val modelWithValidation = gbt.fit(trainDF.union(validationDF))
 
-      assert(modelWithoutValidation.numTrees === numIter)
+      assert(modelWithoutValidation.getNumTrees === numIter)
       // early stop
-      assert(modelWithValidation.numTrees < numIter)
+      assert(modelWithValidation.getNumTrees < numIter)
 
       val (errorWithoutValidation, errorWithValidation) = {
         val remappedRdd = validationData.map {
@@ -455,10 +458,10 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
           OldAlgo.Classification)
       assert(evaluationArray.length === numIter)
-      assert(evaluationArray(modelWithValidation.numTrees) >
-        evaluationArray(modelWithValidation.numTrees - 1))
+      assert(evaluationArray(modelWithValidation.getNumTrees) >
+        evaluationArray(modelWithValidation.getNumTrees - 1))
       var i = 1
-      while (i < modelWithValidation.numTrees) {
+      while (i < modelWithValidation.getNumTrees) {
         assert(evaluationArray(i) <= evaluationArray(i - 1))
         i += 1
       }
@@ -473,6 +476,13 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       .setCheckpointInterval(5)
       .setSeed(123)
     val model = gbt.fit(df)
+    model.setLeafCol("predictedLeafId")
+
+    val transformed = model.transform(df)
+    checkNominalOnDF(transformed, "prediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "predictedLeafId", model.trees.length)
+    checkVectorSizeOnDF(transformed, "rawPrediction", model.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", model.numClasses)
 
     model.trees.foreach (i => {
       assert(i.getMaxDepth === model.getMaxDepth)
@@ -484,30 +494,31 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("training with sample weights") {
     val df = binaryDataset
     val numClasses = 2
-    val predEquals = (x: Double, y: Double) => x == y
-    // (maxIter, maxDepth)
+    // (maxIter, maxDepth, subsamplingRate, fractionInTol)
     val testParams = Seq(
-      (5, 5),
-      (5, 10)
+      (5, 5, 1.0, 0.99),
+      (5, 10, 1.0, 0.99),
+      (5, 10, 0.95, 0.9)
     )
 
-    for ((maxIter, maxDepth) <- testParams) {
+    for ((maxIter, maxDepth, subsamplingRate, tol) <- testParams) {
       val estimator = new GBTClassifier()
         .setMaxIter(maxIter)
         .setMaxDepth(maxDepth)
+        .setSubsamplingRate(subsamplingRate)
         .setSeed(seed)
         .setMinWeightFractionPerNode(0.049)
 
       MLTestingUtils.testArbitrarilyScaledWeights[GBTClassificationModel,
         GBTClassifier](df.as[LabeledPoint], estimator,
-        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7))
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol))
       MLTestingUtils.testOutliersWithSmallWeights[GBTClassificationModel,
         GBTClassifier](df.as[LabeledPoint], estimator,
-        numClasses, MLTestingUtils.modelPredictionEquals(df, predEquals, 0.8),
+        numClasses, MLTestingUtils.modelPredictionEquals(df, _ == _, tol),
         outlierRatio = 2)
       MLTestingUtils.testOversamplingVsWeighting[GBTClassificationModel,
         GBTClassifier](df.as[LabeledPoint], estimator,
-        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7), seed)
+        MLTestingUtils.modelPredictionEquals(df, _ == _, tol), seed)
     }
   }
 

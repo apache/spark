@@ -521,6 +521,32 @@ setMethod("createOrReplaceTempView",
               invisible(callJMethod(x@sdf, "createOrReplaceTempView", viewName))
           })
 
+#' (Deprecated) Register Temporary Table
+#'
+#' Registers a SparkDataFrame as a Temporary Table in the SparkSession
+#' @param x A SparkDataFrame
+#' @param tableName A character vector containing the name of the table
+#'
+#' @seealso \link{createOrReplaceTempView}
+#' @rdname registerTempTable-deprecated
+#' @name registerTempTable
+#' @aliases registerTempTable,SparkDataFrame,character-method
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' registerTempTable(df, "json_df")
+#' new_df <- sql("SELECT * FROM json_df")
+#'}
+#' @note registerTempTable since 1.4.0
+setMethod("registerTempTable",
+          signature(x = "SparkDataFrame", tableName = "character"),
+          function(x, tableName) {
+              .Deprecated("createOrReplaceTempView")
+              invisible(callJMethod(x@sdf, "createOrReplaceTempView", tableName))
+          })
+
 #' insertInto
 #'
 #' Insert the contents of a SparkDataFrame into a table registered in the current SparkSession.
@@ -2252,7 +2278,7 @@ setMethod("mutate",
 
             # The last column of the same name in the specific columns takes effect
             deDupCols <- list()
-            for (i in 1:length(cols)) {
+            for (i in seq_len(length(cols))) {
               deDupCols[[ns[[i]]]] <- alias(cols[[i]], ns[[i]])
             }
 
@@ -2416,7 +2442,7 @@ setMethod("arrange",
             # builds a list of columns of type Column
             # example: [[1]] Column Species ASC
             #          [[2]] Column Petal_Length DESC
-            jcols <- lapply(seq_len(length(decreasing)), function(i){
+            jcols <- lapply(seq_len(length(decreasing)), function(i) {
               if (decreasing[[i]]) {
                 desc(getColumn(x, by[[i]]))
               } else {
@@ -2749,7 +2775,7 @@ genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
     col <- getColumn(x, colName)
     if (colName %in% intersectedColNames) {
       newJoin <- paste(colName, suffix, sep = "")
-      if (newJoin %in% allColNames){
+      if (newJoin %in% allColNames) {
         stop("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
           "Please use different suffixes for the intersected columns.")
       }
@@ -3475,7 +3501,7 @@ setMethod("str",
             cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
 
             if (nrow(localDF) > 0) {
-              for (i in 1 : ncol(localDF)) {
+              for (i in seq_len(ncol(localDF))) {
                 # Get the first elements for each column
 
                 firstElements <- if (types[i] == "character") {

@@ -93,7 +93,7 @@ done
 
 GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"
-$GPG --export-secret-key --armor "$GPG_KEY" > "$GPG_KEY_FILE"
+$GPG --export-secret-key --armor --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$GPG_KEY" > "$GPG_KEY_FILE"
 
 run_silent "Building spark-rm image with tag $IMGTAG..." "docker-build.log" \
   docker build -t "spark-rm:$IMGTAG" --build-arg UID=$UID "$SELF/spark-rm"
@@ -135,9 +135,6 @@ if [ -n "$JAVA" ]; then
   echo "JAVA_HOME=/opt/spark-java" >> $ENVFILE
   JAVA_VOL="--volume $JAVA:/opt/spark-java"
 fi
-
-# SPARK-24530: Sphinx must work with python 3 to generate doc correctly.
-echo "SPHINXPYTHON=/opt/p35/bin/python" >> $ENVFILE
 
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
 docker run -ti \

@@ -17,8 +17,8 @@
 
 package org.apache.spark.storage
 
-import scala.collection.Iterable
 import scala.collection.generic.CanBuildFrom
+import scala.collection.immutable.Iterable
 import scala.concurrent.Future
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -30,6 +30,7 @@ import org.apache.spark.util.{RpcUtils, ThreadUtils}
 private[spark]
 class BlockManagerMaster(
     var driverEndpoint: RpcEndpointRef,
+    var driverHeartbeatEndPoint: RpcEndpointRef,
     conf: SparkConf,
     isDriver: Boolean)
   extends Logging {
@@ -166,10 +167,12 @@ class BlockManagerMaster(
    * amount of remaining memory.
    */
   def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
+    if (driverEndpoint == null) return Map.empty
     driverEndpoint.askSync[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
   }
 
   def getStorageStatus: Array[StorageStatus] = {
+    if (driverEndpoint == null) return Array.empty
     driverEndpoint.askSync[Array[StorageStatus]](GetStorageStatus)
   }
 
@@ -200,7 +203,7 @@ class BlockManagerMaster(
         Option[BlockStatus],
         Iterable[Option[BlockStatus]]]]
     val blockStatus = timeout.awaitResult(
-      Future.sequence[Option[BlockStatus], Iterable](futures)(cbf, ThreadUtils.sameThread))
+      Future.sequence(futures)(cbf, ThreadUtils.sameThread))
     if (blockStatus == null) {
       throw new SparkException("BlockManager returned null for BlockStatus query: " + blockId)
     }
@@ -230,6 +233,11 @@ class BlockManagerMaster(
     if (driverEndpoint != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverEndpoint = null
+      if (driverHeartbeatEndPoint.askSync[Boolean](StopBlockManagerMaster)) {
+        driverHeartbeatEndPoint = null
+      } else {
+        logWarning("Failed to stop BlockManagerMasterHeartbeatEndpoint")
+      }
       logInfo("BlockManagerMaster stopped")
     }
   }
@@ -245,4 +253,5 @@ class BlockManagerMaster(
 
 private[spark] object BlockManagerMaster {
   val DRIVER_ENDPOINT_NAME = "BlockManagerMaster"
+  val DRIVER_HEARTBEAT_ENDPOINT_NAME = "BlockManagerMasterHeartbeat"
 }

@@ -20,17 +20,20 @@ license: |
 ---
 
 ### Description
+
 Lists the databases that match an optionally supplied string pattern. If no
 pattern is supplied then the command lists all the databases in the system.
-Please note that the usage of `SCHEMAS` and `DATABASES` are interchangable
+Please note that the usage of `SCHEMAS` and `DATABASES` are interchangeable
 and mean the same thing.
 
 ### Syntax
+
 {% highlight sql %}
-SHOW {DATABASES|SCHEMAS} [LIKE string_pattern]
+SHOW { DATABASES | SCHEMAS } [ LIKE string_pattern ]
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>LIKE string_pattern</em></code></dt>
   <dd>
@@ -40,6 +43,7 @@ SHOW {DATABASES|SCHEMAS} [LIKE string_pattern]
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- Create database. Assumes a database named `default` already exists in
 -- the system. 
@@ -55,6 +59,7 @@ SHOW DATABASES;
   | payments_db|
   |  payroll_db|
   +------------+
+  
 -- Lists databases with name starting with string pattern `pay`
 SHOW DATABASES LIKE 'pay*';
   +------------+
@@ -63,6 +68,7 @@ SHOW DATABASES LIKE 'pay*';
   | payments_db|
   |  payroll_db|
   +------------+
+  
 -- Lists all databases. Keywords SCHEMAS and DATABASES are interchangeable. 
 SHOW SCHEMAS;
   +------------+
@@ -73,7 +79,9 @@ SHOW SCHEMAS;
   |  payroll_db|
   +------------+
 {% endhighlight %}
+
 ### Related Statements
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-databases.html)
-- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
-- [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)
+
+ * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+ * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+ * [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)

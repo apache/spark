@@ -345,8 +345,6 @@ class JavaMLReadable(MLReadable):
 @inherit_doc
 class DefaultParamsWritable(MLWritable):
     """
-    .. note:: DeveloperApi
-
     Helper trait for making simple :py:class:`Params` types writable.  If a :py:class:`Params`
     class stores all data as :py:class:`Param` values, then extending this trait will provide
     a default implementation of writing saved instances of the class.
@@ -370,8 +368,6 @@ class DefaultParamsWritable(MLWritable):
 @inherit_doc
 class DefaultParamsWriter(MLWriter):
     """
-    .. note:: DeveloperApi
-
     Specialization of :py:class:`MLWriter` for :py:class:`Params` types
 
     Class for writing Estimators and Transformers whose parameters are JSON-serializable.
@@ -390,6 +386,7 @@ class DefaultParamsWriter(MLWriter):
     def saveMetadata(instance, path, sc, extraMetadata=None, paramMap=None):
         """
         Saves metadata + Params to: path + "/metadata"
+
         - class
         - timestamp
         - sparkVersion
@@ -397,6 +394,7 @@ class DefaultParamsWriter(MLWriter):
         - paramMap
         - defaultParamMap (since 2.4.0)
         - (optionally, extra metadata)
+
         :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
         :param paramMap:  If given, this is saved in the "paramMap" field.
         """
@@ -443,8 +441,6 @@ class DefaultParamsWriter(MLWriter):
 @inherit_doc
 class DefaultParamsReadable(MLReadable):
     """
-    .. note:: DeveloperApi
-
     Helper trait for making simple :py:class:`Params` types readable.
     If a :py:class:`Params` class stores all data as :py:class:`Param` values,
     then extending this trait will provide a default implementation of reading saved
@@ -464,8 +460,6 @@ class DefaultParamsReadable(MLReadable):
 @inherit_doc
 class DefaultParamsReader(MLReader):
     """
-    .. note:: DeveloperApi
-
     Specialization of :py:class:`MLReader` for :py:class:`Params` types
 
     Default :py:class:`MLReader` implementation for transformers and estimators that

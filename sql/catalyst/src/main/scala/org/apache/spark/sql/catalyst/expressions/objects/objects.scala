@@ -28,7 +28,6 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
-import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -311,7 +310,7 @@ case class Invoke(
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
 
-  private lazy val encodedFunctionName = TermName(functionName).encodedName.toString
+  private lazy val encodedFunctionName = ScalaReflection.encodeFieldNameToIdentifier(functionName)
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
@@ -916,7 +915,7 @@ case class MapObjects private(
                ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
                $builder.sizeHint($dataLength);
              """,
-            genValue => s"$builder.$$plus$$eq($genValue);",
+            (genValue: String) => s"$builder.$$plus$$eq($genValue);",
             s"(${cls.getName}) $builder.result();"
           )
         case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
@@ -930,7 +929,7 @@ case class MapObjects private(
               val param = Try(cls.getConstructor(Integer.TYPE)).map(_ => dataLength).getOrElse("")
               s"${cls.getName} $builder = new ${cls.getName}($param);"
             },
-            genValue => s"$builder.add($genValue);",
+            (genValue: String) => s"$builder.add($genValue);",
             s"$builder;"
           )
         case None =>
@@ -940,7 +939,7 @@ case class MapObjects private(
                $convertedType[] $convertedArray = null;
                $convertedArray = $arrayConstructor;
              """,
-            genValue => s"$convertedArray[$loopIndex] = $genValue;",
+            (genValue: String) => s"$convertedArray[$loopIndex] = $genValue;",
             s"new ${classOf[GenericArrayData].getName}($convertedArray);"
           )
       }
@@ -1692,7 +1691,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
   override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
 
-  private val errMsg = s" is not a valid external type for schema of ${expected.catalogString}"
+  private lazy val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>

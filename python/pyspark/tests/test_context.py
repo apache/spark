@@ -214,6 +214,10 @@ class ContextTests(unittest.TestCase):
             rdd = sc.parallelize(range(10)).map(lambda x: time.sleep(100))
 
             def run():
+                # When thread is pinned, job group should be set for each thread for now.
+                # Local properties seem not being inherited like Scala side does.
+                if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
+                    sc.setJobGroup('test_progress_api', '', True)
                 try:
                     rdd.count()
                 except Exception:
@@ -271,6 +275,9 @@ class ContextTestsWithResources(unittest.TestCase):
         self.tempFile = tempfile.NamedTemporaryFile(delete=False)
         self.tempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
         self.tempFile.close()
+        # create temporary directory for Worker resources coordination
+        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(self.tempdir.name)
         os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
                  stat.S_IROTH | stat.S_IXOTH)
         conf = SparkConf().set("spark.test.home", SPARK_HOME)

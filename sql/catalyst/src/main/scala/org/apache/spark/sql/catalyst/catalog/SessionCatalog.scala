@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Im
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
@@ -327,8 +328,7 @@ class SessionCatalog(
 
   def validateTableLocation(table: CatalogTable): Unit = {
     // SPARK-19724: the default location of a managed table should be non-existent or empty.
-    if (table.tableType == CatalogTableType.MANAGED &&
-      !conf.allowCreatingManagedTableUsingNonemptyLocation) {
+    if (table.tableType == CatalogTableType.MANAGED) {
       val tableLocation =
         new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
       val fs = tableLocation.getFileSystem(hadoopConf)
@@ -576,6 +576,10 @@ class SessionCatalog(
     tempViews.get(formatTableName(name))
   }
 
+  def getTempViewNames(): Seq[String] = synchronized {
+    tempViews.keySet.toSeq
+  }
+
   /**
    * Return a global temporary view exactly as it was stored.
    */
@@ -744,24 +748,59 @@ class SessionCatalog(
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
-        if (metadata.tableType == CatalogTableType.VIEW) {
-          val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
-          logDebug(s"'$viewText' will be used for the view($table).")
-          // The relation is a view, so we wrap the relation by:
-          // 1. Add a [[View]] operator over the relation to keep track of the view desc;
-          // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
-          val child = View(
-            desc = metadata,
-            output = metadata.schema.toAttributes,
-            child = parser.parsePlan(viewText))
-          SubqueryAlias(table, db, child)
-        } else {
-          SubqueryAlias(table, db, UnresolvedCatalogRelation(metadata))
-        }
+        getRelation(metadata)
       } else {
         SubqueryAlias(table, tempViews(table))
       }
     }
+  }
+
+  def getRelation(metadata: CatalogTable): LogicalPlan = {
+    val name = metadata.identifier
+    val db = formatDatabaseName(name.database.getOrElse(currentDb))
+    val table = formatTableName(name.table)
+    val multiParts = Seq(CatalogManager.SESSION_CATALOG_NAME, db, table)
+
+    if (metadata.tableType == CatalogTableType.VIEW) {
+      val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+      logDebug(s"'$viewText' will be used for the view($table).")
+      // The relation is a view, so we wrap the relation by:
+      // 1. Add a [[View]] operator over the relation to keep track of the view desc;
+      // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
+      val child = View(
+        desc = metadata,
+        output = metadata.schema.toAttributes,
+        child = parser.parsePlan(viewText))
+      SubqueryAlias(multiParts, child)
+    } else {
+      SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata))
+    }
+  }
+
+  def lookupTempView(table: String): Option[SubqueryAlias] = {
+    val formattedTable = formatTableName(table)
+    getTempView(formattedTable).map { view =>
+      SubqueryAlias(formattedTable, view)
+    }
+  }
+
+  def lookupGlobalTempView(db: String, table: String): Option[SubqueryAlias] = {
+    val formattedDB = formatDatabaseName(db)
+    if (formattedDB == globalTempViewManager.database) {
+      val formattedTable = formatTableName(table)
+      getGlobalTempView(formattedTable).map { view =>
+        SubqueryAlias(formattedTable, formattedDB, view)
+      }
+    } else {
+      None
+    }
+  }
+
+  // TODO: merge it with `isTemporaryTable`.
+  def isTempView(nameParts: Seq[String]): Boolean = {
+    if (nameParts.length > 2) return false
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    isTemporaryTable(nameParts.asTableIdentifier)
   }
 
   /**
@@ -789,6 +828,8 @@ class SessionCatalog(
         getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
       } catch {
         case _: NoSuchTableException => false
+        case _: NoSuchDatabaseException => false
+        case _: NoSuchNamespaceException => false
       }
     }
   }
@@ -837,6 +878,25 @@ class SessionCatalog(
     } else {
       dbTables
     }
+  }
+
+  /**
+   * List all matching views in the specified database, including local temporary views.
+   */
+  def listViews(db: String, pattern: String): Seq[TableIdentifier] = {
+    val dbName = formatDatabaseName(db)
+    val dbViews = if (dbName == globalTempViewManager.database) {
+      globalTempViewManager.listViewNames(pattern).map { name =>
+        TableIdentifier(name, Some(globalTempViewManager.database))
+      }
+    } else {
+      requireDbExists(dbName)
+      externalCatalog.listViews(dbName, pattern).map { name =>
+        TableIdentifier(name, Some(dbName))
+      }
+    }
+
+    dbViews ++ listLocalTempViews(pattern)
   }
 
   /**
@@ -1303,6 +1363,10 @@ class SessionCatalog(
       functionRegistry.functionExists(name) &&
       !FunctionRegistry.builtin.functionExists(name) &&
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
+  }
+
+  def isTempFunction(name: String): Boolean = {
+    isTemporaryFunction(FunctionIdentifier(name))
   }
 
   /**

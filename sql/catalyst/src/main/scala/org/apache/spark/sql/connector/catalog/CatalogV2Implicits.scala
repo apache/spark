@@ -20,15 +20,20 @@ package org.apache.spark.sql.connector.catalog
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, Transform}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
  */
 private[sql] object CatalogV2Implicits {
-  implicit class PartitionTypeHelper(partitionType: StructType) {
-    def asTransforms: Array[Transform] = partitionType.names.map(LogicalExpressions.identity)
+  import LogicalExpressions._
+
+  implicit class PartitionTypeHelper(colNames: Seq[String]) {
+    def asTransforms: Array[Transform] = {
+      colNames.map(col => identity(reference(Seq(col)))).toArray
+    }
   }
 
   implicit class BucketSpecHelper(spec: BucketSpec) {
@@ -38,7 +43,8 @@ private[sql] object CatalogV2Implicits {
           s"Cannot convert bucketing with sort columns to a transform: $spec")
       }
 
-      LogicalExpressions.bucket(spec.numBuckets, spec.bucketColumnNames: _*)
+      val references = spec.bucketColumnNames.map(col => reference(Seq(col)))
+      bucket(spec.numBuckets, references.toArray)
     }
   }
 
@@ -80,16 +86,26 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class NamespaceHelper(namespace: Array[String]) {
-    def quoted: String = namespace.map(quote).mkString(".")
+    def quoted: String = namespace.map(quoteIfNeeded).mkString(".")
   }
 
   implicit class IdentifierHelper(ident: Identifier) {
     def quoted: String = {
       if (ident.namespace.nonEmpty) {
-        ident.namespace.map(quote).mkString(".") + "." + quote(ident.name)
+        ident.namespace.map(quoteIfNeeded).mkString(".") + "." + quoteIfNeeded(ident.name)
       } else {
-        quote(ident.name)
+        quoteIfNeeded(ident.name)
       }
+    }
+
+    def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
+
+    def asTableIdentifier: TableIdentifier = ident.namespace match {
+      case ns if ns.isEmpty => TableIdentifier(ident.name)
+      case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
+      case _ =>
+        throw new AnalysisException(
+          s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
     }
   }
 
@@ -108,14 +124,20 @@ private[sql] object CatalogV2Implicits {
           s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
     }
 
-    def quoted: String = parts.map(quote).mkString(".")
+    def quoted: String = parts.map(quoteIfNeeded).mkString(".")
   }
 
-  private def quote(part: String): String = {
+  def quoteIfNeeded(part: String): String = {
     if (part.contains(".") || part.contains("`")) {
       s"`${part.replace("`", "``")}`"
     } else {
       part
     }
+  }
+
+  private lazy val catalystSqlParser = new CatalystSqlParser(SQLConf.get)
+
+  def parseColumnPath(name: String): Seq[String] = {
+    catalystSqlParser.parseMultipartIdentifier(name)
   }
 }

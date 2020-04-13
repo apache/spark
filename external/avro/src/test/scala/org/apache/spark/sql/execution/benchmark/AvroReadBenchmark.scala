@@ -64,7 +64,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
         prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
 
         benchmark.addCase("Sum") { _ =>
-          spark.sql("SELECT sum(id) FROM avroTable").collect()
+          spark.sql("SELECT sum(id) FROM avroTable").noop()
         }
 
         benchmark.run()
@@ -85,7 +85,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
           spark.sql("SELECT CAST(value AS INT) AS c1, CAST(value as STRING) AS c2 FROM t1"))
 
         benchmark.addCase("Sum of columns") { _ =>
-          spark.sql("SELECT sum(c1), sum(length(c2)) FROM avroTable").collect()
+          spark.sql("SELECT sum(c1), sum(length(c2)) FROM avroTable").noop()
         }
 
         benchmark.run()
@@ -104,15 +104,15 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
         prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
 
         benchmark.addCase("Data column") { _ =>
-          spark.sql("SELECT sum(id) FROM avroTable").collect()
+          spark.sql("SELECT sum(id) FROM avroTable").noop()
         }
 
         benchmark.addCase("Partition column") { _ =>
-          spark.sql("SELECT sum(p) FROM avroTable").collect()
+          spark.sql("SELECT sum(p) FROM avroTable").noop()
         }
 
         benchmark.addCase("Both columns") { _ =>
-          spark.sql("SELECT sum(p), sum(id) FROM avroTable").collect()
+          spark.sql("SELECT sum(p), sum(id) FROM avroTable").noop()
         }
 
         benchmark.run()
@@ -130,7 +130,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
         prepareTable(dir, spark.sql("SELECT CAST((id % 200) + 10000 as STRING) AS c1 FROM t1"))
 
         benchmark.addCase("Sum of string length") { _ =>
-          spark.sql("SELECT sum(length(c1)) FROM avroTable").collect()
+          spark.sql("SELECT sum(length(c1)) FROM avroTable").noop()
         }
 
         benchmark.run()
@@ -155,7 +155,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Sum of string length") { _ =>
           spark.sql("SELECT SUM(LENGTH(c2)) FROM avroTable " +
-            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").collect()
+            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
         }
 
         benchmark.run()
@@ -178,7 +178,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
         prepareTable(dir, spark.sql("SELECT * FROM t1"))
 
         benchmark.addCase("Sum of single column") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM avroTable").collect()
+          spark.sql(s"SELECT sum(c$middle) FROM avroTable").noop()
         }
 
         benchmark.run()

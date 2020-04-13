@@ -18,23 +18,27 @@
 package org.apache.spark.sql.kafka010
 
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
+
+import scala.reflect.ClassTag
+import scala.util.Try
 
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.internals.DefaultPartitioner
 import org.apache.kafka.common.Cluster
 import org.apache.kafka.common.serialization.ByteArraySerializer
+import org.scalatest.concurrent.TimeLimits.failAfter
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkException, TestUtils}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamBase}
+import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StringType, StructField, StructType}
 
 abstract class KafkaSinkSuiteBase extends QueryTest with SharedSparkSession with KafkaTest {
@@ -74,13 +78,17 @@ abstract class KafkaSinkSuiteBase extends QueryTest with SharedSparkSession with
   }
 }
 
-class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
+abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
   import testImplicits._
 
-  override val streamingTimeout = 30.seconds
+  protected val streamingTimeout = 30.seconds
+
+  protected def createMemoryStream(): MemoryStreamBase[String]
+  protected def verifyResult(writer: StreamingQuery)(verifyFn: => Unit): Unit
+  protected def defaultTrigger: Option[Trigger]
 
   test("streaming - write to kafka with topic field") {
-    val input = MemoryStream[String]
+    val input = createMemoryStream()
     val topic = newTopic()
     testUtils.createTopic(topic)
 
@@ -96,55 +104,29 @@ class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
       .as[(Option[Int], Int)]
       .map(_._2)
 
-    try {
-      input.addData("1", "2", "3", "4", "5")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
-      input.addData("6", "7", "8", "9", "10")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    } finally {
-      writer.stop()
-    }
+    runAndVerifyValues(input, writer, reader)
   }
 
-  test("streaming - write aggregation w/o topic field, with topic option") {
-    val input = MemoryStream[String]
+  test("streaming - write w/o topic field, with topic option") {
+    val input = createMemoryStream()
     val topic = newTopic()
     testUtils.createTopic(topic)
 
     val writer = createKafkaWriter(
-      input.toDF().groupBy("value").count(),
+      input.toDF(),
       withTopic = Some(topic),
-      withOutputMode = Some(OutputMode.Update()))(
-      withSelectExpr = "CAST(value as STRING) key", "CAST(count as STRING) value")
+      withOutputMode = Some(OutputMode.Append()))()
 
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
       .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
-      .as[(Int, Int)]
+      .as[(Option[Int], Int)]
+      .map(_._2)
 
-    try {
-      input.addData("1", "2", "2", "3", "3", "3")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, (1, 1), (2, 2), (3, 3))
-      input.addData("1", "2", "3")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, (1, 1), (2, 2), (3, 3), (1, 2), (2, 3), (3, 4))
-    } finally {
-      writer.stop()
-    }
+    runAndVerifyValues(input, writer, reader)
   }
 
-  test("streaming - aggregation with topic field and topic option") {
+  test("streaming - topic field and topic option") {
     /* The purpose of this test is to ensure that the topic option
      * overrides the topic field. We begin by writing some data that
      * includes a topic field and value (e.g., 'foo') along with a topic
@@ -152,62 +134,27 @@ class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
      * we should see the data i.e., the data was written to the topic
      * option, and not to the topic in the data e.g., foo
      */
-    val input = MemoryStream[String]
-    val topic = newTopic()
-    testUtils.createTopic(topic)
-
-    val writer = createKafkaWriter(
-      input.toDF().groupBy("value").count(),
-      withTopic = Some(topic),
-      withOutputMode = Some(OutputMode.Update()))(
-      withSelectExpr = "'foo' as topic",
-        "CAST(value as STRING) key", "CAST(count as STRING) value")
-
-    val reader = createKafkaReader(topic)
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .selectExpr("CAST(key AS INT)", "CAST(value AS INT)")
-      .as[(Int, Int)]
-
-    try {
-      input.addData("1", "2", "2", "3", "3", "3")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, (1, 1), (2, 2), (3, 3))
-      input.addData("1", "2", "3")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      checkDatasetUnorderly(reader, (1, 1), (2, 2), (3, 3), (1, 2), (2, 3), (3, 4))
-    } finally {
-      writer.stop()
-    }
-  }
-
-  test("streaming - sink progress is produced") {
-    /* ensure sink progress is correctly produced. */
-    val input = MemoryStream[String]
+    val input = createMemoryStream()
     val topic = newTopic()
     testUtils.createTopic(topic)
 
     val writer = createKafkaWriter(
       input.toDF(),
       withTopic = Some(topic),
-      withOutputMode = Some(OutputMode.Update()))()
+      withOutputMode = Some(OutputMode.Append()))(
+      withSelectExpr = "'foo' as topic", "value")
 
-    try {
-      input.addData("1", "2", "3")
-      failAfter(streamingTimeout) {
-        writer.processAllAvailable()
-      }
-      assert(writer.lastProgress.sink.numOutputRows == 3L)
-    } finally {
-      writer.stop()
-    }
+    val reader = createKafkaReader(topic)
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .selectExpr("CAST(key AS INT)", "CAST(value AS INT)")
+      .as[(Option[Int], Int)]
+      .map(_._2)
+
+    runAndVerifyValues(input, writer, reader)
   }
 
   test("streaming - write data with bad schema") {
-    val input = MemoryStream[String]
+    val input = createMemoryStream()
     val topic = newTopic()
     testUtils.createTopic(topic)
 
@@ -218,7 +165,7 @@ class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
   }
 
   test("streaming - write data with valid schema but wrong types") {
-    val input = MemoryStream[String]
+    val input = createMemoryStream()
     val topic = newTopic()
     testUtils.createTopic(topic)
 
@@ -233,15 +180,15 @@ class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
   }
 
   test("streaming - write to non-existing topic") {
-    val input = MemoryStream[String]
+    val input = createMemoryStream()
 
-    runAndVerifyStreamingQueryException(input, "job aborted") {
+    runAndVerifyException[StreamingQueryException](input, "job aborted") {
       createKafkaWriter(input.toDF(), withTopic = Some(newTopic()))()
     }
   }
 
   test("streaming - exception on config serializer") {
-    val input = MemoryStream[String]
+    val input = createMemoryStream()
 
     assertWrongOption(input, Map("kafka.key.serializer" -> "foo"),
       "kafka option 'key.serializer' is not supported")
@@ -249,7 +196,7 @@ class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
       "kafka option 'value.serializer' is not supported")
   }
 
-  private def createKafkaWriter(
+  protected def createKafkaWriter(
       input: DataFrame,
       withTopic: Option[String] = None,
       withOutputMode: Option[OutputMode] = None,
@@ -270,42 +217,161 @@ class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
       withTopic.foreach(stream.option("topic", _))
       withOutputMode.foreach(stream.outputMode(_))
       withOptions.foreach(opt => stream.option(opt._1, opt._2))
+      defaultTrigger.foreach(stream.trigger(_))
     }
     stream.start()
   }
 
-  private def runAndVerifyStreamingQueryException(
-      input: MemoryStream[String],
+  private def runAndVerifyValues(
+      input: MemoryStreamBase[String],
+      writer: StreamingQuery,
+      reader: Dataset[Int]): Unit = {
+    try {
+      input.addData("1", "2", "3", "4", "5")
+      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5))
+      input.addData("6", "7", "8", "9", "10")
+      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6,
+        7, 8, 9, 10))
+    } finally {
+      writer.stop()
+    }
+  }
+
+  private def runAndVerifyException[T <: Exception : ClassTag](
+      input: MemoryStreamBase[String],
       expectErrorMsg: String)(
       writerFn: => StreamingQuery): Unit = {
     var writer: StreamingQuery = null
     val ex: Exception = try {
-      intercept[StreamingQueryException] {
+      intercept[T] {
         writer = writerFn
         input.addData("1", "2", "3", "4", "5")
-        writer.processAllAvailable()
+        input match {
+          case _: MemoryStream[String] => writer.processAllAvailable()
+          case _: ContinuousMemoryStream[String] =>
+            eventually(timeout(streamingTimeout)) {
+              assert(writer.exception.isDefined)
+            }
+
+            throw writer.exception.get
+        }
       }
     } finally {
       if (writer != null) writer.stop()
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(expectErrorMsg))
+    TestUtils.assertExceptionMsg(ex, expectErrorMsg, ignoreCase = true)
   }
 
   private def assertWrongSchema(
-      input: MemoryStream[String],
+      input: MemoryStreamBase[String],
       selectExpr: Seq[String],
       expectErrorMsg: String): Unit = {
-    runAndVerifyStreamingQueryException(input, expectErrorMsg) {
-      createKafkaWriter(input.toDF())(withSelectExpr = selectExpr: _*)
+    // just pick common exception of both micro-batch and continuous cases
+    runAndVerifyException[Exception](input, expectErrorMsg) {
+      createKafkaWriter(input.toDF())(
+        withSelectExpr = selectExpr: _*)
     }
   }
 
   private def assertWrongOption(
-      input: MemoryStream[String],
+      input: MemoryStreamBase[String],
       options: Map[String, String],
       expectErrorMsg: String): Unit = {
-    runAndVerifyStreamingQueryException(input, expectErrorMsg) {
+    // just pick common exception of both micro-batch and continuous cases
+    runAndVerifyException[Exception](input, expectErrorMsg) {
       createKafkaWriter(input.toDF(), withOptions = options)()
+    }
+  }
+}
+
+class KafkaSinkMicroBatchStreamingSuite extends KafkaSinkStreamingSuiteBase {
+  import testImplicits._
+
+  override val streamingTimeout = 30.seconds
+
+  override protected def createMemoryStream(): MemoryStreamBase[String] = MemoryStream[String]
+
+  override protected def verifyResult(writer: StreamingQuery)(verifyFn: => Unit): Unit = {
+    failAfter(streamingTimeout) {
+      writer.processAllAvailable()
+    }
+    verifyFn
+  }
+
+  override protected def defaultTrigger: Option[Trigger] = None
+
+  test("streaming - sink progress is produced") {
+    /* ensure sink progress is correctly produced. */
+    val input = MemoryStream[String]
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF(),
+      withTopic = Some(topic),
+      withOutputMode = Some(OutputMode.Update()))()
+
+    try {
+      input.addData("1", "2", "3")
+      verifyResult(writer) {
+        assert(writer.recentProgress.exists(_.sink.numOutputRows == 3L))
+      }
+    } finally {
+      writer.stop()
+    }
+  }
+}
+
+class KafkaContinuousSinkSuite extends KafkaSinkStreamingSuiteBase {
+  import testImplicits._
+
+  // We need more than the default local[2] to be able to schedule all partitions simultaneously.
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[10]",
+      "continuous-stream-test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")))
+
+  override protected def createMemoryStream(): MemoryStreamBase[String] = {
+    ContinuousMemoryStream.singlePartition[String]
+  }
+
+  override protected def verifyResult(writer: StreamingQuery)(verifyFn: => Unit): Unit = {
+    eventually(timeout(streamingTimeout), interval(5.seconds)) {
+      verifyFn
+    }
+  }
+
+  override protected def defaultTrigger: Option[Trigger] = Some(Trigger.Continuous(1000))
+
+  test("generic - write big data with small producer buffer") {
+    /* This test ensures that we understand the semantics of Kafka when
+    * is comes to blocking on a call to send when the send buffer is full.
+    * This test will configure the smallest possible producer buffer and
+    * indicate that we should block when it is full. Thus, no exception should
+    * be thrown in the case of a full buffer.
+    */
+    val topic = newTopic()
+    testUtils.createTopic(topic, 1)
+    val options = new java.util.HashMap[String, Object]
+    options.put("bootstrap.servers", testUtils.brokerAddress)
+    options.put("buffer.memory", "16384") // min buffer size
+    options.put("block.on.buffer.full", "true")
+    options.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, classOf[ByteArraySerializer].getName)
+    options.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, classOf[ByteArraySerializer].getName)
+    val inputSchema = Seq(AttributeReference("value", BinaryType)())
+    val data = new Array[Byte](15000) // large value
+    val writeTask = new KafkaDataWriter(Some(topic), options, inputSchema)
+    try {
+      val fieldTypes: Array[DataType] = Array(BinaryType)
+      val converter = UnsafeProjection.create(fieldTypes)
+      val row = new SpecificInternalRow(fieldTypes)
+      row.update(0, data)
+      val iter = Seq.fill(1000)(converter.apply(row)).iterator
+      iter.foreach(writeTask.write(_))
+      writeTask.commit()
+    } finally {
+      writeTask.close()
     }
   }
 }
@@ -435,7 +501,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
     TestUtils.assertExceptionMsg(ex, "null topic present in the data")
   }
 
-  protected def testUnsupportedSaveModes(msg: (SaveMode) => String): Unit = {
+  protected def testUnsupportedSaveModes(msg: (SaveMode) => Seq[String]): Unit = {
     val topic = newTopic()
     testUtils.createTopic(topic)
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
@@ -448,7 +514,10 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
           .mode(mode)
           .save()
       }
-      TestUtils.assertExceptionMsg(ex, msg(mode))
+      val errorChecks = msg(mode).map(m => Try(TestUtils.assertExceptionMsg(ex, m)))
+      if (!errorChecks.exists(_.isSuccess)) {
+        fail("Error messages not found in exception trace")
+      }
     }
   }
 
@@ -476,7 +545,7 @@ class KafkaSinkBatchSuiteV1 extends KafkaSinkBatchSuiteBase {
       .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
 
   test("batch - unsupported save modes") {
-    testUnsupportedSaveModes((mode) => s"Save mode ${mode.name} not allowed for Kafka")
+    testUnsupportedSaveModes((mode) => s"Save mode ${mode.name} not allowed for Kafka" :: Nil)
   }
 }
 
@@ -487,7 +556,8 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("batch - unsupported save modes") {
-    testUnsupportedSaveModes((mode) => s"cannot be written with ${mode.name} mode")
+    testUnsupportedSaveModes((mode) =>
+      Seq(s"cannot be written with ${mode.name} mode", "does not support truncate"))
   }
 
   test("generic - write big data with small producer buffer") {

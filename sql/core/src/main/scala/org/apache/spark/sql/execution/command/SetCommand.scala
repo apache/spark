@@ -115,14 +115,19 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     case Some(("-v", None)) =>
       val runFunc = (sparkSession: SparkSession) => {
         sparkSession.sessionState.conf.getAllDefinedConfs.sorted.map {
-          case (key, defaultValue, doc) =>
-            Row(key, Option(defaultValue).getOrElse("<undefined>"), doc)
+          case (key, defaultValue, doc, version) =>
+            Row(
+              key,
+              Option(defaultValue).getOrElse("<undefined>"),
+              doc,
+              Option(version).getOrElse("<unknown>"))
         }
       }
       val schema = StructType(
         StructField("key", StringType, nullable = false) ::
           StructField("value", StringType, nullable = false) ::
-          StructField("meaning", StringType, nullable = false) :: Nil)
+          StructField("meaning", StringType, nullable = false) ::
+          StructField("Since version", StringType, nullable = false) :: Nil)
       (schema.toAttributes, runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.
@@ -157,7 +162,8 @@ object SetCommand {
 }
 
 /**
- * This command is for resetting SQLConf to the default values. Command that runs
+ * This command is for resetting SQLConf to the default values. Any configurations that were set
+ * via [[SetCommand]] will get reset to default value. Command that runs
  * {{{
  *   reset;
  * }}}
@@ -165,7 +171,11 @@ object SetCommand {
 case object ResetCommand extends RunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.conf.clear()
+    val conf = sparkSession.sessionState.conf
+    conf.clear()
+    sparkSession.sparkContext.conf.getAll.foreach { case (k, v) =>
+      conf.setConfString(k, v)
+    }
     Seq.empty[Row]
   }
 }

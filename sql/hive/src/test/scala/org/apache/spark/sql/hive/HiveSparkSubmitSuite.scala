@@ -24,6 +24,7 @@ import scala.util.Properties
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.scalatest.Assertions._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -699,7 +700,7 @@ object SPARK_9757 extends QueryTest {
         val df =
           hiveContext
             .range(10)
-            .select(('id + 0.1) cast DecimalType(10, 3) as 'dec)
+            .select(($"id" + 0.1) cast DecimalType(10, 3) as "dec")
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
       }
@@ -708,7 +709,7 @@ object SPARK_9757 extends QueryTest {
         val df =
           hiveContext
             .range(10)
-            .select(callUDF("struct", ('id + 0.2) cast DecimalType(10, 3)) as 'dec_struct)
+            .select(callUDF("struct", ($"id" + 0.2) cast DecimalType(10, 3)) as "dec_struct")
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
       }
@@ -770,8 +771,8 @@ object SPARK_14244 extends QueryTest {
     import hiveContext.implicits._
 
     try {
-      val window = Window.orderBy('id)
-      val df = spark.range(2).select(cume_dist().over(window).as('cdist)).orderBy('cdist)
+      val window = Window.orderBy("id")
+      val df = spark.range(2).select(cume_dist().over(window).as("cdist")).orderBy("cdist")
       checkAnswer(df, Seq(Row(0.5D), Row(1.0D)))
     } finally {
       sparkContext.stop()
@@ -786,7 +787,7 @@ object SPARK_18360 {
       .enableHiveSupport().getOrCreate()
 
     val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
-    assert(new Path(defaultDbLocation) == new Path(spark.sharedState.warehousePath))
+    assert(new Path(defaultDbLocation) == new Path(spark.conf.get(WAREHOUSE_PATH)))
 
     val hiveClient =
       spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
@@ -806,14 +807,14 @@ object SPARK_18360 {
       // Hive will use the value of `hive.metastore.warehouse.dir` to generate default table
       // location for tables in default database.
       assert(rawTable.storage.locationUri.map(
-        CatalogUtils.URIToString(_)).get.contains(newWarehousePath))
+        CatalogUtils.URIToString).get.contains(newWarehousePath))
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
 
       spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
       val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")
       // Spark SQL will use the location of default database to generate default table
       // location for tables in default database.
-      assert(readBack.storage.locationUri.map(CatalogUtils.URIToString(_))
+      assert(readBack.storage.locationUri.map(CatalogUtils.URIToString)
         .get.contains(defaultDbLocation))
     } finally {
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = true, purge = false)

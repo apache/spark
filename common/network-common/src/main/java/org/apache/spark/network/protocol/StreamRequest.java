@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 /**
  * Request to stream data from the remote end.
@@ -67,8 +70,8 @@ public final class StreamRequest extends AbstractMessage implements RequestMessa
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamId", streamId)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("streamId", streamId)
       .toString();
   }
 

@@ -20,28 +20,32 @@ license: |
 ---
 
 ### Description
+
 `REFRESH TABLE` statement invalidates the cached entries, which include data
 and metadata of the given table or view. The invalidated cache is populated in
 lazy manner when the cached table or the query associated with it is executed again.
 
 ### Syntax
+
 {% highlight sql %}
-REFRESH [TABLE] tableIdentifier
+REFRESH [TABLE] table_identifier
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
-  <dt><code><em>tableIdentifier</em></code></dt>
+  <dt><code><em>table_identifier</em></code></dt>
   <dd>
     Specifies a table name, which is either a qualified or unqualified name that designates a table/view. If no database identifier is provided, it refers to a temporary view or a table/view in the current database.<br><br>
     <b>Syntax:</b>
       <code>
-        [database_name.]table_name
+        [ database_name. ] table_name
       </code>
   </dd>
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- The cached entries of the table will be refreshed  
 -- The table is resolved from the current database as the table name is unqualified.
@@ -53,6 +57,8 @@ REFRESH TABLE tempDB.view1;
 {% endhighlight %}
 
 ### Related Statements
-- [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
-- [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
-- [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
+
+ * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+ * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+ * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
+ * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)

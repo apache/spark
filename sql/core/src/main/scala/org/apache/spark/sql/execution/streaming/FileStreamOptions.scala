@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.Locale
+
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
@@ -74,6 +76,30 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
    */
   val fileNameOnly: Boolean = withBooleanParameter("fileNameOnly", false)
 
+  /**
+   * The archive directory to move completed files. The option will be only effective when
+   * "cleanSource" is set to "archive".
+   *
+   * Note that the completed file will be moved to this archive directory with respecting to
+   * its own path.
+   *
+   * For example, if the path of source file is "/a/b/dataset.txt", and the path of archive
+   * directory is "/archived/here", file will be moved to "/archived/here/a/b/dataset.txt".
+   */
+  val sourceArchiveDir: Option[String] = parameters.get("sourceArchiveDir")
+
+  /**
+   * Defines how to clean up completed files. Available options are "archive", "delete", "off".
+   */
+  val cleanSource: CleanSourceMode.Value = {
+    val matchedMode = CleanSourceMode.fromString(parameters.get("cleanSource"))
+    if (matchedMode == CleanSourceMode.ARCHIVE && sourceArchiveDir.isEmpty) {
+      throw new IllegalArgumentException("Archive mode must be used with 'sourceArchiveDir' " +
+        "option.")
+    }
+    matchedMode
+  }
+
   private def withBooleanParameter(name: String, default: Boolean) = {
     parameters.get(name).map { str =>
       try {
@@ -85,4 +111,15 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
       }
     }.getOrElse(default)
   }
+}
+
+object CleanSourceMode extends Enumeration {
+  val ARCHIVE, DELETE, OFF = Value
+
+  def fromString(value: Option[String]): CleanSourceMode.Value = value.map { v =>
+    CleanSourceMode.values.find(_.toString == v.toUpperCase(Locale.ROOT))
+      .getOrElse(throw new IllegalArgumentException(
+        s"Invalid mode for clean source option $value." +
+        s" Must be one of ${CleanSourceMode.values.mkString(",")}"))
+  }.getOrElse(OFF)
 }

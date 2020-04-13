@@ -21,7 +21,7 @@ import java.io._
 import java.net.URL
 import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
-import java.util.{Locale, TimeZone, UUID}
+import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -33,13 +33,19 @@ import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWri
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
 import org.apache.spark.sql._
-import org.apache.spark.sql.TestingUDT.{IntervalData, NullData, NullUDT}
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.TestingUDT.IntervalData
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.{DataSource, FilePartition}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
 abstract class AvroSuite extends QueryTest with SharedSparkSession {
@@ -76,6 +82,11 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
           .head
       }
     }, new GenericDatumReader[Any]()).getSchema.toString(false)
+  }
+
+  private def readResourceAvroFile(name: String): DataFrame = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(name)
+    spark.read.format("avro").load(url.toString)
   }
 
   test("resolve avro data source") {
@@ -397,18 +408,19 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
         StructField("float", FloatType, true),
         StructField("date", DateType, true)
       ))
-      TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-      val rdd = spark.sparkContext.parallelize(Seq(
-        Row(1f, null),
-        Row(2f, new Date(1451948400000L)),
-        Row(3f, new Date(1460066400500L))
-      ))
-      val df = spark.createDataFrame(rdd, schema)
-      df.write.format("avro").save(dir.toString)
-      assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
-      checkAnswer(
-        spark.read.format("avro").load(dir.toString).select("date"),
-        Seq(Row(null), Row(new Date(1451865600000L)), Row(new Date(1459987200000L))))
+      withDefaultTimeZone(UTC) {
+        val rdd = spark.sparkContext.parallelize(Seq(
+          Row(1f, null),
+          Row(2f, new Date(1451948400000L)),
+          Row(3f, new Date(1460066400500L))
+        ))
+        val df = spark.createDataFrame(rdd, schema)
+        df.write.format("avro").save(dir.toString)
+        assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+        checkAnswer(
+          spark.read.format("avro").load(dir.toString).select("date"),
+          Seq(Row(null), Row(new Date(1451865600000L)), Row(new Date(1459987200000L))))
+      }
     }
   }
 
@@ -1492,6 +1504,134 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       |}
     """.stripMargin)
   }
+
+  test("log a warning of ignoreExtension deprecation") {
+    val logAppender = new LogAppender("deprecated Avro option 'ignoreExtension'")
+    withTempPath { dir =>
+      Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1), ("d", 2, 1))
+        .toDF("value", "p1", "p2")
+        .repartition(2)
+        .write
+        .format("avro")
+        .save(dir.getCanonicalPath)
+      withLogAppender(logAppender) {
+        spark
+          .read
+          .format("avro")
+          .option(AvroOptions.ignoreExtensionKey, false)
+          .load(dir.getCanonicalPath)
+          .count()
+      }
+      val deprecatedEvents = logAppender.loggingEvents
+        .filter(_.getRenderedMessage.contains(
+          s"Option ${AvroOptions.ignoreExtensionKey} is deprecated"))
+      assert(deprecatedEvents.size === 1)
+    }
+  }
+
+  test("SPARK-31183: compatibility with Spark 2.4 in reading dates/timestamps") {
+    withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "true") {
+      checkAnswer(
+        readResourceAvroFile("before_1582_date_v2_4.avro"),
+        Row(java.sql.Date.valueOf("1001-01-01")))
+      checkAnswer(
+        readResourceAvroFile("before_1582_ts_micros_v2_4.avro"),
+        Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+      checkAnswer(
+        readResourceAvroFile("before_1582_ts_millis_v2_4.avro"),
+        Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.124")))
+    }
+  }
+
+  test("SPARK-31183: rebasing microseconds timestamps in write") {
+    val tsStr = "1001-01-01 01:02:03.123456"
+    val nonRebased = "1001-01-07 01:09:05.123456"
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_WRITE.key -> "true") {
+        Seq(tsStr).toDF("tsS")
+          .select($"tsS".cast("timestamp").as("ts"))
+          .write.format("avro")
+          .save(path)
+      }
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "true") {
+        checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(tsStr)))
+      }
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "false") {
+        checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(nonRebased)))
+      }
+    }
+  }
+
+  test("SPARK-31183: rebasing milliseconds timestamps in write") {
+    val tsStr = "1001-01-01 01:02:03.123456"
+    val rebased = "1001-01-01 01:02:03.123"
+    val nonRebased = "1001-01-07 01:09:05.123"
+    Seq(
+      """{"type": "long","logicalType": "timestamp-millis"}""",
+      """"long"""").foreach { tsType =>
+      val timestampSchema = s"""
+        |{
+        |  "namespace": "logical",
+        |  "type": "record",
+        |  "name": "test",
+        |  "fields": [
+        |    {"name": "ts", "type": $tsType}
+        |  ]
+        |}""".stripMargin
+      withTempPath { dir =>
+        val path = dir.getAbsolutePath
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_WRITE.key -> "true") {
+          Seq(tsStr).toDF("tsS")
+            .select($"tsS".cast("timestamp").as("ts"))
+            .write
+            .option("avroSchema", timestampSchema)
+            .format("avro")
+            .save(path)
+        }
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "true") {
+          checkAnswer(
+            spark.read.schema("ts timestamp").format("avro").load(path),
+            Row(Timestamp.valueOf(rebased)))
+        }
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "false") {
+          checkAnswer(
+            spark.read.schema("ts timestamp").format("avro").load(path),
+            Row(Timestamp.valueOf(nonRebased)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-31183: rebasing dates in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_WRITE.key -> "true") {
+        Seq("1001-01-01").toDF("dateS")
+          .select($"dateS".cast("date").as("date"))
+          .write.format("avro")
+          .save(path)
+      }
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "true") {
+        checkAnswer(spark.read.format("avro").load(path), Row(Date.valueOf("1001-01-01")))
+      }
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> "false") {
+        checkAnswer(spark.read.format("avro").load(path), Row(Date.valueOf("1001-01-07")))
+      }
+    }
+  }
+
+  test("SPARK-31327: Write Spark version into Avro file metadata") {
+    withTempPath { path =>
+      spark.range(1).repartition(1).write.format("avro").save(path.getCanonicalPath)
+      val avroFiles = path.listFiles()
+        .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+      assert(avroFiles.length === 1)
+      val reader = DataFileReader.openReader(avroFiles(0), new GenericDatumReader[GenericRecord]())
+      val version = reader.asInstanceOf[DataFileReader[_]].getMetaString(SPARK_VERSION_METADATA_KEY)
+      assert(version === SPARK_VERSION_SHORT)
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
@@ -1502,8 +1642,102 @@ class AvroV1Suite extends AvroSuite {
 }
 
 class AvroV2Suite extends AvroSuite {
+  import testImplicits._
+
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("Avro source v2: support partition pruning") {
+    withTempPath { dir =>
+      Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
+        .toDF("value", "p1", "p2")
+        .write
+        .format("avro")
+        .partitionBy("p1", "p2")
+        .save(dir.getCanonicalPath)
+      val df = spark
+        .read
+        .format("avro")
+        .load(dir.getCanonicalPath)
+        .where("p1 = 1 and p2 = 2 and value != \"a\"")
+
+       val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
+         case f: Filter => f.condition
+       }
+      assert(filterCondition.isDefined)
+      // The partitions filters should be pushed down and no need to be reevaluated.
+      assert(filterCondition.get.collectFirst {
+        case a: AttributeReference if a.name == "p1" || a.name == "p2" => a
+      }.isEmpty)
+
+      val fileScan = df.queryExecution.executedPlan collectFirst {
+        case BatchScanExec(_, f: AvroScan) => f
+      }
+      assert(fileScan.nonEmpty)
+      assert(fileScan.get.partitionFilters.nonEmpty)
+      assert(fileScan.get.dataFilters.nonEmpty)
+      assert(fileScan.get.planInputPartitions().forall { partition =>
+        partition.asInstanceOf[FilePartition].files.forall { file =>
+          file.filePath.contains("p1=1") && file.filePath.contains("p2=2")
+        }
+      })
+      checkAnswer(df, Row("b", 1, 2))
+    }
+  }
+
+  test("Avro source v2: support passing data filters to FileScan without partitionFilters") {
+    withTempPath { dir =>
+      Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
+        .toDF("value", "p1", "p2")
+        .write
+        .format("avro")
+        .save(dir.getCanonicalPath)
+      val df = spark
+        .read
+        .format("avro")
+        .load(dir.getCanonicalPath)
+        .where("value = 'a'")
+
+      val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
+        case f: Filter => f.condition
+      }
+      assert(filterCondition.isDefined)
+
+      val fileScan = df.queryExecution.executedPlan collectFirst {
+        case BatchScanExec(_, f: AvroScan) => f
+      }
+      assert(fileScan.nonEmpty)
+      assert(fileScan.get.partitionFilters.isEmpty)
+      assert(fileScan.get.dataFilters.nonEmpty)
+      checkAnswer(df, Row("a", 1, 2))
+    }
+  }
+
+  private def getBatchScanExec(plan: SparkPlan): BatchScanExec = {
+    plan.find(_.isInstanceOf[BatchScanExec]).get.asInstanceOf[BatchScanExec]
+  }
+
+  test("Avro source v2: same result with different orders of data filters and partition filters") {
+    withTempPath { path =>
+      val tmpDir = path.getCanonicalPath
+      spark
+        .range(10)
+        .selectExpr("id as a", "id + 1 as b", "id + 2 as c", "id + 3 as d")
+        .write
+        .partitionBy("a", "b")
+        .format("avro")
+        .save(tmpDir)
+      val df = spark.read.format("avro").load(tmpDir)
+      // partition filters: a > 1 AND b < 9
+      // data filters: c > 1 AND d < 9
+      val plan1 = df.where("a > 1 AND b < 9 AND c > 1 AND d < 9").queryExecution.sparkPlan
+      val plan2 = df.where("b < 9 AND a > 1 AND d < 9 AND c > 1").queryExecution.sparkPlan
+      assert(plan1.sameResult(plan2))
+      val scan1 = getBatchScanExec(plan1)
+      val scan2 = getBatchScanExec(plan2)
+      assert(scan1.sameResult(scan2))
+    }
+  }
 }
