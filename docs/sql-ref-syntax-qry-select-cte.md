@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-A common table expression (CTE) defines a temporary result set that a user can reference within the duration of a SQL statement. A CTE can be used wherever a SELECT statement is used; for example, it can be used in a SELECT, INSERT, UPDATE, DELETE, MERGE or CREATE VIEW statement. A CTE has a name with an optional column names list, followed by a query expression. When a CTE references itself, it is called a recursive CTE.
+A common table expression (CTE) defines a temporary result set that a user can reference possibly multiple times within the scope of a SQL statement. A CTE is used mainly in a SELECT statement. It is defined with a name including an optional column names list, followed by a query expression. When a CTE references itself, it is called a recursive CTE.
 
 ### Syntax
 
@@ -29,7 +29,7 @@ A common table expression (CTE) defines a temporary result set that a user can r
 WITH common_table_expression [ , ... ]
 {% endhighlight %}
 
-While ```common_table_expression``` is defined as
+While `common_table_expression` is defined as
 {% highlight sql %}
 expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( [ common_table_expression ] query )
 {% endhighlight %}
@@ -127,12 +127,8 @@ SELECT * FROM t2;
   +---+
   |  1|
   +---+
-
--- CTE should not fall into infinite loop by referencing self
-WITH s AS (SELECT 1 FROM s) SELECT * FROM s;
-  Error in query: Table or view not found s; line 1 pos 25;
 {% endhighlight %}
 
-### Related Statement
+### Related Statements
 
  * [SELECT](sql-ref-syntax-qry-select.html)
