@@ -162,6 +162,10 @@
                   url: sql-ref-syntax-qry-select-setops.html
                 - text: TABLESAMPLE
                   url: sql-ref-syntax-qry-sampling.html
+                - text: Table-valued Function
+                  url: sql-ref-syntax-qry-select-tvf.html
+                - text: Inline Table
+                  url: sql-ref-syntax-qry-select-inline-table.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements
