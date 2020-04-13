@@ -23,11 +23,15 @@ class ExecutionData private[spark] (
     val status: String,
     val description: String,
     val planDescription: String,
-    val metrics: Seq[Metrics],
     val submissionTime: Date,
     val duration: Long,
     val runningJobIds: Seq[Int],
     val successJobIds: Seq[Int],
-    val failedJobIds: Seq[Int])
+    val failedJobIds: Seq[Int],
+    val metricDetails: Seq[MetricDetails])
 
-case class Metrics private[spark] (metricName: String, metricValue: String)
+case class MetricDetails private[spark] (nodeId: Long,
+                                         nodeName: String,
+                                         metrics: Seq[Metric])
+
+case class Metric private[spark] (name: String, value: String)

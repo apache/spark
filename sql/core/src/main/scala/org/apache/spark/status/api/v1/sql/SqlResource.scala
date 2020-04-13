@@ -31,11 +31,13 @@ private[v1] class SqlResource extends BaseAppResource {
   @GET
   def sqlList(
       @DefaultValue("false") @QueryParam("details") details: Boolean,
+      @DefaultValue("true") @QueryParam("planDescription") planDescription: Boolean,
       @DefaultValue("0") @QueryParam("offset") offset: Int,
       @DefaultValue("20") @QueryParam("length") length: Int): Seq[ExecutionData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      sqlStore.executionsList(offset, length).map(prepareExecutionData(_, details))
+      sqlStore.executionsList(offset, length).map(prepareExecutionData(_,
+        details = details, planDescription = planDescription))
     }
   }
 
@@ -43,24 +45,47 @@ private[v1] class SqlResource extends BaseAppResource {
   @Path("{executionId:\\d+}")
   def sql(
       @PathParam("executionId") execId: Long,
-      @DefaultValue("false") @QueryParam("details") details: Boolean): ExecutionData = {
+      @DefaultValue("false") @QueryParam("details") details: Boolean,
+      @DefaultValue("true") @QueryParam("planDescription")
+      planDescription: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData(_, details))
-        .getOrElse(throw new NotFoundException("unknown id: " + execId))
+        .map(prepareExecutionData(_, details, planDescription))
+        .getOrElse(throw new NotFoundException("unknown execution id: " + execId))
     }
   }
 
   private def printableMetrics(
-      metrics: Seq[SQLPlanMetric],
-      metricValues: Map[Long, String]): Seq[Metrics] = {
-    metrics.map(metric =>
-      Metrics(metric.name, metricValues.get(metric.accumulatorId).getOrElse("")))
+      sqlPlanMetrics: Seq[SQLPlanMetric],
+      metricValues: Map[Long, String]): Seq[MetricDetails] = {
+
+    def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
+                  metricName: String): Option[Metric] = {
+      metricValues.get(accumulatorId).map( mv => {
+        val metricValue = if (mv.startsWith("\n")) mv.substring(1, mv.length) else mv
+        Metric(metricName, metricValue)
+      })
+    }
+
+    val groupedMap: Map[(Long, String), Seq[SQLPlanMetric]] =
+      sqlPlanMetrics.groupBy[(Long, String)](
+        sqlPlanMetric => (sqlPlanMetric.nodeId.getOrElse(-1), sqlPlanMetric.nodeName.getOrElse("")))
+
+    val metrics = groupedMap.mapValues[Seq[Metric]](sqlPlanMetrics =>
+      sqlPlanMetrics.flatMap(m => getMetric(metricValues, m.accumulatorId, m.name.trim)))
+
+    val metricDetails = metrics.map {
+      case ((nodeId: Long, nodeName: String), metrics: Seq[Metric]) =>
+        MetricDetails(nodeId = nodeId, nodeName = nodeName.trim, metrics = metrics) }.toSeq
+
+    metricDetails.sortBy(_.nodeId).reverse
   }
 
-  private def prepareExecutionData(exec: SQLExecutionUIData, details: Boolean): ExecutionData = {
+  private def prepareExecutionData(exec: SQLExecutionUIData,
+                                   details: Boolean,
+                                   planDescription: Boolean): ExecutionData = {
     var running = Seq[Int]()
     var completed = Seq[Int]()
     var failed = Seq[Int]()
@@ -84,18 +109,20 @@ private[v1] class SqlResource extends BaseAppResource {
     }
 
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
-    val planDetails = if (details) exec.physicalPlanDescription else ""
-    val metrics = if (details) printableMetrics(exec.metrics, exec.metricValues) else Seq.empty
+    val planDetails = if (details && planDescription) exec.physicalPlanDescription else ""
+    val metrics =
+      if (details) printableMetrics(exec.metrics, exec.metricValues)
+      else Seq.empty
     new ExecutionData(
       exec.executionId,
       status,
       exec.description,
       planDetails,
-      metrics,
       new Date(exec.submissionTime),
       duration,
       running,
       completed,
-      failed)
+      failed,
+      metrics)
   }
 }
