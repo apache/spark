@@ -105,29 +105,30 @@ case class CustomShuffleReaderExec private(
   }
 
   private def sendPartitionDataSizeMetrics(
-      executionId: String,
-      partitionMetrics: SQLMetric): Unit = {
+      executionId: String): Unit = {
     val mapStats = shuffleStage.get.mapStats
+    val partitionMetrics = metrics("partitionDataSize")
+
     if (mapStats.isEmpty) {
-      metrics("partitionDataSize").set(0)
-      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq{partitionMetrics})
+      partitionMetrics.set(0)
+      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq(partitionMetrics))
     } else {
       var sum = 0L
       partitionSpecs.foreach {
         case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
           val dataSize = startReducerIndex.until(endReducerIndex).map(
             mapStats.get.bytesByPartitionId(_)).sum
-          metrics("partitionDataSize").set(dataSize)
-          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq{partitionMetrics})
+          partitionMetrics.set(dataSize)
+          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq(partitionMetrics))
           sum += dataSize
         case p: PartialReducerPartitionSpec =>
-          metrics("partitionDataSize").set(p.dataSize)
-          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq{partitionMetrics})
+          partitionMetrics.set(p.dataSize)
+          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq(partitionMetrics))
           sum += p.dataSize
         case p => throw new IllegalStateException("unexpected " + p)
       }
       // Set sum value to "partitionDataSize" metric.
-      metrics("partitionDataSize").set(sum)
+      partitionMetrics.set(sum)
     }
   }
 
@@ -163,7 +164,7 @@ case class CustomShuffleReaderExec private(
       metrics.filter(_._1 != "partitionDataSize").values.toSeq)
 
     if(!isLocalReader && shuffleStage.get.mapStats.isDefined) {
-      sendPartitionDataSizeMetrics(executionId, metrics.get("partitionDataSize").get)
+      sendPartitionDataSizeMetrics(executionId)
     }
     shuffleStage.map { stage =>
       new ShuffledRowRDD(
