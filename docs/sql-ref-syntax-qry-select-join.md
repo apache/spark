@@ -18,6 +18,7 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
 ### Description
 
 A SQL join is used to combine rows from two relations based on join criteria. The following section describes the overall join syntax and the sub-sections cover different types of joins along with examples.
@@ -84,6 +85,7 @@ A left join returns all values from the left relation and the matched values fro
 </dd>
 
 #### <b>Right Join </b>
+
 <dd>
 A right join returns all values from the right relation and the matched values from the left relation, or appends NULL if there is no match. It is also referred to as a right outer join.<br><br>
   <b>Syntax:</b><br>
@@ -254,6 +256,7 @@ SELECT * FROM employee ANTI JOIN department ON employee.deptno = department.dept
   +---+-----+------+
 {% endhighlight %}
 
-### Related Statement
+### Related Statements
+
   * [SELECT](sql-ref-syntax-qry-select.html)
   * [Join Hints](sql-ref-syntax-qry-select-hints.html)

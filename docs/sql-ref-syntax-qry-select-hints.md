@@ -82,5 +82,6 @@ SELECT /*+ BROADCAST(t1) */ /*+ MERGE(t1, t2) */ * FROM t1 INNER JOIN t2 ON t1.k
 {% endhighlight %}
 
 ### Related Statements
-- [JOIN](sql-ref-syntax-qry-select-join.html)
-- [SELECT](sql-ref-syntax-qry-select.html)
+
+ * [JOIN](sql-ref-syntax-qry-select-join.html)
+ * [SELECT](sql-ref-syntax-qry-select.html)
