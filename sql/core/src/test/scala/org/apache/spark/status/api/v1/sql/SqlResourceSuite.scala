@@ -19,9 +19,10 @@ package org.apache.spark.status.api.v1.sql
 
 import java.util.Date
 
-import org.apache.spark.sql.execution.ui.{SQLExecutionUIData, SQLPlanMetric}
-import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.scalatest.PrivateMethodTester
+
+import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
+import org.apache.spark.sql.execution.ui.{SQLExecutionUIData, SQLPlanMetric}
 
 object SqlResourceSuite {
 
@@ -104,8 +105,8 @@ object SqlResourceSuite {
 }
 
 /**
-  * Sql Resource Public API Unit Tests
-  */
+ * Sql Resource Public API Unit Tests.
+ */
 class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
 
   import SqlResourceSuite._
