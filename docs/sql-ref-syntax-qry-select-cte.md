@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-A common table expression (CTE) defines a temporary result set that a user can reference possibly multiple times within the scope of a SQL statement. A CTE is used mainly in a SELECT statement. It is defined with a name including an optional column names list, followed by a query expression. When a CTE references itself, it is called a recursive CTE.
+A common table expression (CTE) defines a temporary result set that a user can reference possibly multiple times within the scope of a SQL statement. A CTE is used mainly in a SELECT statement.
 
 ### Syntax
 
@@ -95,6 +95,17 @@ SELECT (
   |               1|
   +----------------+
 
+-- CTE in CREATE VIEW statement
+CREATE VIEW v AS
+    WITH t(a, b, c, d) AS (SELECT 1, 2, 3, 4)
+    SELECT * FROM t;
+SELECT * FROM v;
+  +---+---+---+---+
+  |  a|  b|  c|  d|
+  +---+---+---+---+
+  |  1|  2|  3|  4|
+  +---+---+---+---+
+
 -- Name conflict in nested CTE. Spark throws an AnalysisException by default.
 -- SET spark.sql.legacy.ctePrecedencePolicy = CORRECTED (which is recommended),
 -- inner CTE definitions take precedence over outer definitions.
@@ -110,22 +121,6 @@ SELECT * FROM t2;
   |  2|
   +---+
   |  2|
-  +---+
-
--- SET spark.sql.legacy.ctePrecedencePolicy = LEGACY (the behavior in version 2.4 and earlier)
--- outer CTE definitions take precedence over inner definitions.
-SET spark.sql.legacy.ctePrecedencePolicy = LEGACY;
-WITH
-    t AS (SELECT 1),
-    t2 AS (
-        WITH t AS (SELECT 2)
-        SELECT * FROM t
-    )
-SELECT * FROM t2;
-  +---+
-  |  1|
-  +---+
-  |  1|
   +---+
 {% endhighlight %}
 
