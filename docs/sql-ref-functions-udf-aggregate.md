@@ -82,6 +82,7 @@ For example, a type-safe user-defined average can look like:
   {% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
 </div>
 </div>
+
 #### Untyped User-Defined Aggregate Functions
 
 Typed aggregations, as described above, may also be registered as untyped aggregating UDFs for use with DataFrames.
@@ -132,5 +133,6 @@ SELECT myAverage(salary) as average_salary FROM employees;
 </div>
 
 ### Related Statements
+
  * [Scalar User Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
  * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
