@@ -88,7 +88,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       "sql", "core", "src", "test", "resources", "sql-functions").toFile
   }
 
-  private val resultFile = new File(baseResourcePath, "output.out")
+  private val resultFile = new File(baseResourcePath, "schema.out")
 
   val ignoreSet = Set(
     // One of examples shows getting the current timestamp
@@ -133,16 +133,19 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
           // If expression exists 'Examples' segment, the first element is 'Examples'. Because
           // this test case is only used to print aliases of expressions for double checking.
           // Therefore, we only need to output the first SQL and its corresponding schema.
-          example.split("  > ").take(2).toList.foreach(_ match {
-            case exampleRe(sql, expected) =>
-              val df = spark.sql(sql)
-              val schema = df.schema.catalogString
-              val queryOutput = QueryOutput(sql, schema)
-              outputBuffer += queryOutput.toString
-              outputs += queryOutput
-            case _ =>
-          })
-        }
+          // Note: We need to filter out the commands that set the parameters, such as:
+          // SET spark.sql.parser.escapedStringLiterals=true
+          example.split("  > ").tail
+            .filterNot(_.trim.startsWith("SET")).take(2).toList.foreach(_ match {
+              case exampleRe(sql, expected) =>
+                val df = spark.sql(sql)
+                val schema = df.schema.catalogString
+                val queryOutput = QueryOutput(sql, schema)
+                outputBuffer += queryOutput.toString
+                outputs += queryOutput
+              case _ =>
+            })
+          }
       }
     }
 
