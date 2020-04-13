@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
@@ -588,20 +589,29 @@ private[hive] class TestHiveQueryExecution(
 
   override lazy val analyzed: LogicalPlan = {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _, _) => tbl.table :: Nil
+      case CacheTableCommand(tbl, _, _, _) => tbl :: Nil
       case _ => Nil
     }
 
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(ident) => ident.last }
+        logical.collect { case UnresolvedRelation(ident) => ident.asTableIdentifier }
     val resolver = sparkSession.sessionState.conf.resolver
-    val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
-      referencedTables.exists(resolver(_, testTable))
+    val referencedTestTables = referencedTables.flatMap { tbl =>
+      val testTableOpt = sparkSession.testTables.keys.find(resolver(_, tbl.table))
+      testTableOpt.map(testTable => tbl.copy(table = testTable))
     }
-    logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
-    referencedTestTables.foreach(sparkSession.loadTestTable)
+    logDebug(s"Query references test tables: ${referencedTestTables.map(_.table).mkString(", ")}")
+    referencedTestTables.foreach { tbl =>
+      val curDB = sparkSession.catalog.currentDatabase
+      try {
+        tbl.database.foreach(db => sparkSession.catalog.setCurrentDatabase(db))
+        sparkSession.loadTestTable(tbl.table)
+      } finally {
+        tbl.database.foreach(_ => sparkSession.catalog.setCurrentDatabase(curDB))
+      }
+    }
     // Proceed with analysis.
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
