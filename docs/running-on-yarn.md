@@ -488,8 +488,8 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.blacklist.waiting.millis</code></td>
   <td>60000</td>
   <td>
-  A waiting time in millis for more yarn resource when avaliable nodes are all in blacklist.
-  This helps to avoid job failing directly in some scenes. For example, HA YARN resourcemanager 
+  A waiting time in millis for more yarn resource when available nodes are all in blacklist.
+  This helps to avoid job failing directly in some scenes. For example, HA YARN resourcemanager
   failover, it will cost time for nodemanagers to register again.
   </td>
 </tr>
