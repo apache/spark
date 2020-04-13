@@ -55,9 +55,14 @@ class PlanParserSuite extends AnalysisTest {
     With(plan, ctes)
   }
 
-  test("single comment") {
+  test("single comment case one") {
     val plan = table("a").select(star())
     assertEqual("-- single comment\nSELECT * FROM a", plan)
+  }
+
+  test("single comment case two") {
+    val plan = table("a").select(star())
+    assertEqual("-- single comment\\\nwith line continuity\nSELECT * FROM a", plan)
   }
 
   test("bracketed comment case one") {

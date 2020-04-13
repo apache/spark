@@ -454,11 +454,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
   }
 
   test("SPARK-30049 Should not complain for quotes in commented lines") {
-    runCliWithin(3.minute)(
+    runCliWithin(1.minute)(
       """SELECT concat('test', 'comment') -- someone's comment here
         |;""".stripMargin -> "testcomment"
     )
-    runCliWithin(3.minute)(
+  }
+
+  test("SPARK-31102 spark-sql fails to parse when contains comment") {
+    runCliWithin(1.minute)(
       """SELECT concat('test', 'comment'),
         |    -- someone's comment here
         | 2;""".stripMargin -> "testcomment"
@@ -466,12 +469,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
   }
 
   test("SPARK-30049 Should not complain for quotes in commented with multi-lines") {
-    runCliWithin(3.minute)(
+    runCliWithin(1.minute)(
       """SELECT concat('test', 'comment') -- someone's comment here \
         | comment continues here with single ' quote \
         | extra ' \
         |;""".stripMargin -> "testcomment"
     )
   }
-
 }
