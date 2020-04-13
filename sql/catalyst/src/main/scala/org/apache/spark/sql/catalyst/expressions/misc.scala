@@ -226,6 +226,7 @@ case class TypeOf(child: Expression) extends UnaryExpression {
       > SELECT _FUNC_(regexp_extract('1a 2b 14m', '\\d+', 1));
        NULL
       > SELECT _FUNC_(encode('abc', 'utf-88'));
+       NULL
   """,
   since = "3.1.0")
 // scalastyle:on line.size.limit
