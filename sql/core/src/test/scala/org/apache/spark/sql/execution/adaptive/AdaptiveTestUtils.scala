@@ -26,9 +26,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
- * Don't run this test at all if adaptive execution is enabled.
+ * Test with this tag will be ignored if the test suite extends `EnableAdaptiveExecutionSuite`.
+ * Otherwise, it will be executed with adaptive execution disabled.
  */
-case class DisableAdaptiveExecution(reason: String) extends Tag("IgnoreIfAdaptiveExecution")
+case class DisableAdaptiveExecution(reason: String) extends Tag("DisableAdaptiveExecution")
 
 /**
  * Helper trait that enables AQE for all tests regardless of default config values, except that
