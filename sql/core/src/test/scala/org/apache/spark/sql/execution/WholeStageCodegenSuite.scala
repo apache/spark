@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -28,22 +29,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
-class WholeStageCodegenSuite extends QueryTest with SharedSparkSession {
+// Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
+class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
+  with DisableAdaptiveExecutionSuite {
 
   import testImplicits._
-
-  var originalValue: String = _
-  // With on AQE, the WholeStageCodegenExec is added when running QueryStageExec.
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
-    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
-  }
-
-  override def afterAll(): Unit = {
-    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
-    super.afterAll()
-  }
 
   test("range/filter should be combined") {
     val df = spark.range(10).filter("id = 1").selectExpr("id + 1")
