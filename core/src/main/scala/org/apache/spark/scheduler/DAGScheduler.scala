@@ -1142,7 +1142,7 @@ private[spark] class DAGScheduler(
    */
   private def addPysparkConfigsToProperties(stage: Stage, properties: Properties): Unit = {
     val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
-    val pysparkMem = rp.getPysparkMemory
+    val pysparkMem = rp.getPySparkMemory
     // use the getOption on EXECUTOR_CORES.key instead of using the EXECUTOR_CORES config reader
     // because the default for this config isn't correct for standalone mode. Here we want
     // to know if it was explicitly set or not. The default profile always has it set to either

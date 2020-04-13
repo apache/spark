@@ -20,26 +20,32 @@ class TaskResourceRequest(object):
     """
     .. note:: Evolving
 
-    A task resource request. This is used in conjuntion with the ResourceProfile to
-    programmatically specify the resources needed for an RDD that will be applied at the
-    stage level. The amount is specified as a Double to allow for saying you want more then
-    1 task per resource. Valid values are less than or equal to 0.5 or whole numbers.
-    Use `pyspark.TaskResourceRequests` class as a convenience API.
+    A task resource request. This is used in conjuntion with the
+    :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
+    needed for an RDD that will be applied at the stage level. The amount is specified
+    as a Double to allow for saying you want more then 1 task per resource. Valid values
+    are less than or equal to 0.5 or whole numbers.
+    Use :class:`pyspark.resource.TaskResourceRequests` class as a convenience API.
 
     :param resourceName: Name of the resource
     :param amount: Amount requesting as a Double to support fractional resource requests.
         Valid values are less than or equal to 0.5 or whole numbers.
+
+    .. versionadded:: 3.1.0
     """
     def __init__(self, resourceName, amount):
-        """Create a new TaskResourceRequest that wraps the underlying JVM object."""
+        """
+        Create a new :class:`pyspark.resource.TaskResourceRequest` that wraps the underlying
+        JVM object.
+        """
         from pyspark.context import SparkContext
-        self._jTaskRequest = SparkContext._jvm.org.apache.spark.resource.TaskResourceRequest(
+        self._java_task_request = SparkContext._jvm.org.apache.spark.resource.TaskResourceRequest(
             resourceName, amount)
 
     @property
     def resourceName(self):
-        return self._jTaskRequest.resourceName()
+        return self._java_task_request.resourceName()
 
     @property
     def amount(self):
-        return self._jTaskRequest.amount()
+        return self._java_task_request.amount()

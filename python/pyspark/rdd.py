@@ -2489,10 +2489,10 @@ class RDD(object):
         """
         .. note:: Experimental
 
-        Specify a ResourceProfile to use when calculating this RDD. This is only supported on
-        certain cluster managers and currently requires dynamic allocation to be enabled.
-        It will result in new executors with the resources specified being acquired to
-        calculate the RDD.
+        Specify a :class:`pyspark.resource.ResourceProfile` to use when calculating this RDD.
+        This is only supported on certain cluster managers and currently requires dynamic
+        allocation to be enabled. It will result in new executors with the resources specified
+        being acquired to calculate the RDD.
 
         .. versionadded:: 3.1.0
         """
@@ -2504,7 +2504,8 @@ class RDD(object):
         """
         .. note:: Experimental
 
-        Get the ResourceProfile specified with this RDD or None if it wasn't specified.
+        Get the :class:`pyspark.resource.ResourceProfile` specified with this RDD or None
+        if it wasn't specified.
         :return: the user specified ResourceProfile or null if none was specified
 
         .. versionadded:: 3.1.0

@@ -48,26 +48,31 @@ class ExecutorResourceRequest(object):
         allocated. The script runs on Executors startup to discover the addresses
         of the resources available.
     :param vendor: Vendor, required for some cluster managers
+
+    .. versionadded:: 3.1.0
     """
 
     def __init__(self, resourceName, amount, discoveryScript="", vendor=""):
-        """Create a new ExecutorResourceRequest that wraps the underlying JVM object."""
+        """
+        Create a new :class:`pyspark.resource.ExecutorResourceRequest` that wraps the
+        underlying JVM object.
+        """
         from pyspark.context import SparkContext
-        self._jExecRequest = SparkContext._jvm.org.apache.spark.resource.ExecutorResourceRequest(
+        self._java_exec_request = SparkContext._jvm.org.apache.spark.resource.ExecutorResourceRequest(
             resourceName, amount, discoveryScript, vendor)
 
     @property
     def resourceName(self):
-        return self._jExecRequest.resourceName()
+        return self._java_exec_request.resourceName()
 
     @property
     def amount(self):
-        return self._jExecRequest.amount()
+        return self._java_exec_request.amount()
 
     @property
     def discoveryScript(self):
-        return self._jExecRequest.discoveryScript()
+        return self._java_exec_request.discoveryScript()
 
     @property
     def vendor(self):
-        return self._jExecRequest.vendor()
+        return self._java_exec_request.vendor()

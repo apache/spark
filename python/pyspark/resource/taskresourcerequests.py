@@ -24,27 +24,32 @@ class TaskResourceRequests(object):
     .. note:: Evolving
 
     A set of task resource requests. This is used in conjuntion with the
-    ResourceProfileBuilder to programmatically specify the resources needed for
+    :class:`pyspark.resource.ResourceProfileBuilder` to programmatically specify the resources needed for
     an RDD that will be applied at the stage level.
+
+    .. versionadded:: 3.1.0
     """
 
     def __init__(self):
-        """Create a new TaskResourceRequests that wraps the underlying JVM object."""
+        """
+        Create a new :class:`pyspark.resource.TaskResourceRequests` that wraps the underlying
+        JVM object.
+        """
         from pyspark import SparkContext
-        self._javaTaskResourceRequests \
-            = SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()
+        self._java_task_resource_requests = \
+            SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()
 
     def cpus(self, amount):
-        self._javaTaskResourceRequests.cpus(amount)
+        self._java_task_resource_requests.cpus(amount)
         return self
 
     def resource(self, resourceName, amount):
-        self._javaTaskResourceRequests.resource(resourceName, float(amount))
+        self._java_task_resource_requests.resource(resourceName, float(amount))
         return self
 
     @property
     def requests(self):
-        taskRes = self._javaTaskResourceRequests.requestsJMap()
+        taskRes = self._java_task_resource_requests.requestsJMap()
         result = {}
         # convert back to python TaskResourceRequest
         for k, v in taskRes.items():

@@ -75,7 +75,7 @@ class ResourceProfile(
     taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
   }
 
-  private[spark] def getPysparkMemory: Option[Long] = {
+  private[spark] def getPySparkMemory: Option[Long] = {
     executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount.toLong)
   }
 

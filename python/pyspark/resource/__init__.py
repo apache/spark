@@ -27,5 +27,5 @@ from pyspark.resource.resourceprofile import ResourceProfile
 
 __all__ = [
     "TaskResourceRequest", "TaskResourceRequests", "ExecutorResourceRequest",
-    "ExecutorResourceRequests", "ResourceProfile", "ResourceProfileBuilder"
+    "ExecutorResourceRequests", "ResourceProfile", "ResourceProfileBuilder",
 ]

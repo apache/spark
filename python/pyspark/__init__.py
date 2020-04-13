@@ -119,5 +119,5 @@ __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
     "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
-    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "ResourceInformation"
+    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "ResourceInformation",
 ]

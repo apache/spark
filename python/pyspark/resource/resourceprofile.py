@@ -28,14 +28,16 @@ class ResourceProfile(object):
     specify executor and task requirements for an RDD that will get applied during a
     stage. This allows the user to change the resource requirements between stages.
     This is meant to be immutable so user doesn't change it after building.
+
+    .. versionadded:: 3.1.0
     """
 
-    def __init__(self, _jResourceProfile):
-        self._jResourceProfile = _jResourceProfile
+    def __init__(self, _java_resource_profile):
+        self._java_resource_profile = _java_resource_profile
 
     @property
     def taskResources(self):
-        taskRes = self._jResourceProfile.taskResourcesJMap()
+        taskRes = self._java_resource_profile.taskResourcesJMap()
         result = {}
         # convert back to python TaskResourceRequest
         for k, v in taskRes.items():
@@ -44,7 +46,7 @@ class ResourceProfile(object):
 
     @property
     def executorResources(self):
-        execRes = self._jResourceProfile.executorResourcesJMap()
+        execRes = self._java_resource_profile.executorResourcesJMap()
         result = {}
         # convert back to python ExecutorResourceRequest
         for k, v in execRes.items():

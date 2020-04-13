@@ -26,37 +26,42 @@ class ExecutorResourceRequests(object):
     A set of Executor resource requests. This is used in conjunction with the
     ResourceProfileBuilder to programmatically specify the resources needed for an RDD
     that will be applied at the stage level.
+
+    .. versionadded:: 3.1.0
     """
 
     def __init__(self):
-        """Create a new ExecutorResourceRequests that wraps the underlying JVM object."""
+        """
+        Create a new :class:`pyspark.resource.ExecutorResourceRequests` that wraps the
+        underlying JVM object.
+        """
         from pyspark import SparkContext
-        self._javaExecutorResourceRequests \
-            = SparkContext._jvm.org.apache.spark.resource.ExecutorResourceRequests()
+        self._java_executor_resource_requests = \
+            SparkContext._jvm.org.apache.spark.resource.ExecutorResourceRequests()
 
     def memory(self, amount):
-        self._javaExecutorResourceRequests.memory(amount)
+        self._java_executor_resource_requests.memory(amount)
         return self
 
     def memoryOverhead(self, amount):
-        self._javaExecutorResourceRequests.memoryOverhead(amount)
+        self._java_executor_resource_requests.memoryOverhead(amount)
         return self
 
     def pysparkMemory(self, amount):
-        self._javaExecutorResourceRequests.pysparkMemory(amount)
+        self._java_executor_resource_requests.pysparkMemory(amount)
         return self
 
     def cores(self, amount):
-        self._javaExecutorResourceRequests.cores(amount)
+        self._java_executor_resource_requests.cores(amount)
         return self
 
     def resource(self, resourceName, amount, discoveryScript="", vendor=""):
-        self._javaExecutorResourceRequests.resource(resourceName, amount, discoveryScript, vendor)
+        self._java_executor_resource_requests.resource(resourceName, amount, discoveryScript, vendor)
         return self
 
     @property
     def requests(self):
-        execRes = self._javaExecutorResourceRequests.requestsJMap()
+        execRes = self._java_executor_resource_requests.requestsJMap()
         result = {}
         # convert back to python ExecutorResourceRequest
         for k, v in execRes.items():

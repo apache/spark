@@ -30,30 +30,32 @@ class ResourceProfileBuilder(object):
     A ResourceProfile allows the user to specify executor and task requirements for
     an RDD that will get applied during a stage. This allows the user to change the
     resource requirements between stages.
+
+    .. versionadded:: 3.1.0
     """
 
     def __init__(self, ):
         """Create a new ResourceProfileBuilder that wraps the underlying JVM object."""
         from pyspark.context import SparkContext
-        self._jResourceProfileBuilder \
-            = SparkContext._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+        self._java_resource_profile_builder = \
+            SparkContext._jvm.org.apache.spark.resource.ResourceProfileBuilder()
 
     def require(self, resourceRequest):
         if isinstance(resourceRequest, TaskResourceRequests):
-            self._jResourceProfileBuilder.require(resourceRequest._javaTaskResourceRequests)
+            self._java_resource_profile_builder.require(resourceRequest._java_task_resource_requests)
         else:
-            self._jResourceProfileBuilder.require(resourceRequest._javaExecutorResourceRequests)
+            self._java_resource_profile_builder.require(resourceRequest._java_executor_resource_requests)
         return self
 
     def clearExecutorResourceRequests(self):
-        self._jResourceProfileBuilder.clearExecutorResourceRequests()
+        self._java_resource_profile_builder.clearExecutorResourceRequests()
 
     def clearTaskResourceRequests(self):
-        self._jResourceProfileBuilder.clearTaskResourceRequests()
+        self._java_resource_profile_builder.clearTaskResourceRequests()
 
     @property
     def taskResources(self):
-        taskRes = self._jResourceProfileBuilder.taskResourcesJMap()
+        taskRes = self._java_resource_profile_builder.taskResourcesJMap()
         result = {}
         # convert back to python TaskResourceRequest
         for k, v in taskRes.items():
@@ -62,7 +64,7 @@ class ResourceProfileBuilder(object):
 
     @property
     def executorResources(self):
-        execRes = self._jResourceProfileBuilder.executorResourcesJMap()
+        execRes = self._java_resource_profile_builder.executorResourcesJMap()
         result = {}
         # convert back to python ExecutorResourceRequest
         for k, v in execRes.items():
@@ -72,5 +74,5 @@ class ResourceProfileBuilder(object):
 
     @property
     def build(self):
-        jresourceProfile = self._jResourceProfileBuilder.build()
+        jresourceProfile = self._java_resource_profile_builder.build()
         return ResourceProfile(jresourceProfile)
