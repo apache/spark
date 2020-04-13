@@ -81,38 +81,6 @@ For example, a type-safe user-defined average can look like:
 <div data-lang="java"  markdown="1">
   {% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
 </div>
-<div data-lang="sql"  markdown="1">
-{% highlight sql %}
--- Compile and place UDAF MyAverage in a JAR file called `MyAverage.jar` in /tmp.
-CREATE FUNCTION myAverage AS 'MyAverage' USING JAR '/tmp/MyAverage.jar';
-SHOW USER FUNCTIONS;
--- +------------------+
--- |          function|
--- +------------------+
--- | default.myAverage|
--- +------------------+
-CREATE TEMPORARY VIEW employees
-USING org.apache.spark.sql.json
-OPTIONS (
-    path "examples/src/main/resources/employees.json"
-);
-SELECT * FROM employees;
--- +-------+------+
--- |   name|salary|
--- +-------+------+
--- |Michael|  3000|
--- |   Andy|  4500|
--- | Justin|  3500|
--- |  Berta|  4000|
--- +-------+------+
-SELECT myAverage(salary) as average_salary FROM employees;
--- +--------------+
--- |average_salary|
--- +--------------+
--- |        3750.0|
--- +--------------+
-{% endhighlight %}
-</div>
 </div>
 #### Untyped User-Defined Aggregate Functions
 
@@ -124,6 +92,42 @@ For example, a user-defined average for untyped DataFrames can look like:
 </div>
 <div data-lang="java"  markdown="1">
   {% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
+</div>
+<div data-lang="sql"  markdown="1">
+{% highlight sql %}
+-- Compile and place UDAF MyAverage in a JAR file called `MyAverage.jar` in /tmp.
+CREATE FUNCTION myAverage AS 'MyAverage' USING JAR '/tmp/MyAverage.jar';
+
+SHOW USER FUNCTIONS;
+-- +------------------+
+-- |          function|
+-- +------------------+
+-- | default.myAverage|
+-- +------------------+
+
+CREATE TEMPORARY VIEW employees
+USING org.apache.spark.sql.json
+OPTIONS (
+    path "examples/src/main/resources/employees.json"
+);
+
+SELECT * FROM employees;
+-- +-------+------+
+-- |   name|salary|
+-- +-------+------+
+-- |Michael|  3000|
+-- |   Andy|  4500|
+-- | Justin|  3500|
+-- |  Berta|  4000|
+-- +-------+------+
+
+SELECT myAverage(salary) as average_salary FROM employees;
+-- +--------------+
+-- |average_salary|
+-- +--------------+
+-- |        3750.0|
+-- +--------------+
+{% endhighlight %}
 </div>
 </div>
 
