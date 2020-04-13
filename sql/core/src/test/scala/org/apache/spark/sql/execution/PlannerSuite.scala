@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
@@ -752,7 +752,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-24556: always rewrite output partitioning in ReusedExchangeExec " +
-    "and InMemoryTableScanExec") {
+    "and InMemoryTableScanExec",
+    DisableAdaptiveExecution("Reuse is dynamic in AQE")) {
     def checkOutputPartitioningRewrite(
         plans: Seq[SparkPlan],
         expectedPartitioningClass: Class[_]): Unit = {
@@ -782,8 +783,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       checkOutputPartitioningRewrite(inMemoryScan, expectedPartitioningClass)
     }
     // when enable AQE, the reusedExchange is inserted when executed.
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       // ReusedExchange is HashPartitioning
       val df1 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
       val df2 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
