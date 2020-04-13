@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
 import org.apache.spark.sql.catalyst.expressions.objects.{DecodeUsingSerializer, EncodeUsingSerializer}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Methods for creating an [[Encoder]].
@@ -134,6 +135,13 @@ object Encoders {
    * @since 1.6.1
    */
   def BINARY: Encoder[Array[Byte]] = ExpressionEncoder()
+
+  /**
+   * An encoder for [[CalendarInterval]]
+   *
+   * @since 3.1.0
+   */
+  def CALENDARINTERVAL: Encoder[CalendarInterval] = ExpressionEncoder()
 
   /**
    * Creates an encoder for Java Bean of type T.

@@ -235,6 +235,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.lang.String]) =>
         createDeserializerForString(path, returnNullable = false)
 
+      case t if isSubtype(t, localTypeOf[CalendarInterval]) => path
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
         createDeserializerForJavaBigDecimal(path, returnNullable = false)
 
@@ -497,6 +498,8 @@ object ScalaReflection extends ScalaReflection {
         createSerializerForJavaLocalDate(inputObject)
 
       case t if isSubtype(t, localTypeOf[java.sql.Date]) => createSerializerForSqlDate(inputObject)
+
+      case t if isSubtype(t, localTypeOf[CalendarInterval]) => inputObject
 
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         createSerializerForScalaBigDecimal(inputObject)

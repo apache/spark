@@ -23,6 +23,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * A collection of implicit methods for converting common Scala objects into [[Dataset]]s.
@@ -237,6 +238,8 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
+  /** @since 3.1.0 */
+  implicit def newIntervalEncoder: Encoder[CalendarInterval] = Encoders.CALENDARINTERVAL
 }
 
 /**

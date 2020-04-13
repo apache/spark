@@ -437,4 +437,11 @@ class ScalaReflectionSuite extends SparkFunSuite {
       StructField("f2", StringType))))
     assert(deserializerFor[FooWithAnnotation].dataType == ObjectType(classOf[FooWithAnnotation]))
   }
+
+  test("serde for CalendarInterval") {
+    val ser = serializerFor[CalendarInterval]
+    assert(ser.dataType === CalendarIntervalType)
+    val deser = deserializerFor[CalendarInterval]
+    assert(deser.dataType === CalendarIntervalType)
+  }
 }

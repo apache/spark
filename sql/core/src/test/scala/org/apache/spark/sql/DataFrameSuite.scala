@@ -2358,6 +2358,18 @@ class DataFrameSuite extends QueryTest
     val df = Seq((1, new CalendarInterval(1, 2, 3))).toDF("a", "b")
     checkAnswer(df.selectExpr("b"), Row(new CalendarInterval(1, 2, 3)))
   }
+
+  test("CalendarInterval encoder support") {
+    val df = Seq(
+      new CalendarInterval(1, 2, 3),
+      new CalendarInterval(4, 5, 6),
+      null).toDF()
+    checkAnswer(df,
+      Seq(
+        Row(new CalendarInterval(1, 2, 3)),
+        Row(new CalendarInterval(4, 5, 6)),
+        Row(null)))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
