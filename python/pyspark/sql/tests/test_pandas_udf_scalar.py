@@ -445,8 +445,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     Exception,
-                    "The number of output rows of pandas iterator UDF should be "
-                    "the same with input rows"):
+                    "The length of output in Scalar iterator.*"
+                    "the length of output was 1"):
                 df.select(iter_udf_wong_output_size(col('id'))).collect()
 
         @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
@@ -461,7 +461,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(
                         Exception,
-                        "SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator"):
+                        "pandas iterator UDF should exhaust"):
                     df1.select(iter_udf_not_reading_all_input(col('id'))).collect()
 
     def test_vectorized_udf_chained(self):

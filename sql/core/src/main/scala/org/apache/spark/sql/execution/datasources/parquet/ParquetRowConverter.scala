@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -129,6 +130,9 @@ private[parquet] class ParquetRowConverter(
     convertTz: Option[ZoneId],
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
+
+  // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
+  private val rebaseDateTime = SQLConf.get.parquetRebaseDateTimeInReadEnabled
 
   assert(
     parquetType.getFieldCount <= catalystType.length,
@@ -271,16 +275,35 @@ private[parquet] class ParquetRowConverter(
         new ParquetStringConverter(updater)
 
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MICROS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            updater.setLong(value)
+        if (rebaseDateTime) {
+          new ParquetPrimitiveConverter(updater) {
+            override def addLong(value: Long): Unit = {
+              val rebased = rebaseJulianToGregorianMicros(value)
+              updater.setLong(rebased)
+            }
+          }
+        } else {
+          new ParquetPrimitiveConverter(updater) {
+            override def addLong(value: Long): Unit = {
+              updater.setLong(value)
+            }
           }
         }
 
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            updater.setLong(DateTimeUtils.millisToMicros(value))
+        if (rebaseDateTime) {
+          new ParquetPrimitiveConverter(updater) {
+            override def addLong(value: Long): Unit = {
+              val micros = DateTimeUtils.millisToMicros(value)
+              val rebased = rebaseJulianToGregorianMicros(micros)
+              updater.setLong(rebased)
+            }
+          }
+        } else {
+          new ParquetPrimitiveConverter(updater) {
+            override def addLong(value: Long): Unit = {
+              updater.setLong(DateTimeUtils.millisToMicros(value))
+            }
           }
         }
 
@@ -305,10 +328,17 @@ private[parquet] class ParquetRowConverter(
         }
 
       case DateType =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addInt(value: Int): Unit = {
-            // DateType is not specialized in `SpecificMutableRow`, have to box it here.
-            updater.set(value.asInstanceOf[DateType#InternalType])
+        if (rebaseDateTime) {
+          new ParquetPrimitiveConverter(updater) {
+            override def addInt(value: Int): Unit = {
+              updater.set(rebaseJulianToGregorianDays(value))
+            }
+          }
+        } else {
+          new ParquetPrimitiveConverter(updater) {
+            override def addInt(value: Int): Unit = {
+              updater.set(value)
+            }
           }
         }
 

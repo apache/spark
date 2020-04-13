@@ -26,13 +26,12 @@ and brief description of supported clauses are explained in
 ability to generate logical and physical plan for a given query using
 [EXPLAIN](sql-ref-syntax-qry-explain.html) statement.
 
-
-- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
-- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
-- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
-- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
-- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
-- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
-- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
-- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
-- [EXPLAIN Statement](sql-ref-syntax-qry-explain.html)
+ * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+ * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+ * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+ * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+ * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+ * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+ * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+ * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+ * [EXPLAIN Statement](sql-ref-syntax-qry-explain.html)

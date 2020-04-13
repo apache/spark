@@ -22,6 +22,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -227,12 +228,18 @@ object SharedState extends Logging {
    * Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
    * the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
    */
-  def loadHiveConfFile(sparkConf: SparkConf, hadoopConf: Configuration): Unit = {
+  def loadHiveConfFile(
+      sparkConf: SparkConf,
+      hadoopConf: Configuration): Unit = {
     val hiveWarehouseKey = "hive.metastore.warehouse.dir"
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
       logInfo(s"loading hive config file: $configFile")
-      hadoopConf.addResource(configFile)
+      val hadoopConfTemp = new Configuration()
+      hadoopConfTemp.addResource(configFile)
+      hadoopConfTemp.asScala.foreach { entry =>
+        hadoopConf.setIfUnset(entry.getKey, entry.getValue)
+      }
     }
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkConf.remove(hiveWarehouseKey)

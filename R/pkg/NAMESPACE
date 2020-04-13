@@ -28,6 +28,7 @@ importFrom("utils", "download.file", "object.size", "packageVersion", "tail", "u
 
 # S3 methods exported
 export("sparkR.session")
+export("sparkR.init")
 export("sparkR.session.stop")
 export("sparkR.stop")
 export("sparkR.conf")
@@ -40,6 +41,9 @@ export("sparkR.callJMethod")
 export("sparkR.callJStatic")
 
 export("install.spark")
+
+export("sparkRSQL.init",
+       "sparkRHive.init")
 
 # MLlib integration
 exportMethods("glm",
@@ -68,7 +72,10 @@ exportMethods("glm",
               "spark.freqItemsets",
               "spark.associationRules",
               "spark.findFrequentSequentialPatterns",
-              "spark.assignClusters")
+              "spark.assignClusters",
+              "spark.fmClassifier",
+              "spark.lm",
+              "spark.fmRegressor")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -148,6 +155,7 @@ exportMethods("arrange",
               "printSchema",
               "randomSplit",
               "rbind",
+              "registerTempTable",
               "rename",
               "repartition",
               "repartitionByRange",
@@ -431,8 +439,10 @@ export("as.DataFrame",
        "cacheTable",
        "clearCache",
        "createDataFrame",
+       "createExternalTable",
        "createTable",
        "currentDatabase",
+       "dropTempTable",
        "dropTempView",
        "listColumns",
        "listDatabases",
