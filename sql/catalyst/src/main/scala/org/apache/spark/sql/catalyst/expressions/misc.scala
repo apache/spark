@@ -205,19 +205,27 @@ case class TypeOf(child: Expression) extends UnaryExpression {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Evaluate an expression and handle certain types of execution errors by returning NULL.
+    _FUNC_(expr) - Evaluate an expression and handle certain types of runtime exceptions by returning NULL.
     In cases where it is preferable that queries produce NULL instead of failing when corrupt or invalid data is encountered, the TRY function may be useful, especially when ANSI mode is on and the users need null-tolerant on certain columns or outputs.
-    AnalysisExceptions will not be handled by this, typically errors handled by TRY function are:
+    AnalysisExceptions will not be handled by this, typically runtime exceptions handled by TRY function are:
 
-      * Division by zero,
-      * Invalid casting,
-      * Numeric value out of range,
-      * e.t.c
+      * ArightmeticException - e.g. division by zero, numeric value out of range,
+      * NumberFormatException - e.g. invalid casting,
+      * IllegalArgumentException - e.g. invalid datetime pattern, missing format argument for string formatting,
+      * DateTimeException - e.g. invalid datetime values
+      * UnsupportedEncodingException - e.g. encode or decode string with invalid charset
   """,
   examples = """
       Examples:
       > SELECT _FUNC_(1 / 0);
        NULL
+      > SELECT _FUNC_(date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc'));
+       NULL
+      > SELECT _FUNC_((5e36BD + 0.1) + 5e36BD);
+       NULL
+      > SELECT _FUNC_(regexp_extract('1a 2b 14m', '\\d+', 1));
+       NULL
+      > SELECT _FUNC_(encode('abc', 'utf-88'));
   """,
   since = "3.1.0")
 // scalastyle:on line.size.limit
@@ -240,24 +248,31 @@ case class TryExpression(child: Expression) extends UnaryExpression {
     val javaType = CodeGenerator.javaType(dataType)
     ev.copy(code =
       code"""
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        try {
-          ${eval.code}
-          ${ev.isNull} = ${eval.isNull};
-          ${ev.value} = ${eval.value};
-        } catch (java.lang.Exception e) {
-          if (org.apache.spark.sql.catalyst.expressions.TryExpression.canSuppress(e)) {
-            ${ev.isNull} = true;
-          } else {
-            throw e;
-          }
-        }""")
+         |boolean ${ev.isNull} = false;
+         |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |try {
+         |  ${eval.code}
+         |  ${ev.isNull} = ${eval.isNull};
+         |  ${ev.value} = ${eval.value};
+         |} catch (java.lang.Exception e) {
+         |  if (org.apache.spark.sql.catalyst.expressions.TryExpression.canSuppress(e)) {
+         |    ${ev.isNull} = true;
+         |  } else {
+         |    throw e;
+         |  }
+         |}
+         |""".stripMargin)
   }
 }
 
 object TryExpression {
 
+  /**
+   * Certain runtime exceptions that can be suppressed by [[TryExpression]], those not listed here
+   * are not handled by try function, e.g. exceptions that related access controls or critical ones
+   * like [[InterruptedException]] etc, or superclass like [[RuntimeException]] that can suppress
+   * all of its subclasses.
+   */
   def canSuppress(e: Throwable): Boolean = e match {
     case _: IllegalArgumentException |
          _: ArithmeticException |

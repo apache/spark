@@ -22,6 +22,7 @@ import java.io.PrintStream
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -88,5 +89,30 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     assert(outputCodegen.contains(s"Result of $inputExpr is 1"))
     assert(outputEval.contains(s"Result of $inputExpr is 1"))
+  }
+
+  test("try expression") {
+    intercept[RuntimeException] {
+      val try1 = TryExpression(AssertTrue(Literal.create(false, BooleanType)))
+      checkEvaluation(try1, null)
+    }
+
+    checkEvaluation(TryExpression(AnsiCast(Literal("N A N"), DoubleType)), null)
+    checkEvaluation(TryExpression(AnsiCast(Literal(128), ByteType)), null)
+    checkEvaluation(TryExpression(FormatString(Literal("%s"))), null)
+
+    val maxIntLiteral = Literal(Int.MaxValue)
+    val minIntLiteral = Literal(Int.MinValue)
+    val e1 = Add(maxIntLiteral, Literal(1))
+    val e2 = Subtract(maxIntLiteral, Literal(-1))
+    val e3 = Multiply(maxIntLiteral, Literal(2))
+    val e4 = Add(minIntLiteral, minIntLiteral)
+    val e5 = Subtract(minIntLiteral, maxIntLiteral)
+    val e6 = Multiply(minIntLiteral, minIntLiteral)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
+        checkEvaluation(TryExpression(e), null)
+      }
+    }
   }
 }
