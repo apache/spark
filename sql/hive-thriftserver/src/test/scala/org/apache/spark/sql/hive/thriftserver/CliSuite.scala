@@ -464,4 +464,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
         | 2;""".stripMargin -> "testcomment"
     )
   }
+
+  test("SPARK-30049 Should not complain for quotes in commented with multi-lines") {
+    runCliWithin(3.minute)(
+      """SELECT concat('test', 'comment') -- someone's comment here \
+        | comment continues here with single ' quote \
+        | extra ' \
+        |;""".stripMargin -> "testcomment"
+    )
+  }
+
 }
