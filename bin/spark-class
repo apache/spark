@@ -37,14 +37,14 @@ fi
 
 # Find Spark jars.
 if [ -d "${SPARK_HOME}/jars" ]; then
-  SPARK_JARS_DIR="${SPARK_HOME}/jars"
+  SPARK_JARS_DIR="${SPARK_JARS_DIR:-"${SPARK_HOME}/jars"}"
 else
-  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"
+  SPARK_JARS_DIR="${SPARK_JARS_DIR:-"${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"}"
 fi
 
 if [ ! -d "$SPARK_JARS_DIR" ] && [ -z "$SPARK_TESTING$SPARK_SQL_TESTING" ]; then
   echo "Failed to find Spark jars directory ($SPARK_JARS_DIR)." 1>&2
-  echo "You need to build Spark with the target \"package\" before running this program." 1>&2
+  echo "You need to set an appropriate directory for SPARK_JARS_DIR or build Spark with the target \"package\" before running this program." 1>&2
   exit 1
 else
   LAUNCH_CLASSPATH="$SPARK_JARS_DIR/*"

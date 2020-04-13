@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.junit.Test;
+
 import static org.junit.Assert.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -97,6 +98,11 @@ public class CommandBuilderUtilsSuite {
     assertEquals(9, javaMajorVersion("9"));
     assertEquals(9, javaMajorVersion("9.1.0"));
     assertEquals(10, javaMajorVersion("10"));
+  }
+
+  @Test
+  public void testGetJarsDir() {
+    assertEquals("/spark/home/jars", getJarsDir("/spark/home"));
   }
 
   private static void testOpt(String opts, List<String> expected) {

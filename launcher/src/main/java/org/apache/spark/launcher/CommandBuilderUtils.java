@@ -30,6 +30,7 @@ class CommandBuilderUtils {
   static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
+  static final String ENV_SPARK_JARS_DIR = "SPARK_JARS_DIR";
 
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
@@ -315,7 +316,7 @@ class CommandBuilderUtils {
    */
   static String findJarsDir(String sparkHome, String scalaVersion, boolean failIfNotFound) {
     // TODO: change to the correct directory once the assembly build is changed.
-    File libdir = new File(sparkHome, "jars");
+    File libdir = new File(getJarsDir(sparkHome));
     if (!libdir.isDirectory()) {
       libdir = new File(sparkHome, String.format("assembly/target/scala-%s/jars", scalaVersion));
       if (!libdir.isDirectory()) {
@@ -326,6 +327,11 @@ class CommandBuilderUtils {
       }
     }
     return libdir.getAbsolutePath();
+  }
+
+  static String getJarsDir(String sparkHome) {
+    String jarsDir = System.getenv(ENV_SPARK_JARS_DIR);
+    return jarsDir != null ? jarsDir : join(File.separator, sparkHome, "jars");
   }
 
 }
