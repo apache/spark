@@ -98,7 +98,7 @@ SELECT (
 -- Name conflict in nested CTE. Spark throws an AnalysisException by default.
 -- SET spark.sql.legacy.ctePrecedencePolicy = CORRECTED (which is recommended),
 -- inner CTE definitions take precedence over outer definitions.
-SET spark.sql.legacy.ctePrecedencePolicy = CORRECTED
+SET spark.sql.legacy.ctePrecedencePolicy = CORRECTED;
 WITH
     t AS (SELECT 1),
     t2 AS (
@@ -114,7 +114,7 @@ SELECT * FROM t2;
 
 -- SET spark.sql.legacy.ctePrecedencePolicy = LEGACY (the behavior in version 2.4 and earlier)
 -- outer CTE definitions take precedence over inner definitions.
-SET spark.sql.legacy.ctePrecedencePolicy = CORRECTED
+SET spark.sql.legacy.ctePrecedencePolicy = LEGACY;
 WITH
     t AS (SELECT 1),
     t2 AS (
