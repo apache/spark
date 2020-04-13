@@ -28,7 +28,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, TypedImperativeAggregate}
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types._
 
 /**
@@ -52,6 +52,15 @@ sealed abstract class SummaryBuilder {
   @Since("2.3.0")
   def summary(featuresCol: Column): Column = summary(featuresCol, lit(1.0))
 
+  @Since("3.1.0")
+  def summary(featuresCol: String, weightCol: String): Column = {
+    summary(col(featuresCol), col(weightCol))
+  }
+
+  @Since("3.1.0")
+  def summary(featuresCol: String): Column = {
+    summary(col(featuresCol), lit(1.0))
+  }
 }
 
 /**
