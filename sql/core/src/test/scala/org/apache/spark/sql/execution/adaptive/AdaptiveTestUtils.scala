@@ -28,18 +28,20 @@ import org.apache.spark.sql.test.SQLTestUtils
 /**
  * Don't run this test at all if adaptive execution is enabled.
  */
-case class IgnoreIfAdaptiveExecution(reason: String) extends Tag("IgnoreIfAdaptiveExecution")
+case class DisableAdaptiveExecution(reason: String) extends Tag("IgnoreIfAdaptiveExecution")
 
 /**
  * Helper trait that enables AQE for all tests regardless of default config values, except that
- * tests tagged with [[IgnoreIfAdaptiveExecution]] will be skipped.
+ * tests tagged with [[DisableAdaptiveExecution]] will be skipped.
  */
-trait EnableAdaptiveExecution extends SQLTestUtils {
+trait EnableAdaptiveExecutionSuite extends SQLTestUtils {
   protected val forceApply = true
 
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
-    if (testTags.exists(_.isInstanceOf[IgnoreIfAdaptiveExecution])) {
+    if (testTags.exists(_.isInstanceOf[DisableAdaptiveExecution])) {
+      // we ignore the test here but assume that another test suite which extends
+      // `DisableAdaptiveExecutionSuite` will test it anyway to ensure test coverage
       ignore(testName + " (disabled when AQE is on)", testTags: _*)(testFun)
     } else {
       super.test(testName, testTags: _*) {
@@ -56,7 +58,7 @@ trait EnableAdaptiveExecution extends SQLTestUtils {
 /**
  * Helper trait that disables AQE for all tests regardless of default config values.
  */
-trait DisableAdaptiveExecution extends SQLTestUtils {
+trait DisableAdaptiveExecutionSuite extends SQLTestUtils {
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {

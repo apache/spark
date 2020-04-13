@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 
-import org.apache.spark.sql.execution.adaptive.IgnoreIfAdaptiveExecution
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -29,7 +29,7 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("SPARK-22160 spark.sql.execution.rangeExchange.sampleSizePerPartition",
-    IgnoreIfAdaptiveExecution("Post shuffle partition number can be different")) {
+    DisableAdaptiveExecution("Post shuffle partition number can be different")) {
     // In this test, we run a sort and compute the histogram for partition size post shuffle.
     // With a high sample count, the partition size should be more evenly distributed, and has a
     // low chi-sq test value.

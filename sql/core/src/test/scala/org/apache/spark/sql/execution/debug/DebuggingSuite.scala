@@ -24,14 +24,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.StructType
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
-class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecution {
+class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecutionSuite {
 
   test("DataFrame.debug()") {
     testData.debug()

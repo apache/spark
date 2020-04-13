@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.IgnoreIfAdaptiveExecution
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SQLTestUtils
@@ -100,7 +100,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("SPARK-22219: refactor to control to generate comment",
-    IgnoreIfAdaptiveExecution("WSCG rule is applied later in AQE")) {
+    DisableAdaptiveExecution("WSCG rule is applied later in AQE")) {
     Seq(true, false).foreach { flag =>
       withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString) {
         // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.

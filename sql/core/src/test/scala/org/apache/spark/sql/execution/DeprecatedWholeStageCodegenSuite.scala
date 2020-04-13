@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.test.SharedSparkSession
@@ -27,7 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 @deprecated("This test suite will be removed.", "3.0.0")
 class DeprecatedWholeStageCodegenSuite extends QueryTest
   with SharedSparkSession
-  with DisableAdaptiveExecution {
+  with DisableAdaptiveExecutionSuite {
 
   test("simple typed UDAF should be included in WholeStageCodegen") {
     import testImplicits._

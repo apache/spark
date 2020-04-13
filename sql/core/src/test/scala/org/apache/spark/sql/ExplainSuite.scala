@@ -18,13 +18,13 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class ExplainSuite extends QueryTest with SharedSparkSession with DisableAdaptiveExecution {
+class ExplainSuite extends QueryTest with SharedSparkSession with DisableAdaptiveExecutionSuite {
   import testImplicits._
 
   private def getNormalizedExplain(df: DataFrame, mode: ExplainMode): String = {
