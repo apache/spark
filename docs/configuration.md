@@ -2939,6 +2939,10 @@ To specify a different configuration directory other than the default "SPARK_HOM
 you can set SPARK_CONF_DIR. Spark will use the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
 from this directory.
 
+# Overriding classpath default directory
+
+To specify a different classpath directory other than the default "SPARK_HOME/jars"  you can set SPARK_JARS_DIR. Any of the services under "SPARK_HOME/sbin" folder will use it.
+
 # Inheriting Hadoop Cluster Configuration
 
 If you plan to read and write from HDFS using Spark, there are two Hadoop configuration files that
