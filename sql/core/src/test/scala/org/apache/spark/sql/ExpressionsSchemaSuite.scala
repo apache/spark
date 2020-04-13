@@ -129,7 +129,11 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
         kv._2.foreach { funInfo =>
           outputBuffer += s"\n-- Function name: ${funInfo.getName}"
           val example = funInfo.getExamples
-          example.split("  > ").toList.foreach(_ match {
+
+          // If expression exists 'Examples' segment, the first element is 'Examples'. Because
+          // this test case is only used to print aliases of expressions for double checking.
+          // Therefore, we only need to output the first SQL and its corresponding schema.
+          example.split("  > ").take(2).toList.foreach(_ match {
             case exampleRe(sql, expected) =>
               val df = spark.sql(sql)
               val schema = df.schema.catalogString
