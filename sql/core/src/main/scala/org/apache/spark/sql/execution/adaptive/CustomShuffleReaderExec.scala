@@ -104,8 +104,7 @@ case class CustomShuffleReaderExec private(
     Map("numSkewedPartitions" -> metrics)
   }
 
-  private def sendPartitionDataSizeMetrics(
-      executionId: String): Unit = {
+  private def sendPartitionDataSizeMetrics(executionId: String): Unit = {
     val mapStats = shuffleStage.get.mapStats
     val partitionMetrics = metrics("partitionDataSize")
 
