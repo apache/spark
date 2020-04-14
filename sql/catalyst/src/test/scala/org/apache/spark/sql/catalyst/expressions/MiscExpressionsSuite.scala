@@ -96,7 +96,8 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val try1 = TryExpression(AssertTrue(Literal.create(false, BooleanType)))
       checkEvaluation(try1, null)
     }
-    assert(e.getMessage.contains("is not true"))
+    assert(e.getCause.isInstanceOf[RuntimeException])
+    assert(e.getCause.getMessage.contains("is not true"))
 
     checkEvaluation(TryExpression(AnsiCast(Literal("N A N"), DoubleType)), null)
     checkEvaluation(TryExpression(AnsiCast(Literal(128), ByteType)), null)
