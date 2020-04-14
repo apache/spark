@@ -79,9 +79,20 @@ private[spark] object ChiSqTest extends Logging {
    * the independence test.
    * Returns an array containing the ChiSquaredTestResult for every feature against the label.
    */
-  def chiSquaredFeatures(data: RDD[LabeledPoint],
+  def chiSquaredFeatures(
+      data: RDD[LabeledPoint],
       methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
-    data.first().features match {
+    computeChiSquared(data.map(l => (l.label, l.features)), methodName)
+      .collect().sortBy(_._1)
+      .map { case (_, pValue, degreesOfFreedom, statistic, nullHypothesis) =>
+        new ChiSqTestResult(pValue, degreesOfFreedom, statistic, methodName, nullHypothesis)
+      }
+  }
+
+  private[spark] def computeChiSquared(
+      data: RDD[(Double, Vector)],
+      methodName: String = PEARSON.name): RDD[(Int, Double, Int, Double, String)] = {
+    data.first()._2 match {
       case dv: DenseVector =>
         chiSquaredDenseFeatures(data, dv.size, methodName)
       case sv: SparseVector =>
@@ -89,10 +100,11 @@ private[spark] object ChiSqTest extends Logging {
     }
   }
 
-  private def chiSquaredDenseFeatures(data: RDD[LabeledPoint],
+  private def chiSquaredDenseFeatures(
+      data: RDD[(Double, Vector)],
       numFeatures: Int,
-      methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
-    data.flatMap { case LabeledPoint(label, features) =>
+      methodName: String = PEARSON.name): RDD[(Int, Double, Int, Double, String)] = {
+    data.flatMap { case (label, features) =>
       require(features.size == numFeatures,
         s"Number of features must be $numFeatures but got ${features.size}")
       features.iterator.map { case (col, value) => (col, (label, value)) }
@@ -106,17 +118,16 @@ private[spark] object ChiSqTest extends Logging {
         counts1
       }
     ).map { case (col, counts) =>
-      (col, computeChiSq(counts.toMap, methodName, col))
-    }.collect().sortBy(_._1).map {
-      case (_, (pValue, degreesOfFreedom, statistic, nullHypothesis)) =>
-        new ChiSqTestResult(pValue, degreesOfFreedom, statistic, methodName, nullHypothesis)
+      val result = computeChiSq(counts.toMap, methodName, col)
+      (col, result.pValue, result.degreesOfFreedom, result.statistic, result.nullHypothesis)
     }
   }
 
-  private def chiSquaredSparseFeatures(data: RDD[LabeledPoint],
+  private def chiSquaredSparseFeatures(
+      data: RDD[(Double, Vector)],
       numFeatures: Int,
-      methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
-    val labelCounts = data.map(_.label).countByValue().toMap
+      methodName: String = PEARSON.name): RDD[(Int, Double, Int, Double, String)] = {
+    val labelCounts = data.map(_._1).countByValue().toMap
     val numInstances = labelCounts.valuesIterator.sum
     val numLabels = labelCounts.size
     if (numLabels > maxCategories) {
@@ -126,15 +137,13 @@ private[spark] object ChiSqTest extends Logging {
 
     val numParts = data.getNumPartitions
     data.mapPartitionsWithIndex { case (pid, iter) =>
-      iter.flatMap { case LabeledPoint(label, features) =>
+      iter.flatMap { case (label, features) =>
         require(features.size == numFeatures,
           s"Number of features must be $numFeatures but got ${features.size}")
         features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
       } ++ {
         // append this to make sure that all columns are taken into account
-        Iterator.range(0, numFeatures)
-          .filter(_ % numParts == pid)
-          .map(col => (col, null))
+        Iterator.range(pid, numFeatures, numParts).map(col => (col, null))
       }
     }.aggregateByKey(new OpenHashMap[(Double, Double), Long])(
       seqOp = { case (counts, labelAndValue) =>
@@ -163,17 +172,15 @@ private[spark] object ChiSqTest extends Logging {
         }
       }
 
-      (col, computeChiSq(counts.toMap, methodName, col))
-    }.collect().sortBy(_._1).map {
-      case (_, (pValue, degreesOfFreedom, statistic, nullHypothesis)) =>
-        new ChiSqTestResult(pValue, degreesOfFreedom, statistic, methodName, nullHypothesis)
+      val result = computeChiSq(counts.toMap, methodName, col)
+      (col, result.pValue, result.degreesOfFreedom, result.statistic, result.nullHypothesis)
     }
   }
 
   private def computeChiSq(
       counts: Map[(Double, Double), Long],
       methodName: String,
-      col: Int): (Double, Int, Double, String) = {
+      col: Int): ChiSqTestResult = {
     val label2Index = counts.iterator.map(_._1._1).toArray.distinct.sorted.zipWithIndex.toMap
     val numLabels = label2Index.size
     if (numLabels > maxCategories) {
@@ -196,8 +203,7 @@ private[spark] object ChiSqTest extends Logging {
       contingency.update(i, j, c)
     }
 
-    val result = ChiSqTest.chiSquaredMatrix(contingency, methodName)
-    (result.pValue, result.degreesOfFreedom, result.statistic, result.nullHypothesis)
+    ChiSqTest.chiSquaredMatrix(contingency, methodName)
   }
 
   /*
