@@ -136,7 +136,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
           // Note: We need to filter out the commands that set the parameters, such as:
           // SET spark.sql.parser.escapedStringLiterals=true
           example.split("  > ").tail
-            .filterNot(_.trim.startsWith("SET")).take(2).toList.foreach(_ match {
+            .filterNot(_.trim.startsWith("SET")).take(1).foreach(_ match {
               case exampleRe(sql, expected) =>
                 val df = spark.sql(sql)
                 val schema = df.schema.catalogString
