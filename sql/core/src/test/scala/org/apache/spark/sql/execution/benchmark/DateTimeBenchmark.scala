@@ -131,7 +131,12 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           import spark.implicits._
           val rowsNum = 5000000
           val numIters = 3
-          val benchmark = new Benchmark("To/from java.sql.Timestamp", rowsNum, output = output)
+          val benchmark = new Benchmark("To/from Java's date-time", rowsNum, output = output)
+          benchmark.addCase("From java.sql.Date", numIters) { _ =>
+            spark.range(rowsNum)
+              .map(millis => new java.sql.Date(millis))
+              .noop()
+          }
           benchmark.addCase("From java.sql.Timestamp", numIters) { _ =>
             spark.range(rowsNum)
               .map(millis => new Timestamp(millis))
