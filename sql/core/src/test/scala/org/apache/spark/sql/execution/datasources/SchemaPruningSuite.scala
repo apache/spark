@@ -49,6 +49,11 @@ abstract class SchemaPruningSuite
     relatives: Map[String, FullName] = Map.empty,
     employer: Employer = null,
     relations: Map[FullName, String] = Map.empty)
+  case class Department(
+    depId: Int,
+    depName: String,
+    contactId: Int,
+    employer: Employer)
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
@@ -63,6 +68,10 @@ abstract class SchemaPruningSuite
       relations = Map(johnDoe -> "brother")) ::
     Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe),
       employer = employerWithNullCompany, relations = Map(janeDoe -> "sister")) :: Nil
+
+  val departments =
+    Department(0, "Engineering", 0, employer) ::
+    Department(1, "Marketing", 1, employerWithNullCompany) :: Nil
 
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
@@ -338,6 +347,74 @@ abstract class SchemaPruningSuite
     }
   }
 
+  testSchemaPruning("select one deep nested complex field after repartition") {
+    val query = sql("select * from contacts")
+      .repartition(100)
+      .where("employer.company.address is not null")
+      .selectExpr("employer.id as employer_id")
+    checkScan(query,
+      "struct<employer:struct<id:int,company:struct<address:string>>>")
+    checkAnswer(query, Row(0) :: Nil)
+  }
+
+  testSchemaPruning("select one deep nested complex field after repartition by expression") {
+    val query1 = sql("select * from contacts")
+      .repartition(100, col("id"))
+      .where("employer.company.address is not null")
+      .selectExpr("employer.id as employer_id")
+    checkScan(query1,
+      "struct<id:int,employer:struct<id:int,company:struct<address:string>>>")
+    checkAnswer(query1, Row(0) :: Nil)
+
+    val query2 = sql("select * from contacts")
+      .repartition(100, col("employer"))
+      .where("employer.company.address is not null")
+      .selectExpr("employer.id as employer_id")
+    checkScan(query2,
+      "struct<employer:struct<id:int,company:struct<name:string,address:string>>>")
+    checkAnswer(query2, Row(0) :: Nil)
+
+    val query3 = sql("select * from contacts")
+      .repartition(100, col("employer.company"))
+      .where("employer.company.address is not null")
+      .selectExpr("employer.company as employer_company")
+    checkScan(query3,
+      "struct<employer:struct<company:struct<name:string,address:string>>>")
+    checkAnswer(query3, Row(Row("abc", "123 Business Street")) :: Nil)
+
+    val query4 = sql("select * from contacts")
+      .repartition(100, col("employer.company.address"))
+      .where("employer.company.address is not null")
+      .selectExpr("employer.company.address as employer_company_addr")
+    checkScan(query4,
+      "struct<employer:struct<company:struct<address:string>>>")
+    checkAnswer(query4, Row("123 Business Street") :: Nil)
+  }
+
+  testSchemaPruning("select one deep nested complex field after join") {
+    val query1 = sql("select contacts.name.middle from contacts, departments where " +
+        "contacts.id = departments.contactId")
+    checkScan(query1,
+      "struct<id:int,name:struct<middle:string>>",
+    "struct<contactId:int>")
+    checkAnswer(query1, Row("X.") :: Row("Y.") :: Nil)
+
+    val query2 = sql("select contacts.name.middle from contacts, departments where " +
+      "contacts.employer = departments.employer")
+    checkScan(query2,
+      "struct<name:struct<middle:string>," +
+        "employer:struct<id:int,company:struct<name:string,address:string>>>",
+      "struct<employer:struct<id:int,company:struct<name:string,address:string>>>")
+    checkAnswer(query2, Row("X.") :: Row("Y.") :: Nil)
+
+    val query3 = sql("select contacts.employer.company.name from contacts, departments where " +
+      "contacts.employer = departments.employer")
+    checkScan(query3,
+      "struct<employer:struct<id:int,company:struct<name:string,address:string>>>",
+      "struct<employer:struct<id:int,company:struct<name:string,address:string>>>")
+    checkAnswer(query3, Row("abc") :: Row(null) :: Nil)
+  }
+
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {
     test(s"Spark vectorized reader - without partition data column - $testName") {
       withSQLConf(vectorizedReaderEnabledKey -> "true") {
@@ -368,6 +445,7 @@ abstract class SchemaPruningSuite
 
       makeDataSourceFile(contacts, new File(path + "/contacts/p=1"))
       makeDataSourceFile(briefContacts, new File(path + "/contacts/p=2"))
+      makeDataSourceFile(departments, new File(path + "/departments"))
 
       // Providing user specified schema. Inferred schema from different data sources might
       // be different.
@@ -379,6 +457,11 @@ abstract class SchemaPruningSuite
         "`last`: STRING>,STRING>,`p` INT"
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
+
+      val departmentScahem = "`depId` INT,`depName` STRING,`contactId` INT, " +
+        "`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, `address`: STRING>>"
+      spark.read.format(dataSourceName).schema(departmentScahem).load(path + "/departments")
+        .createOrReplaceTempView("departments")
 
       testThunk
     }
@@ -390,6 +473,7 @@ abstract class SchemaPruningSuite
 
       makeDataSourceFile(contactsWithDataPartitionColumn, new File(path + "/contacts/p=1"))
       makeDataSourceFile(briefContactsWithDataPartitionColumn, new File(path + "/contacts/p=2"))
+      makeDataSourceFile(departments, new File(path + "/departments"))
 
       // Providing user specified schema. Inferred schema from different data sources might
       // be different.
@@ -401,6 +485,11 @@ abstract class SchemaPruningSuite
         "`last`: STRING>,STRING>,`p` INT"
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
+
+      val departmentScahem = "`depId` INT,`depName` STRING,`contactId` INT, " +
+        "`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, `address`: STRING>>"
+      spark.read.format(dataSourceName).schema(departmentScahem).load(path + "/departments")
+        .createOrReplaceTempView("departments")
 
       testThunk
     }

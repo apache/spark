@@ -34,7 +34,8 @@ object NestedColumnAliasing {
     : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = plan match {
     case Project(projectList, child)
         if SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
-      getAliasSubMap(projectList)
+      val exprsToPrune = projectList ++ child.expressions
+      getAliasSubMap(exprsToPrune, child.producedAttributes.toSeq)
     case _ => None
   }
 
@@ -48,7 +49,7 @@ object NestedColumnAliasing {
     case Project(projectList, child) =>
       Project(
         getNewProjectList(projectList, nestedFieldToAlias),
-        replaceChildrenWithAliases(child, attrToAliases))
+        replaceChildrenWithAliases(child, nestedFieldToAlias, attrToAliases))
   }
 
   /**
@@ -68,10 +69,14 @@ object NestedColumnAliasing {
    */
   def replaceChildrenWithAliases(
       plan: LogicalPlan,
+      nestedFieldToAlias: Map[ExtractValue, Alias],
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
     plan.withNewChildren(plan.children.map { plan =>
       Project(plan.output.flatMap(a => attrToAliases.getOrElse(a.exprId, Seq(a))), plan)
-    })
+    }).transformExpressions {
+      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
+        nestedFieldToAlias(f).toAttribute
+    }
   }
 
   /**
@@ -82,6 +87,8 @@ object NestedColumnAliasing {
     case _: LocalLimit => true
     case _: Repartition => true
     case _: Sample => true
+    case _: RepartitionByExpression => true
+    case _: Join => true
     case _ => false
   }
 
@@ -204,15 +211,8 @@ object GeneratorNestedColumnAliasing {
       g: Generate,
       nestedFieldToAlias: Map[ExtractValue, Alias],
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
-    val newGenerator = g.generator.transform {
-      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-        nestedFieldToAlias(f).toAttribute
-    }.asInstanceOf[Generator]
-
     // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
-    val newGenerate = g.copy(generator = newGenerator)
-
-    NestedColumnAliasing.replaceChildrenWithAliases(newGenerate, attrToAliases)
+    NestedColumnAliasing.replaceChildrenWithAliases(g, nestedFieldToAlias, attrToAliases)
   }
 
   /**

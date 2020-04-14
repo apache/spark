@@ -144,7 +144,6 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("Pushing a single nested field projection - negative") {
     val ops = Seq(
       (input: LogicalPlan) => input.distribute('name)(1),
-      (input: LogicalPlan) => input.distribute($"name.middle")(1),
       (input: LogicalPlan) => input.orderBy('name.asc),
       (input: LogicalPlan) => input.orderBy($"name.middle".asc),
       (input: LogicalPlan) => input.sortBy('name.asc),
@@ -340,6 +339,90 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .select('explode, 'friends)
       .analyze
     comparePlans(optimized, expected)
+  }
+
+  test("Nested field pruning through RepartitionByExpression") {
+    val query1 = contact
+      .distribute($"id")(1)
+      .select($"name.middle")
+      .analyze
+    val optimized1 = Optimize.execute(query1)
+
+    val aliases1 = collectGeneratedAliases(optimized1)
+
+    val expected1 = contact
+      .select('id, 'name.getField("middle").as(aliases1(0)))
+      .distribute($"id")(1)
+      .select($"${aliases1(0)}".as("middle"))
+      .analyze
+    comparePlans(optimized1, expected1)
+
+
+    val query2 = contact
+      .distribute($"name.middle")(1)
+      .select($"name.middle")
+      .analyze
+    val optimized2 = Optimize.execute(query2)
+
+    val aliases2 = collectGeneratedAliases(optimized2)
+
+    val expected2 = contact
+      .select('name.getField("middle").as(aliases2(0)))
+      .distribute($"${aliases2(0)}")(1)
+      .select($"${aliases2(0)}".as("middle"))
+      .analyze
+    comparePlans(optimized2, expected2)
+
+    val query3 = contact
+      .select($"name")
+      .distribute($"name")(1)
+      .select($"name.middle")
+      .analyze
+    val optimized3 = Optimize.execute(query3)
+
+    comparePlans(optimized3, query3)
+  }
+
+  test("Nested field pruning through Join") {
+    val department = LocalRelation(
+      'depID.int,
+      'personID.string)
+
+    val query1 = contact.join(department, condition = Some($"id" === $"depID"))
+      .select($"name.middle")
+      .analyze
+    val optimized1 = Optimize.execute(query1)
+
+    val aliases1 = collectGeneratedAliases(optimized1)
+
+    val expected1 = contact.select('id, 'name.getField("middle").as(aliases1(0)))
+      .join(department.select('depID), condition = Some($"id" === $"depID"))
+      .select($"${aliases1(0)}".as("middle"))
+      .analyze
+    comparePlans(optimized1, expected1)
+
+    val query2 = contact.join(department, condition = Some($"name.middle" === $"personID"))
+      .select($"name.first")
+      .analyze
+    val optimized2 = Optimize.execute(query2)
+
+    val aliases2 = collectGeneratedAliases(optimized2)
+
+    val expected2 = contact.select(
+        'name.getField("first").as(aliases2(0)),
+        'name.getField("middle").as(aliases2(1)))
+      .join(department.select('personID), condition = Some($"${aliases2(1)}" === $"personID"))
+      .select($"${aliases2(0)}".as("first"))
+      .analyze
+    comparePlans(optimized2, expected2)
+
+    val contact2 = LocalRelation('name2.struct(name))
+    val query3 = contact.select('name)
+      .join(contact2, condition = Some($"name" === $"name2"))
+      .select($"name.first")
+      .analyze
+    val optimized3 = Optimize.execute(query3)
+    comparePlans(optimized3, query3)
   }
 }
 
