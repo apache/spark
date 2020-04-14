@@ -223,7 +223,8 @@ object SQLMetrics {
   }
 
   def postDriverMetricsUpdatedByValue(
-      sc: SparkContext, executionId: String,
+      sc: SparkContext,
+      executionId: String,
       accumUpdates: Seq[(Long, Long)]): Unit = {
     if (executionId != null) {
       sc.listenerBus.post(
