@@ -324,7 +324,8 @@ public class JavaDatasetSuite implements Serializable {
       ds1.map((MapFunction<IntervalBean, CalendarInterval>) ib -> ib.getI(), Encoders.INTERVAL());
     Assert.assertEquals(
       Arrays.asList("1 months 2 days 1 hours", "4 months 5 days 1 hours", null),
-      ds2.select(expr("value + interval 1 hour").cast("string")).as(Encoders.STRING()).collectAsList());
+      ds2.select(expr("value + interval 1 hour").cast("string"))
+        .as(Encoders.STRING()).collectAsList());
   }
 
   @Test
