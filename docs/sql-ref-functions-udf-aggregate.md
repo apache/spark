@@ -94,7 +94,7 @@ For example, a user-defined average for untyped DataFrames can look like:
 <div data-lang="java"  markdown="1">
   {% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
 </div>
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 {% highlight sql %}
 -- Compile and place UDAF MyAverage in a JAR file called `MyAverage.jar` in /tmp.
 CREATE FUNCTION myAverage AS 'MyAverage' USING JAR '/tmp/MyAverage.jar';
