@@ -28,6 +28,7 @@ import javax.annotation.Nonnull;
 
 import org.apache.spark.sql.streaming.GroupStateTimeout;
 import org.apache.spark.sql.streaming.OutputMode;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -261,6 +262,69 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(
       Arrays.asList(tuple2(3, "2"), tuple2(7, "6")),
       selected.collectAsList());
+  }
+
+  @Test
+  public void testCalendarInterval() {
+    List<CalendarInterval> data = Arrays.asList(
+      new CalendarInterval(1, 2, 0),
+      new CalendarInterval(4, 5, 0),
+      null);
+    Dataset<CalendarInterval> ds =
+      spark.createDataset(data, Encoders.INTERVAL());
+
+    Dataset<String> selected =
+      ds.select(expr("value + interval 1 hour").cast("string")).as(Encoders.STRING());
+
+    Assert.assertEquals(
+      Arrays.asList("1 months 2 days 1 hours", "4 months 5 days 1 hours", null),
+      selected.collectAsList());
+  }
+
+
+  public static class IntervalBean implements Serializable {
+    private CalendarInterval i;
+
+    public void setI(CalendarInterval i) {
+      this.i = i;
+    }
+
+    public CalendarInterval getI() {
+      return this.i;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      IntervalBean ib = (IntervalBean) o;
+      if (ib.i == null) return false;
+      return ib.i.equals(i);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(i);
+    }
+  }
+
+  @Test
+  public void testJavaBeanWithCalendarInterval() {
+    IntervalBean ib1 = new IntervalBean();
+    ib1.setI(new CalendarInterval(1, 2, 0));
+    IntervalBean ib2 = new IntervalBean();
+    ib2.setI(new CalendarInterval(4, 5, 0));
+    IntervalBean ib3 = new IntervalBean();
+    ib3.setI(null);
+
+    List<IntervalBean> data = Arrays.asList(ib1, ib2, ib3);
+    Dataset<IntervalBean> ds1 =
+      spark.createDataFrame(data, IntervalBean.class).as(Encoders.bean(IntervalBean.class));
+    Dataset<CalendarInterval> ds2 =
+      ds1.map((MapFunction<IntervalBean, CalendarInterval>) ib -> ib.getI(), Encoders.INTERVAL());
+    Assert.assertEquals(
+      Arrays.asList("1 months 2 days 1 hours", "4 months 5 days 1 hours", null),
+      ds2.select(expr("value + interval 1 hour").cast("string")).as(Encoders.STRING()).collectAsList());
   }
 
   @Test

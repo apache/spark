@@ -141,7 +141,7 @@ object Encoders {
    *
    * @since 3.1.0
    */
-  def CALENDARINTERVAL: Encoder[CalendarInterval] = ExpressionEncoder()
+  def INTERVAL: Encoder[CalendarInterval] = ExpressionEncoder()
 
   /**
    * Creates an encoder for Java Bean of type T.

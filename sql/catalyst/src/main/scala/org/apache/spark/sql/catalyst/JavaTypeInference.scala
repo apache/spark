@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Type-inference utilities for POJOs and Java collections.
@@ -118,6 +119,7 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.time.Instant] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
+      case c: Class[_] if c == classOf[CalendarInterval] => (CalendarIntervalType, true)
 
       case _ if typeToken.isArray =>
         val (dataType, nullable) = inferDataType(typeToken.getComponentType, seenTypeSet)
@@ -248,6 +250,8 @@ object JavaTypeInference {
 
       case c if c == classOf[java.sql.Timestamp] =>
         createDeserializerForSqlTimestamp(path)
+
+      case c if c == classOf[CalendarInterval] => path
 
       case c if c == classOf[java.lang.String] =>
         createDeserializerForString(path, returnNullable = true)
@@ -405,6 +409,8 @@ object JavaTypeInference {
         case c if c == classOf[java.time.LocalDate] => createSerializerForJavaLocalDate(inputObject)
 
         case c if c == classOf[java.sql.Date] => createSerializerForSqlDate(inputObject)
+
+        case c if c == classOf[CalendarInterval] => inputObject
 
         case c if c == classOf[java.math.BigDecimal] =>
           createSerializerForJavaBigDecimal(inputObject)
