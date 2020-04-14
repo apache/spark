@@ -1076,7 +1076,7 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
                        |once it has processed $fallbackStartsAt input rows).
                        |The query is ${actual.queryExecution}
                        |$errorMessage
-                  """.stripMargin
+                    """.stripMargin
 
                   fail(newErrorMessage)
                 case None => // Success
