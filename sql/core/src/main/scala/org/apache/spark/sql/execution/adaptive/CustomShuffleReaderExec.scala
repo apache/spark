@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
@@ -112,22 +114,22 @@ case class CustomShuffleReaderExec private(
       partitionMetrics.set(0)
       SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq(partitionMetrics))
     } else {
-      var sum = 0L
+      val sizes = ArrayBuffer[Long]()
       partitionSpecs.foreach {
         case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
-          val dataSize = startReducerIndex.until(endReducerIndex).map(
+          sizes += startReducerIndex.until(endReducerIndex).map(
             mapStats.get.bytesByPartitionId(_)).sum
-          partitionMetrics.set(dataSize)
-          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq(partitionMetrics))
-          sum += dataSize
         case p: PartialReducerPartitionSpec =>
-          partitionMetrics.set(p.dataSize)
-          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq(partitionMetrics))
-          sum += p.dataSize
+          sizes += p.dataSize
         case p => throw new IllegalStateException("unexpected " + p)
       }
+
+      val id = partitionMetrics.id
+      val accumUpdates = sizes.map(value => (id, value))
+      SQLMetrics.postDriverMetricsUpdatedByValue(sparkContext, executionId, accumUpdates)
+
       // Set sum value to "partitionDataSize" metric.
-      partitionMetrics.set(sum)
+      partitionMetrics.set(sizes.sum)
     }
   }
 
