@@ -73,7 +73,7 @@ class MinHashLSHModel private[ml](
     val xIter = x.nonZeroIterator.map(_._1)
     val yIter = y.nonZeroIterator.map(_._1)
     if (xIter.isEmpty) {
-      assert(yIter.hasNext, "The union of two input sets must have at least 1 elements")
+      require(yIter.hasNext, "The union of two input sets must have at least 1 elements")
       return 1.0
     } else if (yIter.isEmpty) {
       return 1.0
@@ -85,28 +85,23 @@ class MinHashLSHModel private[ml](
     var ySize = 1
     var intersectionSize = 0
 
-    while (xIndex != -1 || yIndex != -1) {
-      if (xIndex != -1 && yIndex != -1) {
-        if (xIndex == yIndex) {
-          intersectionSize += 1
-          xIndex = if (xIter.hasNext) { xSize += 1; xIter.next } else -1
-          yIndex = if (yIter.hasNext) { ySize += 1; yIter.next } else -1
-        } else if (xIndex > yIndex) {
-          yIndex = if (yIter.hasNext) { ySize += 1; yIter.next } else -1
-        } else {
-          xIndex = if (xIter.hasNext) { xSize += 1; xIter.next } else -1
-        }
-      } else if (xIndex != -1) {
-        while (xIter.hasNext) { xIndex = xIter.next; xSize += 1 }
-        xIndex = -1
+    while (xIndex != -1 && yIndex != -1) {
+      if (xIndex == yIndex) {
+        intersectionSize += 1
+        xIndex = if (xIter.hasNext) { xSize += 1; xIter.next } else -1
+        yIndex = if (yIter.hasNext) { ySize += 1; yIter.next } else -1
+      } else if (xIndex > yIndex) {
+        yIndex = if (yIter.hasNext) { ySize += 1; yIter.next } else -1
       } else {
-        while (yIter.hasNext) { yIndex = yIter.next; ySize += 1 }
-        yIndex = -1
+        xIndex = if (xIter.hasNext) { xSize += 1; xIter.next } else -1
       }
     }
 
+    xSize += xIter.size
+    ySize += yIter.size
+
     val unionSize = xSize + ySize - intersectionSize
-    assert(unionSize > 0, "The union of two input sets must have at least 1 elements")
+    require(unionSize > 0, "The union of two input sets must have at least 1 elements")
     1 - intersectionSize.toDouble / unionSize
   }
 
