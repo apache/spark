@@ -207,7 +207,7 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   usage = """
     _FUNC_(expr) - Evaluate an expression and handle certain types of runtime exceptions by returning NULL.
     In cases where it is preferable that queries produce NULL instead of failing when corrupt or invalid data is encountered, the TRY function may be useful, especially when ANSI mode is on and the users need null-tolerant on certain columns or outputs.
-    AnalysisExceptions will not be handled by this, typically runtime exceptions handled by TRY function are:
+    AnalysisExceptions will not be handled by this, typically runtime exceptions handled by _FUNC_ function are:
 
       * ArightmeticException - e.g. division by zero, numeric value out of range,
       * NumberFormatException - e.g. invalid casting,
