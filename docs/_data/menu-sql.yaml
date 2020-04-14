@@ -242,23 +242,11 @@
     - text: Functions
       url: sql-ref-functions.html
       subitems:
-      - text: Build-in Functions
-        url: sql-ref-functions-builtin.html
-        subitems:
-        - text: Build-in Aggregate Functions
-          url: sql-ref-functions-builtin-aggregate.html
-        - text: Build-in Array Functions
-          url: sql-ref-functions-builtin-array.html
-        - text: Build-in Date Time Functions
-          url: sql-ref-functions-builtin-date-time.html
-      - text: UDFs (User-Defined Functions)
-        url: sql-ref-functions-udf.html
-        subitems:
-        - text: Scalar UDFs (User-Defined Functions)
-          url: sql-ref-functions-udf-scalar.html
-        - text: UDAFs (User-Defined Aggregate Functions)
-          url: sql-ref-functions-udf-aggregate.html
-        - text: Integration with Hive UDFs/UDAFs/UDTFs
-          url: sql-ref-functions-udf-hive.html
+      - text: Scalar UDFs (User-Defined Functions)
+        url: sql-ref-functions-udf-scalar.html
+      - text: UDAFs (User-Defined Aggregate Functions)
+        url: sql-ref-functions-udf-aggregate.html
+      - text: Integration with Hive UDFs/UDAFs/UDTFs
+        url: sql-ref-functions-udf-hive.html
     - text: Datetime Pattern
       url: sql-ref-datetime-pattern.html

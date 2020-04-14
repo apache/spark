@@ -234,16 +234,16 @@ private[hive] class TestHiveSparkSession(
    * Dataset.ofRows that creates a TestHiveQueryExecution (rather than a normal QueryExecution
    * which wouldn't load all the test tables).
    */
-  override def sql(sqlText: String): DataFrame = {
+  override def sql(sqlText: String): DataFrame = withActive {
     val plan = sessionState.sqlParser.parsePlan(sqlText)
     Dataset.ofRows(self, plan)
   }
 
-  override def newSession(): TestHiveSparkSession = {
+  override def newSession(): TestHiveSparkSession = withActive {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
   }
 
-  override def cloneSession(): SparkSession = {
+  override def cloneSession(): SparkSession = withActive {
     val result = new TestHiveSparkSession(
       sparkContext,
       Some(sharedState),
@@ -264,7 +264,10 @@ private[hive] class TestHiveSparkSession(
   System.clearProperty("spark.hostPort")
 
   // For some hive test case which contain ${system:test.tmp.dir}
-  System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
+  // Make sure it is not called again when cloning sessions.
+  if (parentSessionState.isEmpty) {
+    System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
+  }
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -587,7 +590,7 @@ private[hive] class TestHiveQueryExecution(
     this(TestHive.sparkSession, sql)
   }
 
-  override lazy val analyzed: LogicalPlan = {
+  override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     val describedTables = logical match {
       case CacheTableCommand(tbl, _, _, _) => tbl :: Nil
       case _ => Nil

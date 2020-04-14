@@ -14,24 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.ui.jobs
 
-package org.apache.spark.sql.hive.execution
+import org.apache.spark.status.api.v1.JobData
+import org.apache.spark.ui.UIUtils
 
-import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
-import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-
-// Disable AQE because metric info is different with AQE on/off
-class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
-  with DisableAdaptiveExecutionSuite {
-
-  test("writing data out metrics: hive") {
-    testMetricsNonDynamicPartition("hive", "t1")
+private[ui] object JobDataUtil {
+  def getDuration(jobData: JobData): Option[Long] = {
+    jobData.submissionTime.map { start =>
+        val end = jobData.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
+        end - start.getTime()
+    }
   }
 
-  test("writing data out metrics dynamic partition: hive") {
-    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      testMetricsDynamicPartition("hive", "hive", "t1")
-    }
+  def getFormattedDuration(jobData: JobData): String = {
+    val duration = getDuration(jobData)
+    duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
+  }
+
+  def getFormattedSubmissionTime(jobData: JobData): String = {
+    jobData.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
   }
 }

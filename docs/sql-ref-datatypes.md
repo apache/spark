@@ -631,7 +631,7 @@ from pyspark.sql.types import *
 </table>
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 The following table shows the type names as well as aliases used in Spark SQL parser for each data type.
 
