@@ -28,6 +28,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
     showCurrentTime: false,
     start: startTime,
     zoomable: false,
+    locale: "en",
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
     }
@@ -110,6 +111,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
     showCurrentTime: false,
     start: startTime,
     zoomable: false,
+    locale: "en",
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
     }
@@ -194,6 +196,7 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
     start: minLaunchTime,
     end: maxFinishTime,
     zoomable: false,
+    locale: "en",
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
     }
