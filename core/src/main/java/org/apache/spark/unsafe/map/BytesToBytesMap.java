@@ -706,7 +706,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
-      // (uao: klen + vlen + uaolen) (uao: klen) (key) (value) (8 byte pointer to next value)
+      // (total length) (key length) (key) (value) (8 byte pointer to next value)
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
       final long recordLength = (2L * uaoSize) + klen + vlen + 8;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
