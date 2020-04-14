@@ -341,6 +341,78 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .analyze
     comparePlans(optimized, expected)
   }
+
+  test("Nested field pruning for Aggregate") {
+    val query1 = contact.groupBy($"id")(first($"name.first").as("first")).analyze
+    val optimized1 = Optimize.execute(query1)
+    val aliases1 = collectGeneratedAliases(optimized1)
+
+    val expected1 = contact
+      .select($"id", 'name.getField("first").as(aliases1(0)))
+      .groupBy($"id")(first($"${aliases1(0)}").as("first")).analyze
+    comparePlans(optimized1, expected1)
+
+    val query2 = contact.groupBy($"name.last")(first($"name.first").as("first")).analyze
+    val optimized2 = Optimize.execute(query2)
+    val aliases2 = collectGeneratedAliases(optimized2)
+
+    val expected2 = contact
+      .select('name.getField("last").as(aliases2(0)), 'name.getField("first").as(aliases2(1)))
+      .groupBy($"${aliases2(0)}")(first($"${aliases2(1)}").as("first")).analyze
+    comparePlans(optimized2, expected2)
+
+    val query3 = contact.groupBy($"id")(first($"name"), first($"name.first").as("first")).analyze
+    val optimized3 = Optimize.execute(query3)
+    val expected3 = contact.select($"id", $"name")
+      .groupBy($"id")(first($"name"), first($"name.first").as("first")).analyze
+    comparePlans(optimized3, expected3)
+  }
+
+  test("Nested field pruning for Expand") {
+    val query1 = Expand(
+      Seq(
+        Seq($"name.first", $"name.middle"),
+        Seq(ConcatWs(Seq($"name.first", $"name.middle")),
+          ConcatWs(Seq($"name.middle", $"name.first")))
+      ),
+      Seq('a.string, 'b.string),
+      contact
+    ).analyze
+    val optimized1 = Optimize.execute(query1)
+    val aliases1 = collectGeneratedAliases(optimized1)
+
+    val expected1 = Expand(
+      Seq(
+        Seq($"${aliases1(0)}", $"${aliases1(1)}"),
+        Seq(ConcatWs(Seq($"${aliases1(0)}", $"${aliases1(1)}")),
+          ConcatWs(Seq($"${aliases1(1)}", $"${aliases1(0)}")))
+      ),
+      Seq('a.string, 'b.string),
+      contact.select(
+        'name.getField("first").as(aliases1(0)),
+        'name.getField("middle").as(aliases1(1)))
+    ).analyze
+    comparePlans(optimized1, expected1)
+
+    val query2 = Expand(
+      Seq(
+        Seq($"name", $"name.middle"),
+        Seq($"name", ConcatWs(Seq($"name.middle", $"name.first")))
+      ),
+      Seq('a.string, 'b.string),
+      contact
+    ).analyze
+    val optimized2 = Optimize.execute(query2)
+    val expected2 = Expand(
+      Seq(
+        Seq($"name", $"name.middle"),
+        Seq($"name", ConcatWs(Seq($"name.middle", $"name.first")))
+      ),
+      Seq('a.string, 'b.string),
+      contact.select($"name")
+    ).analyze
+    comparePlans(optimized2, expected2)
+  }
 }
 
 object NestedColumnAliasingSuite {
