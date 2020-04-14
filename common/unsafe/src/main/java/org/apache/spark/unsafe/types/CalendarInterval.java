@@ -66,9 +66,8 @@ public final class CalendarInterval implements Serializable {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     CalendarInterval that = (CalendarInterval) o;
-    return months == that.months &&
-      days == that.days &&
-      microseconds == that.microseconds;
+    return ((this.months * MICROS_PER_MONTH) + (this.days * MICROS_PER_DAY) + this.microseconds) ==
+           ((that.months * MICROS_PER_MONTH) + (that.days * MICROS_PER_DAY) + that.microseconds);
   }
 
   @Override

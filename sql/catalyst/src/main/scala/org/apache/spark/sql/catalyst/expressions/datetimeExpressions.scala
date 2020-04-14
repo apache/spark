@@ -2200,7 +2200,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
  * between the given timestamps.
  */
 case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = endTimestamp
   override def right: Expression = startTimestamp
@@ -2208,12 +2208,14 @@ case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expressi
   override def dataType: DataType = CalendarIntervalType
 
   override def nullSafeEval(end: Any, start: Any): Any = {
-    new CalendarInterval(0, 0, end.asInstanceOf[Long] - start.asInstanceOf[Long])
+    DateTimeUtils.subtractTimestamps(end.asInstanceOf[Long], start.asInstanceOf[Long])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (end, start) =>
-      s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
+    defineCodeGen(ctx, ev, (end, start) => {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      s"$dtu.subtractTimestamps($end, $start)"
+    })
   }
 }
 

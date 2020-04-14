@@ -971,4 +971,32 @@ object DateTimeUtils {
     val days = period.getDays
     new CalendarInterval(months, days, 0)
   }
+
+  /**
+   * Subtracts two timestamps.
+   * @param endTimestamp The end timestamp
+   * @param startTimestamp The start timestamp
+   * @return An interval between two timestamps. The interval can be negative
+   *         if the end timestamp is before the start timestamp.
+   */
+  def subtractTimestamps(endTimestamp: SQLTimestamp,
+                         startTimestamp: SQLTimestamp): CalendarInterval = {
+    durationToCalendarInterval(endTimestamp-startTimestamp)
+  }
+
+  /**
+   * Calculate CalendarInterval from duration
+   * @param microseconds Microseconds to calculate duration from
+   * @return A CalendarInterval from microseconds duration. The interval can be negative
+   *         if the input is negative.
+   */
+  def durationToCalendarInterval(microseconds: Long): CalendarInterval = {
+    val duration = Duration.ofMillis(MICROSECONDS.toMillis(microseconds))
+    val months = duration.toDays / DAYS_PER_MONTH
+    val days = duration.toDays - (months * DAYS_PER_MONTH)
+    var microSeconds = NANOSECONDS.toMicros(duration.minusDays(duration.toDays).toNanos)
+    microSeconds += microseconds%1000
+
+    new CalendarInterval(months.toInt, days.toInt, microSeconds)
+  }
 }

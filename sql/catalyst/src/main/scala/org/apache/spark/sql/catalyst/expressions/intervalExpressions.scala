@@ -58,10 +58,10 @@ case class ExtractIntervalYears(child: Expression)
   extends ExtractIntervalPart(child, IntegerType, getYears, "getYears")
 
 case class ExtractIntervalQuarters(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getQuarters, "getQuarters")
+  extends ExtractIntervalPart(child, IntegerType, getQuarters, "getQuarters")
 
 case class ExtractIntervalMonths(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths")
+  extends ExtractIntervalPart(child, IntegerType, getMonths, "getMonths")
 
 case class ExtractIntervalDays(child: Expression)
   extends ExtractIntervalPart(child, IntegerType, getDays, "getDays")
@@ -70,13 +70,13 @@ case class ExtractIntervalHours(child: Expression)
   extends ExtractIntervalPart(child, LongType, getHours, "getHours")
 
 case class ExtractIntervalMinutes(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes")
+  extends ExtractIntervalPart(child, LongType, getMinutes, "getMinutes")
 
 case class ExtractIntervalSeconds(child: Expression)
-  extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
+  extends ExtractIntervalPart(child, DecimalType(18, 6), getSeconds, "getSeconds")
 
 case class ExtractIntervalMilliseconds(child: Expression)
-  extends ExtractIntervalPart(child, DecimalType(8, 3), getMilliseconds, "getMilliseconds")
+  extends ExtractIntervalPart(child, DecimalType(18, 3), getMilliseconds, "getMilliseconds")
 
 case class ExtractIntervalMicroseconds(child: Expression)
   extends ExtractIntervalPart(child, LongType, getMicroseconds, "getMicroseconds")

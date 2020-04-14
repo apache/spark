@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
@@ -62,44 +63,51 @@ object IntervalUtils {
     getYears(interval) / YEARS_PER_DECADE
   }
 
-  def getMonths(interval: CalendarInterval): Byte = {
-    (interval.months % MONTHS_PER_YEAR).toByte
+  def getMonths(interval: CalendarInterval): Int = {
+    interval.months
   }
 
-  def getQuarters(interval: CalendarInterval): Byte = {
-    (getMonths(interval) / MONTHS_PER_QUARTER + 1).toByte
+  def getQuarters(interval: CalendarInterval): Int = {
+    (getMonths(interval) / MONTHS_PER_QUARTER).toInt
   }
 
   def getDays(interval: CalendarInterval): Int = {
-    interval.days
+    var result = interval.days
+    result += getMonths(interval) * DAYS_PER_MONTH.toInt
+    result
   }
 
   def getHours(interval: CalendarInterval): Long = {
-    interval.microseconds / MICROS_PER_HOUR
+    var result = interval.microseconds / MICROS_PER_HOUR
+    result += getDays(interval) * HOURS_PER_DAY
+    result
   }
 
-  def getMinutes(interval: CalendarInterval): Byte = {
-    ((interval.microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
+  def getMinutes(interval: CalendarInterval): Long = {
+    var result = (interval.microseconds / MICROS_PER_MINUTE)
+    result += getHours(interval) * MINUTES_PER_HOUR
+    result
   }
 
   def getMicroseconds(interval: CalendarInterval): Long = {
-    interval.microseconds % MICROS_PER_MINUTE
+    var result = interval.microseconds
+    result += getMinutes(interval) * MICROS_PER_MINUTE
+    result
   }
 
   def getSeconds(interval: CalendarInterval): Decimal = {
-    Decimal(getMicroseconds(interval), 8, 6)
+    Decimal(getMicroseconds(interval), 18, 6)
   }
 
   def getMilliseconds(interval: CalendarInterval): Decimal = {
-    Decimal(getMicroseconds(interval), 8, 3)
+    Decimal(getMicroseconds(interval), 18, 3)
   }
 
   // Returns total number of seconds with microseconds fractional part in the given interval.
   def getEpoch(interval: CalendarInterval): Decimal = {
     var result = interval.microseconds
     result += MICROS_PER_DAY * interval.days
-    result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
-    result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
+    result += MICROS_PER_MONTH * interval.months
     Decimal(result, 18, 6)
   }
 
@@ -767,7 +775,8 @@ object IntervalUtils {
 
     val result = state match {
       case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
-        new CalendarInterval(months, days, microseconds)
+        val microsecondsTotal = microseconds + DAYS.toMicros((months * DAYS_PER_MONTH) + days)
+        DateTimeUtils.durationToCalendarInterval(microsecondsTotal)
       case _ => null
     }
 
