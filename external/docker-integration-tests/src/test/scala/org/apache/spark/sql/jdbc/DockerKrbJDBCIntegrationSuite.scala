@@ -100,7 +100,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
   }
 
   override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement("CREATE TABLE bar (c0 text)").executeUpdate()
+    conn.prepareStatement("CREATE TABLE bar (c0 VARCHAR(8))").executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES ('hello')").executeUpdate()
   }
 

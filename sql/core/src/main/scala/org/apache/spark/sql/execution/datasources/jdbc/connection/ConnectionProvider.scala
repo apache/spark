@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
+import java.util.Properties
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
@@ -28,6 +29,11 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
  * the parameters.
  */
 private[jdbc] trait ConnectionProvider {
+  /**
+   * Additional properties for data connection (Data source property takes precedence).
+   */
+  def getAdditionalProperties(): Properties = new Properties()
+
   /**
    * Opens connection toward the database.
    */
@@ -49,6 +55,10 @@ private[jdbc] object ConnectionProvider extends Logging {
         case MariaDBConnectionProvider.driverClass =>
           logDebug("MariaDB connection provider found")
           new MariaDBConnectionProvider(driver, options)
+
+        case DB2ConnectionProvider.driverClass =>
+          logDebug("DB2 connection provider found")
+          new DB2ConnectionProvider(driver, options)
 
         case _ =>
           throw new IllegalArgumentException(s"Driver ${options.driverClass} does not support " +

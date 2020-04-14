@@ -18,7 +18,8 @@
 package org.apache.spark.sql.jdbc
 
 import java.net.ServerSocket
-import java.sql.Connection
+import java.sql.{Connection, DriverManager}
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -54,9 +55,19 @@ abstract class DatabaseOnDocker {
   val jdbcPort: Int
 
   /**
+   * Parameter whether the container should run privileged.
+   */
+  val privileged: Boolean = false
+
+  /**
    * Return a JDBC URL that connects to the database running at the given IP address and port.
    */
   def getJdbcUrl(ip: String, port: Int): String
+
+  /**
+   * Return the JDBC properties needed for the connection.
+   */
+  def getJdbcProperties(): Properties = new Properties()
 
   /**
    * Optional entry point when container starts
@@ -118,6 +129,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
         port
       }
       val hostConfigBuilder = HostConfig.builder()
+        .privileged(db.privileged)
         .networkMode("bridge")
         .ipcMode(if (db.usesIpc) "host" else "")
         .portBindings(
@@ -142,12 +154,11 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
       // Start the container and wait until the database can accept JDBC connections:
       docker.startContainer(containerId)
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
-      eventually(timeout(1.minute), interval(1.second)) {
-        val conn = java.sql.DriverManager.getConnection(jdbcUrl)
-        conn.close()
+      var conn: Connection = null
+      eventually(timeout(2.minutes), interval(1.second)) {
+        conn = getConnection()
       }
       // Run any setup queries:
-      val conn: Connection = java.sql.DriverManager.getConnection(jdbcUrl)
       try {
         dataPreparation(conn)
       } finally {
@@ -181,6 +192,13 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
     } finally {
       super.afterAll()
     }
+  }
+
+  /**
+   * Return the JDBC connection.
+   */
+  def getConnection(): Connection = {
+    DriverManager.getConnection(jdbcUrl, db.getJdbcProperties())
   }
 
   /**
