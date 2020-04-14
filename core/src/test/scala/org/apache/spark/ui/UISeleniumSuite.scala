@@ -46,7 +46,7 @@ import org.apache.spark.status.config._
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
-  private val cssWhiteList = List("bootstrap.min.css", "vis.min.css")
+  private val cssWhiteList = List("bootstrap.min.css", "vis-timeline-graph2d.min.css")
 
   private def isInWhileList(uri: String): Boolean = cssWhiteList.exists(uri.endsWith)
 
