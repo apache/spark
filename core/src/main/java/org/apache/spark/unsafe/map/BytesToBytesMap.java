@@ -53,7 +53,8 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  * The map can support up to 2^29 keys. If the key cardinality is higher than this, you should
  * probably be using sorting instead of hashing for better cache locality.
  *
- * The key and values under the hood are stored together, in the following format(uaoSize = 4):
+ * The key and values under the hood are stored together, in the following format(in case of
+ * uaoSize = 4):
  *   Bytes 0 to 4: len(k) (key length in bytes) + len(v) (value length in bytes) + 4
  *   Bytes 4 to 8: len(k)
  *   Bytes 8 to 8 + len(k): key data

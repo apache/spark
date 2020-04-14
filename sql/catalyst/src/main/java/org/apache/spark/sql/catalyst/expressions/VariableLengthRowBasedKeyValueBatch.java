@@ -105,7 +105,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
     int uaoSize = UnsafeAlignedOffset.getUaoSize();
     long offset = keyRow.getBaseOffset();
     int klen = keyRow.getSizeInBytes();
-    int vlen = UnsafeAlignedOffset.getSize(base, offset - uaoSize - uaoSize) - klen - uaoSize;
+    int vlen = UnsafeAlignedOffset.getSize(base, offset - uaoSize * 2) - klen - uaoSize;
     valueRow.pointTo(base, offset + klen, vlen);
     return valueRow;
   }
@@ -146,7 +146,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
         }
 
         int uaoSize = UnsafeAlignedOffset.getUaoSize();
-        int doubleUaoSize = uaoSize + uaoSize;
+        int doubleUaoSize = 2 * uaoSize;
         totalLength = UnsafeAlignedOffset.getSize(base, offsetInPage) - uaoSize;
         currentklen = UnsafeAlignedOffset.getSize(base, offsetInPage + uaoSize);
         currentvlen = totalLength - currentklen;
