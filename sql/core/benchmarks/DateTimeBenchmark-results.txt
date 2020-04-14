@@ -6,92 +6,92 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 cast to timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to timestamp wholestage off                    416            439          32         24.0          41.6       1.0X
-cast to timestamp wholestage on                     370            399          31         27.1          37.0       1.1X
+cast to timestamp wholestage off                    410            428          25         24.4          41.0       1.0X
+cast to timestamp wholestage on                     364            379          17         27.5          36.4       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 year of timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-year of timestamp wholestage off                   1328           1343          21          7.5         132.8       1.0X
-year of timestamp wholestage on                    1204           1247          27          8.3         120.4       1.1X
+year of timestamp wholestage off                   1308           1318          15          7.6         130.8       1.0X
+year of timestamp wholestage on                    1204           1234          19          8.3         120.4       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 quarter of timestamp:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-quarter of timestamp wholestage off                1447           1451           6          6.9         144.7       1.0X
-quarter of timestamp wholestage on                 1384           1392           7          7.2         138.4       1.0X
+quarter of timestamp wholestage off                1439           1442           6          7.0         143.9       1.0X
+quarter of timestamp wholestage on                 1374           1385           9          7.3         137.4       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 month of timestamp:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-month of timestamp wholestage off                  1233           1238           6          8.1         123.3       1.0X
-month of timestamp wholestage on                   1232           1252          15          8.1         123.2       1.0X
+month of timestamp wholestage off                  1228           1234           8          8.1         122.8       1.0X
+month of timestamp wholestage on                   1225           1241          25          8.2         122.5       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 weekofyear of timestamp:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-weekofyear of timestamp wholestage off             1921           1923           3          5.2         192.1       1.0X
-weekofyear of timestamp wholestage on              1893           1914          14          5.3         189.3       1.0X
+weekofyear of timestamp wholestage off             1878           1880           3          5.3         187.8       1.0X
+weekofyear of timestamp wholestage on              1864           1870           6          5.4         186.4       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 day of timestamp:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-day of timestamp wholestage off                    1224           1227           4          8.2         122.4       1.0X
-day of timestamp wholestage on                     1219           1238          15          8.2         121.9       1.0X
+day of timestamp wholestage off                    1218           1220           3          8.2         121.8       1.0X
+day of timestamp wholestage on                     1217           1226          10          8.2         121.7       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 dayofyear of timestamp:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-dayofyear of timestamp wholestage off              1283           1283           1          7.8         128.3       1.0X
-dayofyear of timestamp wholestage on               1256           1261           5          8.0         125.6       1.0X
+dayofyear of timestamp wholestage off              1274           1282          12          7.8         127.4       1.0X
+dayofyear of timestamp wholestage on               1263           1274          14          7.9         126.3       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 dayofmonth of timestamp:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-dayofmonth of timestamp wholestage off             1227           1233           8          8.2         122.7       1.0X
-dayofmonth of timestamp wholestage on              1220           1228           6          8.2         122.0       1.0X
+dayofmonth of timestamp wholestage off             1221           1226           6          8.2         122.1       1.0X
+dayofmonth of timestamp wholestage on              1215           1222           9          8.2         121.5       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 dayofweek of timestamp:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-dayofweek of timestamp wholestage off              1404           1408           5          7.1         140.4       1.0X
-dayofweek of timestamp wholestage on               1376           1386           6          7.3         137.6       1.0X
+dayofweek of timestamp wholestage off              1404           1431          38          7.1         140.4       1.0X
+dayofweek of timestamp wholestage on               1374           1381           8          7.3         137.4       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 weekday of timestamp:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-weekday of timestamp wholestage off                1346           1350           5          7.4         134.6       1.0X
-weekday of timestamp wholestage on                 1313           1319           6          7.6         131.3       1.0X
+weekday of timestamp wholestage off                1342           1350          12          7.5         134.2       1.0X
+weekday of timestamp wholestage on                 1311           1317           5          7.6         131.1       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 hour of timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-hour of timestamp wholestage off                   1005           1011           8         10.0         100.5       1.0X
-hour of timestamp wholestage on                     953            961           9         10.5          95.3       1.1X
+hour of timestamp wholestage off                    997           1000           4         10.0          99.7       1.0X
+hour of timestamp wholestage on                     959            969           8         10.4          95.9       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 minute of timestamp:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-minute of timestamp wholestage off                  995           1000           8         10.1          99.5       1.0X
-minute of timestamp wholestage on                   957            959           3         10.5          95.7       1.0X
+minute of timestamp wholestage off                  968            970           2         10.3          96.8       1.0X
+minute of timestamp wholestage on                   952            960           8         10.5          95.2       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 second of timestamp:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-second of timestamp wholestage off                  960            963           4         10.4          96.0       1.0X
-second of timestamp wholestage on                   957            960           3         10.4          95.7       1.0X
+second of timestamp wholestage off                  971            974           5         10.3          97.1       1.0X
+second of timestamp wholestage on                   952            953           0         10.5          95.2       1.0X
 
 
 ================================================================================================
@@ -102,15 +102,15 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 current_date:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-current_date wholestage off                         290            295           7         34.4          29.0       1.0X
-current_date wholestage on                          287            295          13         34.9          28.7       1.0X
+current_date wholestage off                         277            282           7         36.1          27.7       1.0X
+current_date wholestage on                          283            290          11         35.3          28.3       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 current_timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-current_timestamp wholestage off                    294            296           4         34.1          29.4       1.0X
-current_timestamp wholestage on                     280            303          19         35.7          28.0       1.0X
+current_timestamp wholestage off                    302            324          31         33.1          30.2       1.0X
+current_timestamp wholestage on                     281            292          13         35.6          28.1       1.1X
 
 
 ================================================================================================
@@ -121,43 +121,43 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 cast to date:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to date wholestage off                        1066           1067           1          9.4         106.6       1.0X
-cast to date wholestage on                         1007           1014           6          9.9         100.7       1.1X
+cast to date wholestage off                        1064           1066           2          9.4         106.4       1.0X
+cast to date wholestage on                         1002           1010           8         10.0         100.2       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 last_day:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-last_day wholestage off                            1273           1289          22          7.9         127.3       1.0X
-last_day wholestage on                             1238           1246           9          8.1         123.8       1.0X
+last_day wholestage off                            1247           1250           4          8.0         124.7       1.0X
+last_day wholestage on                             1238           1245           4          8.1         123.8       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 next_day:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-next_day wholestage off                            1124           1125           2          8.9         112.4       1.0X
-next_day wholestage on                             1058           1064           8          9.5         105.8       1.1X
+next_day wholestage off                            1112           1113           1          9.0         111.2       1.0X
+next_day wholestage on                             1055           1059           5          9.5         105.5       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_add:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_add wholestage off                            1049           1049           0          9.5         104.9       1.0X
-date_add wholestage on                             1036           1041           7          9.6         103.6       1.0X
+date_add wholestage off                            1049           1051           3          9.5         104.9       1.0X
+date_add wholestage on                             1036           1043           9          9.6         103.6       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_sub:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_sub wholestage off                            1051           1052           2          9.5         105.1       1.0X
-date_sub wholestage on                             1040           1046           5          9.6         104.0       1.0X
+date_sub wholestage off                            1043           1063          29          9.6         104.3       1.0X
+date_sub wholestage on                             1036           1041           5          9.6         103.6       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 add_months:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-add_months wholestage off                          1381           1388          11          7.2         138.1       1.0X
-add_months wholestage on                           1359           1367           8          7.4         135.9       1.0X
+add_months wholestage off                          1371           1373           2          7.3         137.1       1.0X
+add_months wholestage on                           1402           1409          10          7.1         140.2       1.0X
 
 
 ================================================================================================
@@ -168,8 +168,8 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 format date:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-format date wholestage off                         5766           5793          38          1.7         576.6       1.0X
-format date wholestage on                          5803           5812           7          1.7         580.3       1.0X
+format date wholestage off                         5741           5862         171          1.7         574.1       1.0X
+format date wholestage on                          5589           5600          19          1.8         558.9       1.0X
 
 
 ================================================================================================
@@ -180,8 +180,8 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 from_unixtime:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-from_unixtime wholestage off                       8891           8915          34          1.1         889.1       1.0X
-from_unixtime wholestage on                        8870           8885          12          1.1         887.0       1.0X
+from_unixtime wholestage off                       8681           8684           4          1.2         868.1       1.0X
+from_unixtime wholestage on                        8669           8707          33          1.2         866.9       1.0X
 
 
 ================================================================================================
@@ -192,15 +192,15 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 from_utc_timestamp:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-from_utc_timestamp wholestage off                  1089           1094           7          9.2         108.9       1.0X
-from_utc_timestamp wholestage on                   1105           1107           3          9.0         110.5       1.0X
+from_utc_timestamp wholestage off                  1096           1101           7          9.1         109.6       1.0X
+from_utc_timestamp wholestage on                   1108           1116           6          9.0         110.8       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 to_utc_timestamp:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_utc_timestamp wholestage off                    1620           1628          11          6.2         162.0       1.0X
-to_utc_timestamp wholestage on                     1600           1608           7          6.3         160.0       1.0X
+to_utc_timestamp wholestage off                    1626           1638          16          6.1         162.6       1.0X
+to_utc_timestamp wholestage on                     1594           1606          10          6.3         159.4       1.0X
 
 
 ================================================================================================
@@ -211,29 +211,29 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 cast interval:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast interval wholestage off                        334            336           3         30.0          33.4       1.0X
-cast interval wholestage on                         305            310           4         32.7          30.5       1.1X
+cast interval wholestage off                        331            335           6         30.2          33.1       1.0X
+cast interval wholestage on                         298            305           5         33.5          29.8       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 datediff:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-datediff wholestage off                            1811           1816           7          5.5         181.1       1.0X
-datediff wholestage on                             1758           1761           3          5.7         175.8       1.0X
+datediff wholestage off                            1821           1822           2          5.5         182.1       1.0X
+datediff wholestage on                             1759           1763           3          5.7         175.9       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 months_between:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-months_between wholestage off                      4780           4789          12          2.1         478.0       1.0X
-months_between wholestage on                       4765           4772           8          2.1         476.5       1.0X
+months_between wholestage off                      4752           4770          25          2.1         475.2       1.0X
+months_between wholestage on                       4740           4746           5          2.1         474.0       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 window:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-window wholestage off                              1840           1967         179          0.5        1840.4       1.0X
-window wholestage on                              46710          46792          57          0.0       46709.5       0.0X
+window wholestage off                              1936           2049         160          0.5        1935.7       1.0X
+window wholestage on                              44821          44850          44          0.0       44820.6       0.0X
 
 
 ================================================================================================
@@ -244,134 +244,134 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc YEAR:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc YEAR wholestage off                     2350           2351           1          4.3         235.0       1.0X
-date_trunc YEAR wholestage on                      2317           2324           8          4.3         231.7       1.0X
+date_trunc YEAR wholestage off                     2382           2384           3          4.2         238.2       1.0X
+date_trunc YEAR wholestage on                      2309           2316           7          4.3         230.9       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc YYYY:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc YYYY wholestage off                     2341           2343           3          4.3         234.1       1.0X
-date_trunc YYYY wholestage on                      2314           2332          22          4.3         231.4       1.0X
+date_trunc YYYY wholestage off                     2368           2375          10          4.2         236.8       1.0X
+date_trunc YYYY wholestage on                      2304           2313           7          4.3         230.4       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc YY:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc YY wholestage off                       2348           2354           9          4.3         234.8       1.0X
-date_trunc YY wholestage on                        2313           2317           3          4.3         231.3       1.0X
+date_trunc YY wholestage off                       2381           2396          22          4.2         238.1       1.0X
+date_trunc YY wholestage on                        2303           2305           1          4.3         230.3       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc MON:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MON wholestage off                      2383           2385           3          4.2         238.3       1.0X
-date_trunc MON wholestage on                       2293           2307          22          4.4         229.3       1.0X
+date_trunc MON wholestage off                      2325           2333          11          4.3         232.5       1.0X
+date_trunc MON wholestage on                       2293           2301           6          4.4         229.3       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc MONTH:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MONTH wholestage off                    2380           2393          18          4.2         238.0       1.0X
-date_trunc MONTH wholestage on                     2296           2304           9          4.4         229.6       1.0X
+date_trunc MONTH wholestage off                    2335           2335           0          4.3         233.5       1.0X
+date_trunc MONTH wholestage on                     2296           2298           2          4.4         229.6       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc MM:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MM wholestage off                       2375           2380           7          4.2         237.5       1.0X
-date_trunc MM wholestage on                        2295           2302           8          4.4         229.5       1.0X
+date_trunc MM wholestage off                       2328           2329           1          4.3         232.8       1.0X
+date_trunc MM wholestage on                        2290           2295           4          4.4         229.0       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc DAY:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc DAY wholestage off                      2145           2145           1          4.7         214.5       1.0X
-date_trunc DAY wholestage on                       2090           2096           6          4.8         209.0       1.0X
+date_trunc DAY wholestage off                      2139           2140           1          4.7         213.9       1.0X
+date_trunc DAY wholestage on                       2095           2101           7          4.8         209.5       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc DD:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc DD wholestage off                       2142           2149          11          4.7         214.2       1.0X
-date_trunc DD wholestage on                        2090           2096           5          4.8         209.0       1.0X
+date_trunc DD wholestage off                       2143           2145           2          4.7         214.3       1.0X
+date_trunc DD wholestage on                        2087           2092           3          4.8         208.7       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc HOUR:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc HOUR wholestage off                     2204           2212          11          4.5         220.4       1.0X
-date_trunc HOUR wholestage on                      2196           2201           5          4.6         219.6       1.0X
+date_trunc HOUR wholestage off                     2201           2207           8          4.5         220.1       1.0X
+date_trunc HOUR wholestage on                      2176           2185           6          4.6         217.6       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc MINUTE:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MINUTE wholestage off                    353            353           1         28.3          35.3       1.0X
-date_trunc MINUTE wholestage on                     331            335           4         30.2          33.1       1.1X
+date_trunc MINUTE wholestage off                    356            356           0         28.1          35.6       1.0X
+date_trunc MINUTE wholestage on                     333            344           7         30.1          33.3       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc SECOND:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc SECOND wholestage off                    343            345           3         29.2          34.3       1.0X
-date_trunc SECOND wholestage on                     335            336           2         29.9          33.5       1.0X
+date_trunc SECOND wholestage off                    341            342           2         29.3          34.1       1.0X
+date_trunc SECOND wholestage on                     335            349          18         29.9          33.5       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc WEEK:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc WEEK wholestage off                     2277           2279           3          4.4         227.7       1.0X
-date_trunc WEEK wholestage on                      2262           2270          10          4.4         226.2       1.0X
+date_trunc WEEK wholestage off                     2257           2257           1          4.4         225.7       1.0X
+date_trunc WEEK wholestage on                      2202           2211          11          4.5         220.2       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 date_trunc QUARTER:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc QUARTER wholestage off                  3395           3395           0          2.9         339.5       1.0X
-date_trunc QUARTER wholestage on                   3185           3193           6          3.1         318.5       1.1X
+date_trunc QUARTER wholestage off                  3180           3181           2          3.1         318.0       1.0X
+date_trunc QUARTER wholestage on                   3036           3043          12          3.3         303.6       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 trunc year:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc year wholestage off                           321            330          14         31.2          32.1       1.0X
-trunc year wholestage on                            293            308          14         34.1          29.3       1.1X
+trunc year wholestage off                           327            328           1         30.6          32.7       1.0X
+trunc year wholestage on                            310            325          13         32.3          31.0       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 trunc yyyy:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc yyyy wholestage off                           322            324           2         31.1          32.2       1.0X
-trunc yyyy wholestage on                            293            296           4         34.1          29.3       1.1X
+trunc yyyy wholestage off                           323            327           6         31.0          32.3       1.0X
+trunc yyyy wholestage on                            304            317          14         32.9          30.4       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 trunc yy:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc yy wholestage off                             322            322           0         31.0          32.2       1.0X
-trunc yy wholestage on                              292            296           4         34.2          29.2       1.1X
+trunc yy wholestage off                             324            325           2         30.8          32.4       1.0X
+trunc yy wholestage on                              308            311           3         32.4          30.8       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 trunc mon:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc mon wholestage off                            319            320           1         31.3          31.9       1.0X
-trunc mon wholestage on                             293            295           1         34.1          29.3       1.1X
+trunc mon wholestage off                            323            323           1         31.0          32.3       1.0X
+trunc mon wholestage on                             303            310           7         33.0          30.3       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 trunc month:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc month wholestage off                          319            320           1         31.3          31.9       1.0X
-trunc month wholestage on                           293            295           2         34.1          29.3       1.1X
+trunc month wholestage off                          322            323           0         31.0          32.2       1.0X
+trunc month wholestage on                           307            337          65         32.6          30.7       1.1X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 trunc mm:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc mm wholestage off                             318            319           1         31.4          31.8       1.0X
-trunc mm wholestage on                              293            312          26         34.1          29.3       1.1X
+trunc mm wholestage off                             324            325           2         30.9          32.4       1.0X
+trunc mm wholestage on                              294            306           7         34.0          29.4       1.1X
 
 
 ================================================================================================
@@ -382,36 +382,36 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 to timestamp str:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to timestamp str wholestage off                     220            226           9          4.5         220.3       1.0X
-to timestamp str wholestage on                      212            214           4          4.7         212.2       1.0X
+to timestamp str wholestage off                     216            216           1          4.6         215.7       1.0X
+to timestamp str wholestage on                      207            209           3          4.8         207.0       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 to_timestamp:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_timestamp wholestage off                        1875           1876           2          0.5        1874.7       1.0X
-to_timestamp wholestage on                         2075           2091          25          0.5        2075.1       0.9X
+to_timestamp wholestage off                        1751           1751           1          0.6        1750.6       1.0X
+to_timestamp wholestage on                         1798           1832          31          0.6        1798.4       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 to_unix_timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_unix_timestamp wholestage off                   2141           2143           2          0.5        2141.2       1.0X
-to_unix_timestamp wholestage on                    2145           2177          21          0.5        2144.7       1.0X
+to_unix_timestamp wholestage off                   1770           1773           4          0.6        1770.2       1.0X
+to_unix_timestamp wholestage on                    1743           1754          10          0.6        1743.0       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 to date str:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to date str wholestage off                          276            284          11          3.6         276.1       1.0X
-to date str wholestage on                           264            270           8          3.8         264.3       1.0X
+to date str wholestage off                          260            266           9          3.8         260.1       1.0X
+to date str wholestage on                           257            260           3          3.9         257.3       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-1063-aws
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 to_date:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_date wholestage off                             3876           3903          38          0.3        3876.1       1.0X
-to_date wholestage on                              3833           3843           6          0.3        3833.4       1.0X
+to_date wholestage off                             3589           3620          44          0.3        3589.0       1.0X
+to_date wholestage on                              3565           3579          15          0.3        3565.0       1.0X
 
 
 ================================================================================================
@@ -422,8 +422,9 @@ OpenJDK 64-Bit Server VM 1.8.0_242-8u242-b08-0ubuntu3~18.04-b08 on Linux 4.15.0-
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 To/from Java's date-time:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-From java.sql.Timestamp                             394            399           5         12.7          78.7       1.0X
-Collect longs                                      1336           2676        1201          3.7         267.2       0.3X
-Collect timestamps                                 2025           2091          65          2.5         405.0       0.2X
+From java.sql.Date                                  416            420           6         12.0          83.2       1.0X
+From java.sql.Timestamp                             375            381           5         13.3          75.1       1.1X
+Collect longs                                      1225           1962        1101          4.1         245.1       0.3X
+Collect timestamps                                 2013           2829        1401          2.5         402.5       0.2X
 
 
