@@ -231,7 +231,7 @@ the following case-insensitive options:
 {% include_example jdbc_dataset r/RSparkSQLExample.R %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 

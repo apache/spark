@@ -437,6 +437,22 @@ case class ShowTables(
 }
 
 /**
+ * The logical plan of the SHOW VIEWS command that works for v1 and v2 catalogs.
+ *
+ * Notes: v2 catalogs do not support views API yet, the command will fallback to
+ * v1 ShowViewsCommand during ResolveSessionCatalog.
+ */
+case class ShowViews(
+    namespace: LogicalPlan,
+    pattern: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)(),
+    AttributeReference("viewName", StringType, nullable = false)())
+}
+
+/**
  * The logical plan of the USE/USE NAMESPACE command that works for v2 catalogs.
  */
 case class SetCatalogAndNamespace(

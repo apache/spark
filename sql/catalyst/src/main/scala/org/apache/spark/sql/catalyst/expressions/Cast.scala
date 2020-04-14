@@ -206,8 +206,13 @@ object Cast {
     case _ => false  // overflow
   }
 
+  /**
+   * Returns `true` if casting non-nullable values from `from` type to `to` type
+   * may return null. Note that the caller side should take care of input nullability
+   * first and only call this method if the input is not nullable.
+   */
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (NullType, _) => true
+    case (NullType, _) => false // empty array or map case
     case (_, _) if from == to => false
 
     case (StringType, BinaryType) => false
@@ -265,7 +270,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
+  override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
   protected def ansiEnabled: Boolean
 

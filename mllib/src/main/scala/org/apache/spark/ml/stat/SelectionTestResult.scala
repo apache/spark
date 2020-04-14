@@ -99,3 +99,19 @@ class FValueTestResult private[stat] (
       s"F Value = $statistic \n"
   }
 }
+
+/**
+ * Object containing the test results for the ANOVA classification test.
+ */
+@Since("3.1.0")
+class ANOVATestResult private[stat] (
+    override val pValue: Double,
+    override val degreesOfFreedom: Long,
+    override val statistic: Double) extends SelectionTestResult {
+
+  override def toString: String = {
+    "ANOVA Regression test summary:\n" +
+      super.toString +
+      s"F Value = $statistic \n"
+  }
+}

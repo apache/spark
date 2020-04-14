@@ -18,8 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.lang.reflect.{ParameterizedType, Type, WildcardType}
-import java.time.LocalDate
-import java.util.Calendar
 
 import scala.collection.JavaConverters._
 
@@ -34,6 +32,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -181,33 +180,6 @@ import org.apache.spark.unsafe.types.UTF8String
  *       We don't need to unwrap the data for printf and wrap it again and passes in data_add
  */
 private[hive] trait HiveInspectors {
-
-  private final val JULIAN_CUTOVER_DAY =
-    rebaseGregorianToJulianDays(DateTimeUtils.GREGORIAN_CUTOVER_DAY.toInt)
-
-  private def rebaseJulianToGregorianDays(daysSinceEpoch: Int): Int = {
-    val localDate = LocalDate.ofEpochDay(daysSinceEpoch)
-    val utcCal = new Calendar.Builder()
-      .setCalendarType("gregory")
-      .setTimeZone(DateTimeUtils.TimeZoneUTC)
-      .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
-      .build()
-    Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, DateTimeConstants.MILLIS_PER_DAY))
-  }
-
-  private def rebaseGregorianToJulianDays(daysSinceEpoch: Int): Int = {
-    val millis = Math.multiplyExact(daysSinceEpoch, DateTimeConstants.MILLIS_PER_DAY)
-    val utcCal = new Calendar.Builder()
-      .setCalendarType("gregory")
-      .setTimeZone(DateTimeUtils.TimeZoneUTC)
-      .setInstant(millis)
-      .build()
-    val localDate = LocalDate.of(
-      utcCal.get(Calendar.YEAR),
-      utcCal.get(Calendar.MONTH) + 1,
-      utcCal.get(Calendar.DAY_OF_MONTH))
-    Math.toIntExact(localDate.toEpochDay)
-  }
 
   def javaTypeToDataType(clz: Type): DataType = clz match {
     // writable
@@ -646,14 +618,7 @@ private[hive] trait HiveInspectors {
         case x: DateObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              // Rebasing written days via conversion to local dates.
-              // See the comment for `getDateWritable()`.
-              val daysSinceEpoch = x.getPrimitiveWritableObject(data).getDays
-              if (daysSinceEpoch < JULIAN_CUTOVER_DAY) {
-                rebaseJulianToGregorianDays(daysSinceEpoch)
-              } else {
-                daysSinceEpoch
-              }
+              new DaysWritable(x.getPrimitiveWritableObject(data)).gregorianDays
             } else {
               null
             }
@@ -1045,27 +1010,11 @@ private[hive] trait HiveInspectors {
       new hadoopIo.BytesWritable(value.asInstanceOf[Array[Byte]])
     }
 
-  private def getDateWritable(value: Any): hiveIo.DateWritable =
+  private def getDateWritable(value: Any): DaysWritable =
     if (value == null) {
       null
     } else {
-      // Rebasing days since the epoch to store the same number of days
-      // as by Spark 2.4 and earlier versions. Spark 3.0 switched to
-      // Proleptic Gregorian calendar (see SPARK-26651), and as a consequence of that,
-      // this affects dates before 1582-10-15. Spark 2.4 and earlier versions use
-      // Julian calendar for dates before 1582-10-15. So, the same local date may
-      // be mapped to different number of days since the epoch in different calendars.
-      // For example:
-      // Proleptic Gregorian calendar: 1582-01-01 -> -141714
-      // Julian calendar: 1582-01-01 -> -141704
-      // The code below converts -141714 to -141704.
-      val daysSinceEpoch = value.asInstanceOf[Int]
-      val rebasedDays = if (daysSinceEpoch < DateTimeUtils.GREGORIAN_CUTOVER_DAY) {
-        rebaseGregorianToJulianDays(daysSinceEpoch)
-      } else {
-        daysSinceEpoch
-      }
-      new hiveIo.DateWritable(rebasedDays)
+      new DaysWritable(value.asInstanceOf[Int])
     }
 
   private def getTimestampWritable(value: Any): hiveIo.TimestampWritable =

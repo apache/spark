@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
@@ -457,6 +457,18 @@ case class Remainder(left: Expression, right: Expression) extends DivModLike {
 
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
+  override def toString: String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(sqlOperator) match {
+      case operator if operator == sqlOperator => s"($left $sqlOperator $right)"
+      case funcName => s"$funcName($left, $right)"
+    }
+  }
+  override def sql: String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(sqlOperator) match {
+      case operator if operator == sqlOperator => s"(${left.sql} $sqlOperator ${right.sql})"
+      case funcName => s"$funcName(${left.sql}, ${right.sql})"
+    }
+  }
 
   private lazy val mod: (Any, Any) => Any = dataType match {
     // special cases to make float/double primitive types faster

@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
@@ -233,16 +234,16 @@ private[hive] class TestHiveSparkSession(
    * Dataset.ofRows that creates a TestHiveQueryExecution (rather than a normal QueryExecution
    * which wouldn't load all the test tables).
    */
-  override def sql(sqlText: String): DataFrame = {
+  override def sql(sqlText: String): DataFrame = withActive {
     val plan = sessionState.sqlParser.parsePlan(sqlText)
     Dataset.ofRows(self, plan)
   }
 
-  override def newSession(): TestHiveSparkSession = {
+  override def newSession(): TestHiveSparkSession = withActive {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
   }
 
-  override def cloneSession(): SparkSession = {
+  override def cloneSession(): SparkSession = withActive {
     val result = new TestHiveSparkSession(
       sparkContext,
       Some(sharedState),
@@ -263,7 +264,10 @@ private[hive] class TestHiveSparkSession(
   System.clearProperty("spark.hostPort")
 
   // For some hive test case which contain ${system:test.tmp.dir}
-  System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
+  // Make sure it is not called again when cloning sessions.
+  if (parentSessionState.isEmpty) {
+    System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
+  }
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -586,22 +590,31 @@ private[hive] class TestHiveQueryExecution(
     this(TestHive.sparkSession, sql)
   }
 
-  override lazy val analyzed: LogicalPlan = {
+  override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _, _) => tbl.table :: Nil
+      case CacheTableCommand(tbl, _, _, _) => tbl :: Nil
       case _ => Nil
     }
 
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(ident) => ident.last }
+        logical.collect { case UnresolvedRelation(ident) => ident.asTableIdentifier }
     val resolver = sparkSession.sessionState.conf.resolver
-    val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
-      referencedTables.exists(resolver(_, testTable))
+    val referencedTestTables = referencedTables.flatMap { tbl =>
+      val testTableOpt = sparkSession.testTables.keys.find(resolver(_, tbl.table))
+      testTableOpt.map(testTable => tbl.copy(table = testTable))
     }
-    logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
-    referencedTestTables.foreach(sparkSession.loadTestTable)
+    logDebug(s"Query references test tables: ${referencedTestTables.map(_.table).mkString(", ")}")
+    referencedTestTables.foreach { tbl =>
+      val curDB = sparkSession.catalog.currentDatabase
+      try {
+        tbl.database.foreach(db => sparkSession.catalog.setCurrentDatabase(db))
+        sparkSession.loadTestTable(tbl.table)
+      } finally {
+        tbl.database.foreach(_ => sparkSession.catalog.setCurrentDatabase(curDB))
+      }
+    }
     // Proceed with analysis.
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }

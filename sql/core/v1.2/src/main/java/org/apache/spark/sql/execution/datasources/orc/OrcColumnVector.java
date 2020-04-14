@@ -22,7 +22,9 @@ import java.math.BigDecimal;
 import org.apache.orc.storage.ql.exec.vector.*;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.DateType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.TimestampType;
 import org.apache.spark.sql.vectorized.ColumnarArray;
@@ -42,6 +44,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   private DecimalColumnVector decimalData;
   private TimestampColumnVector timestampData;
   private final boolean isTimestamp;
+  private final boolean isDate;
 
   private int batchSize;
 
@@ -52,6 +55,12 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
       isTimestamp = true;
     } else {
       isTimestamp = false;
+    }
+
+    if (type instanceof DateType) {
+      isDate = true;
+    } else {
+      isDate = false;
     }
 
     baseData = vector;
@@ -130,7 +139,12 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
 
   @Override
   public int getInt(int rowId) {
-    return (int) longData.vector[getRowIndex(rowId)];
+    int value = (int) longData.vector[getRowIndex(rowId)];
+    if (isDate) {
+      return RebaseDateTime.rebaseJulianToGregorianDays(value);
+    } else {
+      return value;
+    }
   }
 
   @Override

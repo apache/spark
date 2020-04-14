@@ -1036,4 +1036,11 @@ class PlanParserSuite extends AnalysisTest {
         "t" -> ((table("a").select(Literal(0).as("level"), 'c)
           .union(table("t").where('level < 10).select('level + 1, 'c)), Seq("x")))))
   }
+
+  test("statement containing terminal semicolons") {
+    assertEqual("select 1;", OneRowRelation().select(1))
+    assertEqual("select a, b;", OneRowRelation().select('a, 'b))
+    assertEqual("select a, b from db.c;;;", table("db", "c").select('a, 'b))
+    assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select('a, 'b))
+  }
 }

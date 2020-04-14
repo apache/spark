@@ -75,7 +75,8 @@ class KubernetesConfSuite extends SparkFunSuite {
       KubernetesTestConf.APP_ID,
       JavaMainAppResource(None),
       KubernetesTestConf.MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      None)
     assert(conf.labels === Map(
       SPARK_APP_ID_LABEL -> KubernetesTestConf.APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++

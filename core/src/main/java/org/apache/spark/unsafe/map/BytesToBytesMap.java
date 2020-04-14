@@ -96,8 +96,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * since that's the largest power-of-2 that's less than Integer.MAX_VALUE. We need two long array
    * entries per key, giving us a maximum capacity of (1 &lt;&lt; 29).
    */
-  @VisibleForTesting
-  static final int MAX_CAPACITY = (1 << 29);
+  public static final int MAX_CAPACITY = (1 << 29);
 
   // This choice of page table size and page size means that we can address up to 500 gigabytes
   // of memory.

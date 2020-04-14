@@ -20,6 +20,7 @@ license: |
 ---
 
 ### Description
+
 A table consists of a set of rows and each row contains a set of columns.
 A column is associated with a data type and represents
 a specific attribute of an entity (for example, `age` is a column of an
@@ -61,7 +62,7 @@ the `age` column and this table will be used in various examples in the sections
 <tr><td>700</td><td>Dan</td><td>50</td></tr>
 </table>
 
-### Comparison operators <a name="comp-operators"></a>
+### Comparison Operators <a name="comp-operators"></a>
 
 Apache spark supports the standard comparison operators such as '>', '>=', '=', '<' and '<='.
 The result of these operators is unknown or `NULL` when one of the operands or both the operands are
@@ -114,13 +115,14 @@ one or both operands are `NULL`:
 </table>
 
 ### Examples
+
 {% highlight sql %}
 -- Normal comparison operators return `NULL` when one of the operand is `NULL`.
 SELECT 5 > null AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |null             |
+  |             null|
   +-----------------+
 
 -- Normal comparison operators return `NULL` when both the operands are `NULL`.
@@ -128,7 +130,7 @@ SELECT null = null AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |null             |
+  |             null|
   +-----------------+
 
 -- Null-safe equal operator return `False` when one of the operand is `NULL`
@@ -136,7 +138,7 @@ SELECT 5 <=> null AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |false            |
+  |            false|
   +-----------------+
 
 -- Null-safe equal operator return `True` when one of the operand is `NULL`
@@ -144,11 +146,12 @@ SELECT NULL <=> NULL;
   +-----------------+
   |expression_output|
   +-----------------+
-  |true             |
+  |             true|
   +-----------------+
 {% endhighlight %}
 
-### Logical operators <a name="logical-operators"></a>
+### Logical Operators <a name="logical-operators"></a>
+
 Spark supports standard logical operators such as `AND`, `OR` and `NOT`. These operators take `Boolean` expressions
 as the arguments and return a `Boolean` value.  
 
@@ -205,13 +208,14 @@ The following tables illustrate the behavior of logical operators when one or bo
 </table>
 
 ### Examples
+
 {% highlight sql %}
 -- Normal comparison operators return `NULL` when one of the operands is `NULL`.
 SELECT (true OR null) AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |true             |
+  |             true|
   +-----------------+
 
 -- Normal comparison operators return `NULL` when both the operands are `NULL`.
@@ -219,7 +223,7 @@ SELECT (null OR false) AS expression_output
   +-----------------+
   |expression_output|
   +-----------------+
-  |null             |
+  |             null|
   +-----------------+
 
 -- Null-safe equal operator returns `False` when one of the operands is `NULL`
@@ -227,11 +231,12 @@ SELECT NOT(null) AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |null             |
+  |             null|
   +-----------------+
 {% endhighlight %}
 
 ### Expressions <a name="expressions"></a>
+
 The comparison operators and logical operators are treated as expressions in
 Spark. Other than these two kinds of expressions, Spark supports other form of
 expressions such as function expressions, cast expressions, etc. The expressions
@@ -240,35 +245,37 @@ in Spark can be broadly classified as :
 - Expressions that can process `NULL` value operands
   - The result of these expressions depends on the expression itself.
 
-#### Null intolerant expressions <a name="null-intolerant"></a>
+#### Null Intolerant Expressions <a name="null-intolerant"></a>
+
 Null intolerant expressions return `NULL` when one or more arguments of 
 expression are `NULL` and most of the expressions fall in this category.
 
 ##### Examples
+
 {% highlight sql %}
-SELECT concat('John', null) as expression_output;
+SELECT concat('John', null) AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |null             |
+  |             null|
   +-----------------+
 
-SELECT positive(null) as expression_output;
+SELECT positive(null) AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |null             |
+  |             null|
   +-----------------+
 
-SELECT to_date(null) as expression_output;
+SELECT to_date(null) AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |null             |
+  |             null|
   +-----------------+
 {% endhighlight %}
 
-#### Expressions that can process null value operands. <a name="can-process-null"></a>
+#### Expressions That Can Process Null Value Operands <a name="can-process-null"></a>
 
 This class of expressions are designed to handle `NULL` values. The result of the 
 expressions depends on the expression itself. As an example, function expression `isnull`
@@ -287,14 +294,14 @@ returns the first non `NULL` value in its list of operands. However, `coalesce` 
   - ATLEASTNNONNULLS 
   - IN
 
-
 ##### Examples
+
 {% highlight sql %}
 SELECT isnull(null) AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |true             |
+  |             true|
   +-----------------+
 
 -- Returns the first occurrence of non `NULL` value.
@@ -302,7 +309,7 @@ SELECT coalesce(null, null, 3, null) AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |3                |
+  |                3|
   +-----------------+
 
 -- Returns `NULL` as all its operands are `NULL`. 
@@ -310,18 +317,19 @@ SELECT coalesce(null, null, null, null) AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |null             |
+  |             null|
   +-----------------+
 
-SELECT isnan(null) as expression_output;
+SELECT isnan(null) AS expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
-  |false            |
+  |            false|
   +-----------------+
 {% endhighlight %}
 
 #### Builtin Aggregate Expressions <a name="built-in-aggregate"></a>
+
 Aggregate functions compute a single result by processing a set of input rows. Below are
 the rules of how `NULL` values are handled by aggregate functions.
 - `NULL` values are ignored from processing by all the aggregate functions.
@@ -337,13 +345,14 @@ the rules of how `NULL` values are handled by aggregate functions.
   - SOME
    
 #### Examples
+
 {% highlight sql %}
 -- `count(*)` does not skip `NULL` values.
 SELECT count(*) FROM person;
   +--------+
   |count(1)|
   +--------+
-  |7       |
+  |       7|
   +--------+
 
 -- `NULL` values in column `age` are skipped from processing.
@@ -351,7 +360,7 @@ SELECT count(age) FROM person;
   +----------+
   |count(age)|
   +----------+
-  |5         |
+  |         5|
   +----------+
 
 -- `count(*)` on an empty input set returns 0. This is unlike the other
@@ -360,7 +369,7 @@ SELECT count(*) FROM person where 1 = 0;
   +--------+
   |count(1)|
   +--------+
-  |0       |
+  |       0|
   +--------+
 
 -- `NULL` values are excluded from computation of maximum value.
@@ -368,7 +377,7 @@ SELECT max(age) FROM person;
   +--------+
   |max(age)|
   +--------+
-  |50      |
+  |      50|
   +--------+
 
 -- `max` returns `NULL` on an empty input set.
@@ -376,44 +385,45 @@ SELECT max(age) FROM person where 1 = 0;
   +--------+
   |max(age)|
   +--------+
-  |null    |
+  |    null|
   +--------+
-
 {% endhighlight %}
 
-### Condition expressions in WHERE, HAVING and JOIN clauses. <a name="condition-expressions"></a>
+### Condition Expressions in WHERE, HAVING and JOIN Clauses <a name="condition-expressions"></a>
+
 `WHERE`, `HAVING` operators filter rows based on the user specified condition.
 A `JOIN` operator is used to combine rows from two tables based on a join condition.
 For all the three operators, a condition expression is a boolean expression and can return
  <code>True, False or Unknown (NULL)</code>. They are "satisfied" if the result of the condition is `True`.
 
 #### Examples
+
 {% highlight sql %}
 -- Persons whose age is unknown (`NULL`) are filtered out from the result set.
 SELECT * FROM person WHERE age > 0;
   +--------+---+
-  |name    |age|
+  |    name|age|
   +--------+---+
-  |Michelle|30 |
-  |Fred    |50 |
-  |Mike    |18 |
-  |Dan     |50 |
-  |Joe     |30 |
+  |Michelle| 30|
+  |    Fred| 50|
+  |    Mike| 18|
+  |     Dan| 50|
+  |     Joe| 30|
   +--------+---+
 
 -- `IS NULL` expression is used in disjunction to select the persons
 -- with unknown (`NULL`) records.
 SELECT * FROM person WHERE age > 0 OR age IS NULL;
   +--------+----+
-  |name    |age |
+  |    name| age|
   +--------+----+
-  |Albert  |null|
-  |Michelle|30  |
-  |Fred    |50  |
-  |Mike    |18  |
-  |Dan     |50  |
-  |Marry   |null|
-  |Joe     |30  |
+  |  Albert|null|
+  |Michelle|  30|
+  |    Fred|  50|
+  |    Mike|  18|
+  |     Dan|  50|
+  |   Marry|null|
+  |     Joe|  30|
   +--------+----+
 
 -- Person with unknown(`NULL`) ages are skipped from processing.
@@ -421,135 +431,139 @@ SELECT * FROM person GROUP BY age HAVING max(age) > 18;
   +---+--------+                                                                  
   |age|count(1)|
   +---+--------+
-  |50 |2       |
-  |30 |2       |
+  | 50|       2|
+  | 30|       2|
   +---+--------+
 
 -- A self join case with a join condition `p1.age = p2.age AND p1.name = p2.name`.
 -- The persons with unknown age (`NULL`) are filtered out by the join operator.
 SELECT * FROM person p1, person p2
-WHERE p1.age = p2.age
-  AND p1.name = p2.name;
+    WHERE p1.age = p2.age
+    AND p1.name = p2.name;
   +--------+---+--------+---+
-  |name    |age|name    |age|
+  |    name|age|    name|age|
   +--------+---+--------+---+
-  |Michelle|30 |Michelle|30 |
-  |Fred    |50 |Fred    |50 |
-  |Mike    |18 |Mike    |18 |
-  |Dan     |50 |Dan     |50 |
-  |Joe     |30 |Joe     |30 |
+  |Michelle| 30|Michelle| 30|
+  |    Fred| 50|    Fred| 50|
+  |    Mike| 18|    Mike| 18|
+  |     Dan| 50|     Dan| 50|
+  |     Joe| 30|     Joe| 30|
   +--------+---+--------+---+
 
 -- The age column from both legs of join are compared using null-safe equal which
 -- is why the persons with unknown age (`NULL`) are qualified by the join.
 SELECT * FROM person p1, person p2
-WHERE p1.age <=> p2.age
-  AND p1.name = p2.name;
-+--------+----+--------+----+
-|    name| age|    name| age|
-+--------+----+--------+----+
-|  Albert|null|  Albert|null|
-|Michelle|  30|Michelle|  30|
-|    Fred|  50|    Fred|  50|
-|    Mike|  18|    Mike|  18|
-|     Dan|  50|     Dan|  50|
-|   Marry|null|   Marry|null|
-|     Joe|  30|     Joe|  30|
-+--------+----+--------+----+
-
+    WHERE p1.age <=> p2.age
+    AND p1.name = p2.name;
+  +--------+----+--------+----+
+  |    name| age|    name| age|
+  +--------+----+--------+----+
+  |  Albert|null|  Albert|null|
+  |Michelle|  30|Michelle|  30|
+  |    Fred|  50|    Fred|  50|
+  |    Mike|  18|    Mike|  18|
+  |     Dan|  50|     Dan|  50|
+  |   Marry|null|   Marry|null|
+  |     Joe|  30|     Joe|  30|
+  +--------+----+--------+----+
 {% endhighlight %}
 
-### Aggregate operator (GROUP BY, DISTINCT) <a name="aggregate-operator"></a>
+### Aggregate Operator (GROUP BY, DISTINCT) <a name="aggregate-operator"></a>
+
 As discussed in the previous section [comparison operator](sql-ref-null-semantics.html#comparison-operators),
 two `NULL` values are not equal. However, for the purpose of grouping and distinct processing, the two or more
 values with `NULL data`are grouped together into the same bucket. This behaviour is conformant with SQL
 standard and with other enterprise database management systems.
 
 #### Examples
+
 {% highlight sql %}
 -- `NULL` values are put in one bucket in `GROUP BY` processing.
 SELECT age, count(*) FROM person GROUP BY age;
   +----+--------+                                                                 
-  |age |count(1)|
+  | age|count(1)|
   +----+--------+
-  |null|2       |
-  |50  |2       |
-  |30  |2       |
-  |18  |1       |
+  |null|       2|
+  |  50|       2|
+  |  30|       2|
+  |  18|       1|
   +----+--------+
 
 -- All `NULL` ages are considered one distinct value in `DISTINCT` processing.
 SELECT DISTINCT age FROM person;
   +----+
-  |age |
+  | age|
   +----+
   |null|
-  |50  |
-  |30  |
-  |18  |
+  |  50|
+  |  30|
+  |  18|
   +----+
-
 {% endhighlight %}
 
-### Sort operator (ORDER BY Clause) <a name="order-by"></a>
+### Sort Operator (ORDER BY Clause) <a name="order-by"></a>
+
 Spark SQL supports null ordering specification in `ORDER BY` clause. Spark processes the `ORDER BY` clause by
 placing all the `NULL` values at first or at last depending on the null ordering specification. By default, all
 the `NULL` values are placed at first.
 
 #### Examples
+
 {% highlight sql %}
 -- `NULL` values are shown at first and other values
 -- are sorted in ascending way.
 SELECT age, name FROM person ORDER BY age;
   +----+--------+
-  |age |name    |
+  | age|    name|
   +----+--------+
-  |null|Marry   |
-  |null|Albert  |
-  |18  |Mike    |
-  |30  |Michelle|
-  |30  |Joe     |
-  |50  |Fred    |
-  |50  |Dan     |
+  |null|   Marry|
+  |null|  Albert|
+  |  18|    Mike|
+  |  30|Michelle|
+  |  30|     Joe|
+  |  50|    Fred|
+  |  50|     Dan|
   +----+--------+
 
 -- Column values other than `NULL` are sorted in ascending
 -- way and `NULL` values are shown at the last.
 SELECT age, name FROM person ORDER BY age NULLS LAST;
   +----+--------+
-  |age |name    |
+  | age|    name|
   +----+--------+
-  |18  |Mike    |
-  |30  |Michelle|
-  |30  |Joe     |
-  |50  |Dan     |
-  |50  |Fred    |
-  |null|Marry   |
-  |null|Albert  |
+  |  18|    Mike|
+  |  30|Michelle|
+  |  30|     Joe|
+  |  50|     Dan|
+  |  50|    Fred|
+  |null|   Marry|
+  |null|  Albert|
   +----+--------+
 
 -- Columns other than `NULL` values are sorted in descending
 -- and `NULL` values are shown at the last.
 SELECT age, name FROM person ORDER BY age DESC NULLS LAST;
   +----+--------+
-  |age |name    |
+  | age|    name|
   +----+--------+
-  |50  |Fred    |
-  |50  |Dan     |
-  |30  |Michelle|
-  |30  |Joe     |
-  |18  |Mike    |
-  |null|Marry   |
-  |null|Albert  |
+  |  50|    Fred|
+  |  50|     Dan|
+  |  30|Michelle|
+  |  30|     Joe|
+  |  18|    Mike|
+  |null|   Marry|
+  |null|  Albert|
   +----+--------+
 {% endhighlight %}
 
-### Set operators (UNION, INTERSECT, EXCEPT) <a name="set-operators"></a>
+### Set Operators (UNION, INTERSECT, EXCEPT) <a name="set-operators"></a>
+
 `NULL` values are compared in a null-safe manner for equality in the context of
 set operations. That means when comparing rows, two `NULL` values are considered 
 equal unlike the regular `EqualTo`(`=`) operator.
 
 #### Examples
+
 {% highlight sql %}
 CREATE VIEW unknown_age SELECT * FROM person WHERE age IS NULL;
 
@@ -557,51 +571,51 @@ CREATE VIEW unknown_age SELECT * FROM person WHERE age IS NULL;
 -- result set. The comparison between columns of the row are done
 -- in a null-safe manner.
 SELECT name, age FROM person
-INTERSECT
-SELECT name, age from unknown_age;
+    INTERSECT
+    SELECT name, age from unknown_age;
   +------+----+                                                                   
-  |name  |age |
+  |  name| age|
   +------+----+
   |Albert|null|
-  |Marry |null|
+  | Marry|null|
   +------+----+
 
 -- `NULL` values from two legs of the `EXCEPT` are not in output. 
 -- This basically shows that the comparison happens in a null-safe manner.
 SELECT age, name FROM person
-EXCEPT
-SELECT age FROM unknown_age;
+    EXCEPT
+    SELECT age FROM unknown_age;
   +---+--------+                                                                  
-  |age|name    |
+  |age|    name|
   +---+--------+
-  |30 |Joe     |
-  |50 |Fred    |
-  |30 |Michelle|
-  |18 |Mike    |
-  |50 |Dan     |
+  | 30|     Joe|
+  | 50|    Fred|
+  | 30|Michelle|
+  | 18|    Mike|
+  | 50|     Dan|
   +---+--------+
 
 -- Performs `UNION` operation between two sets of data. 
 -- The comparison between columns of the row ae done in
 -- null-safe manner.
 SELECT name, age FROM person
-UNION 
-SELECT name, age FROM unknown_age;
+    UNION 
+    SELECT name, age FROM unknown_age;
   +--------+----+                                                                 
-  |name    |age |
+  |    name| age|
   +--------+----+
-  |Albert  |null|
-  |Joe     |30  |
-  |Michelle|30  |
-  |Marry   |null|
-  |Fred    |50  |
-  |Mike    |18  |
-  |Dan     |50  |
+  |  Albert|null|
+  |     Joe|  30|
+  |Michelle|  30|
+  |   Marry|null|
+  |    Fred|  50|
+  |    Mike|  18|
+  |     Dan|  50|
   +--------+----+
 {% endhighlight %}
 
-
 ### EXISTS/NOT EXISTS Subquery <a name="exists-not-exists"></a>
+
 In Spark, EXISTS and NOT EXISTS expressions are allowed inside a WHERE clause. 
 These are boolean expressions which return either `TRUE` or
 `FALSE`. In other words, EXISTS is a membership condition and returns `TRUE`
@@ -614,20 +628,21 @@ the subquery. They are normally faster because they can be converted to
 semijoins / anti-semijoins without special provisions for null awareness.
 
 #### Examples
+
 {% highlight sql %}
 -- Even if subquery produces rows with `NULL` values, the `EXISTS` expression
 -- evaluates to `TRUE` as the subquery produces 1 row.
 SELECT * FROM person WHERE EXISTS (SELECT null);
   +--------+----+                                                                 
-  |name    |age |
+  |    name| age|
   +--------+----+
-  |Albert  |null|
-  |Michelle|30  |
-  |Fred    |50  |
-  |Mike    |18  |
-  |Dan     |50  |
-  |Marry   |null|
-  |Joe     |30  |
+  |  Albert|null|
+  |Michelle|  30|
+  |    Fred|  50|
+  |    Mike|  18|
+  |     Dan|  50|
+  |   Marry|null|
+  |     Joe|  30|
   +--------+----+
 
 -- `NOT EXISTS` expression returns `FALSE`. It returns `TRUE` only when
@@ -641,19 +656,20 @@ SELECT * FROM person WHERE NOT EXISTS (SELECT null);
 -- `NOT EXISTS` expression returns `TRUE`.
 SELECT * FROM person WHERE NOT EXISTS (SELECT 1 WHERE 1 = 0);
   +--------+----+
-  |name    |age |
+  |    name| age|
   +--------+----+
-  |Albert  |null|
-  |Michelle|30  |
-  |Fred    |50  |
-  |Mike    |18  |
-  |Dan     |50  |
-  |Marry   |null|
-  |Joe     |30  |
+  |  Albert|null|
+  |Michelle|  30|
+  |    Fred|  50|
+  |    Mike|  18|
+  |     Dan|  50|
+  |   Marry|null|
+  |     Joe|  30|
   +--------+----+
 {% endhighlight %}
 
 ### IN/NOT IN Subquery <a name="in-not-in"></a>
+
 In Spark, `IN` and `NOT IN` expressions are allowed inside a WHERE clause of
 a query. Unlike the `EXISTS` expression, `IN` expression can return a `TRUE`,
 `FALSE` or `UNKNOWN (NULL)` value. Conceptually a `IN` expression is semantically
@@ -675,6 +691,7 @@ This is because IN returns UNKNOWN if the value is not in the list containing `N
 and because NOT UNKNOWN is again UNKNOWN.
  
 #### Examples
+
 {% highlight sql %}
 -- The subquery has only `NULL` value in its result set. Therefore,
 -- the result of `IN` predicate is UNKNOWN.
@@ -687,22 +704,21 @@ SELECT * FROM person WHERE age IN (SELECT null);
 -- The subquery has `NULL` value in the result set as well as a valid 
 -- value `50`. Rows with age = 50 are returned. 
 SELECT * FROM person
-WHERE age IN (SELECT age FROM VALUES (50), (null) sub(age));
+    WHERE age IN (SELECT age FROM VALUES (50), (null) sub(age));
   +----+---+
   |name|age|
   +----+---+
-  |Fred|50 |
-  |Dan |50 |
+  |Fred| 50|
+  | Dan| 50|
   +----+---+
 
 -- Since subquery has `NULL` value in the result set, the `NOT IN`
 -- predicate would return UNKNOWN. Hence, no rows are
 -- qualified for this query.
 SELECT * FROM person
-WHERE age NOT IN (SELECT age FROM VALUES (50), (null) sub(age));
+    WHERE age NOT IN (SELECT age FROM VALUES (50), (null) sub(age));
   +----+---+
   |name|age|
   +----+---+
   +----+---+
-
 {% endhighlight %}

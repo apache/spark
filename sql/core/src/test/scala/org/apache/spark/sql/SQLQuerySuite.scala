@@ -181,6 +181,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     parFuncs.foreach { funcId =>
       // Examples can change settings. We clone the session to prevent tests clashing.
       val clonedSpark = spark.cloneSession()
+      // Coalescing partitions can change result order, so disable it.
+      clonedSpark.sessionState.conf.setConf(SQLConf.COALESCE_PARTITIONS_ENABLED, false)
       val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
       if (!ignoreSet.contains(className)) {
@@ -3485,6 +3487,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }.getMessage
         assert(errMsg.contains("Grouping sets size cannot be greater than 64"))
       }
+    }
+  }
+
+  test("SPARK-31166: UNION map<null, null> and other maps should not fail") {
+    checkAnswer(
+      sql("(SELECT map()) UNION ALL (SELECT map(1, 2))"),
+      Seq(Row(Map[Int, Int]()), Row(Map(1 -> 2))))
+  }
+
+  test("SPARK-31242: clone SparkSession should respect sessionInitWithConfigDefaults") {
+    // Note, only the conf explicitly set in SparkConf(e.g. in SharedSparkSessionBase) would cause
+    // problem before the fix.
+    withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
+      val cloned = spark.cloneSession()
+      SparkSession.setActiveSession(cloned)
+      assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
     }
   }
 }

@@ -154,10 +154,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
         .client.version.fullVersion.startsWith(version))
     }
 
-    def table(database: String, tableName: String): CatalogTable = {
+    def table(database: String, tableName: String,
+        tableType: CatalogTableType = CatalogTableType.MANAGED): CatalogTable = {
       CatalogTable(
         identifier = TableIdentifier(tableName, Some(database)),
-        tableType = CatalogTableType.MANAGED,
+        tableType = tableType,
         schema = new StructType().add("key", "int"),
         storage = CatalogStorageFormat(
           locationUri = None,
@@ -273,7 +274,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: createTable") {
       client.createTable(table("default", tableName = "src"), ignoreIfExists = false)
-      client.createTable(table("default", "temporary"), ignoreIfExists = false)
+      client.createTable(table("default", tableName = "temporary"), ignoreIfExists = false)
+      client.createTable(table("default", tableName = "view1", tableType = CatalogTableType.VIEW),
+        ignoreIfExists = false)
     }
 
     test(s"$version: loadTable") {
@@ -389,12 +392,19 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: listTables(database)") {
-      assert(client.listTables("default") === Seq("src", "temporary"))
+      assert(client.listTables("default") === Seq("src", "temporary", "view1"))
     }
 
     test(s"$version: listTables(database, pattern)") {
       assert(client.listTables("default", pattern = "src") === Seq("src"))
       assert(client.listTables("default", pattern = "nonexist").isEmpty)
+    }
+
+    test(s"$version: listTablesByType(database, pattern, tableType)") {
+      assert(client.listTablesByType("default", pattern = "view1",
+        CatalogTableType.VIEW) === Seq("view1"))
+      assert(client.listTablesByType("default", pattern = "nonexist",
+        CatalogTableType.VIEW).isEmpty)
     }
 
     test(s"$version: dropTable") {
@@ -410,6 +420,16 @@ class VersionsSuite extends SparkFunSuite with Logging {
         case _: UnsupportedOperationException =>
           assert(versionsWithoutPurge.contains(version))
           client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
+            purge = false)
+      }
+      // Drop table with type CatalogTableType.VIEW.
+      try {
+        client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
+          purge = true)
+        assert(!versionsWithoutPurge.contains(version))
+      } catch {
+        case _: UnsupportedOperationException =>
+          client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
             purge = false)
       }
       assert(client.listTables("default") === Seq("src"))
