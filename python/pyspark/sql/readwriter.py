@@ -245,7 +245,7 @@ class DataFrameReader(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
@@ -455,7 +455,7 @@ class DataFrameReader(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -892,7 +892,7 @@ class DataFrameWriter(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
         :param encoding: specifies encoding (charset) of saved json files. If None is set,
                         the default UTF-8 charset will be used.
         :param lineSep: defines the line separator that should be used for writing. If None is
@@ -996,7 +996,7 @@ class DataFrameWriter(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
         :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
                                         values being written should be skipped. If None is set, it
                                         uses the default value, ``true``.
