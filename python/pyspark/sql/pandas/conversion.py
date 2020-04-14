@@ -103,7 +103,7 @@ class PandasConversionMixin(object):
                 try:
                     from pyspark.sql.pandas.types import _check_series_localize_timestamps
                     import pyarrow
-                    # Rename columns to void duplicated column names.
+                    # Rename columns to avoid duplicated column names.
                     tmp_column_names = ['col_{}'.format(i) for i in range(len(self.columns))]
                     batches = self.toDF(*tmp_column_names)._collect_as_arrow()
                     if len(batches) > 0:
