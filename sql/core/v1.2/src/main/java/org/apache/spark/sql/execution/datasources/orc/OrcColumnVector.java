@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import org.apache.orc.storage.ql.exec.vector.*;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DateType;
 import org.apache.spark.sql.types.Decimal;
@@ -140,7 +141,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   public int getInt(int rowId) {
     int value = (int) longData.vector[getRowIndex(rowId)];
     if (isDate) {
-      return DateTimeUtils.rebaseJulianToGregorianDays(value);
+      return RebaseDateTime.rebaseJulianToGregorianDays(value);
     } else {
       return value;
     }

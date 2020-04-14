@@ -18,25 +18,14 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class ExplainSuite extends QueryTest with SharedSparkSession {
+class ExplainSuite extends QueryTest with SharedSparkSession with DisableAdaptiveExecutionSuite {
   import testImplicits._
-
-  var originalValue: String = _
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
-    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
-  }
-
-  protected override def afterAll(): Unit = {
-    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
-    super.afterAll()
-  }
 
   private def getNormalizedExplain(df: DataFrame, mode: ExplainMode): String = {
     val output = new java.io.ByteArrayOutputStream()
