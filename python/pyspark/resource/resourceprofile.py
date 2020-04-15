@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.resource.executorresourcerequest import ExecutorResourceRequest
 from pyspark.resource.taskresourcerequest import TaskResourceRequest
+from pyspark.resource.taskresourcerequests import TaskResourceRequests
 
 
 class ResourceProfile(object):
@@ -24,20 +24,32 @@ class ResourceProfile(object):
     """
     .. note:: Evolving
 
-    Resource profile to associate with an RDD. A ResourceProfile allows the user to
-    specify executor and task requirements for an RDD that will get applied during a
-    stage. This allows the user to change the resource requirements between stages.
-    This is meant to be immutable so user doesn't change it after building.
+    Resource profile to associate with an RDD. A :class:`pyspark.resource.ResourceProfile`
+    allows the user to specify executor and task requirements for an RDD that will get
+    applied during a stage. This allows the user to change the resource requirements between
+    stages. This is meant to be immutable so user doesn't change it after building.
 
     .. versionadded:: 3.1.0
     """
 
-    def __init__(self, _java_resource_profile):
-        self._java_resource_profile = _java_resource_profile
+    def __init__(self, _java_resource_profile = None, _exec_req = None, _task_req = None):
+        if _java_resource_profile is not None:
+            self._java_resource_profile = _java_resource_profile
+        else:
+            self._java_resource_profile = None
+            self._executor_resource_requests = _exec_req
+            self._task_resource_requests = _task_req
+
+    @property
+    def id(self):
+        return self._java_resource_profile.id()
 
     @property
     def taskResources(self):
-        taskRes = self._java_resource_profile.taskResourcesJMap()
+        if _java_resource_profile is not None:
+            taskRes = self._java_resource_profile.taskResourcesJMap()
+        else:
+            taskRes = self._task_resource_requests
         result = {}
         # convert back to python TaskResourceRequest
         for k, v in taskRes.items():

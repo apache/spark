@@ -30,28 +30,49 @@ class TaskResourceRequests(object):
     .. versionadded:: 3.1.0
     """
 
-    def __init__(self):
+    def __init__(self, _jvm = None, _requests = None):
         """
         Create a new :class:`pyspark.resource.TaskResourceRequests` that wraps the underlying
         JVM object.
         """
         from pyspark import SparkContext
-        self._java_task_resource_requests = \
-            SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()
+        _jvm = _jvm or SparkContext._jvm
+        if _jvm is not None:
+            self._java_task_resource_requests = \
+                SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()
+            if _requests is not None:
+                self._java_task_resource_requests.cpus(_requests._cpus)
+        else:
+            self._java_task_resource_requests = None
+            self._custom_resources = []
+            self._cpus = None
+
 
     def cpus(self, amount):
-        self._java_task_resource_requests.cpus(amount)
+        if self._java_task_resource_requests is not None:
+            self._java_task_resource_requests.cpus(amount)
+        else:
+            self._cpus=amount
         return self
 
     def resource(self, resourceName, amount):
-        self._java_task_resource_requests.resource(resourceName, float(amount))
+        if self._java_task_resource_requests is not None:
+            self._java_task_resource_requests.resource(resourceName, float(amount))
+        else:
+            self._custom_resources.append(TaskResourceRequest(resourceName, amount))
         return self
 
     @property
     def requests(self):
-        taskRes = self._java_task_resource_requests.requestsJMap()
         result = {}
-        # convert back to python TaskResourceRequest
-        for k, v in taskRes.items():
-            result[k] = TaskResourceRequest(v.resourceName(), v.amount())
+        if self._java_task_resource_requests is not None:
+            taskRes = self._java_task_resource_requests.requestsJMap()
+            # convert back to python TaskResourceRequest
+            for k, v in taskRes.items():
+                result[k] = TaskResourceRequest(v.resourceName(), v.amount())
+        else:
+            if self._cpus is not None:
+                result["cpus"] = TaskResourceRequest("cpus", self._cpus)
+            for t in self._custom_resources:
+                result[t.resourceName] = TaskResourceRequest(t.resourceName, t.amount)
         return result

@@ -34,28 +34,53 @@ class ResourceProfileBuilder(object):
     .. versionadded:: 3.1.0
     """
 
-    def __init__(self, ):
-        """Create a new ResourceProfileBuilder that wraps the underlying JVM object."""
+    def __init__(self):
+        """
+        Create a new :class:`pyspark.resource.ResourceProfileBuilder` that wraps the
+        underlying JVM object.
+        """
         from pyspark.context import SparkContext
-        self._java_resource_profile_builder = \
-            SparkContext._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+        _jvm = SparkContext._jvm
+        if _jvm is not None:
+            self._java_resource_profile_builder = \
+                _jvm.org.apache.spark.resource.ResourceProfileBuilder()
+        else:
+            self._java_resource_profile_builder = None
+            self._executor_resource_requests = None
+            self._task_resource_requests = None
 
     def require(self, resourceRequest):
         if isinstance(resourceRequest, TaskResourceRequests):
-            self._java_resource_profile_builder.require(resourceRequest._java_task_resource_requests)
+            if self._java_resource_profile_builder is not None:
+                self._java_resource_profile_builder.require(resourceRequest._java_task_resource_requests)
+            else:
+                self._task_resource_requests = resourceRequest
         else:
-            self._java_resource_profile_builder.require(resourceRequest._java_executor_resource_requests)
+            if self._java_resource_profile_builder is not None:
+                self._java_resource_profile_builder.require(resourceRequest._java_executor_resource_requests)
+            else:
+                self._executor_resource_requests = resourceRequest
         return self
 
     def clearExecutorResourceRequests(self):
-        self._java_resource_profile_builder.clearExecutorResourceRequests()
+        if self._java_resource_profile_builder is not None:
+            self._java_resource_profile_builder.clearExecutorResourceRequests()
+        else:
+            self._executor_resource_requests = None
 
     def clearTaskResourceRequests(self):
-        self._java_resource_profile_builder.clearTaskResourceRequests()
+        if self._java_resource_profile_builder is not None:
+            self._java_resource_profile_builder.clearTaskResourceRequests()
+        else:
+            self._task_resource_requests = None
 
     @property
     def taskResources(self):
-        taskRes = self._java_resource_profile_builder.taskResourcesJMap()
+        if self._java_resource_profile_builder is not None:
+            taskRes = self._java_resource_profile_builder.taskResourcesJMap()
+        else:
+            taskRes = self._task_resource_requests
+
         result = {}
         # convert back to python TaskResourceRequest
         for k, v in taskRes.items():
@@ -64,7 +89,10 @@ class ResourceProfileBuilder(object):
 
     @property
     def executorResources(self):
-        execRes = self._java_resource_profile_builder.executorResourcesJMap()
+        if self._java_resource_profile_builder is not None:
+            execRes = self._java_resource_profile_builder.executorResourcesJMap()
+        else:
+            execRes = self._executor_resource_requests
         result = {}
         # convert back to python ExecutorResourceRequest
         for k, v in execRes.items():
@@ -74,5 +102,10 @@ class ResourceProfileBuilder(object):
 
     @property
     def build(self):
-        jresourceProfile = self._java_resource_profile_builder.build()
-        return ResourceProfile(jresourceProfile)
+        if self._java_resource_profile_builder is not None:
+            jresourceProfile = self._java_resource_profile_builder.build()
+            return ResourceProfile(_java_resource_profile = jresourceProfile)
+        else:
+            return ResourceProfile(_exec_req = self._executor_resource_requests,
+                _task_req = self._task_resource_requests)
+

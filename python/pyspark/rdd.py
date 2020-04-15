@@ -47,7 +47,9 @@ from pyspark.join import python_join, python_left_outer_join, \
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
+from pyspark.resource.executorresourcerequests import ExecutorResourceRequests
 from pyspark.resource.resourceprofile import ResourceProfile
+from pyspark.resource.taskresourcerequests import TaskResourceRequests
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
@@ -2497,7 +2499,17 @@ class RDD(object):
         .. versionadded:: 3.1.0
         """
         self.has_resourceProfile = True
-        self._jrdd.withResources(profile._jResourceProfile)
+        if profile._java_resource_profile is not None:
+            jrp = profile._java_resource_profile
+        else:
+            builder = self.ctx._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+            ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_request)
+            treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_request)
+            builder.require(ereqs._java_executor_resource_requests)
+            builder.require(treqs._java_task_resource_requests)
+            jrp = builder.build()
+
+        self._jrdd.withResources(jrp)
         return self
 
     def getResourceProfile(self):
@@ -2510,7 +2522,7 @@ class RDD(object):
 
         .. versionadded:: 3.1.0
         """
-        return ResourceProfile(self._jrdd.getResourceProfile())
+        return ResourceProfile(_java_resource_profile = self._jrdd.getResourceProfile())
 
 
 def _prepare_for_python_RDD(sc, command):
