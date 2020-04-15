@@ -23,6 +23,7 @@ import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.control.NonFatal
 
+import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkException
@@ -52,6 +53,15 @@ import org.apache.spark.sql.types._
  *   3. Support SHOW command.
  */
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
+
+  override protected def testFile(fileName: String): String = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
+    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
+    val file = File.createTempFile("thriftserver-test", ".data")
+    file.deleteOnExit()
+    FileUtils.copyURLToFile(url, file)
+    file.getAbsolutePath
+  }
 
   /** List of test cases to ignore, in lower cases. */
   override def blackList: Set[String] = super.blackList ++ Set(

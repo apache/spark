@@ -77,7 +77,7 @@ For a regular multi-line JSON file, set a named parameter `multiLine` to `TRUE`.
 
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 

@@ -26,6 +26,8 @@ import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
+import sun.util.calendar.ZoneInfo
+
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.types.Decimal
@@ -94,16 +96,10 @@ object DateTimeUtils {
    * @return The number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): Int = {
-    val era = if (date.before(julianCommonEraStart)) 0 else 1
-    val localDate = LocalDate
-      .of(date.getYear + 1900, date.getMonth + 1, 1)
-      .`with`(ChronoField.ERA, era)
-      // Add days separately to convert dates existed in Julian calendar but not
-      // in Proleptic Gregorian calendar. For example, 1000-02-29 is valid date
-      // in Julian calendar because 1000 is a leap year but 1000 is not a leap
-      // year in Proleptic Gregorian calendar. And 1000-02-29 doesn't exist in it.
-      .plusDays(date.getDate - 1) // Returns the next valid date after `date.getDate - 1` days
-    localDateToDays(localDate)
+    val millisUtc = date.getTime
+    val millisLocal = millisUtc + TimeZone.getDefault.getOffset(millisUtc)
+    val julianDays = Math.toIntExact(Math.floorDiv(millisLocal, MILLIS_PER_DAY))
+    rebaseJulianToGregorianDays(julianDays)
   }
 
   /**
@@ -120,8 +116,13 @@ object DateTimeUtils {
    * @return A `java.sql.Date` from number of days since epoch.
    */
   def toJavaDate(days: Int): Date = {
-    val localDate = LocalDate.ofEpochDay(days)
-    new Date(localDate.getYear - 1900, localDate.getMonthValue - 1, localDate.getDayOfMonth)
+    val rebasedDays = rebaseGregorianToJulianDays(days)
+    val localMillis = Math.multiplyExact(rebasedDays, MILLIS_PER_DAY)
+    val timeZoneOffset = TimeZone.getDefault match {
+      case zoneInfo: ZoneInfo => zoneInfo.getOffsetsByWall(localMillis, null)
+      case timeZone: TimeZone => timeZone.getOffset(localMillis - timeZone.getRawOffset)
+    }
+    new Date(localMillis - timeZoneOffset)
   }
 
   /**
@@ -137,12 +138,16 @@ object DateTimeUtils {
    * representation as `year`, `month`, `day`, ..., `seconds` in the original calendar
    * and in the target calendar.
    *
-   * @param us The number of microseconds since 1970-01-01T00:00:00.000000Z.
+   * @param micros The number of microseconds since 1970-01-01T00:00:00.000000Z.
    * @return A `java.sql.Timestamp` from number of micros since epoch.
    */
   def toJavaTimestamp(micros: Long): Timestamp = {
-    val ldt = microsToInstant(micros).atZone(ZoneId.systemDefault()).toLocalDateTime
-    Timestamp.valueOf(ldt)
+    val rebasedMicros = rebaseGregorianToJulianMicros(micros)
+    val seconds = Math.floorDiv(rebasedMicros, MICROS_PER_SECOND)
+    val ts = new Timestamp(seconds * MILLIS_PER_SECOND)
+    val nanos = (rebasedMicros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
+    ts.setNanos(nanos.toInt)
+    ts
   }
 
   /**
@@ -165,17 +170,8 @@ object DateTimeUtils {
    * @return The number of micros since epoch from `java.sql.Timestamp`.
    */
   def fromJavaTimestamp(t: Timestamp): Long = {
-    val era = if (t.before(julianCommonEraStart)) 0 else 1
-    val localDateTime = LocalDateTime.of(
-      t.getYear + 1900, t.getMonth + 1, 1,
-      t.getHours, t.getMinutes, t.getSeconds, t.getNanos)
-      .`with`(ChronoField.ERA, era)
-      // Add days separately to convert dates existed in Julian calendar but not
-      // in Proleptic Gregorian calendar. For example, 1000-02-29 is valid date
-      // in Julian calendar because 1000 is a leap year but 1000 is not a leap
-      // year in Proleptic Gregorian calendar. And 1000-02-29 doesn't exist in it.
-      .plusDays(t.getDate - 1) // Returns the next valid date after `date.getDate - 1` days
-    instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
+    val micros = millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
+    rebaseJulianToGregorianMicros(micros)
   }
 
   /**

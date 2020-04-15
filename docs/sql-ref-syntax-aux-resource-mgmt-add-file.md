@@ -20,20 +20,24 @@ license: |
 ---
 
 ### Description
+
 `ADD FILE` can be used to add a single file as well as a directory to the list of resources. The added resource can be listed using [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html).
 
 ### Syntax
+
 {% highlight sql %}
 ADD FILE resource_name
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
  <dt><code><em>resource_name</em></code></dt>
  <dd>The name of the file or directory to be added.</dd>
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 ADD FILE /tmp/test;
 ADD FILE "/path/to/file/abc.txt";
@@ -43,6 +47,7 @@ ADD FILE "/path/to/some/directory";
 {% endhighlight %}
 
 ### Related Statements
+
  * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
  * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
  * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)

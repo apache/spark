@@ -103,13 +103,17 @@ class PandasConversionMixin(object):
                 try:
                     from pyspark.sql.pandas.types import _check_series_localize_timestamps
                     import pyarrow
-                    batches = self._collect_as_arrow()
+                    # Rename columns to avoid duplicated column names.
+                    tmp_column_names = ['col_{}'.format(i) for i in range(len(self.columns))]
+                    batches = self.toDF(*tmp_column_names)._collect_as_arrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
                         # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
                         # values, but we should use datetime.date to match the behavior with when
                         # Arrow optimization is disabled.
                         pdf = table.to_pandas(date_as_object=True)
+                        # Rename back to the original column names.
+                        pdf.columns = self.columns
                         for field in self.schema:
                             if isinstance(field.dataType, TimestampType):
                                 pdf[field.name] = \
