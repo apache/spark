@@ -24,13 +24,13 @@ class TaskResourceRequests(object):
     .. note:: Evolving
 
     A set of task resource requests. This is used in conjuntion with the
-    :class:`pyspark.resource.ResourceProfileBuilder` to programmatically specify the resources needed for
-    an RDD that will be applied at the stage level.
+    :class:`pyspark.resource.ResourceProfileBuilder` to programmatically specify the resources
+    needed for an RDD that will be applied at the stage level.
 
     .. versionadded:: 3.1.0
     """
 
-    def __init__(self, _jvm = None, _requests = None):
+    def __init__(self, _jvm=None, _requests=None):
         from pyspark import SparkContext
         _jvm = _jvm or SparkContext._jvm
         if _jvm is not None:
@@ -46,12 +46,11 @@ class TaskResourceRequests(object):
             self._custom_resources = []
             self._cpus = None
 
-
     def cpus(self, amount):
         if self._java_task_resource_requests is not None:
             self._java_task_resource_requests.cpus(amount)
         else:
-            self._cpus=amount
+            self._cpus = amount
         return self
 
     def resource(self, resourceName, amount):

@@ -32,7 +32,7 @@ class ResourceProfile(object):
     .. versionadded:: 3.1.0
     """
 
-    def __init__(self, _java_resource_profile = None, _exec_req = None, _task_req = None):
+    def __init__(self, _java_resource_profile=None, _exec_req=None, _task_req=None):
         if _java_resource_profile is not None:
             self._java_resource_profile = _java_resource_profile
         else:
@@ -66,7 +66,7 @@ class ResourceProfile(object):
             result = {}
             for k, v in execRes.items():
                 result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
-                    v.discoveryScript(), v.vendor())
+                                                    v.discoveryScript(), v.vendor())
             return result
         else:
             return self._executor_resource_requests

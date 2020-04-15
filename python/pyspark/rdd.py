@@ -2522,7 +2522,7 @@ class RDD(object):
 
         .. versionadded:: 3.1.0
         """
-        return ResourceProfile(_java_resource_profile = self._jrdd.getResourceProfile())
+        return ResourceProfile(_java_resource_profile=self._jrdd.getResourceProfile())
 
 
 def _prepare_for_python_RDD(sc, command):

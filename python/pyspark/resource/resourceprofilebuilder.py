@@ -48,12 +48,14 @@ class ResourceProfileBuilder(object):
     def require(self, resourceRequest):
         if isinstance(resourceRequest, TaskResourceRequests):
             if self._java_resource_profile_builder is not None:
-                self._java_resource_profile_builder.require(resourceRequest._java_task_resource_requests)
+                self._java_resource_profile_builder.require(
+                    resourceRequest._java_task_resource_requests)
             else:
                 self._task_resource_requests = resourceRequest
         else:
             if self._java_resource_profile_builder is not None:
-                self._java_resource_profile_builder.require(resourceRequest._java_executor_resource_requests)
+                self._java_resource_profile_builder.require(
+                    resourceRequest._java_executor_resource_requests)
             else:
                 self._executor_resource_requests = resourceRequest
         return self
@@ -88,7 +90,7 @@ class ResourceProfileBuilder(object):
             execRes = self._java_resource_profile_builder.executorResourcesJMap()
             for k, v in execRes.items():
                 result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
-                    v.discoveryScript(), v.vendor())
+                                                    v.discoveryScript(), v.vendor())
             return result
         else:
             return self._executor_resource_requests
@@ -97,8 +99,7 @@ class ResourceProfileBuilder(object):
     def build(self):
         if self._java_resource_profile_builder is not None:
             jresourceProfile = self._java_resource_profile_builder.build()
-            return ResourceProfile(_java_resource_profile = jresourceProfile)
+            return ResourceProfile(_java_resource_profile=jresourceProfile)
         else:
-            return ResourceProfile(_exec_req = self._executor_resource_requests,
-                _task_req = self._task_resource_requests)
-
+            return ResourceProfile(_exec_req=self._executor_resource_requests,
+                                   _task_req=self._task_resource_requests)
