@@ -2941,7 +2941,12 @@ from this directory.
 
 # Overriding classpath default directory
 
-To specify a different classpath directory other than the default "SPARK_HOME/jars"  you can set SPARK_JARS_DIR. Any of the services under "SPARK_HOME/sbin" folder will use it.
+To specify a different classpath directory other than the default "SPARK_HOME/jars", you can set SPARK_JARS_DIR.
+
+The configuration affects to
+* The commands under "SPARK_HOME/bin", specifically the script uses `spark-class`.
+* The services under "SPARK_HOME/sbin", specifically the script uses `spark-config.sh`.
+* An application employs spark-launcher to run a spark application
 
 # Inheriting Hadoop Cluster Configuration
 
