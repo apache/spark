@@ -364,4 +364,26 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
   }
+
+  test("rebase not-existed dates in the hybrid calendar") {
+    outstandingZoneIds.foreach { zid =>
+      withDefaultTimeZone(zid) {
+        Seq(
+          "1582-10-04" -> "1582-10-04",
+          "1582-10-05" -> "1582-10-15", "1582-10-06" -> "1582-10-15", "1582-10-07" -> "1582-10-15",
+          "1582-10-08" -> "1582-10-15", "1582-10-09" -> "1582-10-15", "1582-10-11" -> "1582-10-15",
+          "1582-10-12" -> "1582-10-15", "1582-10-13" -> "1582-10-15", "1582-10-14" -> "1582-10-15",
+          "1582-10-15" -> "1582-10-15").foreach { case (hybridDate, gregDate) =>
+          withClue(s"tz = ${zid.getId} hybrid date = $hybridDate greg date = $gregDate") {
+            val date = Date.valueOf(gregDate)
+            val hybridDays = fromJavaDateLegacy(date)
+            val gregorianDays = localDateToDays(LocalDate.parse(hybridDate))
+
+            assert(localRebaseGregorianToJulianDays(gregorianDays) === hybridDays)
+            assert(rebaseGregorianToJulianDays(gregorianDays) === hybridDays)
+          }
+        }
+      }
+    }
+  }
 }
