@@ -409,6 +409,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
             val gregorianMicros = parseToGregMicros(gregTs, zid)
 
             assert(rebaseGregorianToJulianMicros(zid, gregorianMicros) === hybridMicros)
+            assert(rebaseGregorianToJulianMicros(gregorianMicros) === hybridMicros)
           }
         }
       }
