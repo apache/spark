@@ -437,7 +437,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   testOverflowingBigNumeric(new BigInteger("9" * 100), "java very big int")
 
   encodeDecodeTest("foo" -> 1L, "makeCopy") {
-    Encoders.product[(String, Long)].makeCopy.asInstanceOf[ExpressionEncoder[(String, Long)]]
+    Encoders.product[(String, Long)].asInstanceOf[ExpressionEncoder[(String, Long)]]
   }
 
   private def testOverflowingBigNumeric[T: TypeTag](bigNumeric: T, testName: String): Unit = {

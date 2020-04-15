@@ -57,10 +57,6 @@ import org.apache.spark.sql.types._
  *   Encoders.bean(MyClass.class);
  * }}}
  *
- * == Implementation ==
- *  - Encoders are not required to be thread-safe and thus they do not need to use locks to guard
- *    against concurrent access if they reuse internal buffers to improve performance.
- *
  * @since 1.6.0
  */
 @implicitNotFound("Unable to find encoder for type ${T}. An implicit Encoder[${T}] is needed to " +
@@ -76,10 +72,4 @@ trait Encoder[T] extends Serializable {
    * A ClassTag that can be used to construct an Array to contain a collection of `T`.
    */
   def clsTag: ClassTag[T]
-
-  /**
-   * Create a copied [[Encoder]]. The implementation may just copy internal reusable fields to speed
-   * up the [[Encoder]] creation.
-   */
-  def makeCopy: Encoder[T]
 }
