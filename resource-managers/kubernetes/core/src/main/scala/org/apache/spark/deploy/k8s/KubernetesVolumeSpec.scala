@@ -29,6 +29,11 @@ private[spark] case class KubernetesEmptyDirVolumeConf(
     sizeLimit: Option[String])
   extends KubernetesVolumeSpecificConf
 
+private[spark] case class KubernetesNFSVolumeConf(
+    path: String,
+    server: String)
+  extends KubernetesVolumeSpecificConf
+
 private[spark] case class KubernetesVolumeSpec(
     volumeName: String,
     mountPath: String,
