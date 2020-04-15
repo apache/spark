@@ -232,18 +232,6 @@ tr.corresponding-item-hover > td, tr.corresponding-item-hover > th {
   background-color: #D6FFE4 !important;
 }
 
-#application-timeline.collapsed {
-  display: none;
-}
-
-#job-timeline.collapsed {
-  display: none;
-}
-
-#task-assignment-timeline.collapsed {
-  display: none;
-}
-
 .control-panel {
   margin-bottom: 5px;
 }
