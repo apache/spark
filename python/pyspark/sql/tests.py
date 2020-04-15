@@ -3297,6 +3297,19 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEquals(types[5], 'datetime64[ns]')
 
     @unittest.skipIf(not _have_pandas, _pandas_requirement_message)
+    def test_to_pandas_with_duplicated_column_names(self):
+        import numpy as np
+
+        sql = "select 1 v, 1 v"
+        for arrowEnabled in [False, True]:
+            with self.sql_conf({"spark.sql.execution.arrow.enabled": arrowEnabled}):
+                df = self.spark.sql(sql)
+                pdf = df.toPandas()
+                types = pdf.dtypes
+                self.assertEquals(types.iloc[0], np.int32)
+                self.assertEquals(types.iloc[1], np.int32)
+
+    @unittest.skipIf(not _have_pandas, _pandas_requirement_message)
     def test_to_pandas_on_cross_join(self):
         import numpy as np
 
@@ -3307,12 +3320,14 @@ class SQLTests(ReusedSQLTestCase):
           select explode(sequence(1, 3)) v
         ) t2
         """
-        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
-            df = self.spark.sql(sql)
-            pdf = df.toPandas()
-            types = pdf.dtypes
-            self.assertEquals(types.iloc[0], np.int32)
-            self.assertEquals(types.iloc[1], np.int32)
+        for arrowEnabled in [False, True]:
+            with self.sql_conf({"spark.sql.crossJoin.enabled": True,
+                                "spark.sql.execution.arrow.enabled": arrowEnabled}):
+                df = self.spark.sql(sql)
+                pdf = df.toPandas()
+                types = pdf.dtypes
+                self.assertEquals(types.iloc[0], np.int32)
+                self.assertEquals(types.iloc[1], np.int32)
 
     @unittest.skipIf(_have_pandas, "Required Pandas was found.")
     def test_to_pandas_required_pandas_not_found(self):

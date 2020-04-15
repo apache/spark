@@ -2127,10 +2127,14 @@ class DataFrame(object):
                     from pyspark.sql.types import _check_dataframe_convert_date, \
                         _check_dataframe_localize_timestamps
                     import pyarrow
-                    batches = self._collectAsArrow()
+                    # Rename columns to avoid duplicated column names.
+                    tmp_column_names = ['col_{}'.format(i) for i in range(len(self.columns))]
+                    batches = self.toDF(*tmp_column_names)._collectAsArrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
                         pdf = table.to_pandas()
+                        # Rename back to the original column names.
+                        pdf.columns = self.columns
                         pdf = _check_dataframe_convert_date(pdf, self.schema)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
                     else:
