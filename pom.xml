@@ -929,6 +929,18 @@
         <scope>test</scope>
       </dependency>
       <dependency>
+        <groupId>com.github.stefanbirkner</groupId>
+        <artifactId>system-rules</artifactId>
+        <version>1.19.0</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>junit</groupId>
+            <artifactId>junit-dep</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
         <version>8.14.1</version>

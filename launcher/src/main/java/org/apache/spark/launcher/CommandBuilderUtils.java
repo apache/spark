@@ -21,11 +21,15 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Helper methods for command builders.
  */
 class CommandBuilderUtils {
+
+  private static final Logger LOG = Logger.getLogger(AbstractAppHandle.class.getName());
 
   static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
@@ -315,23 +319,31 @@ class CommandBuilderUtils {
    * or a distribution directory.
    */
   static String findJarsDir(String sparkHome, String scalaVersion, boolean failIfNotFound) {
+    String envSparkJarsDir = System.getenv(ENV_SPARK_JARS_DIR);
+    if (envSparkJarsDir != null && !envSparkJarsDir.isEmpty()) {
+      File envJarsDir = new File(envSparkJarsDir);
+      return handleJarsDir(envJarsDir, failIfNotFound,
+        "The specified SPARK_JARS_DIR '%s' does not exist; make sure SPARK_JARS_DIR is set appropriately.");
+    }
+    
     // TODO: change to the correct directory once the assembly build is changed.
-    File libdir = new File(getJarsDir(sparkHome));
+    File libdir = new File(sparkHome, "jars");
     if (!libdir.isDirectory()) {
       libdir = new File(sparkHome, String.format("assembly/target/scala-%s/jars", scalaVersion));
-      if (!libdir.isDirectory()) {
-        checkState(!failIfNotFound,
-          "Library directory '%s' does not exist; make sure Spark is built.",
-          libdir.getAbsolutePath());
-        return null;
-      }
+      return handleJarsDir(libdir, failIfNotFound,
+          "Library directory '%s' does not exist; make sure Spark is built.");
     }
     return libdir.getAbsolutePath();
   }
 
-  static String getJarsDir(String sparkHome) {
-    String jarsDir = System.getenv(ENV_SPARK_JARS_DIR);
-    return jarsDir != null ? jarsDir : join(File.separator, sparkHome, "jars");
+  private static String handleJarsDir(File theDir, boolean failIfNotFound, String message) { 
+    if (!theDir.isDirectory()) {
+      LOG.log(Level.WARNING, "The jar dir candidate {0} is skipped because it is not a directory.",
+          new Object[] { theDir });
+      checkState(!failIfNotFound, message, theDir.getAbsolutePath());
+      return null;
+    }
+    return theDir.getAbsolutePath();
   }
 
 }
