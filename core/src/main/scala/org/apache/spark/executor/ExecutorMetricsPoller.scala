@@ -147,6 +147,10 @@ private[spark] class ExecutorMetricsPoller(
    * Called by TaskRunner#run.
    */
   def getTaskMetricPeaks(taskId: Long): Array[Long] = {
+    // If task running duration is less then pollInterval, task metric peak may not updated
+    // call poll() update to latest metrics
+    poll()
+
     // If this is called with an invalid taskId or a valid taskId but the task was killed and
     // onTaskStart was therefore not called, then we return an array of zeros.
     val currentPeaks = taskMetricPeaks.get(taskId) // may be null
