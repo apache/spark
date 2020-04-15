@@ -48,7 +48,7 @@ class ExecutorResourceRequests(object):
                     self._java_executor_resource_requests.cores(_requests._cores)
                 for r in _requests._custom_resources:
                     self._java_executor_resource_requests.resource(r.resourceName, r.amount,
-                       r.discoveryScript, r.vendor)
+                        r.discoveryScript, r.vendor)
         else:
             self._java_executor_resource_requests = None
             self._custom_resources = []
@@ -64,7 +64,6 @@ class ExecutorResourceRequests(object):
             self._memory = amount
         return self
             
-
     def memoryOverhead(self, amount):
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.memoryOverhead(amount)

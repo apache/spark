@@ -40,8 +40,7 @@ class TaskResourceRequests(object):
                 if _requests._cpus is not None:
                     self._java_task_resource_requests.cpus(_requests._cpus)
                 for r in _requests._custom_resources:
-                    self._java_executor_resource_requests.resource(r.resourceName,
-                       r.amount, r.discoveryScript, r.vendor)
+                    self._java_task_resource_requests.resource(r.resourceName, r.amount)
         else:
             self._java_task_resource_requests = None
             self._custom_resources = []
@@ -67,7 +66,6 @@ class TaskResourceRequests(object):
         result = {}
         if self._java_task_resource_requests is not None:
             taskRes = self._java_task_resource_requests.requestsJMap()
-            # convert back to python TaskResourceRequest
             for k, v in taskRes.items():
                 result[k] = TaskResourceRequest(v.resourceName(), v.amount())
         else:
