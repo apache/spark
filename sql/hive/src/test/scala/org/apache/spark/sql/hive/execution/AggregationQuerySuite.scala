@@ -1083,6 +1083,8 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
               }
             }
           }
+          // reset static uaoSize to avoid affect other tests
+          UnsafeAlignedOffset.setUaoSize(0)
         }
       }
     }
