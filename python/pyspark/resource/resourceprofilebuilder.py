@@ -35,10 +35,6 @@ class ResourceProfileBuilder(object):
     """
 
     def __init__(self):
-        """
-        Create a new :class:`pyspark.resource.ResourceProfileBuilder` that wraps the
-        underlying JVM object.
-        """
         from pyspark.context import SparkContext
         _jvm = SparkContext._jvm
         if _jvm is not None:
@@ -78,27 +74,24 @@ class ResourceProfileBuilder(object):
     def taskResources(self):
         if self._java_resource_profile_builder is not None:
             taskRes = self._java_resource_profile_builder.taskResourcesJMap()
+            result = {}
+            for k, v in taskRes.items():
+                result[k] = TaskResourceRequest(v.resourceName(), v.amount())
+            return result
         else:
-            taskRes = self._task_resource_requests
-
-        result = {}
-        # convert back to python TaskResourceRequest
-        for k, v in taskRes.items():
-            result[k] = TaskResourceRequest(v.resourceName(), v.amount())
-        return result
+            return self._task_resource_requests
 
     @property
     def executorResources(self):
         if self._java_resource_profile_builder is not None:
+            result = {}
             execRes = self._java_resource_profile_builder.executorResourcesJMap()
+            for k, v in execRes.items():
+                result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
+                    v.discoveryScript(), v.vendor())
+            return result
         else:
-            execRes = self._executor_resource_requests
-        result = {}
-        # convert back to python ExecutorResourceRequest
-        for k, v in execRes.items():
-            result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
-                                                v.discoveryScript(), v.vendor())
-        return result
+            return self._executor_resource_requests
 
     @property
     def build(self):

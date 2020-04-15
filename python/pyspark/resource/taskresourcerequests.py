@@ -31,17 +31,17 @@ class TaskResourceRequests(object):
     """
 
     def __init__(self, _jvm = None, _requests = None):
-        """
-        Create a new :class:`pyspark.resource.TaskResourceRequests` that wraps the underlying
-        JVM object.
-        """
         from pyspark import SparkContext
         _jvm = _jvm or SparkContext._jvm
         if _jvm is not None:
             self._java_task_resource_requests = \
                 SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()
             if _requests is not None:
-                self._java_task_resource_requests.cpus(_requests._cpus)
+                if _requests._cpus is not None:
+                    self._java_task_resource_requests.cpus(_requests._cpus)
+                for r in _requests._custom_resources:
+                    self._java_executor_resource_requests.resource(r.resourceName,
+                       r.amount, r.discoveryScript, r.vendor)
         else:
             self._java_task_resource_requests = None
             self._custom_resources = []

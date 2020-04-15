@@ -53,46 +53,23 @@ class ExecutorResourceRequest(object):
     """
 
     def __init__(self, resourceName, amount, discoveryScript="", vendor=""):
-        """
-        Create a new :class:`pyspark.resource.ExecutorResourceRequest` that wraps the
-        underlying JVM object.
-        """
-        from pyspark.context import SparkContext
-        _jvm = SparkContext._jvm
-        if _jvm is not None:
-            self._java_exec_request = _jvm.org.apache.spark.resource.ExecutorResourceRequest(
-                resourceName, amount, discoveryScript, vendor)
-        else:
-            self._java_exec_request = None
-            self._name = resourceName
-            self._amount = amount
-            self._discoveryScript = discoveryScript
-            self._vendor = vendor
+        self._name = resourceName
+        self._amount = amount
+        self._discoveryScript = discoveryScript
+        self._vendor = vendor
 
     @property
     def resourceName(self):
-        if self._java_exec_request is not None:
-            return self._java_exec_request.resourceName()
-        else:
-            return self._name
+        return self._name
 
     @property
     def amount(self):
-        if self._java_exec_request is not None:
-            return self._java_exec_request.amount()
-        else:
-            return self._amount
+        return self._amount
 
     @property
     def discoveryScript(self):
-        if self._java_exec_request is not None:
-            return self._java_exec_request.discoveryScript()
-        else:
-            return self._discoveryScript
+        return self._discoveryScript
 
     @property
     def vendor(self):
-        if self._java_exec_request is not None:
-            return self._java_exec_request.vendor()
-        else:
-            return self._vendor
+        return self._vendor

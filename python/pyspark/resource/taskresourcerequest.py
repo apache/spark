@@ -34,30 +34,13 @@ class TaskResourceRequest(object):
     .. versionadded:: 3.1.0
     """
     def __init__(self, resourceName, amount):
-        """
-        Create a new :class:`pyspark.resource.TaskResourceRequest` that wraps the underlying
-        JVM object.
-        """
-        from pyspark.context import SparkContext
-        _jvm = SparkContext._jvm
-        if _jvm is not None:
-            self._java_task_request = SparkContext._jvm.org.apache.spark.resource.TaskResourceRequest(
-                resourceName, float(amount))
-        else:
-            self._java_task_request = None
-            self._name = resourceName
-            self._amount = amount
+        self._name = resourceName
+        self._amount = float(amount)
 
     @property
     def resourceName(self):
-        if self._java_task_request is not None:
-            return self._java_task_request.resourceName()
-        else:
-            return self._name
+        return self._name
 
     @property
     def amount(self):
-        if self._java_task_request is not None:
-            return self._java_task_request.amount()
-        else:
-            return self._amount
+        return self._amount

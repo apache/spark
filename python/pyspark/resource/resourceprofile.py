@@ -16,7 +16,7 @@
 #
 
 from pyspark.resource.taskresourcerequest import TaskResourceRequest
-from pyspark.resource.taskresourcerequests import TaskResourceRequests
+from pyspark.resource.executorresourcerequest import ExecutorResourceRequest
 
 
 class ResourceProfile(object):
@@ -42,26 +42,31 @@ class ResourceProfile(object):
 
     @property
     def id(self):
-        return self._java_resource_profile.id()
+        if self._java_resource_profile is not None:
+            return self._java_resource_profile.id()
+        else:
+            raise RuntimeError("SparkContext must be created to get the id, get the id "
+                               "after adding the ResourceProfile to an RDD")
 
     @property
     def taskResources(self):
-        if _java_resource_profile is not None:
+        if self._java_resource_profile is not None:
             taskRes = self._java_resource_profile.taskResourcesJMap()
+            result = {}
+            for k, v in taskRes.items():
+                result[k] = TaskResourceRequest(v.resourceName(), v.amount())
+            return result
         else:
-            taskRes = self._task_resource_requests
-        result = {}
-        # convert back to python TaskResourceRequest
-        for k, v in taskRes.items():
-            result[k] = TaskResourceRequest(v.resourceName(), v.amount())
-        return result
+            return self._task_resource_requests
 
     @property
     def executorResources(self):
-        execRes = self._java_resource_profile.executorResourcesJMap()
-        result = {}
-        # convert back to python ExecutorResourceRequest
-        for k, v in execRes.items():
-            result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
-                                                v.discoveryScript(), v.vendor())
-        return result
+        if self._java_resource_profile is not None:
+            execRes = self._java_resource_profile.executorResourcesJMap()
+            result = {}
+            for k, v in execRes.items():
+                result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
+                    v.discoveryScript(), v.vendor())
+            return result
+        else:
+            return self._executor_resource_requests

@@ -16,6 +16,7 @@
 #
 
 from pyspark.resource.executorresourcerequest import ExecutorResourceRequest
+from pyspark.resource.taskresourcerequest import TaskResourceRequest
 
 
 class ExecutorResourceRequests(object):
@@ -31,21 +32,30 @@ class ExecutorResourceRequests(object):
     """
 
     def __init__(self, _jvm = None, _requests = None):
-        """
-        Create a new :class:`pyspark.resource.ExecutorResourceRequests` that wraps the
-        underlying JVM object.
-        """
         from pyspark import SparkContext
         _jvm = _jvm or SparkContext._jvm
         if _jvm is not None:
             self._java_executor_resource_requests = \
                 _jvm.org.apache.spark.resource.ExecutorResourceRequests()
             if _requests is not None:
-                self._java_executor_resource_requests.memory(_requests._memory)
-                self._java_executor_resource_requests.cores(_requests._cores)
+                if _requests._memory is not None:
+                    self._java_executor_resource_requests.memory(_requests._memory)
+                if _requests._overhead_memory is not None:
+                    self._java_executor_resource_requests.memoryOverhead(_requests._overhead_memory)
+                if _requests._pyspark_memory is not None:
+                    self._java_executor_resource_requests.pysparkMemory(_requests._pyspark_memory)
+                if _requests._cores is not None:
+                    self._java_executor_resource_requests.cores(_requests._cores)
+                for r in _requests._custom_resources:
+                    self._java_executor_resource_requests.resource(r.resourceName, r.amount,
+                       r.discoveryScript, r.vendor)
         else:
             self._java_executor_resource_requests = None
             self._custom_resources = []
+            self._memory = None
+            self._overhead_memory = None
+            self._pyspark_memory = None
+            self._cores = None
 
     def memory(self, amount):
         if self._java_executor_resource_requests is not None:
@@ -85,14 +95,24 @@ class ExecutorResourceRequests(object):
 
     @property
     def requests(self):
+        result = {}
         if self._java_executor_resource_requests is not None:
             execRes = self._java_executor_resource_requests.requestsJMap()
+            for k, v in execRes.items():
+                result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
+                    v.discoveryScript(), v.vendor())
         else:
-            # TODO
-            execRes = self._custom_resources
-        result = {}
-        # convert back to python ExecutorResourceRequest
-        for k, v in execRes.items():
-            result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
-                                                v.discoveryScript(), v.vendor())
+            if self._cores is not None:
+                result["cores"] = ExecutorResourceRequest("cores", self._cores)
+            if self._memory is not None:
+                result["memory"] = ExecutorResourceRequest("memory", self._memory)
+            if self._overhead_memory is not None:
+                result["memoryOverhead"] = ExecutorResourceRequest("memoryOverhead",
+                    self._overhead_memory)
+            if self._pyspark_memory is not None:
+                result["pyspark.memory"] = ExecutorResourceRequest("pyspark.memory",
+                    self._pyspark_memory)
+            for r in self._custom_resources:
+                result[r.resourceName] = ExecutorResourceRequest(r.resourceName, r.amount,
+                    r.discoveryScript, r.vendor)
         return result

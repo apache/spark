@@ -2503,8 +2503,8 @@ class RDD(object):
             jrp = profile._java_resource_profile
         else:
             builder = self.ctx._jvm.org.apache.spark.resource.ResourceProfileBuilder()
-            ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_request)
-            treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_request)
+            ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_requests)
+            treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_requests)
             builder.require(ereqs._java_executor_resource_requests)
             builder.require(treqs._java_task_resource_requests)
             jrp = builder.build()
