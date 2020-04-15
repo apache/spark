@@ -43,8 +43,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
   public UnsafeRow appendRow(Object kbase, long koff, int klen,
                              Object vbase, long voff, int vlen) {
     int uaoSize = UnsafeAlignedOffset.getUaoSize();
-    int doubleUaoSize = 2 * uaoSize;
-    final long recordLength = doubleUaoSize + klen + vlen + 8L;
+    final long recordLength = 2 * uaoSize + klen + vlen + 8L;
     // if run out of max supported rows or page size, return null
     if (numRows >= capacity || page == null || page.size() - pageCursor < recordLength) {
       return null;
@@ -55,7 +54,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
     UnsafeAlignedOffset.putSize(base, offset, klen + vlen + uaoSize);
     UnsafeAlignedOffset.putSize(base, offset + uaoSize, klen);
 
-    offset += doubleUaoSize;
+    offset += 2 * uaoSize;
     Platform.copyMemory(kbase, koff, base, offset, klen);
     offset += klen;
     Platform.copyMemory(vbase, voff, base, offset, vlen);
@@ -64,11 +63,11 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
 
     pageCursor += recordLength;
 
-    keyOffsets[numRows] = recordOffset + doubleUaoSize;
+    keyOffsets[numRows] = recordOffset + 2 * uaoSize;
 
     keyRowId = numRows;
-    keyRow.pointTo(base, recordOffset + doubleUaoSize, klen);
-    valueRow.pointTo(base, recordOffset + doubleUaoSize + klen, vlen);
+    keyRow.pointTo(base, recordOffset + 2 * uaoSize, klen);
+    valueRow.pointTo(base, recordOffset + 2 * uaoSize + klen, vlen);
     numRows++;
     return valueRow;
   }
@@ -146,15 +145,14 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
         }
 
         int uaoSize = UnsafeAlignedOffset.getUaoSize();
-        int doubleUaoSize = 2 * uaoSize;
         totalLength = UnsafeAlignedOffset.getSize(base, offsetInPage) - uaoSize;
         currentklen = UnsafeAlignedOffset.getSize(base, offsetInPage + uaoSize);
         currentvlen = totalLength - currentklen;
 
-        key.pointTo(base, offsetInPage + doubleUaoSize, currentklen);
-        value.pointTo(base, offsetInPage + doubleUaoSize + currentklen, currentvlen);
+        key.pointTo(base, offsetInPage + 2 * uaoSize, currentklen);
+        value.pointTo(base, offsetInPage + 2 * uaoSize + currentklen, currentvlen);
 
-        offsetInPage += doubleUaoSize + totalLength + 8;
+        offsetInPage += 2 * uaoSize + totalLength + 8;
         recordsInPage -= 1;
         return true;
       }
