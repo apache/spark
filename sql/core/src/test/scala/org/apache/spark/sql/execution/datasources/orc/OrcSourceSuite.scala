@@ -493,17 +493,19 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  test("SPARK-31238: rebasing dates in write") {
+  test("SPARK-31238, SPARK-31423: rebasing dates in write") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      Seq("1001-01-01").toDF("dateS")
+      Seq("1001-01-01", "1582-10-10").toDF("dateS")
         .select($"dateS".cast("date").as("date"))
         .write
         .orc(path)
 
       Seq(false, true).foreach { vectorized =>
         withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-          checkAnswer(spark.read.orc(path), Row(Date.valueOf("1001-01-01")))
+          checkAnswer(
+            spark.read.orc(path),
+            Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
         }
       }
     }
