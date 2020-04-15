@@ -380,6 +380,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
             val gregorianDays = localDateToDays(LocalDate.parse(hybridDate))
 
             assert(localRebaseGregorianToJulianDays(gregorianDays) === hybridDays)
+            assert(rebaseGregorianToJulianDays(gregorianDays) === hybridDays)
           }
         }
       }
