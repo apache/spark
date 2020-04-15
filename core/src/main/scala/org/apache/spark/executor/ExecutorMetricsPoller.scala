@@ -61,7 +61,6 @@ private[spark] class ExecutorMetricsPoller(
   // Map of taskId to executor metric peaks
   private val taskMetricPeaks = new ConcurrentHashMap[Long, AtomicLongArray]
 
-  private var latestMetrics = ExecutorMetrics.getCurrentMetrics(memoryManager)
   private val poller =
     if (pollingInterval > 0) {
       Some(ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-metrics-poller"))
@@ -80,7 +79,7 @@ private[spark] class ExecutorMetricsPoller(
     // with this function via calls to methods of this class.
 
     // get the latest values for the metrics
-    latestMetrics = ExecutorMetrics.getCurrentMetrics(memoryManager)
+    val latestMetrics = ExecutorMetrics.getCurrentMetrics(memoryManager)
     executorMetricsSource.foreach(_.updateMetricsSnapshot(latestMetrics))
 
     def updatePeaks(metrics: AtomicLongArray): Unit = {
@@ -108,8 +107,8 @@ private[spark] class ExecutorMetricsPoller(
    * Called by TaskRunner#run.
    */
   def onTaskStart(taskId: Long, stageId: Int, stageAttemptId: Int): Unit = {
-    // Put an entry in taskMetricPeaks for the task with latestMetrics.
-    taskMetricPeaks.put(taskId, new AtomicLongArray(latestMetrics))
+    // Put an entry in taskMetricPeaks for the task.
+    taskMetricPeaks.put(taskId, new AtomicLongArray(ExecutorMetricType.numMetrics))
 
     // Put a new entry in stageTCMP for the stage if there isn't one already.
     // Increment the task count.
