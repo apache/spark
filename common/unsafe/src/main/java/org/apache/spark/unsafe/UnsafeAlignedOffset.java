@@ -30,6 +30,7 @@ public class UnsafeAlignedOffset {
 
   private static int TEST_UAO_SIZE = 0;
 
+  // used for test only
   public static void setUaoSize(int size) {
     assert size == 4 || size == 8;
     TEST_UAO_SIZE = size;
