@@ -146,6 +146,9 @@ object RebaseDateTime {
   // in Proleptic Gregorian calendar.
   private final val gregorianCommonEraStartDay = gregJulianDiffSwitchDay(0)
 
+  private final val gregorianStartDay = LocalDate.of(1582, 10, 15)
+  private final val julianEndDay = LocalDate.of(1582, 10, 4)
+
   /**
    * Converts the given number of days since the epoch day 1970-01-01 to a local date in Proleptic
    * Gregorian calendar, interprets the result as a local date in Julian calendar, and takes the
@@ -165,7 +168,10 @@ object RebaseDateTime {
    * @return The rebased number of days in Julian calendar.
    */
   private[sql] def localRebaseGregorianToJulianDays(days: Int): Int = {
-    val localDate = LocalDate.ofEpochDay(days)
+    var localDate = LocalDate.ofEpochDay(days)
+    if (localDate.isAfter(julianEndDay) && localDate.isBefore(gregorianStartDay)) {
+      localDate = gregorianStartDay
+    }
     val utcCal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
