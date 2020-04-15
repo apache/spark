@@ -373,14 +373,42 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
           "1582-10-05" -> "1582-10-15", "1582-10-06" -> "1582-10-15", "1582-10-07" -> "1582-10-15",
           "1582-10-08" -> "1582-10-15", "1582-10-09" -> "1582-10-15", "1582-10-11" -> "1582-10-15",
           "1582-10-12" -> "1582-10-15", "1582-10-13" -> "1582-10-15", "1582-10-14" -> "1582-10-15",
-          "1582-10-15" -> "1582-10-15").foreach { case (hybridDate, gregDate) =>
-          withClue(s"tz = ${zid.getId} hybrid date = $hybridDate greg date = $gregDate") {
-            val date = Date.valueOf(gregDate)
+          "1582-10-15" -> "1582-10-15").foreach { case (gregDate, hybridDate) =>
+          withClue(s"tz = ${zid.getId} greg date = $gregDate hybrid date = $hybridDate ") {
+            val date = Date.valueOf(hybridDate)
             val hybridDays = fromJavaDateLegacy(date)
-            val gregorianDays = localDateToDays(LocalDate.parse(hybridDate))
+            val gregorianDays = localDateToDays(LocalDate.parse(gregDate))
 
             assert(localRebaseGregorianToJulianDays(gregorianDays) === hybridDays)
             assert(rebaseGregorianToJulianDays(gregorianDays) === hybridDays)
+          }
+        }
+      }
+    }
+  }
+
+  test("rebase not-existed timestamps in the hybrid calendar") {
+    outstandingZoneIds.foreach { zid =>
+      withDefaultTimeZone(zid) {
+        Seq(
+          "1582-10-04T23:59:59.999999" -> "1582-10-04 23:59:59.999999",
+          "1582-10-05T00:00:00.000000" -> "1582-10-15 00:00:00.000000",
+          "1582-10-06T01:02:03.000001" -> "1582-10-15 01:02:03.000001",
+          "1582-10-07T00:00:00.000000" -> "1582-10-15 00:00:00.000000",
+          "1582-10-08T23:59:59.999999" -> "1582-10-15 23:59:59.999999",
+          "1582-10-09T23:59:59.001001" -> "1582-10-15 23:59:59.001001",
+          "1582-10-10T00:11:22.334455" -> "1582-10-15 00:11:22.334455",
+          "1582-10-11T11:12:13.111111" -> "1582-10-15 11:12:13.111111",
+          "1582-10-12T10:11:12.131415" -> "1582-10-15 10:11:12.131415",
+          "1582-10-13T00:00:00.999999" -> "1582-10-15 00:00:00.999999",
+          "1582-10-14T23:00:00.123321" -> "1582-10-15 23:00:00.123321",
+          "1582-10-15T00:00:00.000000" -> "1582-10-15 00:00:00.000000"
+        ).foreach { case (gregTs, hybridTs) =>
+          withClue(s"tz = ${zid.getId} greg ts = $gregTs hybrid ts = $hybridTs") {
+            val hybridMicros = parseToJulianMicros(hybridTs)
+            val gregorianMicros = parseToGregMicros(gregTs, zid)
+
+            assert(rebaseGregorianToJulianMicros(zid, gregorianMicros) === hybridMicros)
           }
         }
       }

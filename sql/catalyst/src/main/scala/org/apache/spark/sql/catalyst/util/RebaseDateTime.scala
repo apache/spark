@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{LocalDate, LocalDateTime, ZoneId}
+import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.time.temporal.ChronoField
 import java.util.{Calendar, TimeZone}
 
@@ -284,6 +284,11 @@ object RebaseDateTime {
    */
   private val gregJulianRebaseMap = loadRebaseRecords("gregorian-julian-rebase-micros.json")
 
+  private final val gregorianStartMicros = LocalDateTime.of(gregorianStartDay, LocalTime.MIDNIGHT)
+  private final val julianEndMicros = LocalDateTime.of(
+    julianEndDay,
+    LocalTime.of(23, 59, 59, 999999999))
+
   /**
    * Converts the given number of microseconds since the epoch '1970-01-01T00:00:00Z', to a local
    * date-time in Proleptic Gregorian calendar with timezone identified by `zoneId`, interprets the
@@ -306,7 +311,10 @@ object RebaseDateTime {
    */
   private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
     val instant = microsToInstant(micros)
-    val ldt = instant.atZone(zoneId).toLocalDateTime
+    var ldt = instant.atZone(zoneId).toLocalDateTime
+    if (ldt.isAfter(julianEndMicros) && ldt.isBefore(gregorianStartMicros)) {
+      ldt = LocalDateTime.of(gregorianStartDay, ldt.toLocalTime)
+    }
     val cal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
