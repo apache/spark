@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import java.io.ObjectInputStream
+
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
@@ -168,13 +170,13 @@ object ExpressionEncoder {
    * Function that deserializes an [[InternalRow]] into an object of type `T`. Instances of this
    * class are not meant to be thread-safe.
    */
-  abstract class Deserializer[T] extends (InternalRow => T)
+  abstract class Deserializer[T] extends (InternalRow => T) with Serializable
 
   /**
    * Function that serializesa an object of type `T` to an [[InternalRow]].  Instances of this
    * class are not meant to be thread-safe.
    */
-  abstract class Serializer[T] extends (T => InternalRow)
+  abstract class Serializer[T] extends (T => InternalRow) with Serializable
 }
 
 /**
@@ -349,9 +351,17 @@ case class ExpressionEncoder[T](
    *  the caller should copy the result before making another call if required.
    */
   def createSerializer(): Serializer[T] = new Serializer[T] {
-    private val inputRow = new GenericInternalRow(1)
+    @transient
+    private var inputRow: GenericInternalRow = _
 
-    private val extractProjection = GenerateUnsafeProjection.generate(optimizedSerializer)
+    @transient
+    private var extractProjection: UnsafeProjection = _
+
+    private def initialize(): Unit = {
+      inputRow = new GenericInternalRow(1)
+      extractProjection = GenerateUnsafeProjection.generate(optimizedSerializer)
+    }
+    initialize()
 
     override def apply(t: T): InternalRow = try {
       inputRow(0) = t
@@ -360,6 +370,11 @@ case class ExpressionEncoder[T](
       case e: Exception =>
         throw new RuntimeException(s"Error while encoding: $e\n" +
           s"${serializer.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
+    }
+
+    private def readObject(in: ObjectInputStream): Unit = {
+      in.defaultReadObject()
+      initialize()
     }
   }
 
@@ -370,7 +385,13 @@ case class ExpressionEncoder[T](
    * deserializer.
    */
   def createDeserializer(): Deserializer[T] = new Deserializer[T] {
-    private val constructProjection = SafeProjection.create(optimizedDeserializer)
+    @transient
+    private var constructProjection: Projection = _
+
+    private def initialize(): Unit = {
+      constructProjection = SafeProjection.create(optimizedDeserializer)
+    }
+    initialize()
 
     override def apply(row: InternalRow): T = try {
       constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
@@ -378,6 +399,11 @@ case class ExpressionEncoder[T](
       case e: Exception =>
         throw new RuntimeException(s"Error while decoding: $e\n" +
           s"${deserializer.simpleString(SQLConf.get.maxToStringFields)}", e)
+    }
+
+    private def readObject(in: ObjectInputStream): Unit = {
+      in.defaultReadObject()
+      initialize()
     }
   }
 
