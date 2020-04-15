@@ -27,6 +27,7 @@ else:
     from itertools import imap as map
     from cgi import escape as html_escape
 
+from collections import Counter
 import warnings
 
 from pyspark import copy_func, since, _NoValue
@@ -2148,9 +2149,16 @@ class DataFrame(object):
 
         # Below is toPandas without Arrow optimization.
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+        column_counter = Counter(self.columns)
 
-        dtype = {}
-        for field in self.schema:
+        dtype = [None] * len(self.schema)
+        for fieldIdx, field in enumerate(self.schema):
+            # For duplicate column name, we use `iloc` to access it.
+            if column_counter[field.name] > 1:
+                pandas_col = pdf.iloc[:, fieldIdx]
+            else:
+                pandas_col = pdf[field.name]
+
             pandas_type = _to_corrected_pandas_type(field.dataType)
             # SPARK-21766: if an integer field is nullable and has null values, it can be
             # inferred by pandas as float column. Once we convert the column with NaN back
@@ -2158,11 +2166,31 @@ class DataFrame(object):
             # float type, not the corrected type from the schema in this case.
             if pandas_type is not None and \
                 not(isinstance(field.dataType, IntegralType) and field.nullable and
-                    pdf[field.name].isnull().any()):
-                dtype[field.name] = pandas_type
+                    pandas_col.isnull().any()):
+                dtype[fieldIdx] = pandas_type
 
-        for f, t in dtype.items():
-            pdf[f] = pdf[f].astype(t, copy=False)
+        df = pd.DataFrame()
+        for index, t in enumerate(dtype):
+            column_name = self.schema[index].name
+
+            # For duplicate column name, we use `iloc` to access it.
+            if column_counter[column_name] > 1:
+                series = pdf.iloc[:, index]
+            else:
+                series = pdf[column_name]
+
+            if t is not None:
+                series = series.astype(t, copy=False)
+
+            # `insert` API makes copy of data, we only do it for Series of duplicate column names.
+            # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work because `iloc` could
+            # return a view or a copy depending by context.
+            if column_counter[column_name] > 1:
+                df.insert(index, column_name, series, allow_duplicates=True)
+            else:
+                df[column_name] = series
+
+        pdf = df
 
         if timezone is None:
             return pdf
