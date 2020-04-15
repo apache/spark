@@ -811,6 +811,8 @@ class RDDTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(10)).withResources(rp)
         return_rp = rdd.getResourceProfile()
         assert_request_contents(return_rp.executorResources, return_rp.taskResources)
+        rddWithoutRp = self.sc.parallelize(range(10))
+        self.assertEqual(rddWithoutRp.getResourceProfile(), None)
 
 if __name__ == "__main__":
     import unittest

@@ -2518,11 +2518,15 @@ class RDD(object):
 
         Get the :class:`pyspark.resource.ResourceProfile` specified with this RDD or None
         if it wasn't specified.
-        :return: the user specified ResourceProfile or null if none was specified
+        :return: the user specified ResourceProfile or None if none were specified
 
         .. versionadded:: 3.1.0
         """
-        return ResourceProfile(_java_resource_profile=self._jrdd.getResourceProfile())
+        rp = self._jrdd.getResourceProfile()
+        if rp is not None:
+            return ResourceProfile(_java_resource_profile=rp)
+        else:
+            return None
 
 
 def _prepare_for_python_RDD(sc, command):
