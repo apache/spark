@@ -166,7 +166,7 @@ private[libsvm] class LibSVMFileFormat
             LabeledPoint(label, Vectors.sparse(numFeatures, indices, values))
           }
 
-      val converter = RowEncoder(dataSchema)
+      val toRow = RowEncoder(dataSchema).createSerializer()
       val fullOutput = dataSchema.map { f =>
         AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
       }
@@ -178,7 +178,7 @@ private[libsvm] class LibSVMFileFormat
 
       points.map { pt =>
         val features = if (isSparse) pt.features.toSparse else pt.features.toDense
-        requiredColumns(converter.toRow(Row(pt.label, features)))
+        requiredColumns(toRow(Row(pt.label, features)))
       }
     }
   }

@@ -60,7 +60,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
     // Distribute data evenly among partition lists.
     data.toSeq.zipWithIndex.map {
       case (item, index) =>
-        records(index % numPartitions) += encoder.toRow(item).copy().asInstanceOf[UnsafeRow]
+        records(index % numPartitions) += toRow(item).copy().asInstanceOf[UnsafeRow]
     }
 
     // The new target offset is the offset where all records in all partitions have been processed.

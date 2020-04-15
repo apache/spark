@@ -369,14 +369,14 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   }
 
   test("null check for map key: String") {
-    val encoder = ExpressionEncoder[Map[String, Int]]()
-    val e = intercept[RuntimeException](encoder.toRow(Map(("a", 1), (null, 2))))
+    val toRow = ExpressionEncoder[Map[String, Int]]().createSerializer()
+    val e = intercept[RuntimeException](toRow(Map(("a", 1), (null, 2))))
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
   test("null check for map key: Integer") {
-    val encoder = ExpressionEncoder[Map[Integer, String]]()
-    val e = intercept[RuntimeException](encoder.toRow(Map((1, "a"), (null, "b"))))
+    val toRow = ExpressionEncoder[Map[Integer, String]]().createSerializer()
+    val e = intercept[RuntimeException](toRow(Map((1, "a"), (null, "b"))))
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
@@ -450,12 +450,14 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
           // Need to construct Encoder here rather than implicitly resolving it
           // so that SQLConf changes are respected.
           val encoder = ExpressionEncoder[T]()
+          val toRow = encoder.createSerializer()
           if (!ansiEnabled) {
-            val convertedBack = encoder.resolveAndBind().fromRow(encoder.toRow(bigNumeric))
+            val fromRow = encoder.resolveAndBind().createDeserializer()
+            val convertedBack = fromRow(toRow(bigNumeric))
             assert(convertedBack === null)
           } else {
             val e = intercept[RuntimeException] {
-              encoder.toRow(bigNumeric)
+              toRow(bigNumeric)
             }
             assert(e.getMessage.contains("Error while encoding"))
             assert(e.getCause.getClass === classOf[ArithmeticException])
@@ -474,10 +476,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       // Make sure encoder is serializable.
       ClosureCleaner.clean((s: String) => encoder.getClass.getName)
 
-      val row = encoder.toRow(input)
+      val row = encoder.createSerializer().apply(input)
       val schema = encoder.schema.toAttributes
       val boundEncoder = encoder.resolveAndBind()
-      val convertedBack = try boundEncoder.fromRow(row) catch {
+      val convertedBack = try boundEncoder.createDeserializer().apply(row) catch {
         case e: Exception =>
           fail(
            s"""Exception thrown while decoding

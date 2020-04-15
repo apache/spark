@@ -32,17 +32,17 @@ case class ShowTablePropertiesExec(
 
   override protected def run(): Seq[InternalRow] = {
     import scala.collection.JavaConverters._
-    val encoder = RowEncoder(schema).resolveAndBind()
+    val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
 
     val properties = catalogTable.properties.asScala
     propertyKey match {
       case Some(p) =>
         val propValue = properties
           .getOrElse(p, s"Table ${catalogTable.name} does not have property: $p")
-        Seq(encoder.toRow(new GenericRowWithSchema(Array(p, propValue), schema)).copy())
+        Seq(toRow(new GenericRowWithSchema(Array(p, propValue), schema)).copy())
       case None =>
         properties.keys.map(k =>
-          encoder.toRow(new GenericRowWithSchema(Array(k, properties(k)), schema)).copy()).toSeq
+          toRow(new GenericRowWithSchema(Array(k, properties(k)), schema)).copy()).toSeq
     }
   }
 }

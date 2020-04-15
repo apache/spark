@@ -30,7 +30,8 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
     val resolvedEncoder = encoder.resolveAndBind(
       data.logicalPlan.output,
       data.sparkSession.sessionState.analyzer)
-    val rdd = data.queryExecution.toRdd.map[T](resolvedEncoder.fromRow)(encoder.clsTag)
+    val fromRow = resolvedEncoder.createDeserializer()
+    val rdd = data.queryExecution.toRdd.map[T](fromRow)(encoder.clsTag)
     val ds = data.sparkSession.createDataset(rdd)(encoder)
     batchWriter(ds, batchId)
   }

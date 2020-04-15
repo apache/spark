@@ -31,7 +31,9 @@ case class DescribeTableExec(
     table: Table,
     isExtended: Boolean) extends V2CommandExec {
 
-  private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
+  private val toRow = {
+    RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
+  }
 
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
@@ -85,6 +87,6 @@ case class DescribeTableExec(
   private def emptyRow(): InternalRow = toCatalystRow("", "", "")
 
   private def toCatalystRow(strs: String*): InternalRow = {
-    encoder.toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
+    toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
   }
 }

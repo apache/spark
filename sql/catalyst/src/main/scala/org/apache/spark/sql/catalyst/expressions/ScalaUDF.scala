@@ -110,8 +110,8 @@ case class ScalaUDF(
     } else {
       val encoder = inputEncoders(i)
       if (encoder.isDefined && encoder.get.isSerializedAsStructForTopLevel) {
-        val enc = encoder.get.resolveAndBind()
-        row: Any => enc.fromRow(row.asInstanceOf[InternalRow])
+        val deserializer = encoder.get.resolveAndBind().createDeserializer()
+        row: Any => deserializer.apply(row.asInstanceOf[InternalRow])
       } else {
         CatalystTypeConverters.createToScalaConverter(dataType)
       }
