@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Windowing Analytic Functions
-displayTitle: Windowing Analytic Functions
+title: Window Functions
+displayTitle: Window Functions
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,4 +19,222 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+
+Similarly to aggregate functions, window functions operate on a group of rows. However, unlike aggregate functions, window functions perform aggregation without reducing, calculating a return value for each row in the group. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative, or accessing the value of rows given the relative position of the current row. Spark SQL supports three types of window functions:
+  * Ranking Functions
+  * Analytic Functions
+  * Aggregate Functions
+
+### How to Use Window Functions
+
+  * Mark a function as window function by using `over`.
+    - SQL: Add an OVER clause after the window function, e.g. rank ( ) OVER ( ... )
+    - DataFrame API: Call the window function's `over` method, e.g. rank ( ).over ( ... )
+  * Define the window specification associated with this function. A window specification includes partitioning specification, ordering specification, and frame specification.
+    - Partitioning Specification:
+      - SQL: PARTITION BY
+      - DataFrame API: Window.partitionBy ( ... )
+    - Ordering Specification:
+      - SQL: ORDER BY
+      - DataFrame API: Window.orderBy ( ... )
+    - Frame Specification:
+      - SQL: ROWS ( for ROW frame ), RANGE ( for RANGE frame )
+      - DataFrame API: WindowSpec.rowsBetween ( for row frame ), WindowSpec.rangeBetween ( for range frame )
+
+### Syntax
+
+{% highlight sql %}
+window_function OVER ( [ partition_spec ] order_spec [ window_frame ] )
+{% endhighlight %}
+
+### Parameters
+
+<dl>
+  <dt><code><em>window_function</em></code></dt>
+  <dd>
+    <ul>
+      <li> Ranking Functions </li>
+      <br>
+      <b>Syntax:</b>
+        <code>
+          RANK | DENSE_RANK | PERCENT_RANK | NTILE | ROW_NUMBER
+        </code>
+    </ul>
+    <ul>
+      <li> Analytic Functions </li>
+      <br>
+      <b>Syntax:</b>
+        <code>
+          CUME_DIST | LAG | LEAD
+        </code>
+    </ul>
+    <ul>
+      <li> Aggregate Functions </li>
+      <br>
+      <b>Syntax:</b>
+        <code>
+          MAX | MIN | COUNT | SUM | AVG | ...
+        </code>
+        <br>
+        Please refer <a href="api/sql/">here</a> for a complete list of Spark Aggregate Functions.
+    </ul>
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>
+    Specifies a comma separated list of key and value pairs for partitions.<br><br>
+    <b>Syntax:</b><br>
+      <code>
+        { PARTITION | DISTRIBUTE } BY partition_col_name  = partition_col_val ( [ , ... ] )
+      </code>
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>order_spec</em></code></dt>
+  <dd>
+    Specifies an ordering of the rows.<br><br>
+    <b>Syntax:</b><br>
+      <code>
+        { ORDER | SORT } BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ... ] }
+      </code>
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>window_frame</em></code></dt>
+  <dd>
+    Specifies which row to start the window on and where to end it.<br><br>
+    <b>Syntax:</b><br>
+      <code>
+        { RANGE | ROWS } [ BETWEEN ]
+          UNBOUNDED { PRECEDING | FOLLOWING }
+          | CURRENT ROW
+          | boolean_expression { PRECEDING | FOLLOWING }
+      </code> <br><br>
+      <code>boolean_expression</code><br>
+      Specifies an expression with a return type of boolean.
+  </dd>
+</dl>
+### Examples
+
+{% highlight sql %}
+
+CREATE TABLE employees (name STRING, dept STRING, salary INT, age INT);
+
+INSERT INTO employees VALUES ("Lisa", "Sales", 10000, 35);
+INSERT INTO employees VALUES ("Evan", "Sales", 32000, 38);
+INSERT INTO employees VALUES ("Fred", "Engineering", 21000, 28);
+INSERT INTO employees VALUES ("Alex", "Sales", 30000, 33);
+INSERT INTO employees VALUES ("Tom", "Engineering", 23000, 33);
+INSERT INTO employees VALUES ("Jane", "Marketing", 29000, 28);
+INSERT INTO employees VALUES ("Jeff", "Marketing", 35000, 38);
+INSERT INTO employees VALUES ("Paul", "Engineering", 29000, 23);
+INSERT INTO employees VALUES ("Chloe", "Engineering", 23000, 25);
+
+SELECT * FROM employees;
+  +-----+-----------+------+-----+
+  | name|       dept|salary|  age|
+  +-----+-----------+------+-----+
+  |Chloe|Engineering| 23000|   25|
+  | Fred|Engineering| 21000|   28|
+  | Paul|Engineering| 29000|   23|
+  |Helen|  Marketing| 29000|   40|
+  |  Tom|Engineering| 23000|   33|
+  | Jane|  Marketing| 29000|   28|
+  | Jeff|  Marketing| 35000|   38|
+  | Evan|      Sales| 32000|   38|
+  | Lisa|      Sales| 10000|   35|
+  | Alex|      Sales| 30000|   33|
+  +-----+-----------+------+-----+
+
+SELECT name, dept, RANK() OVER (PARTITION BY dept ORDER BY salary) AS rank FROM employees;
+  +-----+-----------+------+----+
+  | name|       dept|salary|rank|
+  +-----+-----------+------+----+
+  | Lisa|      Sales| 10000|   1|
+  | Alex|      Sales| 30000|   2|
+  | Evan|      Sales| 32000|   3|
+  | Fred|Engineering| 21000|   1|
+  |  Tom|Engineering| 23000|   2|
+  |Chloe|Engineering| 23000|   2|
+  | Paul|Engineering| 29000|   4|
+  |Helen|  Marketing| 29000|   1|
+  | Jane|  Marketing| 29000|   1|
+  | Jeff|  Marketing| 35000|   3|
+  +-----+-----------+------+----+
+
+SELECT name, dept, DENSE_RANK() OVER (PARTITION BY dept ORDER BY salary ROWS BETWEEN
+    UNBOUNDED PRECEDING AND CURRENT ROW) AS dense_rank FROM employees;
+  +-----+-----------+------+----------+
+  | name|       dept|salary|dense_rank|
+  +-----+-----------+------+----------+
+  | Lisa|      Sales| 10000|         1|
+  | Alex|      Sales| 30000|         2|
+  | Evan|      Sales| 32000|         3|
+  | Fred|Engineering| 21000|         1|
+  |  Tom|Engineering| 23000|         2|
+  |Chloe|Engineering| 23000|         2|
+  | Paul|Engineering| 29000|         3|
+  |Helen|  Marketing| 29000|         1|
+  | Jane|  Marketing| 29000|         1|
+  | Jeff|  Marketing| 35000|         2|
+  +-----+-----------+------+----------+
+
+SELECT name, dept, age, CUME_DIST() OVER (PARTITION BY dept ORDER BY age
+    RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as cume_dist FROM employees;
+  +-----+-----------+------+------------------+
+  | name|       dept|age   |         cume_dist|
+  +-----+-----------+------+------------------+
+  | Alex|      Sales|    33|0.3333333333333333|
+  | Lisa|      Sales|    35|0.6666666666666666|
+  | Evan|      Sales|    38|               1.0|
+  | Paul|Engineering|    23|              0.25|
+  |Chloe|Engineering|    25|              0.75|
+  | Fred|Engineering|    28|              0.25|
+  |  Tom|Engineering|    33|               1.0|
+  | Jane|  Marketing|    28|0.3333333333333333|
+  | Jeff|  Marketing|    38|0.6666666666666666|
+  |Helen|  Marketing|    40|               1.0|
+  +-----+-----------+------+------------------+
+
+SELECT name, dept, salary, MIN(salary) OVER (PARTITION BY dept ORDER BY salary) AS min
+    FROM employees;
+  +-----+-----------+------+-----+
+  | name|       dept|salary|  min|
+  +-----+-----------+------+-----+
+  | Lisa|      Sales| 10000|10000|
+  | Alex|      Sales| 30000|10000|
+  | Evan|      Sales| 32000|10000|
+  |Helen|  Marketing| 29000|29000|
+  | Jane|  Marketing| 29000|29000|
+  | Jeff|  Marketing| 35000|29000|
+  | Fred|Engineering| 21000|21000|
+  |  Tom|Engineering| 23000|21000|
+  |Chloe|Engineering| 23000|21000|
+  | Paul|Engineering| 29000|21000|
+  +-----+-----------+------+-----+
+
+SELECT name, salary,
+    LAG(salary) OVER (PARTITION BY dept ORDER BY salary) as lag,
+    LEAD(salary, 1, 0) OVER (PARTITION BY dept ORDER BY salary) as lead
+    FROM employees;
+  +-----+-----------+------+-----+-----+
+  | name|       dept|salary|  lag| lead|
+  +-----+-----------+------+-----+-----+
+  | Lisa|      Sales| 10000|NULL |30000|
+  | Alex|      Sales| 30000|10000|32000|
+  | Evan|      Sales| 32000|30000|    0|
+  | Fred|Engineering| 21000| NULL|23000|
+  |Chloe|Engineering| 23000|21000|23000|
+  |  Tom|Engineering| 23000|23000|29000|
+  | Paul|Engineering| 29000|23000|    0|
+  |Helen|  Marketing| 29000| NULL|29000|
+  | Jane|  Marketing| 29000|29000|35000|
+  | Jeff|  Marketing| 35000|29000|    0|
+  +-----+-----------+------+-----+-----+
+{% endhighlight %}
+
+### Related Statements
+
+  * [SELECT](sql-ref-syntax-qry-select.html)
