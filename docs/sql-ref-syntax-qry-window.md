@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-Similarly to aggregate functions, window functions operate on a group of rows. However, unlike aggregate functions, window functions perform aggregation without reducing, calculating an aggregated value for each row in the specified window. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative, or accessing the value of rows given the relative position of the current row. Spark SQL supports three types of window functions:
+Window functions operate on a group of rows, referred to as a window, and calculate an aggregated value for each row based on the specified window. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative, or accessing the value of rows given the relative position of the current row. Spark SQL supports three types of window functions:
 
   * Ranking Functions
   * Analytic Functions
