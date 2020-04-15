@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchem
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.execution.LeafExecNode
 
 /**
  * Physical plan node for showing tables.
@@ -33,8 +34,7 @@ case class ShowTablesExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: Option[String])
-    extends V2CommandExec {
+    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val encoder = RowEncoder(schema).resolveAndBind()

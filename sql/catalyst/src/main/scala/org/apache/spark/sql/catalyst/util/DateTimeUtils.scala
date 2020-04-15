@@ -26,7 +26,10 @@ import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
+import sun.util.calendar.ZoneInfo
+
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -46,6 +49,8 @@ object DateTimeUtils {
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
+
+  final val julianCommonEraStart = Timestamp.valueOf("0001-01-01 00:00:00")
 
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
@@ -83,31 +88,97 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the number of days since epoch from java.sql.Date.
+   * Converts an instance of `java.sql.Date` to a number of days since the epoch
+   * 1970-01-01 via extracting date fields `year`, `month`, `days` from the input,
+   * creating a local date in Proleptic Gregorian calendar from the fields, and
+   * getting the number of days from the resulted local date.
+   *
+   * This approach was taken to have the same local date as the triple of `year`,
+   * `month`, `day` in the original hybrid calendar used by `java.sql.Date` and
+   * Proleptic Gregorian calendar used by Spark since version 3.0.0, see SPARK-26651.
+   *
+   * @param date It represents a specific instant in time based on
+   *             the hybrid calendar which combines Julian and
+   *             Gregorian calendars.
+   * @return The number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    microsToDays(millisToMicros(date.getTime))
+    val millisUtc = date.getTime
+    val millisLocal = millisUtc + TimeZone.getDefault.getOffset(millisUtc)
+    val julianDays = Math.toIntExact(Math.floorDiv(millisLocal, MILLIS_PER_DAY))
+    rebaseJulianToGregorianDays(julianDays)
   }
 
   /**
-   * Returns a java.sql.Date from number of days since epoch.
+   * The opposite to `fromJavaDate` method which converts a number of days to an
+   * instance of `java.sql.Date`. It builds a local date in Proleptic Gregorian
+   * calendar, extracts date fields `year`, `month`, `day`, and creates a local
+   * date in the hybrid calendar (Julian + Gregorian calendars) from the fields.
+   *
+   * The purpose of the conversion is to have the same local date as the triple
+   * of `year`, `month`, `day` in the original Proleptic Gregorian calendar and
+   * in the target calender.
+   *
+   * @param daysSinceEpoch The number of days since 1970-01-01.
+   * @return A `java.sql.Date` from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    new Date(microsToMillis(daysToMicros(daysSinceEpoch)))
+    val rebasedDays = rebaseGregorianToJulianDays(daysSinceEpoch)
+    val localMillis = Math.multiplyExact(rebasedDays, MILLIS_PER_DAY)
+    val timeZoneOffset = TimeZone.getDefault match {
+      case zoneInfo: ZoneInfo => zoneInfo.getOffsetsByWall(localMillis, null)
+      case timeZone: TimeZone => timeZone.getOffset(localMillis - timeZone.getRawOffset)
+    }
+    new Date(localMillis - timeZoneOffset)
   }
 
   /**
-   * Returns a java.sql.Timestamp from number of micros since epoch.
+   * Converts microseconds since the epoch to an instance of `java.sql.Timestamp`
+   * via creating a local timestamp at the system time zone in Proleptic Gregorian
+   * calendar, extracting date and time fields like `year` and `hours`, and forming
+   * new timestamp in the hybrid calendar from the extracted fields.
+   *
+   * The conversion is based on the JVM system time zone because the `java.sql.Timestamp`
+   * uses the time zone internally.
+   *
+   * The method performs the conversion via local timestamp fields to have the same date-time
+   * representation as `year`, `month`, `day`, ..., `seconds` in the original calendar
+   * and in the target calendar.
+   *
+   * @param us The number of microseconds since 1970-01-01T00:00:00.000000Z.
+   * @return A `java.sql.Timestamp` from number of micros since epoch.
    */
   def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
-    Timestamp.from(microsToInstant(us))
+    val rebasedMicros = rebaseGregorianToJulianMicros(us)
+    val seconds = Math.floorDiv(rebasedMicros, MICROS_PER_SECOND)
+    val ts = new Timestamp(seconds * MILLIS_PER_SECOND)
+    val nanos = (rebasedMicros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
+    ts.setNanos(nanos.toInt)
+    ts
   }
 
   /**
-   * Returns the number of micros since epoch from java.sql.Timestamp.
+   * Converts an instance of `java.sql.Timestamp` to the number of microseconds since
+   * 1970-01-01T00:00:00.000000Z. It extracts date-time fields from the input, builds
+   * a local timestamp in Proleptic Gregorian calendar from the fields, and binds
+   * the timestamp to the system time zone. The resulted instant is converted to
+   * microseconds since the epoch.
+   *
+   * The conversion is performed via the system time zone because it is used internally
+   * in `java.sql.Timestamp` while extracting date-time fields.
+   *
+   * The goal of the function is to have the same local date-time in the original calendar
+   * - the hybrid calendar (Julian + Gregorian) and in the target calendar which is
+   * Proleptic Gregorian calendar, see SPARK-26651.
+   *
+   * @param t It represents a specific instant in time based on
+   *          the hybrid calendar which combines Julian and
+   *          Gregorian calendars.
+   * @return The number of micros since epoch from `java.sql.Timestamp`.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
-    instantToMicros(t.toInstant)
+    val micros = millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
+    rebaseJulianToGregorianMicros(micros)
   }
 
   /**
@@ -117,7 +188,9 @@ object DateTimeUtils {
   def fromJulianDay(day: Int, nanoseconds: Long): SQLTimestamp = {
     // use Long to avoid rounding errors
     val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY
-    SECONDS.toMicros(seconds) + NANOSECONDS.toMicros(nanoseconds)
+    val micros = SECONDS.toMicros(seconds) + NANOSECONDS.toMicros(nanoseconds)
+    val rebased = rebaseJulianToGregorianMicros(micros)
+    rebased
   }
 
   /**
@@ -126,7 +199,7 @@ object DateTimeUtils {
    * Note: support timestamp since 4717 BC (without negative nanoseconds, compatible with Hive).
    */
   def toJulianDay(us: SQLTimestamp): (Int, Long) = {
-    val julian_us = us + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
+    val julian_us = rebaseGregorianToJulianMicros(us) + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
     val day = julian_us / MICROS_PER_DAY
     val micros = julian_us % MICROS_PER_DAY
     (day.toInt, MICROSECONDS.toNanos(micros))
@@ -161,6 +234,21 @@ object DateTimeUtils {
     instantToMicros(localDateTime.atZone(zoneId).toInstant)
   }
 
+  // A method called by JSON/CSV parser to clean up the legacy timestamp string by removing the
+  // "GMT" string.
+  def cleanLegacyTimestampStr(s: String): String = {
+    val indexOfGMT = s.indexOf("GMT")
+    if (indexOfGMT != -1) {
+      // ISO8601 with a weird time zone specifier (2000-01-01T00:00GMT+01:00)
+      val s0 = s.substring(0, indexOfGMT)
+      val s1 = s.substring(indexOfGMT + 3)
+      // Mapped to 2000-01-01T00:00+01:00
+      s0 + s1
+    } else {
+      s
+    }
+  }
+
   /**
    * Trim and parse a given UTF8 date string to the corresponding a corresponding [[Long]] value.
    * The return type is [[Option]] in order to distinguish between 0L and null. The following
@@ -170,28 +258,28 @@ object DateTimeUtils {
    * `yyyy-[m]m`
    * `yyyy-[m]m-[d]d`
    * `yyyy-[m]m-[d]d `
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]Z`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
+   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   *
+   * where `zone_id` should have one of the forms:
+   *   - Z - Zulu time zone UTC+0
+   *   - +|-[h]h:[m]m
+   *   - A short id, see https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#SHORT_IDS
+   *   - An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-,
+   *     and a suffix in the formats:
+   *     - +|-h[h]
+   *     - +|-hh[:]mm
+   *     - +|-hh:mm:ss
+   *     - +|-hhmmss
+   *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
    */
   def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = {
     if (s == null) {
       return None
     }
-    var tz: Option[Byte] = None
+    var tz: Option[String] = None
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
     var i = 0
     var currentSegmentValue = 0
@@ -242,22 +330,21 @@ object DateTimeUtils {
             return None
           }
         } else if (i == 5 || i == 6) {
-          if (b == 'Z') {
+          if (b == '-' || b == '+') {
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
-            tz = Some(43)
-          } else if (b == '-' || b == '+') {
-            segments(i) = currentSegmentValue
-            currentSegmentValue = 0
-            i += 1
-            tz = Some(b)
+            tz = Some(new String(bytes, j, 1))
           } else if (b == '.' && i == 5) {
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
           } else {
-            return None
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+            tz = Some(new String(bytes, j, bytes.length - j))
+            j = bytes.length - 1
           }
           if (i == 6  && b != '.') {
             i += 1
@@ -297,11 +384,11 @@ object DateTimeUtils {
       digitsMilli -= 1
     }
     try {
-      val zoneId = if (tz.isEmpty) {
-        timeZoneId
-      } else {
-        val sign = if (tz.get.toChar == '-') -1 else 1
-        ZoneOffset.ofHoursMinutes(sign * segments(7), sign * segments(8))
+      val zoneId = tz match {
+        case None => timeZoneId
+        case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
+        case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
+        case Some(zoneName: String) => getZoneId(zoneName.trim)
       }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
@@ -799,9 +886,9 @@ object DateTimeUtils {
 
   /**
    * Extracts special values from an input string ignoring case.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some special value in lower case or None.
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some special value in lower case or None.
    */
   private def extractSpecialValue(input: String, zoneId: ZoneId): Option[String] = {
     def isValid(value: String, timeZoneId: String): Boolean = {
@@ -828,9 +915,9 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some of microseconds since the epoch if the conversion completed
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[SQLTimestamp] = {
@@ -854,9 +941,9 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary dates.
-   * @param input - a trimmed string
-   * @param zoneId - zone identifier used to get the current date.
-   * @return some of days since the epoch if the conversion completed successfully otherwise None.
+   * @param input A trimmed string
+   * @param zoneId Zone identifier used to get the current date.
+   * @return Some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[SQLDate] = {
     extractSpecialValue(input, zoneId).flatMap {
@@ -878,9 +965,9 @@ object DateTimeUtils {
 
   /**
    * Subtracts two dates.
-   * @param endDate - the end date, exclusive
-   * @param startDate - the start date, inclusive
-   * @return an interval between two dates. The interval can be negative
+   * @param endDate The end date, exclusive
+   * @param startDate The start date, inclusive
+   * @return An interval between two dates. The interval can be negative
    *         if the end date is before the start date.
    */
   def subtractDates(endDate: SQLDate, startDate: SQLDate): CalendarInterval = {

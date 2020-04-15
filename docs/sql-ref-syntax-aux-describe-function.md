@@ -18,6 +18,7 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
 ### Description
 
 `DESCRIBE FUNCTION` statement returns the basic metadata information of an
@@ -26,11 +27,13 @@ class and the usage details.  If the optional `EXTENDED` option is specified, th
 metadata information is returned along with the extended usage information.
 
 ### Syntax
+
 {% highlight sql %}
 { DESC | DESCRIBE } FUNCTION [ EXTENDED ] function_name
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>function_name</em></code></dt>
   <dd>
@@ -46,6 +49,7 @@ metadata information is returned along with the extended usage information.
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- Describe a builtin scalar function.
 -- Returns function name, implementing class and usage
@@ -107,6 +111,7 @@ DESC FUNCTION EXTENDED explode
 {% endhighlight %}
 
 ### Related Statements
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
-- [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
-- [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)
+
+ * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+ * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+ * [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)

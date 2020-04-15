@@ -217,11 +217,11 @@ class BarrierTaskContext private[spark] (
    */
   @Experimental
   @Since("3.0.0")
-  def allGather(message: String): ArrayBuffer[String] = {
+  def allGather(message: String): Array[String] = {
     val json = runBarrier(RequestMethod.ALL_GATHER, message)
     val jsonArray = parse(json)
     implicit val formats = DefaultFormats
-    ArrayBuffer(jsonArray.extract[Array[String]]: _*)
+    jsonArray.extract[Array[String]]
   }
 
   /**

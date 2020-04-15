@@ -23,8 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelectStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -46,8 +45,6 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private val df: DataFrame = ds.toDF()
 
   private val sparkSession = ds.sparkSession
-
-  private val catalogManager = sparkSession.sessionState.analyzer.catalogManager
 
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
@@ -120,19 +117,19 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   override def create(): Unit = {
-    // create and replace could alternatively create ParsedPlan statements, like
-    // `CreateTableFromDataFrameStatement(UnresolvedRelation(tableName), ...)`, to keep the catalog
-    // resolution logic in the analyzer.
     runCommand("create") {
-      CreateTableAsSelect(
-        catalog,
-        identifier,
-        partitioning.getOrElse(Seq.empty),
+      CreateTableAsSelectStatement(
+        tableName,
         logicalPlan,
-        properties = provider.map(p => properties + (TableCatalog.PROP_PROVIDER -> p))
-          .getOrElse(properties).toMap,
-        writeOptions = options.toMap,
-        ignoreIfExists = false)
+        partitioning.getOrElse(Seq.empty),
+        None,
+        properties.toMap,
+        provider,
+        Map.empty,
+        None,
+        None,
+        options.toMap,
+        ifNotExists = false)
     }
   }
 
@@ -231,13 +228,17 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private def internalReplace(orCreate: Boolean): Unit = {
     runCommand("replace") {
-      ReplaceTableAsSelect(
-        catalog,
-        identifier,
-        partitioning.getOrElse(Seq.empty),
+      ReplaceTableAsSelectStatement(
+        tableName,
         logicalPlan,
-        properties = provider.map(p => properties + ("provider" -> p)).getOrElse(properties).toMap,
-        writeOptions = options.toMap,
+        partitioning.getOrElse(Seq.empty),
+        None,
+        properties.toMap,
+        provider,
+        Map.empty,
+        None,
+        None,
+        options.toMap,
         orCreate = orCreate)
     }
   }

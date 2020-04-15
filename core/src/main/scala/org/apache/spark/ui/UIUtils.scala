@@ -36,7 +36,7 @@ import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
+  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-sm"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
@@ -222,16 +222,18 @@ private[spark] object UIUtils extends Logging {
 
   def commonHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/bootstrap.min.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri(request, "/static/vis.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/vis-timeline-graph2d.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri(request, "/static/webui.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
     <script src={prependBaseUri(request, "/static/jquery-3.4.1.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/vis.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/bootstrap-tooltip.js")}></script>
+    <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/bootstrap.bundle.min.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
@@ -251,17 +253,18 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet" href={prependBaseUri(request,
-      "/static/jquery.dataTables.1.10.18.min.css")} type="text/css"/>
+      "/static/jquery.dataTables.1.10.20.min.css")} type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap.css")} type="text/css"/>
+          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.20.min.css")}
+          type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.18.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.20.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.20.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jsonFormatter.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
@@ -279,8 +282,9 @@ private[spark] object UIUtils extends Logging {
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
     val header = activeTab.headerTabs.map { tab =>
-      <li class={if (tab == activeTab) "active" else ""}>
-        <a href={prependBaseUri(request, activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
+      <li class={if (tab == activeTab) "nav-item active" else "nav-item"}>
+        <a class="nav-link"
+           href={prependBaseUri(request, activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
     val helpButton: Seq[Node] = helpText.map(tooltip(_, "top")).getOrElse(Seq.empty)
@@ -295,30 +299,42 @@ private[spark] object UIUtils extends Logging {
         <title>{appName} - {title}</title>
       </head>
       <body>
-        <div class="navbar navbar-static-top">
-          <div class="navbar-inner">
-            <div class="brand">
-              <a href={prependBaseUri(request, "/")} class="brand">
+        <nav class="navbar navbar-expand-md navbar-light bg-light mb-4">
+          <div class="navbar-header">
+            <div class="navbar-brand">
+              <a href={prependBaseUri(request, "/")}>
                 <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
                 <span class="version">{activeTab.appSparkVersion}</span>
               </a>
             </div>
-            <p class="navbar-text pull-right">
-              <strong title={appName}>{shortAppName}</strong> application UI
-            </p>
-            <ul class="nav">{header}</ul>
           </div>
-        </div>
+          <button class="navbar-toggler" type="button" data-toggle="collapse"
+                  data-target="#navbarCollapse" aria-controls="navbarCollapse"
+                  aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav mr-auto">{header}</ul>
+            <span class="navbar-text navbar-right d-none d-md-block">
+              <strong title={appName} class="text-nowrap">{shortAppName}</strong>
+              <span class="text-nowrap">application UI</span>
+            </span>
+          </div>
+        </nav>
         <div class="container-fluid">
-          <div class="row-fluid">
-            <div class="span12">
+          <div class="row">
+            <div class="col-12">
               <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
                 {helpButton}
               </h3>
             </div>
           </div>
-          {content}
+          <div class="row">
+            <div class="col-12">
+              {content}
+            </div>
+          </div>
         </div>
       </body>
     </html>
@@ -340,8 +356,8 @@ private[spark] object UIUtils extends Logging {
       </head>
       <body>
         <div class="container-fluid">
-          <div class="row-fluid">
-            <div class="span12">
+          <div class="row">
+            <div class="col-12">
               <h3 style="vertical-align: middle; display: inline-block;">
                 <a style="text-decoration: none" href={prependBaseUri(request, "/")}>
                   <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
@@ -352,7 +368,11 @@ private[spark] object UIUtils extends Logging {
               </h3>
             </div>
           </div>
-          {content}
+          <div class="row">
+            <div class="col-12">
+              {content}
+            </div>
+          </div>
         </div>
       </body>
     </html>
@@ -403,7 +423,7 @@ private[spark] object UIUtils extends Logging {
     val newlinesInHeader = headers.exists(_.contains("\n"))
     def getHeaderContent(header: String): Seq[Node] = {
       if (newlinesInHeader) {
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           { header.split("\n").map(t => <li> {t} </li>) }
         </ul>
       } else {
@@ -445,8 +465,8 @@ private[spark] object UIUtils extends Logging {
     val boundedStarted = math.min(started, total - completed)
     val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)
 
-    <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%; left:0;">
+    <div class={ if (started > 0) s"progress progress-started" else s"progress" }>
+      <span style="text-align:center; position:absolute; width:100%;">
         {completed}/{total}
         { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
         { if (failed > 0) s"($failed failed)" }
@@ -456,8 +476,7 @@ private[spark] object UIUtils extends Logging {
           }
         }
       </span>
-      <div class="bar bar-completed" style={completeWidth}></div>
-      <div class="bar bar-running" style={startWidth}></div>
+      <div class="progress-bar" style={completeWidth}></div>
     </div>
   }
 

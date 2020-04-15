@@ -194,8 +194,8 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       }
   }
 
-  @Since("3.0.0")
-  override def train(dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
+  override protected def train(
+      dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
     val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)

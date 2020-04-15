@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
@@ -752,7 +752,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-24556: always rewrite output partitioning in ReusedExchangeExec " +
-    "and InMemoryTableScanExec") {
+    "and InMemoryTableScanExec",
+    DisableAdaptiveExecution("Reuse is dynamic in AQE")) {
     def checkOutputPartitioningRewrite(
         plans: Seq[SparkPlan],
         expectedPartitioningClass: Class[_]): Unit = {
@@ -782,8 +783,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       checkOutputPartitioningRewrite(inMemoryScan, expectedPartitioningClass)
     }
     // when enable AQE, the reusedExchange is inserted when executed.
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       // ReusedExchange is HashPartitioning
       val df1 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
       val df2 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
@@ -972,6 +972,25 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
           assert(exchanges.size == 2)
         }
+      }
+    }
+  }
+
+  test("aliases in the sort aggregate expressions should not introduce extra sort") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
+        val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
+
+        val agg1 = t1.groupBy("k1").agg(collect_list("k1")).withColumnRenamed("k1", "k3")
+        val agg2 = t2.groupBy("k2").agg(collect_list("k2"))
+
+        val planned = agg1.join(agg2, $"k3" === $"k2").queryExecution.executedPlan
+        assert(planned.collect { case s: SortAggregateExec => s }.nonEmpty)
+
+        // We expect two SortExec nodes on each side of join.
+        val sorts = planned.collect { case s: SortExec => s }
+        assert(sorts.size == 4)
       }
     }
   }

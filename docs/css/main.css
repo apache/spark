@@ -14,6 +14,37 @@ a:hover {
   color: #05c;
 }
 
+table {
+  margin: 15px 0;
+  padding: 0;
+}
+
+table tr {
+  border-top: 1px solid #cccccc;
+  background-color: white;
+  margin: 0;
+  padding: 0;
+}
+
+table tr:nth-child(2n) {
+  background-color: #F1F4F5;
+}
+
+table tr th {
+  font-weight: bold;
+  border: 1px solid #cccccc;
+  text-align: left;
+  margin: 0;
+  padding: 6px 13px;
+}
+
+table tr td {
+  border: 1px solid #cccccc;
+  text-align: left;
+  margin: 0;
+  padding: 6px 13px;
+}
+
 .navbar {
   background-color: #fafafa;
   background-image: linear-gradient(to bottom, #ffffff, #e2f1f8);

@@ -83,6 +83,7 @@ case class CreateTableAsSelectStatement(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
+    writeOptions: Map[String, String],
     ifNotExists: Boolean) extends ParsedStatement {
 
   override def children: Seq[LogicalPlan] = Seq(asSelect)
@@ -114,7 +115,7 @@ case class ReplaceTableStatement(
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
-    provider: String,
+    provider: Option[String],
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
@@ -129,10 +130,11 @@ case class ReplaceTableAsSelectStatement(
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
-    provider: String,
+    provider: Option[String],
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
+    writeOptions: Map[String, String],
     orCreate: Boolean) extends ParsedStatement {
 
   override def children: Seq[LogicalPlan] = Seq(asSelect)

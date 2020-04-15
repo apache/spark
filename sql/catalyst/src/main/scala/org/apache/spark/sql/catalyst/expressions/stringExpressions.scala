@@ -27,7 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
@@ -1450,7 +1450,7 @@ case class ParseUrl(children: Seq[Expression])
 // scalastyle:on line.size.limit
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
-  require(children.nonEmpty, "format_string() should take at least 1 argument")
+  require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
@@ -1517,7 +1517,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       }""")
   }
 
-  override def prettyName: String = "format_string"
+  override def prettyName: String = getTagValue(
+    FunctionRegistry.FUNC_ALIAS).getOrElse("format_string")
 }
 
 /**

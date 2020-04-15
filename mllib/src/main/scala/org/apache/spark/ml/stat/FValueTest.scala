@@ -22,9 +22,8 @@ import org.apache.commons.math3.distribution.FDistribution
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-
 
 /**
  * FValue test for continuous data.
@@ -33,7 +32,7 @@ import org.apache.spark.sql.functions._
 object FValueTest {
 
   /** Used to construct output schema of tests */
-  private case class FValueResult(
+  private  case class FValueResult(
       pValues: Vector,
       degreesOfFreedom: Array[Long],
       fValues: Vector)
@@ -45,12 +44,30 @@ object FValueTest {
    * @return DataFrame containing the test result for every feature against the label.
    *         This DataFrame will contain a single Row with the following fields:
    *          - `pValues: Vector`
-   *          - `degreesOfFreedom: Array[Int]`
+   *          - `degreesOfFreedom: Array[Long]`
    *          - `fValues: Vector`
    *         Each of these fields has one value per feature.
    */
   @Since("3.1.0")
   def test(dataset: DataFrame, featuresCol: String, labelCol: String): DataFrame = {
+    val spark = dataset.sparkSession
+    val testResults = testRegression(dataset, featuresCol, labelCol)
+    val pValues = Vectors.dense(testResults.map(_.pValue))
+    val degreesOfFreedom = testResults.map(_.degreesOfFreedom)
+    val fValues = Vectors.dense(testResults.map(_.statistic))
+    spark.createDataFrame(Seq(FValueResult(pValues, degreesOfFreedom, fValues)))
+  }
+
+  /**
+   * @param dataset  DataFrame of continuous labels and continuous features.
+   * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
+   * @param labelCol  Name of label column in dataset, of any numerical type
+   * @return Array containing the FValueTestResult for every feature against the label.
+   */
+  private[ml] def testRegression(
+      dataset: Dataset[_],
+      featuresCol: String,
+      labelCol: String): Array[SelectionTestResult] = {
 
     val spark = dataset.sparkSession
     import spark.implicits._
@@ -65,7 +82,7 @@ object FValueTest {
       .select("summary.mean", "summary.std", "yMean", "yStd", "summary.count")
       .first()
 
-    val labeledPointRdd = dataset.select(col("label").cast("double"), col("features"))
+    val labeledPointRdd = dataset.select(col(labelCol).cast("double"), col(featuresCol))
       .as[(Double, Vector)].rdd
 
     val numFeatures = xMeans.size
@@ -97,21 +114,14 @@ object FValueTest {
       array1
     }
 
-    val pValues = Array.ofDim[Double](numFeatures)
-    val degreesOfFreedoms = Array.fill(numFeatures)(degreesOfFreedom)
-    val fValues = Array.ofDim[Double](numFeatures)
-
     val fd = new FDistribution(1, degreesOfFreedom)
-    for (i <- 0 until numFeatures) {
+    Array.tabulate(numFeatures) { i =>
       // Cov(X,Y) = Sum(((Xi - Avg(X)) * ((Yi-Avg(Y))) / (N-1)
       val covariance = sumForCov (i) / (numSamples - 1)
       val corr = covariance / (yStd * xStd(i))
       val fValue = corr * corr / (1 - corr * corr) * degreesOfFreedom
-      pValues(i) = 1.0 - fd.cumulativeProbability(fValue)
-      fValues(i) = fValue
+      val pValue = 1.0 - fd.cumulativeProbability(fValue)
+      new FValueTestResult(pValue, degreesOfFreedom, fValue)
     }
-
-    spark.createDataFrame(
-      Seq(FValueResult(Vectors.dense(pValues), degreesOfFreedoms, Vectors.dense(fValues))))
   }
 }

@@ -313,7 +313,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val errMsg1 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 1)")
     }
-    assert(errMsg1.getMessage.startsWith("Schema should be specified in DDL format as a string"))
+    assert(errMsg1.getMessage.startsWith("The expression '1' is not a valid schema string"))
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
@@ -652,5 +652,73 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         .as[String].head.length
       assert(json_tuple_result === len)
     }
+  }
+
+  test("support foldable schema by from_json") {
+    val options = Map[String, String]().asJava
+    val schema = regexp_replace(lit("dpt_org_id INT, dpt_org_city STRING"), "dpt_org_", "")
+    checkAnswer(
+      Seq("""{"id":1,"city":"Moscow"}""").toDS().select(from_json($"value", schema, options)),
+      Row(Row(1, "Moscow")))
+
+    val errMsg = intercept[AnalysisException] {
+      Seq(("""{"i":1}""", "i int")).toDF("json", "schema")
+        .select(from_json($"json", $"schema", options)).collect()
+    }.getMessage
+    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+  }
+
+  test("schema_of_json - infers the schema of foldable JSON string") {
+    val input = regexp_replace(lit("""{"item_id": 1, "item_price": 0.1}"""), "item_", "")
+    checkAnswer(
+      spark.range(1).select(schema_of_json(input)),
+      Seq(Row("struct<id:bigint,price:double>")))
+  }
+
+  test("SPARK-31065: schema_of_json - null and empty strings as strings") {
+    Seq("""{"id": null}""", """{"id": ""}""").foreach { input =>
+      checkAnswer(
+        spark.range(1).select(schema_of_json(input)),
+        Seq(Row("struct<id:string>")))
+    }
+  }
+
+  test("SPARK-31065: schema_of_json - 'dropFieldIfAllNull' option") {
+    val options = Map("dropFieldIfAllNull" -> "true")
+    // Structs
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""{"id": "a", "drop": {"drop": null}}"""),
+          options.asJava)),
+      Seq(Row("struct<id:string>")))
+
+    // Array of structs
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""[{"id": "a", "drop": {"drop": null}}]"""),
+          options.asJava)),
+      Seq(Row("array<struct<id:string>>")))
+
+    // Other types are not affected.
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(
+          lit("""null"""),
+          options.asJava)),
+      Seq(Row("string")))
+  }
+
+  test("optional datetime parser does not affect json time formatting") {
+    val s = "2015-08-26 12:34:46"
+    def toDF(p: String): DataFrame = sql(
+      s"""
+         |SELECT
+         | to_json(
+         |   named_struct('time', timestamp'$s'), map('timestampFormat', "$p")
+         | )
+         | """.stripMargin)
+    checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
   }
 }
