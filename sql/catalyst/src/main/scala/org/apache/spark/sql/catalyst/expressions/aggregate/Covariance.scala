@@ -86,6 +86,7 @@ abstract class Covariance(x: Expression, y: Expression)
       > SELECT _FUNC_(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2);
        0.6666666666666666
   """,
+  group = "agg_funcs",
   since = "2.0.0")
 case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
@@ -102,6 +103,7 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
       > SELECT _FUNC_(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2);
        1.0
   """,
+  group = "agg_funcs",
   since = "2.0.0")
 case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {

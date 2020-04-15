@@ -35,6 +35,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
        NULL
   """,
+  group = "agg_funcs",
   since = "1.0.0")
 case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
