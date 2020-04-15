@@ -53,15 +53,14 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  * The map can support up to 2^29 keys. If the key cardinality is higher than this, you should
  * probably be using sorting instead of hashing for better cache locality.
  *
- * The key and values under the hood are stored together, in the following format(in case of
- * uaoSize = 4):
- *   Bytes 0 to 4: len(k) (key length in bytes) + len(v) (value length in bytes) + 4
- *   Bytes 4 to 8: len(k)
- *   Bytes 8 to 8 + len(k): key data
- *   Bytes 8 + len(k) to 8 + len(k) + len(v): value data
- *   Bytes 8 + len(k) + len(v) to 8 + len(k) + len(v) + 8: pointer to next pair
+ * The key and values under the hood are stored together, in the following format:
+ *   Bytes 0 to uaoSize: len(k) (key length in bytes) + len(v) (value length in bytes) + uaoSize
+ *   Bytes uaoSize to 2 * uaoSize: len(k)
+ *   Bytes 2 * uaoSize to 2 * uaoSize + len(k): key data
+ *   Bytes 2 * uaoSize + len(k) to 2 * uaoSize + len(k) + len(v): value data
+ *   Bytes 2 * uaoSize + len(k) + len(v) to 8 + len(k) + len(v) + 8: pointer to next pair
  *
- * This means that the first four bytes store the entire record (key + value) length. This format
+ * It means first uaoSize bytes store the entire record (key + value + uaoSize) length. This format
  * is compatible with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
  * so we can pass records from this map directly into the sorter to sort records in place.
  */
