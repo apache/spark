@@ -21,26 +21,11 @@ license: |
 
 ### Description
 
-Similarly to aggregate functions, window functions operate on a group of rows. However, unlike aggregate functions, window functions perform aggregation without reducing, calculating a return value for each row in the group. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative, or accessing the value of rows given the relative position of the current row. Spark SQL supports three types of window functions:
+Similarly to aggregate functions, window functions operate on a group of rows. However, unlike aggregate functions, window functions perform aggregation without reducing, calculating an aggregated value for each row in the specified window. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative, or accessing the value of rows given the relative position of the current row. Spark SQL supports three types of window functions:
+
   * Ranking Functions
   * Analytic Functions
   * Aggregate Functions
-
-### How to Use Window Functions
-
-  * Mark a function as window function by using `over`.
-    - SQL: Add an OVER clause after the window function, e.g. rank ( ) OVER ( ... )
-    - DataFrame API: Call the window function's `over` method, e.g. rank ( ).over ( ... )
-  * Define the window specification associated with this function. A window specification includes partitioning specification, ordering specification, and frame specification.
-    - Partitioning Specification:
-      - SQL: PARTITION BY
-      - DataFrame API: Window.partitionBy ( ... )
-    - Ordering Specification:
-      - SQL: ORDER BY
-      - DataFrame API: Window.orderBy ( ... )
-    - Frame Specification:
-      - SQL: ROWS ( for ROW frame ), RANGE ( for RANGE frame )
-      - DataFrame API: WindowSpec.rowsBetween ( for row frame ), WindowSpec.rangeBetween ( for range frame )
 
 ### Syntax
 
@@ -116,6 +101,7 @@ window_function OVER ( [ partition_spec ] order_spec [ window_frame ] )
       Specifies an expression with a return type of boolean.
   </dd>
 </dl>
+
 ### Examples
 
 {% highlight sql %}
