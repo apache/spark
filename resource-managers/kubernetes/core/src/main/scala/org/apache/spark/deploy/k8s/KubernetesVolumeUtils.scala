@@ -80,11 +80,9 @@ private[spark] object KubernetesVolumeUtils {
 
       case KUBERNETES_VOLUMES_NFS_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
-        val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_READ_ONLY_KEY"
         val serverKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY"
         KubernetesNFSVolumeConf(
           options(pathKey),
-          options.get(readOnlyKey).map(_.toBoolean),
           options(serverKey))
 
       case _ =>

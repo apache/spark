@@ -109,13 +109,13 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
   }
 
-  test("Mounts nfs volumes") {
+  test("Mounts read/write nfs volumes") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
       "",
       false,
-      KubernetesNFSVolumeConf("/share/name", None, "nfs.example.com")
+      KubernetesNFSVolumeConf("/share/name", "nfs.example.com")
     )
     val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
@@ -136,8 +136,8 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "testVolume",
       "/tmp",
       "",
-      false,
-      KubernetesNFSVolumeConf("/share/name", Some(true), "nfs.example.com")
+      true,
+      KubernetesNFSVolumeConf("/share/name", "nfs.example.com")
     )
     val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
@@ -145,12 +145,12 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getPath === "/share/name")
-    assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getReadOnly === true)
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getReadOnly === null)
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getServer === "nfs.example.com")
     assert(configuredPod.container.getVolumeMounts.size() === 1)
     assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
     assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
-    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
+    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === true)
   }
 
   test("Mounts multiple volumes") {
