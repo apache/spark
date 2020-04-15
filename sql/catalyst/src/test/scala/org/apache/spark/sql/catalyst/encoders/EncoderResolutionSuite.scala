@@ -47,7 +47,7 @@ class EncoderResolutionSuite extends PlanTest {
       encoder: ExpressionEncoder[T],
       attributes: Seq[Attribute],
       row: InternalRow): Unit = {
-    encoder.resolveAndBind(attributes).createDeserializer()(row)
+    encoder.resolveAndBind(attributes).createDeserializer().apply(row)
   }
 
   test("real type doesn't match encoder schema but they are compatible: product") {
