@@ -148,8 +148,8 @@ object RebaseDateTime {
   // in Proleptic Gregorian calendar.
   private final val gregorianCommonEraStartDay = gregJulianDiffSwitchDay(0)
 
-  private final val gregorianStartDay = LocalDate.of(1582, 10, 15)
-  private final val julianEndDay = LocalDate.of(1582, 10, 4)
+  private final val gregorianStartDate = LocalDate.of(1582, 10, 15)
+  private final val julianEndDate = LocalDate.of(1582, 10, 4)
 
   /**
    * Converts the given number of days since the epoch day 1970-01-01 to a local date in Proleptic
@@ -171,8 +171,8 @@ object RebaseDateTime {
    */
   private[sql] def localRebaseGregorianToJulianDays(days: Int): Int = {
     var localDate = LocalDate.ofEpochDay(days)
-    if (localDate.isAfter(julianEndDay) && localDate.isBefore(gregorianStartDay)) {
-      localDate = gregorianStartDay
+    if (localDate.isAfter(julianEndDate) && localDate.isBefore(gregorianStartDate)) {
+      localDate = gregorianStartDate
     }
     val utcCal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
@@ -284,9 +284,9 @@ object RebaseDateTime {
    */
   private val gregJulianRebaseMap = loadRebaseRecords("gregorian-julian-rebase-micros.json")
 
-  private final val gregorianStartMicros = LocalDateTime.of(gregorianStartDay, LocalTime.MIDNIGHT)
-  private final val julianEndMicros = LocalDateTime.of(
-    julianEndDay,
+  private final val gregorianStartTs = LocalDateTime.of(gregorianStartDate, LocalTime.MIDNIGHT)
+  private final val julianEndTs = LocalDateTime.of(
+    julianEndDate,
     LocalTime.of(23, 59, 59, 999999999))
 
   /**
@@ -312,8 +312,8 @@ object RebaseDateTime {
   private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
     val instant = microsToInstant(micros)
     var ldt = instant.atZone(zoneId).toLocalDateTime
-    if (ldt.isAfter(julianEndMicros) && ldt.isBefore(gregorianStartMicros)) {
-      ldt = LocalDateTime.of(gregorianStartDay, ldt.toLocalTime)
+    if (ldt.isAfter(julianEndTs) && ldt.isBefore(gregorianStartTs)) {
+      ldt = LocalDateTime.of(gregorianStartDate, ldt.toLocalTime)
     }
     val cal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
