@@ -21,7 +21,8 @@ license: |
 
 ### Description
 
-Window functions operate on a group of rows, referred to as a window, and calculate an aggregated value for each row based on the specified window. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative statistic, or accessing the value of rows given the relative position of the current row. Spark SQL supports three types of window functions:
+Window functions operate on a group of rows, referred to as a window, and calculate an aggregated value for each row based on the specified window. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative statistic, or accessing the value of rows given the relative position of the current row.
+Spark SQL supports three types of window functions:
 
   * Ranking Functions
   * Analytic Functions
@@ -62,7 +63,7 @@ window_function OVER ( [ partition_spec ] order_spec [ window_frame ] )
           MAX | MIN | COUNT | SUM | AVG | ...
         </code>
         <br>
-        Please refer <a href="api/sql/">here</a> for a complete list of Spark Aggregate Functions.
+        Please refer to the <a href="sql-ref-functions-builtin.html">Built-in Function</a> document for a complete list of Spark aggregate functions.
     </ul>
   </dd>
 </dl>
@@ -72,7 +73,7 @@ window_function OVER ( [ partition_spec ] order_spec [ window_frame ] )
     Specifies a comma separated list of key and value pairs for partitions.<br><br>
     <b>Syntax:</b><br>
       <code>
-        { PARTITION | DISTRIBUTE } BY partition_col_name  = partition_col_val ( [ , ... ] )
+        { PARTITION | DISTRIBUTE } BY partition_col_name = partition_col_val ( [ , ... ] )
       </code>
   </dd>
 </dl>
