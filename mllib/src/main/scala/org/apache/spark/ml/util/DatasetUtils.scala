@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{DenseMatrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, Dataset, Row}
@@ -67,6 +67,37 @@ private[spark] object DatasetUtils {
     dataset.select(columnToVector(dataset, colName))
       .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
+    }
+  }
+
+  def VectorsToDenseMatrix(rows: Iterator[Row]): DenseMatrix = {
+
+    val vector_array = rows.map {
+      case Row(point: Vector) => point
+    }.toArray
+
+    val column_num = vector_array(0).size
+    val row_num = vector_array.length
+
+    val values = new Array[Double](row_num * column_num)
+    var rowIndex = 0
+
+    // convert to column-major dense matrix
+    for (vector <- vector_array) {
+      for ((value, index) <- vector.toArray.zipWithIndex) {
+        values(index*row_num + rowIndex) = value
+      }
+      rowIndex = rowIndex + 1
+    }
+
+    new DenseMatrix(row_num, column_num, values)
+  }
+
+  def columnToDenseMatrix(dataset: Dataset[_], colName: String, rowNum: Int): RDD[DenseMatrix] = {
+    dataset.select(columnToVector(dataset, colName))
+      .rdd.mapPartitions { p =>
+      val groups = p.grouped(rowNum)
+      groups.map(s => VectorsToDenseMatrix(s.toIterator))
     }
   }
 }

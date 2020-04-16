@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.linalg.Vector
@@ -28,7 +29,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
+import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
@@ -331,7 +332,64 @@ class KMeans @Since("1.5.0") (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): KMeansModel = {
+    val conf = new SparkConf(true)
+    val enableMatrixImpl = conf.getBoolean("spark.ml.kmeans.matrixImplementation.enabled", false)
+
+    if (enableMatrixImpl && $(distanceMeasure) == "euclidean") {
+      val matrixRowNum = conf.getInt("spark.ml.kmeans.matrixImplementation.rowsPerMatrix", 1000)
+      fitMatrixImpl(dataset, matrixRowNum)
+    } else {
+      // Calling the old K-Means implementation
+      fitOld(dataset)
+    }
+  }
+
+  private def fitMatrixImpl(dataset: Dataset[_],
+    matrix_row_num: Int): KMeansModel = instrumented { instr =>
+
+    instr.logInfo(s"k-means matrix implementation enabled! rowsPerMatrix = ${matrix_row_num}")
+
+    transformSchema(dataset.schema, logging = true)
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    val instances = DatasetUtils.columnToDenseMatrix(dataset, getFeaturesCol, matrix_row_num)
+
+    if (handlePersistence) {
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
+      maxIter, seed, tol)
+    val algo = new KMeansMatrixImpl()
+      .setK($(k))
+      .setInitializationMode($(initMode))
+      .setInitializationSteps($(initSteps))
+      .setMaxIterations($(maxIter))
+      .setSeed($(seed))
+      .setEpsilon($(tol))
+      .setDistanceMeasure($(distanceMeasure))
+    val parentModel = algo.run(instances, matrix_row_num, Option(instr))
+    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+    val summary = new KMeansSummary(
+      model.transform(dataset),
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      parentModel.numIter,
+      parentModel.trainingCost)
+
+    model.setSummary(Some(summary))
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
+    if (handlePersistence) {
+      instances.unpersist()
+    }
+    model
+  }
+
+  private def fitOld(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
