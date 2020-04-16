@@ -165,7 +165,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
         "## Summary\n" +
         s"  - Number of queries: ${outputs.size}\n" +
         s"  - Number of expressions that missing example: ${missingExamples.size}\n" +
-        s"  - Expressions for all missing examples include $missingExampleStr\n" +
+        s"  - Expressions missing examples: $missingExampleStr\n" +
         "## Schema of Built-in Functions\n" +
         "| No | Class name | Function name or alias | Query example | Output schema |\n" +
         "| -- | ---------- | ---------------------- | ------------- | ------------- |\n" +
