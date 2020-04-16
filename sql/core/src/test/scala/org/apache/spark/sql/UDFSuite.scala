@@ -557,11 +557,10 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     }
 
     val errMsg = intercept[IllegalArgumentException] {
-      val invalidGroupName = "invalidGroupName"
+      val invalidGroupName = "invalid_group_funcs"
       new ExpressionInfo("testClass", null, "testName", null, "", "", "", invalidGroupName, "", "")
     }.getMessage
-    assert(errMsg === "'group' is malformed in the expression [testName]. It should be a value " +
-      "in [agg_funcs, collection_funcs, datetime_funcs]; however, got [invalidGroupName].")
+    assert(errMsg.contains("'group' is malformed in the expression [testName]."))
   }
 
   test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
