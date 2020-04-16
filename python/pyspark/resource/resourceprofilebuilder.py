@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-from pyspark.resource.executorresourcerequest import ExecutorResourceRequest
+from pyspark.resource.executorrequests import ExecutorResourceRequest,\
+    ExecutorResourceRequests
 from pyspark.resource.resourceprofile import ResourceProfile
-from pyspark.resource.taskresourcerequest import TaskResourceRequest
-from pyspark.resource.taskresourcerequests import TaskResourceRequests
+from pyspark.resource.taskrequests import TaskResourceRequest, TaskResourceRequests
 
 
 class ResourceProfileBuilder(object):
@@ -38,39 +38,51 @@ class ResourceProfileBuilder(object):
         from pyspark.context import SparkContext
         _jvm = SparkContext._jvm
         if _jvm is not None:
+            self._jvm = _jvm
             self._java_resource_profile_builder = \
                 _jvm.org.apache.spark.resource.ResourceProfileBuilder()
         else:
+            self._jvm = None
             self._java_resource_profile_builder = None
-            self._executor_resource_requests = None
-            self._task_resource_requests = None
+            self._executor_resource_requests = {}
+            self._task_resource_requests = {}
 
     def require(self, resourceRequest):
         if isinstance(resourceRequest, TaskResourceRequests):
             if self._java_resource_profile_builder is not None:
-                self._java_resource_profile_builder.require(
-                    resourceRequest._java_task_resource_requests)
+                if resourceRequest._java_task_resource_requests is not None:
+                    self._java_resource_profile_builder.require(
+                        resourceRequest._java_task_resource_requests)
+                else:
+                    taskReqs = TaskResourceRequests(self._jvm, resourceRequest.requests)
+                    self._java_resource_profile_builder.require(
+                        taskReqs._java_task_resource_requests)
             else:
-                self._task_resource_requests = resourceRequest
+                self._task_resource_requests.update(resourceRequest.requests)
         else:
             if self._java_resource_profile_builder is not None:
-                self._java_resource_profile_builder.require(
-                    resourceRequest._java_executor_resource_requests)
+                if resourceRequest._java_executor_resource_requests is not None:
+                    self._java_resource_profile_builder.require(
+                        resourceRequest._java_executor_resource_requests)
+                else:
+                    execReqs = ExecutorResourceRequests(self._jvm, resourceRequest.requests)
+                    self._java_resource_profile_builder.require(
+                        execReqs._java_executor_resource_requests)
             else:
-                self._executor_resource_requests = resourceRequest
+                self._executor_resource_requests.update(resourceRequest.requests)
         return self
 
     def clearExecutorResourceRequests(self):
         if self._java_resource_profile_builder is not None:
             self._java_resource_profile_builder.clearExecutorResourceRequests()
         else:
-            self._executor_resource_requests = None
+            self._executor_resource_requests = {}
 
     def clearTaskResourceRequests(self):
         if self._java_resource_profile_builder is not None:
             self._java_resource_profile_builder.clearTaskResourceRequests()
         else:
-            self._task_resource_requests = None
+            self._task_resource_requests = {}
 
     @property
     def taskResources(self):

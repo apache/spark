@@ -15,7 +15,35 @@
 # limitations under the License.
 #
 
-from pyspark.resource.taskresourcerequest import TaskResourceRequest
+
+class TaskResourceRequest(object):
+    """
+    .. note:: Evolving
+
+    A task resource request. This is used in conjuntion with the
+    :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
+    needed for an RDD that will be applied at the stage level. The amount is specified
+    as a Double to allow for saying you want more then 1 task per resource. Valid values
+    are less than or equal to 0.5 or whole numbers.
+    Use :class:`pyspark.resource.TaskResourceRequests` class as a convenience API.
+
+    :param resourceName: Name of the resource
+    :param amount: Amount requesting as a Double to support fractional resource requests.
+        Valid values are less than or equal to 0.5 or whole numbers.
+
+    .. versionadded:: 3.1.0
+    """
+    def __init__(self, resourceName, amount):
+        self._name = resourceName
+        self._amount = float(amount)
+
+    @property
+    def resourceName(self):
+        return self._name
+
+    @property
+    def amount(self):
+        return self._amount
 
 
 class TaskResourceRequests(object):
@@ -30,6 +58,8 @@ class TaskResourceRequests(object):
     .. versionadded:: 3.1.0
     """
 
+    _CPUS = "cpus"
+
     def __init__(self, _jvm=None, _requests=None):
         from pyspark import SparkContext
         _jvm = _jvm or SparkContext._jvm
@@ -37,39 +67,36 @@ class TaskResourceRequests(object):
             self._java_task_resource_requests = \
                 SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()
             if _requests is not None:
-                if _requests._cpus is not None:
-                    self._java_task_resource_requests.cpus(_requests._cpus)
-                for r in _requests._custom_resources:
-                    self._java_task_resource_requests.resource(r.resourceName, r.amount)
+                for k, v in _requests.items():
+                    if k == self._CPUS:
+                        self._java_task_resource_requests.cpus(int(v.amount))
+                    else:
+                        self._java_task_resource_requests.resource(v.resourceName, v.amount)
         else:
             self._java_task_resource_requests = None
-            self._custom_resources = []
-            self._cpus = None
+            self._task_resources = {}
 
     def cpus(self, amount):
         if self._java_task_resource_requests is not None:
             self._java_task_resource_requests.cpus(amount)
         else:
-            self._cpus = amount
+            self._task_resources[self._CPUS] = TaskResourceRequest(self._CPUS, amount)
         return self
 
     def resource(self, resourceName, amount):
         if self._java_task_resource_requests is not None:
             self._java_task_resource_requests.resource(resourceName, float(amount))
         else:
-            self._custom_resources.append(TaskResourceRequest(resourceName, amount))
+            self._task_resources[resourceName] = TaskResourceRequest(resourceName, amount)
         return self
 
     @property
     def requests(self):
-        result = {}
         if self._java_task_resource_requests is not None:
+            result = {}
             taskRes = self._java_task_resource_requests.requestsJMap()
             for k, v in taskRes.items():
                 result[k] = TaskResourceRequest(v.resourceName(), v.amount())
+            return result
         else:
-            if self._cpus is not None:
-                result["cpus"] = TaskResourceRequest("cpus", self._cpus)
-            for t in self._custom_resources:
-                result[t.resourceName] = TaskResourceRequest(t.resourceName, t.amount)
-        return result
+            return self._task_resources

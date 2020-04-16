@@ -47,14 +47,14 @@ from pyspark.join import python_join, python_left_outer_join, \
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
-from pyspark.resource.executorresourcerequests import ExecutorResourceRequests
+from pyspark.resource.executorrequests import ExecutorResourceRequests
 from pyspark.resource.resourceprofile import ResourceProfile
-from pyspark.resource.taskresourcerequests import TaskResourceRequests
+from pyspark.resource.taskrequests import TaskResourceRequests
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration, _parse_memory
 
 
 __all__ = ["RDD"]
@@ -126,22 +126,6 @@ class BoundedFloat(float):
         obj.low = low
         obj.high = high
         return obj
-
-
-def _parse_memory(s):
-    """
-    Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MiB
-
-    >>> _parse_memory("256m")
-    256
-    >>> _parse_memory("2g")
-    2048
-    """
-    units = {'g': 1024, 'm': 1, 't': 1 << 20, 'k': 1.0 / 1024}
-    if s[-1].lower() not in units:
-        raise ValueError("invalid format: " + s)
-    return int(float(s[:-1]) * units[s[-1].lower()])
 
 
 def _create_local_socket(sock_info):

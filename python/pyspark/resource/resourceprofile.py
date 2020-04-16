@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.resource.taskresourcerequest import TaskResourceRequest
-from pyspark.resource.executorresourcerequest import ExecutorResourceRequest
+from pyspark.resource.taskrequests import TaskResourceRequest
+from pyspark.resource.executorrequests import ExecutorResourceRequest
 
 
 class ResourceProfile(object):
@@ -32,7 +32,7 @@ class ResourceProfile(object):
     .. versionadded:: 3.1.0
     """
 
-    def __init__(self, _java_resource_profile=None, _exec_req=None, _task_req=None):
+    def __init__(self, _java_resource_profile=None, _exec_req={}, _task_req={}):
         if _java_resource_profile is not None:
             self._java_resource_profile = _java_resource_profile
         else:

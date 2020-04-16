@@ -14,16 +14,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-"""
-APIs to let users manipulate resource requirements.
-"""
-from pyspark.resource.executorrequests import ExecutorResourceRequest, ExecutorResourceRequests
-from pyspark.resource.taskrequests import TaskResourceRequest, TaskResourceRequests
-from pyspark.resource.resourceprofilebuilder import ResourceProfileBuilder
-from pyspark.resource.resourceprofile import ResourceProfile
-
-__all__ = [
-    "TaskResourceRequest", "TaskResourceRequests", "ExecutorResourceRequest",
-    "ExecutorResourceRequests", "ResourceProfile", "ResourceProfileBuilder",
-]
