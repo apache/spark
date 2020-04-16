@@ -36,6 +36,7 @@ BUILD:
   - "!/dev/github_jira_sync.py"
   - "!/dev/merge_spark_pr.py"
   - "!/dev/run-tests-jenkins*"
+  - "!/dev/.rat-excludes"
   - "/build/"
   - "/project/"
   - "/assembly/"
