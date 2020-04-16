@@ -111,6 +111,7 @@ case class CustomShuffleReaderExec private(
       val numSkewedPartitions = partitionSpecs.collect {
         case p: PartialReducerPartitionSpec => p.reducerIndex
       }.distinct.length
+      skewedMetric.set(numSkewedPartitions)
       driverAccumUpdates = driverAccumUpdates :+ (skewedMetric.id, numSkewedPartitions.toLong)
     }
 
