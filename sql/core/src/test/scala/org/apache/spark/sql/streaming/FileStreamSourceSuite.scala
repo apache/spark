@@ -1973,12 +1973,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
         }
 
+        CountListingLocalFileSystem.resetCount()
+
         // provide 20 files in src, with sequential "last modified" to guarantee ordering
-        var lastModified = 0
         val inputFiles = (0 to 19).map { idx =>
           val f = createFile(idx.toString, new File(src, idx.toString), tmp)
-          f.setLastModified(lastModified)
-          lastModified += 10000
+          f.setLastModified(idx * 10000)
           f
         }
 
@@ -2008,12 +2008,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
           StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
 
+        CountListingLocalFileSystem.resetCount()
+
         // provide 20 files in src, with sequential "last modified" to guarantee ordering
-        var lastModified = 0
         (0 to 19).map { idx =>
           val f = createFile(idx.toString, new File(src, idx.toString), tmp)
-          f.setLastModified(lastModified)
-          lastModified += 10000
+          f.setLastModified(idx * 10000)
           f
         }
 
@@ -2098,14 +2098,15 @@ class CountListingLocalFileSystem extends RawLocalFileSystem {
   }
 
   override def listStatus(f: Path): Array[FileStatus] = {
-    val path = f.toUri.getPath
-    val curVal = pathToNumListStatusCalled.getOrElseUpdate(path, new AtomicLong(0))
+    val curVal = pathToNumListStatusCalled.getOrElseUpdate(f.toUri.getPath, new AtomicLong(0))
     curVal.incrementAndGet()
     super.listStatus(f)
   }
 }
 
 object CountListingLocalFileSystem {
-  val scheme = s"FileStreamSourceSuite${math.abs(Random.nextInt)}fs"
+  val scheme = s"CountListingLocalFileSystem${math.abs(Random.nextInt)}fs"
   val pathToNumListStatusCalled = new mutable.HashMap[String, AtomicLong]
+
+  def resetCount(): Unit = pathToNumListStatusCalled.clear()
 }
