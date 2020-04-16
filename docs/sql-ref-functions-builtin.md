@@ -1060,7 +1060,7 @@ SELECT shuffle(array(1, 20, null, 3));
   +-------------------------------------------+
   |shuffle(array(1, 20, CAST(NULL AS INT), 3))|
   +-------------------------------------------+
-  |                                [3,, 20, 1]|
+  |                                [1,, 20, 3]|
   +-------------------------------------------+
   
 -- slice
@@ -1659,7 +1659,7 @@ SELECT unix_timestamp();
   +--------------------------------------------------------+
   |unix_timestamp(current_timestamp(), yyyy-MM-dd HH:mm:ss)|
   +--------------------------------------------------------+
-  |                                              1586941183|
+  |                                              1587002726|
   +--------------------------------------------------------+
   
 SELECT unix_timestamp('2016-04-08', 'yyyy-MM-dd');
@@ -1958,3 +1958,62 @@ SELECT map_values(map(1, 'a', 2, 'b'));
   +---------------------------+
   
 {% endhighlight %}
+
+### Window Functions
+
+<table class="table">
+  <thead>
+    <tr>
+      <th style="width:25%">Function</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>cume_dist()</td>
+      <td>Computes the position of a value relative to all values in the partition.</td>
+    </tr>
+    <tr>
+      <td>dense_rank()</td>
+      <td>Computes the rank of a value in a group of values. The result is one plus the
+      previously assigned rank value. Unlike the function rank, dense_rank will not produce gaps
+      in the ranking sequence.</td>
+    </tr>
+    <tr>
+      <td>lag(input[, offset[, default]])</td>
+      <td>Returns the value of `input` at the `offset`th row
+      before the current row in the window. The default value of `offset` is 1 and the default
+      value of `default` is null. If the value of `input` at the `offset`th row is null,
+      null is returned. If there is no such offset row (e.g., when the offset is 1, the first
+      row of the window does not have any previous row), `default` is returned.</td>
+    </tr>
+    <tr>
+      <td>lead(input[, offset[, default]])</td>
+      <td>Returns the value of `input` at the `offset`th row
+      after the current row in the window. The default value of `offset` is 1 and the default
+      value of `default` is null. If the value of `input` at the `offset`th row is null,
+      null is returned. If there is no such an offset row (e.g., when the offset is 1, the last
+      row of the window does not have any subsequent row), `default` is returned.</td>
+    </tr>
+    <tr>
+      <td>ntile(n)</td>
+      <td>Divides the rows for each window partition into `n` buckets ranging
+      from 1 to at most `n`.</td>
+    </tr>
+    <tr>
+      <td>percent_rank()</td>
+      <td>Computes the percentage ranking of a value in a group of values.</td>
+    </tr>
+    <tr>
+      <td>rank()</td>
+      <td>Computes the rank of a value in a group of values. The result is one plus the number
+      of rows preceding or equal to the current row in the ordering of the partition. The values
+      will produce gaps in the sequence.</td>
+    </tr>
+    <tr>
+      <td>row_number()</td>
+      <td>Assigns a unique, sequential number to each row, starting with one,
+      according to the ordering of rows within the window partition.</td>
+    </tr>
+  </tbody>
+</table>

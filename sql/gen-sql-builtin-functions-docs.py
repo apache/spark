@@ -52,7 +52,8 @@ group_titles = {
     "array_funcs": "Array Functions",
     "datetime_funcs": "Date and Timestamp Functions",
     "json_funcs": "JSON Functions",
-    "map_funcs": "Map Functions"
+    "map_funcs": "Map Functions",
+    "window_funcs": "Window Functions",
 }
 
 
@@ -150,7 +151,8 @@ def _make_pretty_query_example(jspark, query):
 
 def _make_pretty_examples(jspark, infos):
     """
-    Makes the examples description pretty and returns a formatted string.
+    Makes the examples description pretty and returns a formatted string if `infos`
+    has any `examples` starting with the example prefix. Otherwise, returns None.
 
     Expected input:
 
@@ -178,19 +180,20 @@ def _make_pretty_examples(jspark, infos):
 
     """
 
-    result = []
-    result.append("\n#### Examples\n")
-    result.append("{% highlight sql %}")
+    if any(info.examples.startswith("\n    Examples:") for info in infos):
+        result = []
+        result.append("\n#### Examples\n")
+        result.append("{% highlight sql %}")
 
-    for info in infos:
-        result.append("-- %s" % info.name)
-        query_examples = filter(lambda x: x.startswith("      > "), info.examples.split("\n"))
-        for query_example in query_examples:
-            query = query_example.lstrip("      > ")
-            result.append(_make_pretty_query_example(jspark, query))
+        for info in infos:
+            result.append("-- %s" % info.name)
+            query_examples = filter(lambda x: x.startswith("      > "), info.examples.split("\n"))
+            for query_example in query_examples:
+                query = query_example.lstrip("      > ")
+                result.append(_make_pretty_query_example(jspark, query))
 
-    result.append("{% endhighlight %}\n")
-    return "\n".join(result)
+        result.append("{% endhighlight %}\n")
+        return "\n".join(result)
 
 
 def generate_sql_markdown(jvm, jspark, path):
@@ -231,7 +234,8 @@ def generate_sql_markdown(jvm, jspark, path):
             function_table = _make_pretty_usage(infos)
             examples = _make_pretty_examples(jspark, infos)
             mdfile.write(function_table)
-            mdfile.write(examples)
+            if examples is not None:
+                mdfile.write(examples)
 
 
 if __name__ == "__main__":

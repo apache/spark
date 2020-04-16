@@ -28,6 +28,7 @@ Spark SQL has some categories of frequently-used built-in functions for aggregti
 This subsection presents the usages and descriptions of these functions.
 
  * [Aggregate Functions](sql-ref-functions-builtin.html#aggregate-functions)
+ * [Window Functions](sql-ref-functions-builtin.html#window-functions)
  * [Array Functions](sql-ref-functions-builtin.html#array-functions)
  * [Map Functions](sql-ref-functions-builtin.html#map-functions)
  * [Date and Timestamp Functions](sql-ref-functions-builtin.html#date-and-timestamp-functions)

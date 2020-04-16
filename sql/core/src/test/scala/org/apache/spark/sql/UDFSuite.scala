@@ -549,7 +549,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
     assert(info.getGroup === "agg_funcs")
 
-    Seq("agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs")
+    Seq("agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs", "window_funcs")
         .foreach { groupName =>
       val info = new ExpressionInfo(
         "testClass", null, "testName", null, "", "", "", groupName, "", "")

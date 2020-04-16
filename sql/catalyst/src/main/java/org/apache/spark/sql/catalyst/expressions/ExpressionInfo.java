@@ -41,7 +41,7 @@ public class ExpressionInfo {
 
     private static final Set<String> validGroups =
         new HashSet<>(Arrays.asList("agg_funcs", "array_funcs", "datetime_funcs",
-            "json_funcs", "map_funcs"));
+            "json_funcs", "map_funcs", "window_funcs"));
 
     public String getClassName() {
         return className;
