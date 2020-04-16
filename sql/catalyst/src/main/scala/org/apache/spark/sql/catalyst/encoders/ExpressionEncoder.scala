@@ -177,22 +177,15 @@ object ExpressionEncoder {
     @transient
     private[this] var constructProjection: Projection = _
 
-    private def initialize(): Unit = {
-      constructProjection = SafeProjection.create(expressions)
-    }
-    initialize()
-
     override def apply(row: InternalRow): T = try {
+      if (constructProjection == null) {
+        constructProjection = SafeProjection.create(expressions)
+      }
       constructProjection(row).get(0, anyObjectType).asInstanceOf[T]
     } catch {
       case e: Exception =>
         throw new RuntimeException(s"Error while decoding: $e\n" +
           s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
-    }
-
-    private def readObject(in: ObjectInputStream): Unit = {
-      in.defaultReadObject()
-      initialize()
     }
   }
 
@@ -209,24 +202,17 @@ object ExpressionEncoder {
     @transient
     private[this] var extractProjection: UnsafeProjection = _
 
-    private def initialize(): Unit = {
-      inputRow = new GenericInternalRow(1)
-      extractProjection = GenerateUnsafeProjection.generate(expressions)
-    }
-    initialize()
-
     override def apply(t: T): InternalRow = try {
+      if (extractProjection == null) {
+        inputRow = new GenericInternalRow(1)
+        extractProjection = GenerateUnsafeProjection.generate(expressions)
+      }
       inputRow(0) = t
       extractProjection(inputRow)
     } catch {
       case e: Exception =>
         throw new RuntimeException(s"Error while encoding: $e\n" +
           s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
-    }
-
-    private def readObject(in: ObjectInputStream): Unit = {
-      in.defaultReadObject()
-      initialize()
     }
   }
 }
