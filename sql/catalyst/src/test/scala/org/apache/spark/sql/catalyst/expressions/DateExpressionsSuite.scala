@@ -844,9 +844,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
         sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
+
         // Week of Year relies on Locale to define the first day of the week.
         val fmt4 = "YYYY-ww"
-        val sdf4 = new SimpleDateFormat(fmt4, Locale.getDefault)
+        val sdf4 = new SimpleDateFormat(fmt4, Locale.US)
 
         withDefaultTimeZone(UTC) {
           for (zid <- outstandingZoneIds) {

@@ -100,8 +100,8 @@ private object DateTimeFormatterHelper {
   }
 
   def setDefaulting(builder: DateTimeFormatterBuilder,
-                    locale: Locale,
-                     isWeekBased: Boolean = false): DateTimeFormatterBuilder = {
+      locale: Locale,
+      isWeekBased: Boolean = false): DateTimeFormatterBuilder = {
 
     val defaults = Seq(
       (ChronoField.ERA, 1),
@@ -125,8 +125,8 @@ private object DateTimeFormatterHelper {
   }
 
   def toFormatter(builder: DateTimeFormatterBuilder,
-                  locale: Locale,
-                  isWeekBased: Boolean = false): DateTimeFormatter = {
+      locale: Locale,
+      isWeekBased: Boolean = false): DateTimeFormatter = {
     setDefaulting(builder, locale, isWeekBased)
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
