@@ -114,7 +114,7 @@ case class CustomShuffleReaderExec private(
       driverAccumUpdates = driverAccumUpdates :+ (skewedMetric.id, numSkewedPartitions.toLong)
     }
 
-    if(!isLocalReader && shuffleStage.get.mapStats.isDefined) {
+    if(!isLocalReader) {
       val partitionMetrics = metrics("partitionDataSize")
       val mapStats = shuffleStage.get.mapStats
 
