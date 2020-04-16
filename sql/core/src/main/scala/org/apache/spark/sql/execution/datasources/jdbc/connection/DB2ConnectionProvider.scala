@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.security.PrivilegedExceptionAction
 import java.sql.{Connection, Driver}
 import java.util.Properties
-import javax.security.auth.login.Configuration
 
 import org.apache.hadoop.security.UserGroupInformation
 
@@ -50,13 +49,9 @@ private[sql] class DB2ConnectionProvider(driver: Driver, options: JDBCOptions)
   }
 
   override def setAuthenticationConfigIfNeeded(): Unit = {
-    val parent = Configuration.getConfiguration
-    val configEntry = parent.getAppConfigurationEntry(appEntry)
+    val (parent, configEntry) = getConfigWithAppEntry()
     if (configEntry == null || configEntry.isEmpty) {
-      val config = new SecureConnectionProvider.JDBCConfiguration(
-        parent, appEntry, options.keytab, options.principal)
-      logDebug("Adding database specific security configuration")
-      Configuration.setConfiguration(config)
+      setAuthenticationConfig(parent)
     }
   }
 }

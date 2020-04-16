@@ -58,7 +58,6 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig.Builder,
         containerConfigBuilder: ContainerConfig.Builder): Unit = {
-      def replaceIp(s: String): String = s.replace("__IP_ADDRESS_REPLACE_ME__", dockerIp)
       copyExecutableResource("db2_krb_setup.sh", initDbDir, replaceIp)
 
       hostConfigBuilder.appendBinds(
