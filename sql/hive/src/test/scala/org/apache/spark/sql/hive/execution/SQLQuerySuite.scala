@@ -25,6 +25,7 @@ import java.util.{Locale, Set}
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.orc.FileFormatException
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
@@ -43,7 +44,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -2491,6 +2491,39 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
               |""".stripMargin),
           Row(1, "1990-11-11"))
       }
+    }
+  }
+
+  test("load data command support for builtin datasource tables") {
+    withTable("t1", "t2", "t3", "t4") {
+      sql("CREATE TABLE t1 (a int, b int) using parquet")
+      sql("CREATE TABLE t2 (a int, b int) using parquet")
+      sql("CREATE TABLE t3 (a int, b int) using orc")
+      sql("CREATE TABLE t4 (a int, b int) using csv")
+      sql("INSERT INTO t1 values(1, 2)")
+      val path = sql("DESC EXTENDED t1").where("col_name='Location'").head().getString(1)
+      sql(s"LOAD DATA LOCAL INPATH '$path' into table t2")
+      checkAnswer(sql("SELECT * FROM t1"), sql("SELECT * FROM t2"))
+      sql(s"LOAD DATA LOCAL INPATH '$path' into table t3")
+      val e1 = intercept[SparkException](sql("SELECT * FROM t3").collect())
+      assert(e1.getCause.isInstanceOf[FileFormatException])
+      assert(e1.getCause.getMessage.contains("Malformed ORC file"))
+      val e2 = intercept[AnalysisException](sql(s"LOAD DATA LOCAL INPATH '$path' into table t4"))
+      assert(e2.getMessage.contains("LOAD DATA is not supported for 'csv'"))
+    }
+
+    withTable("t1", "t2", "t3") {
+      sql("CREATE TABLE t1 (a int, b int) using parquet partitioned by(b)")
+      sql("CREATE TABLE t2 (a int, b int) using parquet partitioned by(b)")
+      sql("CREATE TABLE t3 (a int, b int) using parquet")
+      sql("INSERT INTO t1 values(1, 2)")
+      val path = sql("DESC EXTENDED t1").where("col_name='Location'").head().getString(1) + "/b=2"
+      val e1 = intercept[AnalysisException](sql(s"LOAD DATA LOCAL INPATH '$path' into table t2"))
+      assert(e1.getMessage.contains("no partition spec is provided"))
+      sql(s"LOAD DATA LOCAL INPATH '$path' into table t2 partition(b=2)")
+      checkAnswer(sql("SELECT * FROM t1"), sql("SELECT * FROM t2"))
+      sql(s"LOAD DATA LOCAL INPATH '$path' into table t3")
+      checkAnswer(sql("select *  from t3"), Row(1, null))
     }
   }
 }

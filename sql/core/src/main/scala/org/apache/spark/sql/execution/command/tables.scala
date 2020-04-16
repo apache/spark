@@ -313,9 +313,11 @@ case class LoadDataCommand(
     if (targetTable.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
     }
-    if (DDLUtils.isDatasourceTable(targetTable)) {
-      throw new AnalysisException(
-        s"LOAD DATA is not supported for datasource tables: $tableIdentwithDB")
+
+    if (targetTable.provider.isDefined &&
+      HiveSerDe.sourceToSerDe(targetTable.provider.get).isEmpty) {
+      throw new AnalysisException(s"LOAD DATA is not supported for '${targetTable.provider.get}'" +
+        s" datasource table: $tableIdentwithDB")
     }
     if (targetTable.partitionColumnNames.nonEmpty) {
       if (partition.isEmpty) {
