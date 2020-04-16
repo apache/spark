@@ -716,6 +716,7 @@ class JDBCSuite extends QueryTest
     assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") == MsSqlServerDialect)
     assert(JdbcDialects.get("jdbc:derby:db") == DerbyDialect)
+    assert(JdbcDialects.get("jdbc:hive2://127.0.0.1/db") == HiveDialect)
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
