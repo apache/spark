@@ -367,10 +367,10 @@ case class HashAggregateExec(
          """.stripMargin
       }
       code"""
-         |// do aggregate for ${aggNames(i)}
-         |// evaluate aggregate function
+         |${ctx.registerComment(s"do aggregate for ${aggNames(i)}")}
+         |${ctx.registerComment("evaluate aggregate function")}
          |${evaluateVariables(bufferEvalsForOneFunc)}
-         |// update aggregation buffers
+         |${ctx.registerComment("update aggregation buffers")}
          |${updates.mkString("\n").trim}
        """.stripMargin
     }
@@ -975,9 +975,9 @@ case class HashAggregateExec(
           CodeGenerator.updateColumn(unsafeRowBuffer, dt, bufferOffset + j, ev, nullable)
         }
         code"""
-           |// evaluate aggregate function for ${aggNames(i)}
+           |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
            |${evaluateVariables(rowBufferEvalsForOneFunc)}
-           |// update unsafe row buffer
+           |${ctx.registerComment("update unsafe row buffer")}
            |${updateRowBuffers.mkString("\n").trim}
          """.stripMargin
       }
@@ -1030,9 +1030,9 @@ case class HashAggregateExec(
                 isVectorized = true)
             }
             code"""
-               |// evaluate aggregate function for ${aggNames(i)}
+               |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
                |${evaluateVariables(fastRowEvalsForOneFunc)}
-               |// update fast row
+               |${ctx.registerComment("update fast row")}
                |${updateRowBuffer.mkString("\n").trim}
              """.stripMargin
           }
