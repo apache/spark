@@ -54,11 +54,11 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  * probably be using sorting instead of hashing for better cache locality.
  *
  * The key and values under the hood are stored together, in the following format:
- *   Bytes 0 to uaoSize: len(k) (key length in bytes) + len(v) (value length in bytes) + uaoSize
- *   Bytes uaoSize to 2 * uaoSize: len(k)
- *   Bytes 2 * uaoSize to 2 * uaoSize + len(k): key data
- *   Bytes 2 * uaoSize + len(k) to 2 * uaoSize + len(k) + len(v): value data
- *   Bytes 2 * uaoSize + len(k) + len(v) to 8 + len(k) + len(v) + 8: pointer to next pair
+ *   First uaoSize bytes: len(k) (key length in bytes) + len(v) (value length in bytes) + uaoSize
+ *   Next uaoSize bytes: len(k)
+ *   Next len(k) bytes: key data
+ *   Next len(v) bytes: value data
+ *   Last 8 bytes: pointer to next pair
  *
  * It means first uaoSize bytes store the entire record (key + value + uaoSize) length. This format
  * is compatible with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
