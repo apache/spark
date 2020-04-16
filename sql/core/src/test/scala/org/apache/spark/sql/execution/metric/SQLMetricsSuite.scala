@@ -375,12 +375,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
         // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
         val query = "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
           "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a"
-        Seq((1L, false), (0L, true)).foreach { args =>
+        Seq(false, true).foreach { enableWholeStage =>
           val df = spark.sql(query)
-          testSparkPlanMetrics(df, 3, Map(
-            args._1 -> (("BroadcastNestedLoopJoin", Map(
+          testSparkPlanMetrics(df, 2, Map(
+            0L -> (("BroadcastNestedLoopJoin", Map(
               "number of output rows" -> 12L)))),
-            args._2
+            enableWholeStage
           )
         }
       }
