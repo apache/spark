@@ -73,16 +73,18 @@ window_function OVER
 <dl>
   <dt><code><em>window_frame</em></code></dt>
   <dd>
-    Specifies which row to start the window on and where to end it.<br><br>
+    Specifies which row to start the window on and where to end it.<br>
     <b>Syntax:</b><br>
-      <code>
-        { RANGE | ROWS } [ BETWEEN ]
-          UNBOUNDED { PRECEDING | FOLLOWING }
-          | CURRENT ROW
-          | boolean_expression { PRECEDING | FOLLOWING }
-      </code> <br><br>
-      <code>boolean_expression</code><br>
-      Specifies an expression with a return type of boolean.
+      <code>{ RANGE | ROWS } { frame_start | BETWEEN frame_start AND frame_end }</code><br>
+      If frame_end is omitted it defaults to CURRENT ROW.<br><br>
+      <ul>
+      <code>frame_start</code> and <code>frame_end</code> have the following syntax<br>
+      <b>Syntax:</b><br>
+        <code>
+          UNBOUNDED PRECEDING | offset PRECEDING | CURRENT ROW | offset FOLLOWING | UNBOUNDED FOLLOWING
+        </code><br>
+        <code>offset:</code>specifies the <code>offset</code> from the position of the current row.
+      </ul>
   </dd>
 </dl>
 
