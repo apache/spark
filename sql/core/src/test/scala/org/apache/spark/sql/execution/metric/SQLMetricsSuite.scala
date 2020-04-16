@@ -333,30 +333,20 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       // +- Exchange(nodeId = 5)
       // +- Project(nodeId = 6)
       // +- LocalTableScan(nodeId = 7)
-      val df = df1.join(df2, "key")
-      testSparkPlanMetrics(df, 1, Map(
-        1L -> (("ShuffledHashJoin", Map(
-          "number of output rows" -> 2L))),
-        2L -> (("Exchange", Map(
-          "shuffle records written" -> 2L,
-          "records read" -> 2L))),
-        5L -> (("Exchange", Map(
-          "shuffle records written" -> 10L,
-          "records read" -> 10L))))
-      )
-
-      val df3 = df1.join(df2, "key")
-      testSparkPlanMetrics(df3, 1, Map(
-        2L -> (("ShuffledHashJoin", Map(
-          "number of output rows" -> 2L))),
-        3L -> (("Exchange", Map(
-          "shuffle records written" -> 2L,
-          "records read" -> 2L))),
-        7L -> (("Exchange", Map(
-          "shuffle records written" -> 10L,
-          "records read" -> 10L)))),
-        true
-      )
+      Seq((1L, 2L, 5L, false), (2L, 3L, 7L, true)).foreach{args =>
+        val df = df1.join(df2, "key")
+        testSparkPlanMetrics(df, 1, Map(
+          args._1 -> (("ShuffledHashJoin", Map(
+            "number of output rows" -> 2L))),
+          args._2 -> (("Exchange", Map(
+            "shuffle records written" -> 2L,
+            "records read" -> 2L))),
+          args._3 -> (("Exchange", Map(
+            "shuffle records written" -> 10L,
+            "records read" -> 10L)))),
+          args._4
+        )
+      }
     }
   }
 
