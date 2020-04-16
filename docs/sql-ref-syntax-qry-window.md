@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-Window functions operate on a group of rows, referred to as a window, and calculate an aggregated value for each row based on the specified window. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative statistic, or accessing the value of rows given the relative position of the current row.
+Window functions operate on a group of rows, referred to as a window, and calculate a return value for each row based on the group of rows. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative statistic, or accessing the value of rows given the relative position of the current row.
 Spark SQL supports three types of window functions:
 
   * Ranking Functions
@@ -31,7 +31,10 @@ Spark SQL supports three types of window functions:
 ### Syntax
 
 {% highlight sql %}
-window_function OVER ( [ partition_spec ] order_spec [ window_frame ] )
+window_function OVER
+( [  { PARTITION | DISTRIBUTE } BY partition_col_name = partition_col_val ( [ , ... ] ) ]
+  { ORDER | SORT } BY expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ... ]
+  [ window_frame ] )
 {% endhighlight %}
 
 ### Parameters
@@ -40,7 +43,7 @@ window_function OVER ( [ partition_spec ] order_spec [ window_frame ] )
   <dt><code><em>window_function</em></code></dt>
   <dd>
     <ul>
-      <li> Ranking Functions </li>
+      <li>Ranking Functions</li>
       <br>
       <b>Syntax:</b>
         <code>
@@ -48,7 +51,7 @@ window_function OVER ( [ partition_spec ] order_spec [ window_frame ] )
         </code>
     </ul>
     <ul>
-      <li> Analytic Functions </li>
+      <li>Analytic Functions</li>
       <br>
       <b>Syntax:</b>
         <code>
@@ -56,35 +59,15 @@ window_function OVER ( [ partition_spec ] order_spec [ window_frame ] )
         </code>
     </ul>
     <ul>
-      <li> Aggregate Functions </li>
+      <li>Aggregate Functions</li>
       <br>
       <b>Syntax:</b>
         <code>
           MAX | MIN | COUNT | SUM | AVG | ...
         </code>
         <br>
-        Please refer to the <a href="sql-ref-functions-builtin.html">Built-in Function</a> document for a complete list of Spark aggregate functions.
+        Please refer to the <a href="api/sql/">Built-in Functions</a> document for a complete list of Spark aggregate functions.
     </ul>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
-    Specifies a comma separated list of key and value pairs for partitions.<br><br>
-    <b>Syntax:</b><br>
-      <code>
-        { PARTITION | DISTRIBUTE } BY partition_col_name = partition_col_val ( [ , ... ] )
-      </code>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>order_spec</em></code></dt>
-  <dd>
-    Specifies an ordering of the rows.<br><br>
-    <b>Syntax:</b><br>
-      <code>
-        { ORDER | SORT } BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ... ] }
-      </code>
   </dd>
 </dl>
 <dl>
