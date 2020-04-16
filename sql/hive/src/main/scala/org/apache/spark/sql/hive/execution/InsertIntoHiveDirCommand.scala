@@ -90,6 +90,15 @@ case class InsertIntoHiveDirCommand(
         val dfs = qualifiedPath.getFileSystem(hadoopConf)
         (qualifiedPath, dfs)
       }
+
+    if (fs.exists(writeToPath) && fs.isFile(writeToPath)) {
+      if (overwrite) {
+        fs.delete(writeToPath, true)
+      } else {
+        throw new SparkException(s"Failed inserting overwrite directory, " +
+          s"the path ${writeToPath.toString} is a file and overwrite is false")
+      }
+    }
     if (!fs.exists(writeToPath)) {
       fs.mkdirs(writeToPath)
     }
