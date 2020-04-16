@@ -57,6 +57,9 @@ import org.apache.spark.sql.types._
  *   Encoders.bean(MyClass.class);
  * }}}
  *
+ * == Implementation ==
+ *  - Encoders should be thread-safe.
+ *
  * @since 1.6.0
  */
 @implicitNotFound("Unable to find encoder for type ${T}. An implicit Encoder[${T}] is needed to " +
