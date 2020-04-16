@@ -54,7 +54,7 @@ WORKDIR=
 IMGTAG=latest
 JAVA=
 RELEASE_STEP=
-while getopts "d:hj:ns:t:" opt; do
+while getopts ":d:hj:ns:t:" opt; do
   case $opt in
     d) WORKDIR="$OPTARG" ;;
     n) DRY_RUN=1 ;;
