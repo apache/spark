@@ -15,31 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.{DataInput, DataOutput, IOException}
 import java.sql.Date
 
-import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.WritableUtils
+import org.apache.orc.storage.serde2.io.DateWritable
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{rebaseGregorianToJulianDays, rebaseJulianToGregorianDays}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseJulianToGregorianDays}
 
 /**
  * The class accepts/returns days in Gregorian calendar and rebase them
  * via conversion to local date in Julian calendar for dates before 1582-10-15
  * in read/write for backward compatibility with Spark 2.4 and earlier versions.
  *
+ * This is a clone of `org.apache.spark.sql.execution.datasources.DaysWritable`.
+ * The class is cloned because Hive ORC v1.2 uses different `DateWritable`:
+ *   - v1.2: `org.apache.orc.storage.serde2.io.DateWritable`
+ *   - v2.3 and `HiveInspectors`: `org.apache.hadoop.hive.serde2.io.DateWritable`
+ *
  * @param gregorianDays The number of days since the epoch 1970-01-01 in
  *                      Gregorian calendar.
  * @param julianDays The number of days since the epoch 1970-01-01 in
  *                   Julian calendar.
  */
-private[hive] class DaysWritable(
+class DaysWritable(
     var gregorianDays: Int,
     var julianDays: Int)
   extends DateWritable {
 
+  def this() = this(0, 0)
   def this(gregorianDays: Int) =
     this(gregorianDays, rebaseGregorianToJulianDays(gregorianDays))
   def this(dateWritable: DateWritable) = {
@@ -54,6 +60,11 @@ private[hive] class DaysWritable(
 
   override def getDays: Int = julianDays
   override def get(): Date = new Date(DateWritable.daysToMillis(julianDays))
+
+  override def set(d: Int): Unit = {
+    gregorianDays = d
+    julianDays = rebaseGregorianToJulianDays(d)
+  }
 
   @throws[IOException]
   override def write(out: DataOutput): Unit = {

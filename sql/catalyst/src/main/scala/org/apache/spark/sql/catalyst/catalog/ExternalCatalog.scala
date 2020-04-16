@@ -136,6 +136,8 @@ trait ExternalCatalog {
 
   def listTables(db: String, pattern: String): Seq[String]
 
+  def listViews(db: String, pattern: String): Seq[String]
+
   /**
    * Loads data into a table.
    *

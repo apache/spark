@@ -17,7 +17,9 @@
 
 package org.apache.spark.resource
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantReadWriteLock
+
+import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
@@ -34,7 +36,12 @@ import org.apache.spark.util.Utils.isTesting
  */
 @Evolving
 private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Logging {
-  private val resourceProfileIdToResourceProfile = new ConcurrentHashMap[Int, ResourceProfile]()
+  private val resourceProfileIdToResourceProfile = new HashMap[Int, ResourceProfile]()
+
+  private val (readLock, writeLock) = {
+    val lock = new ReentrantReadWriteLock()
+    (lock.readLock(), lock.writeLock())
+  }
 
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
   addResourceProfile(defaultProfile)
@@ -61,10 +68,20 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
 
   def addResourceProfile(rp: ResourceProfile): Unit = {
     isSupported(rp)
-    // force the computation of maxTasks and limitingResource now so we don't have cost later
-    rp.limitingResource(sparkConf)
-    val res = resourceProfileIdToResourceProfile.putIfAbsent(rp.id, rp)
-    if (res == null) {
+    var putNewProfile = false
+    writeLock.lock()
+    try {
+      if (!resourceProfileIdToResourceProfile.contains(rp.id)) {
+        val prev = resourceProfileIdToResourceProfile.put(rp.id, rp)
+        if (prev.isEmpty) putNewProfile = true
+      }
+    } finally {
+      writeLock.unlock()
+    }
+    // do this outside the write lock only when we add a new profile
+    if (putNewProfile) {
+      // force the computation of maxTasks and limitingResource now so we don't have cost later
+      rp.limitingResource(sparkConf)
       logInfo(s"Added ResourceProfile id: ${rp.id}")
     }
   }
@@ -74,10 +91,28 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
    * it returns the default ResourceProfile created from the application level configs.
    */
   def resourceProfileFromId(rpId: Int): ResourceProfile = {
-    val rp = resourceProfileIdToResourceProfile.get(rpId)
-    if (rp == null) {
-      throw new SparkException(s"ResourceProfileId $rpId not found!")
+    readLock.lock()
+    try {
+      resourceProfileIdToResourceProfile.get(rpId).getOrElse(
+        throw new SparkException(s"ResourceProfileId $rpId not found!")
+      )
+    } finally {
+      readLock.unlock()
     }
-    rp
+  }
+
+  /*
+   * If the ResourceProfile passed in is equivalent to an existing one, return the
+   * existing one, other return None
+   */
+  def getEquivalentProfile(rp: ResourceProfile): Option[ResourceProfile] = {
+    readLock.lock()
+    try {
+      resourceProfileIdToResourceProfile.find { case (_, rpEntry) =>
+        rpEntry.resourcesEqual(rp)
+      }.map(_._2)
+    } finally {
+      readLock.unlock()
+    }
   }
 }

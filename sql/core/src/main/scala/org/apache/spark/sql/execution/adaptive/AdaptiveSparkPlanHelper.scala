@@ -109,7 +109,7 @@ trait AdaptiveSparkPlanHelper {
    * Returns a sequence containing the result of applying a partial function to all elements in this
    * plan, also considering all the plans in its (nested) subqueries
    */
-  def collectInPlanAndSubqueries[B](p: SparkPlan)(f: PartialFunction[SparkPlan, B]): Seq[B] = {
+  def collectWithSubqueries[B](p: SparkPlan)(f: PartialFunction[SparkPlan, B]): Seq[B] = {
     (p +: subqueriesAll(p)).flatMap(collect(_)(f))
   }
 

@@ -18,16 +18,21 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
+### Description
+
 The <code>DISTRIBUTE BY</code> clause is used to repartition the data based
 on the input expressions. Unlike the [CLUSTER BY](sql-ref-syntax-qry-select-clusterby.html)
 clause, this does not sort the data within each partition.
 
 ### Syntax
+
 {% highlight sql %}
 DISTRIBUTE BY { expression [ , ... ] }
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>expression</em></code></dt>
   <dd>
@@ -36,6 +41,7 @@ DISTRIBUTE BY { expression [ , ... ] }
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 CREATE TABLE person (name STRING, age INT);
 INSERT INTO person VALUES
@@ -55,40 +61,39 @@ SET spark.sql.shuffle.partitions = 2;
 -- behavior of `DISTRIBUTE BY`. The query below produces rows where age columns are not
 -- clustered together.
 SELECT age, name FROM person;
-
   +---+-------+
-  |age|name   |
+  |age|   name|
   +---+-------+
-  |16 |Shone S|
-  |25 |Zen Hui|
-  |16 |Jack N |
-  |25 |Mike A |
-  |18 |John A |
-  |18 |Anil B |
+  | 16|Shone S|
+  | 25|Zen Hui|
+  | 16| Jack N|
+  | 25| Mike A|
+  | 18| John A|
+  | 18| Anil B|
   +---+-------+
 
 -- Produces rows clustered by age. Persons with same age are clustered together.
 -- Unlike `CLUSTER BY` clause, the rows are not sorted within a partition.
 SELECT age, name FROM person DISTRIBUTE BY age;
-
   +---+-------+
-  |age|name   |
+  |age|   name|
   +---+-------+
-  |25 |Zen Hui|
-  |25 |Mike A |
-  |18 |John A |
-  |18 |Anil B |
-  |16 |Shone S|
-  |16 |Jack N |
+  | 25|Zen Hui|
+  | 25| Mike A|
+  | 18| John A|
+  | 18| Anil B|
+  | 16|Shone S|
+  | 16| Jack N|
   +---+-------+
 {% endhighlight %}
 
-### Related Clauses
-- [SELECT Main](sql-ref-syntax-qry-select.html)
-- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
-- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
-- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
-- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
-- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
-- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
-- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+### Related Statements
+
+ * [SELECT Main](sql-ref-syntax-qry-select.html)
+ * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+ * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+ * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+ * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+ * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+ * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+ * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

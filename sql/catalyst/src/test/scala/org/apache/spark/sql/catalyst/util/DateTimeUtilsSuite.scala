@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
@@ -154,11 +154,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("string to timestamp") {
-    for (tz <- ALL_TIMEZONES) {
+    for (zid <- ALL_TIMEZONES) {
       def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
-        assert(toTimestamp(str, tz.toZoneId) === expected)
+        assert(toTimestamp(str, zid) === expected)
       }
-      val zid = tz.toZoneId
 
       checkStringToTimestamp("1969-12-31 16:00:00", Option(date(1969, 12, 31, 16, zid = zid)))
       checkStringToTimestamp("0001", Option(date(1, 1, 1, 0, zid = zid)))
@@ -465,7 +464,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
 
-    withDefaultTimeZone(TimeZone.getTimeZone(LA.getId)) {
+    withDefaultTimeZone(LA) {
       // Daylight Saving Time
       test("2016-03-13 09:59:59.0", LA.getId, "2016-03-13 01:59:59.0")
       test("2016-03-13 10:00:00.0", LA.getId, "2016-03-13 03:00:00.0")
@@ -481,8 +480,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         === expected)
     }
 
-    for (tz <- ALL_TIMEZONES) {
-      withDefaultTimeZone(tz) {
+    for (zid <- ALL_TIMEZONES) {
+      withDefaultTimeZone(zid) {
         test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
         test("2011-12-25 18:00:00.123456", JST.getId, "2011-12-25 09:00:00.123456")
         test("2011-12-25 01:00:00.123456", LA.getId, "2011-12-25 09:00:00.123456")
@@ -490,15 +489,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
 
-    val tz = LA.getId
-    withDefaultTimeZone(TimeZone.getTimeZone(tz)) {
+    withDefaultTimeZone(LA) {
+      val tz = LA.getId
       // Daylight Saving Time
       test("2016-03-13 01:59:59", tz, "2016-03-13 09:59:59.0")
       test("2016-03-13 02:00:00", tz, "2016-03-13 10:00:00.0")
       test("2016-03-13 03:00:00", tz, "2016-03-13 10:00:00.0")
       test("2016-11-06 00:59:59", tz, "2016-11-06 07:59:59.0")
-      test("2016-11-06 01:00:00", tz, "2016-11-06 08:00:00.0")
-      test("2016-11-06 01:59:59", tz, "2016-11-06 08:59:59.0")
+      test("2016-11-06 01:00:00", tz, "2016-11-06 09:00:00.0")
+      test("2016-11-06 01:59:59", tz, "2016-11-06 09:59:59.0")
       test("2016-11-06 02:00:00", tz, "2016-11-06 10:00:00.0")
     }
   }
@@ -552,9 +551,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     testTrunc(DateTimeUtils.TRUNC_TO_CENTURY, "2001-01-01", defaultInputTS.get)
     testTrunc(DateTimeUtils.TRUNC_TO_MILLENNIUM, "2001-01-01", defaultInputTS.get)
 
-    for (tz <- ALL_TIMEZONES) {
-      withDefaultTimeZone(tz) {
-        val zid = tz.toZoneId
+    for (zid <- ALL_TIMEZONES) {
+      withDefaultTimeZone(zid) {
         val inputTS = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("2015-03-05T09:32:05.359"), defaultZoneId)
         val inputTS1 = DateTimeUtils.stringToTimestamp(
@@ -610,14 +608,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       "Pacific/Kiritimati" -> Set(9130, 9131),
       "Pacific/Kwajalein" -> Set(8632, 8633, 8634),
       MIT.getId -> Set(15338))
-    for (tz <- ALL_TIMEZONES) {
-      val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
+    for (zid <- ALL_TIMEZONES) {
+      val skipped = skipped_days.getOrElse(zid.getId, Set.empty)
       val testingData = Seq(-20000, 20000) ++
         (1 to 1000).map(_ => (math.random() * 40000 - 20000).toInt)
       testingData.foreach { d =>
         if (!skipped.contains(d)) {
-          assert(microsToDays(daysToMicros(d, tz.toZoneId), tz.toZoneId) === d,
-            s"Round trip of $d did not work in tz $tz")
+          assert(microsToDays(daysToMicros(d, zid), zid) === d,
+            s"Round trip of $d did not work in tz ${zid.getId}")
         }
       }
     }
@@ -657,114 +655,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
       assert(toDate("today", zoneId).get === today)
       assert(toDate("tomorrow CET ", zoneId).get === today + 1)
-    }
-  }
-
-  private def parseToJulianMicros(s: String): Long = {
-    val ts = Timestamp.valueOf(s)
-    val julianMicros = millisToMicros(ts.getTime) +
-      ((ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
-    julianMicros
-  }
-
-  private def parseToGregMicros(s: String, zoneId: ZoneId): Long = {
-    instantToMicros(LocalDateTime.parse(s).atZone(zoneId).toInstant)
-  }
-
-  test("rebase julian to/from gregorian micros") {
-    outstandingTimezones.foreach { timeZone =>
-      withDefaultTimeZone(timeZone) {
-        Seq(
-          "0001-01-01 01:02:03.654321",
-          "1000-01-01 03:02:01.123456",
-          "1582-10-04 00:00:00.000000",
-          "1582-10-15 00:00:00.999999", // Gregorian cutover day
-          "1883-11-10 00:00:00.000000", // America/Los_Angeles -7:52:58 zone offset
-          "1883-11-20 00:00:00.000000", // America/Los_Angeles -08:00 zone offset
-          "1969-12-31 11:22:33.000100",
-          "1970-01-01 00:00:00.000001", // The epoch day
-          "2020-03-14 09:33:01.500000").foreach { ts =>
-          withClue(s"time zone = ${timeZone.getID} ts = $ts") {
-            val julianMicros = parseToJulianMicros(ts)
-            val gregMicros = parseToGregMicros(ts.replace(' ', 'T'), timeZone.toZoneId)
-
-            assert(rebaseJulianToGregorianMicros(julianMicros) === gregMicros)
-            assert(rebaseGregorianToJulianMicros(gregMicros) === julianMicros)
-          }
-        }
-      }
-    }
-  }
-
-  // millisToDays() and fromJavaDate() are taken from Spark 2.4
-  private def millisToDaysLegacy(millisUtc: Long, timeZone: TimeZone): Int = {
-    val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
-    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
-  }
-  private def fromJavaDateLegacy(date: Date): Int = {
-    millisToDaysLegacy(date.getTime, defaultTimeZone())
-  }
-
-  test("rebase gregorian to/from julian days") {
-    outstandingTimezones.foreach { timeZone =>
-      withDefaultTimeZone(timeZone) {
-        Seq(
-          "0001-01-01",
-          "1000-01-01",
-          "1582-10-04",
-          "1582-10-15", // Gregorian cutover day
-          "1883-11-10", // America/Los_Angeles -7:52:58 zone offset
-          "1883-11-20", // America/Los_Angeles -08:00 zone offset
-          "1969-12-31",
-          "1970-01-01", // The epoch day
-          "2020-03-14").foreach { date =>
-          val julianDays = fromJavaDateLegacy(Date.valueOf(date))
-          val gregorianDays = localDateToDays(LocalDate.parse(date))
-
-          assert(rebaseGregorianToJulianDays(gregorianDays) === julianDays)
-          assert(rebaseJulianToGregorianDays(julianDays) === gregorianDays)
-        }
-      }
-    }
-  }
-
-  test("rebase julian to gregorian date for leap years") {
-    outstandingTimezones.foreach { timeZone =>
-      withDefaultTimeZone(timeZone) {
-        Seq(
-          "1000-02-29" -> "1000-03-01",
-          "1600-02-29" -> "1600-02-29",
-          "1700-02-29" -> "1700-03-01",
-          "2000-02-29" -> "2000-02-29").foreach { case (julianDate, gregDate) =>
-          withClue(s"tz = ${timeZone.getID} julian date = $julianDate greg date = $gregDate") {
-            val date = Date.valueOf(julianDate)
-            val julianDays = fromJavaDateLegacy(date)
-            val gregorianDays = localDateToDays(LocalDate.parse(gregDate))
-
-            assert(rebaseJulianToGregorianDays(julianDays) === gregorianDays)
-          }
-        }
-      }
-    }
-  }
-
-  test("rebase julian to gregorian timestamp for leap years") {
-    outstandingTimezones.foreach { timeZone =>
-      withDefaultTimeZone(timeZone) {
-        Seq(
-          "1000-02-29 01:02:03.123456" -> "1000-03-01T01:02:03.123456",
-          "1600-02-29 11:12:13.654321" -> "1600-02-29T11:12:13.654321",
-          "1700-02-29 21:22:23.000001" -> "1700-03-01T21:22:23.000001",
-          "2000-02-29 00:00:00.999999" -> "2000-02-29T00:00:00.999999"
-        ).foreach { case (julianTs, gregTs) =>
-          withClue(s"tz = ${timeZone.getID} julian ts = $julianTs greg ts = $gregTs") {
-            val julianMicros = parseToJulianMicros(julianTs)
-            val gregorianMicros = parseToGregMicros(gregTs, timeZone.toZoneId)
-
-            assert(rebaseJulianToGregorianMicros(julianMicros) === gregorianMicros)
-          }
-        }
-      }
     }
   }
 }

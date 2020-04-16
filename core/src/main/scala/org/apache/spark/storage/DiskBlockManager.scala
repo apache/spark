@@ -20,8 +20,6 @@ package org.apache.spark.storage
 import java.io.{File, IOException}
 import java.util.UUID
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
@@ -119,38 +117,20 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
-    var blockId = TempLocalBlockId(UUID.randomUUID())
-    var tempLocalFile = getFile(blockId)
-    var count = 0
-    while (!canCreateFile(tempLocalFile) && count < Utils.MAX_DIR_CREATION_ATTEMPTS) {
-      blockId = TempLocalBlockId(UUID.randomUUID())
-      tempLocalFile = getFile(blockId)
-      count += 1
+    var blockId = new TempLocalBlockId(UUID.randomUUID())
+    while (getFile(blockId).exists()) {
+      blockId = new TempLocalBlockId(UUID.randomUUID())
     }
-    (blockId, tempLocalFile)
+    (blockId, getFile(blockId))
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
-    var blockId = TempShuffleBlockId(UUID.randomUUID())
-    var tempShuffleFile = getFile(blockId)
-    var count = 0
-    while (!canCreateFile(tempShuffleFile) && count < Utils.MAX_DIR_CREATION_ATTEMPTS) {
-      blockId = TempShuffleBlockId(UUID.randomUUID())
-      tempShuffleFile = getFile(blockId)
-      count += 1
+    var blockId = new TempShuffleBlockId(UUID.randomUUID())
+    while (getFile(blockId).exists()) {
+      blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
-    (blockId, tempShuffleFile)
-  }
-
-  private def canCreateFile(file: File): Boolean = {
-    try {
-      file.createNewFile()
-    } catch {
-      case NonFatal(_) =>
-        logError("Failed to create temporary block file: " + file.getAbsoluteFile)
-        false
-    }
+    (blockId, getFile(blockId))
   }
 
   /**

@@ -136,21 +136,18 @@ class ANOVASelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test ANOVAFValue calssification selector: numTopFeatures") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
-    val model = selector.fit(dataset)
     testSelector(selector, dataset)
   }
 
   test("Test ANOVAFValue calssification selector: percentile") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("percentile").setPercentile(0.17)
-    val model = selector.fit(dataset)
     testSelector(selector, dataset)
   }
 
   test("Test ANOVAFValue calssification selector: fpr") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("fpr").setFpr(1.0E-12)
-    val model = selector.fit(dataset)
     testSelector(selector, dataset)
   }
 

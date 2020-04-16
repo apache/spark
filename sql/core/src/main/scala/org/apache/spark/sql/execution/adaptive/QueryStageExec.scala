@@ -161,6 +161,16 @@ case class ShuffleQueryStageExec(
       case _ =>
     }
   }
+
+  /**
+   * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition,
+   * this method returns None, as there is no map statistics.
+   */
+  def mapStats: Option[MapOutputStatistics] = {
+    assert(resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
+    val stats = resultOption.get.asInstanceOf[MapOutputStatistics]
+    Option(stats)
+  }
 }
 
 /**
