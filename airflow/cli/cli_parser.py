@@ -31,6 +31,7 @@ from airflow import settings
 from airflow.configuration import conf
 from airflow.exceptions import AirflowException
 from airflow.executors.executor_loader import ExecutorLoader
+from airflow.utils.cli import ColorMode
 from airflow.utils.helpers import partition
 from airflow.utils.module_loading import import_string
 from airflow.utils.timezone import parse as parsedate
@@ -153,6 +154,11 @@ ARG_OUTPUT = Arg(
     ),
     choices=tabulate_formats,
     default="fancy_grid")
+ARG_COLOR = Arg(
+    ('--color',),
+    help="Do emit colored output (default: auto)",
+    choices={ColorMode.ON, ColorMode.OFF, ColorMode.AUTO},
+    default=ColorMode.AUTO)
 
 # list_dag_runs
 ARG_NO_BACKFILL = Arg(
@@ -1207,7 +1213,7 @@ airflow_commands: List[CLICommand] = [
         name='config',
         help='Show current application configuration',
         func=lazy_load_command('airflow.cli.commands.config_command.show_config'),
-        args=(),
+        args=(ARG_COLOR, ),
     ),
     ActionCommand(
         name='info',
