@@ -214,6 +214,9 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 1.6.1 */
   implicit def newStringArrayEncoder: Encoder[Array[String]] = ExpressionEncoder()
 
+  /** @since 3.1.0 */
+  implicit def newIntervalArrayEncoder: Encoder[Array[CalendarInterval]] = ExpressionEncoder()
+
   /** @since 1.6.1 */
   implicit def newProductArrayEncoder[A <: Product : TypeTag]: Encoder[Array[A]] =
     ExpressionEncoder()

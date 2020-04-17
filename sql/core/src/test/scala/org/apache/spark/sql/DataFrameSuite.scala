@@ -2360,16 +2360,18 @@ class DataFrameSuite extends QueryTest
   }
 
   test("CalendarInterval encoder support") {
-    val df = Seq(
-      new CalendarInterval(1, 2, 3),
-      new CalendarInterval(4, 5, 6),
-      null).toDF()
-    checkAnswer(df,
-      Seq(
-        Row(new CalendarInterval(1, 2, 3)),
-        Row(new CalendarInterval(4, 5, 6)),
-        Row(null)))
+    val i = new CalendarInterval(1, 2, 3)
+    val ii = new CalendarInterval(4, 5, 6)
+    checkAnswer(Seq(i, ii, null).toDF(), Seq(Row(i), Row(ii), Row(null)))
+    checkAnswer(Seq(Some(i), Some(ii), null).toDF(), Seq(Row(i), Row(ii), Row(null)))
+
+    checkAnswer(Seq(Seq(i), null).toDF(), Seq(Row(Array(i)), Row(null)))
+    checkAnswer(Seq(Set(i), null).toDF(), Seq(Row(Array(i)), Row(null)))
+    checkAnswer(Seq(Array(i), null).toDF(), Seq(Row(Array(i)), Row(null)))
+    checkAnswer(Seq(Map(i -> i), null).toDF(), Seq(Row(Map(i -> i)), Row(null)))
+    checkAnswer(Seq(Map(1 -> i), null).toDF(), Seq(Row(Map(1 -> i)), Row(null)))
   }
+
 }
 
 case class GroupByKey(a: Int, b: Int)
