@@ -1541,6 +1541,24 @@ class TypeCoercionSuite extends AnalysisTest {
       Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
         Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)))
   }
+
+  test("SPARK-31468: null types should be casted to decimal types in ImplicitTypeCasts") {
+    Seq(AnyTypeBinaryOperator(_, _), NumericTypeBinaryOperator(_, _)).foreach { binaryOp =>
+      // binaryOp(decimal, null) case
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        binaryOp(Literal.create(null, DecimalType.SYSTEM_DEFAULT),
+          Literal.create(null, NullType)),
+        binaryOp(Literal.create(null, DecimalType.SYSTEM_DEFAULT),
+          Cast(Literal.create(null, NullType), DecimalType.SYSTEM_DEFAULT)))
+
+      // binaryOp(null, decimal) case
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        binaryOp(Literal.create(null, NullType),
+          Literal.create(null, DecimalType.SYSTEM_DEFAULT)),
+        binaryOp(Cast(Literal.create(null, NullType), DecimalType.SYSTEM_DEFAULT),
+          Literal.create(null, DecimalType.SYSTEM_DEFAULT)))
+    }
+  }
 }
 
 
