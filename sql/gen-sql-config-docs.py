@@ -22,7 +22,9 @@ from textwrap import dedent
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
 from mkdocs.structure.pages import markdown
+
 from pyspark.java_gateway import launch_gateway
+
 
 SQLConfEntry = namedtuple(
     "SQLConfEntry", ["name", "default", "description", "version"])

@@ -40,7 +40,7 @@ import java.lang.annotation.RetentionPolicy;
  * `note()` contains some notes for the expression optionally.
  *
  * `group()` describes the category that the expression belongs to. The valid value is
- * `agg_funcs`, `datetime_funcs`, or `collection_funcs`.
+ * "agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs" and "window_funcs".
  *
  * `since()` contains version information for the expression. Version is specified by,
  * for example, "2.2.0".
