@@ -134,7 +134,15 @@ class FileStreamSource(
     val (batchFiles, unselectedFiles) = limit match {
       case files: ReadMaxFiles if !sourceOptions.latestFirst =>
         // we can cache and reuse remaining fetched list of files in further batches
-        newFiles.splitAt(files.maxFiles())
+        val (bFiles, usFiles) = newFiles.splitAt(files.maxFiles())
+        if (usFiles.size < files.maxFiles() * DISCARD_UNSEEN_FILES_RATIO) {
+          // Discard unselected files if the number of files are smaller than threshold.
+          // This is to avoid the case when the next batch would have too few files to read
+          // whereas there're new files available.
+          (bFiles, null)
+        } else {
+          (bFiles, usFiles)
+        }
 
       case files: ReadMaxFiles =>
         // implies "sourceOptions.latestFirst = true" which we want to refresh the list per batch
@@ -333,6 +341,8 @@ class FileStreamSource(
 object FileStreamSource {
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
+
+  val DISCARD_UNSEEN_FILES_RATIO = 0.2
 
   case class FileEntry(path: String, timestamp: Timestamp, batchId: Long) extends Serializable
 

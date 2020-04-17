@@ -1946,7 +1946,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   test("Caches and leverages unread files") {
     withCountListingLocalFileSystemAsLocalFileSystem {
       withThreeTempDirs { case (src, meta, tmp) =>
-        val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "5")
+        val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "10")
         val scheme = CountListingLocalFileSystem.scheme
         val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
           StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
@@ -1965,7 +1965,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           assert(files.forall(_.batchId == batchId))
 
           val actualInputFiles = files.map { p => new Path(p.path).toUri.getPath }
-          val expectedInputFiles = inputFiles.slice(batchId.toInt * 5, batchId.toInt * 5 + 5)
+          val expectedInputFiles = inputFiles.slice(batchId.toInt * 10, batchId.toInt * 10 + 10)
             .map(_.getCanonicalPath)
           assert(actualInputFiles === expectedInputFiles)
 
@@ -1975,26 +1975,35 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
         CountListingLocalFileSystem.resetCount()
 
-        // provide 20 files in src, with sequential "last modified" to guarantee ordering
-        val inputFiles = (0 to 19).map { idx =>
+        // provide 41 files in src, with sequential "last modified" to guarantee ordering
+        val inputFiles = (0 to 40).map { idx =>
           val f = createFile(idx.toString, new File(src, idx.toString), tmp)
           f.setLastModified(idx * 10000)
           f
         }
 
-        // 4 batches will be available for 20 input files
+        // 4 batches will be available for 40 input files
         (0 to 3).foreach { batchId =>
-          val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
+          val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
             .asInstanceOf[FileStreamSourceOffset]
           verifyBatch(offsetBatch, expectedBatchId = batchId, inputFiles, expectedListingCount = 1)
         }
 
-        val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
+        // batch 5 will trigger list operation though the batch 4 should have 1 unseen file:
+        // 1 is smaller than the threshold (refer FileStreamSource.DISCARD_UNSEEN_FILES_RATIO),
+        // hence unseen files for batch 4 will be discarded.
+        val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+          .asInstanceOf[FileStreamSourceOffset]
+        assert(4 === offsetBatch.logOffset)
+        assert(2 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+
+        val offsetBatch2 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
           .asInstanceOf[FileStreamSourceOffset]
         // latestOffset returns the offset for previous batch which means no new batch is presented
-        assert(3 === offsetBatch.logOffset)
+        assert(4 === offsetBatch2.logOffset)
         // listing should be performed after the list of unread files are exhausted
-        assert(2 === CountListingLocalFileSystem.pathToNumListStatusCalled
+        assert(3 === CountListingLocalFileSystem.pathToNumListStatusCalled
           .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
       }
     }
@@ -2019,7 +2028,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
         source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
           .asInstanceOf[FileStreamSourceOffset]
-        assert(1 === CountListingLocalFileSystem.pathToNumListStatusCalled.size)
         assert(1 === CountListingLocalFileSystem.pathToNumListStatusCalled
           .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
 
@@ -2028,7 +2036,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         // listing files
         source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
           .asInstanceOf[FileStreamSourceOffset]
-        assert(1 === CountListingLocalFileSystem.pathToNumListStatusCalled.size)
         assert(2 === CountListingLocalFileSystem.pathToNumListStatusCalled
           .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
       }
