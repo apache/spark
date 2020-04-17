@@ -141,6 +141,9 @@ case class AdaptiveSparkPlanExec(
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (isFinalPlan) return currentPhysicalPlan
 
+    // In case of this adaptive plan being executed out of `withActive` scoped functions, e.g.,
+    // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
+    // created in the middle of the execution.
     context.session.withActive {
       // Subqueries do not have their own execution IDs and therefore rely on the main query to
       // update UI.

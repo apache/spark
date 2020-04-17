@@ -915,6 +915,7 @@ class AdaptiveQueryExecSuite
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
       SparkSession.setActiveSession(null)
       checkAnswer(df, Seq(Row(45)))
+      SparkSession.setActiveSession(spark) // recover the active session.
     }
   }
 }
