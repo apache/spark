@@ -29,17 +29,17 @@ class PowerTransformSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
-  @transient var data: Array[Vector] = _
-  @transient var dataWithNoise: Array[Vector] = _
-  @transient var resWithYeoJohnson: Array[Vector] = _
-  @transient var resWithBoxCox: Array[Vector] = _
+  @transient var data: Seq[Vector] = _
+  @transient var dataWithNoise: Seq[Vector] = _
+  @transient var resWithYeoJohnson: Seq[Vector] = _
+  @transient var resWithBoxCox: Seq[Vector] = _
 
   private val seed = 42L
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    data = Array(
+    data = Seq(
       Vectors.dense(1.28331718, 1.18092228, 0.84160269),
       Vectors.dense(0.94293279, 1.60960836, 0.3879099),
       Vectors.dense(1.35235668, 0.21715673, 1.09977091)
@@ -53,6 +53,7 @@ class PowerTransformSuite extends MLTest with DefaultReadWriteTest {
         Vectors.dense(valuesWithNoise)
       }
     }
+    rng.shuffle(dataWithNoise)
 
     resWithYeoJohnson = Array(
       Vectors.dense(1.88609649e+02, 1.64321816e+00, 1.26875990e+00),

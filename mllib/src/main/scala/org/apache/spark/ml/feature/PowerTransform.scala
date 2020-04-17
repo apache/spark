@@ -25,11 +25,11 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
+import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -164,7 +164,7 @@ class PowerTransform @Since("3.1.0")(
       // as the output value, and sum of counts as the output count.
       pairCounts = pairCounts.as[(Int, Double, Long)]
         .mapPartitions { iter =>
-          MLUtils.combineWithinGroups[Int, (Double, Long), (Double, Long)](
+          Utils.combineWithinGroups[Int, (Double, Long), (Double, Long)](
             input = iter.map(t => (t._1, (t._2, t._3))),
             initOp = { case (v, c) => (v * c, c) },
             seqOp = { case ((sum, count), (v, c)) => (sum + v * c, count + c) },
@@ -242,7 +242,7 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
 
     val obj = new UnivariateFunction() {
       override def value(lambda: Double): Double = {
-        val lambda0 = math.abs(lambda) < MLUtils.EPSILON
+        val lambda0 = math.abs(lambda) < Utils.EPSILON
 
         val iter = computeIter()
         var ySum = 0.0
@@ -282,8 +282,8 @@ object PowerTransform extends DefaultParamsReadable[PowerTransform] {
 
     val obj = new UnivariateFunction() {
       override def value(lambda: Double): Double = {
-        val lambda0 = math.abs(lambda) < MLUtils.EPSILON
-        val lambda2 = math.abs(lambda - 2) < MLUtils.EPSILON
+        val lambda0 = math.abs(lambda) < Utils.EPSILON
+        val lambda2 = math.abs(lambda - 2) < Utils.EPSILON
 
         val iter = computeIter()
         var ySum = 0.0
@@ -411,7 +411,7 @@ class PowerTransformModel private[ml](
   }
 
   private def boxCoxTransform(x: Double, l: Double): Double = {
-    if (math.abs(l) < MLUtils.EPSILON) {
+    if (math.abs(l) < Utils.EPSILON) {
       math.log(x)
     } else {
       (math.pow(x, l) - 1) / l
@@ -420,13 +420,13 @@ class PowerTransformModel private[ml](
 
   private def yeoJohnsonTransform(x: Double, l: Double): Double = {
     if (x >= 0) {
-      if (math.abs(l) < MLUtils.EPSILON) {
+      if (math.abs(l) < Utils.EPSILON) {
         math.log(x + 1)
       } else {
         (math.pow(x + 1, l) - 1) / l
       }
     } else {
-      if (math.abs(l - 2) < MLUtils.EPSILON) {
+      if (math.abs(l - 2) < Utils.EPSILON) {
         -math.log(1 - x)
       } else {
         (math.pow(1 - x, 2 - l) - 1) / (l - 2)
@@ -473,11 +473,8 @@ object PowerTransformModel extends MLReadable[PowerTransformModel] {
     override def load(path: String): PowerTransformModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val Row(lambda: Vector) = MLUtils
-        .convertVectorColumnsToML(data, "lambda")
-        .select("lambda")
-        .head()
+      val Row(lambda: Vector) = sparkSession.read.parquet(dataPath)
+        .select("lambda").head()
       val model = new PowerTransformModel(metadata.uid, lambda)
       metadata.getAndSetParams(model)
       model

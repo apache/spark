@@ -28,70 +28,46 @@ private[spark] object Utils {
     eps
   }
 
+
   /**
-   * Convert an n * (n + 1) / 2 dimension array representing the upper triangular part of a matrix
-   * into an n * n array representing the full symmetric matrix (column major).
+   * Sequentially group input elements to groups, and do aggregation within each group.
+   * A group only contains single key, and be of size no greater than the corresponding size.
+   * For example, input keys = [1, 1, 1, 2, 2, 2, 3, 3, 1],
+   * group sizes are: 1->2, 2->5, 3->1,
+   * then the groups are {1, 1}, {1}, {2, 2, 2}, {3}, {3}, {1}.
    *
-   * @param n The order of the n by n matrix.
-   * @param triangularValues The upper triangular part of the matrix packed in an array
-   *                         (column major).
-   * @return A dense matrix which represents the symmetric matrix in column major.
+   * @param input input iterator containing (key, value), usually sorted by key
+   * @param getSize group size of each key.
+   * @return aggregated iterator
    */
-  def unpackUpperTriangular(
-      n: Int,
-      triangularValues: Array[Double]): Array[Double] = {
-    val symmetricValues = new Array[Double](n * n)
-    var r = 0
-    var i = 0
-    while (i < n) {
-      var j = 0
-      while (j <= i) {
-        symmetricValues(i * n + j) = triangularValues(r)
-        symmetricValues(j * n + i) = triangularValues(r)
-        r += 1
-        j += 1
+  def combineWithinGroups[K, V, U](
+      input: Iterator[(K, V)],
+      initOp: V => U,
+      seqOp: (U, V) => U,
+      getSize: K => Long): Iterator[(K, U)] = {
+    if (input.isEmpty) return Iterator.empty
+
+    // null.asInstanceOf[K] won't work with K=Int/Long/...
+    var prevK = Option.empty[K]
+    var prevU = null.asInstanceOf[U]
+    var groupSize = -1L
+    var groupCount = 0L
+
+    input.flatMap { case (key, value) =>
+      if (!prevK.contains(key) || groupCount == groupSize) {
+        val ret = prevK.map(k => (k, prevU))
+
+        prevK = Some(key)
+        prevU = initOp(value)
+        groupSize = getSize(key)
+        groupCount = 1L
+
+        ret.iterator
+      } else {
+        prevU = seqOp(prevU, value)
+        groupCount += 1L
+        Iterator.empty
       }
-      i += 1
-    }
-    symmetricValues
-  }
-
-  /**
-   * Indexing in an array representing the upper triangular part of a matrix
-   * into an n * n array representing the full symmetric matrix (column major).
-   *    val symmetricValues = unpackUpperTriangularMatrix(n, triangularValues)
-   *    val matrix = new DenseMatrix(n, n, symmetricValues)
-   *    val index = indexUpperTriangularMatrix(n, i, j)
-   *    then: symmetricValues(index) == matrix(i, j)
-   *
-   * @param n The order of the n by n matrix.
-   */
-  def indexUpperTriangular(
-      n: Int,
-      i: Int,
-      j: Int): Int = {
-    require(i >= 0 && i < n, s"Expected 0 <= i < $n, got i = $i.")
-    require(j >= 0 && j < n, s"Expected 0 <= j < $n, got j = $j.")
-    if (i <= j) {
-      j * (j + 1) / 2 + i
-    } else {
-      i * (i + 1) / 2 + j
-    }
-  }
-
-  /**
-   * When `x` is positive and large, computing `math.log(1 + math.exp(x))` will lead to arithmetic
-   * overflow. This will happen when `x &gt; 709.78` which is not a very large number.
-   * It can be addressed by rewriting the formula into `x + math.log1p(math.exp(-x))`
-   * when `x` is positive.
-   * @param x a floating-point value as input.
-   * @return the result of `math.log(1 + math.exp(x))`.
-   */
-  def log1pExp(x: Double): Double = {
-    if (x > 0) {
-      x + math.log1p(math.exp(-x))
-    } else {
-      math.log1p(math.exp(x))
-    }
+    } ++ prevK.iterator.map(k => (k, prevU))
   }
 }
