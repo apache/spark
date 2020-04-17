@@ -148,7 +148,7 @@ SELECT name, dept, DENSE_RANK() OVER (PARTITION BY dept ORDER BY salary ROWS BET
   +-----+-----------+------+----------+
 
 SELECT name, dept, age, CUME_DIST() OVER (PARTITION BY dept ORDER BY age
-    RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as cume_dist FROM employees;
+    RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cume_dist FROM employees;
   +-----+-----------+------+------------------+
   | name|       dept|age   |         cume_dist|
   +-----+-----------+------+------------------+
@@ -182,8 +182,8 @@ SELECT name, dept, salary, MIN(salary) OVER (PARTITION BY dept ORDER BY salary) 
   +-----+-----------+------+-----+
 
 SELECT name, salary,
-    LAG(salary) OVER (PARTITION BY dept ORDER BY salary) as lag,
-    LEAD(salary, 1, 0) OVER (PARTITION BY dept ORDER BY salary) as lead
+    LAG(salary) OVER (PARTITION BY dept ORDER BY salary) AS lag,
+    LEAD(salary, 1, 0) OVER (PARTITION BY dept ORDER BY salary) AS lead
     FROM employees;
   +-----+-----------+------+-----+-----+
   | name|       dept|salary|  lag| lead|
