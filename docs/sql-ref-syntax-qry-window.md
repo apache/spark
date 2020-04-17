@@ -22,11 +22,6 @@ license: |
 ### Description
 
 Window functions operate on a group of rows, referred to as a window, and calculate a return value for each row based on the group of rows. Window functions are useful for processing tasks such as calculating a moving average, computing a cumulative statistic, or accessing the value of rows given the relative position of the current row.
-Spark SQL supports three types of window functions:
-
-  * Ranking Functions
-  * Analytic Functions
-  * Aggregate Functions
 
 ### Syntax
 
@@ -91,7 +86,6 @@ window_function OVER
 ### Examples
 
 {% highlight sql %}
-
 CREATE TABLE employees (name STRING, dept STRING, salary INT, age INT);
 
 INSERT INTO employees VALUES ("Lisa", "Sales", 10000, 35);
