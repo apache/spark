@@ -89,6 +89,9 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 3.0.0 */
   implicit def newInstantEncoder: Encoder[java.time.Instant] = Encoders.INSTANT
 
+  /** @since 3.1.0 */
+  implicit def newIntervalEncoder: Encoder[CalendarInterval] = Encoders.INTERVAL
+
   // Boxed primitives
 
   /** @since 2.0.0 */
@@ -238,8 +241,6 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
-  /** @since 3.1.0 */
-  implicit def newIntervalEncoder: Encoder[CalendarInterval] = Encoders.INTERVAL
 }
 
 /**

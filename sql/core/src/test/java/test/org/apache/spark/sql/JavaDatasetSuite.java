@@ -19,6 +19,7 @@ package test.org.apache.spark.sql;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.sql.Array;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -284,13 +285,19 @@ public class JavaDatasetSuite implements Serializable {
 
   public static class IntervalBean implements Serializable {
     private CalendarInterval i;
+    private CalendarInterval[] ia;
 
     public void setI(CalendarInterval i) {
       this.i = i;
+      this.ia = new CalendarInterval[]{i};
     }
 
     public CalendarInterval getI() {
       return this.i;
+    }
+
+    public CalendarInterval[] getIA() {
+      return this.ia;
     }
 
     @Override
@@ -320,6 +327,10 @@ public class JavaDatasetSuite implements Serializable {
     List<IntervalBean> data = Arrays.asList(ib1, ib2, ib3);
     Dataset<IntervalBean> ds1 =
       spark.createDataFrame(data, IntervalBean.class).as(Encoders.bean(IntervalBean.class));
+
+    ds1.collectAsList().forEach(ib -> {
+      if (ib.getI() != null) Assert.assertEquals(ib.getI(), ib.getIA()[0]);
+    });
     Dataset<CalendarInterval> ds2 =
       ds1.map((MapFunction<IntervalBean, CalendarInterval>) ib -> ib.getI(), Encoders.INTERVAL());
     Assert.assertEquals(
