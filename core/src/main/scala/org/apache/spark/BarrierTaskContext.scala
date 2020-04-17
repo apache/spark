@@ -84,8 +84,6 @@ class BarrierTaskContext private[spark] (
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
         timeout = new RpcTimeout(365.days, "barrierTimeout"))
 
-      // messages which consist of all barrier tasks' messages
-      var messages: Array[String] = null
       // Wait the RPC future to be completed, but every 1 second it will jump out waiting
       // and check whether current spark task is killed. If killed, then throw
       // a `TaskKilledException`, otherwise continue wait RPC until it completes.
@@ -105,8 +103,9 @@ class BarrierTaskContext private[spark] (
           }
         }
       }
-      // return the desired messages if the future is completed successfully or throw exception
-      messages = abortableRpcFuture.future.value.get.get
+      // messages which consist of all barrier tasks' messages. The future will return the
+      // desired messages if it is completed successfully. Otherwise, exception could be thrown.
+      val messages = abortableRpcFuture.future.value.get.get
 
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
