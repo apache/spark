@@ -2019,6 +2019,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
         source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
           .asInstanceOf[FileStreamSourceOffset]
+        assert(1 === CountListingLocalFileSystem.pathToNumListStatusCalled.size)
         assert(1 === CountListingLocalFileSystem.pathToNumListStatusCalled
           .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
 
@@ -2027,6 +2028,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         // listing files
         source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
           .asInstanceOf[FileStreamSourceOffset]
+        assert(1 === CountListingLocalFileSystem.pathToNumListStatusCalled.size)
         assert(2 === CountListingLocalFileSystem.pathToNumListStatusCalled
           .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
       }
