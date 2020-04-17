@@ -97,14 +97,27 @@ case class CustomShuffleReaderExec private(
     case _ => None
   }
 
+  @transient private lazy val partitionDataSizes: Option[Seq[Long]] = {
+    if (!isLocalReader && shuffleStage.get.mapStats.isDefined) {
+      val bytesByPartitionId = shuffleStage.get.mapStats.get.bytesByPartitionId
+      Some(partitionSpecs.map {
+        case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
+          startReducerIndex.until(endReducerIndex).map(bytesByPartitionId).sum
+        case p: PartialReducerPartitionSpec => p.dataSize
+        case p => throw new IllegalStateException("unexpected " + p)
+      })
+    } else {
+      None
+    }
+  }
+
   private def sendDriverMetrics(): Unit = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    var driverAccumUpdates: Seq[(Long, Long)] = Seq.empty
+    val driverAccumUpdates = ArrayBuffer.empty[(Long, Long)]
 
     val numPartitionsMetric = metrics("numPartitions")
     numPartitionsMetric.set(partitionSpecs.length)
-    driverAccumUpdates = driverAccumUpdates :+
-      (numPartitionsMetric.id, partitionSpecs.length.toLong)
+    driverAccumUpdates += (numPartitionsMetric.id -> partitionSpecs.length.toLong)
 
     if (hasSkewedPartition) {
       val skewedMetric = metrics("numSkewedPartitions")
@@ -112,33 +125,14 @@ case class CustomShuffleReaderExec private(
         case p: PartialReducerPartitionSpec => p.reducerIndex
       }.distinct.length
       skewedMetric.set(numSkewedPartitions)
-      driverAccumUpdates = driverAccumUpdates :+ (skewedMetric.id, numSkewedPartitions.toLong)
+      driverAccumUpdates += (skewedMetric.id -> numSkewedPartitions.toLong)
     }
 
-    if(!isLocalReader) {
-      val partitionMetrics = metrics("partitionDataSize")
-      val mapStats = shuffleStage.get.mapStats
-
-      if (mapStats.isEmpty) {
-        partitionMetrics.set(0)
-        driverAccumUpdates = driverAccumUpdates :+ (partitionMetrics.id, 0L)
-      } else {
-        var sum = 0L
-        partitionSpecs.foreach {
-          case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
-            val dataSize = startReducerIndex.until(endReducerIndex).map(
-              mapStats.get.bytesByPartitionId(_)).sum
-            driverAccumUpdates = driverAccumUpdates :+ (partitionMetrics.id, dataSize)
-            sum += dataSize
-          case p: PartialReducerPartitionSpec =>
-            driverAccumUpdates = driverAccumUpdates :+ (partitionMetrics.id, p.dataSize)
-            sum += p.dataSize
-          case p => throw new IllegalStateException("unexpected " + p)
-        }
-
-        // Set sum value to "partitionDataSize" metric.
-        partitionMetrics.set(sum)
-      }
+    partitionDataSizes.foreach { dataSizes =>
+      val partitionDataSizeMetrics = metrics("partitionDataSize")
+      driverAccumUpdates ++= dataSizes.map(partitionDataSizeMetrics.id -> _)
+      // Set sum value to "partitionDataSize" metric.
+      partitionDataSizeMetrics.set(dataSizes.sum)
     }
 
     SQLMetrics.postDriverMetricsUpdatedByValue(sparkContext, executionId, driverAccumUpdates)
