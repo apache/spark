@@ -1221,6 +1221,10 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  def numToString(num: Long): String = {
+    num.toString
+  }
+
   /**
    * Convert a quantity in megabytes to a human-readable string such as "4.0 MiB".
    */
