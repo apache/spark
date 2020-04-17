@@ -2129,19 +2129,12 @@ object DatePart {
                  "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US"),
                  "EPOCH"]
                 Supported string values of `field` for intervals are:
-                 ["MILLENNIUM", ("MILLENNIA", "MIL", "MILS"),
-                   "CENTURY", ("CENTURIES", "C", "CENT"),
-                   "DECADE", ("DECADES", "DEC", "DECS"),
-                   "YEAR", ("Y", "YEARS", "YR", "YRS"),
-                   "QUARTER", ("QTR"),
-                   "MONTH", ("MON", "MONS", "MONTHS"),
-                   "DAY", ("D", "DAYS"),
-                   "HOUR", ("H", "HOURS", "HR", "HRS"),
-                   "MINUTE", ("M", "MIN", "MINS", "MINUTES"),
-                   "SECOND", ("S", "SEC", "SECONDS", "SECS"),
-                   "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS"),
-                   "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US"),
-                   "EPOCH"]
+                 ["YEAR", ("Y", "YEARS", "YR", "YRS"),
+                  "MONTH", ("MON", "MONS", "MONTHS"),
+                  "DAY", ("D", "DAYS"),
+                  "HOUR", ("H", "HOURS", "HR", "HRS"),
+                  "MINUTE", ("M", "MIN", "MINS", "MINUTES"),
+                  "SECOND", ("S", "SEC", "SECONDS", "SECS")]
       * source - a date/timestamp or interval column from where `field` should be extracted
   """,
   examples = """
