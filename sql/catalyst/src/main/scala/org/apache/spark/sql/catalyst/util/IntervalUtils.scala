@@ -94,15 +94,6 @@ object IntervalUtils {
     Decimal(getMicroseconds(interval), 8, 3)
   }
 
-  // Returns total number of seconds with microseconds fractional part in the given interval.
-  def getEpoch(interval: CalendarInterval): Decimal = {
-    var result = interval.microseconds
-    result += MICROS_PER_DAY * interval.days
-    result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
-    result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
-    Decimal(result, 18, 6)
-  }
-
   private def toLongWithRange(
       fieldName: IntervalUnit,
       s: String,

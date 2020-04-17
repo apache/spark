@@ -11,99 +11,99 @@ struct<>
 
 
 -- !query
-select extract(millennium from c), extract(millennium from i) from t
+select extract(millennium from c) from t
 -- !query schema
-struct<date_part('millennium', t.`c`):int,date_part('millennium', t.`i`):int>
+struct<date_part('millennium', t.`c`):int>
 -- !query output
-3	0
+3
 
 
 -- !query
-select extract(millennia from c), extract(millennia from i) from t
+select extract(millennia from c) from t
 -- !query schema
-struct<date_part('millennia', t.`c`):int,date_part('millennia', t.`i`):int>
+struct<date_part('millennia', t.`c`):int>
 -- !query output
-3	0
+3
 
 
 -- !query
-select extract(mil from c), extract(mil from i) from t
+select extract(mil from c) from t
 -- !query schema
-struct<date_part('mil', t.`c`):int,date_part('mil', t.`i`):int>
+struct<date_part('mil', t.`c`):int>
 -- !query output
-3	0
+3
 
 
 -- !query
-select extract(mils from c), extract(mils from i) from t
+select extract(mils from c) from t
 -- !query schema
-struct<date_part('mils', t.`c`):int,date_part('mils', t.`i`):int>
+struct<date_part('mils', t.`c`):int>
 -- !query output
-3	0
+3
 
 
 -- !query
-select extract(century from c), extract(century from i) from t
+select extract(century from c) from t
 -- !query schema
-struct<date_part('century', t.`c`):int,date_part('century', t.`i`):int>
+struct<date_part('century', t.`c`):int>
 -- !query output
-21	0
+21
 
 
 -- !query
-select extract(centuries from c), extract(centuries from i) from t
+select extract(centuries from c) from t
 -- !query schema
-struct<date_part('centuries', t.`c`):int,date_part('centuries', t.`i`):int>
+struct<date_part('centuries', t.`c`):int>
 -- !query output
-21	0
+21
 
 
 -- !query
-select extract(c from c),  extract(c from i) from t
+select extract(c from c) from t
 -- !query schema
-struct<date_part('c', t.`c`):int,date_part('c', t.`i`):int>
+struct<date_part('c', t.`c`):int>
 -- !query output
-21	0
+21
 
 
 -- !query
-select extract(cent from c), extract(cent from i) from t
+select extract(cent from c)from t
 -- !query schema
-struct<date_part('cent', t.`c`):int,date_part('cent', t.`i`):int>
+struct<date_part('cent', t.`c`):int>
 -- !query output
-21	0
+21
 
 
 -- !query
-select extract(decade from c), extract(decade from i) from t
+select extract(decade from c) from t
 -- !query schema
-struct<date_part('decade', t.`c`):int,date_part('decade', t.`i`):int>
+struct<date_part('decade', t.`c`):int>
 -- !query output
-201	1
+201
 
 
 -- !query
-select extract(decades from c), extract(decades from i) from t
+select extract(decades from c) from t
 -- !query schema
-struct<date_part('decades', t.`c`):int,date_part('decades', t.`i`):int>
+struct<date_part('decades', t.`c`):int>
 -- !query output
-201	1
+201
 
 
 -- !query
-select extract(dec from c), extract(dec from i) from t
+select extract(dec from c) from t
 -- !query schema
-struct<date_part('dec', t.`c`):int,date_part('dec', t.`i`):int>
+struct<date_part('dec', t.`c`):int>
 -- !query output
-201	1
+201
 
 
 -- !query
-select extract(decs from c), extract(decs from i) from t
+select extract(decs from c) from t
 -- !query schema
-struct<date_part('decs', t.`c`):int,date_part('decs', t.`i`):int>
+struct<date_part('decs', t.`c`):int>
 -- !query output
-201	1
+201
 
 
 -- !query
@@ -157,17 +157,19 @@ struct<date_part('isoyear', t.`c`):int>
 -- !query
 select extract(quarter from c), extract(quarter from i) from t
 -- !query schema
-struct<date_part('quarter', t.`c`):int,date_part('quarter', t.`i`):tinyint>
+struct<>
 -- !query output
-2	3
+org.apache.spark.sql.AnalysisException
+Literals of type 'quarter' are currently not supported for the interval type.;; line 1 pos 32
 
 
 -- !query
 select extract(qtr from c), extract(qtr from i) from t
 -- !query schema
-struct<date_part('qtr', t.`c`):int,date_part('qtr', t.`i`):tinyint>
+struct<>
 -- !query output
-2	3
+org.apache.spark.sql.AnalysisException
+Literals of type 'qtr' are currently not supported for the interval type.;; line 1 pos 28
 
 
 -- !query
@@ -403,107 +405,107 @@ struct<date_part('secs', t.`c`):decimal(8,6),date_part('secs', t.`i`):decimal(8,
 
 
 -- !query
-select extract(milliseconds from c), extract(milliseconds from i) from t
+select extract(milliseconds from c) from t
 -- !query schema
-struct<date_part('milliseconds', t.`c`):decimal(8,3),date_part('milliseconds', t.`i`):decimal(8,3)>
+struct<date_part('milliseconds', t.`c`):decimal(8,3)>
 -- !query output
-9123.456	6789.000
+9123.456
 
 
 -- !query
-select extract(msec from c), extract(msec from i) from t
+select extract(msec from c) from t
 -- !query schema
-struct<date_part('msec', t.`c`):decimal(8,3),date_part('msec', t.`i`):decimal(8,3)>
+struct<date_part('msec', t.`c`):decimal(8,3)>
 -- !query output
-9123.456	6789.000
+9123.456
 
 
 -- !query
-select extract(msecs from c), extract(msecs from i) from t
+select extract(msecs from c) from t
 -- !query schema
-struct<date_part('msecs', t.`c`):decimal(8,3),date_part('msecs', t.`i`):decimal(8,3)>
+struct<date_part('msecs', t.`c`):decimal(8,3)>
 -- !query output
-9123.456	6789.000
+9123.456
 
 
 -- !query
-select extract(millisecon from c), extract(millisecon from i) from t
+select extract(millisecon from c) from t
 -- !query schema
-struct<date_part('millisecon', t.`c`):decimal(8,3),date_part('millisecon', t.`i`):decimal(8,3)>
+struct<date_part('millisecon', t.`c`):decimal(8,3)>
 -- !query output
-9123.456	6789.000
+9123.456
 
 
 -- !query
-select extract(mseconds from c), extract(mseconds from i) from t
+select extract(mseconds from c) from t
 -- !query schema
-struct<date_part('mseconds', t.`c`):decimal(8,3),date_part('mseconds', t.`i`):decimal(8,3)>
+struct<date_part('mseconds', t.`c`):decimal(8,3)>
 -- !query output
-9123.456	6789.000
+9123.456
 
 
 -- !query
-select extract(ms from c), extract(ms from i) from t
+select extract(ms from c) from t
 -- !query schema
-struct<date_part('ms', t.`c`):decimal(8,3),date_part('ms', t.`i`):decimal(8,3)>
+struct<date_part('ms', t.`c`):decimal(8,3)>
 -- !query output
-9123.456	6789.000
+9123.456
 
 
 -- !query
-select extract(microseconds from c), extract(microseconds from i) from t
+select extract(microseconds from c) from t
 -- !query schema
-struct<date_part('microseconds', t.`c`):int,date_part('microseconds', t.`i`):bigint>
+struct<date_part('microseconds', t.`c`):int>
 -- !query output
-9123456	6789000
+9123456
 
 
 -- !query
-select extract(usec from c), extract(usec from i) from t
+select extract(usec from c) from t
 -- !query schema
-struct<date_part('usec', t.`c`):int,date_part('usec', t.`i`):bigint>
+struct<date_part('usec', t.`c`):int>
 -- !query output
-9123456	6789000
+9123456
 
 
 -- !query
-select extract(usecs from c), extract(usecs from i) from t
+select extract(usecs from c) from t
 -- !query schema
-struct<date_part('usecs', t.`c`):int,date_part('usecs', t.`i`):bigint>
+struct<date_part('usecs', t.`c`):int>
 -- !query output
-9123456	6789000
+9123456
 
 
 -- !query
-select extract(useconds from c), extract(useconds from i) from t
+select extract(useconds from c) from t
 -- !query schema
-struct<date_part('useconds', t.`c`):int,date_part('useconds', t.`i`):bigint>
+struct<date_part('useconds', t.`c`):int>
 -- !query output
-9123456	6789000
+9123456
 
 
 -- !query
-select extract(microsecon from c), extract(microsecon from i) from t
+select extract(microsecon from c) from t
 -- !query schema
-struct<date_part('microsecon', t.`c`):int,date_part('microsecon', t.`i`):bigint>
+struct<date_part('microsecon', t.`c`):int>
 -- !query output
-9123456	6789000
+9123456
 
 
 -- !query
-select extract(us from c), extract(us from i) from t
+select extract(us from c) from t
 -- !query schema
-struct<date_part('us', t.`c`):int,date_part('us', t.`i`):bigint>
+struct<date_part('us', t.`c`):int>
 -- !query output
-9123456	6789000
+9123456
 
 
 -- !query
-select extract(epoch from c), extract(epoch from i) from t
+select extract(epoch from c) from t
 -- !query schema
-struct<date_part('epoch', t.`c`):decimal(20,6),date_part('epoch', t.`i`):decimal(18,6)>
+struct<date_part('epoch', t.`c`):decimal(20,6)>
 -- !query output
-1304665689.123456	370608606.789000
+1304665689.123456
 
 
 -- !query
