@@ -1007,14 +1007,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("test script transform data type") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-    val data = (1 to 5).map { i => (i, i) }
-    data.toDF("key", "value").createOrReplaceTempView("test")
-    checkAnswer(
-      sql("""FROM
-          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` int, thing2 string)) t
-          |SELECT thing1 + 1
+    withTempView("test") {
+      assume(TestUtils.testCommandAvailable("/bin/bash"))
+      val data = (1 to 5).map { i => (i, i) }
+      data.toDF("key", "value").createOrReplaceTempView("test")
+      checkAnswer(
+        sql("""FROM
+              |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` int, thing2 string)) t
+              |SELECT thing1 + 1
         """.stripMargin), (2 to 6).map(i => Row(i)))
+    }
   }
 
   test("Sorting columns are not in Generate") {
