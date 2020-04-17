@@ -19,137 +19,330 @@ license: |
   limitations under the License.
 ---
 
-A literal (aka constant) represents a fixed data value. Spark SQL supports the following literals:
+A literal (also known as a constant) represents a fixed data value. Spark SQL supports the following literals:
 
- * String Literals
- * Boolean Literals
- * Numeric Literals
- * Datetime Literals
- * Interval Literals
+ * [String Literal](#string-literal)
+ * [Null Literal](#null-literal)
+ * [Boolean Literal](#boolean-literal)
+ * [Numeric Literal](#numeric-literal)
+ * [Datetime Literal](#datetime-literal)
+ * [Interval Literal](#interval-literal)
 
-### String Literals
+### String Literal
 
 A string literal is used to specify a character string value.
-<dl>
-  <dt><code><em>Format:</em></code></dt>
-  <dd>
-    <code>'c [ ... ]'</code><br>
-    c: one character of user's character set.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>Examples:</em></code></dt>
-  <dd>
-    <code>'Hello, World!',   'Spark SQL',   'dbname.schema'</code>
-  </dd>
-</dl>
 
-### Boolean Literals
+#### <em>Syntax</em>
 
-A boolean literal is used to specify a boolean value.
-<dl>
-  <dt><code><em>Format:</em></code></dt>
-  <dd>
-    <code>TRUE | FALSE </code>
-  </dd>
-</dl>
+{% highlight sql %}
+'c [ ... ]' | "c [ ... ]"
+{% endhighlight %}
+c: one character of the user's character set.
 
-### Numeric Literals
+#### <em>Examples</em>
+
+{% highlight sql %}
+SELECT 'Hello, World!' AS col;
+  +-------------+
+  |col          |
+  +-------------+
+  |Hello, World!|
+  +-------------+
+
+SELECT "SPARK SQL" AS col;
+  +---------+
+  |col      |
+  +---------+
+  |Spark SQL|
+  +---------+
+{% endhighlight %}
+
+### Null Literal
+
+A null literal is used to specify a null value.
+
+#### <em>Syntax</em>
+
+{% highlight sql %}
+NULL
+{% endhighlight %}
+
+#### <em>Examples</em>
+
+{% highlight sql %}
+SELECT NULL AS col;
+  +----+
+  |col |
+  +----+
+  |NULL|
+  +----+
+{% endhighlight %}
+
+### Boolean Literal
+
+#### <em>Syntax</em>
+
+{% highlight sql %}
+TRUE | FALSE
+{% endhighlight %}
+
+#### <em>Examples</em>
+
+{% highlight sql %}
+SELECT TRUE AS col;
+  +----+
+  |col |
+  +----+
+  |true|
+  +----+
+{% endhighlight %}
+
+### Numeric Literal
 
 A numeric literal is used to specify a fixed or floating-point number.
 
-#### Integer Literals
+#### Integer Literal
 
-<dl>
-  <dt><code><em>Format:</em></code></dt>
-  <dd>
-    <code>[ + | - ] digit [ ... ] [ l | L ]</code><br>
-    digit: one of 0, 1, 2, 3, 4, 5, 6, 7, 8 or 9 <br>
-    l or L: indicates <code>LongType</code>.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>Examples:</em></code></dt>
-  <dd>
-    <code>6,  +188,  -54, 1000L</code>
-  </dd>
-</dl>
+#### <em>Syntax</em>
 
-#### Floating Point and Decimal Literals
+{% highlight sql %}
+[ + | - ] digit [ ... ] [ L | S | Y ]
+{% endhighlight %}
+digit: one of 0, 1, 2, 3, 4, 5, 6, 7, 8 or 9. <br>
+default (no postfix): indicates a 4-byte signed integer number.<br>
+L: case insensitive, indicates <code>BIGINT</code>, which is a 8-byte signed integer number.<br>
+S: case insensitive, indicates <code>SMALLINT</code>, which is a 2-byte signed integer number.<br>
+Y: case insensitive, indicates <code>TINYINT</code>, which is a 1-byte signed integer number.<br>
+#### <em>Examples</em>
 
-<dl>
-  <dt><code><em>Format:</em></code></dt>
-  <dd>
-    <code>
-      [ + | - ] { digit [ ... ] [ . ] [ digit [ ... ] ] | . digit [ ... ] } <br>
-      [ { e | E } [ + | - ] digit [ ... ] ] [ d | D ]
-    </code><br>
-    digit: one of 0, 1, 2, 3, 4, 5, 6, 7, 8 or 9. <br>
-    e or E: indicates that the number is in scientific notation format. <br>
-    d or D: indicates <code>DoubleType</code>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>Examples:</em></code></dt>
-  <dd>
-    <code>5E2,   3.e6,   2.3E-2,   +3.e+3,   -4D,   0.25</code>
-  </dd>
-</dl>
+{% highlight sql %}
+SELECT -2147483648 AS col;
+  +-----------+
+  |col        |
+  +-----------+
+  |-2147483648|
+  +-----------+
 
-### Datetime Literals
+SELECT 9223372036854775807l AS col;
+  +-------------------+
+  |col                |
+  +-------------------+
+  |9223372036854775807|
+  +-------------------+
+
+SELECT -32Y AS col;
+  +---+
+  |col|
+  +---+
+  |-32|
+  +---+
+
+SELECT 482S AS col;
+  +---+
+  |col|
+  +---+
+  |482|
+  +---+
+{% endhighlight %}
+
+#### Decimal Literal
+
+#### <em>Syntax</em>
+
+{% highlight sql %}
+ [ + | - ] { digit [ ... ] . [ digit [ ... ] ] | . digit [ ... ] }
+{% endhighlight %}
+
+#### <em>Examples</em>
+
+{% highlight sql %}
+SELECT 12.578 AS col;
+  +------+
+  |col   |
+  +------+
+  |12.578|
+  +------+
+
+SELECT -0.1234567 AS col;
+  +----------+
+  |col       |
+  +----------+
+  |-0.1234567|
+  +----------+
+
+SELECT -.1234567 AS col;
+  +----------+
+  |col       |
+  +----------+
+  |-0.1234567|
+  +----------+
+{% endhighlight %}
+
+#### Floating Point and BigDecimal Literals
+
+#### <em>Syntax</em>
+
+{% highlight sql %}
+ [ + | - ] { digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ]
+             | digit [ ... ] . [ digit [ ... ] ] [ E [ + | - ] digit [ ... ] ] [ D | BD ]
+             | . digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] }
+{% endhighlight %}
+digit: one of 0, 1, 2, 3, 4, 5, 6, 7, 8 or 9. <br>
+default (no postfix): indicate a 4-byte single-precision floating point number.<br>
+D: case insensitive, indicates <code>DOUBLE</code>, which is a 8-byte double-precision floating point number.<br>
+BD: case insensitive, indicates <code>BIGDECIMAL</code>, is an arbitrary-precision signed decimal number.<br>
+#### <em>Examples</em>
+
+{% highlight sql %}
+SELECT 5E2 AS col;
+  +-----+
+  |col  |
+  +-----+
+  |500.0|
+  +-----+
+
+SELECT 5D AS col;
+  +---+
+  |col|
+  +---+
+  |5.0|
+  +---+
+
+SELECT -5BD AS col;
+  +---+
+  |col|
+  +---+
+  |-5 |
+  +---+
+
+SELECT 12.578e-2d AS col;
+  +-------+
+  |col    |
+  +-------+
+  |0.12578|
+  +-------+
+
+SELECT -.1234567E+2BD AS col;
+  +---------+
+  |col      |
+  +---------+
+  |-12.34567|
+  +---------+
+
+SELECT +3.e+3 AS col;
+  +------+
+  |col   |
+  +------+
+  |3000.0|
+  +------+
+
+SELECT -3.E-3D AS col;
+  +------+
+  |col   |
+  +------+
+  |-0.003|
+  +------+
+{% endhighlight %}
+
+### Datetime Literal
 
 A Datetime literal is used to specify a datetime data type value.
 
-#### Date Literals
+#### Date Literal
 
-<dl>
-  <dt><code><em>Format:</em></code></dt>
-  <dd>
-    <code>
-      DATE 'YYYY-MM-DD'
-    </code>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>Examples:</em></code></dt>
-  <dd>
-    <code>DATE '2011-11-11'</code>
-  </dd>
-</dl>
+#### <em>Syntax</em>
 
-#### Timestamp Literals
+{% highlight sql %}
+DATE 'yyyy-MM-dd'
+{% endhighlight %}
 
-<dl>
-  <dt><code><em>Format:</em></code></dt>
-  <dd>
-    <code>
-      TIMESTAMP yyyy-MM-dd HH:mm[:ss.SSSSSSzzz]
-    </code>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>Examples:</em></code></dt>
-  <dd>
-    <code>TIMESTAMP '1997-01-31 09:26:56.123'</code><br>
-    <code>TIMESTAMP '1997-01-31 09:26:56.66666666CST'</code>
-  </dd>
-</dl>
+#### <em>Examples</em>
 
-### Interval Literals
+{% highlight sql %}
+SELECT DATE '2011-11-11' AS col;
+  +----------+
+  |col       |
+  +----------+
+  |2011-11-11|
+  +----------+
+{% endhighlight %}
 
-An inerval literal is used to specify a fixed period of time.
-<dl>
-  <dt><code><em>Format:</em></code></dt>
-  <dd>
-    <code>
-      INTERVAL value { YEAR | MONTH | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND }
-    </code>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>Examples:</em></code></dt>
-  <dd>
-    <code>INTERVAL 3 YEAR</code><br>
-    <code>INTERVAL 3 YEAR 3 HOUR</code>
-  </dd>
-</dl>
+#### Timestamp Literal
+
+#### <em>Syntax</em>
+
+{% highlight sql %}
+TIMESTAMP 'yyyy-MM-dd [ HH:mm:ss.SSSSSSzzz ]'
+{% endhighlight %}
+
+#### <em>Examples</em>
+
+{% highlight sql %}
+SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;
+  +-----------------------+
+  |col                    |
+  +-----------------------+
+  |1997-01-31 09:26:56.123|
+  +-----------------------+
+
+SELECT TIMESTAMP '1997-01-31 09:26:56.66666666CST' AS col;
+  +--------------------------+
+  |col                       |
+  +--------------------------+
+  |1997-01-31 07:26:56.666666|
+  +--------------------------+
+{% endhighlight %}
+
+### Interval Literal
+
+An interval literal is used to specify a fixed period of time.
+
+#### <em>Syntax</em>
+{% highlight sql %}
+{ INTERVAL interval_value interval_unit [ interval_value interval_unit ... ]
+  | INTERVAL interval_value interval_unit TO interval_unit }
+{% endhighlight %}
+
+interval_value:
+{% highlight sql %}
+{ [ + | - ] number_value | string_value }
+{% endhighlight %}
+Note: string_value needs to be used for INTERNAL ... TO ... format.
+
+interval_unit:
+{% highlight sql %}
+YEAR | MONTH | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+{% endhighlight %}
+
+#### <em>Examples</em>
+
+{% highlight sql %}
+SELECT INTERVAL 3 YEAR AS col;
+  +-------+
+  |    col|
+  +-------+
+  |3 years|
+  +-------+
+
+SELECT INTERVAL -2 HOUR 3 MINUTE AS col;
+  +--------------------+
+  |                 col|
+  +--------------------+
+  |-1 hours -57 minutes|
+  +--------------------+
+
+SELECT INTERVAL 1 YEAR 2 MONTH 3 WEEK 4 DAY 5 HOUR 6 MINUTE 7 SECOND 8
+    MILLISECOND 9 MICROSECOND AS col;
+  +-----------------------------------------------------------+
+  |col                                                        |
+  +-----------------------------------------------------------+
+  |1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds|
+  +-----------------------------------------------------------+
+
+SELECT INTERVAL '20 15:40:32.99899999' DAY TO SECOND AS col;
+  +---------------------------------------------+
+  |col                                          |
+  +---------------------------------------------+
+  |20 days 15 hours 40 minutes 32.998999 seconds|
+  +---------------------------------------------+
+{% endhighlight %}
