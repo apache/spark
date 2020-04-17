@@ -139,7 +139,9 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
-    if (!isFinalPlan) {
+    if (isFinalPlan) return currentPhysicalPlan
+
+    context.session.withActive {
       // Subqueries do not have their own execution IDs and therefore rely on the main query to
       // update UI.
       val executionId = Option(context.session.sparkContext.getLocalProperty(
@@ -225,8 +227,8 @@ case class AdaptiveSparkPlanExec(
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       logOnLevel(s"Final plan: $currentPhysicalPlan")
+      currentPhysicalPlan
     }
-    currentPhysicalPlan
   }
 
   override def executeCollect(): Array[InternalRow] = {
