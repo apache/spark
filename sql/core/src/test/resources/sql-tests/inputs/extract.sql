@@ -23,8 +23,8 @@ select extract(yrs from c), extract(yrs from i) from t;
 
 select extract(isoyear from c) from t;
 
-select extract(quarter from c), extract(quarter from i) from t;
-select extract(qtr from c), extract(qtr from i) from t;
+select extract(quarter from c) from t;
+select extract(qtr from c) from t;
 
 select extract(month from c), extract(month from i) from t;
 select extract(mon from c), extract(mon from i) from t;

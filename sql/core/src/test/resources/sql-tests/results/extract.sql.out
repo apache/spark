@@ -155,21 +155,19 @@ struct<date_part('isoyear', t.`c`):int>
 
 
 -- !query
-select extract(quarter from c), extract(quarter from i) from t
+select extract(quarter from c) from t
 -- !query schema
-struct<>
+struct<date_part('quarter', t.`c`):int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Literals of type 'quarter' are currently not supported for the interval type.;; line 1 pos 32
+2
 
 
 -- !query
-select extract(qtr from c), extract(qtr from i) from t
+select extract(qtr from c) from t
 -- !query schema
-struct<>
+struct<date_part('qtr', t.`c`):int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Literals of type 'qtr' are currently not supported for the interval type.;; line 1 pos 28
+2
 
 
 -- !query

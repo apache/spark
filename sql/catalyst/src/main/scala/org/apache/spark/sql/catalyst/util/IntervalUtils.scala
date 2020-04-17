@@ -50,24 +50,8 @@ object IntervalUtils {
     interval.months / MONTHS_PER_YEAR
   }
 
-  def getMillenniums(interval: CalendarInterval): Int = {
-    getYears(interval) / YEARS_PER_MILLENNIUM
-  }
-
-  def getCenturies(interval: CalendarInterval): Int = {
-    getYears(interval) / YEARS_PER_CENTURY
-  }
-
-  def getDecades(interval: CalendarInterval): Int = {
-    getYears(interval) / YEARS_PER_DECADE
-  }
-
   def getMonths(interval: CalendarInterval): Byte = {
     (interval.months % MONTHS_PER_YEAR).toByte
-  }
-
-  def getQuarters(interval: CalendarInterval): Byte = {
-    (getMonths(interval) / MONTHS_PER_QUARTER + 1).toByte
   }
 
   def getDays(interval: CalendarInterval): Int = {
@@ -82,16 +66,8 @@ object IntervalUtils {
     ((interval.microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
   }
 
-  def getMicroseconds(interval: CalendarInterval): Long = {
-    interval.microseconds % MICROS_PER_MINUTE
-  }
-
   def getSeconds(interval: CalendarInterval): Decimal = {
-    Decimal(getMicroseconds(interval), 8, 6)
-  }
-
-  def getMilliseconds(interval: CalendarInterval): Decimal = {
-    Decimal(getMicroseconds(interval), 8, 3)
+    Decimal(interval.microseconds % MICROS_PER_MINUTE, 8, 6)
   }
 
   private def toLongWithRange(
