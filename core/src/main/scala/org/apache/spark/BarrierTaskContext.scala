@@ -20,7 +20,6 @@ package org.apache.spark
 import java.util.{Properties, Timer, TimerTask}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -90,23 +89,24 @@ class BarrierTaskContext private[spark] (
       // Wait the RPC future to be completed, but every 1 second it will jump out waiting
       // and check whether current spark task is killed. If killed, then throw
       // a `TaskKilledException`, otherwise continue wait RPC until it completes.
-      try {
-        while (!abortableRpcFuture.toFuture.isCompleted) {
+
+      // import scala Success locally to avoid conflict with org.apache.spark.Success
+      import scala.util.{Failure, Success, Try}
+      while (!abortableRpcFuture.future.isCompleted) {
+        try {
           // wait RPC future for at most 1 second
-          try {
-            messages = ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
-          } catch {
-            case _: TimeoutException | _: InterruptedException =>
-              // If `TimeoutException` thrown, waiting RPC future reach 1 second.
-              // If `InterruptedException` thrown, it is possible this task is killed.
-              // So in this two cases, we should check whether task is killed and then
-              // throw `TaskKilledException`
-              taskContext.killTaskIfInterrupted()
+          Thread.sleep(1000)
+        } catch {
+          case _: InterruptedException => // task is killed by driver
+        } finally {
+          Try(taskContext.killTaskIfInterrupted()) match {
+            case Success(_) => // task is still running healthily
+            case Failure(e) => abortableRpcFuture.abort(e)
           }
         }
-      } finally {
-        abortableRpcFuture.abort(taskContext.getKillReason().getOrElse("Unknown reason."))
       }
+      // return the desired messages if the future is completed successfully or throw exception
+      messages = abortableRpcFuture.future.value.get.get
 
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
