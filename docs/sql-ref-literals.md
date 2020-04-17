@@ -80,6 +80,8 @@ SELECT NULL AS col;
 
 ### Boolean Literal
 
+A boolean literal is used to specify a boolean value.
+
 #### <em>Syntax</em>
 
 {% highlight sql %}
@@ -190,7 +192,7 @@ SELECT -.1234567 AS col;
 digit: one of 0, 1, 2, 3, 4, 5, 6, 7, 8 or 9. <br>
 default (no postfix): indicate a 4-byte single-precision floating point number.<br>
 D: case insensitive, indicates <code>DOUBLE</code>, which is a 8-byte double-precision floating point number.<br>
-BD: case insensitive, indicates <code>BIGDECIMAL</code>, is an arbitrary-precision signed decimal number.<br>
+BD: case insensitive, indicates <code>BIGDECIMAL</code>, which is an arbitrary-precision signed decimal number.<br>
 #### <em>Examples</em>
 
 {% highlight sql %}
@@ -246,7 +248,7 @@ SELECT -3.E-3D AS col;
 
 ### Datetime Literal
 
-A Datetime literal is used to specify a datetime data type value.
+A Datetime literal is used to specify a datetime value.
 
 #### Date Literal
 
