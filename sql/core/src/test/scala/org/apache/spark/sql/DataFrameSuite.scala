@@ -2354,11 +2354,6 @@ class DataFrameSuite extends QueryTest
     assert(e.getMessage.contains("Table or view not found:"))
   }
 
-  test("CalendarInterval reflection support") {
-    val df = Seq((1, new CalendarInterval(1, 2, 3))).toDF("a", "b")
-    checkAnswer(df.selectExpr("b"), Row(new CalendarInterval(1, 2, 3)))
-  }
-
   test("CalendarInterval encoder support") {
     val i = new CalendarInterval(1, 2, 3)
     val ii = new CalendarInterval(4, 5, 6)
@@ -2370,6 +2365,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(Seq(Array(i), null).toDF(), Seq(Row(Array(i)), Row(null)))
     checkAnswer(Seq(Map(i -> i), null).toDF(), Seq(Row(Map(i -> i)), Row(null)))
     checkAnswer(Seq(Map(1 -> i), null).toDF(), Seq(Row(Map(1 -> i)), Row(null)))
+    checkAnswer(Seq((1, i)).toDF("a", "b").selectExpr("b"), Row(i))
   }
 
 }

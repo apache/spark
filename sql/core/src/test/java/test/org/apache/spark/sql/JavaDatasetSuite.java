@@ -281,14 +281,44 @@ public class JavaDatasetSuite implements Serializable {
       selected.collectAsList());
   }
 
+  public static class SimpleIntervalBean implements Serializable {
+    private CalendarInterval i;
+    public SimpleIntervalBean(CalendarInterval i) {
+      this.i = i;
+    }
 
-  public static class IntervalBean implements Serializable {
+    public CalendarInterval getI() {
+      return this.i;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      SimpleIntervalBean ib = (SimpleIntervalBean) o;
+      if (ib.i == null) return false;
+      return ib.i.equals(i);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(i);
+    }
+  }
+
+  public static class ComplexIntervalBean implements Serializable {
     private CalendarInterval i;
     private CalendarInterval[] ia;
+    private List<CalendarInterval> il;
+    private Map<CalendarInterval, CalendarInterval> im;
+    private SimpleIntervalBean ib;
 
     public void setI(CalendarInterval i) {
       this.i = i;
       this.ia = new CalendarInterval[]{i};
+      this.il = Collections.singletonList(i);
+      this.im = Collections.singletonMap(i, i);
+      this.ib = new SimpleIntervalBean(i);
     }
 
     public CalendarInterval getI() {
@@ -299,11 +329,23 @@ public class JavaDatasetSuite implements Serializable {
       return this.ia;
     }
 
+    public List<CalendarInterval> getIL() {
+      return this.il;
+    }
+
+    public Map<CalendarInterval, CalendarInterval> getIM() {
+      return this.im;
+    }
+
+    public SimpleIntervalBean getIB() {
+      return this.ib;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
-      IntervalBean ib = (IntervalBean) o;
+      ComplexIntervalBean ib = (ComplexIntervalBean) o;
       if (ib.i == null) return false;
       return ib.i.equals(i);
     }
@@ -316,22 +358,29 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testJavaBeanWithCalendarInterval() {
-    IntervalBean ib1 = new IntervalBean();
+    ComplexIntervalBean ib1 = new ComplexIntervalBean();
     ib1.setI(new CalendarInterval(1, 2, 0));
-    IntervalBean ib2 = new IntervalBean();
+    ComplexIntervalBean ib2 = new ComplexIntervalBean();
     ib2.setI(new CalendarInterval(4, 5, 0));
-    IntervalBean ib3 = new IntervalBean();
+    ComplexIntervalBean ib3 = new ComplexIntervalBean();
     ib3.setI(null);
 
-    List<IntervalBean> data = Arrays.asList(ib1, ib2, ib3);
-    Dataset<IntervalBean> ds1 =
-      spark.createDataFrame(data, IntervalBean.class).as(Encoders.bean(IntervalBean.class));
+    List<ComplexIntervalBean> data = Arrays.asList(ib1, ib2, ib3);
+    Dataset<ComplexIntervalBean> ds1 =
+      spark.createDataFrame(data, ComplexIntervalBean.class)
+        .as(Encoders.bean(ComplexIntervalBean.class));
 
     ds1.collectAsList().forEach(ib -> {
-      if (ib.getI() != null) Assert.assertEquals(ib.getI(), ib.getIA()[0]);
+      if (ib.getI() != null) {
+        Assert.assertEquals(ib.getI(), ib.getIA()[0]);
+        Assert.assertEquals(ib.getI(), ib.getIL().get(0));
+        Assert.assertEquals(ib.getI(), ib.getIM().get(ib.getI()));
+        Assert.assertEquals(ib.getI(), ib.getIB().getI());
+      }
     });
     Dataset<CalendarInterval> ds2 =
-      ds1.map((MapFunction<IntervalBean, CalendarInterval>) ib -> ib.getI(), Encoders.INTERVAL());
+      ds1.map((MapFunction<ComplexIntervalBean, CalendarInterval>) ComplexIntervalBean::getI,
+        Encoders.INTERVAL());
     Assert.assertEquals(
       Arrays.asList("1 months 2 days 1 hours", "4 months 5 days 1 hours", null),
       ds2.select(expr("value + interval 1 hour").cast("string"))
