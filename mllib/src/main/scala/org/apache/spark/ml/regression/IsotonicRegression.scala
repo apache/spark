@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -30,7 +31,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.regression.{IsotonicRegression => MLlibIsotonicRegression}
 import org.apache.spark.mllib.regression.{IsotonicRegressionModel => MLlibIsotonicRegressionModel}
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit, udf}
@@ -246,10 +246,10 @@ class IsotonicRegressionModel private[ml] (
     val predictions = oldModel.predictions
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>
-        udf { feature: Double => MLUtils.interpolate(boundaries, predictions, feature) }
+        udf { feature: Double => Utils.interpolate(boundaries, predictions, feature) }
       case _: VectorUDT =>
         val idx = $(featureIndex)
-        udf { features: Vector => MLUtils.interpolate(boundaries, predictions, features(idx)) }
+        udf { features: Vector => Utils.interpolate(boundaries, predictions, features(idx)) }
     }
     dataset.withColumn($(predictionCol), predict(col($(featuresCol))),
       outputSchema($(predictionCol)).metadata)

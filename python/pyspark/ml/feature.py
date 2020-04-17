@@ -2871,21 +2871,21 @@ class _QuantileTransformParams(HasInputCol, HasOutputCol, HasRelativeError):
     """
     Params for :py:class:`QuantileTransform` and :py:class:`QuantileTransformModel`.
 
-    .. versionadded:: 3.0.0
+    .. versionadded:: 3.1.0
     """
     numQuantiles = Param(Params._dummy(), "numQuantiles", "Number of quantiles to be computed",
                          typeConverter=TypeConverters.toInt)
     distribution = Param(Params._dummy(), "distribution", "Marginal distribution for the " +
                          "transformed data", typeConverter=TypeConverters.toString)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def getNumQuantiles(self):
         """
         Gets the value of numQuantiles or its default value.
         """
         return self.getOrDefault(self.numQuantiles)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def getDistribution(self):
         """
         Gets the value of distribution or its default value.
@@ -2958,7 +2958,7 @@ class QuantileTransform(JavaEstimator, _QuantileTransformParams, JavaMLReadable,
         self.setParams(**kwargs)
 
     @keyword_only
-    @since("3.0.0")
+    @since("3.1.0")
     def setParams(self, numQuantiles=100, distribution="uniform",
                   inputCol=None, outputCol=None, relativeError=0.001):
         """
@@ -2969,35 +2969,35 @@ class QuantileTransform(JavaEstimator, _QuantileTransformParams, JavaMLReadable,
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setNumQuantiles(self, value):
         """
         Sets the value of :py:attr:`numQuantiles`.
         """
         return self._set(numQuantiles=value)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setDistribution(self, value):
         """
         Sets the value of :py:attr:`distribution`.
         """
         return self._set(distribution=value)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setInputCol(self, value):
         """
         Sets the value of :py:attr:`inputCol`.
         """
         return self._set(inputCol=value)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setOutputCol(self, value):
         """
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setRelativeError(self, value):
         """
         Sets the value of :py:attr:`relativeError`.
@@ -3015,14 +3015,14 @@ class QuantileTransformModel(JavaModel, _QuantileTransformParams, JavaMLReadable
     .. versionadded:: 3.0.0
     """
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setInputCol(self, value):
         """
         Sets the value of :py:attr:`inputCol`.
         """
         return self._set(inputCol=value)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setOutputCol(self, value):
         """
         Sets the value of :py:attr:`outputCol`.
@@ -3030,7 +3030,7 @@ class QuantileTransformModel(JavaModel, _QuantileTransformParams, JavaMLReadable
         return self._set(outputCol=value)
 
     @property
-    @since("3.0.0")
+    @since("3.1.0")
     def numFeatures(self):
         """
         Number of features of the QuantileTransformModel.
@@ -3038,7 +3038,7 @@ class QuantileTransformModel(JavaModel, _QuantileTransformParams, JavaMLReadable
         return self._call_java("numFeatures")
 
     @property
-    @since("3.0.0")
+    @since("3.1.0")
     def references(self):
         """
         Quantiles of references of the QuantileTransformModel.
@@ -3046,7 +3046,7 @@ class QuantileTransformModel(JavaModel, _QuantileTransformParams, JavaMLReadable
         return self._call_java("references")
 
     @property
-    @since("3.0.0")
+    @since("3.1.0")
     def quantiles(self):
         """
         The values corresponding the quantiles of reference.

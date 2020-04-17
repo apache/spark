@@ -22,11 +22,11 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -140,7 +140,7 @@ class QuantileTransform(override val uid: String)
 }
 
 
-@Since("3.0.0")
+@Since("3.1.0")
 object QuantileTransform extends DefaultParamsReadable[QuantileTransform] {
 
   /** String name for uniform distribution. */
@@ -162,7 +162,7 @@ object QuantileTransform extends DefaultParamsReadable[QuantileTransform] {
  * Model fitted by [[QuantileTransform]].
  * @param quantiles The values corresponding the quantiles of reference.
  */
-@Since("3.0.0")
+@Since("3.1.0")
 class QuantileTransformModel private[ml] (
     override val uid: String,
     val quantiles: Array[Vector])
@@ -218,15 +218,15 @@ class QuantileTransformModel private[ml] (
       if (v.isNaN) {
         Double.NaN
       } else {
-        MLUtils.interpolate(quantiles(i).toArray, references.toArray, v)
+        Utils.interpolate(quantiles(i).toArray, references.toArray, v)
       }
     }
   }
 
   private def getGaussianTransformFunc: (Int, Double) => Double = {
     val gaussian = new NormalDistribution(0, 1)
-    val clipMin = gaussian.inverseCumulativeProbability(BOUNDS_THRESHOLD - MLUtils.EPSILON)
-    val clipMax = gaussian.inverseCumulativeProbability(1 - (BOUNDS_THRESHOLD - MLUtils.EPSILON))
+    val clipMin = gaussian.inverseCumulativeProbability(BOUNDS_THRESHOLD - Utils.EPSILON)
+    val clipMax = gaussian.inverseCumulativeProbability(1 - (BOUNDS_THRESHOLD - Utils.EPSILON))
 
     (i: Int, v: Double) => {
       if (v.isNaN) {
@@ -238,7 +238,7 @@ class QuantileTransformModel private[ml] (
         } else if (v + BOUNDS_THRESHOLD > q.last) {
           clipMax
         } else {
-          val p = MLUtils.interpolate(q, references.toArray, v)
+          val p = Utils.interpolate(q, references.toArray, v)
           gaussian.inverseCumulativeProbability(p)
         }
       }
@@ -258,7 +258,7 @@ class QuantileTransformModel private[ml] (
   }
 }
 
-@Since("3.0.0")
+@Since("3.1.0")
 object QuantileTransformModel extends MLReadable[QuantileTransformModel] {
 
   private[QuantileTransformModel]
