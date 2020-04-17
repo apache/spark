@@ -1825,7 +1825,7 @@ object SQLConf {
         s"set, the fallback is `${BUFFER_SIZE.key}`. Note that Pandas execution requires more " +
         "than 4 bytes. Lowering this value could make small Pandas UDF batch iterated and " +
         "pipelined; however, it might degrade performance. See SPARK-27870.")
-      .version("3.1.0")
+      .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
@@ -2335,6 +2335,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
+    .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
+      "'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
+    .version("3.1.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValue(mode => Set("SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED").contains(mode),
+      "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'simple', 'extended', " +
+      "'codegen', 'cost' and 'formatted'.")
+    .createWithDefault("formatted")
+
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
     .doc("The max length of a file that can be read by the binary file data source. " +
       "Spark will fail fast and not attempt to read the file if its length exceeds this value. " +
@@ -2508,6 +2519,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.integerGroupingId")
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2847,6 +2859,8 @@ class SQLConf extends Serializable with Logging {
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
+
+  def uiExplainMode: String = getConf(UI_EXPLAIN_MODE)
 
   def addSingleFileInAddFile: Boolean = getConf(LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE)
 

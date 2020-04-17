@@ -345,7 +345,8 @@ class SparkSession private(
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val encoder = RowEncoder(schema)
-    val catalystRows = rowRDD.map(encoder.toRow)
+    val toRow = encoder.createSerializer()
+    val catalystRows = rowRDD.map(toRow)
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
@@ -459,10 +460,10 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
-    // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
-    val enc = encoderFor[T].copy()
+    val enc = encoderFor[T]
+    val toRow = enc.createSerializer()
     val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d).copy())
+    val encoded = data.map(d => toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
     Dataset[T](self, plan)
   }

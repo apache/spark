@@ -265,6 +265,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal("H"), JST_OPT), "0")
         checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), JST_OPT), "22")
 
+        // Test escaping of format
+        GenerateUnsafeProjection.generate(
+          DateFormatClass(Literal(ts), Literal("\"quote"), JST_OPT) :: Nil)
+
         // SPARK-28072 The codegen path should work
         checkEvaluation(
           expression = DateFormatClass(
@@ -602,6 +606,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(NextDay(Literal.create(null, DateType), Literal("xx")), null)
     checkEvaluation(
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
+    // Test escaping of dayOfWeek
+    GenerateUnsafeProjection.generate(
+      NextDay(Literal(Date.valueOf("2015-07-23")), Literal("\"quote")) :: Nil)
   }
 
   test("TruncDate") {
@@ -625,6 +632,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testTrunc(date, null, null)
     testTrunc(null, "MON", null)
     testTrunc(null, null, null)
+    // Test escaping of format
+    GenerateUnsafeProjection.generate(TruncDate(Literal(0, DateType), Literal("\"quote")) :: Nil)
 
     testTrunc(Date.valueOf("2000-03-08"), "decade", Date.valueOf("2000-01-01"))
     testTrunc(Date.valueOf("2000-03-08"), "century", Date.valueOf("1901-01-01"))
@@ -751,6 +760,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+    // Test escaping of format
+    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote")) :: Nil)
   }
 
   test("unix_timestamp") {
@@ -818,6 +829,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+    // Test escaping of format
+    GenerateUnsafeProjection.generate(
+      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
   }
 
   test("to_unix_timestamp") {
@@ -893,6 +907,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+    // Test escaping of format
+    GenerateUnsafeProjection.generate(
+      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
   }
 
   test("datediff") {

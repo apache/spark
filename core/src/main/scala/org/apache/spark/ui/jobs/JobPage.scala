@@ -314,6 +314,14 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
             <Strong>Status:</Strong>
             {jobData.status}
           </li>
+          <li>
+            <Strong>Submitted:</Strong>
+            {JobDataUtil.getFormattedSubmissionTime(jobData)}
+          </li>
+          <li>
+            <Strong>Duration:</Strong>
+            {JobDataUtil.getFormattedDuration(jobData)}
+          </li>
           {
             if (sqlExecutionId.isDefined) {
               <li>

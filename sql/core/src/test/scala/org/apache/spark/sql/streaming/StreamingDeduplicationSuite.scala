@@ -280,7 +280,8 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
         { // State should have been cleaned if flag is set, otherwise should not have been cleaned
           if (flag) assertNumStateRows(total = 1, updated = 1)
           else assertNumStateRows(total = 7, updated = 1)
-        }
+        },
+        AssertOnQuery(q => q.lastProgress.sink.numOutputRows == 0L)
       )
     }
 

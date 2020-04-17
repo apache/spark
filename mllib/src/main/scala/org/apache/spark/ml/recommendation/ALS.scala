@@ -1003,7 +1003,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         previousItemFactors.unpersist()
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
-        val deps = itemFactors.dependencies
         if (shouldCheckpoint(iter)) {
           itemFactors.checkpoint() // itemFactors gets materialized in computeFactors
         }
@@ -1011,7 +1010,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, implicitPrefs, alpha, solver)
         if (shouldCheckpoint(iter)) {
-          ALS.cleanShuffleDependencies(sc, deps)
+          itemFactors.cleanShuffleDependencies()
           deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
@@ -1024,10 +1023,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           userLocalIndexEncoder, solver = solver)
         if (shouldCheckpoint(iter)) {
           itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
-          val deps = itemFactors.dependencies
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
-          ALS.cleanShuffleDependencies(sc, deps)
+          itemFactors.cleanShuffleDependencies()
           deletePreviousCheckpointFile()
 
           previousCachedItemFactors.foreach(_.unpersist())
@@ -1815,31 +1813,4 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * satisfies this requirement, we simply use a type alias here.
    */
   private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner
-
-  /**
-   * Private function to clean up all of the shuffles files from the dependencies and their parents.
-   */
-  private[spark] def cleanShuffleDependencies[T](
-      sc: SparkContext,
-      deps: Seq[Dependency[_]],
-      blocking: Boolean = false): Unit = {
-    // If there is no reference tracking we skip clean up.
-    sc.cleaner.foreach { cleaner =>
-      /**
-       * Clean the shuffles & all of its parents.
-       */
-      def cleanEagerly(dep: Dependency[_]): Unit = {
-        if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
-          val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-          cleaner.doCleanupShuffle(shuffleId, blocking)
-        }
-        val rdd = dep.rdd
-        val rddDeps = rdd.dependencies
-        if (rdd.getStorageLevel == StorageLevel.NONE && rddDeps != null) {
-          rddDeps.foreach(cleanEagerly)
-        }
-      }
-      deps.foreach(cleanEagerly)
-    }
-  }
 }

@@ -19,14 +19,17 @@ package org.apache.spark.sql.avro
 
 import java.io.{IOException, OutputStream}
 
+import scala.collection.JavaConverters._
+
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.avro.mapred.AvroKey
-import org.apache.avro.mapreduce.AvroKeyOutputFormat
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 
+import org.apache.spark.SPARK_VERSION_SHORT
+import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 import org.apache.spark.sql.types._
@@ -45,8 +48,9 @@ private[avro] class AvroOutputWriter(
    * Overrides the couple of methods responsible for generating the output streams / files so
    * that the data can be correctly partitioned
    */
-  private val recordWriter: RecordWriter[AvroKey[GenericRecord], NullWritable] =
-    new AvroKeyOutputFormat[GenericRecord]() {
+  private val recordWriter: RecordWriter[AvroKey[GenericRecord], NullWritable] = {
+    val sparkVersion = Map(SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT).asJava
+    new SparkAvroKeyOutputFormat(sparkVersion) {
 
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         new Path(path)
@@ -57,8 +61,8 @@ private[avro] class AvroOutputWriter(
         val path = getDefaultWorkFile(context, ".avro")
         path.getFileSystem(context.getConfiguration).create(path)
       }
-
     }.getRecordWriter(context)
+  }
 
   override def write(row: InternalRow): Unit = {
     val key = new AvroKey(serializer.serialize(row).asInstanceOf[GenericRecord])

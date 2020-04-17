@@ -55,7 +55,7 @@ WORKDIR=
 IMGTAG=latest
 JAVA=
 RELEASE_STEP=
-while getopts "d:hj:ns:t:" opt; do
+while getopts ":d:hj:ns:t:" opt; do
   case $opt in
     d) WORKDIR="$OPTARG" ;;
     n) DRY_RUN=1 ;;
@@ -63,7 +63,7 @@ while getopts "d:hj:ns:t:" opt; do
     j) JAVA="$OPTARG" ;;
     s) RELEASE_STEP="$OPTARG" ;;
     h) usage ;;
-    ?) error "Invalid option. Run with -h for help." ;;
+    \?) error "Invalid option. Run with -h for help." ;;
   esac
 done
 

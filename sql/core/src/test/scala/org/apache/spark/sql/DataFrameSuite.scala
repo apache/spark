@@ -43,6 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.test.SQLTestData.{DecimalData, NullStrings, TestData2}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -2351,6 +2352,11 @@ class DataFrameSuite extends QueryTest
       sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
     }
     assert(e.getMessage.contains("Table or view not found:"))
+  }
+
+  test("CalendarInterval reflection support") {
+    val df = Seq((1, new CalendarInterval(1, 2, 3))).toDF("a", "b")
+    checkAnswer(df.selectExpr("b"), Row(new CalendarInterval(1, 2, 3)))
   }
 }
 
