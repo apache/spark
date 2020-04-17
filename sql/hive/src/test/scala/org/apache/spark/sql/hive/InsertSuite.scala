@@ -769,6 +769,36 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
+  test("SPARK-31459: fix insert overwrite directory target path is an existing file") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      withTempDir { dir =>
+        // val path = dir.toURI.getPath
+        val tempFile = File.createTempFile("targetPath", "", dir)
+        val path = tempFile.toURI.getPath
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+             |STORED AS orc
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+
+        // use orc data source to check the data of path is right.
+        checkAnswer(
+          spark.read.orc(tempFile.getCanonicalPath),
+          sql("select * from test_insert_table"))
+      }
+    }
+  }
+
   test("SPARK-21165: FileFormatWriter should only rely on attributes from analyzed plan") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
       withTable("tab1", "tab2") {
