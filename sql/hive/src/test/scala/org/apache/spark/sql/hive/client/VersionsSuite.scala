@@ -415,14 +415,20 @@ class VersionsSuite extends SparkFunSuite with Logging {
       try {
         client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
           purge = true)
-        client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
-          purge = true)
         assert(!versionsWithoutPurge.contains(version))
       } catch {
         case _: UnsupportedOperationException =>
           assert(versionsWithoutPurge.contains(version))
           client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
             purge = false)
+      }
+      // Drop table with type CatalogTableType.VIEW.
+      try {
+        client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
+          purge = true)
+        assert(!versionsWithoutPurge.contains(version))
+      } catch {
+        case _: UnsupportedOperationException =>
           client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
             purge = false)
       }

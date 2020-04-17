@@ -181,6 +181,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     parFuncs.foreach { funcId =>
       // Examples can change settings. We clone the session to prevent tests clashing.
       val clonedSpark = spark.cloneSession()
+      // Coalescing partitions can change result order, so disable it.
+      clonedSpark.sessionState.conf.setConf(SQLConf.COALESCE_PARTITIONS_ENABLED, false)
       val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
       if (!ignoreSet.contains(className)) {

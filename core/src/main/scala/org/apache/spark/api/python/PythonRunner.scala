@@ -414,22 +414,15 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       )
       val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
       try {
-        var result: String = ""
-        requestMethod match {
+        val messages = requestMethod match {
           case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
             context.asInstanceOf[BarrierTaskContext].barrier()
-            result = BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS
+            Array(BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS)
           case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
-            val messages: Array[String] = context.asInstanceOf[BarrierTaskContext].allGather(
-              message
-            )
-            result = compact(render(JArray(
-              messages.map(
-                (message) => JString(message)
-              ).toList
-            )))
+            context.asInstanceOf[BarrierTaskContext].allGather(message)
         }
-        writeUTF(result, out)
+        out.writeInt(messages.length)
+        messages.foreach(writeUTF(_, out))
       } catch {
         case e: SparkException =>
           writeUTF(e.getMessage, out)

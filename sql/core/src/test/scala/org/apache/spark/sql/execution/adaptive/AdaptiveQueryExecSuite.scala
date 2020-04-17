@@ -25,12 +25,14 @@ import org.apache.log4j.Level
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
@@ -94,14 +96,14 @@ class AdaptiveQueryExecSuite
   }
 
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
-    collectInPlanAndSubqueries(plan) {
+    collectWithSubqueries(plan) {
       case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
       case BroadcastQueryStageExec(_, e: ReusedExchangeExec) => e
     }
   }
 
   private def findReusedSubquery(plan: SparkPlan): Seq[ReusedSubqueryExec] = {
-    collectInPlanAndSubqueries(plan) {
+    collectWithSubqueries(plan) {
       case e: ReusedSubqueryExec => e
     }
   }
@@ -782,6 +784,19 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-31384: avoid NPE in OptimizeSkewedJoin when there's 0 partition plan") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t2") {
+        // create DataFrame with 0 partition
+        spark.createDataFrame(sparkContext.emptyRDD[Row], new StructType().add("b", IntegerType))
+          .createOrReplaceTempView("t2")
+        // should run successfully without NPE
+        runAdaptiveAndVerifyResult("SELECT * FROM testData2 t1 left semi join t2 ON t1.a=t2.b")
+      }
+    }
+  }
+
   test("metrics of the shuffle reader") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
@@ -795,11 +810,9 @@ class AdaptiveQueryExecSuite
       assert(!reader.hasSkewedPartition)
       assert(reader.hasCoalescedPartition)
       assert(reader.metrics.keys.toSeq.sorted == Seq(
-        "avgPartitionDataSize", "maxPartitionDataSize", "minPartitionDataSize", "numPartitions"))
+        "numPartitions", "partitionDataSize"))
       assert(reader.metrics("numPartitions").value == reader.partitionSpecs.length)
-      assert(reader.metrics("avgPartitionDataSize").value > 0)
-      assert(reader.metrics("maxPartitionDataSize").value > 0)
-      assert(reader.metrics("minPartitionDataSize").value > 0)
+      assert(reader.metrics("partitionDataSize").value > 0)
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
         val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
@@ -884,6 +897,15 @@ class AdaptiveQueryExecSuite
         ("formatted", Seq("== Physical Plan ==", "Output", "Arguments"))).foreach {
       case (mode, expected) =>
         checkPlanDescription(mode, expected)
+    }
+  }
+
+  test("SPARK-30953: InsertAdaptiveSparkPlan should apply AQE on child plan of write commands") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      val plan = sql("CREATE TABLE t1 AS SELECT 1 col").queryExecution.executedPlan
+      assert(plan.isInstanceOf[DataWritingCommandExec])
+      assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
     }
   }
 

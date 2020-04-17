@@ -35,6 +35,7 @@ import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
+import org.apache.spark.sql.execution.adaptive.AdaptiveTestUtils.assertExceptionMessage
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -2192,9 +2193,8 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
         .json(testFile(fileName))
         .count()
     }
-    val errMsg = exception.getMessage
 
-    assert(errMsg.contains("Malformed records are detected in record parsing"))
+    assertExceptionMessage(exception, "Malformed records are detected in record parsing")
   }
 
   def checkEncoding(expectedEncoding: String, pathToJsonFiles: String,

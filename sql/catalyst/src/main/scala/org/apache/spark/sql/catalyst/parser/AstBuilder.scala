@@ -2897,6 +2897,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
+  /**
+   * Create a [[ShowViews]] command.
+   */
+  override def visitShowViews(ctx: ShowViewsContext): LogicalPlan = withOrigin(ctx) {
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowViews(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
+      Option(ctx.pattern).map(string))
+  }
+
   override def visitColPosition(ctx: ColPositionContext): ColumnPosition = {
     ctx.position.getType match {
       case SqlBaseParser.FIRST => ColumnPosition.first()

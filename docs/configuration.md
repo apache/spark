@@ -2823,7 +2823,7 @@ Spark subsystems.
 ### GraphX
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.graphx.pregel.checkpointInterval</code></td>
   <td>-1</td>

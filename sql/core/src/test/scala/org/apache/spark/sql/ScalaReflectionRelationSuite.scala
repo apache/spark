@@ -74,8 +74,13 @@ case class ComplexReflectData(
     mapFieldContainsNull: Map[Int, Option[Long]],
     dataField: Data)
 
+case class InvalidInJava(`abstract`: Int)
+
 class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession {
   import testImplicits._
+
+  // To avoid syntax error thrown by genjavadoc, make this case class non-top level and private.
+  private case class InvalidInJava2(`0`: Int)
 
   test("query case class RDD") {
     val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
@@ -141,5 +146,21 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
           Map(10 -> 100L, 20 -> 200L),
           Map(10 -> 100L, 20 -> 200L, 30 -> null),
           Row(null, "abc"))))
+  }
+
+  test("better error message when use java reserved keyword as field name") {
+    val e = intercept[UnsupportedOperationException] {
+      Seq(InvalidInJava(1)).toDS()
+    }
+    assert(e.getMessage.contains(
+      "`abstract` is not a valid identifier of Java and cannot be used as field name"))
+  }
+
+  test("better error message when use invalid java identifier as field name") {
+    val e1 = intercept[UnsupportedOperationException] {
+      Seq(InvalidInJava2(1)).toDS()
+    }
+    assert(e1.getMessage.contains(
+      "`0` is not a valid identifier of Java and cannot be used as field name"))
   }
 }

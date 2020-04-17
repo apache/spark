@@ -332,9 +332,9 @@ object JdbcUtils extends Logging {
   def resultSetToRows(resultSet: ResultSet, schema: StructType): Iterator[Row] = {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
-    val encoder = RowEncoder(schema).resolveAndBind()
+    val fromRow = RowEncoder(schema).resolveAndBind().createDeserializer()
     val internalRows = resultSetToSparkInternalRows(resultSet, schema, inputMetrics)
-    internalRows.map(encoder.fromRow)
+    internalRows.map(fromRow)
   }
 
   private[spark] def resultSetToSparkInternalRows(
