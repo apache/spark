@@ -91,7 +91,10 @@ case class InsertIntoHiveDirCommand(
         (qualifiedPath, dfs)
       }
 
-    if (fs.exists(writeToPath) && fs.isFile(writeToPath)) {
+    // SPARK-31459: If the target path already exists as a file,
+    // the last rename operation will cause only one result file to be moved,
+    // resulting in incorrect results.
+    if (fs.isFile(writeToPath)) {
       if (overwrite) {
         fs.delete(writeToPath, true)
       } else {

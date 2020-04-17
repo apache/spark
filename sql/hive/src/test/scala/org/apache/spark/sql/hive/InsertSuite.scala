@@ -774,27 +774,23 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
 
       withTempDir { dir =>
-        // val path = dir.toURI.getPath
         val tempFile = File.createTempFile("targetPath", "", dir)
         val path = tempFile.toURI.getPath
-        sql(
-          s"""
-             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
-             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-             |SELECT * FROM test_insert_table
-           """.stripMargin)
 
-        sql(
+        val testSql =
           s"""
              |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
              |STORED AS orc
              |SELECT * FROM test_insert_table
-           """.stripMargin)
+          """.stripMargin
+
+        sql(testSql)
 
         // use orc data source to check the data of path is right.
         checkAnswer(
           spark.read.orc(tempFile.getCanonicalPath),
           sql("select * from test_insert_table"))
+        assert(tempFile.isDirectory)
       }
     }
   }
