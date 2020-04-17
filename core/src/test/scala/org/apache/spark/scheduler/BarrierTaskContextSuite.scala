@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.io.File
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark._
