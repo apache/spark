@@ -19,7 +19,6 @@ package test.org.apache.spark.sql;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.sql.Array;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
