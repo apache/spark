@@ -614,21 +614,6 @@ class AnalysisErrorSuite extends AnalysisTest {
         " in Filter" :: Nil)
   }
 
-  test("PredicateSubQuery is used is a nested condition") {
-    val a = AttributeReference("a", IntegerType)()
-    val b = AttributeReference("b", IntegerType)()
-    val c = AttributeReference("c", BooleanType)()
-    val plan1 = Filter(Cast(Not(InSubquery(Seq(a), ListQuery(LocalRelation(b)))), BooleanType),
-      LocalRelation(a))
-    assertAnalysisError(plan1,
-      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
-
-    val plan2 = Filter(
-      Or(Not(InSubquery(Seq(a), ListQuery(LocalRelation(b)))), c), LocalRelation(a, c))
-    assertAnalysisError(plan2,
-      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
-  }
-
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()

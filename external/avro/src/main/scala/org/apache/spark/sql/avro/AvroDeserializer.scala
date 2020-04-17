@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,7 +45,8 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
   private lazy val decimalConversions = new DecimalConversion()
 
   // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
-  private val rebaseDateTime = SQLConf.get.avroRebaseDateTimeEnabled
+  private val rebaseDateTime =
+    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ)
 
   private val converter: Any => Any = rootCatalystType match {
     // A shortcut for empty schema.
@@ -94,7 +96,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
 
       case (INT, DateType) if rebaseDateTime => (updater, ordinal, value) =>
         val days = value.asInstanceOf[Int]
-        val rebasedDays = DateTimeUtils.rebaseJulianToGregorianDays(days)
+        val rebasedDays = rebaseJulianToGregorianDays(days)
         updater.setInt(ordinal, rebasedDays)
 
       case (INT, DateType) => (updater, ordinal, value) =>
@@ -109,7 +111,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
         case null | _: TimestampMillis if rebaseDateTime => (updater, ordinal, value) =>
           val millis = value.asInstanceOf[Long]
           val micros = DateTimeUtils.millisToMicros(millis)
-          val rebasedMicros = DateTimeUtils.rebaseJulianToGregorianMicros(micros)
+          val rebasedMicros = rebaseJulianToGregorianMicros(micros)
           updater.setLong(ordinal, rebasedMicros)
         case null | _: TimestampMillis => (updater, ordinal, value) =>
           val millis = value.asInstanceOf[Long]
@@ -117,7 +119,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
           updater.setLong(ordinal, micros)
         case _: TimestampMicros if rebaseDateTime => (updater, ordinal, value) =>
           val micros = value.asInstanceOf[Long]
-          val rebasedMicros = DateTimeUtils.rebaseJulianToGregorianMicros(micros)
+          val rebasedMicros = rebaseJulianToGregorianMicros(micros)
           updater.setLong(ordinal, rebasedMicros)
         case _: TimestampMicros => (updater, ordinal, value) =>
           val micros = value.asInstanceOf[Long]

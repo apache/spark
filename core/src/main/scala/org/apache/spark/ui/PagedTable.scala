@@ -115,17 +115,18 @@ private[spark] trait PagedTable[T] {
         _dataSource.pageSize
       }
 
-      val pageNavi = pageNavigation(pageToShow, pageSize, totalPages)
+      val pageNaviTop = pageNavigation(pageToShow, pageSize, totalPages, tableId + "-top")
+      val pageNaviBottom = pageNavigation(pageToShow, pageSize, totalPages, tableId + "-bottom")
 
       <div>
-        {pageNavi}
+        {pageNaviTop}
         <table class={tableCssClass} id={tableId}>
           {headers}
           <tbody>
             {data.map(row)}
           </tbody>
         </table>
-        {pageNavi}
+        {pageNaviBottom}
       </div>
     } catch {
       case e: IndexOutOfBoundsException =>
@@ -171,7 +172,11 @@ private[spark] trait PagedTable[T] {
    * > means jumping to the next page.
    * }}}
    */
-  private[ui] def pageNavigation(page: Int, pageSize: Int, totalPages: Int): Seq[Node] = {
+  private[ui] def pageNavigation(
+      page: Int,
+      pageSize: Int,
+      totalPages: Int,
+      navigationId: String = tableId): Seq[Node] = {
     // A group includes all page numbers will be shown in the page navigation.
     // The size of group is 10 means there are 10 page numbers will be shown.
     // The first group is 1 to 10, the second is 2 to 20, and so on
@@ -214,7 +219,7 @@ private[spark] trait PagedTable[T] {
 
     <div>
       <div>
-        <form id={s"form-$tableId-page"}
+        <form id={s"form-$navigationId-page"}
               method="get"
               action={Unparsed(goButtonFormPath)}
               class="form-inline float-right justify-content-end"
@@ -223,13 +228,13 @@ private[spark] trait PagedTable[T] {
           <label>{totalPages} Pages. Jump to</label>
           <input type="text"
                  name={pageNumberFormField}
-                 id={s"form-$tableId-page-no"}
+                 id={s"form-$navigationId-page-no"}
                  value={page.toString}
                  class="col-1 form-control" />
 
           <label>. Show </label>
           <input type="text"
-                 id={s"form-$tableId-page-size"}
+                 id={s"form-$navigationId-page-size"}
                  name={pageSizeFormField}
                  value={pageSize.toString}
                  class="col-1 form-control" />

@@ -78,7 +78,7 @@ object KinesisWordCountASL extends Logging {
     if (args.length != 3) {
       System.err.println(
         """
-          |Usage: KinesisWordCountASL <app-name> <stream-name> <endpoint-url> <region-name>
+          |Usage: KinesisWordCountASL <app-name> <stream-name> <endpoint-url>
           |
           |    <app-name> is the name of the consumer app, used to track the read data in DynamoDB
           |    <stream-name> is the name of the Kinesis stream
@@ -171,11 +171,11 @@ object KinesisWordCountASL extends Logging {
  *   <endpoint-url> is the endpoint of the Kinesis service
  *     (ie. https://kinesis.us-east-1.amazonaws.com)
  *   <records-per-sec> is the rate of records per second to put onto the stream
- *   <words-per-record> is the rate of records per second to put onto the stream
+ *   <words-per-record> is the number of words per record
  *
  * Example:
  *    $ SPARK_HOME/bin/run-example streaming.KinesisWordProducerASL mySparkStream \
- *         https://kinesis.us-east-1.amazonaws.com us-east-1 10 5
+ *         https://kinesis.us-east-1.amazonaws.com 10 5
  */
 object KinesisWordProducerASL {
   def main(args: Array[String]): Unit = {
@@ -183,13 +183,13 @@ object KinesisWordProducerASL {
       System.err.println(
         """
           |Usage: KinesisWordProducerASL <stream-name> <endpoint-url> <records-per-sec>
-                                         <words-per-record>
+          |                              <words-per-record>
           |
           |    <stream-name> is the name of the Kinesis stream
           |    <endpoint-url> is the endpoint of the Kinesis service
           |                   (e.g. https://kinesis.us-east-1.amazonaws.com)
           |    <records-per-sec> is the rate of records per second to put onto the stream
-          |    <words-per-record> is the rate of records per second to put onto the stream
+          |    <words-per-record> is the number of words per record
           |
         """.stripMargin)
 

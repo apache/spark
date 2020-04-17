@@ -17,10 +17,124 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
+  import MathFunctionsTestData.DoubleData
+  import testImplicits._
+
+  private lazy val doubleData = (1 to 10).map(i => DoubleData(i * 0.2 - 1, i * -0.2 + 1)).toDF()
+
+  private def testOneToOneMathFunction[
+    @specialized(Int, Long, Float, Double) T,
+    @specialized(Int, Long, Float, Double) U](
+        c: Column => Column,
+        f: T => U): Unit = {
+    checkAnswer(
+      doubleData.select(c('a)),
+      (1 to 10).map(n => Row(f((n * 0.2 - 1).asInstanceOf[T])))
+    )
+
+    checkAnswer(
+      doubleData.select(c('b)),
+      (1 to 10).map(n => Row(f((-n * 0.2 + 1).asInstanceOf[T])))
+    )
+
+    checkAnswer(
+      doubleData.select(c(lit(null))),
+      (1 to 10).map(_ => Row(null))
+    )
+  }
+
+  test("functions.toDegrees") {
+    testOneToOneMathFunction(toDegrees, math.toDegrees)
+    withView("t") {
+      val df = Seq(0, 1, 1.5).toDF("a")
+      df.createOrReplaceTempView("t")
+
+      checkAnswer(
+        sql("SELECT degrees(0), degrees(1), degrees(1.5)"),
+        Seq(0).toDF().select(toDegrees(lit(0)), toDegrees(lit(1)), toDegrees(lit(1.5)))
+      )
+      checkAnswer(
+        sql("SELECT degrees(a) FROM t"),
+        df.select(toDegrees("a"))
+      )
+    }
+  }
+
+  test("functions.toRadians") {
+    testOneToOneMathFunction(toRadians, math.toRadians)
+    withView("t") {
+      val df = Seq(0, 1, 1.5).toDF("a")
+      df.createOrReplaceTempView("t")
+
+      checkAnswer(
+        sql("SELECT radians(0), radians(1), radians(1.5)"),
+        Seq(0).toDF().select(toRadians(lit(0)), toRadians(lit(1)), toRadians(lit(1.5)))
+      )
+      checkAnswer(
+        sql("SELECT radians(a) FROM t"),
+        df.select(toRadians("a"))
+      )
+    }
+  }
+
+  test("functions.approxCountDistinct") {
+    withView("t") {
+      val df = Seq(0, 1, 2).toDF("a")
+      df.createOrReplaceTempView("t")
+      checkAnswer(
+        sql("SELECT approx_count_distinct(a) FROM t"),
+        df.select(approxCountDistinct("a")))
+    }
+  }
+
+  test("functions.monotonicallyIncreasingId") {
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
+    checkAnswer(
+      df.select(monotonicallyIncreasingId(), expr("monotonically_increasing_id()")),
+      Row(0L, 0L) ::
+        Row(1L, 1L) ::
+        Row((1L << 33) + 0L, (1L << 33) + 0L) ::
+        Row((1L << 33) + 1L, (1L << 33) + 1L) :: Nil
+    )
+  }
+
+  test("Column.!==") {
+    val nullData = Seq(
+      (Some(1), Some(1)), (Some(1), Some(2)), (Some(1), None), (None, None)).toDF("a", "b")
+    checkAnswer(
+      nullData.filter($"b" !== 1),
+      Row(1, 2) :: Nil)
+
+    checkAnswer(nullData.filter($"b" !== null), Nil)
+
+    checkAnswer(
+      nullData.filter($"a" !== $"b"),
+      Row(1, 2) :: Nil)
+  }
+
+  test("Dataset.registerTempTable") {
+    withTempView("t") {
+      Seq(1).toDF().registerTempTable("t")
+      assert(spark.catalog.tableExists("t"))
+    }
+  }
+
+  test("SQLContext.setActive/clearActive") {
+    val sc = spark.sparkContext
+    val sqlContext = new SQLContext(sc)
+    SQLContext.setActive(sqlContext)
+    assert(SparkSession.getActiveSession === Some(spark))
+    SQLContext.clearActive()
+    assert(SparkSession.getActiveSession === None)
+  }
 
   test("SQLContext.applySchema") {
     val rowRdd = sparkContext.parallelize(Seq(Row("Jack", 20), Row("Marry", 18)))

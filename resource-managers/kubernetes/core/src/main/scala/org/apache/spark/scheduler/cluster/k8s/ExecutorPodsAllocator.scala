@@ -94,7 +94,7 @@ private[spark] class ExecutorPodsAllocator(
 
   private def onNewSnapshots(
       applicationId: String,
-      snapshots: Seq[ExecutorPodsSnapshot]): Unit = synchronized {
+      snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
     newlyCreatedExecutors --= snapshots.flatMap(_.executorPods.keys)
     // For all executors we've created against the API but have not seen in a snapshot
     // yet - check the current time. If the current time has exceeded some threshold,

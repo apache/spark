@@ -884,7 +884,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
     Seq(false, true).foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "true") {
           checkAnswer(
             readResourceParquetFile("test-data/before_1582_date_v2_4.snappy.parquet"),
             Row(java.sql.Date.valueOf("1001-01-01")))
@@ -912,15 +912,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
           withTempPath { dir =>
             val path = dir.getAbsolutePath
-            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> "true") {
               Seq(tsStr).toDF("tsS")
                 .select($"tsS".cast("timestamp").as("ts"))
                 .write
                 .parquet(path)
-
+            }
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "true") {
               checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(tsStr)))
             }
-            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "false") {
               checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(nonRebased)))
             }
           }
@@ -932,15 +933,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("SPARK-31159: rebasing dates in write") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "true") {
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> "true") {
         Seq("1001-01-01").toDF("dateS")
           .select($"dateS".cast("date").as("date"))
           .write
           .parquet(path)
-
+      }
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "true") {
         checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-01")))
       }
-      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME.key -> "false") {
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "false") {
         checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-07")))
       }
     }

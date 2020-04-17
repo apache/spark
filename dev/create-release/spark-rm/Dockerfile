@@ -20,9 +20,9 @@
 # Includes:
 # * Java 8
 # * Ivy
-# * Python 3.7
-# * Ruby 2.7
+# * Python (2.7.15/3.6.7)
 # * R-base/R-base-dev (3.6.1)
+# * Ruby 2.3 build utilities
 
 FROM ubuntu:18.04
 
@@ -38,6 +38,10 @@ ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 
 # Install extra needed repos and refresh.
 # - CRAN repo
+# - Ruby repo (for doc generation)
+#
+# This is all in a single "RUN" command so that if anything changes, "apt update" is run to fetch
+# the most current package versions (instead of potentially using old versions cached by docker).
 RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/' >> /etc/apt/sources.list && \
   gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
@@ -46,43 +50,33 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   rm -rf /var/lib/apt/lists/* && \
   apt-get clean && \
   apt-get update && \
+  $APT_INSTALL software-properties-common && \
+  apt-add-repository -y ppa:brightbox/ruby-ng && \
+  apt-get update && \
   # Install openjdk 8.
   $APT_INSTALL openjdk-8-jdk && \
   update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java && \
   # Install build / source control tools
   $APT_INSTALL curl wget git maven ivy subversion make gcc lsof libffi-dev \
-    pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev
-
-ENV PATH "$PATH:/root/.pyenv/bin:/root/.pyenv/shims"
-RUN curl -L https://github.com/pyenv/pyenv-installer/raw/dd3f7d0914c5b4a416ca71ffabdf2954f2021596/bin/pyenv-installer | bash
-RUN $APT_INSTALL libbz2-dev libreadline-dev libsqlite3-dev
-RUN pyenv install 3.7.6
-RUN pyenv global 3.7.6
-RUN python --version
-RUN pip install --upgrade pip
-RUN pip --version
-RUN pip install $PIP_PKGS
-
-ENV PATH "$PATH:/root/.rbenv/bin:/root/.rbenv/shims"
-RUN curl -fsSL https://github.com/rbenv/rbenv-installer/raw/108c12307621a0aa06f19799641848dde1987deb/bin/rbenv-installer | bash
-RUN rbenv install 2.7.0
-RUN rbenv global 2.7.0
-RUN ruby --version
-RUN $APT_INSTALL g++
-RUN gem --version
-RUN gem install --no-document $GEM_PKGS
-
-RUN \
+    pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev && \
   curl -sL https://deb.nodesource.com/setup_11.x | bash && \
-  $APT_INSTALL nodejs
-
-# Install R packages and dependencies used when building.
-# R depends on pandoc*, libssl (which are installed above).
-RUN \
+  $APT_INSTALL nodejs && \
+  # Install needed python packages. Use pip for installing packages (for consistency).
+  $APT_INSTALL libpython3-dev python3-pip python3-setuptools && \
+  # Change default python version to python3.
+  update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
+  update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \
+  update-alternatives --set python /usr/bin/python3.6 && \
+  pip3 install $PIP_PKGS && \
+  # Install R packages and dependencies used when building.
+  # R depends on pandoc*, libssl (which are installed above).
   $APT_INSTALL r-base r-base-dev && \
   $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf && \
   Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
-  Rscript -e "devtools::install_github('jimhester/lintr')"
+  Rscript -e "devtools::install_github('jimhester/lintr')" && \
+  # Install tools needed to build the documentation.
+  $APT_INSTALL ruby2.5 ruby2.5-dev && \
+  gem install --no-document $GEM_PKGS
 
 WORKDIR /opt/spark-rm/output
 

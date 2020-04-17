@@ -451,9 +451,9 @@ abstract class StreamExecution(
       val stackTraceException = new SparkException("The stream thread was last executing:")
       stackTraceException.setStackTrace(queryExecutionThread.getStackTrace)
       val timeoutException = new TimeoutException(
-        s"Stream Execution thread failed to stop within $timeout milliseconds (specified by " +
-        s"${SQLConf.STREAMING_STOP_TIMEOUT.key}). See the cause on what was " +
-        "being executed in the streaming query thread.")
+        s"Stream Execution thread for stream $prettyIdString failed to stop within $timeout " +
+        s"milliseconds (specified by ${SQLConf.STREAMING_STOP_TIMEOUT.key}). See the cause on " +
+        s"what was being executed in the streaming query thread.")
       timeoutException.initCause(stackTraceException)
       throw timeoutException
     }

@@ -18,37 +18,42 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
+### Description
+
 Spark supports a `SELECT` statement and conforms to the ANSI SQL standard. Queries are
 used to retrieve result sets from one or more tables. The following section
 describes the overall query syntax and the sub-sections cover different constructs
 of a query along with examples.
 
 ### Syntax
+
 {% highlight sql %}
 [ WITH with_query [ , ... ] ]
 select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_statement, ... ]
-[ ORDER BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
-[ SORT BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
-[ CLUSTER BY { expression [ , ...] } ]
-[ DISTRIBUTE BY { expression [, ...] } ]
-[ WINDOW { named_window [ , WINDOW named_window, ... ] } ]
-[ LIMIT { ALL | expression } ]
+    [ ORDER BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
+    [ SORT BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
+    [ CLUSTER BY { expression [ , ...] } ]
+    [ DISTRIBUTE BY { expression [, ...] } ]
+    [ WINDOW { named_window [ , WINDOW named_window, ... ] } ]
+    [ LIMIT { ALL | expression } ]
 {% endhighlight %}
 
 While `select_statement` is defined as
 {% highlight sql %}
 SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
-  FROM { from_item [ , ...] }
-  [ WHERE boolean_expression ]
-  [ GROUP BY expression [ , ...] ]
-  [ HAVING boolean_expression ]
+    FROM { from_item [ , ...] }
+    [ WHERE boolean_expression ]
+    [ GROUP BY expression [ , ...] ]
+    [ HAVING boolean_expression ]
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>with_query</em></code></dt>
   <dd>
-    Specifies the common table expressions (CTEs) before the main query block.
+    Specifies the <a href="sql-ref-syntax-qry-select-cte.html">common table expressions (CTEs)</a> before the main query block.
     These table expressions are allowed to be referenced later in the FROM clause. This is useful to abstract
     out repeated subquery blocks in the FROM clause and improves readability of the query.
   </dd>
@@ -78,9 +83,9 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
     Specifies a source of input for the query. It can be one of the following:
     <ol>
       <li>Table relation</li>
-      <li>Join relation</li>
-      <li>Table valued function</li>
-      <li>Inlined table</li>
+      <li><a href="sql-ref-syntax-qry-select-join.html">Join relation</a></li>
+      <li><a href="sql-ref-syntax-qry-select-tvf.html">Table-value function</a></li>
+      <li><a href="sql-ref-syntax-qry-select-inline-table.html">Inline table</a></li>
       <li>Subquery</li>
     </ol>
   </dd>
@@ -92,6 +97,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
   <dd>
     Specifies the expressions that are used to group the rows. This is used in conjunction with aggregate functions
     (MIN, MAX, COUNT, SUM, AVG, etc.) to group rows based on the grouping expressions and aggregate values in each group.
+    When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
   </dd>
   <dt><code><em>HAVING</em></code></dt>
   <dd>
@@ -140,12 +146,17 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
   </dd>
 </dl>
 
-### Related Clauses
-- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
-- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
-- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
-- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
-- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
-- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
-- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
-- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+### Related Statements
+
+ * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+ * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+ * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+ * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+ * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+ * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+ * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+ * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+ * [TABLESAMPLE](sql-ref-syntax-qry-sampling.html)
+ * [JOIN](sql-ref-syntax-qry-select-join.html)
+ * [SET Operators](sql-ref-syntax-qry-select-setops.html)
+ * [Common Table Expression](sql-ref-syntax-qry-select-cte.html)
