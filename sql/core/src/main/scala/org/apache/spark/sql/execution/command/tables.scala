@@ -314,8 +314,8 @@ case class LoadDataCommand(
       throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
     }
 
-    if (targetTable.provider.isDefined && (!DDLUtils.isHiveTable(targetTable) ||
-      HiveSerDe.sourceToSerDe(targetTable.provider.get).isEmpty)) {
+    if (targetTable.provider.isDefined && !DDLUtils.isHiveTable(targetTable) &&
+      HiveSerDe.sourceToSerDe(targetTable.provider.get).isEmpty) {
       throw new AnalysisException(s"LOAD DATA is not supported for '${targetTable.provider.get}'" +
         s" datasource table: $tableIdentwithDB")
     }

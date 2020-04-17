@@ -2495,11 +2495,13 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("load data command support for builtin datasource tables") {
-    withTable("t1", "t2", "t3", "t4") {
+    withTable("t1", "t2", "t3", "t4", "t5", "t6") {
       sql("CREATE TABLE t1 (a int, b int) using parquet")
       sql("CREATE TABLE t2 (a int, b int) using parquet")
       sql("CREATE TABLE t3 (a int, b int) using orc")
       sql("CREATE TABLE t4 (a int, b int) using csv")
+      sql("CREATE TABLE t5 (a int, b int) using PARQUET")
+      sql("CREATE TABLE t6 (a int, b int) using hive")
       sql("INSERT INTO t1 values(1, 2)")
       val path = sql("DESC EXTENDED t1").where("col_name='Location'").head().getString(1)
       sql(s"LOAD DATA LOCAL INPATH '$path' into table t2")
@@ -2510,6 +2512,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assert(e1.getCause.getMessage.contains("Malformed ORC file"))
       val e2 = intercept[AnalysisException](sql(s"LOAD DATA LOCAL INPATH '$path' into table t4"))
       assert(e2.getMessage.contains("LOAD DATA is not supported for 'csv'"))
+      sql(s"LOAD DATA LOCAL INPATH '$path' into table t5")
+      checkAnswer(sql("SELECT * FROM t1"), sql("SELECT * FROM t5"))
+      sql(s"LOAD DATA LOCAL INPATH '$path' into table t6")
+      checkAnswer(sql("SELECT * FROM t6"), Row(null, null))
     }
 
     withTable("t1", "t2", "t3") {
