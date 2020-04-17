@@ -28,14 +28,13 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
  * The class provides API for applying pushed down filters to partially or
  * fully set internal rows that have the struct schema.
  *
- * @param filters The pushed down source filters. The filters should refer to
- *                the fields of the provided schema.
+ * @param pushedFilters The pushed down source filters. The filters should refer to
+ *                      the fields of the provided schema.
  * @param schema The required schema of records from datasource files.
  */
-abstract class StructFilters(filters: Seq[sources.Filter], schema: StructType) {
+abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructType) {
 
-  assert(filters.forall(checkFilterRefs(_, schema.fieldNames.toSet)),
-    "A pushed down filter refers to a non-existing schema field.")
+  protected val filters = pushedFilters.filter(checkFilterRefs(_, schema.fieldNames.toSet))
 
   /**
    * Applies pushed down source filters to the given row assuming that

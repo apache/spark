@@ -303,20 +303,6 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       requiredSchema = StructType.fromDDL("i INTEGER, d DOUBLE"),
       filters = Seq(EqualTo("d", 3.14)),
       expected = Some(InternalRow(1, 3.14)))
-
-    val errMsg = intercept[AssertionError] {
-      check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
-    }.getMessage
-    assert(errMsg.contains("A pushed down filter refers to a non-existing schema field"))
-
-    val errMsg2 = intercept[AssertionError] {
-      check(
-        dataSchema = new StructType(),
-        requiredSchema = new StructType(),
-        filters = Seq(EqualTo("i", 1)),
-        expected = Some(InternalRow.empty))
-    }.getMessage
-    assert(errMsg2.contains("A pushed down filter refers to a non-existing schema field"))
   }
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {

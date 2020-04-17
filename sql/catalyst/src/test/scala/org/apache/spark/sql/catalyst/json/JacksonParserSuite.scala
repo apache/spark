@@ -53,18 +53,5 @@ class JacksonParserSuite extends SparkFunSuite {
       schema = StructType.fromDDL("i INTEGER, d DOUBLE"),
       filters = Seq(EqualTo("d", 3.14)),
       expected = Seq(InternalRow(1, 3.14)))
-
-    val errMsg = intercept[AssertionError] {
-      check(filters = Seq(EqualTo("invalid attr", 1)), expected = Seq.empty)
-    }.getMessage
-    assert(errMsg.contains("A pushed down filter refers to a non-existing schema field"))
-
-    val errMsg2 = intercept[AssertionError] {
-      check(
-        schema = new StructType(),
-        filters = Seq(EqualTo("i", 1)),
-        expected = Seq(InternalRow.empty))
-    }.getMessage
-    assert(errMsg2.contains("A pushed down filter refers to a non-existing schema field"))
   }
 }

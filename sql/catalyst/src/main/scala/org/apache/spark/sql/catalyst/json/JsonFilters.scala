@@ -30,12 +30,12 @@ import org.apache.spark.sql.types.StructType
  *   2. skipRow() can be called for any valid index of the struct fields,
  *      and in any order.
  *
- * @param filters The pushed down source filters. The filters should refer to
- *                the fields of the provided schema.
+ * @param pushedFilters The pushed down source filters. The filters should refer to
+ *                      the fields of the provided schema.
  * @param schema The required schema of records from datasource files.
  */
-class JsonFilters(filters: Seq[sources.Filter], schema: StructType)
-  extends StructFilters(filters, schema) {
+class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
+  extends StructFilters(pushedFilters, schema) {
 
   /**
    * Stateful JSON predicate that keeps track of its dependent references in the
