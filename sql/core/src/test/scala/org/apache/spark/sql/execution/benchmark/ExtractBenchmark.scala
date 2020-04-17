@@ -92,11 +92,7 @@ object ExtractBenchmark extends SqlBasedBenchmark {
       "DAY", "DAYOFWEEK", "DOW", "ISODOW",
       "DOY", "HOUR", "MINUTE", "SECOND",
       "MILLISECONDS", "MICROSECONDS", "EPOCH")
-    val intervalFields = Seq(
-      "MILLENNIUM", "CENTURY", "DECADE", "YEAR",
-      "QUARTER", "MONTH", "DAY",
-      "HOUR", "MINUTE", "SECOND",
-      "MILLISECONDS", "MICROSECONDS", "EPOCH")
+    val intervalFields = Seq("YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND")
     val settings = Map(
       "timestamp" -> datetimeFields,
       "date" -> datetimeFields,
