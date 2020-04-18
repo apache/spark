@@ -35,26 +35,33 @@ A string literal is used to specify a character string value.
 #### <em>Syntax</em>
 
 {% highlight sql %}
-'c [ ... ]' | "c [ ... ]"
+'...' | "..."
 {% endhighlight %}
-c: one character of the user's character set.
+...: indicates any string.
 
 #### <em>Examples</em>
 
 {% highlight sql %}
 SELECT 'Hello, World!' AS col;
   +-------------+
-  |col          |
+  |          col|
   +-------------+
   |Hello, World!|
   +-------------+
 
 SELECT "SPARK SQL" AS col;
   +---------+
-  |col      |
+  |      col|
   +---------+
   |Spark SQL|
   +---------+
+
+SELECT SELECT 'it\'s $10.' AS col;
+  +---------+
+  |      col|
+  +---------+
+  |It's $10.|
+  +----------+
 {% endhighlight %}
 
 ### Null Literal
@@ -72,7 +79,7 @@ NULL
 {% highlight sql %}
 SELECT NULL AS col;
   +----+
-  |col |
+  | col|
   +----+
   |NULL|
   +----+
@@ -93,7 +100,7 @@ TRUE | FALSE
 {% highlight sql %}
 SELECT TRUE AS col;
   +----+
-  |col |
+  | col|
   +----+
   |true|
   +----+
@@ -120,14 +127,14 @@ Y: case insensitive, indicates <code>TINYINT</code>, which is a 1-byte signed in
 {% highlight sql %}
 SELECT -2147483648 AS col;
   +-----------+
-  |col        |
+  |        col|
   +-----------+
   |-2147483648|
   +-----------+
 
 SELECT 9223372036854775807l AS col;
   +-------------------+
-  |col                |
+  |                col|
   +-------------------+
   |9223372036854775807|
   +-------------------+
@@ -160,21 +167,21 @@ SELECT 482S AS col;
 {% highlight sql %}
 SELECT 12.578 AS col;
   +------+
-  |col   |
+  |   col|
   +------+
   |12.578|
   +------+
 
 SELECT -0.1234567 AS col;
   +----------+
-  |col       |
+  |       col|
   +----------+
   |-0.1234567|
   +----------+
 
 SELECT -.1234567 AS col;
   +----------+
-  |col       |
+  |       col|
   +----------+
   |-0.1234567|
   +----------+
@@ -198,7 +205,7 @@ BD: case insensitive, indicates <code>BIGDECIMAL</code>, which is an arbitrary-p
 {% highlight sql %}
 SELECT 5E2 AS col;
   +-----+
-  |col  |
+  |  col|
   +-----+
   |500.0|
   +-----+
@@ -219,28 +226,28 @@ SELECT -5BD AS col;
 
 SELECT 12.578e-2d AS col;
   +-------+
-  |col    |
+  |    col|
   +-------+
   |0.12578|
   +-------+
 
 SELECT -.1234567E+2BD AS col;
   +---------+
-  |col      |
+  |      col|
   +---------+
   |-12.34567|
   +---------+
 
 SELECT +3.e+3 AS col;
   +------+
-  |col   |
+  |   col|
   +------+
   |3000.0|
   +------+
 
 SELECT -3.E-3D AS col;
   +------+
-  |col   |
+  |   col|
   +------+
   |-0.003|
   +------+
@@ -263,21 +270,21 @@ DATE 'yyyy [ -MM-dd ]'
 {% highlight sql %}
 SELECT DATE '1997' AS col;
   +----------+
-  |col       |
+  |       col|
   +----------+
   |1997-01-01|
   +----------+
 
 SELECT TIMESTAMP '1997-01' AS col;
   +----------+
-  |col       |
+  |       col|
   +----------+
   |1997-01-01|
   +----------+
 
 SELECT DATE '2011-11-11' AS col;
   +----------+
-  |col       |
+  |       col|
   +----------+
   |2011-11-11|
   +----------+
@@ -296,28 +303,28 @@ TIMESTAMP { 'yyyy [ -MM-dd HH:mm:ss.SSSSSSzzz ]' | '[ yyyy-MM-dd ] HH:mm [ :ss.S
 {% highlight sql %}
 SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;
   +-----------------------+
-  |col                    |
+  |                    col|
   +-----------------------+
   |1997-01-31 09:26:56.123|
   +-----------------------+
 
 SELECT TIMESTAMP '1997-01-31 09:26:56.66666666CST' AS col;
   +--------------------------+
-  |col                       |
+  |                      col |
   +--------------------------+
   |1997-01-31 07:26:56.666666|
   +--------------------------+
 
 SELECT TIMESTAMP '1997-01' AS col;
   +-------------------+
-  |col                |
+  |                col|
   +-------------------+
   |1997-01-01 00:00:00|
   +-------------------+
 
 SELECT TIMESTAMP '09:26' AS col;
   +-------------------+
-  |col                |
+  |                col|
   +-------------------+
   |2020-04-17 09:26:00|
   +-------------------+
@@ -364,14 +371,14 @@ SELECT INTERVAL -2 HOUR 3 MINUTE AS col;
 SELECT INTERVAL 1 YEAR 2 MONTH 3 WEEK 4 DAY 5 HOUR 6 MINUTE 7 SECOND 8
     MILLISECOND 9 MICROSECOND AS col;
   +-----------------------------------------------------------+
-  |col                                                        |
+  |                                                        col|
   +-----------------------------------------------------------+
   |1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds|
   +-----------------------------------------------------------+
 
 SELECT INTERVAL '20 15:40:32.99899999' DAY TO SECOND AS col;
   +---------------------------------------------+
-  |col                                          |
+  |                                          col|
   +---------------------------------------------+
   |20 days 15 hours 40 minutes 32.998999 seconds|
   +---------------------------------------------+
