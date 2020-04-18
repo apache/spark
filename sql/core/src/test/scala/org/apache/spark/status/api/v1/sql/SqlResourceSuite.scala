@@ -76,6 +76,21 @@ object SqlResourceSuite {
 
   private def getExpectedMetricDetails(): Seq[MetricDetails] = {
     val metricDetails =
+      MetricDetails(1, WHOLE_STAGE_CODEGEN_1, wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, "0 ms")))
+    val metricDetails2 = MetricDetails(2, FILTER,
+      wholeStageCodegenId = Some(1), metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
+    val metricDetails3 = MetricDetails(3, SCAN_TEXT, wholeStageCodegenId = Some(1),
+      metrics = Seq(Metric(METADATA_TIME, "2 ms"),
+        Metric(NUMBER_OF_FILES_READ, "1"),
+        Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
+        Metric(SIZE_OF_FILES_READ, "330.0 B")))
+
+    // reverse order because of supporting execution order by aligning with Spark-UI
+    Seq(metricDetails3, metricDetails2, metricDetails)
+  }
+
+  private def getExpectedMetricDetailsWhenWholeStageCodegenIsOff(): Seq[MetricDetails] = {
+    val metricDetails =
       MetricDetails(1, WHOLE_STAGE_CODEGEN_1, metrics = Seq(Metric(DURATION, "0 ms")))
     val metricDetails2 = MetricDetails(2, FILTER, metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
     val metricDetails3 = MetricDetails(3, SCAN_TEXT,
@@ -114,16 +129,17 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   val sqlResource = new SqlResource()
   val sqlExecutionUIData = getSQLExecutionUIData()
   val prepareExecutionData = PrivateMethod[ExecutionData]('prepareExecutionData)
+  val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map(2L -> Some(1L), 3L -> Some(1L))
 
   test("Prepare ExecutionData when details = false and planDescription = false") {
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, false, false)
+      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, nodeIdAndWSCGIdMap, false, false)
     verifyExpectedExecutionData(executionData, metricDetails = Seq.empty, planDescription = "")
   }
 
   test("Prepare ExecutionData when details = true and planDescription = false") {
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, true, false)
+      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, nodeIdAndWSCGIdMap, true, false)
     verifyExpectedExecutionData(
       executionData,
       metricDetails = getExpectedMetricDetails(),
@@ -132,11 +148,27 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Prepare ExecutionData when details = true and planDescription = true") {
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, true, true)
+      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, nodeIdAndWSCGIdMap, true, true)
     verifyExpectedExecutionData(
       executionData,
       metricDetails = getExpectedMetricDetails(),
       planDescription = PLAN_DESCRIPTION)
+  }
+
+  test("Prepare ExecutionData when details = true and planDescription = false and WholeStageCodegen = off") {
+    val executionData =
+      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, Map.empty, true, false)
+    verifyExpectedExecutionData(
+      executionData,
+      metricDetails = getExpectedMetricDetailsWhenWholeStageCodegenIsOff(),
+      planDescription = "")
+  }
+
+  test("Parse wholeStageCodegenId from nodeName") {
+    val getWholeStageCodegenId = PrivateMethod[Option[Long]]('getWholeStageCodegenId)
+    val wholeStageCodegenId =
+      sqlResource invokePrivate getWholeStageCodegenId(WHOLE_STAGE_CODEGEN_1)
+    assert(wholeStageCodegenId == Some(1))
   }
 
 }

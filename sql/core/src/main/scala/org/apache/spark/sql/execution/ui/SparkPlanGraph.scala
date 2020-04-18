@@ -195,7 +195,7 @@ private[ui] class SparkPlanGraphNode(
 /**
  * Represent a tree of SparkPlan for WholeStageCodegen.
  */
-private[ui] class SparkPlanGraphCluster(
+class SparkPlanGraphCluster(
     id: Long,
     name: String,
     desc: String,

@@ -21,12 +21,16 @@ import java.util.Date
 import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
+import scala.util.{Failure, Success, Try}
+
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.sql.execution.ui.{SQLAppStatusStore, SQLExecutionUIData, SQLPlanMetric}
+import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SQLAppStatusStore, SQLExecutionUIData, SQLPlanMetric}
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class SqlResource extends BaseAppResource {
+
+  val WHOLE_STAGE_CODEGEN = "WholeStageCodegen"
 
   @GET
   def sqlList(
@@ -50,16 +54,19 @@ private[v1] class SqlResource extends BaseAppResource {
       planDescription: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
+      val graph = sqlStore.planGraph(execId)
+      val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = getNodeIdAndWSCGIdMap(graph)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData(_, details, planDescription))
+        .map(prepareExecutionData(_, nodeIdAndWSCGIdMap, details, planDescription))
         .getOrElse(throw new NotFoundException("unknown execution id: " + execId))
     }
   }
 
   private def printableMetrics(
       sqlPlanMetrics: Seq[SQLPlanMetric],
-      metricValues: Map[Long, String]): Seq[MetricDetails] = {
+      metricValues: Map[Long, String],
+      nodeIdAndWSCGIdMap: Map[Long, Option[Long]]): Seq[MetricDetails] = {
 
     def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
                   metricName: String): Option[Metric] = {
@@ -78,12 +85,15 @@ private[v1] class SqlResource extends BaseAppResource {
 
     val metricDetails = metrics.map {
       case ((nodeId: Long, nodeName: String), metrics: Seq[Metric]) =>
-        MetricDetails(nodeId = nodeId, nodeName = nodeName.trim, metrics = metrics) }.toSeq
+        val wholeStageCodegenId = nodeIdAndWSCGIdMap.get(nodeId).flatten
+        MetricDetails(nodeId = nodeId, nodeName = nodeName.trim, wholeStageCodegenId, metrics)
+    }.toSeq
 
     metricDetails.sortBy(_.nodeId).reverse
   }
 
   private def prepareExecutionData(exec: SQLExecutionUIData,
+                                   nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map.empty,
                                    details: Boolean,
                                    planDescription: Boolean): ExecutionData = {
     var running = Seq[Int]()
@@ -111,7 +121,7 @@ private[v1] class SqlResource extends BaseAppResource {
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val planDetails = if (details && planDescription) exec.physicalPlanDescription else ""
     val metrics =
-      if (details) printableMetrics(exec.metrics, exec.metricValues)
+      if (details) printableMetrics(exec.metrics, exec.metricValues, nodeIdAndWSCGIdMap)
       else Seq.empty
     new ExecutionData(
       exec.executionId,
@@ -125,4 +135,24 @@ private[v1] class SqlResource extends BaseAppResource {
       failed,
       metrics)
   }
+
+  private def getNodeIdAndWSCGIdMap(graph: SparkPlanGraph): Map[Long, Option[Long]] = {
+    val wscgNodes = graph.allNodes.filter(_.name.trim.startsWith(WHOLE_STAGE_CODEGEN))
+    val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = wscgNodes.flatMap { _ match {
+      case x: SparkPlanGraphCluster => x.nodes.map(_.id -> getWholeStageCodegenId(x.name.trim))
+      case _ => Seq.empty
+    }
+    }.toMap
+
+    nodeIdAndWSCGIdMap
+  }
+
+  private def getWholeStageCodegenId(wscgNodeName: String): Option[Long] = {
+    Try(wscgNodeName.substring(
+      s"$WHOLE_STAGE_CODEGEN (".length, wscgNodeName.length - 1).toLong) match {
+      case Success(wscgId) => Some(wscgId)
+      case Failure(t) => None
+    }
+  }
+
 }

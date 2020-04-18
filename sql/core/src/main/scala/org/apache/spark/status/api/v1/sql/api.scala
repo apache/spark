@@ -32,6 +32,7 @@ class ExecutionData private[spark] (
 
 case class MetricDetails private[spark] (nodeId: Long,
                                          nodeName: String,
+                                         wholeStageCodegenId: Option[Long] = None,
                                          metrics: Seq[Metric])
 
 case class Metric private[spark] (name: String, value: String)
