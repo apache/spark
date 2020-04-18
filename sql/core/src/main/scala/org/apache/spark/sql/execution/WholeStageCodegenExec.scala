@@ -586,7 +586,7 @@ object WholeStageCodegenExec {
 
   // Reset generation time of Java source code.
   // Visible for testing
-  def resetCodeGenTime: Unit = _codeGenTime.set(0L)
+  def resetCodeGenTime(): Unit = _codeGenTime.set(0L)
 }
 
 /**
