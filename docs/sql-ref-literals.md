@@ -255,12 +255,26 @@ A Datetime literal is used to specify a datetime value.
 #### <em>Syntax</em>
 
 {% highlight sql %}
-DATE 'yyyy-MM-dd'
+DATE 'yyyy [ -MM-dd ]'
 {% endhighlight %}
 
 #### <em>Examples</em>
 
 {% highlight sql %}
+SELECT DATE '1997' AS col;
+  +----------+
+  |col       |
+  +----------+
+  |1997-01-01|
+  +----------+
+
+SELECT TIMESTAMP '1997-01' AS col;
+  +----------+
+  |col       |
+  +----------+
+  |1997-01-01|
+  +----------+
+
 SELECT DATE '2011-11-11' AS col;
   +----------+
   |col       |
@@ -274,7 +288,7 @@ SELECT DATE '2011-11-11' AS col;
 #### <em>Syntax</em>
 
 {% highlight sql %}
-TIMESTAMP 'yyyy-MM-dd [ HH:mm:ss.SSSSSSzzz ]'
+TIMESTAMP { 'yyyy [ -MM-dd HH:mm:ss.SSSSSSzzz ]' | '[ yyyy-MM-dd ] HH:mm [ :ss.SSSSSSzzz ]' }
 {% endhighlight %}
 
 #### <em>Examples</em>
@@ -293,6 +307,20 @@ SELECT TIMESTAMP '1997-01-31 09:26:56.66666666CST' AS col;
   +--------------------------+
   |1997-01-31 07:26:56.666666|
   +--------------------------+
+
+SELECT TIMESTAMP '1997-01' AS col;
+  +-------------------+
+  |col                |
+  +-------------------+
+  |1997-01-01 00:00:00|
+  +-------------------+
+
+SELECT TIMESTAMP '09:26' AS col;
+  +-------------------+
+  |col                |
+  +-------------------+
+  |2020-04-17 09:26:00|
+  +-------------------+
 {% endhighlight %}
 
 ### Interval Literal
