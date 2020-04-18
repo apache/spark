@@ -769,6 +769,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       val killExecutors: Boolean => Future[Boolean] =
         if (executorsToKill.nonEmpty) {
+          executorsToKill.foreach(id =>
+            executorDataMap.get(id).foreach(_.executorEndpoint.send(StopExecutor)))
           _ => doKillExecutors(executorsToKill)
         } else {
           _ => Future.successful(false)
