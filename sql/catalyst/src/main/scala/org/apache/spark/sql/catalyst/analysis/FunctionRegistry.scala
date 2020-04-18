@@ -423,6 +423,7 @@ object FunctionRegistry {
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
+    expression[Extract]("extract"),
 
     // collection functions
     expression[CreateArray]("array"),
