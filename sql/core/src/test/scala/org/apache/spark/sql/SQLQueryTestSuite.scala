@@ -699,7 +699,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       val generateJavaTime = WholeStageCodegenExec.codeGenTime
       val codegenInfo =
         s"""
-           |=== Metrics of Whole-Stage Codegen ===
+           |=== Metrics of Whole-stage Codegen ===
            |Total code generation time: ${generateJavaTime.toDouble / NANOS_PER_SECOND} seconds
            |Total compile time: ${CodeGenerator.compileTime.toDouble / NANOS_PER_SECOND} seconds
          """.stripMargin

@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -37,6 +38,14 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
     try {
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
+      val generateJavaTime = WholeStageCodegenExec.codeGenTime
+      val codegenInfo =
+        s"""
+           |=== Metrics of Whole-stage Codegen ===
+           |Total code generation time: ${generateJavaTime.toDouble / NANOS_PER_SECOND} seconds
+           |Total compile time: ${CodeGenerator.compileTime.toDouble / NANOS_PER_SECOND} seconds
+         """.stripMargin
+      logWarning(codegenInfo)
       spark.sessionState.catalog.reset()
     } finally {
       super.afterAll()
@@ -46,6 +55,8 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
   override def beforeAll(): Unit = {
     super.beforeAll()
     RuleExecutor.resetMetrics()
+    CodeGenerator.resetCompileTime()
+    WholeStageCodegenExec.resetCodeGenTime()
   }
 
   protected def checkGeneratedCode(plan: SparkPlan, checkMethodCodeSize: Boolean = true): Unit = {
