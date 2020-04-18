@@ -256,22 +256,16 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
 
     val result = new ArrayBuffer[RebaseRecord]()
-    // The time zones are excluded because:
-    // 1. Julian to Gregorian rebasing doesn't match to the opposite rebasing from
-    //    Gregorian to Julian rebasing.
-    // 2. Linear searching over switch points might be slow.
-    // 3. Results after the end time point 2100-01-01 are wrong.
-    // See SPARK-31385
-    val blacklist = Set("Asia/Tehran", "Iran", "Africa/Casablanca", "Africa/El_Aaiun")
     ALL_TIMEZONES
-      .filterNot(zid => blacklist.contains(zid.getId))
       .sortBy(_.getId)
       .foreach { zid =>
       withDefaultTimeZone(zid) {
         val start = adjustFunc(instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0)
           .atZone(zid)
           .toInstant))
-        val end = adjustFunc(instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0)
+        // sun.util.calendar.ZoneInfo resolves DST after 2037 year incorrectly.
+        // See https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8073446
+        val end = adjustFunc(instantToMicros(LocalDateTime.of(2037, 1, 1, 0, 0, 0)
           .atZone(zid)
           .toInstant))
 
@@ -312,7 +306,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       result.toArray)
   }
 
-  ignore("generate 'gregorian-julian-rebase-micros.json'") {
+  test("generate 'gregorian-julian-rebase-micros.json'") {
     generateRebaseJson(
       adjustFunc = identity[Long],
       rebaseFunc = rebaseGregorianToJulianMicros,
@@ -320,7 +314,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       fileName = "gregorian-julian-rebase-micros.json")
   }
 
-  ignore("generate 'julian-gregorian-rebase-micros.json'") {
+  test("generate 'julian-gregorian-rebase-micros.json'") {
     generateRebaseJson(
       adjustFunc = rebaseGregorianToJulianMicros,
       rebaseFunc = rebaseJulianToGregorianMicros,
