@@ -68,7 +68,9 @@ object ShufflePartitionsUtil extends Logging {
       math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong, 16)
     val targetSize = math.min(maxTargetSize, advisoryTargetSize)
 
-    logInfo(s"advisory target size: $advisoryTargetSize, actual target size $targetSize.")
+    val shuffleIds = mapOutputStatistics.map(_.shuffleId).mkString(", ")
+    logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
+      s"actual target size $targetSize.")
 
     // Make sure these shuffles have the same number of partitions.
     val distinctNumShufflePartitions =
