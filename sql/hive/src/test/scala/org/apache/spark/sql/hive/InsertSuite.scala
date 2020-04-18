@@ -777,14 +777,12 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         val tempFile = File.createTempFile("targetPath", "", dir)
         val path = tempFile.toURI.getPath
 
-        val testSql =
+        sql(
           s"""
-             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
-             |STORED AS orc
-             |SELECT * FROM test_insert_table
-          """.stripMargin
-
-        sql(testSql)
+            |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+            |STORED AS orc
+            |SELECT * FROM test_insert_table
+          """.stripMargin)
 
         // use orc data source to check the data of path is right.
         checkAnswer(
