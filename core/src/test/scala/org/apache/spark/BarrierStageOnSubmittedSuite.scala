@@ -216,7 +216,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     "local-cluster mode") {
     val conf = new SparkConf()
       .set(CPUS_PER_TASK, 2)
-      .set(BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT.key, "3s")
+      .set(BARRIER_WAIT_FOR_SLOT_TIMEOUT.key, "3s")
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -230,7 +230,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     "local-cluster mode") {
     val conf = new SparkConf()
       .set(CPUS_PER_TASK, 2)
-      .set(BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT.key, "3s")
+      .set(BARRIER_WAIT_FOR_SLOT_TIMEOUT.key, "3s")
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))

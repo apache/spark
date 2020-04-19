@@ -1402,9 +1402,9 @@ package object config {
       .createWithDefaultString("365d")
 
 
-  private[spark] val BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT =
-    ConfigBuilder("spark.scheduler.barrier.waitForSchedule.timeout")
-      .doc("The timeout in seconds for a barrier stage before it gets scheduled. Spark only " +
+  private[spark] val BARRIER_WAIT_FOR_SLOT_TIMEOUT =
+    ConfigBuilder("spark.scheduler.barrier.waitForEnoughSlots.timeout")
+      .doc("The timeout in seconds for a barrier stage before it finds enough slots. Spark only " +
         "schedule for a barrier stage when the total number of slots in cluster currently " +
         "is more than the required slots from the barrier stage. Thus, the timeout generally " +
         "should be longer than the total launching time of executors which satisfy the " +

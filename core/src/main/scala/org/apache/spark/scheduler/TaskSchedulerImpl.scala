@@ -169,7 +169,7 @@ private[spark] class TaskSchedulerImpl(
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
-  private val barrierScheduleTimeoutS = conf.get(config.BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT)
+  private val barrierSlotsCheckTimeoutS = conf.get(config.BARRIER_WAIT_FOR_SLOT_TIMEOUT)
   private val barrierStageIdToSubmitTime = new HashMap[Int, Long]
 
   private lazy val barrierSyncTimeout = conf.get(config.BARRIER_SYNC_TIMEOUT)
@@ -594,29 +594,33 @@ private[spark] class TaskSchedulerImpl(
         -1
       }
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
-      if (taskSet.isBarrier && numBarrierSlotsAvailable < taskSet.numTasks) {
-        if (clock.getTimeMillis() - barrierStageIdToSubmitTime(taskSet.stageId) >
-          barrierScheduleTimeoutS * 1000 || isLocal) {
+      if (taskSet.isBarrier) {
+        val enoughSlots = numBarrierSlotsAvailable >= taskSet.numTasks
+        if (enoughSlots) {
+          barrierStageIdToSubmitTime.remove(taskSet.stageId)
+        } else if (clock.getTimeMillis() - barrierStageIdToSubmitTime(taskSet.stageId) >
+            barrierSlotsCheckTimeoutS * 1000 || isLocal) {
           val reason = if (isLocal) {
             "Insufficient slots under local mode"
           } else {
-            s"Timeout after waiting $barrierScheduleTimeoutS seconds"
+            s"Timeout after waiting $barrierSlotsCheckTimeoutS seconds for enough slots"
           }
           dagScheduler.taskSetFailed(taskSet.taskSet,
             s"$reason to schedule barrier task set ${taskSet.stageId}. Required " +
               s"${taskSet.numTasks} slots but got $numBarrierSlotsAvailable slots yet. " +
               s"Please init a new cluster with more CPU cores or repartition the input RDD(s) " +
               s"to reduce the number of slots required to run this barrier stage. Or increase " +
-              s"timeout using ${config.BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT.key} if executors " +
+              s"timeout using ${config.BARRIER_WAIT_FOR_SLOT_TIMEOUT.key} if executors " +
               s"haven't been fully launched.", None)
           return tasks
+        } else {
+          // Skip the launch process.
+          // TODO SPARK-24819 If the job requires more slots than available (both busy and free
+          // slots), fail the job on submit.
+          logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
+            s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
+            s"number of available slots is $numBarrierSlotsAvailable.")
         }
-        // Skip the launch process.
-        // TODO SPARK-24819 If the job requires more slots than available (both busy and free
-        // slots), fail the job on submit.
-        logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
-          s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
-          s"number of available slots is $numBarrierSlotsAvailable.")
       } else {
         var launchedAnyTask = false
         var noDelaySchedulingRejects = true

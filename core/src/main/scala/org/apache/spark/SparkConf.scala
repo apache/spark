@@ -775,7 +775,7 @@ private[spark] object SparkConf extends Logging {
     if (key.equals("spark.scheduler.barrier.maxConcurrentTasksCheck.interval") ||
       key.equals("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures")) {
       logWarning(s"The configuration $key is not supported any more from Spark 3.0. " +
-        s"Please use ${BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT.key} to tune barrier job instead.")
+        s"Please use ${BARRIER_WAIT_FOR_SLOT_TIMEOUT.key} to tune barrier job instead.")
     }
   }
 
