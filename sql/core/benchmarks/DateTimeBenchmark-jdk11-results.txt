@@ -422,10 +422,14 @@ OpenJDK 64-Bit Server VM 11.0.6+10-post-Ubuntu-1ubuntu118.04.1 on Linux 4.15.0-1
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 To/from Java's date-time:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-From java.sql.Date                                  435            439           3         11.5          87.1       1.0X
-Collect dates                                      3409           3756         343          1.5         681.9       0.1X
-From java.sql.Timestamp                             350            351           1         14.3          70.1       1.2X
-Collect longs                                      1316           1433         124          3.8         263.2       0.3X
-Collect timestamps                                 1752           2013         231          2.9         350.4       0.2X
+From java.sql.Date                                  585            655          67          8.6         116.9       1.0X
+From java.time.LocalDate                            419            434          24         11.9          83.9       1.4X
+Collect java.sql.Date                              1941           3022        1104          2.6         388.3       0.3X
+Collect java.time.LocalDate                        1894           1988          83          2.6         378.8       0.3X
+From java.sql.Timestamp                             407            409           2         12.3          81.3       1.4X
+From java.time.Instant                              358            376          23         14.0          71.5       1.6X
+Collect longs                                      1514           1572          88          3.3         302.8       0.4X
+Collect java.sql.Timestamp                         1782           1789          11          2.8         356.4       0.3X
+Collect java.time.Instant                          1965           2078         107          2.5         393.0       0.3X
 
 
