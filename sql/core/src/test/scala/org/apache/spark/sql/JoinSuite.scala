@@ -445,8 +445,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             |SELECT l.a, count(*)
             |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
             |GROUP BY l.a
-      """.
-            stripMargin),
+          """.stripMargin),
         Row(null, 10))
 
       checkAnswer(
@@ -455,7 +454,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             |SELECT r.N, count(*)
             |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
             |GROUP BY r.N
-        """.stripMargin),
+          """.stripMargin),
         Row
         (1, 1) ::
           Row(2, 1) ::
@@ -471,7 +470,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             |SELECT l.N, count(*)
             |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
             |GROUP BY l.N
-        """.stripMargin),
+          """.stripMargin),
         Row(1
           , 1) ::
           Row(2, 1) ::
@@ -487,8 +486,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             |SELECT r.a, count(*)
             |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
             |GROUP BY r.a
-      """.
-            stripMargin),
+          """.stripMargin),
         Row(null, 10))
     }
   }

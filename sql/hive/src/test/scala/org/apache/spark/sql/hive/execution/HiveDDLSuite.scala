@@ -2321,12 +2321,12 @@ class HiveDDLSuite
       sql("""CREATE TABLE smallTable(word string, number int)
             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
             |STORED AS TEXTFILE
-        """.stripMargin)
+          """.stripMargin)
 
       sql(
         """INSERT INTO smallTable
           |SELECT word, number from t1
-      """.stripMargin)
+        """.stripMargin)
 
       val inputData = MemoryStream[Int]
       val joined = inputData.toDS().toDF()

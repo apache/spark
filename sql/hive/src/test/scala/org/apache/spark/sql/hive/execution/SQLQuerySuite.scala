@@ -96,9 +96,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       df.createOrReplaceTempView("script_table")
       val query1 = sql(
         s"""
-           |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
-           |REDUCE c1, c2, c3 USING 'bash $scriptFilePath' AS
-           |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
+          |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
+          |REDUCE c1, c2, c3 USING 'bash $scriptFilePath' AS
+          |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
       checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
     }
   }
@@ -156,7 +156,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             |  city String)
             |PARTITIONED BY (state STRING, month INT)
             |STORED AS PARQUET
-        """.stripMargin)
+          """.stripMargin)
 
         sql(
           """CREATE TABLE orderupdates(
@@ -169,7 +169,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             |  city String)
             |PARTITIONED BY (state STRING, month INT)
             |STORED AS PARQUET
-        """.stripMargin)
+          """.stripMargin)
 
         sql("set hive.exec.dynamic.partition.mode=nonstrict")
         sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
@@ -186,7 +186,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
               |  join orderupdates
               |    on orderupdates.id = orders.id) ao
               |  on ao.state = orders.state and ao.month = orders.month
-          """.stripMargin),
+            """.stripMargin),
           (1 to 6).map(_ => Row("CA", 20151)))
       }
     }
@@ -361,7 +361,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |    SUM(c2) c2
           |  FROM table1
           |) a
-      """.stripMargin)
+        """.stripMargin)
       checkAnswer(query, Row(1, 1) :: Nil)
     }
   }
@@ -380,7 +380,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             |)
             |SELECT *
             |FROM T
-        """.stripMargin)
+          """.stripMargin)
         val query = sql("SELECT * FROM with_table1")
         checkAnswer(query, Row(1, 1) :: Nil)
       }
@@ -408,7 +408,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             |SELECT `weird``tab`.`weird``col`
             |FROM nestedArray
             |LATERAL VIEW explode(a.b) `weird``tab` AS `weird``col`
-        """.stripMargin),
+          """.stripMargin),
         Row(1) :: Row(2) :: Row(3) :: Nil)
     }
   }
@@ -1288,13 +1288,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
              |  AS (c STRING, d STRING)
              |) t
              |SELECT c
-        """.stripMargin),
+           """.stripMargin),
         (0 until 5).map(i => Row(i + "#")))
     }
   }
 
   ignore("SPARK-10310: script transformation using LazySimpleSerDe") {
-    withTempView("data") {
+    withTempView("test") {
       spark
         .range(5)
         .selectExpr("id AS a", "id AS b")
@@ -1303,14 +1303,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val scriptFilePath = getTestResourcePath("data")
       val df = sql(
         s"""FROM test
-           |SELECT TRANSFORM(a, b)
-           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-           |WITH SERDEPROPERTIES('field.delim' = '|')
-           |USING 'python $scriptFilePath/scripts/test_transform.py "|"'
-           |AS (c STRING, d STRING)
-           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-           |WITH SERDEPROPERTIES('field.delim' = '|')
-      """.stripMargin)
+          |SELECT TRANSFORM(a, b)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |WITH SERDEPROPERTIES('field.delim' = '|')
+          |USING 'python $scriptFilePath/scripts/test_transform.py "|"'
+          |AS (c STRING, d STRING)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |WITH SERDEPROPERTIES('field.delim' = '|')
+         """.stripMargin)
 
       checkAnswer(df, (0 until 5).map(i => Row(i + "#", i + "#")))
     }

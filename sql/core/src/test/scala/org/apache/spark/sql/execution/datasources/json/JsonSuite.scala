@@ -989,7 +989,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
             |select complexArrayOfStruct[0].field1[1].inner2[0],
             |complexArrayOfStruct[1].field2[0][1]
             |from jsonTable
-        """.stripMargin),
+          """.stripMargin),
         Row("str2", 6)
       )
     }
@@ -1005,7 +1005,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           """
             |select arrayOfArray1[0][0][0], arrayOfArray1[1][0][1], arrayOfArray1[1][1][0]
             |from jsonTable
-        """.stripMargin),
+          """.stripMargin),
         Row(5, 7, 8)
       )
       checkAnswer(
@@ -1014,7 +1014,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
             |select arrayOfArray2[0][0][0].inner1, arrayOfArray2[1][0],
             |arrayOfArray2[1][1][1].inner2[0], arrayOfArray2[2][0][0].inner3[0][0].inner4
             |from jsonTable
-        """.stripMargin),
+          """.stripMargin),
         Row("str1", Nil, "str4", 2)
       )
     }
@@ -1030,7 +1030,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           """
             |select a, b, c
             |from jsonTable
-        """.stripMargin),
+          """.stripMargin),
         Row("str_a_1", null, null) ::
           Row("str_a_2", null, null) ::
           Row(null, "str_b_3", null) ::
@@ -1201,7 +1201,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           """
             |SELECT field1, field2, field3, field4
             |FROM jsonTable
-        """.stripMargin),
+          """.stripMargin),
         Row(Seq(Seq(null), Seq(Seq(Seq("Test")))), null, null, null) ::
           Row(null, Seq(null, Seq(Row(1))), null, null) ::
           Row(null, null, Seq(Seq(null), Seq(Row("2"))), null) ::
@@ -1214,10 +1214,10 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
     withTempView("applySchema1", "applySchema2", "primitiveTable", "complexTable") {
       val schema1 = StructType(
         StructField("f1", IntegerType, false) ::
-          StructField("f2", StringType, false) ::
-          StructField("f3", BooleanType, false) ::
-          StructField("f4", ArrayType(StringType), nullable = true) ::
-          StructField("f5", IntegerType, true) :: Nil)
+        StructField("f2", StringType, false) ::
+        StructField("f3", BooleanType, false) ::
+        StructField("f4", ArrayType(StringType), nullable = true) ::
+        StructField("f5", IntegerType, true) :: Nil)
 
       val rowRDD1 = unparsedStrings.map { r =>
         val values = r.split(",").map(_.trim)
@@ -1239,8 +1239,8 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val schema2 = StructType(
         StructField("f1", StructType(
           StructField("f11", IntegerType, false) ::
-            StructField("f12", BooleanType, false) :: Nil), false) ::
-          StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
+          StructField("f12", BooleanType, false) :: Nil), false) ::
+        StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
 
       val rowRDD2 = unparsedStrings.map { r =>
         val values = r.split(",").map(_.trim)
@@ -1262,7 +1262,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val primTable = spark.read.json(jsonDF.toJSON)
       primTable.createOrReplaceTempView("primitiveTable")
       checkAnswer(
-        sql("select * from primitiveTable"),
+          sql("select * from primitiveTable"),
         Row(new java.math.BigDecimal("92233720368547758070"),
           true,
           1.7976931348623157,

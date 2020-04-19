@@ -49,7 +49,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           """
             |select area, sum(product), sum(sum(product)) over (partition by area)
             |from windowData group by month, area
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           ("a", 5, 11),
           ("a", 6, 11),
@@ -64,7 +64,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           """
             |select area, sum(product) - 1, sum(sum(product)) over (partition by area)
             |from windowData group by month, area
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           ("a", 4, 11),
           ("a", 5, 11),
@@ -79,7 +79,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           """
             |select area, sum(product), sum(product) / sum(sum(product)) over (partition by area)
             |from windowData group by month, area
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           ("a", 5, 5d/11),
           ("a", 6, 6d/11),
@@ -95,7 +95,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
             |select area, sum(product), sum(product) / sum(sum(product) - 1) over
             |(partition by area)
             |from windowData group by month, area
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           ("a", 5, 5d/9),
           ("a", 6, 6d/9),
@@ -124,7 +124,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           """
             |select area, rank() over (partition by area order by tmp.month) + tmp.tmp1 as c1
             |from (select month, area, product, 1 as tmp1 from windowData) tmp
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           ("a", 2),
           ("a", 3),
@@ -153,7 +153,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           """
             |select month, area, product, sum(product + 1) over (partition by 1 order by 2)
             |from windowData
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           (1, "a", 5, 51),
           (2, "a", 6, 51),
@@ -169,7 +169,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
             |select month, area, product, sum(product)
             |over (partition by month % 2 order by 10 - product)
             |from windowData
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           (1, "a", 5, 21),
           (2, "a", 6, 24),
@@ -198,7 +198,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           """
             |select month, area, product, sum(distinct product + 1) over (partition by 1 order by 2)
             |from windowData
-        """.stripMargin)
+          """.stripMargin)
       }
       assert(e.getMessage.contains("Distinct window functions are not supported"))
     }
@@ -222,7 +222,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
             |select month, area, month % 2,
             |lag(product, 1 + 1, product) over (partition by month % 2 order by area)
             |from windowData
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           (1, "a", 1, 5),
           (2, "a", 0, 6),
@@ -263,7 +263,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           """
             |select area, rank() over (partition by area order by tmp.month) + tmp.tmp1 as c1
             |from (select month, area, product as p, 1 as tmp1 from windowData) tmp order by p
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           ("a", 2),
           ("b", 2),
@@ -278,7 +278,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           """
             |select area, rank() over (partition by area order by month) as c1
             |from windowData group by product, area, month order by product, area
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           ("a", 1),
           ("b", 1),
@@ -293,7 +293,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
           """
             |select area, sum(product) / sum(sum(product)) over (partition by area) as c1
             |from windowData group by area, month order by month, c1
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           ("d", 1.0),
           ("a", 1.0),
@@ -324,7 +324,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
             |select area, sum(product) over () as c from windowData
             |where product > 3 group by area, product
             |having avg(month) > 0 order by avg(month), product
-        """.stripMargin),
+          """.stripMargin),
         Seq(
           ("a", 51),
           ("b", 51),

@@ -808,28 +808,28 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         spark.sql(
           """
             |SELECT corr(b, c) FROM covar_tab WHERE a < 1
-        """.stripMargin),
+          """.stripMargin),
         Row(null) :: Nil)
 
       checkAnswer(
         spark.sql(
           """
             |SELECT corr(b, c) FROM covar_tab WHERE a < 3
-        """.stripMargin),
+          """.stripMargin),
         Row(null) :: Nil)
 
       checkAnswer(
         spark.sql(
           """
             |SELECT corr(b, c) FROM covar_tab WHERE a = 3
-        """.stripMargin),
+          """.stripMargin),
         Row(Double.NaN) :: Nil)
 
       checkAnswer(
         spark.sql(
           """
             |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
-        """.stripMargin),
+          """.stripMargin),
         Row(1, null) ::
           Row(2, null) ::
           Row(3, Double.NaN) ::
