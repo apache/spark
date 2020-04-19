@@ -916,8 +916,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withTempView("data") {
       val ds = (1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}""").toDS()
       read.json(ds).createOrReplaceTempView("data")
-      val df = sql("SELECT explode(a) AS val FROM data")
-      val col = df("val")
+      sql("SELECT explode(a) AS val FROM data")
     }
   }
 
@@ -1041,9 +1040,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val data = (1 to 5).map { i => (i, i) }
       data.toDF("key", "value").createOrReplaceTempView("test")
       checkAnswer(
-        sql("""FROM
-              |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` int, thing2 string))
-              |t SELECT thing1 + 1
+        sql(
+        """FROM
+          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` int, thing2 string)) t
+          |SELECT thing1 + 1
         """.stripMargin), (2 to 6).map(i => Row(i)))
     }
   }
