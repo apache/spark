@@ -128,9 +128,9 @@ private class ClientEndpoint(
   }
 
   /**
-    *  Find out driver status then exit the JVM. If the waitAppCompletion is set to true, monitors
-    *  the application until it finishes, fails or is killed.
-    */
+   * Find out driver status then exit the JVM. If the waitAppCompletion is set to true, monitors
+   * the application until it finishes, fails or is killed.
+   */
   def pollAndReportStatus(driverId: String): Unit = {
     // Since ClientEndpoint is the only RpcEndpoint in the process, blocking the event loop thread
     // is fine.
