@@ -189,27 +189,18 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
   test("submit a barrier ResultStage that requires more slots than current total under local " +
       "mode") {
     val conf = new SparkConf()
-      // Shorten the time interval between two failed checks to make the test fail faster.
-      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
-      // Reduce max check failures allowed to make the test fail faster.
-      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
     val rdd = sc.parallelize(1 to 10, 5)
       .barrier()
       .mapPartitions(iter => iter)
-    testSubmitJob(sc, rdd,
-      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+    testSubmitJob(sc, rdd, message = "Insufficient slots under local mode")
   }
 
   test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
     "local mode") {
     val conf = new SparkConf()
-      // Shorten the time interval between two failed checks to make the test fail faster.
-      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
-      // Reduce max check failures allowed to make the test fail faster.
-      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -218,36 +209,28 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .mapPartitions(iter => iter)
       .repartition(2)
       .map(x => x + 1)
-    testSubmitJob(sc, rdd,
-      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+    testSubmitJob(sc, rdd, message = "Insufficient slots under local mode")
   }
 
   test("submit a barrier ResultStage that requires more slots than current total under " +
     "local-cluster mode") {
     val conf = new SparkConf()
       .set(CPUS_PER_TASK, 2)
-      // Shorten the time interval between two failed checks to make the test fail faster.
-      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
-      // Reduce max check failures allowed to make the test fail faster.
-      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
+      .set(BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT.key, "3s")
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
     val rdd = sc.parallelize(1 to 10, 5)
       .barrier()
       .mapPartitions(iter => iter)
-    testSubmitJob(sc, rdd,
-      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+    testSubmitJob(sc, rdd, message = "Timeout after waiting 3 seconds to schedule barrier task set")
   }
 
   test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
     "local-cluster mode") {
     val conf = new SparkConf()
       .set(CPUS_PER_TASK, 2)
-      // Shorten the time interval between two failed checks to make the test fail faster.
-      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
-      // Reduce max check failures allowed to make the test fail faster.
-      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
+      .set(BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT.key, "3s")
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -256,7 +239,6 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .mapPartitions(iter => iter)
       .repartition(2)
       .map(x => x + 1)
-    testSubmitJob(sc, rdd,
-      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+    testSubmitJob(sc, rdd, message = "Timeout after waiting 3 seconds to schedule barrier task set")
   }
 }

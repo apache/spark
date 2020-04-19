@@ -203,24 +203,6 @@ private[spark] class DAGScheduler(
     sc.getConf.getInt("spark.stage.maxConsecutiveAttempts",
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
 
-  /**
-   * Number of max concurrent tasks check failures for each barrier job.
-   */
-  private[scheduler] val barrierJobIdToNumTasksCheckFailures = new ConcurrentHashMap[Int, Int]
-
-  /**
-   * Time in seconds to wait between a max concurrent tasks check failure and the next check.
-   */
-  private val timeIntervalNumTasksCheck = sc.getConf
-    .get(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL)
-
-  /**
-   * Max number of max concurrent tasks check failures allowed for a job before fail the job
-   * submission.
-   */
-  private val maxFailureNumTasksCheck = sc.getConf
-    .get(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES)
-
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
@@ -390,7 +372,6 @@ private[spark] class DAGScheduler(
     val (shuffleDeps, resourceProfiles) = getShuffleDependenciesAndResourceProfiles(rdd)
     val resourceProfile = mergeResourceProfilesForStage(resourceProfiles)
     checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
@@ -427,21 +408,6 @@ private[spark] class DAGScheduler(
   private def checkBarrierStageWithDynamicAllocation(rdd: RDD[_]): Unit = {
     if (rdd.isBarrier() && Utils.isDynamicAllocationEnabled(sc.getConf)) {
       throw new BarrierJobRunWithDynamicAllocationException
-    }
-  }
-
-  /**
-   * Check whether the barrier stage requires more slots (to be able to launch all tasks in the
-   * barrier stage together) than the total number of active slots currently. Fail current check
-   * if trying to submit a barrier stage that requires more slots than current total number. If
-   * the check fails consecutively beyond a configured number for a job, then fail current job
-   * submission.
-   */
-  private def checkBarrierStageWithNumSlots(rdd: RDD[_], rp: ResourceProfile): Unit = {
-    val numPartitions = rdd.getNumPartitions
-    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks(rp)
-    if (rdd.isBarrier() && numPartitions > maxNumConcurrentTasks) {
-      throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
     }
   }
 
@@ -513,7 +479,6 @@ private[spark] class DAGScheduler(
     val (shuffleDeps, resourceProfiles) = getShuffleDependenciesAndResourceProfiles(rdd)
     val resourceProfile = mergeResourceProfilesForStage(resourceProfiles)
     checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
     val id = nextStageId.getAndIncrement()
@@ -1055,39 +1020,11 @@ private[spark] class DAGScheduler(
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
     } catch {
-      case e: BarrierJobSlotsNumberCheckFailed =>
-        // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
-        val numCheckFailures = barrierJobIdToNumTasksCheckFailures.compute(jobId,
-          (_: Int, value: Int) => value + 1)
-
-        logWarning(s"Barrier stage in job $jobId requires ${e.requiredConcurrentTasks} slots, " +
-          s"but only ${e.maxConcurrentTasks} are available. " +
-          s"Will retry up to ${maxFailureNumTasksCheck - numCheckFailures + 1} more times")
-
-        if (numCheckFailures <= maxFailureNumTasksCheck) {
-          messageScheduler.schedule(
-            new Runnable {
-              override def run(): Unit = eventProcessLoop.post(JobSubmitted(jobId, finalRDD, func,
-                partitions, callSite, listener, properties))
-            },
-            timeIntervalNumTasksCheck,
-            TimeUnit.SECONDS
-          )
-          return
-        } else {
-          // Job failed, clear internal data.
-          barrierJobIdToNumTasksCheckFailures.remove(jobId)
-          listener.jobFailed(e)
-          return
-        }
-
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)
         listener.jobFailed(e)
         return
     }
-    // Job submitted, clear internal data.
-    barrierJobIdToNumTasksCheckFailures.remove(jobId)
 
     val job = new ActiveJob(jobId, finalStage, callSite, listener, properties)
     clearCacheLocs()

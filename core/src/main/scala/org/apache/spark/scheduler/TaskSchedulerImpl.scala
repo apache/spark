@@ -169,6 +169,9 @@ private[spark] class TaskSchedulerImpl(
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
+  private val barrierScheduleTimeoutS = conf.get(config.BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT)
+  private val barrierStageIdToSubmitTime = new HashMap[Int, Long]
+
   private lazy val barrierSyncTimeout = conf.get(config.BARRIER_SYNC_TIMEOUT)
 
   private[scheduler] var barrierCoordinator: RpcEndpoint = null
@@ -223,13 +226,15 @@ private[spark] class TaskSchedulerImpl(
 
   override def submitTasks(taskSet: TaskSet): Unit = {
     val tasks = taskSet.tasks
-    logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks "
-      + "resource profile " + taskSet.resourceProfileId)
+    val isBarrier = tasks.headOption.exists(_.isBarrier)
+    logInfo(s"Adding ${if (isBarrier) "barrier" else ""} task set " + taskSet.id + " with " +
+      tasks.length + " tasks " + "resource profile " + taskSet.resourceProfileId)
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
+      if (isBarrier) barrierStageIdToSubmitTime(stage) = clock.getTimeMillis()
 
       // Mark all the existing TaskSetManagers of this stage as zombie, as we are adding a new one.
       // This is necessary to handle a corner case. Let's say a stage has 10 partitions and has 2
@@ -337,6 +342,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     resetOnPreviousOffer -= manager.taskSet
+    barrierStageIdToSubmitTime.remove(manager.stageId)
     manager.parent.removeSchedulable(manager)
     logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
       s" ${manager.parent.name}")
@@ -589,6 +595,22 @@ private[spark] class TaskSchedulerImpl(
       }
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
       if (taskSet.isBarrier && numBarrierSlotsAvailable < taskSet.numTasks) {
+        if (clock.getTimeMillis() - barrierStageIdToSubmitTime(taskSet.stageId) >
+          barrierScheduleTimeoutS * 1000 || isLocal) {
+          val reason = if (isLocal) {
+            "Insufficient slots under local mode"
+          } else {
+            s"Timeout after waiting $barrierScheduleTimeoutS seconds"
+          }
+          dagScheduler.taskSetFailed(taskSet.taskSet,
+            s"$reason to schedule barrier task set ${taskSet.stageId}. Required " +
+              s"${taskSet.numTasks} slots but got $numBarrierSlotsAvailable slots yet. " +
+              s"Please init a new cluster with more CPU cores or repartition the input RDD(s) " +
+              s"to reduce the number of slots required to run this barrier stage. Or increase " +
+              s"timeout using ${config.BARRIER_WAIT_FOR_SCHEDULE_TIMEOUT.key} if executors " +
+              s"haven't been fully launched.", None)
+          return tasks
+        }
         // Skip the launch process.
         // TODO SPARK-24819 If the job requires more slots than available (both busy and free
         // slots), fail the job on submit.
@@ -691,7 +713,7 @@ private[spark] class TaskSchedulerImpl(
             .map(_._1)
             .mkString(",")
           addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
-
+          barrierStageIdToSubmitTime.remove(taskSet.stageId)
           logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +
             s"stage ${taskSet.stageId}.")
         }

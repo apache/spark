@@ -33,12 +33,6 @@ private[spark] class BarrierJobRunWithDynamicAllocationException
   extends BarrierJobAllocationFailed(
     BarrierJobAllocationFailed.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
 
-private[spark] class BarrierJobSlotsNumberCheckFailed(
-    val requiredConcurrentTasks: Int,
-    val maxConcurrentTasks: Int)
-  extends BarrierJobAllocationFailed(
-    BarrierJobAllocationFailed.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
-
 private[spark] object BarrierJobAllocationFailed {
 
   // Error message when running a barrier stage that have unsupported RDD chain pattern.
@@ -55,11 +49,4 @@ private[spark] object BarrierJobAllocationFailed {
     "[SPARK-24942]: Barrier execution mode does not support dynamic resource allocation for " +
       "now. You can disable dynamic resource allocation by setting Spark conf " +
       s""""${DYN_ALLOCATION_ENABLED.key}" to "false"."""
-
-  // Error message when running a barrier stage that requires more slots than current total number.
-  val ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER =
-    "[SPARK-24819]: Barrier execution mode does not allow run a barrier stage that requires " +
-      "more slots than the total number of slots in the cluster currently. Please init a new " +
-      "cluster with more CPU cores or repartition the input RDD(s) to reduce the number of " +
-      "slots required to run this barrier stage."
 }
