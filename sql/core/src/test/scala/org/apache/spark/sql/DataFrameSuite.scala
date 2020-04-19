@@ -1381,47 +1381,48 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-6941: Better error message for inserting into RDD-based Table") {
     withTempDir { dir =>
+      withTempView("parquet_base", "json_base", "rdd_base", "indirect_ds", "one_row") {
+        val tempParquetFile = new File(dir, "tmp_parquet")
+        val tempJsonFile = new File(dir, "tmp_json")
 
-      val tempParquetFile = new File(dir, "tmp_parquet")
-      val tempJsonFile = new File(dir, "tmp_json")
+        val df = Seq(Tuple1(1)).toDF()
+        val insertion = Seq(Tuple1(2)).toDF("col")
 
-      val df = Seq(Tuple1(1)).toDF()
-      val insertion = Seq(Tuple1(2)).toDF("col")
+        // pass case: parquet table (HadoopFsRelation)
+        df.write.mode(SaveMode.Overwrite).parquet(tempParquetFile.getCanonicalPath)
+        val pdf = spark.read.parquet(tempParquetFile.getCanonicalPath)
+        pdf.createOrReplaceTempView("parquet_base")
 
-      // pass case: parquet table (HadoopFsRelation)
-      df.write.mode(SaveMode.Overwrite).parquet(tempParquetFile.getCanonicalPath)
-      val pdf = spark.read.parquet(tempParquetFile.getCanonicalPath)
-      pdf.createOrReplaceTempView("parquet_base")
+        insertion.write.insertInto("parquet_base")
 
-      insertion.write.insertInto("parquet_base")
+        // pass case: json table (InsertableRelation)
+        df.write.mode(SaveMode.Overwrite).json(tempJsonFile.getCanonicalPath)
+        val jdf = spark.read.json(tempJsonFile.getCanonicalPath)
+        jdf.createOrReplaceTempView("json_base")
+        insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
 
-      // pass case: json table (InsertableRelation)
-      df.write.mode(SaveMode.Overwrite).json(tempJsonFile.getCanonicalPath)
-      val jdf = spark.read.json(tempJsonFile.getCanonicalPath)
-      jdf.createOrReplaceTempView("json_base")
-      insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
+        // error cases: insert into an RDD
+        df.createOrReplaceTempView("rdd_base")
+        val e1 = intercept[AnalysisException] {
+          insertion.write.insertInto("rdd_base")
+        }
+        assert(e1.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
-      // error cases: insert into an RDD
-      df.createOrReplaceTempView("rdd_base")
-      val e1 = intercept[AnalysisException] {
-        insertion.write.insertInto("rdd_base")
+        // error case: insert into a logical plan that is not a LeafNode
+        val indirectDS = pdf.select("_1").filter($"_1" > 5)
+        indirectDS.createOrReplaceTempView("indirect_ds")
+        val e2 = intercept[AnalysisException] {
+          insertion.write.insertInto("indirect_ds")
+        }
+        assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+
+        // error case: insert into an OneRowRelation
+        Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
+        val e3 = intercept[AnalysisException] {
+          insertion.write.insertInto("one_row")
+        }
+        assert(e3.getMessage.contains("Inserting into an RDD-based table is not allowed."))
       }
-      assert(e1.getMessage.contains("Inserting into an RDD-based table is not allowed."))
-
-      // error case: insert into a logical plan that is not a LeafNode
-      val indirectDS = pdf.select("_1").filter($"_1" > 5)
-      indirectDS.createOrReplaceTempView("indirect_ds")
-      val e2 = intercept[AnalysisException] {
-        insertion.write.insertInto("indirect_ds")
-      }
-      assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
-
-      // error case: insert into an OneRowRelation
-      Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
-      val e3 = intercept[AnalysisException] {
-        insertion.write.insertInto("one_row")
-      }
-      assert(e3.getMessage.contains("Inserting into an RDD-based table is not allowed."))
     }
   }
 
@@ -1793,13 +1794,17 @@ class DataFrameSuite extends QueryTest
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
     // invalid table names
     Seq("11111", "t~", "#$@sum", "table!#").foreach { name =>
-      val m = intercept[AnalysisException](df.createOrReplaceTempView(name)).getMessage
-      assert(m.contains(s"Invalid view name: $name"))
+      withTempView(name) {
+        val m = intercept[AnalysisException](df.createOrReplaceTempView(name)).getMessage
+        assert(m.contains(s"Invalid view name: $name"))
+      }
     }
 
     // valid table names
     Seq("table1", "`11111`", "`t~`", "`#$@sum`", "`table!#`").foreach { name =>
-      df.createOrReplaceTempView(name)
+      withTempView(name) {
+        df.createOrReplaceTempView(name)
+      }
     }
   }
 

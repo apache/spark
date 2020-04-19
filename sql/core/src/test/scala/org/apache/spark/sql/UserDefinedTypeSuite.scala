@@ -150,12 +150,14 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   }
 
   test("UDTs and UDFs") {
-    spark.udf.register("testType",
-      (d: TestUDT.MyDenseVector) => d.isInstanceOf[TestUDT.MyDenseVector])
-    pointsRDD.createOrReplaceTempView("points")
-    checkAnswer(
-      sql("SELECT testType(features) from points"),
-      Seq(Row(true), Row(true)))
+    withTempView("points") {
+      spark.udf.register("testType",
+        (d: TestUDT.MyDenseVector) => d.isInstanceOf[TestUDT.MyDenseVector])
+      pointsRDD.createOrReplaceTempView("points")
+      checkAnswer(
+        sql("SELECT testType(features) from points"),
+        Seq(Row(true), Row(true)))
+    }
   }
 
   testStandardAndLegacyModes("UDTs with Parquet") {

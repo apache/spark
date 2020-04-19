@@ -2315,37 +2315,39 @@ class HiveDDLSuite
 
     implicit val _sqlContext = spark.sqlContext
 
-    Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word").createOrReplaceTempView("t1")
-    // Make a table and ensure it will be broadcast.
-    sql("""CREATE TABLE smallTable(word string, number int)
-          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |STORED AS TEXTFILE
+    withTempView("t1") {
+      Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word").createOrReplaceTempView("t1")
+      // Make a table and ensure it will be broadcast.
+      sql("""CREATE TABLE smallTable(word string, number int)
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+            |STORED AS TEXTFILE
         """.stripMargin)
 
-    sql(
-      """INSERT INTO smallTable
-        |SELECT word, number from t1
+      sql(
+        """INSERT INTO smallTable
+          |SELECT word, number from t1
       """.stripMargin)
 
-    val inputData = MemoryStream[Int]
-    val joined = inputData.toDS().toDF()
-      .join(spark.table("smallTable"), $"value" === $"number")
+      val inputData = MemoryStream[Int]
+      val joined = inputData.toDS().toDF()
+        .join(spark.table("smallTable"), $"value" === $"number")
 
-    val sq = joined.writeStream
-      .format("memory")
-      .queryName("t2")
-      .start()
-    try {
-      inputData.addData(1, 2)
+      val sq = joined.writeStream
+        .format("memory")
+        .queryName("t2")
+        .start()
+      try {
+        inputData.addData(1, 2)
 
-      sq.processAllAvailable()
+        sq.processAllAvailable()
 
-      checkAnswer(
-        spark.table("t2"),
-        Seq(Row(1, "one", 1), Row(2, "two", 2))
-      )
-    } finally {
-      sq.stop()
+        checkAnswer(
+          spark.table("t2"),
+          Seq(Row(1, "one", 1), Row(2, "two", 2))
+        )
+      } finally {
+        sq.stop()
+      }
     }
   }
 
