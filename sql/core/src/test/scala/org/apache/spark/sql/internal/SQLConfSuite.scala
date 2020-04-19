@@ -114,6 +114,21 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-31234: reset will not change static sql configs and spark core configs") {
+    val conf = spark.sparkContext.getConf.getAll.toMap
+    val appName = conf.get("spark.app.name")
+    val driverHost = conf.get("spark.driver.host")
+    val master = conf.get("spark.master")
+    val warehouseDir = conf.get("spark.sql.warehouse.dir")
+    // ensure the conf here is not default value, and will not be reset to default value later
+    assert(warehouseDir.get.contains(this.getClass.getCanonicalName))
+    sql("RESET")
+    assert(conf.get("spark.app.name") === appName)
+    assert(conf.get("spark.driver.host") === driverHost)
+    assert(conf.get("spark.master") === master)
+    assert(conf.get("spark.sql.warehouse.dir") === warehouseDir)
+  }
+
   test("reset - public conf") {
     spark.sessionState.conf.clear()
     val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
