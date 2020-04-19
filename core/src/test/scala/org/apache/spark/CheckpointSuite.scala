@@ -644,7 +644,7 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("checkpoint should not fail in retry") {
+  test("SPARK-31484: checkpoint should not fail in retry") {
     withTempDir { checkpointDir =>
       val conf = new SparkConf()
         .set(UI_ENABLED.key, "false")
