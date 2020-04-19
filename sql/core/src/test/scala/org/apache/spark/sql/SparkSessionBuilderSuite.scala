@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -150,5 +151,20 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     } finally {
       session.sparkContext.hadoopConfiguration.unset(mySpecialKey)
     }
+  }
+
+  test("SPARK-31234: RESET command will not change static sql configs and " +
+    "spark context conf values in SessionState") {
+    val session = SparkSession.builder()
+      .master("local")
+      .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31234")
+      .config("spark.app.name", "test-app-SPARK-31234")
+      .getOrCreate()
+
+    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globalTempDB-SPARK-31234")
+    session.sql("RESET")
+    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globalTempDB-SPARK-31234")
   }
 }
