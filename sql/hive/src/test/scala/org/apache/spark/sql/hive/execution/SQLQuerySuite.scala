@@ -1041,10 +1041,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       data.toDF("key", "value").createOrReplaceTempView("test")
       checkAnswer(
         sql(
-        """FROM
-          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` int, thing2 string)) t
-          |SELECT thing1 + 1
-        """.stripMargin), (2 to 6).map(i => Row(i)))
+          """FROM
+            |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` int, thing2 string)) t
+            |SELECT thing1 + 1
+          """.stripMargin), (2 to 6).map(i => Row(i)))
     }
   }
 

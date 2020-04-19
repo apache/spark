@@ -702,7 +702,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       val testData =
         TestHive.sparkContext.parallelize(
           TestData(1, "str1") ::
-            TestData(2, "str2") :: Nil)
+          TestData(2, "str2") :: Nil)
       testData.toDF().createOrReplaceTempView("REGisteredTABle")
 
       assertResult(Array(Row(2, "str2"))) {
@@ -976,14 +976,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
       sql(
         """
-      SELECT name, message
-      FROM rawLogs
-      JOIN (
-        SELECT name
-        FROM logFiles
-      ) files
-      ON rawLogs.filename = files.name
-      """).createOrReplaceTempView("boom")
+        SELECT name, message
+        FROM rawLogs
+        JOIN (
+          SELECT name
+          FROM logFiles
+        ) files
+        ON rawLogs.filename = files.name
+        """).createOrReplaceTempView("boom")
 
       // This should be successfully analyzed
       sql("SELECT * FROM boom").queryExecution.analyzed

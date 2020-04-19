@@ -442,10 +442,11 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       checkAnswer(
         sql(
           """
-            |SELECT l.a, count(*)
-            |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-            |GROUP BY l.a
-          """.stripMargin),
+          |SELECT l.a, count(*)
+          |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+          |GROUP BY l.a
+        """.
+            stripMargin),
         Row(null, 10))
 
       checkAnswer(
@@ -483,10 +484,11 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       checkAnswer(
         sql(
           """
-            |SELECT r.a, count(*)
-            |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-            |GROUP BY r.a
-          """.stripMargin),
+          |SELECT r.a, count(*)
+          |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+          |GROUP BY r.a
+        """.
+            stripMargin),
         Row(null, 10))
     }
   }

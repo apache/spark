@@ -315,14 +315,14 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           StructField("arrayOfStruct", ArrayType(
             StructType(
               StructField("field1", BooleanType, true) ::
-                StructField("field2", StringType, true) ::
-                StructField("field3", StringType, true) :: Nil), true), true) ::
+              StructField("field2", StringType, true) ::
+              StructField("field3", StringType, true) :: Nil), true), true) ::
           StructField("struct", StructType(
             StructField("field1", BooleanType, true) ::
-              StructField("field2", DecimalType(20, 0), true) :: Nil), true) ::
+            StructField("field2", DecimalType(20, 0), true) :: Nil), true) ::
           StructField("structWithArrayFields", StructType(
             StructField("field1", ArrayType(LongType, true), true) ::
-              StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
+            StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -425,11 +425,11 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val expectedSchema = StructType(
         StructField("num_bool", StringType, true) ::
-          StructField("num_num_1", LongType, true) ::
-          StructField("num_num_2", DoubleType, true) ::
-          StructField("num_num_3", DoubleType, true) ::
-          StructField("num_str", StringType, true) ::
-          StructField("str_bool", StringType, true) :: Nil)
+        StructField("num_num_1", LongType, true) ::
+        StructField("num_num_2", DoubleType, true) ::
+        StructField("num_num_3", DoubleType, true) ::
+        StructField("num_str", StringType, true) ::
+        StructField("str_bool", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -525,9 +525,9 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val expectedSchema = StructType(
         StructField("array1", ArrayType(StringType, true), true) ::
-          StructField("array2", ArrayType(StructType(
-            StructField("field", LongType, true) :: Nil), true), true) ::
-          StructField("array3", ArrayType(StringType, true), true) :: Nil)
+        StructField("array2", ArrayType(StructType(
+          StructField("field", LongType, true) :: Nil), true), true) ::
+        StructField("array3", ArrayType(StringType, true), true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -537,8 +537,8 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
         sql("select * from jsonTable"),
         Row(Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]",
           """{"field":"str"}"""), Seq(Row(214748364700L), Row(1)), null) ::
-          Row(null, null, Seq("""{"field":"str"}""", """{"field":1}""")) ::
-          Row(null, null, Seq("1", "2", "3")) :: Nil
+        Row(null, null, Seq("""{"field":"str"}""", """{"field":1}""")) ::
+        Row(null, null, Seq("1", "2", "3")) :: Nil
       )
 
       // Treat an element as a number.
@@ -555,11 +555,11 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val expectedSchema = StructType(
         StructField("a", BooleanType, true) ::
-          StructField("b", LongType, true) ::
-          StructField("c", ArrayType(LongType, true), true) ::
-          StructField("d", StructType(
-            StructField("field", BooleanType, true) :: Nil), true) ::
-          StructField("e", StringType, true) :: Nil)
+        StructField("b", LongType, true) ::
+        StructField("c", ArrayType(LongType, true), true) ::
+        StructField("d", StructType(
+          StructField("field", BooleanType, true) :: Nil), true) ::
+        StructField("e", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -577,12 +577,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val expectedSchema = StructType(
         StructField("bigInteger", DecimalType(20, 0), true) ::
-          StructField("boolean", BooleanType, true) ::
-          StructField("double", DoubleType, true) ::
-          StructField("integer", LongType, true) ::
-          StructField("long", LongType, true) ::
-          StructField("null", StringType, true) ::
-          StructField("string", StringType, true) :: Nil)
+        StructField("boolean", BooleanType, true) ::
+        StructField("double", DoubleType, true) ::
+        StructField("integer", LongType, true) ::
+        StructField("long", LongType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -591,12 +591,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       checkAnswer(
         sql("select * from jsonTable"),
         Row(new java.math.BigDecimal("92233720368547758070"),
-          true,
-          1.7976931348623157,
-          10,
-          21474836470L,
-          null,
-          "this is a simple string.")
+        true,
+        1.7976931348623157,
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
       )
     }
   }
@@ -611,12 +611,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val expectedSchema = StructType(
         StructField("bigInteger", StringType, true) ::
-          StructField("boolean", StringType, true) ::
-          StructField("double", StringType, true) ::
-          StructField("integer", StringType, true) ::
-          StructField("long", StringType, true) ::
-          StructField("null", StringType, true) ::
-          StructField("string", StringType, true) :: Nil)
+        StructField("boolean", StringType, true) ::
+        StructField("double", StringType, true) ::
+        StructField("integer", StringType, true) ::
+        StructField("long", StringType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -625,12 +625,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       checkAnswer(
         sql("select * from jsonTable"),
         Row("92233720368547758070",
-          "true",
-          "1.7976931348623157",
-          "10",
-          "21474836470",
-          null,
-          "this is a simple string.")
+        "true",
+        "1.7976931348623157",
+        "10",
+        "21474836470",
+        null,
+        "this is a simple string.")
       )
     }
   }
@@ -641,25 +641,25 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val expectedSchema = StructType(
         StructField("arrayOfArray1", ArrayType(ArrayType(StringType, true), true), true) ::
-          StructField("arrayOfArray2", ArrayType(ArrayType(StringType, true), true), true) ::
-          StructField("arrayOfBigInteger", ArrayType(StringType, true), true) ::
-          StructField("arrayOfBoolean", ArrayType(StringType, true), true) ::
-          StructField("arrayOfDouble", ArrayType(StringType, true), true) ::
-          StructField("arrayOfInteger", ArrayType(StringType, true), true) ::
-          StructField("arrayOfLong", ArrayType(StringType, true), true) ::
-          StructField("arrayOfNull", ArrayType(StringType, true), true) ::
-          StructField("arrayOfString", ArrayType(StringType, true), true) ::
-          StructField("arrayOfStruct", ArrayType(
-            StructType(
-              StructField("field1", StringType, true) ::
-                StructField("field2", StringType, true) ::
-                StructField("field3", StringType, true) :: Nil), true), true) ::
-          StructField("struct", StructType(
+        StructField("arrayOfArray2", ArrayType(ArrayType(StringType, true), true), true) ::
+        StructField("arrayOfBigInteger", ArrayType(StringType, true), true) ::
+        StructField("arrayOfBoolean", ArrayType(StringType, true), true) ::
+        StructField("arrayOfDouble", ArrayType(StringType, true), true) ::
+        StructField("arrayOfInteger", ArrayType(StringType, true), true) ::
+        StructField("arrayOfLong", ArrayType(StringType, true), true) ::
+        StructField("arrayOfNull", ArrayType(StringType, true), true) ::
+        StructField("arrayOfString", ArrayType(StringType, true), true) ::
+        StructField("arrayOfStruct", ArrayType(
+          StructType(
             StructField("field1", StringType, true) ::
-              StructField("field2", StringType, true) :: Nil), true) ::
-          StructField("structWithArrayFields", StructType(
-            StructField("field1", ArrayType(StringType, true), true) ::
-              StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
+            StructField("field2", StringType, true) ::
+            StructField("field3", StringType, true) :: Nil), true), true) ::
+        StructField("struct", StructType(
+          StructField("field1", StringType, true) ::
+          StructField("field2", StringType, true) :: Nil), true) ::
+        StructField("structWithArrayFields", StructType(
+          StructField("field1", ArrayType(StringType, true), true) ::
+          StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -869,12 +869,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val schema = StructType(
         StructField("bigInteger", DecimalType.SYSTEM_DEFAULT, true) ::
-          StructField("boolean", BooleanType, true) ::
-          StructField("double", DoubleType, true) ::
-          StructField("integer", IntegerType, true) ::
-          StructField("long", LongType, true) ::
-          StructField("null", StringType, true) ::
-          StructField("string", StringType, true) :: Nil)
+        StructField("boolean", BooleanType, true) ::
+        StructField("double", DoubleType, true) ::
+        StructField("integer", IntegerType, true) ::
+        StructField("long", LongType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
 
       val jsonDF1 = spark.read.schema(schema).json(path)
 
@@ -885,12 +885,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       checkAnswer(
         sql("select * from jsonTable1"),
         Row(new java.math.BigDecimal("92233720368547758070"),
-          true,
-          1.7976931348623157,
-          10,
-          21474836470L,
-          null,
-          "this is a simple string.")
+        true,
+        1.7976931348623157,
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
       )
 
       val jsonDF2 = spark.read.schema(schema).json(primitiveFieldAndType)
@@ -902,12 +902,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       checkAnswer(
         sql("select * from jsonTable2"),
         Row(new java.math.BigDecimal("92233720368547758070"),
-          true,
-          1.7976931348623157,
-          10,
-          21474836470L,
-          null,
-          "this is a simple string.")
+        true,
+        1.7976931348623157,
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
       )
     }
   }
@@ -923,26 +923,26 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       checkAnswer(
         sql("select `map` from jsonWithSimpleMap"),
         Row(Map("a" -> 1)) ::
-          Row(Map("b" -> 2)) ::
-          Row(Map("c" -> 3)) ::
-          Row(Map("c" -> 1, "d" -> 4)) ::
-          Row(Map("e" -> null)) :: Nil
+        Row(Map("b" -> 2)) ::
+        Row(Map("c" -> 3)) ::
+        Row(Map("c" -> 1, "d" -> 4)) ::
+        Row(Map("e" -> null)) :: Nil
       )
 
       withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
         checkAnswer(
           sql("select `map`['c'] from jsonWithSimpleMap"),
           Row(null) ::
-            Row(null) ::
-            Row(3) ::
-            Row(1) ::
-            Row(null) :: Nil
+          Row(null) ::
+          Row(3) ::
+          Row(1) ::
+          Row(null) :: Nil
         )
       }
 
       val innerStruct = StructType(
         StructField("field1", ArrayType(IntegerType, true), true) ::
-          StructField("field2", IntegerType, true) :: Nil)
+        StructField("field2", IntegerType, true) :: Nil)
       val schemaWithComplexMap = StructType(
         StructField("map", MapType(StringType, innerStruct, true), false) :: Nil)
 
@@ -953,22 +953,22 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       checkAnswer(
         sql("select `map` from jsonWithComplexMap"),
         Row(Map("a" -> Row(Seq(1, 2, 3, null), null))) ::
-          Row(Map("b" -> Row(null, 2))) ::
-          Row(Map("c" -> Row(Seq(), 4))) ::
-          Row(Map("c" -> Row(null, 3), "d" -> Row(Seq(null), null))) ::
-          Row(Map("e" -> null)) ::
-          Row(Map("f" -> Row(null, null))) :: Nil
+        Row(Map("b" -> Row(null, 2))) ::
+        Row(Map("c" -> Row(Seq(), 4))) ::
+        Row(Map("c" -> Row(null, 3), "d" -> Row(Seq(null), null))) ::
+        Row(Map("e" -> null)) ::
+        Row(Map("f" -> Row(null, null))) :: Nil
       )
 
       withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
         checkAnswer(
           sql("select `map`['a'].field1, `map`['c'].field2 from jsonWithComplexMap"),
           Row(Seq(1, 2, 3, null), null) ::
-            Row(null, null) ::
-            Row(null, 4) ::
-            Row(null, 3) ::
-            Row(null, null) ::
-            Row(null, null) :: Nil
+          Row(null, null) ::
+          Row(null, 4) ::
+          Row(null, 3) ::
+          Row(null, null) ::
+          Row(null, null) :: Nil
         )
       }
     }
@@ -1185,14 +1185,14 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val schema = StructType(
         StructField("field1",
           ArrayType(ArrayType(ArrayType(ArrayType(StringType, true), true), true), true), true) ::
-          StructField("field2",
-            ArrayType(ArrayType(
-              StructType(StructField("Test", LongType, true) :: Nil), true), true), true) ::
-          StructField("field3",
-            ArrayType(ArrayType(
-              StructType(StructField("Test", StringType, true) :: Nil), true), true), true) ::
-          StructField("field4",
-            ArrayType(ArrayType(ArrayType(LongType, true), true), true), true) :: Nil)
+        StructField("field2",
+          ArrayType(ArrayType(
+            StructType(StructField("Test", LongType, true) :: Nil), true), true), true) ::
+        StructField("field3",
+          ArrayType(ArrayType(
+            StructType(StructField("Test", StringType, true) :: Nil), true), true), true) ::
+        StructField("field4",
+          ArrayType(ArrayType(ArrayType(LongType, true), true), true), true) :: Nil)
 
       assert(schema === jsonDF.schema)
 

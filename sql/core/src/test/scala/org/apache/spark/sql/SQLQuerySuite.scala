@@ -312,7 +312,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("rows") {
       spark.read
         .json(Seq("""{"nested": {"attribute": 1}, "value": 2}""").toDS())
-        .createOrReplaceTempView("rows")
+       .createOrReplaceTempView("rows")
 
       checkAnswer(
         sql(
@@ -885,11 +885,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(
         sql("SELECT * FROM lowerCaseData INNER JOIN subset1 ON subset1.n = lowerCaseData.n"),
         Row(3, "c", 3) ::
-          Row(4, "d", 4) :: Nil)
+        Row(4, "d", 4) :: Nil)
       checkAnswer(
         sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
         Row(1, "a", 1) ::
-          Row(2, "b", 2) :: Nil)
+        Row(2, "b", 2) :: Nil)
     }
   }
 
@@ -1136,9 +1136,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("applySchema1", "applySchema2", "applySchema3") {
       val schema1 = StructType(
         StructField("f1", IntegerType, false) ::
-          StructField("f2", StringType, false) ::
-          StructField("f3", BooleanType, false) ::
-          StructField("f4", IntegerType, true) :: Nil)
+        StructField("f2", StringType, false) ::
+        StructField("f3", BooleanType, false) ::
+        StructField("f4", IntegerType, true) :: Nil)
 
       val rowRDD1 = unparsedStrings.map { r =>
         val values = r.split(",").map(_.trim)
@@ -1153,22 +1153,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(
         sql("SELECT * FROM applySchema1"),
         Row(1, "A1", true, null) ::
-          Row(2, "B2", false, null) ::
-          Row(3, "C3", true, null) ::
-          Row(4, "D4", true, 2147483644) :: Nil)
+        Row(2, "B2", false, null) ::
+        Row(3, "C3", true, null) ::
+        Row(4, "D4", true, 2147483644) :: Nil)
 
       checkAnswer(
         sql("SELECT f1, f4 FROM applySchema1"),
         Row(1, null) ::
-          Row(2, null) ::
-          Row(3, null) ::
-          Row(4, 2147483644) :: Nil)
+        Row(2, null) ::
+        Row(3, null) ::
+        Row(4, 2147483644) :: Nil)
 
       val schema2 = StructType(
         StructField("f1", StructType(
           StructField("f11", IntegerType, false) ::
-            StructField("f12", BooleanType, false) :: Nil), false) ::
-          StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
+          StructField("f12", BooleanType, false) :: Nil), false) ::
+        StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
 
       val rowRDD2 = unparsedStrings.map { r =>
         val values = r.split(",").map(_.trim)
@@ -1183,16 +1183,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(
         sql("SELECT * FROM applySchema2"),
         Row(Row(1, true), Map("A1" -> null)) ::
-          Row(Row(2, false), Map("B2" -> null)) ::
-          Row(Row(3, true), Map("C3" -> null)) ::
-          Row(Row(4, true), Map("D4" -> 2147483644)) :: Nil)
+        Row(Row(2, false), Map("B2" -> null)) ::
+        Row(Row(3, true), Map("C3" -> null)) ::
+        Row(Row(4, true), Map("D4" -> 2147483644)) :: Nil)
 
       checkAnswer(
         sql("SELECT f1.f11, f2['D4'] FROM applySchema2"),
         Row(1, null) ::
-          Row(2, null) ::
-          Row(3, null) ::
-          Row(4, 2147483644) :: Nil)
+        Row(2, null) ::
+        Row(3, null) ::
+        Row(4, 2147483644) :: Nil)
 
       // The value of a MapType column can be a mutable map.
       val rowRDD3 = unparsedStrings.map { r =>
@@ -1210,9 +1210,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(
         sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
         Row(1, null) ::
-          Row(2, null) ::
-          Row(3, null) ::
-          Row(4, 2147483644) :: Nil)
+        Row(2, null) ::
+        Row(3, null) ::
+        Row(4, 2147483644) :: Nil)
     }
   }
 
@@ -1969,8 +1969,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
         val specialCharacterPath = sql(
           """
-            | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
-            |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
+          | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
+          |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
       """.stripMargin)
         withTempView("specialCharacterTable") {
           specialCharacterPath.createOrReplaceTempView("specialCharacterTable")
@@ -1978,9 +1978,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             specialCharacterPath.select($"`r&&b.c`.*"),
             nestedStructData.select($"record.*"))
           checkAnswer(
-            sql(
-              "SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
-            nestedStructData.select($"record.r1"))
+          sql(
+            "SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
+          nestedStructData.select($"record.r1"))
           checkAnswer(
             sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
             nestedStructData.select($"record.r2"))
