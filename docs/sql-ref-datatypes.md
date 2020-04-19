@@ -19,6 +19,8 @@ license: |
   limitations under the License.
 ---
 
+### Supported Data Types
+
 Spark SQL and DataFrames support the following data types:
 
 * Numeric types
@@ -706,3 +708,28 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 </table>
 </div>
 </div>
+
+### Floating Point Special Values
+
+Spark SQL supports several special floating point values in a case-insensitive manner:
+
+ * Inf/+Inf/Infinity/+Infinity: positive infinity
+   * ```FloatType```: 1.0f / 0.0f
+   * ```DoubleType```: 1.0 / 0.0
+ * -Inf/-Infinity: negative infinity
+   * ```FloatType```: -1.0f / 0.0f
+   * ```DoubleType```: -1.0 / 0.0
+ * NaN: not a number
+   * ```FloatType```: 0.0f / 0.0f
+   * ```DoubleType```:  0.0d / 0.0
+
+### NaN Semantics
+
+There is special handling for not-a-number (NaN) when dealing with `float` or `double` types that
+do not exactly match standard floating point semantics.
+Specifically:
+
+ - NaN = NaN returns true.
+ - In aggregations, all NaN values are grouped together.
+ - NaN is treated as a normal value in join keys.
+ - NaN values go last when in ascending order, larger than any other numeric value.

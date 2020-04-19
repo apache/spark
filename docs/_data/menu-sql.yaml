@@ -80,8 +80,6 @@
       url: sql-ref-datatypes.html
     - text: Null Semantics
       url: sql-ref-null-semantics.html
-    - text: NaN Semantics
-      url: sql-ref-nan-semantics.html
     - text: ANSI Compliance
       url: sql-ref-ansi-compliance.html
       subitems:
