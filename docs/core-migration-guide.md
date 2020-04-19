@@ -25,7 +25,7 @@ license: |
 ## Upgrading from Core 2.4 to 3.0
 
 - The `org.apache.spark.ExecutorPlugin` interface and related configuration has been replaced with
-  `org.apache.spark.plugin.SparkPlugin`, which adds new functionality. Plugins using the old
+  `org.apache.spark.api.plugin.SparkPlugin`, which adds new functionality. Plugins using the old
   interface must be modified to extend the new interfaces. Check the
   [Monitoring](monitoring.html) guide for more details.
 
