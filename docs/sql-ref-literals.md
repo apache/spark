@@ -32,12 +32,20 @@ A literal (also known as a constant) represents a fixed data value. Spark SQL su
 
 A string literal is used to specify a character string value.
 
-#### <em>Syntax</em>
+#### Syntax
 
 {% highlight sql %}
-'...' | "..."
+'c [ ... ]' | "c [ ... ]"
 {% endhighlight %}
-...: indicates any string.
+
+#### <em>Parameters</em>
+
+<dl>
+  <dt><code><em>c</em></code></dt>
+  <dd>
+    One character from the character set. Use <code>\</code> to escape special characters.
+  </dd>
+</dl>
 
 #### <em>Examples</em>
 
@@ -61,20 +69,20 @@ SELECT SELECT 'it\'s $10.' AS col;
   |      col|
   +---------+
   |It's $10.|
-  +----------+
+  +---------+
 {% endhighlight %}
 
 ### Null Literal
 
 A null literal is used to specify a null value.
 
-#### <em>Syntax</em>
+#### Syntax
 
 {% highlight sql %}
 NULL
 {% endhighlight %}
 
-#### <em>Examples</em>
+#### Examples
 
 {% highlight sql %}
 SELECT NULL AS col;
@@ -89,13 +97,13 @@ SELECT NULL AS col;
 
 A boolean literal is used to specify a boolean value.
 
-#### <em>Syntax</em>
+#### Syntax
 
 {% highlight sql %}
 TRUE | FALSE
 {% endhighlight %}
 
-#### <em>Examples</em>
+#### Examples
 
 {% highlight sql %}
 SELECT TRUE AS col;
@@ -112,17 +120,45 @@ A numeric literal is used to specify a fixed or floating-point number.
 
 #### Integer Literal
 
-#### <em>Syntax</em>
+#### Syntax
 
 {% highlight sql %}
 [ + | - ] digit [ ... ] [ L | S | Y ]
 {% endhighlight %}
-digit: one of 0, 1, 2, 3, 4, 5, 6, 7, 8 or 9. <br>
-default (no postfix): indicates a 4-byte signed integer number.<br>
-L: case insensitive, indicates <code>BIGINT</code>, which is a 8-byte signed integer number.<br>
-S: case insensitive, indicates <code>SMALLINT</code>, which is a 2-byte signed integer number.<br>
-Y: case insensitive, indicates <code>TINYINT</code>, which is a 1-byte signed integer number.<br>
-#### <em>Examples</em>
+
+#### Parameters
+
+<dl>
+  <dt><code><em>digit</em></code></dt>
+  <dd>
+    Any numeral from 0 to 9.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>L</em></code></dt>
+  <dd>
+    Case insensitive, indicates <code>BIGINT</code>, which is a 8-byte signed integer number.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>S</em></code></dt>
+  <dd>
+    Case insensitive, indicates <code>SMALLINT</code>, which is a 2-byte signed integer number.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>Y</em></code></dt>
+  <dd>
+    Case insensitive, indicates <code>TINYINT</code>, which is a 1-byte signed integer number.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>default (no postfix)</em></code></dt>
+  <dd>
+    Indicates a 4-byte signed integer number.
+  </dd>
+</dl>
+#### Examples
 
 {% highlight sql %}
 SELECT -2147483648 AS col;
@@ -156,13 +192,22 @@ SELECT 482S AS col;
 
 #### Decimal Literal
 
-#### <em>Syntax</em>
+#### Syntax
 
 {% highlight sql %}
  [ + | - ] { digit [ ... ] . [ digit [ ... ] ] | . digit [ ... ] }
 {% endhighlight %}
 
-#### <em>Examples</em>
+#### Parameters
+
+<dl>
+  <dt><code><em>digit</em></code></dt>
+  <dd>
+    Any numeral from 0 to 9.
+  </dd>
+</dl>
+
+#### Examples
 
 {% highlight sql %}
 SELECT 12.578 AS col;
@@ -189,18 +234,42 @@ SELECT -.1234567 AS col;
 
 #### Floating Point and BigDecimal Literals
 
-#### <em>Syntax</em>
+#### Syntax
 
 {% highlight sql %}
- [ + | - ] { digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ]
-             | digit [ ... ] . [ digit [ ... ] ] [ E [ + | - ] digit [ ... ] ] [ D | BD ]
-             | . digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] }
+ [ + | - ] { digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] |
+             digit [ ... ] . [ digit [ ... ] ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] |
+             . digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] }
 {% endhighlight %}
-digit: one of 0, 1, 2, 3, 4, 5, 6, 7, 8 or 9. <br>
-default (no postfix): indicate a 4-byte single-precision floating point number.<br>
-D: case insensitive, indicates <code>DOUBLE</code>, which is a 8-byte double-precision floating point number.<br>
-BD: case insensitive, indicates <code>BIGDECIMAL</code>, which is an arbitrary-precision signed decimal number.<br>
-#### <em>Examples</em>
+
+#### Parameters
+
+<dl>
+  <dt><code><em>digit</em></code></dt>
+  <dd>
+    Any numeral from 0 to 9.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>D</em></code></dt>
+  <dd>
+    Case insensitive, indicates <code>DOUBLE</code>, which is a 8-byte double-precision floating point number.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>BD</em></code></dt>
+  <dd>
+    Case insensitive, indicates <code>BIGDECIMAL</code>, which is an arbitrary-precision signed decimal number.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>default (no postfix)</em></code></dt>
+  <dd>
+    Indicate a 4-byte single-precision floating point number.
+  </dd>
+</dl>
+
+#### Examples
 
 {% highlight sql %}
 SELECT 5E2 AS col;
@@ -221,7 +290,7 @@ SELECT -5BD AS col;
   +---+
   |col|
   +---+
-  |-5 |
+  | -5|
   +---+
 
 SELECT 12.578e-2d AS col;
@@ -259,13 +328,26 @@ A Datetime literal is used to specify a datetime value.
 
 #### Date Literal
 
-#### <em>Syntax</em>
+#### Syntax
 
 {% highlight sql %}
-DATE 'yyyy [ -MM-dd ]'
+DATE { 'yyyy' |
+       'yyyy-[m]m' |
+       'yyyy-[m]m-[d]d' |
+       'yyyy-[m]m-[d]d ' |
+       'yyyy-[m]m-[d]d[T]c[...]' }
 {% endhighlight %}
 
-#### <em>Examples</em>
+#### Parameters
+
+<dl>
+  <dt><code><em>c</em></code></dt>
+  <dd>
+    One character from the character set.
+  </dd>
+</dl>
+
+#### Examples
 
 {% highlight sql %}
 SELECT DATE '1997' AS col;
@@ -292,13 +374,40 @@ SELECT DATE '2011-11-11' AS col;
 
 #### Timestamp Literal
 
-#### <em>Syntax</em>
+#### Syntax
 
 {% highlight sql %}
-TIMESTAMP { 'yyyy [ -MM-dd HH:mm:ss.SSSSSSzzz ]' | '[ yyyy-MM-dd ] HH:mm [ :ss.SSSSSSzzz ]' }
+TIMESTAMP { 'yyyy' |
+            'yyyy-[m]m' |
+            'yyyy-[m]m-[d]d' |
+            'yyyy-[m]m-[d]d ' |
+            'yyyy-[m]m-[d]d[T][h]h[:]' |
+            'yyyy-[m]m-[d]d[T][h]h:[m]m[:]' |
+            'yyyy-[m]m-[d]d[T][h]h:[m]m:[s]s[.]' |
+            'yyyy-[m]m-[d]d[T][h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]' |
+            '[T][h]h:' |
+            '[T][h]h:[m]m[:]' |
+            '[T][h]h:[m]m:[s]s[.]' |
+            'T[h]h' |
+            '[T][h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]' }
 {% endhighlight %}
+`zone_id` should have one of the forms:
+<ul>
+  <li>Z - Zulu time zone UTC+0</li>
+  <li>+|-[h]h:[m]m</li>
+  <li>A short id, see <a href="https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#SHORT_IDS">SHORT_IDS</a></li>
+  <li>An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-, and a suffix in the formats:
+    <ul>
+      <li>+|-h[h]</li>
+      <li>+|-hh[:]mm</li>
+      <li>+|-hh:mm:ss</li>
+      <li>+|-hhmmss</li>
+    </ul>
+  </li>
+  <li>Region-based zone IDs in the form <code>area/city</code>, such as <code>Europe/Paris</code></li>
+</ul>
 
-#### <em>Examples</em>
+#### Examples
 
 {% highlight sql %}
 SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;
@@ -334,24 +443,35 @@ SELECT TIMESTAMP '09:26' AS col;
 
 An interval literal is used to specify a fixed period of time.
 
-#### <em>Syntax</em>
+#### Syntax
 {% highlight sql %}
-{ INTERVAL interval_value interval_unit [ interval_value interval_unit ... ]
-  | INTERVAL interval_value interval_unit TO interval_unit }
+{ INTERVAL interval_value interval_unit [ interval_value interval_unit ... ] |
+  INTERVAL interval_value interval_unit TO interval_unit }
 {% endhighlight %}
 
-interval_value:
-{% highlight sql %}
-{ [ + | - ] number_value | string_value }
-{% endhighlight %}
-Note: string_value needs to be used for INTERNAL ... TO ... format.
+#### Parameters
 
-interval_unit:
-{% highlight sql %}
-YEAR | MONTH | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
-{% endhighlight %}
+<dl>
+  <dt><code><em>interval_value</em></code></dt>
+  <dd>
+    <b>Syntax:</b>
+      <code>
+        { [ + | - ] number_value | string_value }
+      </code><br>
+      Note: string_value needs to be used for <code>INTERNAL</code> ... <code>TO</code> ... format.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>interval_unit</em></code></dt>
+  <dd>
+    <b>Syntax:</b>
+      <code>
+        YEAR | MONTH | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+      </code>
+  </dd>
+</dl>
 
-#### <em>Examples</em>
+#### Examples
 
 {% highlight sql %}
 SELECT INTERVAL 3 YEAR AS col;
