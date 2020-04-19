@@ -2089,7 +2089,7 @@ object DatePart {
     case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
     case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
     case "DAY" | "D" | "DAYS" => DayOfMonth(source)
-    case "DOW" | "DAYOFWEEK" => DayOfWeek(source)
+    case "DAYOFWEEK" | "DOW" => DayOfWeek(source)
     case "ISODOW" => Add(WeekDay(source), Literal(1))
     case "DOY" => DayOfYear(source)
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
@@ -2101,6 +2101,31 @@ object DatePart {
       Microseconds(source)
     case "EPOCH" => Epoch(source)
     case _ => errorHandleFunc
+  }
+}
+
+object DatePartLike {
+
+  def toEquivalentExpr(field: Expression, source: Expression): Expression = {
+    if (!field.foldable) {
+      throw new AnalysisException("The field parameter needs to be a foldable string value.")
+    }
+    val fieldEval = field.eval()
+    if (fieldEval == null) {
+      Literal(null, DoubleType)
+    } else {
+      val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
+      val errMsg = s"Literals of type '$fieldStr' are currently not supported " +
+        s"for the ${source.dataType.catalogString} type."
+      if (source.dataType == CalendarIntervalType) {
+        ExtractIntervalPart.parseExtractField(
+          fieldStr,
+          source,
+          throw new AnalysisException(errMsg))
+      } else {
+        DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
+      }
+    }
   }
 }
 
@@ -2158,40 +2183,61 @@ object DatePart {
        30.001001
   """,
   note = """
-    The _FUNC_ function is equivalent to the SQL-standard function `extract`
+    The _FUNC_ function is equivalent to the SQL-standard function <a href="#extract">extract</a>
   """,
   since = "3.0.0")
-// scalastyle:off line.size.limit
+// scalastyle:on line.size.limit
 case class DatePart(field: Expression, source: Expression, child: Expression)
   extends RuntimeReplaceable {
 
-  def this(field: Expression, source: Expression) {
-    this(field, source, {
-      if (!field.foldable) {
-        throw new AnalysisException("The field parameter needs to be a foldable string value.")
-      }
-      val fieldEval = field.eval()
-      if (fieldEval == null) {
-        Literal(null, DoubleType)
-      } else {
-        val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
-        val errMsg = s"Literals of type '$fieldStr' are currently not supported " +
-          s"for the ${source.dataType.catalogString} type."
-        if (source.dataType == CalendarIntervalType) {
-          ExtractIntervalPart.parseExtractField(
-            fieldStr,
-            source,
-            throw new AnalysisException(errMsg))
-        } else {
-          DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
-        }
-      }
-    })
+  def this(field: Expression, source: Expression) = {
+    this(field, source, DatePartLike.toEquivalentExpr(field, source))
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
   override def sql: String = s"$prettyName(${field.sql}, ${source.sql})"
   override def prettyName: String = "date_part"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(field FROM source) - Extracts a part of the date/timestamp or interval source.",
+  arguments = """
+    Arguments:
+      * field - selects which part of the source should be extracted and supported string values
+                are the same with the `date_part` fields.
+      * source - a date/timestamp or interval column from where `field` should be extracted
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456');
+       2019
+      > SELECT _FUNC_(week FROM timestamp'2019-08-12 01:00:00.123456');
+       33
+      > SELECT _FUNC_(doy FROM DATE'2019-08-12');
+       224
+      > SELECT _FUNC_(SECONDS FROM timestamp'2019-10-01 00:00:01.000001');
+       1.000001
+      > SELECT _FUNC_(days FROM interval 1 year 10 months 5 days);
+       5
+      > SELECT _FUNC_(seconds FROM interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
+       30.001001
+  """,
+  note = """
+    The _FUNC_ function is equivalent to `date_part`. See  <a href="#date_part">date_part</a> for detail.
+  """,
+  since = "3.0.0")
+// scalastyle:on line.size.limit
+case class Extract(field: Expression, source: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(field: Expression, source: Expression) = {
+    this(field, source, DatePartLike.toEquivalentExpr(field, source))
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(field, source)
+  override def sql: String = s"$prettyName(${field.sql} FROM ${source.sql})"
+  override def prettyName: String = "extract"
 }
 
 /**

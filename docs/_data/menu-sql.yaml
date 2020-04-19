@@ -168,6 +168,8 @@
                   url: sql-ref-syntax-qry-select-inline-table.html
                 - text: Common Table Expression
                   url: sql-ref-syntax-qry-select-cte.html
+                - text: Window Function
+                  url: sql-ref-syntax-qry-window.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements

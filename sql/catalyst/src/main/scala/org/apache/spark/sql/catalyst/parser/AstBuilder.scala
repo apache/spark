@@ -1550,7 +1550,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
     val arguments = Seq(Literal(ctx.field.getText), expression(ctx.source))
-    UnresolvedFunction("date_part", arguments, isDistinct = false)
+    UnresolvedFunction("extract", arguments, isDistinct = false)
   }
 
   /**
