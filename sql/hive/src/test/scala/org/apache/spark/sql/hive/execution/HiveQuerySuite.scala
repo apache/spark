@@ -733,8 +733,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       TestHive.sparkContext.parallelize(fixture).toDF().createOrReplaceTempView("having_test")
       val results =
         sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
-          .collect()
-          .map(x => (x.getString(0), x.getInt(1)))
+        .collect()
+        .map(x => (x.getString(0), x.getInt(1)))
 
       assert(results === Array(("foo", 4)))
       TestHive.reset()

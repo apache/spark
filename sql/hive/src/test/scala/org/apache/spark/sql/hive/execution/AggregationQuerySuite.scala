@@ -831,11 +831,11 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
             |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
           """.stripMargin),
         Row(1, null) ::
-          Row(2, null) ::
-          Row(3, Double.NaN) ::
-          Row(4, Double.NaN) ::
-          Row(5, Double.NaN) ::
-          Row(6, Double.NaN) :: Nil)
+        Row(2, null) ::
+        Row(3, Double.NaN) ::
+        Row(4, Double.NaN) ::
+        Row(5, Double.NaN) ::
+        Row(6, Double.NaN) :: Nil)
 
       val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
       assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)

@@ -274,12 +274,12 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val expectedSchema = StructType(
         StructField("bigInteger", DecimalType(20, 0), true) ::
-          StructField("boolean", BooleanType, true) ::
-          StructField("double", DoubleType, true) ::
-          StructField("integer", LongType, true) ::
-          StructField("long", LongType, true) ::
-          StructField("null", StringType, true) ::
-          StructField("string", StringType, true) :: Nil)
+        StructField("boolean", BooleanType, true) ::
+        StructField("double", DoubleType, true) ::
+        StructField("integer", LongType, true) ::
+        StructField("long", LongType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -304,25 +304,25 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val expectedSchema = StructType(
         StructField("arrayOfArray1", ArrayType(ArrayType(StringType, true), true), true) ::
-          StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, true), true), true) ::
-          StructField("arrayOfBigInteger", ArrayType(DecimalType(21, 0), true), true) ::
-          StructField("arrayOfBoolean", ArrayType(BooleanType, true), true) ::
-          StructField("arrayOfDouble", ArrayType(DoubleType, true), true) ::
-          StructField("arrayOfInteger", ArrayType(LongType, true), true) ::
-          StructField("arrayOfLong", ArrayType(LongType, true), true) ::
-          StructField("arrayOfNull", ArrayType(StringType, true), true) ::
-          StructField("arrayOfString", ArrayType(StringType, true), true) ::
-          StructField("arrayOfStruct", ArrayType(
-            StructType(
-              StructField("field1", BooleanType, true) ::
-              StructField("field2", StringType, true) ::
-              StructField("field3", StringType, true) :: Nil), true), true) ::
-          StructField("struct", StructType(
+        StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, true), true), true) ::
+        StructField("arrayOfBigInteger", ArrayType(DecimalType(21, 0), true), true) ::
+        StructField("arrayOfBoolean", ArrayType(BooleanType, true), true) ::
+        StructField("arrayOfDouble", ArrayType(DoubleType, true), true) ::
+        StructField("arrayOfInteger", ArrayType(LongType, true), true) ::
+        StructField("arrayOfLong", ArrayType(LongType, true), true) ::
+        StructField("arrayOfNull", ArrayType(StringType, true), true) ::
+        StructField("arrayOfString", ArrayType(StringType, true), true) ::
+        StructField("arrayOfStruct", ArrayType(
+          StructType(
             StructField("field1", BooleanType, true) ::
-            StructField("field2", DecimalType(20, 0), true) :: Nil), true) ::
-          StructField("structWithArrayFields", StructType(
-            StructField("field1", ArrayType(LongType, true), true) ::
-            StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
+            StructField("field2", StringType, true) ::
+            StructField("field3", StringType, true) :: Nil), true), true) ::
+        StructField("struct", StructType(
+          StructField("field1", BooleanType, true) ::
+          StructField("field2", DecimalType(20, 0), true) :: Nil), true) ::
+        StructField("structWithArrayFields", StructType(
+          StructField("field1", ArrayType(LongType, true), true) ::
+          StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 
@@ -499,11 +499,11 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
       val expectedSchema = StructType(
         StructField("array", ArrayType(LongType, true), true) ::
-          StructField("num_struct", StringType, true) ::
-          StructField("str_array", StringType, true) ::
-          StructField("struct", StructType(
-            StructField("field", StringType, true) :: Nil), true) ::
-          StructField("struct_array", StringType, true) :: Nil)
+        StructField("num_struct", StringType, true) ::
+        StructField("str_array", StringType, true) ::
+        StructField("struct", StructType(
+          StructField("field", StringType, true) :: Nil), true) ::
+        StructField("struct_array", StringType, true) :: Nil)
 
       assert(expectedSchema === jsonDF.schema)
 

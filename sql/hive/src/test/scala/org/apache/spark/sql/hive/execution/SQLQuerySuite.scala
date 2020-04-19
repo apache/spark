@@ -1283,12 +1283,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(
         sql(
           s"""FROM(
-             |  FROM test SELECT TRANSFORM(a, b)
-             |  USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
-             |  AS (c STRING, d STRING)
-             |) t
-             |SELECT c
-           """.stripMargin),
+            |  FROM test SELECT TRANSFORM(a, b)
+            |  USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+            |  AS (c STRING, d STRING)
+            |) t
+            |SELECT c
+          """.stripMargin),
         (0 until 5).map(i => Row(i + "#")))
     }
   }
@@ -1310,7 +1310,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |AS (c STRING, d STRING)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES('field.delim' = '|')
-         """.stripMargin)
+        """.stripMargin)
 
       checkAnswer(df, (0 until 5).map(i => Row(i + "#", i + "#")))
     }
