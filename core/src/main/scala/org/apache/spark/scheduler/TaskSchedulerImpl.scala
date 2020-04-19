@@ -401,9 +401,7 @@ private[spark] class TaskSchedulerImpl(
                 // addresses are the same as that we allocated in taskResourceAssignments since it's
                 // synchronized. We don't remove the exact addresses allocated because the current
                 // approach produces the identical result with less time complexity.
-                availableResources(i).getOrElse(rName,
-                  throw new SparkException(s"Try to acquire resource $rName that doesn't exist."))
-                  .remove(0, rInfo.addresses.size)
+                availableResources(i)(rName).remove(0, rInfo.addresses.size)
               }
               // Only update hosts for a barrier task.
               if (taskSet.isBarrier) {
@@ -468,8 +466,8 @@ private[spark] class TaskSchedulerImpl(
       resourceProfileIds: Array[Int],
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Buffer[String]]],
-      rpId: Int): Int = {
-    val resourceProfile = sc.resourceProfileManager.resourceProfileFromId(rpId)
+      taskSet: TaskSet): Int = {
+    val resourceProfile = sc.resourceProfileManager.resourceProfileFromId(taskSet.resourceProfileId)
     val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter { case (id, _) =>
       (id == resourceProfile.id)
     }
@@ -484,9 +482,11 @@ private[spark] class TaskSchedulerImpl(
         numTasksPerExecCores
       } else {
         val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount)
-          .getOrElse(throw new SparkException("limitingResource returns from ResourceProfile" +
-            s" $resourceProfile doesn't actually contain that task resource!")
-          )
+          .getOrElse {
+            dagScheduler.taskSetFailed(taskSet, "limitingResource returns from ResourceProfile " +
+              s"$resourceProfile doesn't actually contain that task resource!", None)
+            return -1
+          }
         // available addresses already takes into account if there are fractional
         // task resource requests
         val availAddrs = availableResources(index).get(limitingResource).map(_.size).getOrElse(0)
@@ -582,7 +582,7 @@ private[spark] class TaskSchedulerImpl(
       // value is -1
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
         val slots = calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
-          taskSet.taskSet.resourceProfileId)
+          taskSet.taskSet)
         slots
       } else {
         -1
@@ -675,11 +675,13 @@ private[spark] class TaskSchedulerImpl(
           // Check whether the barrier tasks are partially launched.
           // TODO SPARK-24818 handle the assert failure case (that can happen when some locality
           // requirements are not fulfilled, and we should revert the launched tasks).
-          require(addressesWithDescs.size == taskSet.numTasks,
-            s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
+          if (addressesWithDescs.size != taskSet.numTasks) {
+            dagScheduler.taskSetFailed(taskSet.taskSet,
+            s"Fail current round of resource offers for barrier stage ${taskSet.stageId} " +
               s"because only ${addressesWithDescs.size} out of a total number of " +
               s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
-              "been blacklisted or cannot fulfill task locality requirements.")
+              "been blacklisted or cannot fulfill task locality requirements.", None)
+          }
 
           // materialize the barrier coordinator.
           maybeInitBarrierCoordinator()
