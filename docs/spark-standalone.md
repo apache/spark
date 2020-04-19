@@ -241,6 +241,16 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.6.3</td>
 </tr>
 <tr>
+  <td><code>spark.submit.waitAppCompletion</code></td>
+  <td><code>true</code></td>
+  <td>
+  In Standalone cluster mode, controls whether the client waits to exit until the application completes.
+  If set to <code>true</code>, the client process will stay alive reporting the application's status.
+  Otherwise, the client process will exit after submission.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.worker.timeout</code></td>
   <td>60</td>
   <td>

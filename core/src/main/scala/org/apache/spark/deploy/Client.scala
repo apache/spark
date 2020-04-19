@@ -61,6 +61,9 @@ private class ClientEndpoint(
 
    private val lostMasters = new HashSet[RpcAddress]
    private var activeMasterEndpoint: RpcEndpointRef = null
+   private val waitAppCompletion = conf.get("spark.submit.waitAppCompletion", "false") == "true"
+   private val REPORT_DRIVER_STATUS_INTERVAL = 1000
+
 
   private def getProperty(key: String, conf: SparkConf): Option[String] = {
     sys.props.get(key).orElse(conf.getOption(key))
@@ -124,38 +127,57 @@ private class ClientEndpoint(
     }
   }
 
-  /* Find out driver status then exit the JVM */
+  /**
+    *  Find out driver status then exit the JVM. If the waitAppCompletion is set to true, monitors
+    *  the application until it finishes, fails or is killed.
+    */
   def pollAndReportStatus(driverId: String): Unit = {
     // Since ClientEndpoint is the only RpcEndpoint in the process, blocking the event loop thread
     // is fine.
     logInfo("... waiting before polling master for driver state")
     Thread.sleep(5000)
     logInfo("... polling master for driver state")
-    val statusResponse =
-      activeMasterEndpoint.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
-    if (statusResponse.found) {
-      logInfo(s"State of $driverId is ${statusResponse.state.get}")
-      // Worker node, if present
-      (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
-        case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-          logInfo(s"Driver running on $hostPort ($id)")
-        case _ =>
+    while (true) {
+      val statusResponse =
+        activeMasterEndpoint.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
+      if (statusResponse.found) {
+        logInfo(s"State of $driverId is ${statusResponse.state.get}")
+        // Worker node, if present
+        (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
+          case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
+            logInfo(s"Driver running on $hostPort ($id)")
+          case _ =>
+        }
+        // Exception, if present
+        statusResponse.exception match {
+          case Some(e) =>
+            logError(s"Exception from cluster was: $e")
+            e.printStackTrace()
+            System.exit(-1)
+          case _ =>
+            if (!waitAppCompletion) {
+              logInfo(s"No exception found and waitAppCompletion is false, " +
+                s"exiting spark-submit JVM.")
+              System.exit(0)
+            } else if (statusResponse.state.get == DriverState.FINISHED ||
+              statusResponse.state.get == DriverState.FAILED ||
+              statusResponse.state.get == DriverState.ERROR ||
+              statusResponse.state.get == DriverState.KILLED) {
+              logInfo(s"waitAppCompletion is true, state is ${statusResponse.state.get}, " +
+                s"exiting spark-submit JVM.")
+              System.exit(0)
+            } else {
+              logTrace(s"waitAppCompletion is true, state is ${statusResponse.state.get}," +
+                s"continue monitoring driver status.")
+            }
+        }
+      } else {
+        logError(s"ERROR: Cluster master did not recognize $driverId")
+        System.exit(-1)
       }
-      // Exception, if present
-      statusResponse.exception match {
-        case Some(e) =>
-          logError(s"Exception from cluster was: $e")
-          e.printStackTrace()
-          System.exit(-1)
-        case _ =>
-          System.exit(0)
-      }
-    } else {
-      logError(s"ERROR: Cluster master did not recognize $driverId")
-      System.exit(-1)
+      Thread.sleep(REPORT_DRIVER_STATUS_INTERVAL)
     }
   }
-
   override def receive: PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(master, success, driverId, message) =>
