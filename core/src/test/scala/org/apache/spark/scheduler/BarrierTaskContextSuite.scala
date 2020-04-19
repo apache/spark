@@ -277,7 +277,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     testBarrierTaskKilled(interruptOnKill = true)
   }
 
-  test("barrier stage should fail if only partial tasks are launched") {
+  test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
     initLocalClusterSparkContext(2)
     val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
     val dep = new OneToOneDependency[Int](rdd0)
