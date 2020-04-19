@@ -195,7 +195,7 @@ SELECT 482S AS col;
 #### Syntax
 
 {% highlight sql %}
- [ + | - ] { digit [ ... ] . [ digit [ ... ] ] | . digit [ ... ] }
+[ + | - ] { digit [ ... ] . [ digit [ ... ] ] | . digit [ ... ] }
 {% endhighlight %}
 
 #### Parameters
@@ -237,9 +237,9 @@ SELECT -.1234567 AS col;
 #### Syntax
 
 {% highlight sql %}
- [ + | - ] { digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] |
-             digit [ ... ] . [ digit [ ... ] ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] |
-             . digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] }
+[ + | - ] { digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] |
+            digit [ ... ] . [ digit [ ... ] ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] |
+            . digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] }
 {% endhighlight %}
 
 #### Parameters
