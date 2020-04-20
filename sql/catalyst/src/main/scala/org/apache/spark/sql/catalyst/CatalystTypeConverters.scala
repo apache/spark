@@ -86,7 +86,7 @@ object CatalystTypeConverters {
    * @tparam ScalaOutputType The type of Scala values returned when converting Catalyst to Scala.
    * @tparam CatalystType The internal Catalyst type used to represent values of this Scala type.
    */
-  private[sql] abstract class CatalystTypeConverter[ScalaInputType, ScalaOutputType, CatalystType]
+  private abstract class CatalystTypeConverter[ScalaInputType, ScalaOutputType, CatalystType]
     extends Serializable {
 
     /**
@@ -305,7 +305,7 @@ object CatalystTypeConverters {
       row.getUTF8String(column).toString
   }
 
-  private[sql] object DateConverter extends CatalystTypeConverter[Date, Date, Any] {
+  private object DateConverter extends CatalystTypeConverter[Date, Date, Any] {
     override def toCatalystImpl(scalaValue: Date): Int = DateTimeUtils.fromJavaDate(scalaValue)
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateTimeUtils.toJavaDate(catalystValue.asInstanceOf[Int])
