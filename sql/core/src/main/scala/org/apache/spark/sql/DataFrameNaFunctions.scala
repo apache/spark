@@ -90,7 +90,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def drop(how: String, cols: Seq[String]): DataFrame = {
-    drop0(how, toAttributes(cols))
+    drop0(how, cols.map(df.resolve(_)))
   }
 
   /**
@@ -116,7 +116,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = {
-    drop0(minNonNulls, toAttributes(cols))
+    drop0(minNonNulls, cols.map(df.resolve(_)))
   }
 
   /**
@@ -481,7 +481,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     df.queryExecution.analyzed.output
   }
 
-  private def drop0(how: String, cols: Seq[Attribute]): DataFrame = {
+  private def drop0(how: String, cols: Seq[NamedExpression]): DataFrame = {
     how.toLowerCase(Locale.ROOT) match {
       case "any" => drop0(cols.size, cols)
       case "all" => drop0(1, cols)
@@ -489,12 +489,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     }
   }
 
-  private def drop0(minNonNulls: Int, cols: Seq[Attribute]): DataFrame = {
+  private def drop0(minNonNulls: Int, cols: Seq[NamedExpression]): DataFrame = {
     // Filtering condition:
     // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
-    val predicate = AtLeastNNonNulls(
-      minNonNulls,
-      outputAttributes.filter{ col => cols.exists(_.semanticEquals(col)) })
+    val predicate = AtLeastNNonNulls(minNonNulls, cols)
     df.filter(Column(predicate))
   }
 
