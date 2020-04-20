@@ -1284,11 +1284,7 @@ abstract class DynamicPartitionPruningSuiteBase
   test("Use In when partition size not greater than optimizerInSetConversionThreshold") {
     def checkIn(plan: SparkPlan, expect: Boolean): Unit = {
       val hasIn = collectDynamicPruningExpressions(plan).exists {
-        case e: InSubqueryExec =>
-          e.predicate match {
-            case _: In => true
-            case _ => false
-          }
+        case e: InSubqueryExec => e.predicate.isInstanceOf[In]
         case _ => false
       }
       assert(hasIn == expect)
