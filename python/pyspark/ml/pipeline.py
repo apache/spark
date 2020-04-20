@@ -210,10 +210,12 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         for pair in javaParamMap.toList():
             param = pair.param()
             if self.hasParam(str(param.name())):
-                if param.name() == "classifier":
-                    paramMap[self.getParam(param.name())] = JavaParams._from_java(pair.value())
+                java_obj = pair.value()
+                if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(java_obj):
+                    py_obj = JavaParams._from_java(java_obj)
                 else:
-                    paramMap[self.getParam(param.name())] = _java2py(sc, pair.value())
+                    py_obj = _java2py(sc, java_obj)
+                paramMap[self.getParam(param.name())] = py_obj
         return paramMap
 
 
