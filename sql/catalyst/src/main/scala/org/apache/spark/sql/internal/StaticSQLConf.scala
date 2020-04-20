@@ -47,6 +47,9 @@ object StaticSQLConf {
     .internal()
     .version("2.1.0")
     .stringConf
+    // System preserved database should not exists in metastore. However it's hard to guarantee it
+    // for every session, because case-sensitivity differs. Here we always lowercase it to make our
+    // life easier.
     .transform(_.toLowerCase(Locale.ROOT))
     .createWithDefault("global_temp")
 
