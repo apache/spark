@@ -141,7 +141,6 @@ class PowerTransform @Since("3.1.0")(
       }.toDF("column", "value")
       .groupBy("column", "value")
       .agg(count(lit(0)).as("count"))
-      .sort("column", "value")
 
     val groupSizes = if ($(numBins) > 0) {
       pairCounts
@@ -162,7 +161,9 @@ class PowerTransform @Since("3.1.0")(
       // down-sampling is performed within partitions:
       // group pairs by key with a bounded size, using weighted average
       // as the output value, and sum of counts as the output count.
-      pairCounts = pairCounts.as[(Int, Double, Long)]
+      pairCounts = pairCounts
+        .sort("column", "value")
+        .as[(Int, Double, Long)]
         .mapPartitions { iter =>
           Utils.combineWithinGroups[Int, (Double, Long), (Double, Long)](
             input = iter.map(t => (t._1, (t._2, t._3))),
