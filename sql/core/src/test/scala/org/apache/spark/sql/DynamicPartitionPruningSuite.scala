@@ -1294,7 +1294,7 @@ abstract class DynamicPartitionPruningSuiteBase
       if (hasIn == expect) {
         // ok
       } else {
-        fail(s"expect: $hasIn, but get $expect")
+        fail(s"expect: $expect, but get $hasIn")
       }
     }
 
