@@ -590,7 +590,10 @@ trait Row extends Serializable {
       case (r: Row, _) => r.jsonValue
       case (v: Any, udt: UserDefinedType[Any @unchecked]) =>
         val dataType = udt.sqlType
-        toJson(CatalystTypeConverters.convertToScala(udt.serialize(v), dataType), dataType)
+        toJson(CatalystTypeConverters.convertToScala(
+          udt.serialize(v),
+          dataType,
+          SQLConf.get.datetimeJava8ApiEnabled), dataType)
       case _ =>
         throw new IllegalArgumentException(s"Failed to convert value $value " +
           s"(class of ${value.getClass}}) with the type of $dataType to JSON.")

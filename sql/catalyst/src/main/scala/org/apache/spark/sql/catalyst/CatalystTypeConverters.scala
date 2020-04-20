@@ -478,10 +478,7 @@ object CatalystTypeConverters {
    * This method is slow, and for batch conversion you should be using converter
    * produced by createToScalaConverter.
    */
-  def convertToScala(
-      catalystValue: Any,
-      dataType: DataType,
-      useJava8DateTimeApi: Boolean = SQLConf.get.datetimeJava8ApiEnabled): Any = {
+  def convertToScala(catalystValue: Any, dataType: DataType, useJava8DateTimeApi: Boolean): Any = {
     createToScalaConverter(dataType, useJava8DateTimeApi)(catalystValue)
   }
 }
