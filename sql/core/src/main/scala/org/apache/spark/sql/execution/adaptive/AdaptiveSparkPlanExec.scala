@@ -145,10 +145,11 @@ case class AdaptiveSparkPlanExec(
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
     // created in the middle of the execution.
     context.session.withActive {
-      // Subqueries do not have their own execution IDs and therefore rely on the main query to
-      // update UI.
-      val executionId = Option(context.session.sparkContext.getLocalProperty(
-        SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
+      // If the `QueryExecution` does not match the current execution ID, it means the execution ID
+      // belongs to another (parent) query, and we should not call update UI in this query.
+      val executionId =
+        Option(context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY))
+          .map(_.toLong).filter(SQLExecution.getQueryExecution(_) eq context.qe)
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
@@ -573,7 +574,7 @@ object AdaptiveSparkPlanExec {
 /**
  * The execution context shared between the main query and all sub-queries.
  */
-case class AdaptiveExecutionContext(session: SparkSession) {
+case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
 
   /**
    * The subquery-reuse map shared across the entire query.
