@@ -75,8 +75,8 @@ object SqlResourceSuite {
   }
 
   private def getExpectedMetricDetails(): Seq[MetricDetails] = {
-    val metricDetails =
-      MetricDetails(1, WHOLE_STAGE_CODEGEN_1, wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, "0 ms")))
+    val metricDetails = MetricDetails(1, WHOLE_STAGE_CODEGEN_1,
+      wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, "0 ms")))
     val metricDetails2 = MetricDetails(2, FILTER,
       wholeStageCodegenId = Some(1), metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
     val metricDetails3 = MetricDetails(3, SCAN_TEXT, wholeStageCodegenId = Some(1),
@@ -133,13 +133,15 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Prepare ExecutionData when details = false and planDescription = false") {
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, nodeIdAndWSCGIdMap, false, false)
+      sqlResource invokePrivate prepareExecutionData(
+        sqlExecutionUIData, nodeIdAndWSCGIdMap, false, false)
     verifyExpectedExecutionData(executionData, metricDetails = Seq.empty, planDescription = "")
   }
 
   test("Prepare ExecutionData when details = true and planDescription = false") {
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, nodeIdAndWSCGIdMap, true, false)
+      sqlResource invokePrivate prepareExecutionData(
+        sqlExecutionUIData, nodeIdAndWSCGIdMap, true, false)
     verifyExpectedExecutionData(
       executionData,
       metricDetails = getExpectedMetricDetails(),
@@ -148,14 +150,15 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Prepare ExecutionData when details = true and planDescription = true") {
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, nodeIdAndWSCGIdMap, true, true)
+      sqlResource invokePrivate prepareExecutionData(
+        sqlExecutionUIData, nodeIdAndWSCGIdMap, true, true)
     verifyExpectedExecutionData(
       executionData,
       metricDetails = getExpectedMetricDetails(),
       planDescription = PLAN_DESCRIPTION)
   }
 
-  test("Prepare ExecutionData when details = true and planDescription = false and WholeStageCodegen = off") {
+  test("Prepare ExecutionData when details = true and planDescription = false and WSCG = off") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, Map.empty, true, false)
     verifyExpectedExecutionData(
