@@ -147,8 +147,7 @@ case class InSubqueryExec(
     }
   }
 
-  // Visible for testing
-  private[sql] def predicate: Predicate = {
+  def predicate: Predicate = {
     if (result.length > plan.conf.optimizerInSetConversionThreshold) {
       InSet(child, result.toSet)
     } else {
