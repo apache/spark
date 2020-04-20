@@ -163,9 +163,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .getOrCreate()
 
     assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globalTempDB-SPARK-31234")
+    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
     session.sql("RESET")
     assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globalTempDB-SPARK-31234")
+    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
   }
 }
