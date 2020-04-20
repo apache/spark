@@ -714,14 +714,39 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 Spark SQL supports several special floating point values in a case-insensitive manner:
 
  * Inf/+Inf/Infinity/+Infinity: positive infinity
-   * ```FloatType```: 1.0f / 0.0f
-   * ```DoubleType```: 1.0 / 0.0
+   * ```FloatType```: 1.0f / 0.0f, which is equal to the value returned by <code>java.lang.Float.intBitsToFloat(0x7f800000)</code>.
+   * ```DoubleType```: 1.0 / 0.0, which is equal to the value returned by <code>java.lang.Double.longBitsToDouble(0x7ff0000000000000L)</code>.
  * -Inf/-Infinity: negative infinity
-   * ```FloatType```: -1.0f / 0.0f
-   * ```DoubleType```: -1.0 / 0.0
+   * ```FloatType```: -1.0f / 0.0f, which is equal to the value returned by <code>java.lang.Float.intBitsToFloat(0xff800000)</code>.
+   * ```DoubleType```: -1.0 / 0.0, which is equal to the value returned by <code>java.lang.Double.longBitsToDouble(0xfff0000000000000L)</code>.
  * NaN: not a number
-   * ```FloatType```: 0.0f / 0.0f
-   * ```DoubleType```:  0.0d / 0.0
+   * ```FloatType```: 0.0f / 0.0f, which is equivalent to the value returned by <code>java.lang.Float.intBitsToFloat(0x7fc00000)</code>.
+   * ```DoubleType```:  0.0d / 0.0, which is equivalent to the value returned by <code>java.lang.Double.longBitsToDouble(0x7ff8000000000000L)</code>.
+
+#### Examples
+
+{% highlight sql %}
+SELECT double('infinity');
+  +------------------------+
+  |CAST(infinity AS DOUBLE)|
+  +------------------------+
+  |                Infinity|
+  +------------------------+
+
+SELECT float('-inf');
+  +-------------------+
+  |CAST(-inf AS FLOAT)|
+  +-------------------+
+  |          -Infinity|
+  +-------------------+
+
+SELECT float('NaN');
+  +------------------+
+  |CAST(NaN AS FLOAT)|
+  +------------------+
+  |               NaN|
+  +------------------+
+{% endhighlight %}
 
 ### NaN Semantics
 
