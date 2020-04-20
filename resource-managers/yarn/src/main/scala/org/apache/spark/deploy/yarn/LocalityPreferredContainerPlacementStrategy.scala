@@ -71,7 +71,7 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
  *   4.1 If requested container number (18) is more than newly required containers (12). Follow
  *   method 1 with updated ratio 4 : 4 : 3 : 1.
  *
- *   4.2 If request container number (10) is more than newly required containers (12). Follow
+ *   4.2 If request container number (10) is less than newly required containers (12). Follow
  *   method 2 with updated ratio 4 : 4 : 3 : 1.
  *
  * 5. If containers exist and existing localities can fully cover the requested localities.
