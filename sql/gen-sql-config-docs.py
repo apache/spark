@@ -43,7 +43,7 @@ def get_public_sql_configs(jvm):
     return sql_configs
 
 
-def generate_sql_configs_table(sql_configs, path):
+def generate_sql_configs_table_html(sql_configs, path):
     """
     Generates an HTML table at `path` that lists all public SQL
     configuration options.
@@ -118,6 +118,7 @@ if __name__ == "__main__":
     sql_configs = get_public_sql_configs(jvm)
 
     spark_root_dir = os.path.dirname(os.path.dirname(__file__))
-    sql_configs_table_path = os.path.join(spark_root_dir, "docs/sql-configs.html")
+    sql_configs_table_path = os.path.join(
+        spark_root_dir, "docs/generated-sql-configuration-table.html")
 
-    generate_sql_configs_table(sql_configs, path=sql_configs_table_path)
+    generate_sql_configs_table_html(sql_configs, path=sql_configs_table_path)

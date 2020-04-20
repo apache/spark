@@ -885,11 +885,11 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   """,
   examples = """
     Examples:
-      > Select _FUNC_('{}');
+      > SELECT _FUNC_('{}');
         []
-      > Select _FUNC_('{"key": "value"}');
+      > SELECT _FUNC_('{"key": "value"}');
         ["key"]
-      > Select _FUNC_('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
+      > SELECT _FUNC_('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
         ["f1","f2"]
   """,
   group = "json_funcs",
