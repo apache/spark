@@ -191,12 +191,28 @@ SELECT 482S AS col;
   +---+
 {% endhighlight %}
 
-#### Decimal Literal
+#### Non-integer Literals
 
 #### Syntax
 
+decimal literals:
+{% highlight sql %}
+{ decimal_digits { [ BD ] | [ exponent BD ] } | digit [ ... ] [ exponent ] BD }
+{% endhighlight %}
+
+double literals:
+{% highlight sql %}
+{ decimal_digits  { D | exponent [ D ] }  | digit [ ... ] { exponent [ D ] | [ exponent ] D }
+{% endhighlight %}
+
+While decimal_digits is defined as
 {% highlight sql %}
 [ + | - ] { digit [ ... ] . [ digit [ ... ] ] | . digit [ ... ] }
+{% endhighlight %}
+
+and exponent is defined as
+{% highlight sql %}
+E [ + | - ] digit [ ... ]
 {% endhighlight %}
 
 #### Parameters
@@ -205,6 +221,18 @@ SELECT 482S AS col;
   <dt><code><em>digit</em></code></dt>
   <dd>
     Any numeral from 0 to 9.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>D</em></code></dt>
+  <dd>
+    Case insensitive, indicates <code>DOUBLE</code>, which is a 8-byte double-precision floating point number.
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>BD</em></code></dt>
+  <dd>
+    Case insensitive, indicates <code>BIGDECIMAL</code>, which is an arbitrary-precision signed decimal number.
   </dd>
 </dl>
 
@@ -231,48 +259,21 @@ SELECT -.1234567 AS col;
   +----------+
   |-0.1234567|
   +----------+
-{% endhighlight %}
 
-#### Floating Point and BigDecimal Literals
+SELECT 123. AS col;
+  +---+
+  |col|
+  +---+
+  |123|
+  +---+
 
-#### Syntax
+SELECT 123.BD AS col;
+  +---+
+  |col|
+  +---+
+  |123|
+  +---+
 
-{% highlight sql %}
-[ + | - ] { digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] |
-            digit [ ... ] . [ digit [ ... ] ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] |
-            . digit [ ... ] [ E [ + | - ] digit [ ... ] ] [ D | BD ] }
-{% endhighlight %}
-
-#### Parameters
-
-<dl>
-  <dt><code><em>digit</em></code></dt>
-  <dd>
-    Any numeral from 0 to 9.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>D</em></code></dt>
-  <dd>
-    Case insensitive, indicates <code>DOUBLE</code>, which is a 8-byte double-precision floating point number.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>BD</em></code></dt>
-  <dd>
-    Case insensitive, indicates <code>BIGDECIMAL</code>, which is an arbitrary-precision signed decimal number.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>default (no postfix)</em></code></dt>
-  <dd>
-    Indicate a 4-byte single-precision floating point number.
-  </dd>
-</dl>
-
-#### Examples
-
-{% highlight sql %}
 SELECT 5E2 AS col;
   +-----+
   |  col|
@@ -347,6 +348,7 @@ DATE { 'yyyy' |
     One character from the character set.
   </dd>
 </dl>
+Note: defaults to <code>01</code> if month or day is not specified.
 
 #### Examples
 
@@ -396,7 +398,38 @@ TIMESTAMP { 'yyyy' |
 <ul>
   <li>Z - Zulu time zone UTC+0</li>
   <li>+|-[h]h:[m]m</li>
-  <li>A short id, see <a href="https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#SHORT_IDS">SHORT_IDS</a></li>
+  <li>A short id:
+    <ul>
+      <li>EST - -05:00</li>
+      <li>HST - -10:00</li>
+      <li>MST - -07:00</li>
+      <li>ACT - Australia/Darwin</li>
+      <li>AET - Australia/Sydney</li>
+      <li>AGT - America/Argentina/Buenos_Aires</li>
+      <li>ART - Africa/Cairo</li>
+      <li>AST - America/Anchorage</li>
+      <li>BET - America/Sao_Paulo</li>
+      <li>BST - Asia/Dhaka</li>
+      <li>CAT - Africa/Harare</li>
+      <li>CNT - America/St_Johns</li>
+      <li>CST - America/Chicago</li>
+      <li>CTT - Asia/Shanghai</li>
+      <li>EAT - Africa/Addis_Ababa</li>
+      <li>ECT - Europe/Paris</li>
+      <li>IET - America/Indiana/Indianapolis</li>
+      <li>IST - Asia/Kolkata</li>
+      <li>JST - Asia/Tokyo</li>
+      <li>MIT - Pacific/Apia</li>
+      <li>NET - Asia/Yerevan</li>
+      <li>NST - Pacific/Auckland</li>
+      <li>PLT - Asia/Karachi</li>
+      <li>PNT - America/Phoenix</li>
+      <li>PRT - America/Puerto_Rico</li>
+      <li>PST - America/Los_Angeles</li>
+      <li>SST - Pacific/Guadalcanal</li>
+      <li>VST - Asia/Ho_Chi_Minh</li>
+    </ul>
+  </li>
   <li>An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-, and a suffix in the formats:
     <ul>
       <li>+|-h[h]</li>
@@ -407,6 +440,7 @@ TIMESTAMP { 'yyyy' |
   </li>
   <li>Region-based zone IDs in the form <code>area/city</code>, such as <code>Europe/Paris</code></li>
 </ul>
+Note: defaults to system time-zone if <code>zone_id</code> is not specified.
 
 #### Examples
 
@@ -447,7 +481,8 @@ An interval literal is used to specify a fixed period of time.
 #### Syntax
 {% highlight sql %}
 { INTERVAL interval_value interval_unit [ interval_value interval_unit ... ] |
-  INTERVAL interval_value interval_unit TO interval_unit }
+  INTERVAL ' [ INTERVAL ] interval_value interval_unit [ interval_value interval_unit ... ] ' |
+  INTERVAL interval_string_value interval_unit TO interval_unit }
 {% endhighlight %}
 
 #### Parameters
@@ -457,17 +492,23 @@ An interval literal is used to specify a fixed period of time.
   <dd>
     <b>Syntax:</b>
       <code>
-        { [ + | - ] number_value | string_value }
+        [ + | - ] number_value | ' [ + | - ] number_value '
       </code><br>
-      Note: string_value needs to be used for <code>INTERNAL</code> ... <code>TO</code> ... format.
   </dd>
+</dl>
+<dl>
+  <dt><code><em>interval_string_value</em></code></dt>
+    <dd>
+      SQL standard year-month/date-time string.
+    </dd>
 </dl>
 <dl>
   <dt><code><em>interval_unit</em></code></dt>
   <dd>
-    <b>Syntax:</b>
+    <b>Syntax:</b><br>
       <code>
-        YEAR | MONTH | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+        YEAR[S] | MONTH[S] | WEEK[S] | DAY[S] | HOUR[S] | MINUTE[S] | SECOND[S] | <br>
+        MILLISECOND[S] | MICROSECOND[S]
       </code>
   </dd>
 </dl>
@@ -482,15 +523,22 @@ SELECT INTERVAL 3 YEAR AS col;
   |3 years|
   +-------+
 
-SELECT INTERVAL -2 HOUR 3 MINUTE AS col;
+SELECT INTERVAL -2 HOUR '3' MINUTE AS col;
   +--------------------+
   |                 col|
   +--------------------+
   |-1 hours -57 minutes|
   +--------------------+
 
-SELECT INTERVAL 1 YEAR 2 MONTH 3 WEEK 4 DAY 5 HOUR 6 MINUTE 7 SECOND 8
-    MILLISECOND 9 MICROSECOND AS col;
+SELECT INTERVAL 'INTERVAL 1 YEAR 2 DAYS 3 HOURS';
+  +----------------------+
+  |                   col|
+  +----------------------+
+  |1 years 2 days 3 hours|
+  +----------------------+
+
+SELECT INTERVAL 1 YEARS 2 MONTH 3 WEEK 4 DAYS 5 HOUR 6 MINUTES 7 SECOND 8
+    MILLISECOND 9 MICROSECONDS AS col;
   +-----------------------------------------------------------+
   |                                                        col|
   +-----------------------------------------------------------+
