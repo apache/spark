@@ -2135,36 +2135,32 @@ object DatePartLike {
   arguments = """
     Arguments:
       * field - selects which part of the source should be extracted.
-      <ul>
-        <b> Supported string values of `field` for dates and timestamps are: </b>
-          <li> "MILLENNIUM", ("MILLENNIA", "MIL", "MILS") - the conventional numbering of millennia </li>
-          <li> "CENTURY", ("CENTURIES", "C", "CENT") - the conventional numbering of centuries </li>
-          <li> "DECADE", ("DECADES", "DEC", "DECS") - the year field divided by 10 </li>
-          <li> "YEAR", ("Y", "YEARS", "YR", "YRS") - the year field </li>
-          <li> "ISOYEAR" - the ISO 8601 week-numbering year that the datetime falls in </li>
-          <li> "QUARTER", ("QTR") - the quarter (1 - 4) of the year that the datetime falls in </li>
-          <li> "MONTH", ("MON", "MONS", "MONTHS") - the month field </li>
-          <li> "WEEK", ("W", "WEEKS") - the number of the ISO 8601 week-of-week-based-year. A week is considered to start on a Monday and week 1 is the first week with >3 days. In the ISO week-numbering system, it is possible for early-January dates to be part of the 52nd or 53rd week of the previous year, and for late-December dates to be part of the first week of the next year. For example, 2005-01-02 is part of the 53rd week of year 2004, while 2012-12-31 is part of the first week of 2013 </li>
-          <li> "DAY", ("D", "DAYS") - the day of the month field (1 - 31) </li>
-          <li> "DAYOFWEEK",("DOW") - the day of the week for datetime as Sunday(1) to Saturday(7) </li>
-          <li> "ISODOW" - ISO 8601 based day of the week for datetime as Monday(1) to Sunday(7) </li>
-          <li> "DOY" - the day of the year (1 - 365/366) </li>
-          <li> "HOUR", ("H", "HOURS", "HR", "HRS") - The hour field (0 - 23) </li>
-          <li> "MINUTE", ("M", "MIN", "MINS", "MINUTES") - the minutes field (0 - 59) </li>
-          <li> "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts </li>
-          <li> "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS") - the seconds field, including fractional parts, multiplied by 1000. Note that this includes full seconds </li>
-          <li> "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US") - The seconds field, including fractional parts, multiplied by 1000000. Note that this includes full seconds </li>
-          <li> "EPOCH" - the number of seconds with fractional part in microsecond precision since 1970-01-01 00:00:00 local time (can be negative) </li>
-      </ul>
-      <ul>
-        <b> Supported string values of `field` for interval(which consists of `months`, `days`, `microseconds`) are: </b>
-          <li> "YEAR", ("Y", "YEARS", "YR", "YRS") - the total `months` / 12 </li>
-          <li> "MONTH", ("MON", "MONS", "MONTHS") - the total `months` modulo 12 </li>
-          <li> "DAY", ("D", "DAYS") - the `days` part of interval </li>
-          <li> "HOUR", ("H", "HOURS", "HR", "HRS") - how many hours the `microseconds` contains </li>
-          <li> "MINUTE", ("M", "MIN", "MINS", "MINUTES") - how many minutes left after taking hours from `microseconds` </li>
-          <li> "SECOND", ("S", "SEC", "SECONDS", "SECS") - how many second with fractions left after taking hours and minutes from `microseconds` </li>
-      </ul>
+          - Supported string values of `field` for dates and timestamps are:
+              - "MILLENNIUM", ("MILLENNIA", "MIL", "MILS") - the conventional numbering of millennia
+              - "CENTURY", ("CENTURIES", "C", "CENT") - the conventional numbering of centuries
+              - "DECADE", ("DECADES", "DEC", "DECS") - the year field divided by 1
+              - "YEAR", ("Y", "YEARS", "YR", "YRS") - the year field
+              - "ISOYEAR" - the ISO 8601 week-numbering year that the datetime falls in
+              - "QUARTER", ("QTR") - the quarter (1 - 4) of the year that the datetime falls in
+              - "MONTH", ("MON", "MONS", "MONTHS") - the month field
+              - "WEEK", ("W", "WEEKS") - the number of the ISO 8601 week-of-week-based-year. A week is considered to start on a Monday and week 1 is the first week with >3 days. In the ISO week-numbering system, it is possible for early-January dates to be part of the 52nd or 53rd week of the previous year, and for late-December dates to be part of the first week of the next year. For example, 2005-01-02 is part of the 53rd week of year 2004, while 2012-12-31 is part of the first week of 2013
+              - "DAY", ("D", "DAYS") - the day of the month field (1 - 31)
+              - "DAYOFWEEK",("DOW") - the day of the week for datetime as Sunday(1) to Saturday(7)
+              - "ISODOW" - ISO 8601 based day of the week for datetime as Monday(1) to Sunday(7)
+              - "DOY" - the day of the year (1 - 365/366)
+              - "HOUR", ("H", "HOURS", "HR", "HRS") - The hour field (0 - 23)
+              - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - the minutes field (0 - 59)
+              - "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts
+              - "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS") - the seconds field, including fractional parts, multiplied by 1000. Note that this includes full seconds
+              - "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US") - The seconds field, including fractional parts, multiplied by 1000000. Note that this includes full seconds
+              - "EPOCH" - the number of seconds with fractional part in microsecond precision since 1970-01-01 00:00:00 local time (can be negative)
+          - Supported string values of `field` for interval(which consists of `months`, `days`, `microseconds`) are:
+              - "YEAR", ("Y", "YEARS", "YR", "YRS") - the total `months` / 12
+              - "MONTH", ("MON", "MONS", "MONTHS") - the total `months` modulo 12
+              - "DAY", ("D", "DAYS") - the `days` part of interval
+              - "HOUR", ("H", "HOURS", "HR", "HRS") - how many hours the `microseconds` contains
+              - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - how many minutes left after taking hours from `microseconds`
+              - "SECOND", ("S", "SEC", "SECONDS", "SECS") - how many second with fractions left after taking hours and minutes from `microseconds`
       * source - a date/timestamp or interval column from where `field` should be extracted
   """,
   examples = """
@@ -2183,7 +2179,7 @@ object DatePartLike {
        30.001001
   """,
   note = """
-    The _FUNC_ function is equivalent to the SQL-standard function <a href="#extract">extract</a>
+    The _FUNC_ function is equivalent to the SQL-standard function `extract`
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
@@ -2224,7 +2220,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
        30.001001
   """,
   note = """
-    The _FUNC_ function is equivalent to `date_part`. See  <a href="#date_part">date_part</a> for detail.
+    The _FUNC_ function is equivalent to `date_part`.
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
