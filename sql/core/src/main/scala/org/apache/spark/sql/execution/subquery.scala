@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Expression, ExprId, In, InSet, ListQuery, Literal, PlanExpression, Predicate}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -147,6 +147,17 @@ case class InSubqueryExec(
     }
   }
 
+  // Visible for testing
+  private[sql] def predicate: Predicate = {
+    // respect `OptimizeIn`
+    if (result.length > plan.conf.optimizerInSetConversionThreshold) {
+      InSet(child, result.toSet)
+    } else {
+      val list = result.map(Literal(_))
+      In(child, list)
+    }
+  }
+
   override def eval(input: InternalRow): Any = {
     prepareResult()
     val v = child.eval(input)
@@ -159,7 +170,10 @@ case class InSubqueryExec(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     prepareResult()
-    InSet(child, result.toSet).doGenCode(ctx, ev)
+    predicate match {
+      case in: In => in.doGenCode(ctx, ev)
+      case inSet: InSet => inSet.doGenCode(ctx, ev)
+    }
   }
 
   override lazy val canonicalized: InSubqueryExec = {

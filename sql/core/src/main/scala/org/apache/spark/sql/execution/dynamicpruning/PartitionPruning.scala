@@ -109,7 +109,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    * the size in bytes of the partitioned plan after filtering is greater than the size
    * in bytes of the plan on the other side of the join. We estimate the filtering ratio
    * using column statistics if they are available, otherwise we use the config value of
-   * `spark.sql.optimizer.joinFilterRatio`.
+   * `SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO`.
    */
   private def pruningHasBenefit(
       partExpr: Expression,
