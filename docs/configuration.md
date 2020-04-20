@@ -2622,15 +2622,30 @@ Please refer to the [Security](security.html) page for available options on how 
 Spark subsystems.
 
 
-{% for static_file in site.static_files %}
-    {% if static_file.name == 'sql-configs.html' %}
 ### Spark SQL
 
-        {% include_relative sql-configs.html %}
+#### Runtime SQL Configuration
+
+Runtime SQL configurations inner-session, mutable Spark SQL configurations. They can be set and queried by SET commands and rest by RESET command, or by `SparkSession.conf`'s setter and getter methods.
+
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'runtime-sql-configs.html' %}
+        {% include_relative runtime-sql-configs.html %}
         {% break %}
     {% endif %}
 {% endfor %}
 
+
+#### Static SQL Configuration
+
+Static SQL configurations are cross-session, immutable Spark SQL configurations. External users can query the static sql configs value via `SparkSession.conf` or via set command, e.g. `SET spark.sql.extensions;`, but cannot set/unset them.
+
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'static-sql-configs.html' %}
+        {% include_relative static-sql-configs.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
 
 ### Spark Streaming
 
