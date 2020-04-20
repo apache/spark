@@ -1222,14 +1222,6 @@ class DatasetSuite extends QueryTest
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
 
-  test("better error message when use java reserved keyword as field name") {
-    val e = intercept[UnsupportedOperationException] {
-      Seq(InvalidInJava(1)).toDS()
-    }
-    assert(e.getMessage.contains(
-      "`abstract` is a reserved keyword and cannot be used as field name"))
-  }
-
   test("Dataset should support flat input object to be null") {
     checkDataset(Seq("a", null).toDS(), "a", null)
   }
@@ -1909,6 +1901,21 @@ class DatasetSuite extends QueryTest
 
     assert(active eq SparkSession.getActiveSession.get)
   }
+
+  test("SPARK-30791: sameSemantics and semanticHash work") {
+    val df1 = Seq((1, 2), (4, 5)).toDF("col1", "col2")
+    val df2 = Seq((1, 2), (4, 5)).toDF("col1", "col2")
+    val df3 = Seq((0, 2), (4, 5)).toDF("col1", "col2")
+    val df4 = Seq((0, 2), (4, 5)).toDF("col0", "col2")
+
+    assert(df1.sameSemantics(df2) === true)
+    assert(df1.sameSemantics(df3) === false)
+    assert(df3.sameSemantics(df4) === true)
+
+    assert(df1.semanticHash === df2.semanticHash)
+    assert(df1.semanticHash !== df3.semanticHash)
+    assert(df3.semanticHash === df4.semanticHash)
+  }
 }
 
 object AssertExecutionId {
@@ -1948,8 +1955,6 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
-
-case class InvalidInJava(`abstract`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

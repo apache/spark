@@ -27,6 +27,7 @@ except ImportError:
 
 import py4j
 
+from pyspark import SparkContext, SQLContext
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
@@ -257,6 +258,22 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
                 sys.maxsize = old_maxsize
 
         reload(window)
+
+
+class SQLContextTests(unittest.TestCase):
+
+    def test_get_or_create(self):
+        sc = None
+        sql_context = None
+        try:
+            sc = SparkContext('local[4]', "SQLContextTests")
+            sql_context = SQLContext.getOrCreate(sc)
+            assert(isinstance(sql_context, SQLContext))
+        finally:
+            if sql_context is not None:
+                sql_context.sparkSession.stop()
+            if sc is not None:
+                sc.stop()
 
 
 if __name__ == "__main__":

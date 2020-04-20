@@ -31,18 +31,13 @@ trait BaseAggregateExec extends UnaryExecNode {
   def resultExpressions: Seq[NamedExpression]
 
   override def verboseStringWithOperatorId(): String = {
-    val inputString = child.output.mkString("[", ", ", "]")
-    val keyString = groupingExpressions.mkString("[", ", ", "]")
-    val functionString = aggregateExpressions.mkString("[", ", ", "]")
-    val aggregateAttributeString = aggregateAttributes.mkString("[", ", ", "]")
-    val resultString = resultExpressions.mkString("[", ", ", "]")
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Input: $inputString
-       |Keys: $keyString
-       |Functions: $functionString
-       |Aggregate Attributes: $aggregateAttributeString
-       |Results: $resultString
+       |${ExplainUtils.generateFieldString("Input", child.output)}
+       |${ExplainUtils.generateFieldString("Keys", groupingExpressions)}
+       |${ExplainUtils.generateFieldString("Functions", aggregateExpressions)}
+       |${ExplainUtils.generateFieldString("Aggregate Attributes", aggregateAttributes)}
+       |${ExplainUtils.generateFieldString("Results", resultExpressions)}
      """.stripMargin
   }
 }

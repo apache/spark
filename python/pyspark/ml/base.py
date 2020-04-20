@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 import copy
 import threading
@@ -96,8 +96,6 @@ class Estimator(Params):
         :return: A thread safe iterable which contains one model for each param map. Each
                  call to `next(modelIterator)` will return `(index, model)` where model was fit
                  using `paramMaps[index]`. `index` values may not be sequential.
-
-        .. note:: DeveloperApi
         """
         estimator = self.copy()
 
@@ -246,3 +244,82 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
         transformedDataset = dataset.withColumn(self.getOutputCol(),
                                                 transformUDF(dataset[self.getInputCol()]))
         return transformedDataset
+
+
+@inherit_doc
+class _PredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
+    """
+    Params for :py:class:`Predictor` and :py:class:`PredictorModel`.
+
+    .. versionadded:: 3.0.0
+    """
+    pass
+
+
+@inherit_doc
+class Predictor(Estimator, _PredictorParams):
+    """
+    Estimator for prediction tasks (regression and classification).
+    """
+
+    __metaclass__ = ABCMeta
+
+    @since("3.0.0")
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+
+@inherit_doc
+class PredictionModel(Model, _PredictorParams):
+    """
+    Model for prediction tasks (regression and classification).
+    """
+
+    __metaclass__ = ABCMeta
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @abstractproperty
+    @since("2.1.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        raise NotImplementedError()

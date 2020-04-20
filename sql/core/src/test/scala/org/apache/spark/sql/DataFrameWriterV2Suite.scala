@@ -71,7 +71,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         plan = qe.analyzed
 
       }
-      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
     spark.listenerManager.register(listener)
 

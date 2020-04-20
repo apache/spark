@@ -288,7 +288,7 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
           featureIndex += length
         } else {
           throw new SparkException(
-            s"""Encountered null while assembling a row with handleInvalid = "keep". Consider
+            s"""Encountered null while assembling a row with handleInvalid = "error". Consider
                |removing nulls from dataset or using handleInvalid = "keep" or "skip"."""
               .stripMargin)
         }

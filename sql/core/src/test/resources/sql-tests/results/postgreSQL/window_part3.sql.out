@@ -244,7 +244,7 @@ from t1 where f1 = f2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY default.t1.`f1` RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 24
+cannot resolve '(PARTITION BY spark_catalog.default.t1.`f1` RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 24
 
 
 -- !query
@@ -306,7 +306,7 @@ org.apache.spark.sql.AnalysisException
 
 The query operator `Join` contains one or more unsupported
 expression types Aggregate, Window or Generate.
-Invalid expressions: [row_number() OVER (ORDER BY default.empsalary.`salary` ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)];
+Invalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.`salary` ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)];
 
 
 -- !query

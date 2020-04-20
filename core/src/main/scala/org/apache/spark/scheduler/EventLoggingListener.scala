@@ -40,7 +40,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  *   spark.eventLog.enabled - Whether event logging is enabled.
  *   spark.eventLog.dir - Path to the directory in which events are logged.
  *   spark.eventLog.logBlockUpdates.enabled - Whether to log block updates
- *   spark.eventLog.logStageExecutorMetrics.enabled - Whether to log stage executor metrics
+ *   spark.eventLog.logStageExecutorMetrics - Whether to log stage executor metrics
  *
  * Event log file writer maintains its own parameters: refer the doc of [[EventLogFileWriter]]
  * and its descendant for more details.

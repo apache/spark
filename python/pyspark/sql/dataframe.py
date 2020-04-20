@@ -122,6 +122,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
+    @since(1.3)
+    def registerTempTable(self, name):
+        """Registers this DataFrame as a temporary table using the given name.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+
+        >>> df.registerTempTable("people")
+        >>> df2 = spark.sql("select * from people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
+        True
+        >>> spark.catalog.dropTempView("people")
+
+        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
+        """
+        warnings.warn(
+            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
+        self._jdf.createOrReplaceTempView(name)
+
     @since(2.0)
     def createTempView(self, name):
         """Creates a local temporary view with this :class:`DataFrame`.
@@ -284,7 +303,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         == Physical Plan ==
         * Scan ExistingRDD (1)
         (1) Scan ExistingRDD [codegen id : 1]
-        Output: [age#0, name#1]
+        Output [2]: [age#0, name#1]
+        ...
 
         .. versionchanged:: 3.0.0
            Added optional argument `mode` to specify the expected output format of plans.
@@ -2152,6 +2172,52 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         assert isinstance(result, DataFrame), "Func returned an instance of type [%s], " \
                                               "should have been DataFrame." % type(result)
         return result
+
+    @since(3.1)
+    def sameSemantics(self, other):
+        """
+        Returns `True` when the logical query plans inside both :class:`DataFrame`\\s are equal and
+        therefore return same results.
+
+        .. note:: The equality comparison here is simplified by tolerating the cosmetic differences
+            such as attribute names.
+
+        .. note:: This API can compare both :class:`DataFrame`\\s very fast but can still return
+            `False` on the :class:`DataFrame` that return the same results, for instance, from
+            different plans. Such false negative semantic can be useful when caching as an example.
+
+        .. note:: DeveloperApi
+
+        >>> df1 = spark.range(10)
+        >>> df2 = spark.range(10)
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col1", df2.id * 2))
+        True
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col1", df2.id + 2))
+        False
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col0", df2.id * 2))
+        True
+        """
+        if not isinstance(other, DataFrame):
+            raise ValueError("other parameter should be of DataFrame; however, got %s"
+                             % type(other))
+        return self._jdf.sameSemantics(other._jdf)
+
+    @since(3.1)
+    def semanticHash(self):
+        """
+        Returns a hash code of the logical query plan against this :class:`DataFrame`.
+
+        .. note:: Unlike the standard hash code, the hash is calculated against the query plan
+            simplified by tolerating the cosmetic differences such as attribute names.
+
+        .. note:: DeveloperApi
+
+        >>> spark.range(10).selectExpr("id as col0").semanticHash()  # doctest: +SKIP
+        1855039936
+        >>> spark.range(10).selectExpr("id as col1").semanticHash()  # doctest: +SKIP
+        1855039936
+        """
+        return self._jdf.semanticHash()
 
     where = copy_func(
         filter,

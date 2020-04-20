@@ -31,6 +31,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.ManualClock
@@ -40,7 +41,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def stop(): Unit = {}
   def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
-  def maxNumConcurrentTasks(): Int = 0
+  def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
@@ -195,6 +196,240 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
+  private def setupTaskSchedulerForLocalityTests(clock: ManualClock): TaskSchedulerImpl = {
+    val conf = new SparkConf()
+    sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
+    val taskScheduler = new TaskSchedulerImpl(sc,
+      sc.conf.get(config.TASK_MAX_FAILURES),
+      clock = clock) {
+      override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
+        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+      }
+      override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
+        // Don't shuffle the offers around for this test.  Instead, we'll just pass in all
+        // the permutations we care about directly.
+        offers
+      }
+    }
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+
+      override def executorAdded(execId: String, host: String): Unit = {}
+    }
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    val taskSet = FakeTask.createTaskSet(8, 1, 1,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1"))
+    )
+
+    // Offer resources first so that when the taskset is submitted it can initialize
+    // with proper locality level. Otherwise, ANY would be the only locality level.
+    // See TaskSetManager.computeValidLocalityLevels()
+    // This begins the task set as PROCESS_LOCAL locality level
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+    taskScheduler.submitTasks(taskSet)
+    taskScheduler
+  }
+
+  test("SPARK-18886 - partial offers (isAllFreeResources = false) reset timer before " +
+    "any resources have been rejected") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
+
+    // Advancing clock increases locality level to NODE_LOCAL.
+    clock.advance(advanceAmount)
+
+    // If there hasn't yet been any full resource offers,
+    // partial resource (isAllFreeResources = false) offers reset delay scheduling
+    // if this and previous offers were accepted.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // This NODE_LOCAL task should not be accepted.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.isEmpty)
+  }
+
+  test("SPARK-18886 - delay scheduling timer is reset when it accepts all resources offered when " +
+    "isAllFreeResources = true") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
+
+    // Advancing clock increases locality level to NODE_LOCAL.
+    clock.advance(advanceAmount)
+
+    // If there are no rejects on an all resource offer, delay scheduling is reset.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = true)
+      .flatten.length === 1)
+
+    // This NODE_LOCAL task should not be accepted.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.isEmpty)
+  }
+
+  test("SPARK-18886 - partial resource offers (isAllFreeResources = false) reset " +
+    "time if last full resource offer (isAllResources = true) was accepted as well as any " +
+    "following partial resource offers") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
+
+    // PROCESS_LOCAL full resource offer is accepted.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = true)
+      .flatten.length === 1)
+
+    // Advancing clock increases locality level to NODE_LOCAL.
+    clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted.
+    // Since all offers have been accepted since the last full resource offer
+    // (this one and the previous one), delay scheduling is reset.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // Advancing clock increases locality level to NODE_LOCAL
+    clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted
+    // Since all offers have been accepted since the last full resource offer
+    // (one previous full offer, one previous partial offer, and this partial offer),
+    // delay scheduling is reset.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // This NODE_LOCAL task should not be accepted.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.isEmpty)
+  }
+
+  // This tests two cases
+  // 1. partial resource offer doesn't reset timer after full resource offer had rejected resources
+  // 2. partial resource offer doesn't reset timer after partial resource offer
+  //    had rejected resources
+  test("SPARK-18886 - partial resource offers (isAllFreeResources = false) do not reset " +
+    "time if any offer was rejected since last full offer was fully accepted") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
+
+    // case 1 from test description above.
+    // NODE_LOCAL full resource offer is rejected, so delay scheduling is not reset.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = true)
+      .flatten.isEmpty)
+
+    // Advancing clock increases locality level to NODE_LOCAL
+    clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted,
+    // but because preceding full resource offer was rejected, delay scheduling is not reset.
+    // Locality level remains at NODE_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // Even though we launched a local task above, we still utilize non-local exec2.
+    // This is the behavior change to fix SPARK-18886.
+    // Locality level remains NODE_LOCAL after this clock advance.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+
+    // case 2 from test description above.
+    // PROCESS_LOCAL full resource offer is accepted, resetting delay scheduling.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = true)
+      .flatten.length === 1)
+
+    // Partial resource offer: NODE_LOCAL exec 2 is rejected, PROCESS_LOCAL exec1 is accepted.
+    // Since there were rejects, delay scheduling is not reset, and follow up partial offers
+    // will not reset delay scheduling, even if they are accepted.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1), WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.size === 1)
+
+    // Advancing clock increases locality level to NODE_LOCAL
+    clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted, but does not reset delay scheduling
+    // as described above.
+    // Locality level remains at NODE_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // NODE_LOCAL partial resource offer is accepted,
+    // verifying locality level was not reset to PROCESS_LOCAL by above offer.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+  }
+
   test("Scheduler does not crash when tasks are not serializable") {
     val taskCpus = 2
     val taskScheduler = setupSchedulerWithMaster(
@@ -202,7 +437,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       config.CPUS_PER_TASK.key -> taskCpus.toString)
     val numFreeCores = 1
     val taskSet = new TaskSet(
-      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
+      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val multiCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", taskCpus),
       new WorkerOffer("executor1", "host1", numFreeCores))
     taskScheduler.submitTasks(taskSet)
@@ -216,7 +452,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // still be processed without error
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
     val taskSet2 = new TaskSet(
-      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 1, 0, 0, null)
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
+      1, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     taskScheduler.submitTasks(taskSet2)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
@@ -758,7 +995,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         // that are explicitly blacklisted, plus those that have *any* executors blacklisted.
         val nodesForBlacklistedExecutors = offers.filter { offer =>
           execBlacklist.contains(offer.executorId)
-        }.map(_.host).toSet.toSeq
+        }.map(_.host).distinct
         val nodesWithAnyBlacklisting = (nodeBlacklist ++ nodesForBlacklistedExecutors).toSet
         // Similarly, figure out which executors have any blacklisting.  This means all executors
         // that are explicitly blacklisted, plus all executors on nodes that are blacklisted.
@@ -898,18 +1135,17 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
 
     // Here is the main check of this test -- we have the same offers again, and we schedule it
-    // successfully.  Because the scheduler first tries to schedule with locality in mind, at first
-    // it won't schedule anything on executor1.  But despite that, we don't abort the job.  Then the
-    // scheduler tries for ANY locality, and successfully schedules tasks on executor1.
+    // successfully.  Because the scheduler tries to schedule with locality in mind, at first
+    // it won't schedule anything on executor1.  But despite that, we don't abort the job.
     val secondTaskAttempts = taskScheduler.resourceOffers(offers).flatten
-    assert(secondTaskAttempts.size == 2)
-    secondTaskAttempts.foreach { taskAttempt => assert("executor1" === taskAttempt.executorId) }
+    assert(secondTaskAttempts.isEmpty)
     assert(!failedTaskSet)
   }
 
   test("SPARK-16106 locality levels updated if executor added to existing host") {
     val taskScheduler = setupScheduler()
 
+    taskScheduler.resourceOffers(IndexedSeq(new WorkerOffer("executor0", "host0", 1)))
     taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0,
       (0 until 2).map { _ => Seq(TaskLocation("host0", "executor2")) }: _*
     ))
@@ -1135,6 +1371,96 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(0 === taskDescriptions.length)
   }
 
+  test("don't schedule for a barrier taskSet if available slots are less than " +
+    "pending tasks gpus limiting") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString,
+      "spark.executor.resource.gpu.amount" -> "1", "spark.task.resource.gpu.amount" -> "1")
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0").toBuffer)),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0").toBuffer)))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+  }
+
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together gpus") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString,
+      "spark.executor.resource.gpu.amount" -> "1", "spark.task.resource.gpu.amount" -> "1")
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0").toBuffer)),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0").toBuffer)),
+      new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629"),
+        Map("gpu" -> Seq("0").toBuffer)))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(3 === taskDescriptions.length)
+  }
+
+  // barrier scheduling doesn't yet work with dynamic allocation but test it with another
+  // ResourceProfile anyway to make sure code path works when it is supported
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together " +
+    "diff ResourceProfile") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    val rp = new ResourceProfile(execReqs.requests, taskReqs.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+
+    val numFreeCores = 2
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0", "1").toBuffer), rp.id),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0", "1").toBuffer), rp.id))
+    val attempt1 = FakeTask.createBarrierTaskSet(3, rpId = rp.id)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(3 === taskDescriptions.length)
+  }
+
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together " +
+    "diff ResourceProfile, but not enough gpus") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    val rp = new ResourceProfile(execReqs.requests, taskReqs.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+
+    val numFreeCores = 2
+    // make each of the worker offers only have 1 GPU, thus making it not enough
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0").toBuffer), rp.id),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0").toBuffer), rp.id))
+    val attempt1 = FakeTask.createBarrierTaskSet(3, rpId = rp.id)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+  }
+
   test("schedule tasks for a barrier taskSet if all tasks can be launched together") {
     val taskCpus = 2
     val taskScheduler = setupSchedulerWithMaster(
@@ -1165,8 +1491,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
       new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
       new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
-    val barrier = FakeTask.createBarrierTaskSet(3, stageId = 0, stageAttemptId = 0, priority = 1)
-    val highPrio = FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0, priority = 0)
+    val barrier = FakeTask.createBarrierTaskSet(3, stageId = 0, stageAttemptId = 0, priority = 1,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val highPrio = FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0, priority = 0,
+      rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     // submit highPrio and barrier taskSet
     taskScheduler.submitTasks(highPrio)
@@ -1287,6 +1615,93 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
     assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
     assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.addresses)
+  }
+
+  test("Scheduler correctly accounts for GPUs per task with fractional amount") {
+    val taskCpus = 1
+    val taskGpus = 0.33
+    val executorGpus = 1
+    val executorCpus = 4
+
+    val taskScheduler = setupScheduler(numCores = executorCpus,
+      config.CPUS_PER_TASK.key -> taskCpus.toString,
+      TASK_GPU_ID.amountConf -> taskGpus.toString,
+      EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
+      config.EXECUTOR_CORES.key -> executorCpus.toString)
+    val taskSet = FakeTask.createTaskSet(5)
+
+    val numFreeCores = 4
+    val resources = Map(GPU -> ArrayBuffer("0", "0", "0"))
+    val singleCoreWorkerOffers =
+      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
+
+    taskScheduler.submitTasks(taskSet)
+    // Launch tasks on executor that satisfies resource requirements.
+    var taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
+    assert(3 === taskDescriptions.length)
+    assert(!failedTaskSet)
+    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
+    assert(ArrayBuffer("0") === taskDescriptions(1).resources.get(GPU).get.addresses)
+    assert(ArrayBuffer("0") === taskDescriptions(2).resources.get(GPU).get.addresses)
+  }
+
+  test("Scheduler works with multiple ResourceProfiles and gpus") {
+    val taskCpus = 1
+    val taskGpus = 1
+    val executorGpus = 4
+    val executorCpus = 4
+
+    val taskScheduler = setupScheduler(numCores = executorCpus,
+      config.CPUS_PER_TASK.key -> taskCpus.toString,
+      TASK_GPU_ID.amountConf -> taskGpus.toString,
+      EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
+      config.EXECUTOR_CORES.key -> executorCpus.toString)
+
+    val ereqs = new ExecutorResourceRequests().cores(6).resource(GPU, 6)
+    val treqs = new TaskResourceRequests().cpus(2).resource(GPU, 2)
+    val rp = new ResourceProfile(ereqs.requests, treqs.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+    val taskSet = FakeTask.createTaskSet(3)
+    val rpTaskSet = FakeTask.createTaskSet(5, stageId = 1, stageAttemptId = 0,
+      priority = 0, rpId = rp.id)
+
+    val resourcesDefaultProf = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
+    val resources = Map(GPU -> ArrayBuffer("4", "5", "6", "7", "8", "9"))
+
+    val workerOffers =
+      IndexedSeq(new WorkerOffer("executor0", "host0", 2, None, resourcesDefaultProf),
+      new WorkerOffer("executor1", "host1", 6, None, resources, rp.id))
+    taskScheduler.submitTasks(taskSet)
+    taskScheduler.submitTasks(rpTaskSet)
+    // should have 2 for default profile and 2 for additional resource profile
+    var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(5 === taskDescriptions.length)
+    var has2Gpus = 0
+    var has1Gpu = 0
+    for (tDesc <- taskDescriptions) {
+      assert(tDesc.resources.contains(GPU))
+      if (tDesc.resources(GPU).addresses.size == 2) {
+        has2Gpus += 1
+      }
+      if (tDesc.resources(GPU).addresses.size == 1) {
+        has1Gpu += 1
+      }
+    }
+    assert(has2Gpus == 3)
+    assert(has1Gpu == 2)
+
+    val resources3 = Map(GPU -> ArrayBuffer("14", "15", "16", "17", "18", "19"))
+
+    // clear the first 2 worker offers so they don't have any room and add a third
+    // for the resource profile
+    val workerOffers3 = IndexedSeq(
+      new WorkerOffer("executor0", "host0", 0, None, Map.empty),
+      new WorkerOffer("executor1", "host1", 0, None, Map.empty, rp.id),
+      new WorkerOffer("executor2", "host2", 6, None, resources3, rp.id))
+    taskDescriptions = taskScheduler.resourceOffers(workerOffers3).flatten
+    assert(2 === taskDescriptions.length)
+    assert(taskDescriptions.head.resources.contains(GPU))
+    assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
   }
 
   /**

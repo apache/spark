@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 
 object ExplainUtils {
   /**
@@ -171,7 +170,7 @@ object ExplainUtils {
     var currentCodegenId = -1
     plan.foreach {
       case p: WholeStageCodegenExec => currentCodegenId = p.codegenStageId
-      case p: InputAdapter => currentCodegenId = -1
+      case _: InputAdapter => currentCodegenId = -1
       case other: QueryPlan[_] =>
         if (currentCodegenId != -1) {
           other.setTagValue(QueryPlan.CODEGEN_ID_TAG, currentCodegenId)
@@ -180,6 +179,17 @@ object ExplainUtils {
           generateWholeStageCodegenIds(plan)
         }
     }
+  }
+
+  /**
+   * Generate detailed field string with different format based on type of input value
+   */
+  def generateFieldString(fieldName: String, values: Any): String = values match {
+    case iter: Iterable[_] if (iter.size == 0) => s"${fieldName}: []"
+    case iter: Iterable[_] => s"${fieldName} [${iter.size}]: ${iter.mkString("[", ", ", "]")}"
+    case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
+    case str: String => s"${fieldName}: ${str}"
+    case _ => throw new IllegalArgumentException(s"Unsupported type for argument values: $values")
   }
 
   /**

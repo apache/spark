@@ -111,7 +111,7 @@ struct<split(aa1cc2ee3, [1-9]+, 2):array<string>>
 -- !query
 SELECT substr('Spark SQL', 5)
 -- !query schema
-struct<substring(Spark SQL, 5, 2147483647):string>
+struct<substr(Spark SQL, 5, 2147483647):string>
 -- !query output
 k SQL
 
@@ -119,7 +119,7 @@ k SQL
 -- !query
 SELECT substr('Spark SQL', -3)
 -- !query schema
-struct<substring(Spark SQL, -3, 2147483647):string>
+struct<substr(Spark SQL, -3, 2147483647):string>
 -- !query output
 SQL
 
@@ -127,7 +127,7 @@ SQL
 -- !query
 SELECT substr('Spark SQL', 5, 1)
 -- !query schema
-struct<substring(Spark SQL, 5, 1):string>
+struct<substr(Spark SQL, 5, 1):string>
 -- !query output
 k
 
@@ -205,64 +205,64 @@ k
 
 
 -- !query
-SELECT trim('yxTomxx', 'xyz'), trim(BOTH 'xyz' FROM 'yxTomxx'), trim('xyz' FROM 'yxTomxx')
+SELECT trim(BOTH 'xyz' FROM 'yxTomxx'), trim('xyz' FROM 'yxTomxx')
 -- !query schema
-struct<trim(yxTomxx, xyz):string,trim(yxTomxx, xyz):string,trim(yxTomxx, xyz):string>
+struct<trim(yxTomxx, xyz):string,trim(yxTomxx, xyz):string>
 -- !query output
-Tom	Tom	Tom
+Tom	Tom
 
 
 -- !query
-SELECT trim('xxxbarxxx', 'x'), trim(BOTH 'x' FROM 'xxxbarxxx'), trim('x' FROM 'xxxbarxxx')
+SELECT trim(BOTH 'x' FROM 'xxxbarxxx'), trim('x' FROM 'xxxbarxxx')
 -- !query schema
-struct<trim(xxxbarxxx, x):string,trim(xxxbarxxx, x):string,trim(xxxbarxxx, x):string>
+struct<trim(xxxbarxxx, x):string,trim(xxxbarxxx, x):string>
 -- !query output
-bar	bar	bar
+bar	bar
 
 
 -- !query
-SELECT ltrim('zzzytest', 'xyz'), trim(LEADING 'xyz' FROM 'zzzytest')
+SELECT trim(LEADING 'xyz' FROM 'zzzytest')
 -- !query schema
-struct<ltrim(zzzytest, xyz):string,ltrim(zzzytest, xyz):string>
+struct<ltrim(zzzytest, xyz):string>
 -- !query output
-test	test
+test
 
 
 -- !query
-SELECT ltrim('zzzytestxyz', 'xyz'), trim(LEADING 'xyz' FROM 'zzzytestxyz')
+SELECT trim(LEADING 'xyz' FROM 'zzzytestxyz')
 -- !query schema
-struct<ltrim(zzzytestxyz, xyz):string,ltrim(zzzytestxyz, xyz):string>
+struct<ltrim(zzzytestxyz, xyz):string>
 -- !query output
-testxyz	testxyz
+testxyz
 
 
 -- !query
-SELECT ltrim('xyxXxyLAST WORD', 'xy'), trim(LEADING 'xy' FROM 'xyxXxyLAST WORD')
+SELECT trim(LEADING 'xy' FROM 'xyxXxyLAST WORD')
 -- !query schema
-struct<ltrim(xyxXxyLAST WORD, xy):string,ltrim(xyxXxyLAST WORD, xy):string>
+struct<ltrim(xyxXxyLAST WORD, xy):string>
 -- !query output
-XxyLAST WORD	XxyLAST WORD
+XxyLAST WORD
 
 
 -- !query
-SELECT rtrim('testxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'testxxzx')
+SELECT trim(TRAILING 'xyz' FROM 'testxxzx')
 -- !query schema
-struct<rtrim(testxxzx, xyz):string,rtrim(testxxzx, xyz):string>
+struct<rtrim(testxxzx, xyz):string>
 -- !query output
-test	test
+test
 
 
 -- !query
-SELECT rtrim('xyztestxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'xyztestxxzx')
+SELECT trim(TRAILING 'xyz' FROM 'xyztestxxzx')
 -- !query schema
-struct<rtrim(xyztestxxzx, xyz):string,rtrim(xyztestxxzx, xyz):string>
+struct<rtrim(xyztestxxzx, xyz):string>
 -- !query output
-xyztest	xyztest
+xyztest
 
 
 -- !query
-SELECT rtrim('TURNERyxXxy', 'xy'), trim(TRAILING 'xy' FROM 'TURNERyxXxy')
+SELECT trim(TRAILING 'xy' FROM 'TURNERyxXxy')
 -- !query schema
-struct<rtrim(TURNERyxXxy, xy):string,rtrim(TURNERyxXxy, xy):string>
+struct<rtrim(TURNERyxXxy, xy):string>
 -- !query output
-TURNERyxX	TURNERyxX
+TURNERyxX

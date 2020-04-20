@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.types.StructType
 
@@ -35,18 +36,10 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
     def quoted: String = {
       identifier.database match {
         case Some(db) =>
-          Seq(db, identifier.table).map(quote).mkString(".")
+          Seq(db, identifier.table).map(quoteIfNeeded).mkString(".")
         case _ =>
-          quote(identifier.table)
+          quoteIfNeeded(identifier.table)
 
-      }
-    }
-
-    private def quote(part: String): String = {
-      if (part.contains(".") || part.contains("`")) {
-        s"`${part.replace("`", "``")}`"
-      } else {
-        part
       }
     }
   }

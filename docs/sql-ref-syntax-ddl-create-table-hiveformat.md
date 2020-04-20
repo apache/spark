@@ -18,24 +18,28 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
 ### Description
 
 The `CREATE TABLE` statement defines a new table using Hive format.
 
 ### Syntax
+
 {% highlight sql %}
 CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
-  [ ( col_name1[:] col_type1 [ COMMENT col_comment1 ], ... ) ]
-  [ COMMENT table_comment ]
-  [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
-      | ( col_name1, col_name2, ... ) ]
-  [ ROW FORMAT row_format ]
-  [ STORED AS file_format ]
-  [ LOCATION path ]
-  [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
-  [ AS select_statement ]
-
+    [ ( col_name1[:] col_type1 [ COMMENT col_comment1 ], ... ) ]
+    [ COMMENT table_comment ]
+    [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
+        | ( col_name1, col_name2, ... ) ]
+    [ ROW FORMAT row_format ]
+    [ STORED AS file_format ]
+    [ LOCATION path ]
+    [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+    [ AS select_statement ]
 {% endhighlight %}
+
+Note that, the clauses between the columns definition clause and the AS SELECT clause can come in
+as any order. For example, you can write COMMENT table_comment after TBLPROPERTIES.
 
 ### Parameters
 
@@ -77,14 +81,12 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
 
 <dl>
   <dt><code><em>COMMENT</em></code></dt>
-  <dd>Table comments are added.</dd>
+  <dd>A string literal to describe the table.</dd>
 </dl>
 
 <dl>
   <dt><code><em>TBLPROPERTIES</em></code></dt>
-  <dd>
-	Table properties that have to be set are specified, such as `created.by.user`, `owner`, etc.
-  </dd>
+  <dd>A list of key-value pairs that is used to tag the table definition.</dd>
 </dl>
 
 <dl>
@@ -92,31 +94,45 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
   <dd>The table is populated using the data from the select statement.</dd>
 </dl>
 
-
 ### Examples
+
 {% highlight sql %}
+--Use hive format
+CREATE TABLE student (id INT, name STRING, age INT) STORED AS ORC;
 
---Using Comment and loading data from another table into the created table
-CREATE TABLE StudentInfo
-  COMMENT 'Table is created using existing data'
-  AS SELECT * FROM Student;
+--Use data from another table
+CREATE TABLE student_copy STORED AS ORC
+    AS SELECT * FROM student;
 
---Partitioned table
-CREATE TABLE Student (Id INT,name STRING)
-  PARTITIONED BY (age INT)
-  TBLPROPERTIES ('owner'='xxxx');
+--Specify table comment and properties
+CREATE TABLE student (id INT, name STRING, age INT)
+    COMMENT 'this is a comment'
+    STORED AS ORC
+    TBLPROPERTIES ('foo'='bar');  
 
-CREATE TABLE Student (Id INT,name STRING,age INT)
-  PARTITIONED BY (name,age);
+--Specify table comment and properties with different clauses order
+CREATE TABLE student (id INT, name STRING, age INT)
+    STORED AS ORC
+    TBLPROPERTIES ('foo'='bar')
+    COMMENT 'this is a comment';
 
---Using Row Format and file format
-CREATE TABLE Student (Id INT,name STRING)
-  ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-  STORED AS TEXTFILE;
+--Create partitioned table
+CREATE TABLE student (id INT, name STRING)
+    PARTITIONED BY (age INT)
+    STORED AS ORC;
 
+--Create partitioned table with different clauses order
+CREATE TABLE student (id INT, name STRING)
+    STORED AS ORC
+    PARTITIONED BY (age INT);
+
+--Use Row Format and file format
+CREATE TABLE student (id INT,name STRING)
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+    STORED AS TEXTFILE;
 {% endhighlight %}
 
-
 ### Related Statements
-* [CREATE TABLE USING DATASOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
-* [CREATE TABLE LIKE](sql-ref-syntax-ddl-create-table-like.html)
+
+ * [CREATE TABLE USING DATASOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
+ * [CREATE TABLE LIKE](sql-ref-syntax-ddl-create-table-like.html)

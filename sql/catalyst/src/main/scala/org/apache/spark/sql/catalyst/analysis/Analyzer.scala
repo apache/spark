@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -294,8 +295,8 @@ class Analyzer(
           case (CalendarIntervalType, CalendarIntervalType) => a
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
-          case (DateType, _) => DateAdd(l, r)
-          case (_, DateType) => DateAdd(r, l)
+          case (DateType, dt) if dt != StringType => DateAdd(l, r)
+          case (dt, DateType) if dt != StringType => DateAdd(r, l)
           case _ => a
         }
         case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
@@ -304,7 +305,7 @@ class Analyzer(
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
-          case (DateType, _) => DateSub(l, r)
+          case (DateType, dt) if dt != StringType => DateSub(l, r)
           case _ => s
         }
         case m @ Multiply(l, r) if m.childrenResolved => (l.dataType, r.dataType) match {
@@ -436,7 +437,7 @@ class Analyzer(
           val idx = groupByExprs.indexWhere(_.semanticEquals(col))
           if (idx >= 0) {
             Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
-              Literal(1)), ByteType), toPrettySQL(e))()
+              Literal(1L)), ByteType), toPrettySQL(e))()
           } else {
             throw new AnalysisException(s"Column of grouping ($col) can't be found " +
               s"in grouping columns ${groupByExprs.mkString(",")}")
@@ -530,8 +531,6 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
-      val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
-
       // In case of ANSI-SQL compliant syntax for GROUPING SETS, groupByExprs is optional and
       // can be null. In such case, we derive the groupByExprs from the user supplied values for
       // grouping sets.
@@ -550,12 +549,18 @@ class Analyzer(
         groupByExprs
       }
 
+      if (finalGroupByExpressions.size > GroupingID.dataType.defaultSize * 8) {
+        throw new AnalysisException(
+          s"Grouping sets size cannot be greater than ${GroupingID.dataType.defaultSize * 8}")
+      }
+
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
       // instead of the original value we need to create new aliases for all group by expressions
       // that will only be used for the intended purpose.
       val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
 
+      val gid = AttributeReference(VirtualColumn.groupingIdName, GroupingID.dataType, false)()
       val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 
@@ -742,6 +747,8 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case s @ ShowTables(UnresolvedNamespace(Seq()), _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+      case s @ ShowViews(UnresolvedNamespace(Seq()), _) =>
+        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
         ResolvedNamespace(currentCatalog, Seq.empty[String])
       case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
@@ -807,8 +814,10 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier)
-          .map(SubqueryAlias(u.multipartIdentifier, _))
-          .getOrElse(u)
+          .map { rel =>
+            val ident = rel.identifier.get
+            SubqueryAlias(rel.catalog.get.name +: ident.namespace :+ ident.name, rel)
+          }.getOrElse(u)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
         CatalogV2Util.loadTable(catalog, ident)
@@ -933,7 +942,7 @@ class Analyzer(
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
               SubqueryAlias(
-                identifier,
+                catalog.name +: ident.asMultipartIdentifier,
                 DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
@@ -1793,6 +1802,7 @@ class Analyzer(
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
+    val trimWarningEnabled = new AtomicBoolean(true)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case q: LogicalPlan =>
         q transformExpressions {
@@ -1837,13 +1847,19 @@ class Analyzer(
                   }
                   AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
-                case other =>
-                  if (isDistinct || filter.isDefined) {
-                    failAnalysis("DISTINCT or FILTER specified, " +
-                      s"but ${other.prettyName} is not an aggregate function")
-                  } else {
-                    other
+                case other if (isDistinct || filter.isDefined) =>
+                  failAnalysis("DISTINCT or FILTER specified, " +
+                    s"but ${other.prettyName} is not an aggregate function")
+                case e: String2TrimExpression if arguments.size == 2 =>
+                  if (trimWarningEnabled.get) {
+                    log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
+                      " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
+                      " instead.")
+                    trimWarningEnabled.set(false)
                   }
+                  e
+                case other =>
+                  other
               }
             }
         }
@@ -2162,12 +2178,31 @@ class Analyzer(
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      def hasInnerGenerator(g: Generator): Boolean = g match {
+        // Since `GeneratorOuter` is just a wrapper of generators, we skip it here
+        case go: GeneratorOuter =>
+          hasInnerGenerator(go.child)
+        case _ =>
+          g.children.exists { _.find {
+            case _: Generator => true
+            case _ => false
+          }.isDefined }
+      }
       CleanupAliases.trimNonTopLevelAliases(expr) match {
-        case UnresolvedAlias(_: Generator, _) => false
-        case Alias(_: Generator, _) => false
-        case MultiAlias(_: Generator, _) => false
+        case UnresolvedAlias(g: Generator, _) => hasInnerGenerator(g)
+        case Alias(g: Generator, _) => hasInnerGenerator(g)
+        case MultiAlias(g: Generator, _) => hasInnerGenerator(g)
         case other => hasGenerator(other)
       }
+    }
+
+    private def hasAggFunctionInGenerator(ne: Seq[NamedExpression]): Boolean = {
+      ne.exists(_.find {
+        case g: Generator =>
+          g.children.exists(_.find(_.isInstanceOf[AggregateFunction]).isDefined)
+        case _ =>
+          false
+      }.nonEmpty)
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
@@ -2255,6 +2290,11 @@ class Analyzer(
 
         val newAgg = Aggregate(groupList, newAggList, child)
         Project(projectExprs.toList, newAgg)
+
+      case p @ Project(projectList, _) if hasAggFunctionInGenerator(projectList) =>
+        // If a generator has any aggregate function, we need to apply the `GlobalAggregates` rule
+        // first for replacing `Project` with `Aggregate`.
+        p
 
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.
@@ -2669,13 +2709,13 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, inputPrimitives, _, _, _, _)
-            if inputPrimitives.contains(true) =>
+        case udf @ ScalaUDF(_, _, inputs, _, _, _, _)
+            if udf.inputPrimitives.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
-          assert(inputPrimitives.length == inputs.length)
+          assert(udf.inputPrimitives.length == inputs.length)
 
-          val inputPrimitivesPair = inputPrimitives.zip(inputs)
+          val inputPrimitivesPair = udf.inputPrimitives.zip(inputs)
           val inputNullCheck = inputPrimitivesPair.collect {
             case (isPrimitive, input) if isPrimitive && input.nullable =>
               IsNull(input)
@@ -3023,9 +3063,29 @@ class Analyzer(
   object ResolveAlterTableChanges extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
+        // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
+        // normalized parent name of fields to field names that belong to the parent.
+        // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
+        // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
+        val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
         val schema = t.schema
         val normalizedChanges = changes.flatMap {
           case add: AddColumn =>
+            def addColumn(
+                parentSchema: StructType,
+                parentName: String,
+                normalizedParentName: Seq[String]): TableChange = {
+              val fieldsAdded = colsToAdd.getOrElse(normalizedParentName, Nil)
+              val pos = findColumnPosition(add.position(), parentName, parentSchema, fieldsAdded)
+              val field = add.fieldNames().last
+              colsToAdd(normalizedParentName) = fieldsAdded :+ field
+              TableChange.addColumn(
+                (normalizedParentName :+ field).toArray,
+                add.dataType(),
+                add.isNullable,
+                add.comment,
+                pos)
+            }
             val parent = add.fieldNames().init
             if (parent.nonEmpty) {
               // Adding a nested field, need to normalize the parent column and position
@@ -3037,27 +3097,14 @@ class Analyzer(
                 val (normalizedName, sf) = target.get
                 sf.dataType match {
                   case struct: StructType =>
-                    val pos = findColumnPosition(add.position(), parent.quoted, struct)
-                    Some(TableChange.addColumn(
-                      (normalizedName ++ Seq(sf.name, add.fieldNames().last)).toArray,
-                      add.dataType(),
-                      add.isNullable,
-                      add.comment,
-                      pos))
-
+                    Some(addColumn(struct, parent.quoted, normalizedName :+ sf.name))
                   case other =>
                     Some(add)
                 }
               }
             } else {
               // Adding to the root. Just need to normalize position
-              val pos = findColumnPosition(add.position(), "root", schema)
-              Some(TableChange.addColumn(
-                add.fieldNames(),
-                add.dataType(),
-                add.isNullable,
-                add.comment,
-                pos))
+              Some(addColumn(schema, "root", Nil))
             }
 
           case typeChange: UpdateColumnType =>
@@ -3156,17 +3203,18 @@ class Analyzer(
 
     private def findColumnPosition(
         position: ColumnPosition,
-        field: String,
-        struct: StructType): ColumnPosition = {
+        parentName: String,
+        struct: StructType,
+        fieldsAdded: Seq[String]): ColumnPosition = {
       position match {
         case null => null
         case after: After =>
-          struct.fieldNames.find(n => conf.resolver(n, after.column())) match {
+          (struct.fieldNames ++ fieldsAdded).find(n => conf.resolver(n, after.column())) match {
             case Some(colName) =>
               ColumnPosition.after(colName)
             case None =>
               throw new AnalysisException("Couldn't find the reference column for " +
-                s"$after at $field")
+                s"$after at $parentName")
           }
         case other => other
       }

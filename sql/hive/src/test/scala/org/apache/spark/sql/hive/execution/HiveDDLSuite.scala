@@ -981,8 +981,8 @@ class HiveDDLSuite
     val expectedSerdePropsString =
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
-    assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assume(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
+    assert(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
+    assert(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
@@ -1580,6 +1580,12 @@ class HiveDDLSuite
         "source table/view path should be different from target table path")
     }
 
+    if (DDLUtils.isHiveTable(targetTable)) {
+      assert(targetTable.tracksPartitionsInCatalog)
+    } else {
+      assert(targetTable.tracksPartitionsInCatalog == sourceTable.tracksPartitionsInCatalog)
+    }
+
     // The source table contents should not been seen in the target table.
     assert(spark.table(sourceTable.identifier).count() != 0, "the source table should be nonempty")
     assert(spark.table(targetTable.identifier).count() == 0, "the target table should be empty")
@@ -1729,7 +1735,7 @@ class HiveDDLSuite
     Seq("json", "parquet").foreach { format =>
       withTable("rectangles") {
         data.write.format(format).saveAsTable("rectangles")
-        assume(spark.table("rectangles").collect().nonEmpty,
+        assert(spark.table("rectangles").collect().nonEmpty,
           "bad test; table was empty to begin with")
 
         sql("TRUNCATE TABLE rectangles")
@@ -2722,6 +2728,21 @@ class HiveDDLSuite
         val table = catalog.getTableMetadata(TableIdentifier("s"))
         assert(table.provider === Some("hive"))
       }
+    }
+  }
+
+  test("SPARK-30785: create table like a partitioned table") {
+    val catalog = spark.sessionState.catalog
+    withTable("sc_part", "ta_part") {
+      sql("CREATE TABLE sc_part (key string, ts int) USING parquet PARTITIONED BY (ts)")
+      sql("CREATE TABLE ta_part like sc_part")
+      val sourceTable = catalog.getTableMetadata(TableIdentifier("sc_part", Some("default")))
+      val targetTable = catalog.getTableMetadata(TableIdentifier("ta_part", Some("default")))
+      assert(sourceTable.tracksPartitionsInCatalog)
+      assert(targetTable.tracksPartitionsInCatalog)
+      assert(targetTable.partitionColumnNames == Seq("ts"))
+      sql("ALTER TABLE ta_part ADD PARTITION (ts=10)") // no exception
+      checkAnswer(sql("SHOW PARTITIONS ta_part"), Row("ts=10") :: Nil)
     }
   }
 }

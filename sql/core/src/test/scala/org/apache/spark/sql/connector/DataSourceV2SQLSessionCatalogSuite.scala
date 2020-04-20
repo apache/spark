@@ -47,7 +47,7 @@ class DataSourceV2SQLSessionCatalogSuite
     val v2Catalog = spark.sessionState.catalogManager.currentCatalog
     val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     v2Catalog.asInstanceOf[TableCatalog]
-      .loadTable(Identifier.of(Array.empty, nameParts.last))
+      .loadTable(Identifier.of(nameParts.init.toArray, nameParts.last))
   }
 
   test("SPARK-30697: catalog.isView doesn't throw an error for specialized identifiers") {
@@ -55,7 +55,7 @@ class DataSourceV2SQLSessionCatalogSuite
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
 
-      def idResolver(id: Identifier): Identifier = Identifier.of(Array.empty, id.name())
+      def idResolver(id: Identifier): Identifier = Identifier.of(Array("default"), id.name())
 
       InMemoryTableSessionCatalog.withCustomIdentifierResolver(idResolver) {
         // The following should not throw AnalysisException.

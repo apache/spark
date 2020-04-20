@@ -483,6 +483,28 @@ class JsonProtocolSuite extends SparkFunSuite {
     testAccumValue(Some("anything"), blocks, JString(blocks.toString))
     testAccumValue(Some("anything"), 123, JString("123"))
   }
+
+  test("SPARK-30936: forwards compatibility - ignore unknown fields") {
+    val expected = TestListenerEvent("foo", 123)
+    val unknownFieldsJson =
+      """{
+        |  "Event" : "org.apache.spark.util.TestListenerEvent",
+        |  "foo" : "foo",
+        |  "bar" : 123,
+        |  "unknown" : "unknown"
+        |}""".stripMargin
+    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
+  }
+
+  test("SPARK-30936: backwards compatibility - set default values for missing fields") {
+    val expected = TestListenerEvent("foo", 0)
+    val unknownFieldsJson =
+      """{
+        |  "Event" : "org.apache.spark.util.TestListenerEvent",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
+  }
 }
 
 
@@ -2313,3 +2335,5 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |}
     """.stripMargin
 }
+
+case class TestListenerEvent(foo: String, bar: Int) extends SparkListenerEvent

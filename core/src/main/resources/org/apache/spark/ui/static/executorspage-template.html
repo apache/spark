@@ -19,16 +19,16 @@ limitations under the License.
   <div id="showAdditionalMetrics"></div>
   <h4 class="title-table">Summary</h4>
   <div class="container-fluid">
-    <div class="container-fluid">
-      <table id="summary-execs-table" class="table table-striped compact cell-border">
+      <table id="summary-execs-table" class="table table-striped compact cell-border" style="width: 100%">
         <thead>
+          <tr>
         <th></th>
         <th>RDD Blocks</th>
-        <th><span data-toggle="tooltip"
+        <th><span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">Storage Memory</span>
         </th>
         <th>
-          <span data-toggle="tooltip"
+          <span data-toggle="tooltip" data-placement="top"
                 title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">On Heap Storage Memory</span>
         </th>
         <th>
@@ -41,12 +41,12 @@ limitations under the License.
         <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks that have failed on this executor. Darker shading highlights executors with a high proportion of failed tasks.">Failed Tasks</span></th>
         <th>Complete Tasks</th>
         <th>Total Tasks</th>
-        <th><span data-toggle="tooltip"
+        <th><span data-toggle="tooltip" data-placement="top"
                   title="Shaded red when garbage collection (GC) time is over 10% of task time">
           Task Time (GC Time)</span></th>
-        <th><span data-toggle="tooltip"
+        <th><span data-toggle="tooltip" data-placement="top"
                   title="Bytes and records read from Hadoop or from Spark storage.">Input</span></th>
-        <th><span data-toggle="tooltip"
+        <th><span data-toggle="tooltip" data-placement="top"
                   title="Total shuffle bytes and records read (includes both data read locally and data read from remote executors).">
           Shuffle Read</span></th>
         <th>
@@ -59,16 +59,15 @@ limitations under the License.
                 title="Number of executors blacklisted by the scheduler due to task failures.">
             Blacklisted</span>
         </th>
+          </tr>
         </thead>
         <tbody>
         </tbody>
       </table>
-    </div>
   </div>
   <h4 class="title-table">Executors</h4>
   <div class="container-fluid">
-    <div class="container-fluid">
-      <table id="active-executors-table" class="table table-striped compact cell-border">
+      <table id="active-executors-table" class="table table-striped compact cell-border" style="width: 100%">
         <thead>
         <tr>
           <th>Executor ID</th>
@@ -84,7 +83,7 @@ limitations under the License.
                   title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">
               On Heap Storage Memory</span></th>
           <th>
-            <span data-toggle="tooltip"
+            <span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">
               Off Heap Storage Memory</span></th>
           <th>Disk Used</th>
@@ -95,10 +94,10 @@ limitations under the License.
           <th>Complete Tasks</th>
           <th>Total Tasks</th>
           <th>
-            <scan data-toggle="tooltip" data-placement="top"
+            <span data-toggle="tooltip" data-placement="top"
                   title="Shaded red when garbage collection (GC) time is over 10% of task time">
               Task Time (GC Time)
-            </scan>
+            </span>
           </th>
           <th><span data-toggle="tooltip" data-placement="top"
                     title="Bytes and records read from Hadoop or from Spark storage.">Input</span></th>
@@ -117,6 +116,5 @@ limitations under the License.
         <tbody>
         </tbody>
       </table>
-    </div>
   </div>
 </script>

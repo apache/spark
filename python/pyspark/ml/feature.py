@@ -1467,7 +1467,7 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     """
     Imputation estimator for completing missing values, either using the mean or the median
     of the columns in which the missing values are located. The input columns should be of
-    DoubleType or FloatType. Currently Imputer does not support categorical features and
+    numeric type. Currently Imputer does not support categorical features and
     possibly creates incorrect values for a categorical feature.
 
     Note that the mean/median value is computed after filtering out missing values.

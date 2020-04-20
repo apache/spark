@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.util.concurrent._
+import java.util.concurrent.{Future => JFuture}
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
@@ -303,6 +304,22 @@ private[spark] object ThreadUtils {
     }
   }
   // scalastyle:on awaitresult
+
+  @throws(classOf[SparkException])
+  def awaitResult[T](future: JFuture[T], atMost: Duration): T = {
+    try {
+      atMost match {
+        case Duration.Inf => future.get()
+        case _ => future.get(atMost._1, atMost._2)
+      }
+    } catch {
+      case e: SparkFatalException =>
+        throw e.throwable
+      case NonFatal(t)
+        if !t.isInstanceOf[TimeoutException] && !t.isInstanceOf[RpcAbortException] =>
+        throw new SparkException("Exception thrown in awaitResult: ", t)
+    }
+  }
 
   // scalastyle:off awaitready
   /**

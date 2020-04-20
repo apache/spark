@@ -1,2 +1,2 @@
---SET spark.sql.legacy.ctePrecedence.enabled = false
---IMPORT cte.sql
+--SET spark.sql.legacy.ctePrecedencePolicy = corrected
+--IMPORT cte-nested.sql

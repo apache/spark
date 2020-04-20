@@ -35,6 +35,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -1216,7 +1217,7 @@ class StreamSuite extends StreamTest {
     }
 
     var lastTimestamp = System.currentTimeMillis()
-    val currentDate = DateTimeUtils.millisToDays(lastTimestamp)
+    val currentDate = DateTimeUtils.microsToDays(DateTimeUtils.millisToMicros(lastTimestamp))
     testStream(df) (
       AddData(input, 1),
       CheckLastBatch { rows: Seq[Row] =>
@@ -1244,9 +1245,10 @@ class StreamSuite extends StreamTest {
       failAfter(60.seconds) {
         val startTime = System.nanoTime()
         withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "2000") {
-          intercept[TimeoutException] {
+          val ex = intercept[TimeoutException] {
             sq.stop()
           }
+          assert(ex.getMessage.contains(sq.id.toString))
         }
         val duration = (System.nanoTime() - startTime) / 1e6
         assert(duration >= 2000,

@@ -285,7 +285,7 @@ struct<month(CAST(1996-01-10 AS DATE)):int>
 -- !query
 SELECT day( '1996-01-10') FROM t
 -- !query schema
-struct<dayofmonth(CAST(1996-01-10 AS DATE)):int>
+struct<day(CAST(1996-01-10 AS DATE)):int>
 -- !query output
 10
 

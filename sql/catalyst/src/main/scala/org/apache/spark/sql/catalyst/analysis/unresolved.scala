@@ -298,35 +298,26 @@ abstract class Star extends LeafExpression with NamedExpression {
 case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevaluable {
 
   /**
-   * Returns true if the nameParts match the qualifier of the attribute
+   * Returns true if the nameParts is a subset of the last elements of qualifier of the attribute.
    *
-   * There are two checks: i) Check if the nameParts match the qualifier fully.
-   * E.g. SELECT db.t1.* FROM db1.t1   In this case, the nameParts is Seq("db1", "t1") and
-   * qualifier of the attribute is Seq("db1","t1")
-   * ii) If (i) is not true, then check if nameParts is only a single element and it
-   * matches the table portion of the qualifier
-   *
-   * E.g. SELECT t1.* FROM db1.t1  In this case nameParts is Seq("t1") and
-   * qualifier is Seq("db1","t1")
-   * SELECT a.* FROM db1.t1 AS a
-   * In this case nameParts is Seq("a") and qualifier for
-   * attribute is Seq("a")
+   * For example, the following should all return true:
+   *   - `SELECT ns1.ns2.t.* FROM ns1.n2.t` where nameParts is Seq("ns1", "ns2", "t") and
+   *     qualifier is Seq("ns1", "ns2", "t").
+   *   - `SELECT ns2.t.* FROM ns1.n2.t` where nameParts is Seq("ns2", "t") and
+   *     qualifier is Seq("ns1", "ns2", "t").
+   *   - `SELECT t.* FROM ns1.n2.t` where nameParts is Seq("t") and
+   *     qualifier is Seq("ns1", "ns2", "t").
    */
   private def matchedQualifier(
       attribute: Attribute,
       nameParts: Seq[String],
       resolver: Resolver): Boolean = {
-    val qualifierList = attribute.qualifier
-
-    val matched = nameParts.corresponds(qualifierList)(resolver) || {
-      // check if it matches the table portion of the qualifier
-      if (nameParts.length == 1 && qualifierList.nonEmpty) {
-        resolver(nameParts.head, qualifierList.last)
-      } else {
-        false
-      }
+    val qualifierList = if (nameParts.length == attribute.qualifier.length) {
+      attribute.qualifier
+    } else {
+      attribute.qualifier.takeRight(nameParts.length)
     }
-    matched
+    nameParts.corresponds(qualifierList)(resolver)
   }
 
   override def expand(

@@ -39,12 +39,12 @@ SELECT substring('Spark SQL' from 5);
 SELECT substring('Spark SQL' from -3);
 SELECT substring('Spark SQL' from 5 for 1);
 
--- trim/ltrim/rtrim
-SELECT trim('yxTomxx', 'xyz'), trim(BOTH 'xyz' FROM 'yxTomxx'), trim('xyz' FROM 'yxTomxx');
-SELECT trim('xxxbarxxx', 'x'), trim(BOTH 'x' FROM 'xxxbarxxx'), trim('x' FROM 'xxxbarxxx');
-SELECT ltrim('zzzytest', 'xyz'), trim(LEADING 'xyz' FROM 'zzzytest');
-SELECT ltrim('zzzytestxyz', 'xyz'), trim(LEADING 'xyz' FROM 'zzzytestxyz');
-SELECT ltrim('xyxXxyLAST WORD', 'xy'), trim(LEADING 'xy' FROM 'xyxXxyLAST WORD');
-SELECT rtrim('testxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'testxxzx');
-SELECT rtrim('xyztestxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'xyztestxxzx');
-SELECT rtrim('TURNERyxXxy', 'xy'), trim(TRAILING 'xy' FROM 'TURNERyxXxy');
+-- trim
+SELECT trim(BOTH 'xyz' FROM 'yxTomxx'), trim('xyz' FROM 'yxTomxx');
+SELECT trim(BOTH 'x' FROM 'xxxbarxxx'), trim('x' FROM 'xxxbarxxx');
+SELECT trim(LEADING 'xyz' FROM 'zzzytest');
+SELECT trim(LEADING 'xyz' FROM 'zzzytestxyz');
+SELECT trim(LEADING 'xy' FROM 'xyxXxyLAST WORD');
+SELECT trim(TRAILING 'xyz' FROM 'testxxzx');
+SELECT trim(TRAILING 'xyz' FROM 'xyztestxxzx');
+SELECT trim(TRAILING 'xy' FROM 'TURNERyxXxy');

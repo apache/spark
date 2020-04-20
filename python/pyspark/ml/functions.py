@@ -23,6 +23,7 @@ from pyspark.sql.column import Column, _to_java_column
 def vector_to_array(col, dtype="float64"):
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
+
     :param col: A string of the column name or a Column
     :param dtype: The data type of the output array. Valid values: "float64" or "float32".
     :return: The converted column of dense arrays.

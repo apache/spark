@@ -20,10 +20,19 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTag}
-import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
+/**
+ * An abstraction of the Spark SQL query plan tree, which can be logical or physical. This class
+ * defines some basic properties of a query plan node, as well as some new transform APIs to
+ * transform the expressions of the plan node.
+ *
+ * Note that, the query plan is a mutually recursive structure:
+ *   QueryPlan -> Expression (subquery) -> QueryPlan
+ * The tree traverse APIs like `transform`, `foreach`, `collect`, etc. that are
+ * inherited from `TreeNode`, do not traverse into query plans inside subqueries.
+ */
 abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
@@ -134,7 +143,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   /**
    * Returns the result of running [[transformExpressions]] on this node
-   * and all its children.
+   * and all its children. Note that this method skips expressions inside subqueries.
    */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transform {
@@ -189,13 +198,23 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     val codegenIdStr =
       getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s"[codegen id : $id]").getOrElse("")
     val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
-    s"""
-       |($operatorId) $nodeName $codegenIdStr
-     """.stripMargin
+    val baseStr = s"($operatorId) $nodeName $codegenIdStr"
+    val argumentString = argString(SQLConf.get.maxToStringFields)
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$baseStr
+         |Arguments: $argumentString
+      """.stripMargin
+    } else {
+      s"""
+         |$baseStr
+      """.stripMargin
+    }
   }
 
   /**
-   * All the subqueries of current plan.
+   * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
   def subqueries: Seq[PlanType] = {
     expressions.flatMap(_.collect {
@@ -204,20 +223,20 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   }
 
   /**
-   * Returns a sequence containing the result of applying a partial function to all elements in this
-   * plan, also considering all the plans in its (nested) subqueries
-   */
-  def collectInPlanAndSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
-    (this +: subqueriesAll).flatMap(_.collect(f))
-
-  /**
-   * Returns a sequence containing the subqueries in this plan, also including the (nested)
-   * subquries in its children
+   * All the subqueries of the current plan node and all its children. Nested subqueries are also
+   * included.
    */
   def subqueriesAll: Seq[PlanType] = {
     val subqueries = this.flatMap(_.subqueries)
     subqueries ++ subqueries.flatMap(_.subqueriesAll)
   }
+
+  /**
+   * A variant of `collect`. This method not only apply the given function to all elements in this
+   * plan, also considering all the plans in its (nested) subqueries
+   */
+  def collectWithSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
+    (this +: subqueriesAll).flatMap(_.collect(f))
 
   override def innerChildren: Seq[QueryPlan[_]] = subqueries
 

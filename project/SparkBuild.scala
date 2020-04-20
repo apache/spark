@@ -88,7 +88,8 @@ object SparkBuild extends PomBuild {
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
   override val profiles = {
-    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES")
+      .orElse(Properties.propOrNone("sbt.maven.profiles")) match {
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
@@ -226,7 +227,7 @@ object SparkBuild extends PomBuild {
     resolvers := Seq(
       // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
       // See https://storage-download.googleapis.com/maven-central/index.html for more info.
-      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/repos/central/data/",
+      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
       DefaultMavenRepository,
       Resolver.mavenLocal,
       Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
@@ -479,7 +480,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
-    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextSuite"
+    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextSuite",
+    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -621,7 +623,10 @@ object KubernetesIntegrationTests {
 object DependencyOverrides {
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % "14.0.1",
-    dependencyOverrides += "jline" % "jline" % "2.14.6")
+    dependencyOverrides += "commons-io" % "commons-io" % "2.4",
+    dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
+    dependencyOverrides += "jline" % "jline" % "2.14.6",
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.8.2")
 }
 
 /**
@@ -823,6 +828,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/memory")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/network")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/rpc")))
       .map(_.filterNot(f =>
         f.getCanonicalPath.contains("org/apache/spark/shuffle") &&
         !f.getCanonicalPath.contains("org/apache/spark/shuffle/api")))

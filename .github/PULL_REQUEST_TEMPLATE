@@ -6,6 +6,8 @@ Thanks for sending a pull request!  Here are some tips for you:
   4. Be sure to keep the PR description updated to reflect all changes.
   5. Please write your PR title to summarize what this PR proposes.
   6. If possible, provide a concise example to reproduce the issue for a faster review.
+  7. If you want to add a new configuration, please read the guideline first for naming configurations in
+     'core/src/main/scala/org/apache/spark/internal/config/ConfigEntry.scala'.
 -->
 
 ### What changes were proposed in this pull request?

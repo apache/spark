@@ -154,7 +154,7 @@ private[spark] object TaskIndexNames {
 private[spark] class TaskDataWrapper(
     // Storing this as an object actually saves memory; it's also used as the key in the in-memory
     // store, so in that case you'd save the extra copy of the value here.
-    @KVIndexParam
+    @KVIndexParam(parent = TaskIndexNames.STAGE)
     val taskId: JLong,
     @KVIndexParam(value = TaskIndexNames.TASK_INDEX, parent = TaskIndexNames.STAGE)
     val index: Int,

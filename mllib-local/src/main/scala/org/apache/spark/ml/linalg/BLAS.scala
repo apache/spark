@@ -27,13 +27,22 @@ private[spark] object BLAS extends Serializable {
 
   @transient private var _f2jBLAS: NetlibBLAS = _
   @transient private var _nativeBLAS: NetlibBLAS = _
+  private val nativeL1Threshold: Int = 256
 
-  // For level-1 routines, we use Java implementation.
+  // For level-1 function dspmv, use f2jBLAS for better performance.
   private[ml] def f2jBLAS: NetlibBLAS = {
     if (_f2jBLAS == null) {
       _f2jBLAS = new F2jBLAS
     }
     _f2jBLAS
+  }
+
+  private[ml] def getBLAS(vectorSize: Int): NetlibBLAS = {
+    if (vectorSize < nativeL1Threshold) {
+      f2jBLAS
+    } else {
+      nativeBLAS
+    }
   }
 
   /**
@@ -63,7 +72,7 @@ private[spark] object BLAS extends Serializable {
    */
   private def axpy(a: Double, x: DenseVector, y: DenseVector): Unit = {
     val n = x.size
-    f2jBLAS.daxpy(n, a, x.values, 1, y.values, 1)
+    getBLAS(n).daxpy(n, a, x.values, 1, y.values, 1)
   }
 
   /**
@@ -94,7 +103,7 @@ private[spark] object BLAS extends Serializable {
   private[spark] def axpy(a: Double, X: DenseMatrix, Y: DenseMatrix): Unit = {
     require(X.numRows == Y.numRows && X.numCols == Y.numCols, "Dimension mismatch: " +
       s"size(X) = ${(X.numRows, X.numCols)} but size(Y) = ${(Y.numRows, Y.numCols)}.")
-    f2jBLAS.daxpy(X.numRows * X.numCols, a, X.values, 1, Y.values, 1)
+    getBLAS(X.values.length).daxpy(X.numRows * X.numCols, a, X.values, 1, Y.values, 1)
   }
 
   /**
@@ -123,7 +132,7 @@ private[spark] object BLAS extends Serializable {
    */
   private def dot(x: DenseVector, y: DenseVector): Double = {
     val n = x.size
-    f2jBLAS.ddot(n, x.values, 1, y.values, 1)
+    getBLAS(n).ddot(n, x.values, 1, y.values, 1)
   }
 
   /**
@@ -218,16 +227,16 @@ private[spark] object BLAS extends Serializable {
   def scal(a: Double, x: Vector): Unit = {
     x match {
       case sx: SparseVector =>
-        f2jBLAS.dscal(sx.values.length, a, sx.values, 1)
+        getBLAS(sx.values.length).dscal(sx.values.length, a, sx.values, 1)
       case dx: DenseVector =>
-        f2jBLAS.dscal(dx.values.length, a, dx.values, 1)
+        getBLAS(dx.size).dscal(dx.values.length, a, dx.values, 1)
       case _ =>
         throw new IllegalArgumentException(s"scal doesn't support vector type ${x.getClass}.")
     }
   }
 
   // For level-3 routines, we use the native BLAS.
-  private def nativeBLAS: NetlibBLAS = {
+  private[ml] def nativeBLAS: NetlibBLAS = {
     if (_nativeBLAS == null) {
       _nativeBLAS = NativeBLAS
     }
@@ -374,7 +383,7 @@ private[spark] object BLAS extends Serializable {
       // gemm: alpha is equal to 0 and beta is equal to 1. Returning C.
       return
     } else if (alpha == 0.0) {
-      f2jBLAS.dscal(C.values.length, beta, C.values, 1)
+      getBLAS(C.values.length).dscal(C.values.length, beta, C.values, 1)
     } else {
       A match {
         case sparse: SparseMatrix => gemm(alpha, sparse, B, beta, C)
@@ -480,7 +489,7 @@ private[spark] object BLAS extends Serializable {
     } else {
       // Scale matrix first if `beta` is not equal to 1.0
       if (beta != 1.0) {
-        f2jBLAS.dscal(C.values.length, beta, C.values, 1)
+        getBLAS(C.values.length).dscal(C.values.length, beta, C.values, 1)
       }
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
       // B, and added to C.
@@ -682,7 +691,6 @@ private[spark] object BLAS extends Serializable {
 
           val xTemp = xValues(k) * alpha
           while (i < indEnd) {
-            val rowIndex = Arows(i)
             yValues(Arows(i)) += Avals(i) * xTemp
             i += 1
           }
@@ -734,8 +742,7 @@ private[spark] object BLAS extends Serializable {
         val indEnd = Acols(colCounterForA + 1)
         val xVal = xValues(colCounterForA) * alpha
         while (i < indEnd) {
-          val rowIndex = Arows(i)
-          yValues(rowIndex) += Avals(i) * xVal
+          yValues(Arows(i)) += Avals(i) * xVal
           i += 1
         }
         colCounterForA += 1

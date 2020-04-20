@@ -124,7 +124,7 @@ will compile against built-in Hive and use those classes for internal execution 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
 <table class="table">
-  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
     <td><code>2.3.6</code></td>
@@ -132,6 +132,7 @@ The following options can be used to configure the version of Hive that is used 
       Version of the Hive metastore. Available
       options are <code>0.12.0</code> through <code>2.3.6</code> and <code>3.0.0</code> through <code>3.1.2</code>.
     </td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.hive.metastore.jars</code></td>
@@ -153,6 +154,7 @@ The following options can be used to configure the version of Hive that is used 
         they are packaged with your application.</li>
       </ol>
     </td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.hive.metastore.sharedPrefixes</code></td>
@@ -166,6 +168,7 @@ The following options can be used to configure the version of Hive that is used 
         custom appenders that are used by log4j.
       </p>
     </td>
+    <td>1.4.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.hive.metastore.barrierPrefixes</code></td>
@@ -177,5 +180,6 @@ The following options can be used to configure the version of Hive that is used 
         prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).
       </p>
     </td>
+    <td>1.4.0</td>
   </tr>
 </table>

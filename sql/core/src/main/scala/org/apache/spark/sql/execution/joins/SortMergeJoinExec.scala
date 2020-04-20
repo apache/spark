@@ -41,7 +41,7 @@ case class SortMergeJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false) extends BinaryExecNode with CodegenSupport {
+    isSkewJoin: Boolean = false) extends BaseJoinExec with CodegenSupport {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -51,23 +51,6 @@ case class SortMergeJoinExec(
   }
 
   override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
-
-  override def simpleStringWithNodeId(): String = {
-    val opId = ExplainUtils.getOpId(this)
-    s"$nodeName $joinType ($opId)".trim
-  }
-
-  override def verboseStringWithOperatorId(): String = {
-    val joinCondStr = if (condition.isDefined) {
-      s"${condition.get}"
-    } else "None"
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Left keys : ${leftKeys}
-       |Right keys: ${rightKeys}
-       |Join condition : ${joinCondStr}
-     """.stripMargin
-  }
 
   override def output: Seq[Attribute] = {
     joinType match {

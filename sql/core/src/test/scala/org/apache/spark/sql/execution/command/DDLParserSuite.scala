@@ -40,7 +40,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
-  private lazy val parser = new SparkSqlParser(new SQLConf)
+  private lazy val parser = new SparkSqlParser(new SQLConf().copy(
+    SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED -> false))
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
     val e = intercept[ParseException] {
@@ -492,7 +493,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(statement.partitioning.isEmpty)
     assert(statement.bucketSpec.isEmpty)
     assert(statement.properties.isEmpty)
-    assert(statement.provider == conf.defaultDataSourceName)
+    assert(statement.provider.isEmpty)
     assert(statement.options.isEmpty)
     assert(statement.location.isEmpty)
     assert(statement.comment.isEmpty)
@@ -662,7 +663,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       assert(state.partitioning.isEmpty)
       assert(state.bucketSpec.isEmpty)
       assert(state.properties.isEmpty)
-      assert(state.provider == conf.defaultDataSourceName)
+      assert(state.provider.isEmpty)
       assert(state.options.isEmpty)
       assert(state.location.isEmpty)
       assert(state.comment.isEmpty)

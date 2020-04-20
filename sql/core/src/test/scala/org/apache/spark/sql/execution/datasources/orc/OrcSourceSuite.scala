@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
@@ -478,6 +478,64 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
             spark.read.orc(basePath).columns.length
           }.getCause
           assert(exception.getCause.getMessage.contains("Could not read footer for file"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-31238: compatibility with Spark 2.4 in reading dates") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        checkAnswer(
+          readResourceOrcFile("test-data/before_1582_date_v2_4.snappy.orc"),
+          Row(java.sql.Date.valueOf("1200-01-01")))
+      }
+    }
+  }
+
+  test("SPARK-31238, SPARK-31423: rebasing dates in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      Seq("1001-01-01", "1582-10-10").toDF("dateS")
+        .select($"dateS".cast("date").as("date"))
+        .write
+        .orc(path)
+
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          checkAnswer(
+            spark.read.orc(path),
+            Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-31284: compatibility with Spark 2.4 in reading timestamps") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        checkAnswer(
+          readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
+          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+      }
+    }
+  }
+
+  test("SPARK-31284, SPARK-31423: rebasing timestamps in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      Seq("1001-01-01 01:02:03.123456", "1582-10-10 11:12:13.654321").toDF("tsS")
+        .select($"tsS".cast("timestamp").as("ts"))
+        .write
+        .orc(path)
+
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          checkAnswer(
+            spark.read.orc(path),
+            Seq(
+              Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
+              Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
         }
       }
     }

@@ -162,7 +162,8 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
     Examples:
       > SELECT _FUNC_(0);
        0
-  """)
+  """,
+  since = "3.0.0")
 case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))

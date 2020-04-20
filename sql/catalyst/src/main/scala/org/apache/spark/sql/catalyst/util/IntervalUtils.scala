@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -49,24 +50,8 @@ object IntervalUtils {
     interval.months / MONTHS_PER_YEAR
   }
 
-  def getMillenniums(interval: CalendarInterval): Int = {
-    getYears(interval) / YEARS_PER_MILLENNIUM
-  }
-
-  def getCenturies(interval: CalendarInterval): Int = {
-    getYears(interval) / YEARS_PER_CENTURY
-  }
-
-  def getDecades(interval: CalendarInterval): Int = {
-    getYears(interval) / YEARS_PER_DECADE
-  }
-
   def getMonths(interval: CalendarInterval): Byte = {
     (interval.months % MONTHS_PER_YEAR).toByte
-  }
-
-  def getQuarters(interval: CalendarInterval): Byte = {
-    (getMonths(interval) / MONTHS_PER_QUARTER + 1).toByte
   }
 
   def getDays(interval: CalendarInterval): Int = {
@@ -81,25 +66,8 @@ object IntervalUtils {
     ((interval.microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
   }
 
-  def getMicroseconds(interval: CalendarInterval): Long = {
-    interval.microseconds % MICROS_PER_MINUTE
-  }
-
   def getSeconds(interval: CalendarInterval): Decimal = {
-    Decimal(getMicroseconds(interval), 8, 6)
-  }
-
-  def getMilliseconds(interval: CalendarInterval): Decimal = {
-    Decimal(getMicroseconds(interval), 8, 3)
-  }
-
-  // Returns total number of seconds with microseconds fractional part in the given interval.
-  def getEpoch(interval: CalendarInterval): Decimal = {
-    var result = interval.microseconds
-    result += MICROS_PER_DAY * interval.days
-    result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
-    result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
-    Decimal(result, 18, 6)
+    Decimal(interval.microseconds % MICROS_PER_MINUTE, 8, 6)
   }
 
   private def toLongWithRange(
@@ -135,8 +103,7 @@ object IntervalUtils {
             s"Error parsing interval year-month string: ${e.getMessage}", e)
       }
     }
-    assert(input.length == input.trim.length)
-    input match {
+    input.trim match {
       case yearMonthPattern("-", yearStr, monthStr) =>
         negateExact(toInterval(yearStr, monthStr))
       case yearMonthPattern(_, yearStr, monthStr) =>
@@ -299,7 +266,7 @@ object IntervalUtils {
     val regexp = dayTimePattern.get(from -> to)
     require(regexp.isDefined, s"Cannot support (interval '$input' $from to $to) expression")
     val pattern = regexp.get.pattern
-    val m = pattern.matcher(input)
+    val m = pattern.matcher(input.trim)
     require(m.matches, s"Interval string must match day-time format of '$pattern': $input, " +
       s"$fallbackNotice")
     var micros: Long = 0L
@@ -404,20 +371,36 @@ object IntervalUtils {
   }
 
   /**
-   * Makes an interval from months, days and micros with the fractional part by
-   * adding the month fraction to days and the days fraction to micros.
-   *
-   * @throws ArithmeticException if the result overflows any field value
+   * Makes an interval from months, days and micros with the fractional part.
+   * The overflow style here follows the way of ansi sql standard and the natural rules for
+   * intervals as defined in the Gregorian calendar. Thus, the days fraction will be added
+   * to microseconds but the months fraction will not be added to days, and it will throw
+   * exception if any part overflows.
    */
   private def fromDoubles(
       monthsWithFraction: Double,
       daysWithFraction: Double,
       microsWithFraction: Double): CalendarInterval = {
     val truncatedMonths = Math.toIntExact(monthsWithFraction.toLong)
-    val days = daysWithFraction + DAYS_PER_MONTH * (monthsWithFraction - truncatedMonths)
-    val truncatedDays = Math.toIntExact(days.toLong)
-    val micros = microsWithFraction + MICROS_PER_DAY * (days - truncatedDays)
+    val truncatedDays = Math.toIntExact(daysWithFraction.toLong)
+    val micros = microsWithFraction + MICROS_PER_DAY * (daysWithFraction - truncatedDays)
     new CalendarInterval(truncatedMonths, truncatedDays, micros.round)
+  }
+
+  /**
+   * Makes an interval from months, days and micros with the fractional part.
+   * The overflow style here follows the way of casting [[java.lang.Double]] to integrals and the
+   * natural rules for intervals as defined in the Gregorian calendar. Thus, the days fraction
+   * will be added to microseconds but the months fraction will not be added to days, and there may
+   * be rounding or truncation in months(or day and microseconds) part.
+   */
+  private def safeFromDoubles(
+      monthsWithFraction: Double,
+      daysWithFraction: Double,
+      microsWithFraction: Double): CalendarInterval = {
+    val truncatedDays = daysWithFraction.toInt
+    val micros = microsWithFraction + MICROS_PER_DAY * (daysWithFraction - truncatedDays)
+    new CalendarInterval(monthsWithFraction.toInt, truncatedDays, micros.round)
   }
 
   /**
@@ -485,11 +468,26 @@ object IntervalUtils {
 
   /**
    * Return a new calendar interval instance of the left interval times a multiplier.
+   */
+  def multiply(interval: CalendarInterval, num: Double): CalendarInterval = {
+    safeFromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
+  }
+
+  /**
+   * Return a new calendar interval instance of the left interval times a multiplier.
    *
    * @throws ArithmeticException if the result overflows any field value
    */
   def multiplyExact(interval: CalendarInterval, num: Double): CalendarInterval = {
     fromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
+  }
+
+  /**
+   * Return a new calendar interval instance of the left interval divides by a dividend.
+   */
+  def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
+    if (num == 0) return null
+    safeFromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
   /**
@@ -704,9 +702,7 @@ object IntervalUtils {
                   microseconds = Math.addExact(microseconds, minutesUs)
                   i += minuteStr.numBytes()
                 } else if (s.matchAt(millisStr, i)) {
-                  val millisUs = Math.multiplyExact(
-                    currentValue,
-                    MICROS_PER_MILLIS)
+                  val millisUs = millisToMicros(currentValue)
                   microseconds = Math.addExact(microseconds, millisUs)
                   i += millisStr.numBytes()
                 } else if (s.matchAt(microsStr, i)) {

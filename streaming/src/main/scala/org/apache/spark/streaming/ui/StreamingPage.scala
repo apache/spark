@@ -80,9 +80,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val resources = generateLoadResources(request)
+    val onClickTimelineFunc = generateOnClickTimelineFunction()
     val basicInfo = generateBasicInfo()
     val content = resources ++
-      basicInfo ++
+      onClickTimelineFunc ++ basicInfo ++
       listener.synchronized {
         generateStatTable() ++
           generateBatchListTables()
@@ -99,6 +100,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
       <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
     // scalastyle:on
+  }
+
+  /** Generate html that will set onClickTimeline declared in streaming-page.js */
+  private def generateOnClickTimelineFunction(): Seq[Node] = {
+    val js = "onClickTimeline = getOnClickTimelineFunction();"
+    <script>{Unparsed(js)}</script>
   }
 
   /** Generate basic information of the streaming program */
@@ -135,6 +142,16 @@ private[ui] class StreamingPage(parent: StreamingTab)
       val formattedTime =
         SparkUIUtils.formatBatchTime(time, listener.batchDuration, showYYYYMMSS = false)
       s"timeFormat[$time] = '$formattedTime';"
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
+  private def generateTimeTipStrings(times: Seq[Long]): Seq[Node] = {
+    // We leverage timeFormat as the value would be same as timeFormat. This means it is
+    // sensitive to the order - generateTimeMap should be called earlier than this.
+    val js = "var timeTipStrings = {};\n" + times.map { time =>
+      s"timeTipStrings[$time] = timeFormat[$time];"
     }.mkString("\n")
 
     <script>{Unparsed(js)}</script>
@@ -313,7 +330,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </table>
     // scalastyle:on
 
-    generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
+    generateTimeMap(batchTimes) ++ generateTimeTipStrings(batchTimes) ++ table ++
+      jsCollector.toHtml
   }
 
   private def generateInputDStreamsTable(
@@ -421,8 +439,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
       sortBy(_.batchTime.milliseconds).reverse
 
     val activeBatchesContent = {
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <span id="activeBatches" class="collapse-aggregated-activeBatches collapse-table"
                 onClick="collapseTable('collapse-aggregated-activeBatches',
                 'aggregated-activeBatches')">
@@ -439,8 +457,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     }
 
     val completedBatchesContent = {
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
                 onClick="collapseTable('collapse-aggregated-completedBatches',
                 'aggregated-completedBatches')">

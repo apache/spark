@@ -23,6 +23,8 @@ import org.apache.spark.annotation.Evolving;
  * A physical representation of a data source scan for batch queries. This interface is used to
  * provide physical information, like how many partitions the scanned data has, and how to read
  * records from the partitions.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface Batch {

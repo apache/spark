@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
@@ -764,20 +765,171 @@ case class SchemaOfJson(
   @transient
   private lazy val json = child.eval().asInstanceOf[UTF8String]
 
-  override def checkInputDataTypes(): TypeCheckResult = child match {
-    case Literal(s, StringType) if s != null => super.checkInputDataTypes()
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"The input json should be a string literal and not null; however, got ${child.sql}.")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.foldable && json != null) {
+      super.checkInputDataTypes()
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        "The input json should be a foldable string expression and not null; " +
+        s"however, got ${child.sql}.")
+    }
   }
 
   override def eval(v: InternalRow): Any = {
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       parser.nextToken()
-      jsonInferSchema.inferField(parser)
+      // To match with schema inference from JSON datasource.
+      jsonInferSchema.inferField(parser) match {
+        case st: StructType =>
+          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
+        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
+          jsonInferSchema
+            .canonicalizeType(at.elementType, jsonOptions)
+            .map(ArrayType(_, containsNull = at.containsNull))
+            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
+        case other: DataType =>
+          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(StringType)
+      }
     }
 
     UTF8String.fromString(dt.catalogString)
   }
 
   override def prettyName: String = "schema_of_json"
+}
+
+/**
+ * A function that returns the number of elements in the outmost JSON array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(jsonArray) - Returns the number of elements in the outmost JSON array.",
+  arguments = """
+    Arguments:
+      * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
+          `NULL` or an invalid JSON.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('[1,2,3,4]');
+        4
+      > SELECT _FUNC_('[1,2,3,{"f1":1,"f2":[5,6]},4]');
+        5
+      > SELECT _FUNC_('[1,2');
+        NULL
+  """,
+  since = "3.1.0"
+)
+case class LengthOfJsonArray(child: Expression) extends UnaryExpression
+  with CodegenFallback with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = IntegerType
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_array_length"
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // return null for null input
+    if (json == null) {
+      return null
+    }
+
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => {
+          // return null if null array is encountered.
+          if (parser.nextToken() == null) {
+            return null
+          }
+          // Parse the array to compute its length.
+          parseCounter(parser, input)
+        }
+      }
+    } catch {
+      case _: JsonProcessingException | _: IOException => null
+    }
+  }
+
+  private def parseCounter(parser: JsonParser, input: InternalRow): Any = {
+    var length = 0
+    // Only JSON array are supported for this function.
+    if (parser.currentToken != JsonToken.START_ARRAY) {
+      return null
+    }
+    // Keep traversing until the end of JSON array
+    while(parser.nextToken() != JsonToken.END_ARRAY) {
+      length += 1
+      // skip all the child of inner object or array
+      parser.skipChildren()
+    }
+    length
+  }
+}
+
+/**
+ * A function which returns all the keys of the outmost JSON object.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(json_object) - Returns all the keys of the outmost JSON object as an array.",
+  arguments = """
+    Arguments:
+      * json_object - A JSON object. If a valid JSON object is given, all the keys of the outmost
+          object will be returned as an array. If it is any other valid JSON string, an invalid JSON
+          string or an empty string, the function returns null.
+  """,
+  examples = """
+    Examples:
+      > Select _FUNC_('{}');
+        []
+      > Select _FUNC_('{"key": "value"}');
+        ["key"]
+      > Select _FUNC_('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
+        ["f1","f2"]
+  """,
+  since = "3.1.0"
+)
+case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback
+  with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = ArrayType(StringType)
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_object_keys"
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // return null for `NULL` input
+    if(json == null) {
+      return null
+    }
+
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => {
+          // return null if an empty string or any other valid JSON string is encountered
+          if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
+            return null
+          }
+          // Parse the JSON string to get all the keys of outmost JSON object
+          getJsonKeys(parser, input)
+        }
+      }
+    } catch {
+      case _: JsonProcessingException | _: IOException => null
+    }
+  }
+
+  private def getJsonKeys(parser: JsonParser, input: InternalRow): GenericArrayData = {
+    var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
+
+    // traverse until the end of input and ensure it returns valid key
+    while(parser.nextValue() != null && parser.currentName() != null) {
+      // add current fieldName to the ArrayBuffer
+      arrayBufferOfKeys += UTF8String.fromString(parser.getCurrentName)
+
+      // skip all the children of inner object or array
+      parser.skipChildren()
+    }
+    new GenericArrayData(arrayBufferOfKeys.toArray)
+  }
 }

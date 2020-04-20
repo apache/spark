@@ -37,8 +37,8 @@ object UnsafeProjectionBenchmark extends BenchmarkBase {
 
   def generateRows(schema: StructType, numRows: Int): Array[InternalRow] = {
     val generator = RandomDataGenerator.forType(schema, nullable = false).get
-    val encoder = RowEncoder(schema)
-    (1 to numRows).map(_ => encoder.toRow(generator().asInstanceOf[Row]).copy()).toArray
+    val toRow = RowEncoder(schema).createSerializer()
+    (1 to numRows).map(_ => toRow(generator().asInstanceOf[Row]).copy()).toArray
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {

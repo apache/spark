@@ -227,6 +227,17 @@ private object ResourceRequestHelper extends Logging {
     resourceInformation
   }
 
+  def isYarnCustomResourcesNonEmpty(resource: Resource): Boolean = {
+    try {
+      // Use reflection as this uses APIs only available in Hadoop 3
+      val getResourcesMethod = resource.getClass().getMethod("getResources")
+      val resources = getResourcesMethod.invoke(resource).asInstanceOf[Array[Any]]
+      if (resources.nonEmpty) true else false
+    } catch {
+      case  _: NoSuchMethodException => false
+    }
+  }
+
   /**
    * Checks whether Hadoop 2.x or 3 is used as a dependency.
    * In case of Hadoop 3 and later, the ResourceInformation class

@@ -54,13 +54,13 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  * probably be using sorting instead of hashing for better cache locality.
  *
  * The key and values under the hood are stored together, in the following format:
- *   Bytes 0 to 4: len(k) (key length in bytes) + len(v) (value length in bytes) + 4
- *   Bytes 4 to 8: len(k)
- *   Bytes 8 to 8 + len(k): key data
- *   Bytes 8 + len(k) to 8 + len(k) + len(v): value data
- *   Bytes 8 + len(k) + len(v) to 8 + len(k) + len(v) + 8: pointer to next pair
+ *   First uaoSize bytes: len(k) (key length in bytes) + len(v) (value length in bytes) + uaoSize
+ *   Next uaoSize bytes: len(k)
+ *   Next len(k) bytes: key data
+ *   Next len(v) bytes: value data
+ *   Last 8 bytes: pointer to next pair
  *
- * This means that the first four bytes store the entire record (key + value) length. This format
+ * It means first uaoSize bytes store the entire record (key + value + uaoSize) length. This format
  * is compatible with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
  * so we can pass records from this map directly into the sorter to sort records in place.
  */
@@ -96,8 +96,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * since that's the largest power-of-2 that's less than Integer.MAX_VALUE. We need two long array
    * entries per key, giving us a maximum capacity of (1 &lt;&lt; 29).
    */
-  @VisibleForTesting
-  static final int MAX_CAPACITY = (1 << 29);
+  public static final int MAX_CAPACITY = (1 << 29);
 
   // This choice of page table size and page size means that we can address up to 500 gigabytes
   // of memory.
@@ -707,7 +706,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
-      // (8 byte key length) (key) (value) (8 byte pointer to next value)
+      // (total length) (key length) (key) (value) (8 byte pointer to next value)
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
       final long recordLength = (2L * uaoSize) + klen + vlen + 8;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {

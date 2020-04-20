@@ -79,4 +79,11 @@ class CanonicalizeSuite extends SparkFunSuite {
       0, Some("b2"))
     assert(fieldB1.semanticEquals(fieldB2))
   }
+
+  test("SPARK-30847: Take productPrefix into account in MurmurHash3.productHash") {
+    val range = Range(1, 1, 1, 1)
+    val addExpr = Add(range.output.head, Literal(1))
+    val subExpr = Subtract(range.output.head, Literal(1))
+    assert(addExpr.canonicalized.hashCode() != subExpr.canonicalized.hashCode())
+  }
 }

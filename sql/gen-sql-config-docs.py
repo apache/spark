@@ -25,7 +25,7 @@ from mkdocs.structure.pages import markdown
 from pyspark.java_gateway import launch_gateway
 
 SQLConfEntry = namedtuple(
-    "SQLConfEntry", ["name", "default", "description"])
+    "SQLConfEntry", ["name", "default", "description", "version"])
 
 
 def get_public_sql_configs(jvm):
@@ -34,6 +34,7 @@ def get_public_sql_configs(jvm):
             name=_sql_config._1(),
             default=_sql_config._2(),
             description=_sql_config._3(),
+            version=_sql_config._4()
         )
         for _sql_config in jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listSQLConfigs()
     ]
@@ -49,12 +50,13 @@ def generate_sql_configs_table(sql_configs, path):
 
     ```html
     <table class="table">
-    <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+    <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 
     <tr>
         <td><code>spark.sql.adaptive.enabled</code></td>
         <td>false</td>
         <td><p>When true, enable adaptive query execution.</p></td>
+        <td>2.1.0</td>
     </tr>
 
     ...
@@ -68,7 +70,7 @@ def generate_sql_configs_table(sql_configs, path):
         f.write(dedent(
             """
             <table class="table">
-            <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+            <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
             """
         ))
         for config in sorted(sql_configs, key=lambda x: x.name):
@@ -96,12 +98,14 @@ def generate_sql_configs_table(sql_configs, path):
                     <td><code>{name}</code></td>
                     <td>{default}</td>
                     <td>{description}</td>
+                    <td>{version}</td>
                 </tr>
                 """
                 .format(
                     name=config.name,
                     default=default,
                     description=markdown.markdown(config.description),
+                    version=config.version
                 )
             ))
         f.write("</table>\n")

@@ -119,7 +119,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       </script>
     val summary: NodeSeq =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           {
             if (running.nonEmpty) {
               <li>
@@ -246,7 +246,7 @@ private[ui] class ExecutionPagedTable(
   override def tableId: String = s"$executionTag-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
+    "table table-bordered table-sm table-striped " +
       "table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {

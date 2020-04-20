@@ -21,14 +21,15 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * Evaluator for binary classification, which expects two input columns: rawPrediction and label.
+ * Evaluator for binary classification, which expects input columns rawPrediction, label and
+ *  an optional weight column.
  * The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label 1)
  * or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
  */
@@ -104,7 +105,9 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
       SchemaUtils.checkNumericType(schema, $(weightCol))
     }
 
-    // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
+    MetadataUtils.getNumFeatures(schema($(rawPredictionCol)))
+      .foreach(n => require(n == 2, s"rawPredictionCol vectors must have length=2, but got $n"))
+
     val scoreAndLabelsWithWeights =
       dataset.select(
         col($(rawPredictionCol)),

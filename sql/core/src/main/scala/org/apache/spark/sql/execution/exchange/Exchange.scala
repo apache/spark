@@ -92,7 +92,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
     val reuse_op_str = ExplainUtils.getOpId(child)
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${cdgen} [Reuses operator id: $reuse_op_str]
-       |Output : ${output}
+       |${ExplainUtils.generateFieldString("Output", output)}
      """.stripMargin
   }
 }
