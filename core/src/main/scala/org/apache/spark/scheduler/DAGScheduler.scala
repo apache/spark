@@ -774,6 +774,7 @@ private[spark] class DAGScheduler(
         SparkListenerJobStart(jobId, time, Seq.empty, clonedProperties))
       listenerBus.post(
         SparkListenerJobEnd(jobId, time, JobSucceeded))
+      listenerBus.post(SparkListenerJobCleaned(jobId, time))
       // Return immediately if the job is running 0 tasks
       return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
@@ -798,6 +799,7 @@ private[spark] class DAGScheduler(
    * @param callSite where in the user program this job was called
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
+   * @param jobCleanedHook job cleaned hook to do some cleaning after job cleaned
    *
    * @note Throws `Exception` when the job fails
    */
@@ -807,9 +809,11 @@ private[spark] class DAGScheduler(
       partitions: Seq[Int],
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
-      properties: Properties): Unit = {
+      properties: Properties,
+      jobCleanedHook: Int => Unit = Int => Unit): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
+    sc.jobCleanedHookListener.addCleanedHook(waiter.jobId, jobCleanedHook)
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
@@ -849,6 +853,7 @@ private[spark] class DAGScheduler(
       val time = clock.getTimeMillis()
       listenerBus.post(SparkListenerJobStart(jobId, time, Seq[StageInfo](), properties))
       listenerBus.post(SparkListenerJobEnd(jobId, time, JobSucceeded))
+      listenerBus.post(SparkListenerJobCleaned(jobId, time))
       return new PartialResult(evaluator.currentResult(), true)
     }
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)

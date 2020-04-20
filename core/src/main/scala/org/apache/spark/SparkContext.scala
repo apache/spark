@@ -341,6 +341,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] var checkpointDir: Option[String] = None
 
+  private[spark] val jobCleanedHookListener: JobCleanedHookListener = new JobCleanedHookListener
+
   // Thread Local variable that can be used by users to pass information down the stack
   protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = {
@@ -442,6 +444,8 @@ class SparkContext(config: SparkConf) extends Logging {
     val appStatusSource = AppStatusSource.createSource(conf)
     _statusStore = AppStatusStore.createLiveStore(conf, appStatusSource)
     listenerBus.addToStatusQueue(_statusStore.listener.get)
+
+    listenerBus.addToSharedQueue(jobCleanedHookListener)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
@@ -2090,12 +2094,14 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param partitions set of partitions to run on; some jobs may not want to compute on all
    * partitions of the target RDD, e.g. for operations like `first()`
    * @param resultHandler callback to pass each result to
+   * @param jobCleanedHook job cleaned hook to do some cleaning after job cleaned
    */
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
-      resultHandler: (Int, U) => Unit): Unit = {
+      resultHandler: (Int, U) => Unit,
+      jobCleanedHook: Int => Unit): Unit = {
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
@@ -2105,9 +2111,28 @@ class SparkContext(config: SparkConf) extends Logging {
     if (conf.getBoolean("spark.logLineage", false)) {
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
     }
-    dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get)
+    dagScheduler.runJob(
+      rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get, jobCleanedHook)
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
+  }
+
+  /**
+   * Run a function on a given set of partitions in an RDD and pass the results to the given
+   * handler function. This is the main entry point for all actions in Spark.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param func a function to run on each partition of the RDD
+   * @param partitions set of partitions to run on; some jobs may not want to compute on all
+   * partitions of the target RDD, e.g. for operations like `first()`
+   * @param resultHandler callback to pass each result to
+   */
+  def runJob[T, U: ClassTag](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      resultHandler: (Int, U) => Unit): Unit = {
+    runJob(rdd, func, partitions, resultHandler, jobCleanedHook = Int => Unit)
   }
 
   /**

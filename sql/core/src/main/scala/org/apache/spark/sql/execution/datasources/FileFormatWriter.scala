@@ -50,7 +50,8 @@ object FileFormatWriter extends Logging {
   case class OutputSpec(
       outputPath: String,
       customPartitionLocations: Map[TablePartitionSpec, String],
-      outputColumns: Seq[Attribute])
+      outputColumns: Seq[Attribute],
+      cleanedHook: Int => Unit = Int => Unit)
 
   /** A function that converts the empty string to null for partition values. */
   case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
@@ -92,8 +93,7 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
-      options: Map[String, String])
-    : Set[String] = {
+      options: Map[String, String]): Set[String] = {
 
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
@@ -208,7 +208,8 @@ object FileFormatWriter extends Logging {
         (index, res: WriteTaskResult) => {
           committer.onTaskCommit(res.commitMsg)
           ret(index) = res
-        })
+        },
+        jobCleanedHook = outputSpec.cleanedHook)
 
       val commitMsgs = ret.map(_.commitMsg)
 

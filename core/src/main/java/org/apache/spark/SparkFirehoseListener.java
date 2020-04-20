@@ -68,6 +68,11 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
+  public final void onJobCleaned(SparkListenerJobCleaned jobCleaned) {
+    onEvent(jobCleaned);
+  }
+
+  @Override
   public final void onEnvironmentUpdate(SparkListenerEnvironmentUpdate environmentUpdate) {
     onEvent(environmentUpdate);
   }

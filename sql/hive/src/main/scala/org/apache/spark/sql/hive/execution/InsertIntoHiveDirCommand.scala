@@ -124,6 +124,8 @@ case class InsertIntoHiveDirCommand(
       }
     } catch {
       case e: Throwable =>
+        // Make sure tmp path deleted while getting Exception before sc.runJob
+        deleteExternalTmpPath(hadoopConf)
         throw new SparkException(
           "Failed inserting overwrite directory " + storage.locationUri.get, e)
     } finally {

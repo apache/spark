@@ -89,6 +89,12 @@ case class SparkListenerJobEnd(
   extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerJobCleaned(
+    jobId: Int,
+    time: Long)
+  extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent
 
@@ -252,6 +258,11 @@ private[spark] trait SparkListenerInterface {
   def onJobEnd(jobEnd: SparkListenerJobEnd): Unit
 
   /**
+   * Called when a job is cleaned
+   */
+  def onJobCleaned(jobCleaned: SparkListenerJobCleaned): Unit
+
+  /**
    * Called when environment properties have been updated
    */
   def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit
@@ -373,6 +384,8 @@ abstract class SparkListener extends SparkListenerInterface {
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = { }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = { }
+
+  override def onJobCleaned(jobCleaned: SparkListenerJobCleaned): Unit = { }
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit = { }
 

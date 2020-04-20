@@ -109,6 +109,7 @@ private[spark] class TaskSchedulerImpl(
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
+  private val jobIdToStageIds = new HashMap[Int, HashSet[Int]]
 
   // keyed by taskset
   // value is true if the task set's locality wait timer was reset on the last resource offer
@@ -230,6 +231,7 @@ private[spark] class TaskSchedulerImpl(
       val stage = taskSet.stageId
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
+      jobIdToStageIds.getOrElseUpdate(taskSet.priority, new HashSet[Int]()) += stage
 
       // Mark all the existing TaskSetManagers of this stage as zombie, as we are adding a new one.
       // This is necessary to handle a corner case. Let's say a stage has 10 partitions and has 2
@@ -334,6 +336,15 @@ private[spark] class TaskSchedulerImpl(
       taskSetsForStage -= manager.taskSet.stageAttemptId
       if (taskSetsForStage.isEmpty) {
         taskSetsByStageIdAndAttempt -= manager.taskSet.stageId
+        jobIdToStageIds.get(manager.priority).foreach { activeStages =>
+          activeStages -= manager.stageId
+          if (activeStages.isEmpty) {
+            jobIdToStageIds -= manager.priority
+            sc.listenerBus.post(
+              SparkListenerJobCleaned(manager.priority, clock.getTimeMillis())
+            )
+          }
+        }
       }
     }
     resetOnPreviousOffer -= manager.taskSet

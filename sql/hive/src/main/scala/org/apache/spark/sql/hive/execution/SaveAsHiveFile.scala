@@ -22,6 +22,7 @@ import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
 
+import scala.collection.mutable.HashSet
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -44,6 +45,8 @@ import org.apache.spark.sql.hive.client.HiveVersion
 private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
   var createdTempDir: Option[Path] = None
+  // This may be not sage in multi threads, use synchronized to keep thread safe.
+  private val cleanedTempDirs: HashSet[Path] = HashSet.empty[Path]
 
   protected def saveAsHiveFile(
       sparkSession: SparkSession,
@@ -88,8 +91,11 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       plan = plan,
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
-      outputSpec =
-        FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
+      outputSpec = FileFormatWriter.OutputSpec(
+        outputLocation,
+        customPartitionLocations,
+        outputColumns,
+        cleanedHook = Int => deleteExternalTmpPath(hadoopConf)),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
@@ -134,23 +140,35 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     }
   }
 
-  protected def deleteExternalTmpPath(hadoopConf: Configuration) : Unit = {
-    // Attempt to delete the staging directory and the inclusive files. If failed, the files are
-    // expected to be dropped at the normal termination of VM since deleteOnExit is used.
-    try {
+  /**
+   * This is a job cleaned hook function and will be called twice for a job to make sure
+   * the valid outputs have been moved and none tasks are active.
+   */
+  protected def deleteExternalTmpPath(hadoopConf: Configuration) : Unit =
+    synchronized {
+      // Attempt to delete the staging directory and the inclusive files. If failed, the files are
+      // expected to be dropped at the normal termination of VM since deleteOnExit is used.
       createdTempDir.foreach { path =>
-        val fs = path.getFileSystem(hadoopConf)
-        if (fs.delete(path, true)) {
-          // If we successfully delete the staging directory, remove it from FileSystem's cache.
-          fs.cancelDeleteOnExit(path)
+        if (cleanedTempDirs.contains(path)) {
+          try {
+            val fs = path.getFileSystem(hadoopConf)
+            if (fs.delete(path, true)) {
+              // Remove the tempDir from memory
+              cleanedTempDirs.remove(path)
+              createdTempDir = None
+              // If we successfully delete the staging directory, remove it from FileSystem's cache.
+              fs.cancelDeleteOnExit(path)
+            }
+          } catch {
+            case NonFatal(e) =>
+              val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
+              logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
+          }
+        } else {
+          cleanedTempDirs.add(path)
         }
       }
-    } catch {
-      case NonFatal(e) =>
-        val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
-        logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
     }
-  }
 
   // Mostly copied from Context.java#getExternalTmpPath of Hive 0.13
   private def oldVersionExternalTempPath(
