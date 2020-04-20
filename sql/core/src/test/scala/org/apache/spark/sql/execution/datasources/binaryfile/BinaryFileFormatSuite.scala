@@ -304,7 +304,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
     val partitionedFile = mock(classOf[PartitionedFile])
     when(partitionedFile.filePath).thenReturn(file.getPath)
     val encoder = RowEncoder(requiredSchema).resolveAndBind()
-    encoder.fromRow(reader(partitionedFile).next())
+    encoder.createDeserializer().apply(reader(partitionedFile).next())
   }
 
   test("column pruning") {

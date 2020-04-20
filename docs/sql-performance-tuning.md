@@ -169,7 +169,7 @@ head(join(src, hint(records, "broadcast"), src$key == records$key))
 
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 -- We accept BROADCAST, BROADCASTJOIN and MAPJOIN for broadcast hint

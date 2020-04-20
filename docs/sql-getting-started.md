@@ -205,7 +205,7 @@ refer it, e.g. `SELECT * FROM global_temp.view1`.
 {% include_example global_temp_view python/sql/basic.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 

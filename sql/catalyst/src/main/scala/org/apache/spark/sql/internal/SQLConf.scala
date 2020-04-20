@@ -2519,6 +2519,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.integerGroupingId")
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 

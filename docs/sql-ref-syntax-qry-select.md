@@ -53,7 +53,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
 <dl>
   <dt><code><em>with_query</em></code></dt>
   <dd>
-    Specifies the common table expressions (CTEs) before the main query block.
+    Specifies the <a href="sql-ref-syntax-qry-select-cte.html">common table expressions (CTEs)</a> before the main query block.
     These table expressions are allowed to be referenced later in the FROM clause. This is useful to abstract
     out repeated subquery blocks in the FROM clause and improves readability of the query.
   </dd>
@@ -159,3 +159,4 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
  * [TABLESAMPLE](sql-ref-syntax-qry-sampling.html)
  * [JOIN](sql-ref-syntax-qry-select-join.html)
  * [SET Operators](sql-ref-syntax-qry-select-setops.html)
+ * [Common Table Expression](sql-ref-syntax-qry-select-cte.html)
