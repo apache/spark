@@ -90,10 +90,10 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
   @Since("1.0.0")
   def predict(points: RDD[Vector]): RDD[Int] = {
     val bcCentersWithNorm = points.context.broadcast(clusterCentersWithNorm)
-    val bcRadii = points.context.broadcast(statistics)
+    val bcStatistics = points.context.broadcast(statistics)
     points.map(p =>
       distanceMeasureInstance.findClosest(bcCentersWithNorm.value,
-        bcRadii.value, new VectorWithNorm(p))._1)
+        bcStatistics.value, new VectorWithNorm(p))._1)
   }
 
   /**
