@@ -43,7 +43,7 @@ A string literal is used to specify a character string value.
 <dl>
   <dt><code><em>c</em></code></dt>
   <dd>
-    One character from the character set. Use <code>\</code> to escape special characters.
+    One character from the character set. Use <code>\</code> to escape special characters (e.g., <code>'</code> or <code>\</code>).
   </dd>
 </dl>
 
@@ -158,6 +158,7 @@ A numeric literal is used to specify a fixed or floating-point number.
     Indicates a 4-byte signed integer number.
   </dd>
 </dl>
+
 #### Examples
 
 {% highlight sql %}
