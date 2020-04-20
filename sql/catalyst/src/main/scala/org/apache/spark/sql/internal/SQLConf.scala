@@ -842,6 +842,7 @@ object SQLConf {
   val HIVE_BLOBSTORE_SUPPORTED_SCHEMES =
     buildConf("spark.sql.hive.blobstore.supported.schemes")
       .doc("Comma-separated list of supported blobstore schemes.")
+      .version("3.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
       .createWithDefault("s3,s3a,s3n")
@@ -852,6 +853,7 @@ object SQLConf {
         "(it may cause performance penalties). " +
         "If you disable this parameter, Spark writes the data first in scratch dir, " +
         "and move it to blobstore because moving it on blobstore is expensive.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
 
