@@ -1284,48 +1284,38 @@ abstract class DynamicPartitionPruningSuiteBase
   test("Use In when partition size not greater than optimizerInSetConversionThreshold") {
     def checkIn(plan: SparkPlan, expect: Boolean): Unit = {
       val hasIn = collectDynamicPruningExpressions(plan).exists {
-        case e @ InSubqueryExec(_, _, _, _) =>
+        case e: InSubqueryExec =>
           e.predicate match {
-            case In(_, _) => true
+            case _: In => true
             case _ => false
           }
         case _ => false
       }
-      if (hasIn == expect) {
-        // ok
-      } else {
-        fail(s"expect: $expect, but get $hasIn")
-      }
+      assert(hasIn == expect)
     }
+
+    val testSql =
+      """
+        |SELECT
+        |/*+ BROADCAST(t2)*/
+        |t1.date_id, t1.store_id FROM fact_sk t1
+        |JOIN dim_store t2
+        |ON t1.store_id = t2.store_id
+        |WHERE t2.country = 'NL'
+      """.stripMargin
 
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
       SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "1") {
-      val df = sql(
-        """
-          |SELECT
-          |/*+ BROADCAST(t2)*/
-          |t1.date_id, t1.store_id FROM fact_sk t1
-          |JOIN dim_store t2
-          |ON t1.store_id = t2.store_id
-          |WHERE t2.country = 'NL'
-        """.stripMargin)
+      val df = sql(testSql)
       checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
       checkIn(df.queryExecution.executedPlan, false)
     }
 
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-      SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "100") {
-      val df = sql(
-        """
-          |SELECT
-          |/*+ BROADCAST(t2)*/
-          |t1.date_id, t1.store_id FROM fact_sk t1
-          |JOIN dim_store t2
-          |ON t1.store_id = t2.store_id
-          |WHERE t2.country = 'NL'
-        """.stripMargin)
+      SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "2") {
+      val df = sql(testSql)
       // Action first then we can get the broadcast data
       checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
       checkIn(df.queryExecution.executedPlan, true)
