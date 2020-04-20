@@ -22,6 +22,7 @@ import java.util.{Properties, Timer, TimerTask}
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.{Failure, Success => ScalaSuccess, Try}
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
@@ -88,8 +89,6 @@ class BarrierTaskContext private[spark] (
       // and check whether current spark task is killed. If killed, then throw
       // a `TaskKilledException`, otherwise continue wait RPC until it completes.
 
-      // import scala Success locally to avoid conflict with org.apache.spark.Success
-      import scala.util.{Failure, Success, Try}
       while (!abortableRpcFuture.future.isCompleted) {
         try {
           // wait RPC future for at most 1 second
@@ -98,7 +97,7 @@ class BarrierTaskContext private[spark] (
           case _: InterruptedException => // task is killed by driver
         } finally {
           Try(taskContext.killTaskIfInterrupted()) match {
-            case Success(_) => // task is still running healthily
+            case ScalaSuccess(_) => // task is still running healthily
             case Failure(e) => abortableRpcFuture.abort(e)
           }
         }
