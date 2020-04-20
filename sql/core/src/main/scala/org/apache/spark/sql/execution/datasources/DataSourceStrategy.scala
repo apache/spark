@@ -450,37 +450,37 @@ object DataSourceStrategy {
 
   private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = predicate match {
     case expressions.EqualTo(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.EqualTo(name, convertToScala(v, t, false)))
+      Some(sources.EqualTo(name, convertToScala(v, t)))
     case expressions.EqualTo(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.EqualTo(name, convertToScala(v, t, false)))
+      Some(sources.EqualTo(name, convertToScala(v, t)))
 
     case expressions.EqualNullSafe(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.EqualNullSafe(name, convertToScala(v, t, false)))
+      Some(sources.EqualNullSafe(name, convertToScala(v, t)))
     case expressions.EqualNullSafe(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.EqualNullSafe(name, convertToScala(v, t, false)))
+      Some(sources.EqualNullSafe(name, convertToScala(v, t)))
 
     case expressions.GreaterThan(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.GreaterThan(name, convertToScala(v, t, false)))
+      Some(sources.GreaterThan(name, convertToScala(v, t)))
     case expressions.GreaterThan(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.LessThan(name, convertToScala(v, t, false)))
+      Some(sources.LessThan(name, convertToScala(v, t)))
 
     case expressions.LessThan(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.LessThan(name, convertToScala(v, t, false)))
+      Some(sources.LessThan(name, convertToScala(v, t)))
     case expressions.LessThan(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.GreaterThan(name, convertToScala(v, t, false)))
+      Some(sources.GreaterThan(name, convertToScala(v, t)))
 
     case expressions.GreaterThanOrEqual(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t, false)))
+      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
     case expressions.GreaterThanOrEqual(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.LessThanOrEqual(name, convertToScala(v, t, false)))
+      Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
 
     case expressions.LessThanOrEqual(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.LessThanOrEqual(name, convertToScala(v, t, false)))
+      Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
     case expressions.LessThanOrEqual(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t, false)))
+      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
 
     case expressions.InSet(e @ PushableColumn(name), set) =>
-      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType, false)
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
       Some(sources.In(name, set.toArray.map(toScala)))
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
@@ -488,7 +488,7 @@ object DataSourceStrategy {
     // down.
     case expressions.In(e @ PushableColumn(name), list) if list.forall(_.isInstanceOf[Literal]) =>
       val hSet = list.map(_.eval(EmptyRow))
-      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType, false)
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
       Some(sources.In(name, hSet.toArray.map(toScala)))
 
     case expressions.IsNull(PushableColumn(name)) =>
