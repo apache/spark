@@ -55,17 +55,17 @@ object CatalystTypeConverters {
     }
   }
 
-  private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
+  private def getConverterForType(
+      dataType: DataType,
+      useJava8DateTimeApi: Boolean): CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
-      case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
-      case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
-      case structType: StructType => StructConverter(structType)
+      case arrayType: ArrayType => ArrayConverter(arrayType.elementType, useJava8DateTimeApi)
+      case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType, useJava8DateTimeApi)
+      case structType: StructType => StructConverter(structType, useJava8DateTimeApi)
       case StringType => StringConverter
-      case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
-      case DateType => DateConverter
-      case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
-      case TimestampType => TimestampConverter
+      case DateType => if (useJava8DateTimeApi) LocalDateConverter else DateConverter
+      case TimestampType => if (useJava8DateTimeApi) InstantConverter else TimestampConverter
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -156,9 +156,10 @@ object CatalystTypeConverters {
 
   /** Converter for arrays, sequences, and Java iterables. */
   private case class ArrayConverter(
-      elementType: DataType) extends CatalystTypeConverter[Any, Seq[Any], ArrayData] {
+      elementType: DataType,
+      useJava8DateTimeApi: Boolean) extends CatalystTypeConverter[Any, Seq[Any], ArrayData] {
 
-    private[this] val elementConverter = getConverterForType(elementType)
+    private[this] val elementConverter = getConverterForType(elementType, useJava8DateTimeApi)
 
     override def toCatalystImpl(scalaValue: Any): ArrayData = {
       scalaValue match {
@@ -200,11 +201,12 @@ object CatalystTypeConverters {
 
   private case class MapConverter(
       keyType: DataType,
-      valueType: DataType)
+      valueType: DataType,
+      useJava8DateTimeApi: Boolean)
     extends CatalystTypeConverter[Any, Map[Any, Any], MapData] {
 
-    private[this] val keyConverter = getConverterForType(keyType)
-    private[this] val valueConverter = getConverterForType(valueType)
+    private[this] val keyConverter = getConverterForType(keyType, useJava8DateTimeApi)
+    private[this] val valueConverter = getConverterForType(valueType, useJava8DateTimeApi)
 
     override def toCatalystImpl(scalaValue: Any): MapData = {
       val keyFunction = (k: Any) => keyConverter.toCatalyst(k)
@@ -240,9 +242,11 @@ object CatalystTypeConverters {
   }
 
   private case class StructConverter(
-      structType: StructType) extends CatalystTypeConverter[Any, Row, InternalRow] {
+      structType: StructType,
+      useJava8DateTimeApi: Boolean) extends CatalystTypeConverter[Any, Row, InternalRow] {
 
-    private[this] val converters = structType.fields.map { f => getConverterForType(f.dataType) }
+    private[this] val converters = structType.fields
+      .map { f => getConverterForType(f.dataType, useJava8DateTimeApi) }
 
     override def toCatalystImpl(scalaValue: Any): InternalRow = scalaValue match {
       case row: Row =>
@@ -404,7 +408,9 @@ object CatalystTypeConverters {
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
    */
-  def createToCatalystConverter(dataType: DataType): Any => Any = {
+  def createToCatalystConverter(
+      dataType: DataType,
+      useJava8DateTimeApi: Boolean = SQLConf.get.datetimeJava8ApiEnabled): Any => Any = {
     if (isPrimitive(dataType)) {
       // Although the `else` branch here is capable of handling inbound conversion of primitives,
       // we add some special-case handling for those types here. The motivation for this relates to
@@ -422,7 +428,7 @@ object CatalystTypeConverters {
       }
       convert
     } else {
-      getConverterForType(dataType).toCatalyst
+      getConverterForType(dataType, useJava8DateTimeApi).toCatalyst
     }
   }
 
@@ -431,11 +437,13 @@ object CatalystTypeConverters {
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
    */
-  def createToScalaConverter(dataType: DataType): Any => Any = {
+  def createToScalaConverter(
+      dataType: DataType,
+      useJava8DateTimeApi: Boolean = SQLConf.get.datetimeJava8ApiEnabled): Any => Any = {
     if (isPrimitive(dataType)) {
       identity
     } else {
-      getConverterForType(dataType).toScala
+      getConverterForType(dataType, useJava8DateTimeApi).toScala
     }
   }
 
@@ -470,7 +478,10 @@ object CatalystTypeConverters {
    * This method is slow, and for batch conversion you should be using converter
    * produced by createToScalaConverter.
    */
-  def convertToScala(catalystValue: Any, dataType: DataType): Any = {
-    createToScalaConverter(dataType)(catalystValue)
+  def convertToScala(
+      catalystValue: Any,
+      dataType: DataType,
+      useJava8DateTimeApi: Boolean = SQLConf.get.datetimeJava8ApiEnabled): Any = {
+    createToScalaConverter(dataType, useJava8DateTimeApi)(catalystValue)
   }
 }

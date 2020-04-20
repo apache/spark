@@ -26,8 +26,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName}
-import org.apache.spark.sql.catalyst.CatalystTypeConverters.{convertToScala, DateConverter}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -448,46 +448,39 @@ object DataSourceStrategy {
     }
   }
 
-  private def translateFilterValues(catalystValue: Any, dataType: DataType): Any = {
-    dataType match {
-      case DateType => DateConverter.toScala(catalystValue)
-      case t => convertToScala(catalystValue, t)
-    }
-  }
-
   private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = predicate match {
     case expressions.EqualTo(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.EqualTo(name, translateFilterValues(v, t)))
+      Some(sources.EqualTo(name, convertToScala(v, t, false)))
     case expressions.EqualTo(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.EqualTo(name, translateFilterValues(v, t)))
+      Some(sources.EqualTo(name, convertToScala(v, t, false)))
 
     case expressions.EqualNullSafe(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.EqualNullSafe(name, translateFilterValues(v, t)))
+      Some(sources.EqualNullSafe(name, convertToScala(v, t, false)))
     case expressions.EqualNullSafe(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.EqualNullSafe(name, translateFilterValues(v, t)))
+      Some(sources.EqualNullSafe(name, convertToScala(v, t, false)))
 
     case expressions.GreaterThan(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.GreaterThan(name, translateFilterValues(v, t)))
+      Some(sources.GreaterThan(name, convertToScala(v, t, false)))
     case expressions.GreaterThan(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.LessThan(name, translateFilterValues(v, t)))
+      Some(sources.LessThan(name, convertToScala(v, t, false)))
 
     case expressions.LessThan(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.LessThan(name, translateFilterValues(v, t)))
+      Some(sources.LessThan(name, convertToScala(v, t, false)))
     case expressions.LessThan(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.GreaterThan(name, translateFilterValues(v, t)))
+      Some(sources.GreaterThan(name, convertToScala(v, t, false)))
 
     case expressions.GreaterThanOrEqual(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.GreaterThanOrEqual(name, translateFilterValues(v, t)))
+      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t, false)))
     case expressions.GreaterThanOrEqual(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.LessThanOrEqual(name, translateFilterValues(v, t)))
+      Some(sources.LessThanOrEqual(name, convertToScala(v, t, false)))
 
     case expressions.LessThanOrEqual(PushableColumn(name), Literal(v, t)) =>
-      Some(sources.LessThanOrEqual(name, translateFilterValues(v, t)))
+      Some(sources.LessThanOrEqual(name, convertToScala(v, t, false)))
     case expressions.LessThanOrEqual(Literal(v, t), PushableColumn(name)) =>
-      Some(sources.GreaterThanOrEqual(name, translateFilterValues(v, t)))
+      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t, false)))
 
     case expressions.InSet(e @ PushableColumn(name), set) =>
-      val toScala = translateFilterValues(_, e.dataType)
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType, false)
       Some(sources.In(name, set.toArray.map(toScala)))
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
@@ -495,7 +488,7 @@ object DataSourceStrategy {
     // down.
     case expressions.In(e @ PushableColumn(name), list) if list.forall(_.isInstanceOf[Literal]) =>
       val hSet = list.map(_.eval(EmptyRow))
-      val toScala = translateFilterValues(_, e.dataType)
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType, false)
       Some(sources.In(name, hSet.toArray.map(toScala)))
 
     case expressions.IsNull(PushableColumn(name)) =>
