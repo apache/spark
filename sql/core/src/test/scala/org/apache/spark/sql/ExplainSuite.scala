@@ -356,7 +356,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     testDf.collect()
     // whitespace
     val ws = " "
-    //   "== Physical Plan ==
+    //   == Physical Plan ==
     //   AdaptiveSparkPlan (14)
     //   +- * HashAggregate (13)
     //      +- CustomShuffleReader (12)
