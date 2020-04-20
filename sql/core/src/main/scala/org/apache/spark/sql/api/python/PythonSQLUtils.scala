@@ -23,7 +23,7 @@ import java.nio.channels.Channels
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDDServer
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -42,6 +42,8 @@ private[sql] object PythonSQLUtils {
 
   def listSQLConfigs(): Array[(String, String, String, String)] = {
     val conf = new SQLConf()
+    // Force to build StaticSQLConf, which is a little bit hacky here
+    conf.warehousePath
     // Py4J doesn't seem to translate Seq well, so we convert to an Array.
     conf.getAllDefinedConfs.toArray
   }
