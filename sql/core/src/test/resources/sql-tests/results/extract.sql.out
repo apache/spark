@@ -167,7 +167,7 @@ select extract(dow from c) from t
 -- !query schema
 struct<extract('dow' FROM t.`c`):int>
 -- !query output
-5
+6
 
 
 -- !query
