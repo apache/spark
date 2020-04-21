@@ -6,7 +6,7 @@ select extract(years from c), extract(years from i) from t;
 select extract(yr from c), extract(yr from i) from t;
 select extract(yrs from c), extract(yrs from i) from t;
 
-select extract(isoyear from c) from t;
+select extract(yearofweek from c) from t;
 
 select extract(quarter from c) from t;
 select extract(qtr from c) from t;
@@ -25,10 +25,10 @@ select extract(d from c), extract(d from i) from t;
 select extract(days from c), extract(days from i) from t;
 
 select extract(dayofweek from c) from t;
-
 select extract(dow from c) from t;
 
-select extract(isodow from c) from t;
+select extract(dayofweek_iso from c) from t;
+select extract(dow_iso from c) from t;
 
 select extract(doy from c) from t;
 
@@ -52,3 +52,60 @@ select extract(secs from c), extract(secs from i) from t;
 
 select extract(not_supported from c) from t;
 select extract(not_supported from i) from t;
+
+select date_part('year', c), date_part('year', i) from t;
+select date_part('y', c), date_part('y', i) from t;
+select date_part('years', c), date_part('years', i) from t;
+select date_part('yr', c), date_part('yr', i) from t;
+select date_part('yrs', c), date_part('yrs', i) from t;
+
+select date_part('yearofweek', c) from t;
+
+select date_part('quarter', c) from t;
+select date_part('qtr', c) from t;
+
+select date_part('month', c), date_part('month', i) from t;
+select date_part('mon', c), date_part('mon', i) from t;
+select date_part('mons', c), date_part('mons', i) from t;
+select date_part('months', c), date_part('months', i) from t;
+
+select date_part('week', c) from t;
+select date_part('w', c) from t;
+select date_part('weeks', c) from t;
+
+select date_part('day', c), date_part('day', i) from t;
+select date_part('d', c), date_part('d', i) from t;
+select date_part('days', c), date_part('days', i) from t;
+
+select date_part('dayofweek', c) from t;
+select date_part('dow', c) from t;
+
+select date_part('dayofweek_iso', c) from t;
+select date_part('dow_iso', c) from t;
+
+select date_part('doy', c) from t;
+
+select date_part('hour', c), date_part('hour', i) from t;
+select date_part('h', c), date_part('h', i) from t;
+select date_part('hours', c), date_part('hours', i) from t;
+select date_part('hr', c), date_part('hr', i) from t;
+select date_part('hrs', c), date_part('hrs', i) from t;
+
+select date_part('minute', c), date_part('minute', i) from t;
+select date_part('m', c), date_part('m', i) from t;
+select date_part('min', c), date_part('min', i) from t;
+select date_part('mins', c), date_part('mins', i) from t;
+select date_part('minutes', c), date_part('minutes', i) from t;
+
+select date_part('second', c), date_part('second', i) from t;
+select date_part('s', c), date_part('s', i) from t;
+select date_part('sec', c), date_part('sec', i) from t;
+select date_part('seconds', c), date_part('seconds', i) from t;
+select date_part('secs', c), date_part('secs', i) from t;
+
+select date_part('not_supported', c) from t;
+select date_part(c, c) from t;
+select date_part(null, c) from t;
+
+select date_part(i, i) from t;
+select date_part(null, i) from t;

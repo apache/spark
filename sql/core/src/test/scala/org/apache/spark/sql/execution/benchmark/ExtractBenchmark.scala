@@ -86,8 +86,8 @@ object ExtractBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 10000000L
-    val datetimeFields = Seq("YEAR", "ISOYEAR", "QUARTER", "MONTH", "WEEK",
-      "DAY", "DAYOFWEEK", "DOW", "ISODOW", "DOY", "HOUR", "MINUTE", "SECOND")
+    val datetimeFields = Seq("YEAR", "YEAROFWEEK", "QUARTER", "MONTH", "WEEK", "DAY", "DAYOFWEEK",
+      "DOW", "DOW_ISO", "DAYOFWEEK_ISO", "DOY", "HOUR", "MINUTE", "SECOND")
     val intervalFields = Seq("YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND")
     val settings = Map(
       "timestamp" -> datetimeFields,
