@@ -282,8 +282,6 @@ object QueryExecution {
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
-      // If the following rules apply, it means the main query is not AQE-ed, so we make sure the
-      // subqueries are not AQE-ed either.
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       EnsureRequirements(sparkSession.sessionState.conf),
@@ -333,19 +331,5 @@ object QueryExecution {
   def prepareExecutedPlan(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
     val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone())
     prepareExecutedPlan(spark, sparkPlan)
-  }
-
-  /**
-   * Returns a cloned [[SparkSession]] with adaptive execution disabled, or the original
-   * [[SparkSession]] if its adaptive execution is already disabled.
-   */
-  def getOrCloneSessionWithAqeOff[T](session: SparkSession): SparkSession = {
-    if (!session.sessionState.conf.adaptiveExecutionEnabled) {
-      session
-    } else {
-      val newSession = session.cloneSession()
-      newSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
-      newSession
-    }
   }
 }
