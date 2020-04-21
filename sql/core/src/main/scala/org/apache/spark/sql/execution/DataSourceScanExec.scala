@@ -76,7 +76,7 @@ trait DataSourceScanExec extends LeafExecNode {
 
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
      """.stripMargin
   }
@@ -378,7 +378,7 @@ case class FileSourceScanExec(
 
     s"""
        |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
      """.stripMargin
   }
