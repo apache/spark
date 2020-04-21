@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
 import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
 import java.time.temporal.IsoFields
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 
 import scala.util.control.NonFatal
 
@@ -2120,8 +2119,7 @@ object DatePart {
     case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
     case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
     case "DAY" | "D" | "DAYS" => DayOfMonth(source)
-    case "DAYOFWEEK" => DayOfWeek(source)
-    case "DOW" => Subtract(DayOfWeek(source), Literal(1))
+    case "DAYOFWEEK" | "DOW" => DayOfWeek(source)
     case "ISODOW" => Add(WeekDay(source), Literal(1))
     case "DOY" => DayOfYear(source)
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
@@ -2161,38 +2159,12 @@ object DatePartLike {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp or interval source.",
   arguments = """
     Arguments:
-      * field - selects which part of the source should be extracted.
-               Supported string values of `field` for dates and timestamps are:
-                ["MILLENNIUM", ("MILLENNIA", "MIL", "MILS"),
-                 "CENTURY", ("CENTURIES", "C", "CENT"),
-                 "DECADE", ("DECADES", "DEC", "DECS"),
-                 "YEAR", ("Y", "YEARS", "YR", "YRS"),
-                 "ISOYEAR",
-                 "QUARTER", ("QTR"),
-                 "MONTH", ("MON", "MONS", "MONTHS"),
-                 "WEEK", ("W", "WEEKS"),
-                 "DAY", ("D", "DAYS"),
-                 "DAYOFWEEK",
-                 "DOW",
-                 "ISODOW",
-                 "DOY",
-                 "HOUR", ("H", "HOURS", "HR", "HRS"),
-                 "MINUTE", ("M", "MIN", "MINS", "MINUTES"),
-                 "SECOND", ("S", "SEC", "SECONDS", "SECS"),
-                 "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS"),
-                 "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US"),
-                 "EPOCH"]
-                Supported string values of `field` for intervals are:
-                 ["YEAR", ("Y", "YEARS", "YR", "YRS"),
-                  "MONTH", ("MON", "MONS", "MONTHS"),
-                  "DAY", ("D", "DAYS"),
-                  "HOUR", ("H", "HOURS", "HR", "HRS"),
-                  "MINUTE", ("M", "MIN", "MINS", "MINUTES"),
-                  "SECOND", ("S", "SEC", "SECONDS", "SECS")]
+      * field - selects which part of the source should be extracted, and supported string values are as same as the fields of the equivalent function `EXTRACT`.
       * source - a date/timestamp or interval column from where `field` should be extracted
   """,
   examples = """
@@ -2210,8 +2182,12 @@ object DatePartLike {
       > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
   """,
+  note = """
+    The _FUNC_ function is equivalent to the SQL-standard function `EXTRACT(field FROM source)`
+  """,
   group = "datetime_funcs",
   since = "3.0.0")
+// scalastyle:on line.size.limit
 case class DatePart(field: Expression, source: Expression, child: Expression)
   extends RuntimeReplaceable {
 
@@ -2224,12 +2200,38 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   override def prettyName: String = "date_part"
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(field FROM source) - Extracts a part of the date/timestamp or interval source.",
   arguments = """
     Arguments:
-      * field - selects which part of the source should be extracted and supported string values
-                are the same with the `date_part` fields.
+      * field - selects which part of the source should be extracted
+          - Supported string values of `field` for dates and timestamps are:
+              - "MILLENNIUM", ("MILLENNIA", "MIL", "MILS") - the conventional numbering of millennia
+              - "CENTURY", ("CENTURIES", "C", "CENT") - the conventional numbering of centuries
+              - "DECADE", ("DECADES", "DEC", "DECS") - the year field divided by 10
+              - "YEAR", ("Y", "YEARS", "YR", "YRS") - the year field
+              - "ISOYEAR" - the ISO 8601 week-numbering year that the datetime falls in
+              - "QUARTER", ("QTR") - the quarter (1 - 4) of the year that the datetime falls in
+              - "MONTH", ("MON", "MONS", "MONTHS") - the month field (1 - 12)
+              - "WEEK", ("W", "WEEKS") - the number of the ISO 8601 week-of-week-based-year. A week is considered to start on a Monday and week 1 is the first week with >3 days. In the ISO week-numbering system, it is possible for early-January dates to be part of the 52nd or 53rd week of the previous year, and for late-December dates to be part of the first week of the next year. For example, 2005-01-02 is part of the 53rd week of year 2004, while 2012-12-31 is part of the first week of 2013
+              - "DAY", ("D", "DAYS") - the day of the month field (1 - 31)
+              - "DAYOFWEEK",("DOW") - the day of the week for datetime as Sunday(1) to Saturday(7)
+              - "ISODOW" - ISO 8601 based day of the week for datetime as Monday(1) to Sunday(7)
+              - "DOY" - the day of the year (1 - 365/366)
+              - "HOUR", ("H", "HOURS", "HR", "HRS") - The hour field (0 - 23)
+              - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - the minutes field (0 - 59)
+              - "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts
+              - "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS") - the seconds field, including fractional parts, multiplied by 1000. Note that this includes full seconds
+              - "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US") - The seconds field, including fractional parts, multiplied by 1000000. Note that this includes full seconds
+              - "EPOCH" - the number of seconds with fractional part in microsecond precision since 1970-01-01 00:00:00 local time (can be negative)
+          - Supported string values of `field` for interval(which consists of `months`, `days`, `microseconds`) are:
+              - "YEAR", ("Y", "YEARS", "YR", "YRS") - the total `months` / 12
+              - "MONTH", ("MON", "MONS", "MONTHS") - the total `months` % 12
+              - "DAY", ("D", "DAYS") - the `days` part of interval
+              - "HOUR", ("H", "HOURS", "HR", "HRS") - how many hours the `microseconds` contains
+              - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - how many minutes left after taking hours from `microseconds`
+              - "SECOND", ("S", "SEC", "SECONDS", "SECS") - how many second with fractions left after taking hours and minutes from `microseconds`
       * source - a date/timestamp or interval column from where `field` should be extracted
   """,
   examples = """
@@ -2247,7 +2249,11 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
       > SELECT _FUNC_(seconds FROM interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
   """,
+  note = """
+    The _FUNC_ function is equivalent to `date_part(field, source)`.
+  """,
   since = "3.0.0")
+// scalastyle:on line.size.limit
 case class Extract(field: Expression, source: Expression, child: Expression)
   extends RuntimeReplaceable {
 
