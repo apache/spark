@@ -23,7 +23,8 @@ import java.net.URI
 import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.OptimizeLocalShuffleReader.LOCAL_SHUFFLE_READER_DESCRIPTION
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -814,6 +815,33 @@ class AdaptiveQueryExecSuite
       SparkSession.setActiveSession(null)
       checkAnswer(df, Seq(Row(45)))
       SparkSession.setActiveSession(spark) // recover the active session.
+    }
+  }
+
+  test("No deadlock in UI update") {
+    object TestStrategy extends Strategy {
+      def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        case _: Aggregate =>
+          withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+            SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+            spark.range(5).rdd
+          }
+          Nil
+        case _ => Nil
+      }
+    }
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      try {
+        spark.experimental.extraStrategies = TestStrategy :: Nil
+        val df = spark.range(10).groupBy('id).count()
+        df.collect()
+      } finally {
+        spark.experimental.extraStrategies = Nil
+      }
     }
   }
 }
