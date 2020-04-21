@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
 import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
 import java.time.temporal.IsoFields
 import java.util.Locale
