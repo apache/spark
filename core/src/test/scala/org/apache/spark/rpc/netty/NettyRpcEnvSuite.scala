@@ -173,9 +173,7 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
         ThreadUtils.awaitResult(answer, Duration(1300, MILLISECONDS))
       }
       val remoteAddr = remoteRef.asInstanceOf[NettyRpcEndpointRef].client.getChannel.remoteAddress
-      val exptMsg = s"Cannot receive any reply from $remoteAddr in 1 second. " +
-        s"This timeout is controlled by spark.rpc.askTimeout"
-      assert(thrown.getMessage.equals(exptMsg))
+      assert(thrown.getMessage.contains(remoteAddr.toString))
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
