@@ -2577,7 +2577,7 @@ object SQLConf {
 
   val COALESCE_BUCKETS_IN_JOIN_ENABLED =
     buildConf("spark.sql.bucketing.coalesceBucketsInJoin.enabled")
-      .doc("When true, if two bucketed tables with a different number of buckets are joined, " +
+      .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
         "the side with a bigger number of buckets will be coalesced to have the same number " +
         "of buckets as the other side. This bucket coalescing can happen only when the bigger " +
         "number of buckets is divisible by the smaller number of buckets.")
