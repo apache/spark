@@ -527,14 +527,6 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns seconds, including fractional parts, multiplied by 1000. The timestamp
-   * is expressed in microseconds since the epoch.
-   */
-  def getMilliseconds(timestamp: SQLTimestamp, zoneId: ZoneId): Decimal = {
-    Decimal(getMicroseconds(timestamp, zoneId), 8, 3)
-  }
-
-  /**
    * Returns seconds, including fractional parts, multiplied by 1000000. The timestamp
    * is expressed in microseconds since the epoch.
    */
@@ -550,24 +542,6 @@ object DateTimeUtils {
   def getDayInYear(date: SQLDate): Int = {
     LocalDate.ofEpochDay(date).getDayOfYear
   }
-
-  private def extractFromYear(date: SQLDate, divider: Int): Int = {
-    val localDate = daysToLocalDate(date)
-    val yearOfEra = localDate.get(ChronoField.YEAR_OF_ERA)
-    var result = yearOfEra / divider
-    if ((yearOfEra % divider) != 0 || yearOfEra <= 1) result += 1
-    if (localDate.get(ChronoField.ERA) == 0) result = -result
-    result
-  }
-
-  /** Returns the millennium for the given date. The date is expressed in days since 1.1.1970. */
-  def getMillennium(date: SQLDate): Int = extractFromYear(date, 1000)
-
-  /** Returns the century for the given date. The date is expressed in days since 1.1.1970. */
-  def getCentury(date: SQLDate): Int = extractFromYear(date, 100)
-
-  /** Returns the decade for the given date. The date is expressed in days since 1.1.1970. */
-  def getDecade(date: SQLDate): Int = Math.floorDiv(getYear(date), 10)
 
   /**
    * Returns the year value for the given date. The date is expressed in days
@@ -861,17 +835,6 @@ object DateTimeUtils {
    */
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
     convertTz(time, getZoneId(timeZone), ZoneOffset.UTC)
-  }
-
-  /**
-   * Returns the number of seconds with fractional part in microsecond precision
-   * since 1970-01-01 00:00:00 local time.
-   */
-  def getEpoch(timestamp: SQLTimestamp, zoneId: ZoneId): Decimal = {
-    val offset = SECONDS.toMicros(
-      zoneId.getRules.getOffset(microsToInstant(timestamp)).getTotalSeconds)
-    val sinceEpoch = timestamp + offset
-    Decimal(sinceEpoch, 20, 6)
   }
 
   def currentTimestamp(): SQLTimestamp = instantToMicros(Instant.now())

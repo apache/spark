@@ -1,20 +1,5 @@
 CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c;
 
-select date_part('millennium', c) from t;
-select date_part('millennia', c) from t;
-select date_part('mil', c) from t;
-select date_part('mils', c) from t;
-
-select date_part('century', c) from t;
-select date_part('centuries', c) from t;
-select date_part('c', c) from t;
-select date_part('cent', c) from t;
-
-select date_part('decade', c) from t;
-select date_part('decades', c) from t;
-select date_part('dec', c) from t;
-select date_part('decs', c) from t;
-
 select date_part('year', c) from t;
 select date_part('y', c) from t;
 select date_part('years', c) from t;

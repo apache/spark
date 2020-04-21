@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
 import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
 import java.time.temporal.IsoFields
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 
 import scala.util.control.NonFatal
 
@@ -333,48 +332,6 @@ case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = No
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getSecondsWithFraction($c, $zid)")
-  }
-}
-
-case class Milliseconds(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-  // DecimalType is used here to not lose precision while converting microseconds to
-  // the fractional part of milliseconds. Scale 3 is taken to have all microseconds as
-  // the fraction. The precision 8 should cover 2 digits for seconds, 3 digits for
-  // milliseconds and 3 digits for microseconds.
-  override def dataType: DataType = DecimalType(8, 3)
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMilliseconds(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMilliseconds($c, $zid)")
-  }
-}
-
-case class Microseconds(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-  override def dataType: DataType = IntegerType
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMicroseconds(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMicroseconds($c, $zid)")
   }
 }
 
@@ -2034,86 +1991,12 @@ case class MakeTimestamp(
   override def prettyName: String = "make_timestamp"
 }
 
-case class Millennium(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getMillennium(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMillennium($c)")
-  }
-}
-
-case class Century(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getCentury(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getCentury($c)")
-  }
-}
-
-case class Decade(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getDecade(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getDecade($c)")
-  }
-}
-
-case class Epoch(child: Expression, timeZoneId: Option[String] = None)
-    extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-  // DecimalType is used to not lose precision while converting microseconds to
-  // the fractional part of seconds. Scale 6 is taken to have all microseconds as
-  // the fraction. The precision 20 should cover whole valid range of years [1, 9999]
-  // plus negative years that can be used in some cases though are not officially supported.
-  override def dataType: DataType = DecimalType(20, 6)
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getEpoch(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    defineCodeGen(ctx, ev, c => s"$dtu.getEpoch($c, $zid)")
-  }
-}
-
 object DatePart {
 
   def parseExtractField(
       extractField: String,
       source: Expression,
       errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
-    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
-    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
     case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
     case "ISOYEAR" => IsoYear(source)
     case "QUARTER" | "QTR" => Quarter(source)
@@ -2127,11 +2010,6 @@ object DatePart {
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
     case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondWithFraction(source)
-    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-      Milliseconds(source)
-    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
-      Microseconds(source)
-    case "EPOCH" => Epoch(source)
     case _ => errorHandleFunc
   }
 }
