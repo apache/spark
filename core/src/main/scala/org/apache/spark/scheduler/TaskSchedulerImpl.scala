@@ -466,8 +466,9 @@ private[spark] class TaskSchedulerImpl(
       resourceProfileIds: Array[Int],
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Buffer[String]]],
-      taskSet: TaskSet): Int = {
-    val resourceProfile = sc.resourceProfileManager.resourceProfileFromId(taskSet.resourceProfileId)
+      taskSet: TaskSetManager): Int = {
+    val resourceProfile = sc.resourceProfileManager.resourceProfileFromId(
+      taskSet.taskSet.resourceProfileId)
     val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter { case (id, _) =>
       (id == resourceProfile.id)
     }
@@ -483,7 +484,7 @@ private[spark] class TaskSchedulerImpl(
       } else {
         val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount)
           .getOrElse {
-            dagScheduler.taskSetFailed(taskSet, "limitingResource returns from ResourceProfile " +
+            taskSet.abort("limitingResource returns from ResourceProfile " +
               s"$resourceProfile doesn't actually contain that task resource!", None)
             return -1
           }
@@ -582,7 +583,7 @@ private[spark] class TaskSchedulerImpl(
       // value is -1
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
         val slots = calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
-          taskSet.taskSet)
+          taskSet)
         slots
       } else {
         -1
@@ -676,11 +677,13 @@ private[spark] class TaskSchedulerImpl(
           // TODO SPARK-24818 handle the assert failure case (that can happen when some locality
           // requirements are not fulfilled, and we should revert the launched tasks).
           if (addressesWithDescs.size != taskSet.numTasks) {
-            dagScheduler.taskSetFailed(taskSet.taskSet,
-            s"Fail current round of resource offers for barrier stage ${taskSet.stageId} " +
+            val errorMsg =
+              s"Fail current round of resource offers for barrier stage ${taskSet.stageId} " +
               s"because only ${addressesWithDescs.size} out of a total number of " +
               s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
-              "been blacklisted or cannot fulfill task locality requirements.", None)
+              "been blacklisted or cannot fulfill task locality requirements."
+            logError(errorMsg)
+            taskSet.abort(errorMsg, None)
           }
 
           // materialize the barrier coordinator.
