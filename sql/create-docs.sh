@@ -51,6 +51,9 @@ echo "Generating runtime SQL runtime configuration table HTML file."
 echo "Generating static SQL configuration table HTML file."
 "$SPARK_HOME/bin/spark-submit" gen-sql-config-docs.py static
 
+echo "Generating HTML files for SQL function table and examples."
+"$SPARK_HOME/bin/spark-submit" gen-sql-functions-docs.py
+
 echo "Generating HTML files for SQL API documentation."
 mkdocs build --clean
 rm -fr docs

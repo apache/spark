@@ -21,6 +21,7 @@ import java.math.BigDecimal
 
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -542,6 +543,24 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(info.getSince === "1.0.1")
     assert(info.getNote === "")
     assert(info.getExtended.contains("> SELECT upper('SparkSql');"))
+  }
+
+  test("group info in ExpressionInfo") {
+    val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
+    assert(info.getGroup === "agg_funcs")
+
+    Seq("agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs", "window_funcs")
+        .foreach { groupName =>
+      val info = new ExpressionInfo(
+        "testClass", null, "testName", null, "", "", "", groupName, "", "")
+      assert(info.getGroup === groupName)
+    }
+
+    val errMsg = intercept[IllegalArgumentException] {
+      val invalidGroupName = "invalid_group_funcs"
+      new ExpressionInfo("testClass", null, "testName", null, "", "", "", invalidGroupName, "", "")
+    }.getMessage
+    assert(errMsg.contains("'group' is malformed in the expression [testName]."))
   }
 
   test("SPARK-28521 error message for CAST(parameter types contains DataType)") {

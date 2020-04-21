@@ -426,7 +426,8 @@ abstract class OffsetWindowFunction
       * default - a string expression which is to use when the offset is larger than the window.
           The default value is null.
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "window_funcs")
 case class Lead(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -459,7 +460,8 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
       * offset - an int expression which is rows to jump back in the partition.
       * default - a string expression which is to use when the offset row does not exist.
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "window_funcs")
 case class Lag(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -517,7 +519,8 @@ object SizeBasedWindowFunction {
     _FUNC_() - Assigns a unique, sequential number to each row, starting with one,
       according to the ordering of rows within the window partition.
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "window_funcs")
 case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = rowNumber
   override def prettyName: String = "row_number"
@@ -535,7 +538,8 @@ case class RowNumber() extends RowNumberLike {
   usage = """
     _FUNC_() - Computes the position of a value relative to all values in the partition.
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "window_funcs")
 case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override def dataType: DataType = DoubleType
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
@@ -574,7 +578,8 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
       * buckets - an int expression which is number of buckets to divide the rows in.
           Default value is 1.
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "window_funcs")
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
 
@@ -700,7 +705,8 @@ abstract class RankLike extends AggregateWindowFunction {
           trigger a change in rank. This is an internal parameter and will be assigned by the
           Analyser.
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "window_funcs")
 case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
@@ -725,7 +731,8 @@ case class Rank(children: Seq[Expression]) extends RankLike {
           trigger a change in rank. This is an internal parameter and will be assigned by the
           Analyser.
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "window_funcs")
 case class DenseRank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
@@ -756,7 +763,8 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
           trigger a change in rank. This is an internal parameter and will be assigned by the
           Analyser.
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "window_funcs")
 case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBasedWindowFunction {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)

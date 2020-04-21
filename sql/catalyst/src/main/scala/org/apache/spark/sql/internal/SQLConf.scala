@@ -434,9 +434,10 @@ object SQLConf {
 
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
-      .doc("The minimum number of shuffle partitions after coalescing. If not set, the default " +
-        "value is the default parallelism of the Spark cluster. This configuration only " +
-        s"has an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+      .doc("The suggested (not guaranteed) minimum number of shuffle partitions after " +
+        "coalescing. If not set, the default value is the default parallelism of the " +
+        "Spark cluster. This configuration only has an effect when " +
+        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true.")
       .version("3.0.0")
       .intConf

@@ -345,6 +345,7 @@ object MyExtensions {
       """
        note
       """,
+      "",
       "3.0.0",
       """
        deprecated
@@ -755,6 +756,7 @@ object MyExtensions2 {
       """
        note
       """,
+      "",
       "3.0.0",
       """
        deprecated
@@ -787,6 +789,7 @@ object MyExtensions2Duplicate {
       """
        note
       """,
+      "",
       "3.0.0",
       """
        deprecated
