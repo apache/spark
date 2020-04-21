@@ -96,6 +96,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
     The function is non-deterministic because the order of collected results depends
     on the order of the rows which may be non-deterministic after a shuffle.
   """,
+  group = "agg_funcs",
   since = "2.0.0")
 case class CollectList(
     child: Expression,
@@ -129,6 +130,7 @@ case class CollectList(
     The function is non-deterministic because the order of collected results depends
     on the order of the rows which may be non-deterministic after a shuffle.
   """,
+  group = "agg_funcs",
   since = "2.0.0")
 case class CollectSet(
     child: Expression,
