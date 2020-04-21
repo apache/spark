@@ -64,6 +64,7 @@ trait TimeZoneAwareExpression extends Expression {
  */
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current date at the start of query evaluation.",
+  group = "datetime_funcs",
   since = "1.5.0")
 case class CurrentDate(timeZoneId: Option[String] = None)
   extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
@@ -91,6 +92,7 @@ case class CurrentDate(timeZoneId: Option[String] = None)
  */
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.",
+  group = "datetime_funcs",
   since = "1.5.0")
 case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
@@ -153,6 +155,7 @@ case class CurrentBatchTimestamp(
       > SELECT _FUNC_('2016-07-30', 1);
        2016-07-31
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class DateAdd(startDate: Expression, days: Expression)
   extends BinaryExpression with ExpectsInputTypes {
@@ -188,6 +191,7 @@ case class DateAdd(startDate: Expression, days: Expression)
       > SELECT _FUNC_('2016-07-30', 1);
        2016-07-29
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class DateSub(startDate: Expression, days: Expression)
   extends BinaryExpression with ExpectsInputTypes {
@@ -219,6 +223,7 @@ case class DateSub(startDate: Expression, days: Expression)
       > SELECT _FUNC_('2009-07-30 12:58:59');
        12
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class Hour(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
@@ -250,6 +255,7 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
       > SELECT _FUNC_('2009-07-30 12:58:59');
        58
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class Minute(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
@@ -281,6 +287,7 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
       > SELECT _FUNC_('2009-07-30 12:58:59');
        59
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class Second(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
@@ -378,6 +385,7 @@ case class Microseconds(child: Expression, timeZoneId: Option[String] = None)
       > SELECT _FUNC_('2016-04-09');
        100
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -402,6 +410,7 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
       > SELECT _FUNC_('2016-07-30');
        2016
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class Year(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -442,6 +451,7 @@ case class IsoYear(child: Expression) extends UnaryExpression with ImplicitCastI
       > SELECT _FUNC_('2016-08-31');
        3
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -466,6 +476,7 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
       > SELECT _FUNC_('2016-07-30');
        7
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class Month(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -515,6 +526,7 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
       > SELECT _FUNC_('2009-07-30');
        5
   """,
+  group = "datetime_funcs",
   since = "2.3.0")
 // scalastyle:on line.size.limit
 case class DayOfWeek(child: Expression) extends DayWeek {
@@ -541,6 +553,7 @@ case class DayOfWeek(child: Expression) extends DayWeek {
       > SELECT _FUNC_('2009-07-30');
        3
   """,
+  group = "datetime_funcs",
   since = "2.4.0")
 // scalastyle:on line.size.limit
 case class WeekDay(child: Expression) extends DayWeek {
@@ -574,6 +587,7 @@ abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
       > SELECT _FUNC_('2008-02-20');
        8
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
@@ -611,6 +625,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
       > SELECT _FUNC_('2016-04-08', 'y');
        2016
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Option[String] = None)
@@ -693,6 +708,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460098800
   """,
+  group = "datetime_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
 case class ToUnixTimestamp(
@@ -742,6 +758,7 @@ case class ToUnixTimestamp(
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Option[String] = None)
@@ -935,6 +952,7 @@ abstract class UnixTime extends ToTimestamp {
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
        1969-12-31 16:00:00
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[String] = None)
@@ -1055,6 +1073,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
       > SELECT _FUNC_('2009-01-12');
        2009-01-31
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def child: Expression = startDate
@@ -1090,6 +1109,7 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
       > SELECT _FUNC_('2015-01-14', 'TU');
        2015-01-20
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class NextDay(startDate: Expression, dayOfWeek: Expression)
@@ -1202,6 +1222,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-31 09:00:00
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression)
@@ -1296,6 +1317,7 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
       > SELECT _FUNC_('2016-08-31', 1);
        2016-09-30
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class AddMonths(startDate: Expression, numMonths: Expression)
@@ -1345,6 +1367,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30', false);
        3.9495967741935485
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class MonthsBetween(
@@ -1406,6 +1429,7 @@ case class MonthsBetween(
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-30 15:00:00
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
@@ -1477,6 +1501,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class ParseToDate(left: Expression, format: Option[Expression], child: Expression)
@@ -1527,6 +1552,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31 00:00:00
   """,
+  group = "datetime_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
 case class ParseToTimestamp(left: Expression, format: Option[Expression], child: Expression)
@@ -1658,6 +1684,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
       > SELECT _FUNC_('1981-01-19', 'millennium');
        1001-01-01
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class TruncDate(date: Expression, format: Expression)
@@ -1711,6 +1738,7 @@ case class TruncDate(date: Expression, format: Expression)
       > SELECT _FUNC_('CENTURY', '2015-03-05T09:32:05.123456');
        2001-01-01 00:00:00
   """,
+  group = "datetime_funcs",
   since = "2.3.0")
 // scalastyle:on line.size.limit
 case class TruncTimestamp(
@@ -1758,6 +1786,7 @@ case class TruncTimestamp(
       > SELECT _FUNC_('2009-07-30', '2009-07-31');
        -1
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class DateDiff(endDate: Expression, startDate: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1811,6 +1840,7 @@ private case class GetTimestamp(
       > SELECT _FUNC_(2019, 2, 30);
        NULL
   """,
+  group = "datetime_funcs",
   since = "3.0.0")
 case class MakeDate(year: Expression, month: Expression, day: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -1872,6 +1902,7 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
   """,
+  group = "datetime_funcs",
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class MakeTimestamp(
@@ -2179,6 +2210,7 @@ object DatePartLike {
       > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
   """,
+  group = "datetime_funcs",
   since = "3.0.0")
 case class DatePart(field: Expression, source: Expression, child: Expression)
   extends RuntimeReplaceable {
