@@ -139,7 +139,7 @@ object FileSourceStrategy extends Strategy with Logging {
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case ScanOperationWithCoalescedBuckets(projects, filters,
-      l@LogicalRelation(fsRelation: HadoopFsRelation, _, table, _), numCoalescedBuckets) =>
+      l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _), numCoalescedBuckets) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
