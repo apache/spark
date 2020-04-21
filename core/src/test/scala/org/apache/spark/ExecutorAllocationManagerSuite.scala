@@ -501,6 +501,39 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
   }
 
+  test("SPARK-31418: add executors when unschedulable tasks added") {
+    val manager = createManager(createConf(0, 10, 0))
+
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
+    // Verify that we're capped at number of tasks including the unschedulable ones in the stage
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(1), Some(1)))
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(None, None))
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+
+    // Verify that running a task doesn't affect the target
+    post(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+  }
+
   test("SPARK-30511 remove executors when speculative tasks end") {
     val clock = new ManualClock()
     val stage = createStageInfo(0, 40)

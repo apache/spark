@@ -660,10 +660,24 @@ private[spark] class TaskSchedulerImpl(
                     abortTimer.schedule(
                       createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
                   }
-                case None => // Abort Immediately
-                  logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
-                    s" executors can be found to kill. Aborting $taskSet." )
-                  taskSet.abortSinceCompletelyBlacklisted(taskIndex)
+                case None =>
+                  //  Notify ExecutorAllocationManager about the unschedulable task set,
+                  // in order to provision more executors to make them schedulable
+                  if (Utils.isDynamicAllocationEnabled(conf)) {
+                    if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
+                      logInfo(s"Requesting additional executors to schedule unschedulable" +
+                      s" blacklisted task before aborting $taskSet.")
+                      dagScheduler.unschedulableBlacklistTaskSubmitted(
+                        Some(taskSet.taskSet.stageId),
+                        Some(taskSet.taskSet.stageAttemptId))
+                      updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
+                    }
+                  } else {
+                    // Abort Immediately
+                    logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
+                      s" executors can be found to kill. Aborting $taskSet.")
+                    taskSet.abortSinceCompletelyBlacklisted(taskIndex)
+                  }
               }
           }
         } else {
@@ -676,6 +690,9 @@ private[spark] class TaskSchedulerImpl(
           if (unschedulableTaskSetToExpiryTime.nonEmpty) {
             logInfo("Clearing the expiry times for all unschedulable taskSets as a task was " +
               "recently scheduled.")
+            // Notify ExecutorAllocationManager as well as other subscribers that a task now
+            // recently becomes schedulable
+            dagScheduler.unschedulableBlacklistTaskSubmitted(None, None)
             unschedulableTaskSetToExpiryTime.clear()
           }
         }
@@ -720,6 +737,17 @@ private[spark] class TaskSchedulerImpl(
       hasLaunchedTask = true
     }
     return tasks.map(_.toSeq)
+  }
+
+  private def updateUnschedulableTaskSetTimeoutAndStartAbortTimer(
+      taskSet: TaskSetManager,
+      taskIndex: Int): Unit = {
+    val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
+    unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
+    logInfo(s"Waiting for $timeout ms for completely " +
+      s"blacklisted task to be schedulable again before aborting $taskSet.")
+    abortTimer.schedule(
+      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
   }
 
   private def createUnschedulableTaskSetAbortTimer(

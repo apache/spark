@@ -622,6 +622,12 @@ private[spark] class ExecutorAllocationManager(
     private val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
 
+    // Keep track of unschedulable task sets due to blacklisting. This is a Set of StageAttempt's
+    // because we'll only take the last unschedulable task in a taskset although there can be more.
+    // This is done in order to avoid costly loops in the scheduling.
+    // Check TaskSetManager#getCompletelyBlacklistedTaskIfAny for more details.
+    private val unschedulableTaskSets = new mutable.HashSet[StageAttempt]
+
     // stageAttempt to tuple (the number of task with locality preferences, a map where each pair
     // is a node and the number of tasks that would like to be scheduled on that node, and
     // the resource profile id) map,
@@ -696,7 +702,9 @@ private[spark] class ExecutorAllocationManager(
 
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
-        if (stageAttemptToNumTasks.isEmpty && stageAttemptToNumSpeculativeTasks.isEmpty) {
+        if (stageAttemptToNumTasks.isEmpty &&
+          stageAttemptToNumSpeculativeTasks.isEmpty &&
+          unschedulableTaskSets.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
         }
       }
@@ -789,6 +797,23 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
+    override def onUnschedulableBlacklistTaskSubmitted
+      (blacklistedTask: SparkListenerUnschedulableBlacklistTaskSubmitted): Unit = {
+      val stageId = blacklistedTask.stageId
+      val stageAttemptId = blacklistedTask.stageAttemptId
+      allocationManager.synchronized {
+        (stageId, stageAttemptId) match {
+          case (Some(stageId), Some(stageAttemptId)) =>
+            val stageAttempt = StageAttempt(stageId, stageAttemptId)
+            unschedulableTaskSets.add(stageAttempt)
+          case (None, None) =>
+            // Clear unschedulableTaskSets since atleast one task becomes schedulable now
+            unschedulableTaskSets.clear()
+        }
+        allocationManager.onSchedulerBacklogged()
+      }
+    }
+
     /**
      * An estimate of the total number of pending tasks remaining for currently running stages. Does
      * not account for tasks which may have failed and been resubmitted.
@@ -829,12 +854,26 @@ private[spark] class ExecutorAllocationManager(
       numTotalTasks - numRunning
     }
 
+    def pendingUnschedulableTasksPerResourceProfile(rp: Int): Int = {
+      val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
+      attempts.filter(attempt => unschedulableTaskSets.contains(attempt)).size
+    }
+
+    def hasPendingUnschedulableTasks: Boolean = {
+      val attemptSets = resourceProfileIdToStageAttempt.values
+      attemptSets.exists { attempts =>
+        attempts.exists(unschedulableTaskSets.contains(_))
+      }
+    }
+
     def hasPendingTasks: Boolean = {
-      hasPendingSpeculativeTasks || hasPendingRegularTasks
+      hasPendingSpeculativeTasks || hasPendingRegularTasks || hasPendingUnschedulableTasks
     }
 
     def totalPendingTasksPerResourceProfile(rp: Int): Int = {
-      pendingTasksPerResourceProfile(rp) + pendingSpeculativeTasksPerResourceProfile(rp)
+      pendingTasksPerResourceProfile(rp) +
+        pendingSpeculativeTasksPerResourceProfile(rp) +
+        pendingUnschedulableTasksPerResourceProfile(rp)
     }
 
     /**

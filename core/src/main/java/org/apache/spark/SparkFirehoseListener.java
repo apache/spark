@@ -162,6 +162,11 @@ public class SparkFirehoseListener implements SparkListenerInterface {
     onEvent(speculativeTask);
   }
 
+  public void onUnschedulableBlacklistTaskSubmitted(
+      SparkListenerUnschedulableBlacklistTaskSubmitted blacklistTask) {
+    onEvent(blacklistTask);
+  }
+
   @Override
   public void onResourceProfileAdded(SparkListenerResourceProfileAdded event) {
     onEvent(event);

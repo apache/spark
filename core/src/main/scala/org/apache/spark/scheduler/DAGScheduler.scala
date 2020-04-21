@@ -311,6 +311,16 @@ private[spark] class DAGScheduler(
     eventProcessLoop.post(SpeculativeTaskSubmitted(task))
   }
 
+  /**
+   * Called by the TaskSetManager when there is an unschedulable blacklist task and dynamic
+   * allocation is enabled
+   */
+  def unschedulableBlacklistTaskSubmitted(
+       stageId: Option[Int],
+       stageAttemptId: Option[Int]): Unit = {
+    eventProcessLoop.post(UnschedulableBlacklistTaskSubmitted(stageId, stageAttemptId))
+  }
+
   private[scheduler]
   def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
@@ -1012,6 +1022,13 @@ private[spark] class DAGScheduler(
 
   private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_]): Unit = {
     listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId, task.stageAttemptId))
+  }
+
+  private[scheduler] def handleUnschedulableBlacklistTaskSubmitted(
+      stageId: Option[Int],
+      stageAttemptId: Option[Int]): Unit = {
+    listenerBus.post(
+      SparkListenerUnschedulableBlacklistTaskSubmitted(stageId, stageAttemptId))
   }
 
   private[scheduler] def handleTaskSetFailed(
@@ -2286,6 +2303,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case SpeculativeTaskSubmitted(task) =>
       dagScheduler.handleSpeculativeTaskSubmitted(task)
+
+    case UnschedulableBlacklistTaskSubmitted(stageId, stageAttemptId) =>
+      dagScheduler.handleUnschedulableBlacklistTaskSubmitted(stageId, stageAttemptId)
 
     case GettingResultEvent(taskInfo) =>
       dagScheduler.handleGetTaskResult(taskInfo)

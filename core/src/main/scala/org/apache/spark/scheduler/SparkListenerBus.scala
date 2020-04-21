@@ -79,6 +79,8 @@ private[spark] trait SparkListenerBus
         listener.onBlockUpdated(blockUpdated)
       case speculativeTaskSubmitted: SparkListenerSpeculativeTaskSubmitted =>
         listener.onSpeculativeTaskSubmitted(speculativeTaskSubmitted)
+      case blacklistTaskSubmitted: SparkListenerUnschedulableBlacklistTaskSubmitted =>
+        listener.onUnschedulableBlacklistTaskSubmitted(blacklistTaskSubmitted)
       case resourceProfileAdded: SparkListenerResourceProfileAdded =>
         listener.onResourceProfileAdded(resourceProfileAdded)
       case _ => listener.onOtherEvent(event)
