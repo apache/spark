@@ -2626,7 +2626,7 @@ Spark subsystems.
 
 #### Runtime SQL Configuration
 
-Runtime SQL configurations per-session, mutable Spark SQL configurations. They can be set with initial values by the config file
+Runtime SQL configurations are per-session, mutable Spark SQL configurations. They can be set with initial values by the config file
 and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
 Also, they can be set and queried by SET commands and rest to their initial values by RESET command,
 or by `SparkSession.conf`'s setter and getter methods in runtime.
