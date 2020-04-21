@@ -26,12 +26,14 @@ An identifier is a string used to identify a database object such as a table, vi
 ### Syntax
 
 #### Regular Identifier
+
 {% highlight sql %}
 { letter | digit | '_' } [ , ... ]
 {% endhighlight %}
 Note: If `spark.sql.ansi.enabled` is set to true, ANSI SQL reserved keywords cannot be used as identifiers. If `spark.sql.ansi.enabled` is set to false (this is the default), strict-non-reserved keywords cannot be used as table aliases. Please refer to [ANSI Compliance](sql-ref-ansi-compliance.html) for a complete list of the keywords.
 
 #### Delimited Identifier
+
 {% highlight sql %}
 `c [ ... ]`
 {% endhighlight %}
@@ -60,7 +62,6 @@ Note: If `spark.sql.ansi.enabled` is set to true, ANSI SQL reserved keywords can
 ### Examples
 
 {% highlight sql %}
-
 -- This CREATE TABLE fails because of the illegal identifier name a.b
 CREATE TABLE test (a.b int);
 
