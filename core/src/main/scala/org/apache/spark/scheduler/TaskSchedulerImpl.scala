@@ -485,7 +485,7 @@ private[spark] class TaskSchedulerImpl(
         val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount)
           .getOrElse {
             taskSet.abort("limitingResource returns from ResourceProfile " +
-              s"$resourceProfile doesn't actually contain that task resource!", None)
+              s"$resourceProfile doesn't actually contain that task resource!")
             return -1
           }
         // available addresses already takes into account if there are fractional
@@ -683,7 +683,7 @@ private[spark] class TaskSchedulerImpl(
               s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
               "been blacklisted or cannot fulfill task locality requirements."
             logError(errorMsg)
-            taskSet.abort(errorMsg, None)
+            taskSet.abort(errorMsg)
           }
 
           // materialize the barrier coordinator.
@@ -746,8 +746,10 @@ private[spark] class TaskSchedulerImpl(
             if (state == TaskState.LOST) {
               // TaskState.LOST is only used by the deprecated Mesos fine-grained scheduling mode,
               // where each executor corresponds to a single task, so mark the executor as failed.
-              val execId = taskIdToExecutorId.getOrElse(tid, throw new IllegalStateException(
-                "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"))
+              val execId = taskIdToExecutorId.getOrElse(tid, { taskSet.abort(
+                "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
+                return }
+              )
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(
                   SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
