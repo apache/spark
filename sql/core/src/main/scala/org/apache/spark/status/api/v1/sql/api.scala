@@ -30,9 +30,10 @@ class ExecutionData private[spark] (
     val failedJobIds: Seq[Int],
     val metricDetails: Seq[MetricDetails])
 
-case class MetricDetails private[spark] (nodeId: Long,
-                                         nodeName: String,
-                                         wholeStageCodegenId: Option[Long] = None,
-                                         metrics: Seq[Metric])
+case class MetricDetails private[spark] (
+    nodeId: Long,
+    nodeName: String,
+    wholeStageCodegenId: Option[Long] = None,
+    metrics: Seq[Metric])
 
 case class Metric private[spark] (name: String, value: String)

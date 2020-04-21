@@ -92,10 +92,12 @@ private[v1] class SqlResource extends BaseAppResource {
     metricDetails.sortBy(_.nodeId).reverse
   }
 
-  private def prepareExecutionData(exec: SQLExecutionUIData,
-                                   nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map.empty,
-                                   details: Boolean,
-                                   planDescription: Boolean): ExecutionData = {
+  private def prepareExecutionData(
+    exec: SQLExecutionUIData,
+    nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map.empty,
+    details: Boolean,
+    planDescription: Boolean): ExecutionData = {
+
     var running = Seq[Int]()
     var completed = Seq[Int]()
     var failed = Seq[Int]()
@@ -121,8 +123,12 @@ private[v1] class SqlResource extends BaseAppResource {
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val planDetails = if (details && planDescription) exec.physicalPlanDescription else ""
     val metrics =
-      if (details) printableMetrics(exec.metrics, exec.metricValues, nodeIdAndWSCGIdMap)
-      else Seq.empty
+      if (details) {
+        printableMetrics(exec.metrics, exec.metricValues, nodeIdAndWSCGIdMap)
+      } else {
+        Seq.empty
+      }
+
     new ExecutionData(
       exec.executionId,
       status,
@@ -138,10 +144,11 @@ private[v1] class SqlResource extends BaseAppResource {
 
   private def getNodeIdAndWSCGIdMap(graph: SparkPlanGraph): Map[Long, Option[Long]] = {
     val wscgNodes = graph.allNodes.filter(_.name.trim.startsWith(WHOLE_STAGE_CODEGEN))
-    val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = wscgNodes.flatMap { _ match {
-      case x: SparkPlanGraphCluster => x.nodes.map(_.id -> getWholeStageCodegenId(x.name.trim))
-      case _ => Seq.empty
-    }
+    val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = wscgNodes.flatMap {
+      _ match {
+        case x: SparkPlanGraphCluster => x.nodes.map(_.id -> getWholeStageCodegenId(x.name.trim))
+        case _ => Seq.empty
+      }
     }.toMap
 
     nodeIdAndWSCGIdMap
