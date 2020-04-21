@@ -141,8 +141,10 @@ object TypeCoercion {
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
     // See SPARK-22469 for details.
-    case (n: DecimalType, s: StringType) => Some(DoubleType)
-    case (s: StringType, n: DecimalType) => Some(DoubleType)
+    // decimal type exists, double lead to the loss of precision and wrong result.
+    // See SPARK-29274 or details.
+    case (n: DecimalType, s: StringType) => Some(n)
+    case (s: StringType, n: DecimalType) => Some(n)
 
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
     case (l: AtomicType, r: StringType) if l != StringType => Some(l)

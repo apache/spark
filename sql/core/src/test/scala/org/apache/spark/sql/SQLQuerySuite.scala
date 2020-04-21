@@ -52,6 +52,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   setupTestData()
 
+  test("SPARK-29274: compare decimal and string, both cast to doubles") {
+    Seq((1, BigDecimal("12345678901234567891"))
+      , (2, BigDecimal("12345678901234567892"))
+      , (3, BigDecimal("12345678901234567893")))
+      .toDF("id1", "decimal").createOrReplaceTempView("test_decimal")
+
+    Seq((1, "12345678901234567891")
+      , (2, "12345678901234567892")
+      , (3, "12345678901234567893"))
+      .toDF("id2", "string").createOrReplaceTempView("test_string")
+
+    val joinDf = sql("select * from test_decimal a left join test_string b on a.decimal=b.string")
+
+    checkAnswer(joinDf, Row(1, BigDecimal("12345678901234567891"), 1, "12345678901234567891")
+      :: Row(2, BigDecimal("12345678901234567892"), 2, "12345678901234567892")
+      :: Row(3, BigDecimal("12345678901234567893"), 3, "12345678901234567893")
+      :: Nil)
+  }
+
   test("SPARK-8010: promote numeric to string") {
     val df = Seq((1, 1)).toDF("key", "value")
     df.createOrReplaceTempView("src")
