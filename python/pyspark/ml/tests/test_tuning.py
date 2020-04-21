@@ -18,7 +18,8 @@
 import tempfile
 import unittest
 
-from pyspark.ml import Estimator, Model
+from pyspark.ml.feature import HashingTF, Tokenizer
+from pyspark.ml import Estimator, Pipeline, Model
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel, OneVsRest
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
     MulticlassClassificationEvaluator, RegressionEvaluator
@@ -310,6 +311,48 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
+    def test_save_load_pipeline_estimator(self):
+        temp_path = tempfile.mkdtemp()
+        training = self.spark.createDataFrame([
+            (0, "a b c d e spark", 1.0),
+            (1, "b d", 0.0),
+            (2, "spark f g h", 1.0),
+            (3, "hadoop mapreduce", 0.0),
+            (4, "b spark who", 1.0),
+            (5, "g d a y", 0.0),
+            (6, "spark fly", 1.0),
+            (7, "was mapreduce", 0.0),
+        ], ["id", "text", "label"])
+
+        # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
+        tokenizer = Tokenizer(inputCol="text", outputCol="words")
+        hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
+
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(5)
+        lr2 = LogisticRegression().setMaxIter(10)
+
+        pipeline = Pipeline(stages=[tokenizer, hashingTF, ova])
+
+        paramGrid = ParamGridBuilder() \
+            .addGrid(hashingTF.numFeatures, [10, 100]) \
+            .addGrid(ova.classifier, [lr1, lr2]) \
+            .build()
+
+        crossval = CrossValidator(estimator=pipeline,
+                                  estimatorParamMaps=paramGrid,
+                                  evaluator=MulticlassClassificationEvaluator(),
+                                  numFolds=2)  # use 3+ folds in practice
+
+        # Run cross-validation, and choose the best set of parameters.
+        cvModel = crossval.fit(training)
+
+        # test save/load of CrossValidatorModel
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedModel = CrossValidatorModel.load(cvModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+
 
 class TrainValidationSplitTests(SparkSessionTestCase):
 
@@ -506,6 +549,47 @@ class TrainValidationSplitTests(SparkSessionTestCase):
                 else:
                     self.assertEqual(param[p], originalParamMap[i][p])
 
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+
+    def test_save_load_pipeline_estimator(self):
+        temp_path = tempfile.mkdtemp()
+        training = self.spark.createDataFrame([
+            (0, "a b c d e spark", 1.0),
+            (1, "b d", 0.0),
+            (2, "spark f g h", 1.0),
+            (3, "hadoop mapreduce", 0.0),
+            (4, "b spark who", 1.0),
+            (5, "g d a y", 0.0),
+            (6, "spark fly", 1.0),
+            (7, "was mapreduce", 0.0),
+        ], ["id", "text", "label"])
+
+        # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
+        tokenizer = Tokenizer(inputCol="text", outputCol="words")
+        hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
+
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(5)
+        lr2 = LogisticRegression().setMaxIter(10)
+
+        pipeline = Pipeline(stages=[tokenizer, hashingTF, ova])
+
+        paramGrid = ParamGridBuilder() \
+            .addGrid(hashingTF.numFeatures, [10, 100]) \
+            .addGrid(ova.classifier, [lr1, lr2]) \
+            .build()
+
+        tvs = TrainValidationSplit(estimator=pipeline,
+                                   estimatorParamMaps=paramGrid,
+                                   evaluator=MulticlassClassificationEvaluator())
+
+        # Run cross-validation, and choose the best set of parameters.
+        tvsModel = tvs.fit(training)
+
+        # test save/load of CrossValidatorModel
         tvsModelPath = temp_path + "/tvsModel"
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
