@@ -40,6 +40,7 @@ SELECT substring('Spark SQL' from -3);
 SELECT substring('Spark SQL' from 5 for 1);
 
 -- trim
+SELECT trim(" xyz "), ltrim(" xyz "), rtrim(" xyz ");
 SELECT trim(BOTH 'xyz' FROM 'yxTomxx'), trim('xyz' FROM 'yxTomxx');
 SELECT trim(BOTH 'x' FROM 'xxxbarxxx'), trim('x' FROM 'xxxbarxxx');
 SELECT trim(LEADING 'xyz' FROM 'zzzytest');
