@@ -36,13 +36,14 @@ private[spark] abstract class DistanceMeasure extends Serializable {
   /**
    * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
    *
-   * @return The upper triangular part of a symmetric matrix containing statistics, matrix(i)(j)
-   *         represents:
-   *         1, a lower bound r of the center i, if i==j. If distance between point x and center i
-   *         is less than f(r), then center i is the closest center to point x.
-   *         2, a lower bound r=matrix(i)(j) to help avoiding unnecessary distance computation.
-   *         Given point x, let i be current closest center, and d be current best distance,
-   *         if d < f(r), then we no longer need to compute the distance to center j.
+   * @return The packed upper triangular part of a symmetric matrix containing statistics,
+   *         matrix(i,j) represents:
+   *         1, if i != j: a bound r = matrix(i,j) to help avoiding unnecessary distance
+   *         computation. Given point x, let i be current closest center, and d be current best
+   *         distance, if d < f(r), then we no longer need to compute the distance to center j;
+   *         2, if i == j: a bound r = matrix(i,i) = min_k{maxtrix(i,k)|k!=i}. If distance
+   *         between point x and center i is less than f(r), then center i is the closest center
+   *         to point x.
    */
   def computeStatistics(centers: Array[VectorWithNorm]): Array[Double] = {
     val k = centers.length
@@ -261,14 +262,15 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
    * @see <a href="https://www.aaai.org/Papers/ICML/2003/ICML03-022.pdf">Charles Elkan,
    *      Using the Triangle Inequality to Accelerate k-Means</a>
    *
-   * @return One element used in statistics matrix to make matrix(i)(j) represents:
-   *         1, squared radii of the center i, if i==j. If distance between point x and center i
-   *         is less than the radius of center i, then center i is the closest center to point x.
-   *         For Euclidean distance, radius of center i is half of the distance between center i
-   *         and its closest center;
-   *         2, a lower bound r=matrix(i)(j) to help avoiding unnecessary distance computation.
-   *         Given point x, let i be current closest center, and d be current best squared
-   *         distance, if d < r, then we no longer need to compute the distance to center j.
+   * @return One element used in statistics matrix to make matrix(i,j) represents:
+   *         1, if i != j: a bound r = matrix(i,j) to help avoiding unnecessary distance
+   *         computation. Given point x, let i be current closest center, and d be current best
+   *         squared distance, if d < r, then we no longer need to compute the distance to center
+   *         j. matrix(i,j) equals to squared of half of Euclidean distance between centers i
+   *         and j;
+   *         2, if i == j: a bound r = matrix(i,i) = min_k{maxtrix(i,k)|k!=i}. If squared
+   *         distance between point x and center i is less than r, then center i is the closest
+   *         center to point x.
    */
   override def computeStatistics(distance: Double): Double = {
     0.25 * distance * distance
@@ -282,9 +284,7 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
       statistics: Array[Double],
       point: VectorWithNorm): (Int, Double) = {
     var bestDistance = EuclideanDistanceMeasure.fastSquaredDistance(centers(0), point)
-    if (bestDistance < statistics(0)) {
-      return (0, bestDistance)
-    }
+    if (bestDistance < statistics(0)) return (0, bestDistance)
 
     val k = centers.length
     var bestIndex = 0
@@ -300,9 +300,8 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
         if (statistics(index1) < bestDistance) {
           val d = EuclideanDistanceMeasure.fastSquaredDistance(center, point)
           val index2 = indexUpperTriangular(k, i, i)
-          if (d < statistics(index2)) {
-            return (i, d)
-          } else if (d < bestDistance) {
+          if (d < statistics(index2)) return (i, d)
+          if (d < bestDistance) {
             bestDistance = d
             bestIndex = i
           }
@@ -398,16 +397,17 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
   /**
    * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
    *
-   * @return One element used in statistics matrix to make matrix(i)(j) represents:
-   *         1, squared radii of the center i, if i==j. If distance between point x and center i
-   *         is less than the radius of center i, then center i is the closest center to point x.
-   *         For Cosine distance, it is similar to Euclidean distance. However, here radian/angle
-   *         is used instead of Cosine distance: for center c, finding its closest center,
-   *         computing the radian/angle between them, halving it, and converting it back to Cosine
-   *         distance at the end.
-   *         2, a lower bound r=matrix(i)(j) to help avoiding unnecessary distance computation.
-   *         Given point x, let i be current closest center, and d be current best squared
-   *         distance, if d < r, then we no longer need to compute the distance to center j.
+   * @return One element used in statistics matrix to make matrix(i,j) represents:
+   *         1, if i != j: a bound r = matrix(i,j) to help avoiding unnecessary distance
+   *         computation. Given point x, let i be current closest center, and d be current best
+   *         squared distance, if d < r, then we no longer need to compute the distance to center
+   *         j. For Cosine distance, it is similar to Euclidean distance. However, radian/angle
+   *         is used instead of Cosine distance to compute matrix(i,j): for centers i and j,
+   *         compute the radian/angle between them, halving it, and converting it back to Cosine
+   *         distance at the end;
+   *         2, if i == j: a bound r = matrix(i,i) = min_k{maxtrix(i,k)|k!=i}. If Cosine
+   *         distance between point x and center i is less than r, then center i is the closest
+   *         center to point x.
    */
   override def computeStatistics(distance: Double): Double = {
     // d = 1 - cos(x)
@@ -423,9 +423,7 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
       statistics: Array[Double],
       point: VectorWithNorm): (Int, Double) = {
     var bestDistance = distance(centers(0), point)
-    if (bestDistance < statistics(0)) {
-      return (0, bestDistance)
-    }
+    if (bestDistance < statistics(0)) return (0, bestDistance)
 
     val k = centers.length
     var bestIndex = 0
@@ -436,9 +434,8 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
         val center = centers(i)
         val d = distance(center, point)
         val index2 = indexUpperTriangular(k, i, i)
-        if (d < statistics(index2)) {
-          return (i, d)
-        } else if (d < bestDistance) {
+        if (d < statistics(index2)) return (i, d)
+        if (d < bestDistance) {
           bestDistance = d
           bestIndex = i
         }
