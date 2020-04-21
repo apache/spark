@@ -49,7 +49,7 @@ private[sql] object PythonSQLUtils {
   def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
     val conf = new SQLConf()
     // Force to build static SQL configurations
-    StaticSQLConf.WAREHOUSE_PATH.key -> ()
+    StaticSQLConf
     conf.getAllDefinedConfs.filter(p => SQLConf.staticConfKeys.contains(p._1)).toArray
   }
 
