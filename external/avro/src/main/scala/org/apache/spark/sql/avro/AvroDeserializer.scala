@@ -41,12 +41,14 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
-class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
-  private lazy val decimalConversions = new DecimalConversion()
+class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType, rebaseDateTime: Boolean) {
 
-  // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
-  private val rebaseDateTime =
-    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ)
+  def this(rootAvroType: Schema, rootCatalystType: DataType) {
+    this(rootAvroType, rootCatalystType,
+      SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ))
+  }
+
+  private lazy val decimalConversions = new DecimalConversion()
 
   private val converter: Any => Any = rootCatalystType match {
     // A shortcut for empty schema.

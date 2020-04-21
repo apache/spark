@@ -120,7 +120,9 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
  *        types should have been expanded.
- * @param convertTz the optional time zone to convert to for int96 data
+ * @param convertTz the optional time zone to convert to int96 data
+ * @param rebaseDateTime true if need to rebase date/timestamp from Julian to Proleptic Gregorian
+ *                       calendar
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class ParquetRowConverter(
@@ -128,11 +130,9 @@ private[parquet] class ParquetRowConverter(
     parquetType: GroupType,
     catalystType: StructType,
     convertTz: Option[ZoneId],
+    rebaseDateTime: Boolean,
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
-
-  // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
-  private val rebaseDateTime = SQLConf.get.parquetRebaseDateTimeInReadEnabled
 
   assert(
     parquetType.getFieldCount <= catalystType.length,
@@ -386,7 +386,7 @@ private[parquet] class ParquetRowConverter(
           }
         }
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, convertTz, wrappedUpdater)
+          schemaConverter, parquetType.asGroupType(), t, convertTz, rebaseDateTime, wrappedUpdater)
 
       case t =>
         throw new RuntimeException(
