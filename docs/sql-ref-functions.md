@@ -22,6 +22,18 @@ license: |
 Spark SQL provides two function features to meet a wide range of user needs: built-in functions and user-defined functions (UDFs).
 Built-in functions are commonly used routines that Spark SQL predefines and a complete list of the functions can be found in the [Built-in Functions](api/sql/) API document. UDFs allow users to define their own functions when the system’s built-in functions are not enough to perform the desired task.
 
+### Built-in Functions
+
+Spark SQL has some categories of frequently-used built-in functions for aggregtion, arrays/maps, date/timestamp, and JSON data.
+This subsection presents the usages and descriptions of these functions.
+
+ * [Aggregate Functions](sql-ref-functions-builtin.html#aggregate-functions)
+ * [Window Functions](sql-ref-functions-builtin.html#window-functions)
+ * [Array Functions](sql-ref-functions-builtin.html#array-functions)
+ * [Map Functions](sql-ref-functions-builtin.html#map-functions)
+ * [Date and Timestamp Functions](sql-ref-functions-builtin.html#date-and-timestamp-functions)
+ * [JSON Functions](sql-ref-functions-builtin.html#json-functions)
+
 ### UDFs (User-Defined Functions)
 
 User-Defined Functions (UDFs) are a feature of Spark SQL that allows users to define their own functions when the system's built-in functions are not enough to perform the desired task. To use UDFs in Spark SQL, users must first define the function, then register the function with Spark, and finally call the registered function. The User-Defined Functions can act on a single row or act on multiple rows at once. Spark SQL also supports integration of existing Hive implementations of UDFs, UDAFs and UDTFs.

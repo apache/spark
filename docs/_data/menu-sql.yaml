@@ -246,6 +246,8 @@
     - text: Functions
       url: sql-ref-functions.html
       subitems:
+      - text: Built-in Functions
+        url: sql-ref-functions-builtin.html
       - text: Scalar UDFs (User-Defined Functions)
         url: sql-ref-functions-udf-scalar.html
       - text: UDAFs (User-Defined Aggregate Functions)

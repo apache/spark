@@ -2612,10 +2612,10 @@ Spark subsystems.
 
 
 {% for static_file in site.static_files %}
-    {% if static_file.name == 'sql-configs.html' %}
+    {% if static_file.name == 'generated-sql-configuration-table.html' %}
 ### Spark SQL
 
-        {% include_relative sql-configs.html %}
+{% include_relative generated-sql-configuration-table.html %}
         {% break %}
     {% endif %}
 {% endfor %}
