@@ -20,9 +20,9 @@ package org.apache.spark
 import java.util.{Properties, Timer, TimerTask}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.{Failure, Success => ScalaSuccess, Try}
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
@@ -85,28 +85,26 @@ class BarrierTaskContext private[spark] (
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
         timeout = new RpcTimeout(365.days, "barrierTimeout"))
 
-      // messages which consist of all barrier tasks' messages
-      var messages: Array[String] = null
       // Wait the RPC future to be completed, but every 1 second it will jump out waiting
       // and check whether current spark task is killed. If killed, then throw
       // a `TaskKilledException`, otherwise continue wait RPC until it completes.
-      try {
-        while (!abortableRpcFuture.toFuture.isCompleted) {
+
+      while (!abortableRpcFuture.future.isCompleted) {
+        try {
           // wait RPC future for at most 1 second
-          try {
-            messages = ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
-          } catch {
-            case _: TimeoutException | _: InterruptedException =>
-              // If `TimeoutException` thrown, waiting RPC future reach 1 second.
-              // If `InterruptedException` thrown, it is possible this task is killed.
-              // So in this two cases, we should check whether task is killed and then
-              // throw `TaskKilledException`
-              taskContext.killTaskIfInterrupted()
+          Thread.sleep(1000)
+        } catch {
+          case _: InterruptedException => // task is killed by driver
+        } finally {
+          Try(taskContext.killTaskIfInterrupted()) match {
+            case ScalaSuccess(_) => // task is still running healthily
+            case Failure(e) => abortableRpcFuture.abort(e)
           }
         }
-      } finally {
-        abortableRpcFuture.abort(taskContext.getKillReason().getOrElse("Unknown reason."))
       }
+      // messages which consist of all barrier tasks' messages. The future will return the
+      // desired messages if it is completed successfully. Otherwise, exception could be thrown.
+      val messages = abortableRpcFuture.future.value.get.get
 
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
