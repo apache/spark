@@ -42,12 +42,16 @@ import org.apache.spark.sql.types._
 /**
  * A serializer to serialize data in catalyst format to data in avro format.
  */
-class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean)
-  extends Logging {
+class AvroSerializer(
+    rootCatalystType: DataType,
+    rootAvroType: Schema,
+    nullable: Boolean,
+    rebaseDateTime: Boolean) extends Logging {
 
-  // Whether to rebase datetimes from Gregorian to Julian calendar in write
-  private val rebaseDateTime: Boolean =
-    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_WRITE)
+  def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) {
+    this(rootCatalystType, rootAvroType, nullable,
+      SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_WRITE))
+  }
 
   def serialize(catalystData: Any): Any = {
     converter.apply(catalystData)
