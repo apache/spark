@@ -883,55 +883,49 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
+    // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
+    def checkReadMixedFiles(fileName: String, dt: String, dataStr: String): Unit = {
+      withTempPaths(2) { paths =>
+        paths.foreach(_.delete())
+        val path2_4 = getResourceParquetFilePath("test-data/" + fileName)
+        val path3_0 = paths(0).getCanonicalPath
+        val path3_0_rebase = paths(1).getCanonicalPath
+        if (dt == "date") {
+          val df = Seq(dataStr).toDF("str").select($"str".cast("date").as("date"))
+          df.write.parquet(path3_0)
+          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> "true") {
+            df.write.parquet(path3_0_rebase)
+          }
+          checkAnswer(
+            spark.read.format("parquet").load(path2_4, path3_0, path3_0_rebase),
+            1.to(3).map(_ => Row(java.sql.Date.valueOf(dataStr))))
+        } else {
+          val df = Seq(dataStr).toDF("str").select($"str".cast("timestamp").as("ts"))
+          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> dt) {
+            df.write.parquet(path3_0)
+            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> "true") {
+              df.write.parquet(path3_0_rebase)
+            }
+          }
+          checkAnswer(
+            spark.read.format("parquet").load(path2_4, path3_0, path3_0_rebase),
+            1.to(3).map(_ => Row(java.sql.Timestamp.valueOf(dataStr))))
+        }
+      }
+    }
+
     Seq(false, true).foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> "true") {
-          // test reading the existing 2.4 files and 3.0 newly written files together.
-          withTempPath { path =>
-            val path2_4 = getResourceParquetFilePath(
-              "test-data/before_1582_date_v2_4.snappy.parquet")
-            val path3_0 = path.getCanonicalPath
-            val dateStr = "1001-01-01"
-            Seq(dateStr).toDF("str").select($"str".cast("date").as("date"))
-              .write.parquet(path3_0)
-            checkAnswer(
-              spark.read.format("parquet").load(path2_4, path3_0),
-              Seq(
-                Row(java.sql.Date.valueOf(dateStr)),
-                Row(java.sql.Date.valueOf(dateStr))))
-          }
-
-          withTempPath { path =>
-            withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
-              val path2_4 = getResourceParquetFilePath(
-                "test-data/before_1582_timestamp_micros_v2_4.snappy.parquet")
-              val path3_0 = path.getCanonicalPath
-              val tsStr = "1001-01-01 01:02:03.123456"
-              Seq(tsStr).toDF("str").select($"str".cast("timestamp").as("ts"))
-                .write.parquet(path3_0)
-              checkAnswer(
-                spark.read.format("parquet").load(path2_4, path3_0),
-                Seq(
-                  Row(java.sql.Timestamp.valueOf(tsStr)),
-                  Row(java.sql.Timestamp.valueOf(tsStr))))
-            }
-          }
-
-          withTempPath { path =>
-            withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MILLIS") {
-              val path2_4 = getResourceParquetFilePath(
-                "test-data/before_1582_timestamp_millis_v2_4.snappy.parquet")
-              val path3_0 = path.getCanonicalPath
-              val tsStr = "1001-01-01 01:02:03.123"
-              Seq(tsStr).toDF("str").select($"str".cast("timestamp").as("ts"))
-                .write.parquet(path3_0)
-              checkAnswer(
-                spark.read.format("parquet").load(path2_4, path3_0),
-                Seq(
-                  Row(java.sql.Timestamp.valueOf(tsStr)),
-                  Row(java.sql.Timestamp.valueOf(tsStr))))
-            }
-          }
+          checkReadMixedFiles("before_1582_date_v2_4.snappy.parquet", "date", "1001-01-01")
+          checkReadMixedFiles(
+            "before_1582_timestamp_micros_v2_4.snappy.parquet",
+            "TIMESTAMP_MICROS",
+            "1001-01-01 01:02:03.123456")
+          checkReadMixedFiles(
+            "before_1582_timestamp_millis_v2_4.snappy.parquet",
+            "TIMESTAMP_MILLIS",
+            "1001-01-01 01:02:03.123")
         }
 
         // INT96 is a legacy timestamp format and we always rebase the seconds for it.
