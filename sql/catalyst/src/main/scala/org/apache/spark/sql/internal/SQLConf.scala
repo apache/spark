@@ -2575,9 +2575,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val COALESCE_BUCKET_IN_JOIN_ENABLED =
-    buildConf("spark.sql.bucketing.coalesceBucketInJoin.enabled")
-      .internal()
+  val COALESCE_BUCKETS_IN_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.enabled")
       .doc("When true, if two bucketed tables with a different number of buckets are joined, " +
         "the side with a bigger number of buckets will be coalesced to have the same number " +
         "of buckets as the other side. This bucket coalescing can happen only when the bigger " +
@@ -2586,14 +2585,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val COALESCE_BUCKET_IN_JOIN_MAX_NUM_BUCKETS_DIFF =
-    buildConf("spark.sql.bucketing.coalesceBucketInJoin.maxNumBucketsDiff")
+  val COALESCE_BUCKETS_IN_JOIN_MAX_NUM_BUCKETS_DIFF =
+    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.maxNumBucketsDiff")
       .doc("The difference in count of two buckets being coalesced should be less than or " +
         "equal to this value for bucket coalescing to be applied. This configuration only " +
-        s"has an effect when '${COALESCE_BUCKET_IN_JOIN_ENABLED.key}' is set to true.")
+        s"has an effect when '${COALESCE_BUCKETS_IN_JOIN_ENABLED.key}' is set to true.")
       .version("3.1.0")
       .intConf
-      .checkValue(_ > 0, "The minimum number of partitions must be positive.")
+      .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(256)
 
   /**
@@ -2891,6 +2890,11 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
+
+  def coalesceBucketsInJoinEnabled: Boolean = getConf(COALESCE_BUCKETS_IN_JOIN_ENABLED)
+
+  def coalesceBucketsInJoinMaxNumBucketsDiff: Int =
+    getConf(COALESCE_BUCKETS_IN_JOIN_MAX_NUM_BUCKETS_DIFF)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

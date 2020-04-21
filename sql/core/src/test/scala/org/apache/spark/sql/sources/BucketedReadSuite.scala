@@ -877,7 +877,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   }
 
   test("bucket coalescing eliminates shuffle") {
-    withSQLConf(SQLConf.COALESCE_BUCKET_IN_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       // The side with bucketedTableTestSpec1 will be coalesced to have 4 output partitions.
       // Currently, sort will be introduced for the side that is coalesced.
       val testSpec1 = BucketedTableTestSpec(

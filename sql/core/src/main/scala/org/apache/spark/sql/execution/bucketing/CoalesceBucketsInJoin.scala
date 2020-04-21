@@ -28,9 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  * This rule injects a hint if one side of two bucketed tables can be coalesced
  * when the two bucketed tables are inner-joined and they differ in the number of buckets.
  */
-object CoalesceBucketInJoin extends Rule[LogicalPlan]  {
-  val JOIN_HINT_COALESCED_NUM_BUCKETS: String = "JoinHintCoalescedNumBuckets"
-
+object CoalesceBucketsInJoin extends Rule[LogicalPlan]  {
   private val sqlConf = SQLConf.get
 
   private def isPlanEligible(plan: LogicalPlan): Boolean = {
@@ -47,8 +45,7 @@ object CoalesceBucketInJoin extends Rule[LogicalPlan]  {
   private def getBucketSpec(plan: LogicalPlan): Option[BucketSpec] = {
     if (isPlanEligible(plan)) {
       plan.collectFirst {
-        case _ @ LogicalRelation(r: HadoopFsRelation, _, _, _)
-          if r.bucketSpec.nonEmpty && !r.options.contains(JOIN_HINT_COALESCED_NUM_BUCKETS) =>
+        case _ @ LogicalRelation(r: HadoopFsRelation, _, _, _) if r.bucketSpec.nonEmpty =>
           r.bucketSpec.get
       }
     } else {
@@ -62,49 +59,53 @@ object CoalesceBucketInJoin extends Rule[LogicalPlan]  {
     // A bucket can be coalesced only if the bigger number of buckets is divisible by the smaller
     // number of buckets because bucket id is calculated by modding the total number of buckets.
     if ((large % small == 0) &&
-      (large - small) <= sqlConf.getConf(SQLConf.COALESCE_BUCKET_IN_JOIN_MAX_NUM_BUCKETS_DIFF)) {
+      ((large - small) <= sqlConf.coalesceBucketsInJoinMaxNumBucketsDiff)) {
       Some(small)
     } else {
       None
     }
   }
 
-  private def addBucketHint(plan: LogicalPlan, hint: (String, String)): LogicalPlan = {
+  private def addCoalesceBuckets(plan: LogicalPlan, numCoalescedBuckets: Int): LogicalPlan = {
     plan.transformUp {
-      case l @ LogicalRelation(r: HadoopFsRelation, _, _, _) =>
-        l.copy(relation = r.copy(options = r.options + hint)(r.sparkSession))
+      case l @ LogicalRelation(_: HadoopFsRelation, _, _, _) =>
+        CoalesceBuckets(numCoalescedBuckets, l)
+    }
+  }
+
+  object ExtractJoinWithBuckets {
+    def unapply(plan: LogicalPlan): Option[(Join, Int, Int)] = {
+      plan match {
+        case join: Join =>
+          val leftBucket = getBucketSpec(join.left)
+          val rightBucket = getBucketSpec(join.right)
+          if (leftBucket.isDefined && rightBucket.isDefined) {
+            Some(join, leftBucket.get.numBuckets, rightBucket.get.numBuckets)
+          } else {
+            None
+          }
+        case _ => None
+      }
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!sqlConf.getConf(SQLConf.COALESCE_BUCKET_IN_JOIN_ENABLED)) {
-      return plan
-    }
+    if (sqlConf.coalesceBucketsInJoinEnabled) {
+      plan transform {
+        case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
+            if numLeftBuckets != numRightBuckets =>
+          mayCoalesce(numLeftBuckets, numRightBuckets).map { numCoalescedBuckets =>
+            if (numCoalescedBuckets != numLeftBuckets) {
+              join.copy(left = addCoalesceBuckets(join.left, numCoalescedBuckets))
+            } else {
+              join.copy(right = addCoalesceBuckets(join.right, numCoalescedBuckets))
+            }
+          }.getOrElse(join)
 
-    plan transform {
-      case join: Join if join.joinType == Inner =>
-        val leftBucket = getBucketSpec(join.left)
-        val rightBucket = getBucketSpec(join.right)
-        if (leftBucket.isEmpty || rightBucket.isEmpty) {
-          return plan
-        }
-
-        val leftBucketNumber = leftBucket.get.numBuckets
-        val rightBucketNumber = rightBucket.get.numBuckets
-        if (leftBucketNumber == rightBucketNumber) {
-          return plan
-        }
-
-        mayCoalesce(leftBucketNumber, rightBucketNumber).map { coalescedNumBuckets =>
-          val hint = JOIN_HINT_COALESCED_NUM_BUCKETS -> coalescedNumBuckets.toString
-          if (coalescedNumBuckets != leftBucketNumber) {
-            join.copy(left = addBucketHint(join.left, hint))
-          } else {
-            join.copy(right = addBucketHint(join.right, hint))
-          }
-        }.getOrElse(join)
-
-      case other => other
+        case other => other
+      }
+    } else {
+      plan
     }
   }
 }
