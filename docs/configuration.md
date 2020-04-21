@@ -2641,8 +2641,8 @@ Runtime SQL configurations inner-session, mutable Spark SQL configurations. They
 Static SQL configurations are cross-session, immutable Spark SQL configurations. External users can query the static sql config values via `SparkSession.conf` or via set command, e.g. `SET spark.sql.extensions;`, but cannot set/unset them.
 
 {% for static_file in site.static_files %}
-    {% if static_file.name == 'generated-runtime-sql-config-table.html' %}
-        {% include_relative generated-runtime-sql-config-table.html %}
+    {% if static_file.name == 'generated-static-sql-config-table.html' %}
+        {% include_relative generated-static-sql-config-table.html %}
         {% break %}
     {% endif %}
 {% endfor %}
