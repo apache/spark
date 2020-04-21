@@ -330,6 +330,16 @@ class ExplainSuite extends QueryTest with SharedSparkSession with DisableAdaptiv
     }.getMessage
     assert(errMsg.contains("Unknown explain mode: unknown"))
   }
+
+  test("SPARK-31504: Output fields in formatted Explain should have determined order") {
+    withTempPath { path =>
+      spark.range(10).selectExpr("id as a", "id as b", "id as c", "id as d", "id as e")
+        .write.mode("overwrite").parquet(path.getAbsolutePath)
+      val df1 = spark.read.parquet(path.getAbsolutePath)
+      val df2 = spark.read.parquet(path.getAbsolutePath)
+      assert(getNormalizedExplain(df1, FormattedMode) === getNormalizedExplain(df2, FormattedMode))
+    }
+  }
 }
 
 case class ExplainSingleData(id: Int)

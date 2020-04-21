@@ -515,7 +515,7 @@ trait LeafExecNode extends SparkPlan {
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(SQLConf.get.maxToStringFields)
     val baseStr = s"(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}"
-    val outputStr = s"${ExplainUtils.generateFieldString("Output", producedAttributes)}"
+    val outputStr = s"${ExplainUtils.generateFieldString("Output", output)}"
 
     if (argumentString.nonEmpty) {
       s"""
