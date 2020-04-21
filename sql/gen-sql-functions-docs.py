@@ -59,7 +59,7 @@ def _list_grouped_function_infos(jvm):
     return [(k, sorted(g, key=lambda x: x.name)) for k, g in grouped_infos]
 
 
-# TODO(SPARK-XXXXX): Needs to add a column to describe arguments and their types
+# TODO(SPARK-31499): Needs to add a column to describe arguments and their types
 def _make_pretty_usage(infos):
     """
     Makes the usage description pretty and returns a formatted string.

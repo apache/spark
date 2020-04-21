@@ -1,12 +1,1 @@
-generated-agg-funcs-examples.html
-generated-agg-funcs-table.html
-generated-array-funcs-examples.html
-generated-array-funcs-table.html
-generated-datetime-funcs-examples.html
-generated-datetime-funcs-table.html
-generated-json-funcs-examples.html
-generated-json-funcs-table.html
-generated-map-funcs-examples.html
-generated-map-funcs-table.html
-generated-sql-configuration-table.html
-generated-window-funcs-table.html
+generated-*.html
