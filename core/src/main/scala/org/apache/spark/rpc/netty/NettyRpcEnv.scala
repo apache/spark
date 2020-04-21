@@ -254,7 +254,14 @@ private[netty] class NettyRpcEnv(
 
       val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
         override def run(): Unit = {
-          onFailure(new TimeoutException(s"Cannot receive any reply from ${remoteAddr} " +
+          val remoteReceAddr = if (remoteAddr == null) {
+            Try {
+              message.receiver.client.getChannel.remoteAddress()
+            }.toOption.orNull
+          } else {
+            remoteAddr
+          }
+          onFailure(new TimeoutException(s"Cannot receive any reply from ${remoteReceAddr} " +
             s"in ${timeout.duration}"))
         }
       }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)

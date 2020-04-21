@@ -989,6 +989,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 }
 
+case class Register(ref: RpcEndpointRef)
+
 class UnserializableClass
 
 class UnserializableException extends Exception {
