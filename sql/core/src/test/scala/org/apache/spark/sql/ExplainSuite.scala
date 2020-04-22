@@ -381,7 +381,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
          |""".stripMargin,
       s"""
          |(11) ShuffleQueryStage$ws
-         |Output [5]: [sum#xL, k#x, sum#x, count#xL, count#xL]
+         |Output [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
          |Arguments: 1
          |""".stripMargin,
       s"""
