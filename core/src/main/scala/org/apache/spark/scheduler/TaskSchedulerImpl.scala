@@ -597,9 +597,8 @@ private[spark] class TaskSchedulerImpl(
           } else {
             s"Timeout after waiting $barrierSlotsCheckTimeoutS seconds for enough slots"
           }
-          taskSet.abort(
-            s"$reason to schedule barrier task set ${taskSet.stageId}. " +
-              s"Required ${taskSet.numTasks} slots but got $numBarrierSlotsAvailable slots yet. " +
+          taskSet.abort(s"$reason to schedule barrier task set ${taskSet.stageId}. " +
+              s"Required ${taskSet.numTasks} slots but got $maxPossibleSlots slots yet. " +
               s"Please init a new cluster with more CPU cores or repartition the input RDD(s) " +
               s"to reduce the number of slots required to run this barrier stage. Or increase " +
               s"timeout using ${config.BARRIER_WAIT_FOR_SLOT_TIMEOUT.key} if executors " +
