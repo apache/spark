@@ -414,13 +414,15 @@ final class ShuffleBlockFetcherIterator(
         def shouldMergeIntoPreviousBatchBlockId =
           mergedBlockInfo.last.blockId.asInstanceOf[ShuffleBlockBatchId].mapId == startBlockId.mapId
 
-        val startReduceId = if (mergedBlockInfo.nonEmpty && shouldMergeIntoPreviousBatchBlockId) {
-          // Remove the previous batch block id as we will add a new one to replace it.
-          mergedBlockInfo.remove(mergedBlockInfo.length - 1).blockId
-            .asInstanceOf[ShuffleBlockBatchId].startReduceId
-        } else {
-          startBlockId.reduceId
-        }
+        val (startReduceId, size) =
+          if (mergedBlockInfo.nonEmpty && shouldMergeIntoPreviousBatchBlockId) {
+            // Remove the previous batch block id as we will add a new one to replace it.
+            val removed = mergedBlockInfo.remove(mergedBlockInfo.length - 1)
+              (removed.blockId.asInstanceOf[ShuffleBlockBatchId].startReduceId,
+                removed.size + toBeMerged.map(_.size).sum)
+          } else {
+            (startBlockId.reduceId, toBeMerged.map(_.size).sum)
+          }
 
         FetchBlockInfo(
           ShuffleBlockBatchId(
@@ -428,7 +430,7 @@ final class ShuffleBlockFetcherIterator(
             startBlockId.mapId,
             startReduceId,
             toBeMerged.last.blockId.asInstanceOf[ShuffleBlockId].reduceId + 1),
-          toBeMerged.map(_.size).sum,
+          size,
           toBeMerged.head.mapIndex)
       }
 
