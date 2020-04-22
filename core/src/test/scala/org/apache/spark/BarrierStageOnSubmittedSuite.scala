@@ -223,7 +223,8 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     val rdd = sc.parallelize(1 to 10, 5)
       .barrier()
       .mapPartitions(iter => iter)
-    testSubmitJob(sc, rdd, message = "Timeout after waiting 3 seconds to schedule barrier task set")
+    testSubmitJob(sc, rdd,
+      message = "Timeout after waiting 3 seconds for enough slots to schedule barrier task set")
   }
 
   test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
@@ -239,6 +240,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .mapPartitions(iter => iter)
       .repartition(2)
       .map(x => x + 1)
-    testSubmitJob(sc, rdd, message = "Timeout after waiting 3 seconds to schedule barrier task set")
+    testSubmitJob(sc, rdd, message =
+      "Timeout after waiting 3 seconds for enough slots to schedule barrier task set")
   }
 }
