@@ -111,9 +111,6 @@ select date_part(i, i) from t;
 select date_part(null, i) from t;
 
 -- In SPARK-31476, we've supported extract('field', source), too
-select extract('millennium', c) from t;
-select extract('century', c) from t;
-select extract('decade', c) from t;
 select extract('year', c) from t;
 select extract('quarter', c) from t;
 select extract('month', c) from t;
@@ -122,7 +119,6 @@ select extract('day', c) from t;
 select extract('days', c) from t;
 select extract('dayofweek', c) from t;
 select extract('dow', c) from t;
-select extract('isodow', c) from t;
 select extract('doy', c) from t;
 select extract('hour', c) from t;
 select extract('minute', c) from t;
