@@ -144,6 +144,16 @@ object TypeCoercion {
     case (n: DecimalType, s: StringType) => Some(DoubleType)
     case (s: StringType, n: DecimalType) => Some(DoubleType)
 
+//     SPARK-31508 we need convert the type to double type if  one is string type,another is a integer value
+    case (n: IntegerType, s: StringType) => Some(DoubleType)
+    case (s: StringType, n: IntegerType) => Some(DoubleType)
+
+    case (n: LongType, s: StringType) => Some(DoubleType)
+    case (s: StringType, n: LongType) => Some(DoubleType)
+
+    case (n: ShortType, s: StringType) => Some(DoubleType)
+    case (s: StringType, n: ShortType) => Some(DoubleType)
+    
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
     case (l: AtomicType, r: StringType) if l != StringType => Some(l)
     case (l, r) => None
