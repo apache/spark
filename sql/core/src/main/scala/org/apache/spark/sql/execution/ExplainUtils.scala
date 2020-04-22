@@ -228,7 +228,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
               case _ =>
             }
         })
-      }
+    }
   }
 
   /**
