@@ -238,13 +238,13 @@ class Analyzer(
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
       ExtractWindowExpressions ::
+      ResolveTimeZone(conf) ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
       ResolveHigherOrderFunctions(v1SessionCatalog) ::
       ResolveLambdaVariables(conf) ::
-      ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic(conf) ::
       TypeCoercion.typeCoercionRules(conf) ++
@@ -1393,6 +1393,9 @@ class Analyzer(
               notMatchedActions = newNotMatchedActions)
         }
 
+      // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
+      case h: AggregateWithHaving => h
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
         q.mapExpressions(resolveExpressionTopDown(_, q))
@@ -2033,8 +2036,9 @@ class Analyzer(
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case f @ Filter(cond, agg @ Aggregate(grouping, originalAggExprs, child)) if agg.resolved =>
-
+      case AggregateWithHaving(
+          cond, agg @ Aggregate(grouping, originalAggExprs, child)) if agg.resolved =>
+        val having = Filter(cond, agg)
         // Try resolving the condition of the filter as though it is in the aggregate clause
         try {
           val aggregatedCondition =
@@ -2079,15 +2083,15 @@ class Analyzer(
                 Filter(transformedAggregateFilter,
                   agg.copy(aggregateExpressions = originalAggExprs ++ aggregateExpressions)))
             } else {
-              f
+              having
             }
           } else {
-            f
+            having
           }
         } catch {
           // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
           // just return the original plan.
-          case ae: AnalysisException => f
+          case ae: AnalysisException => having
         }
 
       case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
