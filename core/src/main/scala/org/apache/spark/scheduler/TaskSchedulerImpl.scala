@@ -484,9 +484,10 @@ private[spark] class TaskSchedulerImpl(
       } else {
         val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount)
           .getOrElse {
-            taskSet.abort("limitingResource returns from ResourceProfile " +
-              s"$resourceProfile doesn't actually contain that task resource!")
-            return -1
+            val errorMsg = "limitingResource returns from ResourceProfile " +
+              s"$resourceProfile doesn't actually contain that task resource!"
+            taskSet.abort(errorMsg)
+            throw new SparkException(errorMsg)
           }
         // available addresses already takes into account if there are fractional
         // task resource requests
@@ -682,8 +683,9 @@ private[spark] class TaskSchedulerImpl(
               s"because only ${addressesWithDescs.size} out of a total number of " +
               s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
               "been blacklisted or cannot fulfill task locality requirements."
-            logError(errorMsg)
+            logWarning(errorMsg)
             taskSet.abort(errorMsg)
+            throw new SparkException(errorMsg)
           }
 
           // materialize the barrier coordinator.
@@ -746,10 +748,12 @@ private[spark] class TaskSchedulerImpl(
             if (state == TaskState.LOST) {
               // TaskState.LOST is only used by the deprecated Mesos fine-grained scheduling mode,
               // where each executor corresponds to a single task, so mark the executor as failed.
-              val execId = taskIdToExecutorId.getOrElse(tid, { taskSet.abort(
-                "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
-                return }
-              )
+              val execId = taskIdToExecutorId.getOrElse(tid, {
+                val errorMsg =
+                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"
+                taskSet.abort(errorMsg)
+                throw new SparkException(errorMsg)
+              })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(
                   SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
