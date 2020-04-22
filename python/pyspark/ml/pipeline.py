@@ -182,8 +182,8 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         param = self._resolveParam(param)
         java_param = sc._jvm.org.apache.spark.ml.param.Param(param.parent, param.name, param.doc)
         if isinstance(value, Params) and hasattr(value, "_to_java"):
-            # Convert JavaEstimator/JavaTransformer object or Estimator/Transformer object which implements
-            # `_to_java` method (such as OneVsRest, Pipeline object) to java object
+            # Convert JavaEstimator/JavaTransformer object or Estimator/Transformer object which
+            # implements `_to_java` method (such as OneVsRest, Pipeline object) to java object.
             # used in the case of an estimator having another estimator as a parameter
             # the reason why this is not in _py2java in common.py is that importing
             # Estimator and Model in common.py results in a circular import with inherit_doc
