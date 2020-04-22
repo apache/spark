@@ -22,6 +22,7 @@ license: |
 A literal (also known as a constant) represents a fixed data value. Spark SQL supports the following literals:
 
  * [String Literal](#string-literal)
+ * [Binary Literal](#binary-literal)
  * [Null Literal](#null-literal)
  * [Boolean Literal](#boolean-literal)
  * [Numeric Literal](#numeric-literal)
@@ -35,7 +36,7 @@ A string literal is used to specify a character string value.
 #### Syntax
 
 {% highlight sql %}
-[ X ] { 'c [ ... ]' | "c [ ... ]" }
+'c [ ... ]' | "c [ ... ]"
 {% endhighlight %}
 
 #### <em>Parameters</em>
@@ -46,36 +47,60 @@ A string literal is used to specify a character string value.
     One character from the character set. Use <code>\</code> to escape special characters (e.g., <code>'</code> or <code>\</code>).
   </dd>
 </dl>
+
+#### <em>Examples</em>
+
+{% highlight sql %}
+SELECT 'Hello, World!' AS col;
++-------------+
+|          col|
++-------------+
+|Hello, World!|
++-------------+
+
+SELECT "SPARK SQL" AS col;
++---------+
+|      col|
++---------+
+|Spark SQL|
++---------+
+
+SELECT SELECT 'it\'s $10.' AS col;
++---------+
+|      col|
++---------+
+|It's $10.|
++---------+
+{% endhighlight %}
+
+### Binary Literal
+
+A binary literal is used to specify a byte sequence value.
+
+#### Syntax
+
+{% highlight sql %}
+X { 'c [ ... ]' | "c [ ... ]" }
+{% endhighlight %}
+
+#### <em>Parameters</em>
+
 <dl>
-  <dt><code><em>X</em></code></dt>
+  <dt><code><em>c</em></code></dt>
   <dd>
-    Indicates the string literal is in binary format.
+    One character from the character set.
   </dd>
 </dl>
 
 #### <em>Examples</em>
 
 {% highlight sql %}
-SELECT 'Hello, World!' AS col;
-  +-------------+
-  |          col|
-  +-------------+
-  |Hello, World!|
-  +-------------+
-
-SELECT "SPARK SQL" AS col;
-  +---------+
-  |      col|
-  +---------+
-  |Spark SQL|
-  +---------+
-
-SELECT SELECT 'it\'s $10.' AS col;
-  +---------+
-  |      col|
-  +---------+
-  |It's $10.|
-  +---------+
+SELECT X'123456' AS col;
++----------+
+|       col|
++----------+
+|[12 34 56]|
++----------+
 {% endhighlight %}
 
 ### Null Literal
@@ -92,11 +117,11 @@ NULL
 
 {% highlight sql %}
 SELECT NULL AS col;
-  +----+
-  | col|
-  +----+
-  |NULL|
-  +----+
++----+
+| col|
++----+
+|NULL|
++----+
 {% endhighlight %}
 
 ### Boolean Literal
@@ -113,18 +138,18 @@ TRUE | FALSE
 
 {% highlight sql %}
 SELECT TRUE AS col;
-  +----+
-  | col|
-  +----+
-  |true|
-  +----+
++----+
+| col|
++----+
+|true|
++----+
 {% endhighlight %}
 
 ### Numeric Literal
 
 A numeric literal is used to specify a fixed or floating-point number.
 
-#### Integer Literal
+#### Integral Literal
 
 #### Syntax
 
@@ -169,46 +194,46 @@ A numeric literal is used to specify a fixed or floating-point number.
 
 {% highlight sql %}
 SELECT -2147483648 AS col;
-  +-----------+
-  |        col|
-  +-----------+
-  |-2147483648|
-  +-----------+
++-----------+
+|        col|
++-----------+
+|-2147483648|
++-----------+
 
 SELECT 9223372036854775807l AS col;
-  +-------------------+
-  |                col|
-  +-------------------+
-  |9223372036854775807|
-  +-------------------+
++-------------------+
+|                col|
++-------------------+
+|9223372036854775807|
++-------------------+
 
 SELECT -32Y AS col;
-  +---+
-  |col|
-  +---+
-  |-32|
-  +---+
++---+
+|col|
++---+
+|-32|
++---+
 
 SELECT 482S AS col;
-  +---+
-  |col|
-  +---+
-  |482|
-  +---+
++---+
+|col|
++---+
+|482|
++---+
 {% endhighlight %}
 
-#### Non-integer Literals
+#### Fractional Literals
 
 #### Syntax
 
 decimal literals:
 {% highlight sql %}
-{ decimal_digits { [ BD ] | [ exponent BD ] } | digit [ ... ] [ exponent ] BD }
+decimal_digits { [ BD ] | [ exponent BD ] } | digit [ ... ] [ exponent ] BD
 {% endhighlight %}
 
 double literals:
 {% highlight sql %}
-{ decimal_digits  { D | exponent [ D ] }  | digit [ ... ] { exponent [ D ] | [ exponent ] D }
+decimal_digits  { D | exponent [ D ] }  | digit [ ... ] { exponent [ D ] | [ exponent ] D }
 {% endhighlight %}
 
 While decimal_digits is defined as
@@ -238,7 +263,7 @@ E [ + | - ] digit [ ... ]
 <dl>
   <dt><code><em>BD</em></code></dt>
   <dd>
-    Case insensitive, indicates <code>BIGDECIMAL</code>, which is an arbitrary-precision signed decimal number.
+    Case insensitive, indicates <code>DECIMAL</code>, with the total number of digits as precision and the number of digits to right of decimal point as scale.
   </dd>
 </dl>
 
@@ -246,88 +271,88 @@ E [ + | - ] digit [ ... ]
 
 {% highlight sql %}
 SELECT 12.578 AS col;
-  +------+
-  |   col|
-  +------+
-  |12.578|
-  +------+
++------+
+|   col|
++------+
+|12.578|
++------+
 
 SELECT -0.1234567 AS col;
-  +----------+
-  |       col|
-  +----------+
-  |-0.1234567|
-  +----------+
++----------+
+|       col|
++----------+
+|-0.1234567|
++----------+
 
 SELECT -.1234567 AS col;
-  +----------+
-  |       col|
-  +----------+
-  |-0.1234567|
-  +----------+
++----------+
+|       col|
++----------+
+|-0.1234567|
++----------+
 
 SELECT 123. AS col;
-  +---+
-  |col|
-  +---+
-  |123|
-  +---+
++---+
+|col|
++---+
+|123|
++---+
 
 SELECT 123.BD AS col;
-  +---+
-  |col|
-  +---+
-  |123|
-  +---+
++---+
+|col|
++---+
+|123|
++---+
 
 SELECT 5E2 AS col;
-  +-----+
-  |  col|
-  +-----+
-  |500.0|
-  +-----+
++-----+
+|  col|
++-----+
+|500.0|
++-----+
 
 SELECT 5D AS col;
-  +---+
-  |col|
-  +---+
-  |5.0|
-  +---+
++---+
+|col|
++---+
+|5.0|
++---+
 
 SELECT -5BD AS col;
-  +---+
-  |col|
-  +---+
-  | -5|
-  +---+
++---+
+|col|
++---+
+| -5|
++---+
 
 SELECT 12.578e-2d AS col;
-  +-------+
-  |    col|
-  +-------+
-  |0.12578|
-  +-------+
++-------+
+|    col|
++-------+
+|0.12578|
++-------+
 
 SELECT -.1234567E+2BD AS col;
-  +---------+
-  |      col|
-  +---------+
-  |-12.34567|
-  +---------+
++---------+
+|      col|
++---------+
+|-12.34567|
++---------+
 
 SELECT +3.e+3 AS col;
-  +------+
-  |   col|
-  +------+
-  |3000.0|
-  +------+
++------+
+|   col|
++------+
+|3000.0|
++------+
 
 SELECT -3.E-3D AS col;
-  +------+
-  |   col|
-  +------+
-  |-0.003|
-  +------+
++------+
+|   col|
++------+
+|-0.003|
++------+
 {% endhighlight %}
 
 ### Datetime Literal
@@ -342,43 +367,33 @@ A Datetime literal is used to specify a datetime value.
 DATE { 'yyyy' |
        'yyyy-[m]m' |
        'yyyy-[m]m-[d]d' |
-       'yyyy-[m]m-[d]d ' |
-       'yyyy-[m]m-[d]d[T]c[...]' }
+       'yyyy-[m]m-[d]d ' }
 {% endhighlight %}
-
-#### Parameters
-
-<dl>
-  <dt><code><em>c</em></code></dt>
-  <dd>
-    One character from the character set.
-  </dd>
-</dl>
 Note: defaults to <code>01</code> if month or day is not specified.
 
 #### Examples
 
 {% highlight sql %}
 SELECT DATE '1997' AS col;
-  +----------+
-  |       col|
-  +----------+
-  |1997-01-01|
-  +----------+
++----------+
+|       col|
++----------+
+|1997-01-01|
++----------+
 
-SELECT TIMESTAMP '1997-01' AS col;
-  +----------+
-  |       col|
-  +----------+
-  |1997-01-01|
-  +----------+
+SELECT DATE '1997-01' AS col;
++----------+
+|       col|
++----------+
+|1997-01-01|
++----------+
 
 SELECT DATE '2011-11-11' AS col;
-  +----------+
-  |       col|
-  +----------+
-  |2011-11-11|
-  +----------+
++----------+
+|       col|
++----------+
+|2011-11-11|
++----------+
 {% endhighlight %}
 
 #### Timestamp Literal
@@ -393,49 +408,13 @@ TIMESTAMP { 'yyyy' |
             'yyyy-[m]m-[d]d[T][h]h[:]' |
             'yyyy-[m]m-[d]d[T][h]h:[m]m[:]' |
             'yyyy-[m]m-[d]d[T][h]h:[m]m:[s]s[.]' |
-            'yyyy-[m]m-[d]d[T][h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]' |
-            '[T][h]h:' |
-            '[T][h]h:[m]m[:]' |
-            '[T][h]h:[m]m:[s]s[.]' |
-            'T[h]h' |
-            '[T][h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]' }
+            'yyyy-[m]m-[d]d[T][h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]'}
 {% endhighlight %}
+Note: defaults to <code>00</code> if hour, minute or second is not specified. <br><br>
 `zone_id` should have one of the forms:
 <ul>
   <li>Z - Zulu time zone UTC+0</li>
   <li>+|-[h]h:[m]m</li>
-  <li>A short id:
-    <ul>
-      <li>EST - -05:00</li>
-      <li>HST - -10:00</li>
-      <li>MST - -07:00</li>
-      <li>ACT - Australia/Darwin</li>
-      <li>AET - Australia/Sydney</li>
-      <li>AGT - America/Argentina/Buenos_Aires</li>
-      <li>ART - Africa/Cairo</li>
-      <li>AST - America/Anchorage</li>
-      <li>BET - America/Sao_Paulo</li>
-      <li>BST - Asia/Dhaka</li>
-      <li>CAT - Africa/Harare</li>
-      <li>CNT - America/St_Johns</li>
-      <li>CST - America/Chicago</li>
-      <li>CTT - Asia/Shanghai</li>
-      <li>EAT - Africa/Addis_Ababa</li>
-      <li>ECT - Europe/Paris</li>
-      <li>IET - America/Indiana/Indianapolis</li>
-      <li>IST - Asia/Kolkata</li>
-      <li>JST - Asia/Tokyo</li>
-      <li>MIT - Pacific/Apia</li>
-      <li>NET - Asia/Yerevan</li>
-      <li>NST - Pacific/Auckland</li>
-      <li>PLT - Asia/Karachi</li>
-      <li>PNT - America/Phoenix</li>
-      <li>PRT - America/Puerto_Rico</li>
-      <li>PST - America/Los_Angeles</li>
-      <li>SST - Pacific/Guadalcanal</li>
-      <li>VST - Asia/Ho_Chi_Minh</li>
-    </ul>
-  </li>
   <li>An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-, and a suffix in the formats:
     <ul>
       <li>+|-h[h]</li>
@@ -446,38 +425,31 @@ TIMESTAMP { 'yyyy' |
   </li>
   <li>Region-based zone IDs in the form <code>area/city</code>, such as <code>Europe/Paris</code></li>
 </ul>
-Note: defaults to system time-zone if <code>zone_id</code> is not specified.
+Note: defaults to the session local timezone (set via <code>spark.sql.session.timeZone</code>) if <code>zone_id</code> is not specified.
 
 #### Examples
 
 {% highlight sql %}
 SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;
-  +-----------------------+
-  |                    col|
-  +-----------------------+
-  |1997-01-31 09:26:56.123|
-  +-----------------------+
++-----------------------+
+|                    col|
++-----------------------+
+|1997-01-31 09:26:56.123|
++-----------------------+
 
 SELECT TIMESTAMP '1997-01-31 09:26:56.66666666CST' AS col;
-  +--------------------------+
-  |                      col |
-  +--------------------------+
-  |1997-01-31 07:26:56.666666|
-  +--------------------------+
++--------------------------+
+|                      col |
++--------------------------+
+|1997-01-31 07:26:56.666666|
++--------------------------+
 
 SELECT TIMESTAMP '1997-01' AS col;
-  +-------------------+
-  |                col|
-  +-------------------+
-  |1997-01-01 00:00:00|
-  +-------------------+
-
-SELECT TIMESTAMP '09:26' AS col;
-  +-------------------+
-  |                col|
-  +-------------------+
-  |2020-04-17 09:26:00|
-  +-------------------+
++-------------------+
+|                col|
++-------------------+
+|1997-01-01 00:00:00|
++-------------------+
 {% endhighlight %}
 
 ### Interval Literal
@@ -487,7 +459,7 @@ An interval literal is used to specify a fixed period of time.
 #### Syntax
 {% highlight sql %}
 { INTERVAL interval_value interval_unit [ interval_value interval_unit ... ] |
-  INTERVAL ' [ INTERVAL ] interval_value interval_unit [ interval_value interval_unit ... ] ' |
+  INTERVAL ' interval_value interval_unit [ interval_value interval_unit ... ] ' |
   INTERVAL interval_string_value interval_unit TO interval_unit }
 {% endhighlight %}
 
@@ -505,7 +477,7 @@ An interval literal is used to specify a fixed period of time.
 <dl>
   <dt><code><em>interval_string_value</em></code></dt>
     <dd>
-      SQL standard year-month/date-time string.
+      year-month/day-time interval string.
     </dd>
 </dl>
 <dl>
@@ -523,38 +495,38 @@ An interval literal is used to specify a fixed period of time.
 
 {% highlight sql %}
 SELECT INTERVAL 3 YEAR AS col;
-  +-------+
-  |    col|
-  +-------+
-  |3 years|
-  +-------+
++-------+
+|    col|
++-------+
+|3 years|
++-------+
 
 SELECT INTERVAL -2 HOUR '3' MINUTE AS col;
-  +--------------------+
-  |                 col|
-  +--------------------+
-  |-1 hours -57 minutes|
-  +--------------------+
++--------------------+
+|                 col|
++--------------------+
+|-1 hours -57 minutes|
++--------------------+
 
 SELECT INTERVAL 'INTERVAL 1 YEAR 2 DAYS 3 HOURS';
-  +----------------------+
-  |                   col|
-  +----------------------+
-  |1 years 2 days 3 hours|
-  +----------------------+
++----------------------+
+|                   col|
++----------------------+
+|1 years 2 days 3 hours|
++----------------------+
 
 SELECT INTERVAL 1 YEARS 2 MONTH 3 WEEK 4 DAYS 5 HOUR 6 MINUTES 7 SECOND 8
     MILLISECOND 9 MICROSECONDS AS col;
-  +-----------------------------------------------------------+
-  |                                                        col|
-  +-----------------------------------------------------------+
-  |1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds|
-  +-----------------------------------------------------------+
++-----------------------------------------------------------+
+|                                                        col|
++-----------------------------------------------------------+
+|1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds|
++-----------------------------------------------------------+
 
 SELECT INTERVAL '20 15:40:32.99899999' DAY TO SECOND AS col;
-  +---------------------------------------------+
-  |                                          col|
-  +---------------------------------------------+
-  |20 days 15 hours 40 minutes 32.998999 seconds|
-  +---------------------------------------------+
++---------------------------------------------+
+|                                          col|
++---------------------------------------------+
+|20 days 15 hours 40 minutes 32.998999 seconds|
++---------------------------------------------+
 {% endhighlight %}
