@@ -2671,6 +2671,8 @@ class SQLConf extends Serializable with Logging {
   @transient protected val reader = new ConfigReader(settings)
 
   /** ************************ Spark SQL Params/Hints ******************* */
+  
+  def windowFunctionOrderEnable: Boolean = getConf(WINDOWFUNCTIONORDER_ENABLE)
 
   def analyzerMaxIterations: Int = getConf(ANALYZER_MAX_ITERATIONS)
 
