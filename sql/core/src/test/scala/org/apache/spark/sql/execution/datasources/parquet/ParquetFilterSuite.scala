@@ -1656,7 +1656,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
         case PhysicalOperation(_, filters,
             DataSourceV2ScanRelation(_, scan: ParquetScan, _)) =>
           assert(filters.nonEmpty, "No filter is analyzed from the given query")
-          val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter).toArray
+          val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter(_, true)).toArray
           val pushedFilters = scan.pushedFilters
           assert(pushedFilters.nonEmpty, "No filter is pushed down")
           val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
