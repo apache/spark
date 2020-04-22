@@ -248,6 +248,34 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void filterByRange() {
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<>();
+    pairs.add(new Tuple2<>(0, 5));
+    pairs.add(new Tuple2<>(1, 8));
+    pairs.add(new Tuple2<>(2, 6));
+    pairs.add(new Tuple2<>(3, 8));
+    pairs.add(new Tuple2<>(4, 8));
+
+    JavaPairRDD<Integer, Integer> rdd = sc.parallelizePairs(pairs).sortByKey();
+
+    // Default comparator
+    JavaPairRDD<Integer, Integer> filteredRDD = rdd.filterByRange(3, 11);
+    List<Tuple2<Integer, Integer>> filteredPairs = filteredRDD.collect();
+    assertEquals(filteredPairs.size(), 2);
+    assertEquals(filteredPairs.get(0), new Tuple2<>(3, 8));
+    assertEquals(filteredPairs.get(1), new Tuple2<>(4, 8));
+
+    // Custom comparator
+    filteredRDD = rdd.filterByRange(Collections.reverseOrder(), 3, -2);
+    filteredPairs = filteredRDD.collect();
+    assertEquals(filteredPairs.size(), 4);
+    assertEquals(filteredPairs.get(0), new Tuple2<>(0, 5));
+    assertEquals(filteredPairs.get(1), new Tuple2<>(1, 8));
+    assertEquals(filteredPairs.get(2), new Tuple2<>(2, 6));
+    assertEquals(filteredPairs.get(3), new Tuple2<>(3, 9));
+  }
+
+  @Test
   public void emptyRDD() {
     JavaRDD<String> rdd = sc.emptyRDD();
     assertEquals("Empty RDD shouldn't have any values", 0, rdd.count());
