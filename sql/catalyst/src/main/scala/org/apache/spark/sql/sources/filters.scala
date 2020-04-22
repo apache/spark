@@ -25,21 +25,8 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * A filter predicate for data sources.
- *
- * Filters with DATE or TIMESTAMP column attributes have values of Java types with
- * date-time fields that are derived from filter date-time value at the default JVM time zone.
- *   - DATE filter values are instances of `java.sql.Date` that are constructed from local
- *     dates with fields (year, month, day). The local dates are derived from numbers of days
- *     since the epoch 1970-01-01 in Proleptic Gregorian calendar.
- *   - TIMESTAMP filter values are instances of `java.sql.Timestamp` that are constructed from
- *     local timestamps with the fields (year, month, day, hour, minute, second with fraction).
- *     The local timestamps are derived from microseconds since the epoch 1970-01-01 00:00:00Z
- *     representing the local timestamp at the default JVM time zone in Proleptic Gregorian
- *     calendar.
- * Since Spark 3.0, date-time filters values are rebased via local dates/timestamps from
- * Proleptic Gregorian calendar to the hybrid calendar (Julian + Gregorian since 1582-10-15)
- * which Java classes `java.sql.Date` and `java.sql.Timestamp` are based on.
+ * A filter predicate for data sources. Mapping between Spark SQL types and filter value
+ * types follow the convention for return type of [[org.apache.spark.sql.Row#get(int)]].
  *
  * @since 1.3.0
  */
