@@ -174,6 +174,12 @@ object SQLConf {
     }
   }
 
+   val WINDOWFUNCTIONORDER_ENABLE = buildConf("spark.sql.optimizer.windowfuncationenable")
+    .doc("When set to true Spark SQL will not table the order by as the necessary " +
+      "when using window funcation")
+    .booleanConf
+    .createWithDefault(true)
+  
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
