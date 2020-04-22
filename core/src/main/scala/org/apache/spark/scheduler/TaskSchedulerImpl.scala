@@ -679,10 +679,12 @@ private[spark] class TaskSchedulerImpl(
           // requirements are not fulfilled, and we should revert the launched tasks).
           if (addressesWithDescs.size != taskSet.numTasks) {
             val errorMsg =
-              s"Fail current round of resource offers for barrier stage ${taskSet.stageId} " +
-              s"because only ${addressesWithDescs.size} out of a total number of " +
-              s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
-              "been blacklisted or cannot fulfill task locality requirements."
+              s"Fail resource offers for barrier stage ${taskSet.stageId} because only " +
+                s"${addressesWithDescs.size} out of a total number of ${taskSet.numTasks}" +
+                s" tasks got resource offers. This happens because barrier execution currently " +
+                s"does not work gracefully with delay scheduling. We highly recommend you to " +
+                s"disable delay scheduling by setting spark.locality.wait=0 as a workaround if " +
+                s"you see this error frequently."
             logWarning(errorMsg)
             taskSet.abort(errorMsg)
             throw new SparkException(errorMsg)
