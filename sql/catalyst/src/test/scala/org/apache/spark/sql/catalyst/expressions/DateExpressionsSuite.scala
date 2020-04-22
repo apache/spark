@@ -1032,94 +1032,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
   }
 
-  test("millennium") {
-    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
-    checkEvaluation(Millennium(date), 3)
-    checkEvaluation(Millennium(date.copy(year = Literal(2001))), 3)
-    checkEvaluation(Millennium(date.copy(year = Literal(2000))), 2)
-    checkEvaluation(Millennium(date.copy(year = Literal(1001), day = Literal(28))), 2)
-    checkEvaluation(Millennium(date.copy(year = Literal(1))), 1)
-    checkEvaluation(Millennium(date.copy(year = Literal(-1))), -1)
-    checkEvaluation(Millennium(date.copy(year = Literal(-100), month = Literal(12))), -1)
-    checkEvaluation(Millennium(date.copy(year = Literal(-2019))), -3)
-  }
-
-  test("century") {
-    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
-    checkEvaluation(Century(date), 21)
-    checkEvaluation(Century(date.copy(year = Literal(2001))), 21)
-    checkEvaluation(Century(date.copy(year = Literal(2000))), 20)
-    checkEvaluation(Century(date.copy(year = Literal(1001), day = Literal(28))), 11)
-    checkEvaluation(Century(date.copy(year = Literal(1))), 1)
-    checkEvaluation(Century(date.copy(year = Literal(-1))), -1)
-    checkEvaluation(Century(date.copy(year = Literal(-100), month = Literal(12))), -2)
-    checkEvaluation(Century(date.copy(year = Literal(-2019))), -21)
-  }
-
-  test("decade") {
-    val date = MakeDate(Literal(2019), Literal(8), Literal(8))
-    checkEvaluation(Decade(date), 201)
-    checkEvaluation(Decade(date.copy(year = Literal(2011))), 201)
-    checkEvaluation(Decade(date.copy(year = Literal(2010))), 201)
-    checkEvaluation(Decade(date.copy(year = Literal(2009))), 200)
-    checkEvaluation(Decade(date.copy(year = Literal(10))), 1)
-    checkEvaluation(Decade(date.copy(year = Literal(1))), 0)
-    checkEvaluation(Decade(date.copy(year = Literal(-1))), -1)
-    checkEvaluation(Decade(date.copy(year = Literal(-10))), -1)
-    checkEvaluation(Decade(date.copy(year = Literal(-11))), -2)
-    checkEvaluation(Decade(date.copy(year = Literal(-2019))), -202)
-  }
-
-  test("milliseconds and microseconds") {
-    outstandingTimezonesIds.foreach { timezone =>
-      var timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
-        Literal(0), Literal(0), Literal(Decimal(BigDecimal(10.123456789), 8, 6)),
-        Some(Literal(timezone)), Some(timezone))
-      def millis(ts: MakeTimestamp): Milliseconds = Milliseconds(timestamp, Some(timezone))
-      def micros(ts: MakeTimestamp): Microseconds = Microseconds(timestamp, Some(timezone))
-
-      checkEvaluation(millis(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
-      checkEvaluation(
-        millis(timestamp.copy(year = Literal(10))),
-        Decimal(BigDecimal(10123.457), 8, 3))
-
-      checkEvaluation(micros(timestamp), 10123457)
-      checkEvaluation(
-        micros(timestamp.copy(year = Literal(10))),
-        10123457)
-
-      timestamp = timestamp.copy(sec = Literal(Decimal(0.0, 8, 6)))
-      checkEvaluation(millis(timestamp), Decimal(0, 8, 3))
-      checkEvaluation(micros(timestamp), 0)
-
-      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(59.999999), 8, 6)))
-      checkEvaluation(millis(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
-      checkEvaluation(micros(timestamp), 59999999)
-
-      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(60.0), 8, 6)))
-      checkEvaluation(millis(timestamp), Decimal(0, 8, 3))
-      checkEvaluation(micros(timestamp), 0)
-    }
-  }
-
-  test("epoch") {
-    val zoneId = ZoneId.systemDefault()
-    val nanos = 123456000
-    val timestamp = Epoch(MakeTimestamp(
-      Literal(2019), Literal(8), Literal(9), Literal(0), Literal(0),
-      Literal(Decimal(nanos / NANOS_PER_SECOND.toDouble, 8, 6)),
-      Some(Literal(zoneId.getId))))
-    val instant = LocalDateTime.of(2019, 8, 9, 0, 0, 0, nanos)
-      .atZone(zoneId).toInstant
-    val expected = Decimal(BigDecimal(nanos) / NANOS_PER_SECOND +
-      instant.getEpochSecond +
-      zoneId.getRules.getOffset(instant).getTotalSeconds)
-    checkEvaluation(timestamp, expected)
-  }
-
   test("ISO 8601 week-numbering year") {
-    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
-    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
+    checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
+    checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
   }
 
   test("extract the seconds part with fraction from timestamps") {

@@ -334,48 +334,6 @@ case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = No
   }
 }
 
-case class Milliseconds(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-  // DecimalType is used here to not lose precision while converting microseconds to
-  // the fractional part of milliseconds. Scale 3 is taken to have all microseconds as
-  // the fraction. The precision 8 should cover 2 digits for seconds, 3 digits for
-  // milliseconds and 3 digits for microseconds.
-  override def dataType: DataType = DecimalType(8, 3)
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMilliseconds(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMilliseconds($c, $zid)")
-  }
-}
-
-case class Microseconds(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-  override def dataType: DataType = IntegerType
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMicroseconds(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMicroseconds($c, $zid)")
-  }
-}
-
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of year of the date/timestamp.",
   examples = """
@@ -426,19 +384,19 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
   }
 }
 
-case class IsoYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class YearOfWeek(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   override def dataType: DataType = IntegerType
 
   override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getIsoYear(date.asInstanceOf[Int])
+    DateTimeUtils.getWeekBasedYear(date.asInstanceOf[Int])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getIsoYear($c)")
+    defineCodeGen(ctx, ev, c => s"$dtu.getWeekBasedYear($c)")
   }
 }
 
@@ -2032,108 +1990,26 @@ case class MakeTimestamp(
   override def prettyName: String = "make_timestamp"
 }
 
-case class Millennium(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getMillennium(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMillennium($c)")
-  }
-}
-
-case class Century(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getCentury(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getCentury($c)")
-  }
-}
-
-case class Decade(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getDecade(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getDecade($c)")
-  }
-}
-
-case class Epoch(child: Expression, timeZoneId: Option[String] = None)
-    extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-  // DecimalType is used to not lose precision while converting microseconds to
-  // the fractional part of seconds. Scale 6 is taken to have all microseconds as
-  // the fraction. The precision 20 should cover whole valid range of years [1, 9999]
-  // plus negative years that can be used in some cases though are not officially supported.
-  override def dataType: DataType = DecimalType(20, 6)
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getEpoch(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    defineCodeGen(ctx, ev, c => s"$dtu.getEpoch($c, $zid)")
-  }
-}
-
 object DatePart {
 
   def parseExtractField(
       extractField: String,
       source: Expression,
       errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
-    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
-    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
     case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
-    case "ISOYEAR" => IsoYear(source)
+    case "YEAROFWEEK" => YearOfWeek(source)
     case "QUARTER" | "QTR" => Quarter(source)
     case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
     case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
     case "DAY" | "D" | "DAYS" => DayOfMonth(source)
     case "DAYOFWEEK" | "DOW" => DayOfWeek(source)
-    case "ISODOW" => Add(WeekDay(source), Literal(1))
+    case "DAYOFWEEK_ISO" | "DOW_ISO" => Add(WeekDay(source), Literal(1))
     case "DOY" => DayOfYear(source)
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
     case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondWithFraction(source)
-    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-      Milliseconds(source)
-    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
-      Microseconds(source)
-    case "EPOCH" => Epoch(source)
     case _ => errorHandleFunc
   }
-}
-
-object DatePartLike {
 
   def toEquivalentExpr(field: Expression, source: Expression): Expression = {
     if (!field.foldable) {
@@ -2191,7 +2067,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   extends RuntimeReplaceable {
 
   def this(field: Expression, source: Expression) = {
-    this(field, source, DatePartLike.toEquivalentExpr(field, source))
+    this(field, source, DatePart.toEquivalentExpr(field, source))
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
@@ -2205,26 +2081,20 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   arguments = """
     Arguments:
       * field - selects which part of the source should be extracted
-          - Supported string values of `field` for dates and timestamps are:
-              - "MILLENNIUM", ("MILLENNIA", "MIL", "MILS") - the conventional numbering of millennia
-              - "CENTURY", ("CENTURIES", "C", "CENT") - the conventional numbering of centuries
-              - "DECADE", ("DECADES", "DEC", "DECS") - the year field divided by 10
+          - Supported string values of `field` for dates and timestamps are(case insensitive):
               - "YEAR", ("Y", "YEARS", "YR", "YRS") - the year field
-              - "ISOYEAR" - the ISO 8601 week-numbering year that the datetime falls in
+              - "YEAROFWEEK" - the ISO 8601 week-numbering year that the datetime falls in. For example, 2005-01-02 is part of the 53rd week of year 2004, so the result is 2004
               - "QUARTER", ("QTR") - the quarter (1 - 4) of the year that the datetime falls in
               - "MONTH", ("MON", "MONS", "MONTHS") - the month field (1 - 12)
               - "WEEK", ("W", "WEEKS") - the number of the ISO 8601 week-of-week-based-year. A week is considered to start on a Monday and week 1 is the first week with >3 days. In the ISO week-numbering system, it is possible for early-January dates to be part of the 52nd or 53rd week of the previous year, and for late-December dates to be part of the first week of the next year. For example, 2005-01-02 is part of the 53rd week of year 2004, while 2012-12-31 is part of the first week of 2013
               - "DAY", ("D", "DAYS") - the day of the month field (1 - 31)
               - "DAYOFWEEK",("DOW") - the day of the week for datetime as Sunday(1) to Saturday(7)
-              - "ISODOW" - ISO 8601 based day of the week for datetime as Monday(1) to Sunday(7)
+              - "DAYOFWEEK_ISO",("DOW_ISO") - ISO 8601 based day of the week for datetime as Monday(1) to Sunday(7)
               - "DOY" - the day of the year (1 - 365/366)
               - "HOUR", ("H", "HOURS", "HR", "HRS") - The hour field (0 - 23)
               - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - the minutes field (0 - 59)
               - "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts
-              - "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS") - the seconds field, including fractional parts, multiplied by 1000. Note that this includes full seconds
-              - "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US") - The seconds field, including fractional parts, multiplied by 1000000. Note that this includes full seconds
-              - "EPOCH" - the number of seconds with fractional part in microsecond precision since 1970-01-01 00:00:00 local time (can be negative)
-          - Supported string values of `field` for interval(which consists of `months`, `days`, `microseconds`) are:
+          - Supported string values of `field` for interval(which consists of `months`, `days`, `microseconds`) are(case insensitive):
               - "YEAR", ("Y", "YEARS", "YR", "YRS") - the total `months` / 12
               - "MONTH", ("MON", "MONS", "MONTHS") - the total `months` % 12
               - "DAY", ("D", "DAYS") - the `days` part of interval
@@ -2257,7 +2127,7 @@ case class Extract(field: Expression, source: Expression, child: Expression)
   extends RuntimeReplaceable {
 
   def this(field: Expression, source: Expression) = {
-    this(field, source, DatePartLike.toEquivalentExpr(field, source))
+    this(field, source, DatePart.toEquivalentExpr(field, source))
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
