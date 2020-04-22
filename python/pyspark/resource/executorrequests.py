@@ -83,8 +83,8 @@ class ExecutorResourceRequests(object):
     .. note:: Evolving
 
     A set of Executor resource requests. This is used in conjunction with the
-    ResourceProfileBuilder to programmatically specify the resources needed for an RDD
-    that will be applied at the stage level.
+    :class:`pyspark.resource.ResourceProfileBuilder` to programmatically specify the
+    resources needed for an RDD that will be applied at the stage level.
 
     .. versionadded:: 3.1.0
     """
