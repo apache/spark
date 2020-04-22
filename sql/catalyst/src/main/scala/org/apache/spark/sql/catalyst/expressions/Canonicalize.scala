@@ -49,10 +49,8 @@ object Canonicalize {
 
   /** Remove TimeZoneId for Cast if needsTimeZone return false. */
   private[expressions] def ignoreTimeZone(e: Expression): Expression = e match {
-    case a: AnsiCast if !a.needsTimeZone && a.timeZoneId.nonEmpty =>
-      a.copy(timeZoneId = None)
-    case c: Cast if !c.needsTimeZone && c.timeZoneId.nonEmpty =>
-      c.copy(timeZoneId = None)
+    case c: CastBase if c.timeZoneId.nonEmpty && !c.needsTimeZone =>
+      c.withTimeZone(null)
     case _ => e
   }
 
