@@ -347,7 +347,8 @@ For example:
 </div>
 
 ## Scalar Functions
-(to be filled soon)
+
+Scalar functions are functions that return a single value per row, as opposed to aggregation functions, which return a value for a group of rows. Spark SQL supports a variety of built-in scalar functions such as [Array Functions](sql-ref-functions-builtin.html#array-functions), [Map Functions](sql-ref-functions-builtin.html#map-functions), [Date and Timestamp Functions](sql-ref-functions-builtin.html#date-and-timestamp-functions), etc. It also supports [User Defined Scalar Functions](sql-ref-functions-udf-scalar.html).
 
 ## Aggregations
 
