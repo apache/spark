@@ -93,7 +93,6 @@ class CanonicalizeSuite extends SparkFunSuite {
     val literal = Literal(1)
     val cast = Cast(literal, LongType)
     val castWithTimeZoneId = Cast(literal, LongType, Some(TimeZone.getDefault.getID))
-
     assert(castWithTimeZoneId.semanticEquals(cast))
   }
 }
