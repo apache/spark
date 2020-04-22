@@ -53,7 +53,7 @@ class AdaptiveQueryExecSuite
         event match {
           case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
             if (sparkPlanInfo.simpleString.startsWith(
-              "AdaptiveSparkPlan(isFinalPlan=true)")) {
+              "AdaptiveSparkPlan isFinalPlan=true")) {
               finalPlanCnt += 1
             }
           case _ => // ignore other events
@@ -64,14 +64,14 @@ class AdaptiveQueryExecSuite
 
     val dfAdaptive = sql(query)
     val planBefore = dfAdaptive.queryExecution.executedPlan
-    assert(planBefore.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=false)"))
+    assert(planBefore.toString.startsWith("AdaptiveSparkPlan isFinalPlan=false"))
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = sql(query)
       QueryTest.sameRows(result.toSeq, df.collect().toSeq)
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
-    assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
+    assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
 
     spark.sparkContext.listenerBus.waitUntilEmpty()
     assert(finalPlanCnt == 1)

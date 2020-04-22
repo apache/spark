@@ -251,10 +251,7 @@ case class AdaptiveSparkPlanExec(
     getFinalPhysicalPlan().execute()
   }
 
-  override def verboseString(maxFields: Int): String = simpleString(maxFields)
-
-  override def simpleString(maxFields: Int): String =
-    s"AdaptiveSparkPlan(isFinalPlan=$isFinalPlan)"
+  protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")
 
   override def generateTreeString(
       depth: Int,
