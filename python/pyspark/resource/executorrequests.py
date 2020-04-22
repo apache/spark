@@ -57,7 +57,7 @@ class ExecutorResourceRequest(object):
     def __init__(self, resourceName, amount, discoveryScript="", vendor=""):
         self._name = resourceName
         self._amount = amount
-        self._discoveryScript = discoveryScript
+        self._discovery_script = discoveryScript
         self._vendor = vendor
 
     @property
@@ -70,7 +70,7 @@ class ExecutorResourceRequest(object):
 
     @property
     def discoveryScript(self):
-        return self._discoveryScript
+        return self._discovery_script
 
     @property
     def vendor(self):

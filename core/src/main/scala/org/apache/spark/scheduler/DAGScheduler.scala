@@ -1140,7 +1140,7 @@ private[spark] class DAGScheduler(
    * `PythonRunner` needs to know what the pyspark memory and cores settings are for the profile
    * being run. Pass them in the local properties of the task if it's set for the stage profile.
    */
-  private def addPysparkConfigsToProperties(stage: Stage, properties: Properties): Unit = {
+  private def addPySparkConfigsToProperties(stage: Stage, properties: Properties): Unit = {
     val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
     val pysparkMem = rp.getPySparkMemory
     // use the getOption on EXECUTOR_CORES.key instead of using the EXECUTOR_CORES config reader
@@ -1176,7 +1176,7 @@ private[spark] class DAGScheduler(
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
     val properties = jobIdToActiveJob(jobId).properties
-    addPysparkConfigsToProperties(stage, properties)
+    addPySparkConfigsToProperties(stage, properties)
 
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are
