@@ -111,8 +111,9 @@ private[spark] class TaskSchedulerImpl(
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
   // keyed by taskset
-  // value is true if the task set's locality wait timer was reset on the last resource offer
-  private val resetOnPreviousOffer = new mutable.HashMap[TaskSet, Boolean]()
+  // value is true if the task set has not rejected any resources due to locality
+  // since the timer was last reset
+  private val noRejectsSinceLastReset = new mutable.HashMap[TaskSet, Boolean]()
   private val legacyLocalityWaitReset = conf.get(LEGACY_LOCALITY_WAIT_RESET)
 
   // Protected by `this`
@@ -336,7 +337,7 @@ private[spark] class TaskSchedulerImpl(
         taskSetsByStageIdAndAttempt -= manager.taskSet.stageId
       }
     }
-    resetOnPreviousOffer -= manager.taskSet
+    noRejectsSinceLastReset -= manager.taskSet
     manager.parent.removeSchedulable(manager)
     logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
       s" ${manager.parent.name}")
@@ -615,13 +616,14 @@ private[spark] class TaskSchedulerImpl(
         }
 
         if (!legacyLocalityWaitReset) {
-          if (noDelaySchedulingRejects && launchedAnyTask) {
-            if (isAllFreeResources || resetOnPreviousOffer.getOrElse(taskSet.taskSet, true)) {
+          if (noDelaySchedulingRejects) {
+            if (launchedAnyTask &&
+              (isAllFreeResources || noRejectsSinceLastReset.getOrElse(taskSet.taskSet, true))) {
               taskSet.resetDelayScheduleTimer(globalMinLocality)
-              resetOnPreviousOffer.update(taskSet.taskSet, true)
+              noRejectsSinceLastReset.update(taskSet.taskSet, true)
             }
           } else {
-            resetOnPreviousOffer.update(taskSet.taskSet, false)
+            noRejectsSinceLastReset.update(taskSet.taskSet, false)
           }
         }
 
