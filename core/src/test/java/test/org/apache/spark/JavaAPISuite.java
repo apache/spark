@@ -272,7 +272,7 @@ public class JavaAPISuite implements Serializable {
     assertEquals(filteredPairs.get(0), new Tuple2<>(0, 5));
     assertEquals(filteredPairs.get(1), new Tuple2<>(1, 8));
     assertEquals(filteredPairs.get(2), new Tuple2<>(2, 6));
-    assertEquals(filteredPairs.get(3), new Tuple2<>(3, 9));
+    assertEquals(filteredPairs.get(3), new Tuple2<>(3, 8));
   }
 
   @Test
