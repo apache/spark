@@ -233,7 +233,7 @@ class Analyzer(
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
-      ResolveWindowOrder ::
+      new ResolveWindowOrder(conf)::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
@@ -2767,10 +2767,12 @@ class Analyzer(
 
   /**
    * Check and add order to [[AggregateWindowFunction]]s.
+   * SPARK-31512 ,make the order by optional
    */
-  object ResolveWindowOrder extends Rule[LogicalPlan] {
+  class ResolveWindowOrder(conf : SQLConf) extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-      case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
+      case WindowExpression(wf: WindowFunction, spec) 
+      if (conf.windowFunctionOrderEnable && spec.orderSpec.isEmpty) =>
         failAnalysis(s"Window function $wf requires window to be ordered, please add ORDER BY " +
           s"clause. For example SELECT $wf(value_expr) OVER (PARTITION BY window_partition " +
           s"ORDER BY window_ordering) from table")
