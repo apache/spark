@@ -35,7 +35,7 @@ A string literal is used to specify a character string value.
 #### Syntax
 
 {% highlight sql %}
-'c [ ... ]' | "c [ ... ]"
+[ X ] { 'c [ ... ]' | "c [ ... ]" }
 {% endhighlight %}
 
 #### <em>Parameters</em>
@@ -44,6 +44,12 @@ A string literal is used to specify a character string value.
   <dt><code><em>c</em></code></dt>
   <dd>
     One character from the character set. Use <code>\</code> to escape special characters (e.g., <code>'</code> or <code>\</code>).
+  </dd>
+</dl>
+<dl>
+  <dt><code><em>X</em></code></dt>
+  <dd>
+    Indicates the string literal is in binary format.
   </dd>
 </dl>
 
