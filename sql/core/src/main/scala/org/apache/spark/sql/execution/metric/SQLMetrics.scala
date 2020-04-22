@@ -87,7 +87,7 @@ object SQLMetrics {
   private val TIMING_METRIC = "timing"
   private val NS_TIMING_METRIC = "nsTiming"
   private val AVERAGE_METRIC = "average"
-  private val NUM_METRIC = "num"
+  private val NUMBER_METRIC = "num"
 
   private val baseForAvgMetric: Int = 10
 
@@ -109,7 +109,7 @@ object SQLMetrics {
   }
 
   def createNumMetric(sc: SparkContext, name: String): SQLMetric = {
-    val acc = new SQLMetric(NUM_METRIC)
+    val acc = new SQLMetric(NUMBER_METRIC)
     acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
@@ -206,8 +206,8 @@ object SQLMetrics {
         Utils.msDurationToString
       } else if (metricsType == NS_TIMING_METRIC) {
         duration => Utils.msDurationToString(duration.nanos.toMillis)
-      } else if (metricsType == NUM_METRIC) {
-        Utils.numToString
+      } else if (metricsType == NUMBER_METRIC) {
+        _.toString
       } else {
         throw new IllegalStateException("unexpected metrics type: " + metricsType)
       }

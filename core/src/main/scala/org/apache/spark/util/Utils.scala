@@ -1220,11 +1220,7 @@ private[spark] object Utils extends Logging {
         "%.2f h".formatLocal(locale, t.toFloat / hour)
     }
   }
-
-  def numToString(num: Long): String = {
-    num.toString
-  }
-
+  
   /**
    * Convert a quantity in megabytes to a human-readable string such as "4.0 MiB".
    */
