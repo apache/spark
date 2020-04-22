@@ -65,7 +65,7 @@ SELECT "SPARK SQL" AS col;
 |Spark SQL|
 +---------+
 
-SELECT SELECT 'it\'s $10.' AS col;
+SELECT 'it\'s $10.' AS col;
 +---------+
 |      col|
 +---------+
@@ -367,7 +367,7 @@ A Datetime literal is used to specify a datetime value.
 DATE { 'yyyy' |
        'yyyy-[m]m' |
        'yyyy-[m]m-[d]d' |
-       'yyyy-[m]m-[d]d ' }
+       'yyyy-[m]m-[d]d[T]' }
 {% endhighlight %}
 Note: defaults to <code>01</code> if month or day is not specified.
 
@@ -459,7 +459,7 @@ An interval literal is used to specify a fixed period of time.
 #### Syntax
 {% highlight sql %}
 { INTERVAL interval_value interval_unit [ interval_value interval_unit ... ] |
-  INTERVAL ' interval_value interval_unit [ interval_value interval_unit ... ] ' |
+  INTERVAL 'interval_value interval_unit [ interval_value interval_unit ... ]' |
   INTERVAL interval_string_value interval_unit TO interval_unit }
 {% endhighlight %}
 
@@ -470,7 +470,7 @@ An interval literal is used to specify a fixed period of time.
   <dd>
     <b>Syntax:</b>
       <code>
-        [ + | - ] number_value | ' [ + | - ] number_value '
+        [ + | - ] number_value | '[ + | - ] number_value'
       </code><br>
   </dd>
 </dl>
