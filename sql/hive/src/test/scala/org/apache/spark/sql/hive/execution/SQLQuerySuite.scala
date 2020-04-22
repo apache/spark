@@ -2495,7 +2495,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-31522: hive metastore related configurations should be static") {
-    Seq("spark.sql.hive.metastore.version ",
+    Seq("spark.sql.hive.metastore.version",
       "spark.sql.hive.version",
       "spark.sql.hive.metastore.jars",
       "spark.sql.hive.metastore.sharedPrefixes",
