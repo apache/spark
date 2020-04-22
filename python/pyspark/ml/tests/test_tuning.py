@@ -352,6 +352,33 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvModel.save(cvModelPath)
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+        self.assertEqual(len(loadedModel.bestModel.stages), len(cvModel.bestModel.stages))
+        for loadedStage, originalStage in zip(loadedModel.bestModel.stages,
+                                              cvModel.bestModel.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
+
+        # Test nested pipeline
+        nested_pipeline = Pipeline(stages=[tokenizer, Pipeline(stages=[hashingTF, ova])])
+        crossval2 = CrossValidator(estimator=nested_pipeline,
+                                   estimatorParamMaps=paramGrid,
+                                   evaluator=MulticlassClassificationEvaluator(),
+                                   numFolds=2)  # use 3+ folds in practice
+
+        # Run cross-validation, and choose the best set of parameters.
+        cvModel2 = crossval2.fit(training)
+        # test save/load of CrossValidatorModel
+        cvModelPath2 = temp_path + "/cvModel2"
+        cvModel2.save(cvModelPath2)
+        loadedModel2 = CrossValidatorModel.load(cvModelPath2)
+        self.assertEqual(loadedModel2.bestModel.uid, cvModel2.bestModel.uid)
+        loaded_nested_pipeline_model = loadedModel2.bestModel.stages[1]
+        original_nested_pipeline_model = cvModel2.bestModel.stages[1]
+        self.assertEqual(loaded_nested_pipeline_model.uid, original_nested_pipeline_model.uid)
+        self.assertEqual(len(loaded_nested_pipeline_model.stages),
+                         len(original_nested_pipeline_model.stages))
+        for loadedStage, originalStage in zip(loaded_nested_pipeline_model.stages,
+                                              original_nested_pipeline_model.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
 
 
 class TrainValidationSplitTests(SparkSessionTestCase):
@@ -586,7 +613,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
                                    estimatorParamMaps=paramGrid,
                                    evaluator=MulticlassClassificationEvaluator())
 
-        # Run cross-validation, and choose the best set of parameters.
+        # Run train validation split, and choose the best set of parameters.
         tvsModel = tvs.fit(training)
 
         # test save/load of CrossValidatorModel
@@ -594,6 +621,32 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+        self.assertEqual(len(loadedModel.bestModel.stages), len(tvsModel.bestModel.stages))
+        for loadedStage, originalStage in zip(loadedModel.bestModel.stages,
+                                              tvsModel.bestModel.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
+
+        # Test nested pipeline
+        nested_pipeline = Pipeline(stages=[tokenizer, Pipeline(stages=[hashingTF, ova])])
+        tvs2 = TrainValidationSplit(estimator=nested_pipeline,
+                                    estimatorParamMaps=paramGrid,
+                                    evaluator=MulticlassClassificationEvaluator())
+
+        # Run train validation split, and choose the best set of parameters.
+        tvsModel2 = tvs2.fit(training)
+        # test save/load of CrossValidatorModel
+        tvsModelPath2 = temp_path + "/tvsModel2"
+        tvsModel2.save(tvsModelPath2)
+        loadedModel2 = TrainValidationSplitModel.load(tvsModelPath2)
+        self.assertEqual(loadedModel2.bestModel.uid, tvsModel2.bestModel.uid)
+        loaded_nested_pipeline_model = loadedModel2.bestModel.stages[1]
+        original_nested_pipeline_model = tvsModel2.bestModel.stages[1]
+        self.assertEqual(loaded_nested_pipeline_model.uid, original_nested_pipeline_model.uid)
+        self.assertEqual(len(loaded_nested_pipeline_model.stages),
+                         len(original_nested_pipeline_model.stages))
+        for loadedStage, originalStage in zip(loaded_nested_pipeline_model.stages,
+                                              original_nested_pipeline_model.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
 
     def test_copy(self):
         dataset = self.spark.createDataFrame([
