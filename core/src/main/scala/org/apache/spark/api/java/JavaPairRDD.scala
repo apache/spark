@@ -943,6 +943,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * performed efficiently by only scanning the partitions that might containt matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.
    */
+  @Since("3.1.0")
   def filterByRange(lower: K, upper: K): JavaPairRDD[K, V] = {
     val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
     filterByRange(comp, lower, upper)
@@ -954,6 +955,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * performed efficiently by only scanning the partitions that might containt matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.
    */
+  @Since("3.1.0")
   def filterByRange(comp: Comparator[K], lower: K, upper: K): JavaPairRDD[K, V] = {
     implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
     fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).filterByRange(lower, upper))
