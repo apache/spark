@@ -943,6 +943,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
    * performed efficiently by only scanning the partitions that might containt matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.
+   *
+   * @since 3.1.0
    */
   @Since("3.1.0")
   def filterByRange(lower: K, upper: K): JavaPairRDD[K, V] = {
@@ -955,6 +957,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
    * performed efficiently by only scanning the partitions that might containt matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.
+   *
+   * @since 3.1.0
    */
   @Since("3.1.0")
   def filterByRange(comp: Comparator[K], lower: K, upper: K): JavaPairRDD[K, V] = {
