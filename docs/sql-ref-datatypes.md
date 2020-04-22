@@ -727,26 +727,34 @@ Spark SQL supports several special floating point values in a case-insensitive m
 
 {% highlight sql %}
 SELECT double('infinity');
-  +------------------------+
-  |CAST(infinity AS DOUBLE)|
-  +------------------------+
-  |                Infinity|
-  +------------------------+
++------------------------+
+|CAST(infinity AS DOUBLE)|
++------------------------+
+|                Infinity|
++------------------------+
 
 SELECT float('-inf');
-  +-------------------+
-  |CAST(-inf AS FLOAT)|
-  +-------------------+
-  |          -Infinity|
-  +-------------------+
++-------------------+
+|CAST(-inf AS FLOAT)|
++-------------------+
+|          -Infinity|
++-------------------+
 
 SELECT float('NaN');
-  +------------------+
-  |CAST(NaN AS FLOAT)|
-  +------------------+
-  |               NaN|
-  +------------------+
++------------------+
+|CAST(NaN AS FLOAT)|
++------------------+
+|               NaN|
++------------------+
 {% endhighlight %}
+
+### -Infinity/Infinity Semantics
+
+ - Infinity = Infinity, Inf = Infinity, -Infinity = -Infinity and -Inf = -Infinity return true.
+ - In aggregations, all Inf/Infinity or -Inf/-Infinity values are grouped together.
+ - Inf/Infinity/-Inf/Infinity are treated as a normal value in join keys.
+ - Inf/Infinity sort lower than NaN and higher than any other value.
+ - -Inf/-Infinity sort lower than any other value.
 
 ### NaN Semantics
 
