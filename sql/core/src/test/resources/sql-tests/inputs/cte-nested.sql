@@ -103,3 +103,11 @@ SELECT (
     SELECT * FROM t
   )
 );
+
+-- CTE in subquery expression shadows outer 4
+WITH t(c) AS (SELECT 1)
+SELECT * FROM t
+WHERE c IN (
+  WITH t(c) AS (SELECT 2)
+  SELECT * FROM t
+);

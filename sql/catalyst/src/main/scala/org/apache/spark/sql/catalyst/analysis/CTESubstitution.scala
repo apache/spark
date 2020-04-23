@@ -31,28 +31,28 @@ object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     LegacyBehaviorPolicy.withName(SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
       case LegacyBehaviorPolicy.EXCEPTION =>
-        assertNoNameConflictsInCTE(plan, inTraverse = false)
-        traverseAndSubstituteCTE(plan, inTraverse = false)
+        assertNoNameConflictsInCTE(plan)
+        traverseAndSubstituteCTE(plan)
       case LegacyBehaviorPolicy.LEGACY =>
         legacyTraverseAndSubstituteCTE(plan)
       case LegacyBehaviorPolicy.CORRECTED =>
-        traverseAndSubstituteCTE(plan, inTraverse = false)
+        traverseAndSubstituteCTE(plan)
     }
   }
 
   /**
    * Check the plan to be traversed has naming conflicts in nested CTE or not, traverse through
-   * child, innerChildren and subquery for the current plan.
+   * child, innerChildren and subquery expressions for the current plan.
    */
   private def assertNoNameConflictsInCTE(
       plan: LogicalPlan,
-      inTraverse: Boolean,
-      cteNames: Set[String] = Set.empty): Unit = {
-    plan.foreach {
+      namesInChildren: Set[String] = Set.empty,
+      namesInExpressions: Set[String] = Set.empty): Unit = {
+    plan match {
       case w @ With(child, relations) =>
         val newNames = relations.map {
           case (cteName, _) =>
-            if (cteNames.contains(cteName)) {
+            if (namesInChildren.contains(cteName)) {
               throw new AnalysisException(s"Name $cteName is ambiguous in nested CTE. " +
                 s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
                 "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
@@ -60,24 +60,14 @@ object CTESubstitution extends Rule[LogicalPlan] {
             } else {
               cteName
             }
-        }.toSet
-        child.transformExpressions {
-          case e: SubqueryExpression =>
-            assertNoNameConflictsInCTE(e.plan, inTraverse = true, cteNames ++ newNames)
-            e
-        }
-        w.innerChildren.foreach { p =>
-          assertNoNameConflictsInCTE(p, inTraverse = true, cteNames ++ newNames)
-        }
+        }.toSet ++ namesInExpressions
+        assertNoNameConflictsInCTE(child, namesInChildren, newNames)
+        w.innerChildren.foreach(assertNoNameConflictsInCTE(_, newNames, newNames))
 
-      case other if inTraverse =>
-        other.transformExpressions {
-          case e: SubqueryExpression =>
-            assertNoNameConflictsInCTE(e.plan, inTraverse = true, cteNames)
-            e
-        }
-
-      case _ =>
+      case other =>
+        other.subqueries.foreach(
+          assertNoNameConflictsInCTE(_, namesInExpressions, namesInExpressions))
+        other.children.foreach(assertNoNameConflictsInCTE(_, namesInChildren, namesInExpressions))
     }
   }
 
@@ -131,37 +121,27 @@ object CTESubstitution extends Rule[LogicalPlan] {
    *     SELECT * FROM t
    *   )
    * @param plan the plan to be traversed
-   * @param inTraverse whether the current traverse is called from another traverse, only in this
-   *                   case name collision can occur
    * @return the plan where CTE substitution is applied
    */
-  private def traverseAndSubstituteCTE(plan: LogicalPlan, inTraverse: Boolean): LogicalPlan = {
+  private def traverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
       case With(child: LogicalPlan, relations) =>
-        // child might contain an inner CTE that has priority so traverse and substitute inner CTEs
-        // in child first
-        val traversedChild: LogicalPlan = child transformExpressions {
-          case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
-        }
-
         // Substitute CTE definitions from last to first as a CTE definition can reference a
         // previous one
-        relations.foldRight(traversedChild) {
+        relations.foldRight(child) {
           case ((cteName, ctePlan), currentPlan) =>
             // A CTE definition might contain an inner CTE that has priority, so traverse and
             // substitute CTE defined in ctePlan.
             // A CTE definition might not be used at all or might be used multiple times. To avoid
             // computation if it is not used and to avoid multiple recomputation if it is used
             // multiple times we use a lazy construct with call-by-name parameter passing.
-            lazy val substitutedCTEPlan = traverseAndSubstituteCTE(ctePlan, true)
+            lazy val substitutedCTEPlan = traverseAndSubstituteCTE(ctePlan)
             substituteCTE(currentPlan, cteName, substitutedCTEPlan)
         }
 
-      // CTE name collision can occur only when inTraverse is true, it helps to avoid eager CTE
-      // substitution in a subquery expression.
-      case other if inTraverse =>
+      case other =>
         other.transformExpressions {
-          case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
+          case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan))
         }
     }
   }
