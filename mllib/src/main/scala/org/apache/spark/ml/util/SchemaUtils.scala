@@ -40,11 +40,10 @@ private[spark] object SchemaUtils {
       msg: String = ""): Unit = {
     val actualDataType = schema(colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
-    require(actualDataType.getClass.getPackage.equals(dataType.getClass.getPackage),
-      s"Column $colName  of type ${dataType.typeName} must belong to ml package")
-    require(actualDataType.equals(dataType),
-      s"Column $colName must be of type ${dataType.catalogString} but was actually " +
-        s"${actualDataType.catalogString}.$message")
+    require(actualDataType.getClass.equals(dataType.getClass) &&
+      actualDataType.equals(dataType),
+      s"Column $colName must be of type ${dataType.getClass} ${dataType.catalogString} " +
+        s"but was actually ${actualDataType.getClass} ${actualDataType.catalogString}.$message")
   }
 
   /**
