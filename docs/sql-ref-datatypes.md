@@ -714,48 +714,53 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 Spark SQL supports several special floating point values in a case-insensitive manner:
 
  * Inf/+Inf/Infinity/+Infinity: positive infinity
-   * ```FloatType```: 1.0f / 0.0f, which is equal to the value returned by <code>java.lang.Float.intBitsToFloat(0x7f800000)</code>.
-   * ```DoubleType```: 1.0 / 0.0, which is equal to the value returned by <code>java.lang.Double.longBitsToDouble(0x7ff0000000000000L)</code>.
+   * ```FloatType```: equivalent to Scala <code>Float.PositiveInfinity</code>.
+   * ```DoubleType```: equivalent to Scala <code>Double.PositiveInfinity</code>.
  * -Inf/-Infinity: negative infinity
-   * ```FloatType```: -1.0f / 0.0f, which is equal to the value returned by <code>java.lang.Float.intBitsToFloat(0xff800000)</code>.
-   * ```DoubleType```: -1.0 / 0.0, which is equal to the value returned by <code>java.lang.Double.longBitsToDouble(0xfff0000000000000L)</code>.
+   * ```FloatType```: equivalent to Scala <code>Float.NegativeInfinity</code>.
+   * ```DoubleType```: equivalent to Scala <code>Double.NegativeInfinity</code>.
  * NaN: not a number
-   * ```FloatType```: 0.0f / 0.0f, which is equivalent to the value returned by <code>java.lang.Float.intBitsToFloat(0x7fc00000)</code>.
-   * ```DoubleType```:  0.0d / 0.0, which is equivalent to the value returned by <code>java.lang.Double.longBitsToDouble(0x7ff8000000000000L)</code>.
+   * ```FloatType```: equivalent to Scala <code>Float.NaN</code>.
+   * ```DoubleType```:  equivalent to Scala <code>Double.NaN</code>.
 
 #### Examples
 
 {% highlight sql %}
-SELECT double('infinity');
-+------------------------+
-|CAST(infinity AS DOUBLE)|
-+------------------------+
-|                Infinity|
-+------------------------+
+SELECT double('infinity') AS col;
++--------+
+|     col|
++--------+
+|Infinity|
++--------+
 
-SELECT float('-inf');
-+-------------------+
-|CAST(-inf AS FLOAT)|
-+-------------------+
-|          -Infinity|
-+-------------------+
+SELECT float('-inf') AS col;
++---------+
+|      col|
++---------+
+|-Infinity|
++---------+
 
-SELECT float('NaN');
-+------------------+
-|CAST(NaN AS FLOAT)|
-+------------------+
-|               NaN|
-+------------------+
+SELECT float('NaN') AS col;
++---+
+|col|
++---+
+|NaN|
++---+
 {% endhighlight %}
 
-### Negative/positive Infinity Semantics
-There is special handling for negative and positive infinity. They have the following semantics:
+### Positive/negative Infinity Semantics
+There is special handling for positive and negative infinity. They have the following semantics:
 
+ - Positive infinity multiplied by any positive value returns positive infinity.
+ - Negative infinity multiplied by any positive value returns negative infinity.
+ - Positive infinity multiplied by any negative value returns negative infinity.
+ - Negative infinity multiplied by any negative value returns positive infinity.
+ - Positive infinity/Negtive infinity multiplied by 0 returns NaN.
  - Infinity = Infinity, Inf = Infinity, -Infinity = -Infinity and -Inf = -Infinity return true.
- - In aggregations, all Inf/Infinity or -Inf/-Infinity values are grouped together.
- - Inf/Infinity/-Inf/Infinity are treated as a normal value in join keys.
- - Inf/Infinity sort lower than NaN and higher than any other value.
- - -Inf/-Infinity sort lower than any other value.
+ - In aggregations, all positive infinity values are grouped together. Similarly,  all negative infinity values are grouped together.
+ - Positive infinity and negative infinity are treated as normal values in join keys.
+ - Positive infinity sorts lower than NaN and higher than any other value.
+ - Negatie infinity sorts lower than any other value.
 
 ### NaN Semantics
 
