@@ -1627,10 +1627,10 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
      Arguments:
        * date - date value or valid date string
        * fmt - the format representing the unit to be truncated to
-           - "YEAR", "YYYY", "YY" - truncate to the first date of the year
-           - "QUARTER" - truncate to the closest quarter start date
-           - "MONTH", "MM", "MON" - truncate to the first date of the month
-           - "WEEK" - truncate to the closest Monday
+           - "YEAR", "YYYY", "YY" - truncate to the first date of the year that the `date` falls in
+           - "QUARTER" - truncate to the first date of the quarter that the `date` falls in
+           - "MONTH", "MM", "MON" - truncate to the first date of the month that the `date` falls in
+           - "WEEK" - truncate to the Monday of the week that the `date` falls in
   """,
   examples = """
     Examples:
@@ -1680,15 +1680,15 @@ case class TruncDate(date: Expression, format: Expression)
   arguments = """
      Arguments:
        * fmt - the format representing the unit to be truncated to
-           - "YEAR", "YYYY", "YY" - truncate to the first date of the year, the time part will be zero out
-           - "QUARTER" - truncate to the closest quarter start date, the time part will be zero out
-           - "MONTH", "MM", "MON" - truncate to the first date of the month, the time part will be zero out
-           - "WEEK" - truncate to the closest Monday, the time part will be zero out
-           - "DAY", "DD" - truncate to the closest midnight, the time part will be zero out
-           - "HOUR" - truncate to the closest hour, the minute and second with fraction will be zero out
-           - "MINUTE"- truncate to the closest minute, the second with fraction will be zero out
-           - "SECOND" - truncate to the closest second, the second fraction part will be zero out
-           - "MILLISECOND" - truncate to the closest millisecond, the microseconds will be zero out
+           - "YEAR", "YYYY", "YY" - truncate to the first date of the year that the `ts` falls in, the time part will be zero out
+           - "QUARTER" - truncate to the first date of the quarter that the `ts` falls in, the time part will be zero out
+           - "MONTH", "MM", "MON" - truncate to the first date of the month that the `ts` falls in, the time part will be zero out
+           - "WEEK" - truncate to the Monday of the week that the `ts` falls in, the time part will be zero out
+           - "DAY", "DD" - zero out the time part
+           - "HOUR" - zero out the minute and second with fraction part
+           - "MINUTE"- zero out the second with fraction part
+           - "SECOND" -  zero out the second fraction part
+           - "MILLISECOND" - zero out the microseconds
            - "MICROSECOND" - everything remains
        * ts - datetime value or valid timestamp string
   """,
