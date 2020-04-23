@@ -716,7 +716,7 @@ object DateTimeUtils {
   private[sql] val TRUNC_TO_MINUTE = 3
   private[sql] val TRUNC_TO_HOUR = 4
   private[sql] val TRUNC_TO_DAY = 5
-  // The levels from TRUNC_TO_WEEK to TRUNC_TO_MILLENNIUM are used in truncations
+  // The levels from TRUNC_TO_WEEK to TRUNC_TO_YEAR are used in truncations
   // of DATE and TIMESTAMP values.
   private[sql] val TRUNC_TO_WEEK = 6
   private[sql] val MIN_LEVEL_OF_DATE_TRUNC = TRUNC_TO_WEEK
@@ -768,7 +768,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_MILLENNIUM,
+   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR,
    * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
   def parseTruncLevel(format: UTF8String): Int = {
