@@ -113,18 +113,19 @@ case class CustomShuffleReaderExec private(
     }
   }
 
-  @transient private lazy val skewedPartitionMetrics: Option[mutable.HashMap[Int, Long]] = {
+  @transient private lazy val skewedPartitionMetrics: Option[Seq[Long]] = {
     if (hasSkewedPartition) {
       val skewedMetrics = new mutable.HashMap[Int, Long]()
-      partitionSpecs.collect {
+      partitionSpecs.foreach {
         case p: PartialReducerPartitionSpec =>
           if (skewedMetrics.contains(p.reducerIndex)) {
-            skewedMetrics(p.reducerIndex) = skewedMetrics.get(p.reducerIndex).get + 1
+            skewedMetrics(p.reducerIndex) = skewedMetrics(p.reducerIndex) + 1
           } else {
             skewedMetrics.put(p.reducerIndex, 1)
           }
+        case _ => None
       }
-      Some(skewedMetrics)
+      Some(skewedMetrics.values.toSeq)
     } else {
       None
     }
@@ -145,12 +146,10 @@ case class CustomShuffleReaderExec private(
       skewedPartitions.set(skewedPartitionMetric.size)
       driverAccumUpdates += (skewedPartitions.id -> skewedPartitionMetric.size.toLong)
 
-      skewedPartitionMetric.map(metric =>
-        driverAccumUpdates += (skewedSplits.id -> metric._2)
-      )
+      driverAccumUpdates ++= skewedPartitionMetric.map(skewedSplits.id -> _)
 
       // Set sum value to "skewedSplits" metric.
-      skewedSplits.set(skewedPartitionMetric.map(_._2).sum)
+      skewedSplits.set(skewedPartitionMetric.sum)
     }
 
     partitionDataSizes.foreach { dataSizes =>
@@ -177,9 +176,9 @@ case class CustomShuffleReaderExec private(
       } ++ {
         if (hasSkewedPartition) {
           Map("numSkewedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of skewed partitions")) ++
-          Map("numSkewedSplits" ->
-            SQLMetrics.createNumMetric(sparkContext, "number of skewed partition splits"))
+            SQLMetrics.createMetric(sparkContext, "number of skewed partitions"),
+            "numSkewedSplits" ->
+              SQLMetrics.createNumMetric(sparkContext, "number of skewed partition splits"))
         } else {
           Map.empty
         }
