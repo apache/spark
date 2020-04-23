@@ -39,6 +39,9 @@ public class ExpressionInfo {
     private String since;
     private String deprecated;
 
+    // The groups below are almost the same with ones defined in `sql/functions.sql`.
+    // But, `collection_funcs` is split into fine-grained three groups: `array_funcs`, `map_funcs`,
+    // and `json_funcs`.
     private static final Set<String> validGroups =
         new HashSet<>(Arrays.asList("agg_funcs", "array_funcs", "datetime_funcs",
             "json_funcs", "map_funcs", "window_funcs"));
