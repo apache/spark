@@ -1373,7 +1373,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Add a predicate to the given expression. Supported expressions are:
    * - (NOT) BETWEEN
    * - (NOT) IN
-   * - (NOT) LIKE (ANY | ALL)
+   * - (NOT) LIKE (ANY | SOME | ALL)
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
    * - IS (NOT) (TRUE | FALSE | UNKNOWN)
@@ -1391,9 +1391,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case other => Seq(other)
     }
 
-    def getLikeQuantifierExps(expressions: java.util.List[ExpressionContext]): Seq[Expression] = {
+    def getLikeQuantifierExprs(expressions: java.util.List[ExpressionContext]): Seq[Expression] = {
       if (expressions.isEmpty) {
-        throw new ParseException("Syntax error: expected something between '(' and ')'.", ctx)
+        throw new ParseException("Expected something between '(' and ')'.", ctx)
       } else {
         expressions.asScala.map(expression).map(p => invertIfNotDefined(new Like(e, p)))
       }
@@ -1412,15 +1412,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
         Option(ctx.quantifier).map(_.getType) match {
-          case Some(SqlBaseParser.ANY) =>
-            getLikeQuantifierExps(ctx.expression).reduceLeft(Or)
+          case Some(SqlBaseParser.ANY) | Some(SqlBaseParser.SOME) =>
+            getLikeQuantifierExprs(ctx.expression).reduceLeft(Or)
           case Some(SqlBaseParser.ALL) =>
-            getLikeQuantifierExps(ctx.expression).reduceLeft(And)
+            getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
           case _ =>
             val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
               if (str.length != 1) {
                 throw new ParseException("Invalid escape string." +
-                  "Escape string must contains only one character.", ctx)
+                  "Escape string must contain only one character.", ctx)
               }
               str.charAt(0)
             }.getOrElse('\\')
