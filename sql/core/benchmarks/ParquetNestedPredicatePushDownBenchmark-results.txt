@@ -1,0 +1,21 @@
+OpenJDK 64-Bit Server VM 1.8.0_252-b09 on Mac OS X 10.14.6
+Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+LoadNoRowGroupsWhenPredicatePushedDown:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+NestedFieldsPredicatePushDownDisabled             33189          34705         443          3.2         316.5       1.0X
+NestedFieldsPredicatePushDownEnabled                 81             93           8       1291.5           0.8     408.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_252-b09 on Mac OS X 10.14.6
+Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+LoadSomeRowGroupsWhenPredicatePushedDown:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+NestedFieldsPredicatePushDownDisabled             33122          34397         901          3.2         315.9       1.0X
+NestedFieldsPredicatePushDownEnabled               3393           3449          54         30.9          32.4       9.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_252-b09 on Mac OS X 10.14.6
+Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+LoadAllRowGroupsWhenPredicatePushedDown:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+NestedFieldsPredicatePushDownDisabled             35266          35849         572          3.0         336.3       1.0X
+NestedFieldsPredicatePushDownEnabled              34682          36049         NaN          3.0         330.8       1.0X
+

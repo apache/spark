@@ -78,6 +78,7 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
         benchmark.run()
     }
   }
+
   /**
    * Benchmark for sorted data with a filter which allows to filter out all the row groups
    * when nested fields predicate push down enabled
@@ -104,14 +105,12 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
    * overhead or not if enable nested predicate push down.
    */
   def runLoadAllRowGroupsWhenPredicatePushedDown(): Unit = {
-
     // all row groups will be loaded with a whole range filter
     val filterFn: DataFrame => DataFrame = { df =>
       df.filter("nested.x >= 0").filter(s"nested.x <= $N")
     }
     createAndRunBenchmark("LoadAllRowGroupsWhenPredicatePushedDown", filterFn)
   }
-
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runLoadNoRowGroupWhenPredicatePushedDown()
