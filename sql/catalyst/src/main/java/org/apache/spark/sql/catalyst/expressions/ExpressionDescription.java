@@ -79,8 +79,8 @@ import java.lang.annotation.RetentionPolicy;
  * </code>
  * </pre>
  *
- *  We can refer the function name by `_FUNC_`, in `usage()`, `arguments()` and `examples()` as
- *  it is registered in `FunctionRegistry`.
+ *  We can refer the function name by `_FUNC_`, in `usage()`, `arguments()`, `examples()` and
+ *  `note()` as it is registered in `FunctionRegistry`.
  *
  *  Note that, if `extended()` is defined, `arguments()`, `examples()`, `note()`, `group()`,
  *  `since()` and `deprecated()` should be not defined together. `extended()` exists
