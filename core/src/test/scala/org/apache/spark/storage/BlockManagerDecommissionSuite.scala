@@ -100,16 +100,5 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // should have same value like before
     assert(sleepyRdd.count() === 10)
     assert(accum.value === 10)
-
-    // all cache block should have been shifted from decommissioned block manager
-    // after some time
-    Thread.sleep(1000)
-    val storageStatus = sc.env.blockManager.master.getStorageStatus
-    val execIdToBlocksMapping = storageStatus.map(
-      status => (status.blockManagerId.executorId, status.blocks)).toMap
-    // No cached blocks should be present on executor which was decommissioned
-    assert(execIdToBlocksMapping(execToDecommission).keys.filter(_.isRDD).toSeq === Seq())
-    // There should still be all 10 RDD blocks cached
-    assert(execIdToBlocksMapping.values.flatMap(_.keys).count(_.isRDD) === 10)
   }
 }

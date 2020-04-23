@@ -1790,7 +1790,7 @@ private[spark] class BlockManager(
    * Tries to offload all cached RDD blocks from this BlockManager to peer BlockManagers
    * Visible for testing
    */
-  def offloadRddCacheBlocks(): Unit = {
+  def decommissionRddCacheBlocks(): Unit = {
     val replicateBlocksInfo = master.getReplicateInfoForRDDBlocks(blockManagerId)
 
     if (replicateBlocksInfo.nonEmpty) {
@@ -1803,8 +1803,9 @@ private[spark] class BlockManager(
       config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
 
     // TODO: We can sort these blocks based on some policy (LRU/blockSize etc)
-    // so that we end up prioritize them over each other
-    val blocksFailedReplication = replicateBlocksInfo.filterNot {
+    //   so that we end up prioritize them over each other
+    val blocksFailedReplication = ThreadUtils.parmap(
+      replicateBlocksInfo, "decommissionRddCacheBlocks", 4) {
       case ReplicateBlock(blockId, existingReplicas, maxReplicas) =>
         val replicatedSuccessfully = replicateBlock(
           blockId,
@@ -1818,8 +1819,8 @@ private[spark] class BlockManager(
         } else {
           logWarning(s"Failed to offload block $blockId")
         }
-        replicatedSuccessfully
-    }
+        (blockId, replicatedSuccessfully)
+    }.filterNot(_._2).map(_._1)
     if (blocksFailedReplication.nonEmpty) {
       logWarning("Blocks failed replication in cache decommissioning " +
         s"process: ${blocksFailedReplication.mkString(",")}")
@@ -1905,7 +1906,7 @@ private[spark] class BlockManager(
         while (blockManagerDecommissioning && !stopped) {
           try {
             logDebug("Attempting to replicate all cached RDD blocks")
-            offloadRddCacheBlocks()
+            decommissionRddCacheBlocks()
             logInfo("Attempt to replicate all cached blocks done")
             val sleepInterval = conf.get(
               config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)

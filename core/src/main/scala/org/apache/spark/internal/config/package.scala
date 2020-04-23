@@ -423,8 +423,9 @@ package object config {
   private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
     ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
       .internal()
-      .doc("Maximum number of failures to tolerate for offloading " +
-        "one block in single decommission cache blocks iteration")
+      .doc("Maximum number of failures which can be handled for the replication of " +
+        "one RDD block when block manager is decommissioning and trying to move its " +
+        "existing blocks.")
       .version("3.1.0")
       .intConf
       .createWithDefault(3)
