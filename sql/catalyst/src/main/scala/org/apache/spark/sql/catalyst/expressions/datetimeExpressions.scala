@@ -1622,7 +1622,15 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
 @ExpressionDescription(
   usage = """
     _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
-    `fmt` should be one of ["week", "mon", "month", "mm", "quarter", "year", "yyyy", "yy", "decade", "century", "millennium"]
+  """,
+  arguments = """
+     Arguments:
+       * date - date value or valid date string
+       * fmt - the format representing the unit to be truncated to
+           - "YEAR", "YYYY", "YY"
+           - "QUARTER"
+           - "MONTH", "MM", "MON"
+           - "WEEK"
   """,
   examples = """
     Examples:
@@ -1634,12 +1642,6 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
        2009-02-01
       > SELECT _FUNC_('2015-10-27', 'YEAR');
        2015-01-01
-      > SELECT _FUNC_('2015-10-27', 'DECADE');
-       2010-01-01
-      > SELECT _FUNC_('1981-01-19', 'century');
-       1901-01-01
-      > SELECT _FUNC_('1981-01-19', 'millennium');
-       1001-01-01
   """,
   group = "datetime_funcs",
   since = "1.5.0")
@@ -1674,9 +1676,21 @@ case class TruncDate(date: Expression, format: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(fmt, ts) - Returns timestamp `ts` truncated to the unit specified by the format model `fmt`.
-    `fmt` should be one of ["MILLENNIUM", "CENTURY", "DECADE", "YEAR", "YYYY", "YY",
-                            "QUARTER", "MON", "MONTH", "MM", "WEEK", "DAY", "DD",
-                            "HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND"]
+  """,
+  arguments = """
+     Arguments:
+       * fmt - the format representing the unit to be truncated to
+           - "YEAR", "YYYY", "YY"
+           - "QUARTER"
+           - "MONTH", "MM", "MON"
+           - "WEEK"
+           - "DAY", "DD"
+           - "HOUR"
+           - "MINUTE"
+           - "SECOND"
+           - "MILLISECOND"
+           - "MICROSECOND"
+       * ts - datetime value or valid timestamp string
   """,
   examples = """
     Examples:
@@ -1690,10 +1704,6 @@ case class TruncDate(date: Expression, format: Expression)
        2015-03-05 09:00:00
       > SELECT _FUNC_('MILLISECOND', '2015-03-05T09:32:05.123456');
        2015-03-05 09:32:05.123
-      > SELECT _FUNC_('DECADE', '2015-03-05T09:32:05.123456');
-       2010-01-01 00:00:00
-      > SELECT _FUNC_('CENTURY', '2015-03-05T09:32:05.123456');
-       2001-01-01 00:00:00
   """,
   group = "datetime_funcs",
   since = "2.3.0")

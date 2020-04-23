@@ -635,8 +635,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test escaping of format
     GenerateUnsafeProjection.generate(TruncDate(Literal(0, DateType), Literal("\"quote")) :: Nil)
 
-    testTrunc(Date.valueOf("2000-03-08"), "decade", Date.valueOf("2000-01-01"))
-    testTrunc(Date.valueOf("2000-03-08"), "century", Date.valueOf("1901-01-01"))
+    testTrunc(Date.valueOf("2000-03-08"), "decade", null)
+    testTrunc(Date.valueOf("2000-03-08"), "century", null)
   }
 
   test("TruncTimestamp") {
@@ -706,10 +706,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       testTrunc(null, "MON", null)
       testTrunc(null, null, null)
 
-      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "decade",
-        Timestamp.valueOf("2000-01-01 00:00:00"))
-      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "century",
-        Timestamp.valueOf("1901-01-01 00:00:00"))
+      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "decade", null)
+      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "century", null)
     }
   }
 

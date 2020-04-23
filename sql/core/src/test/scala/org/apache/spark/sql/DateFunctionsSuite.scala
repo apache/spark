@@ -477,7 +477,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.selectExpr("trunc(t, 'decade')"),
-      Seq(Row(Date.valueOf("2010-01-01")), Row(Date.valueOf("2010-01-01"))))
+      Seq(Row(null), Row(null)))
   }
 
   test("function date_trunc") {
@@ -530,16 +530,10 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Timestamp.valueOf("2015-07-22 10:01:40.123")),
         Row(Timestamp.valueOf("2014-12-31 05:29:06.123"))))
 
-    checkAnswer(
-      df.selectExpr("date_trunc('DECADE', t)"),
-      Seq(Row(Timestamp.valueOf("2010-01-01 00:00:00")),
-        Row(Timestamp.valueOf("2010-01-01 00:00:00"))))
-
-    Seq("century", "millennium").foreach { level =>
+    Seq("DECADE", "century", "millennium").foreach { level =>
       checkAnswer(
         df.selectExpr(s"date_trunc('$level', t)"),
-        Seq(Row(Timestamp.valueOf("2001-01-01 00:00:00")),
-          Row(Timestamp.valueOf("2001-01-01 00:00:00"))))
+        Seq(Row(null), Row(null)))
     }
   }
 
