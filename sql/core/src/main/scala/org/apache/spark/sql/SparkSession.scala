@@ -907,7 +907,6 @@ object SparkSession extends Logging {
       if ((session ne null) && !session.sparkContext.isStopped) {
         for ((k, v) <- options if !SQLConf.staticConfKeys.contains(k)) {
           session.sessionState.conf.setConfString(k, v)
-
         }
         if (options.nonEmpty) {
           logWarning("Using an existing SparkSession; some configuration may not take effect.")
@@ -922,7 +921,6 @@ object SparkSession extends Logging {
         if ((session ne null) && !session.sparkContext.isStopped) {
           for ((k, v) <- options if !SQLConf.staticConfKeys.contains(k)) {
             session.sessionState.conf.setConfString(k, v)
-
           }
           if (options.nonEmpty) {
             logWarning("Using an existing SparkSession; some configuration may not take effect.")
