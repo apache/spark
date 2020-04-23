@@ -40,6 +40,13 @@ abstract class LogicalPlan
     super.verboseString(maxFields) + statsCache.map(", " + _.toString).getOrElse("")
   }
 
+  override protected def doCanonicalize(): LogicalPlan = {
+    if (!resolved) {
+      throw new AnalysisException(s"Failed canonicalize because $this is not resolved")
+    }
+    super.doCanonicalize()
+  }
+
   /**
    * Returns the maximum number of rows that this plan may compute.
    *
