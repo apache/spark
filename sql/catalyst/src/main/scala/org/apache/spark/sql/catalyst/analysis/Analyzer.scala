@@ -238,13 +238,13 @@ class Analyzer(
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
       ExtractWindowExpressions ::
-      ResolveTimeZone(conf) ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
       ResolveHigherOrderFunctions(v1SessionCatalog) ::
       ResolveLambdaVariables(conf) ::
+      ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic(conf) ::
       TypeCoercion.typeCoercionRules(conf) ++
@@ -1232,13 +1232,13 @@ class Analyzer(
     /**
      * Resolves the attribute and extract value expressions(s) by traversing the
      * input expression in top down manner. The traversal is done in top-down manner as
-     * we need to skip over unbound lamda function expression. The lamda expressions are
+     * we need to skip over unbound lambda function expression. The lambda expressions are
      * resolved in a different rule [[ResolveLambdaVariables]]
      *
      * Example :
      * SELECT transform(array(1, 2, 3), (x, i) -> x + i)"
      *
-     * In the case above, x and i are resolved as lamda variables in [[ResolveLambdaVariables]]
+     * In the case above, x and i are resolved as lambda variables in [[ResolveLambdaVariables]]
      *
      * Note : In this routine, the unresolved attributes are resolved from the input plan's
      * children attributes.
@@ -2036,6 +2036,9 @@ class Analyzer(
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      // Resolve aggregate with having clause to Filter(..., Aggregate()). Note, to avoid wrongly
+      // resolve the having condition expression, here we skip resolving it in ResolveReferences
+      // and transform it to Filter after aggregate is resolved. See more details in SPARK-31519.
       case AggregateWithHaving(cond, agg: Aggregate) if agg.resolved =>
         resolveHaving(Filter(cond, agg), agg)
 
@@ -2138,8 +2141,8 @@ class Analyzer(
               alias.toAttribute
             // Grouping functions are handled in the rule [[ResolveGroupingAnalytics]].
             case e: Expression if agg.groupingExpressions.exists(_.semanticEquals(e)) &&
-              !ResolveGroupingAnalytics.hasGroupingFunction(e) &&
-              !agg.output.exists(_.semanticEquals(e)) =>
+                !ResolveGroupingAnalytics.hasGroupingFunction(e) &&
+                !agg.output.exists(_.semanticEquals(e)) =>
               e match {
                 case ne: NamedExpression =>
                   aggregateExpressions += ne
@@ -2596,7 +2599,7 @@ class Analyzer(
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
-      case f @ Filter(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
+      case f @ AggregateWithHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
         if child.resolved &&
            hasWindowFunction(aggregateExprs) &&
            a.expressions.forall(_.resolved) =>

@@ -583,16 +583,6 @@ case class Aggregate(
   }
 }
 
-case class AggregateWithHaving(
-    havingCondition: Expression,
-    child: LogicalPlan)
-  extends UnaryNode {
-
-  override lazy val resolved: Boolean = false
-
-  override def output: Seq[Attribute] = child.output
-}
-
 case class Window(
     windowExpressions: Seq[NamedExpression],
     partitionSpec: Seq[Expression],

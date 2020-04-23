@@ -362,9 +362,12 @@ package object dsl {
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
 
-      def having(groupingExprs: Expression*)
-          (aggregateExprs: Expression*)(havingCondition: Expression): LogicalPlan = {
-        AggregateWithHaving(havingCondition, groupBy(groupingExprs: _*)(aggregateExprs: _*))
+      def having(
+          groupingExprs: Expression*)(
+          aggregateExprs: Expression*)(
+          havingCondition: Expression): LogicalPlan = {
+        AggregateWithHaving(havingCondition,
+          groupBy(groupingExprs: _*)(aggregateExprs: _*).asInstanceOf[Aggregate])
       }
 
       def window(
