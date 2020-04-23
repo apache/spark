@@ -1627,10 +1627,10 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
      Arguments:
        * date - date value or valid date string
        * fmt - the format representing the unit to be truncated to
-           - "YEAR", "YYYY", "YY"
-           - "QUARTER"
-           - "MONTH", "MM", "MON"
-           - "WEEK"
+           - "YEAR", "YYYY", "YY" - truncate to the first date of the year
+           - "QUARTER" - truncate to the closest quarter start date
+           - "MONTH", "MM", "MON" - truncate to the first date of the month
+           - "WEEK" - truncate to the closest Monday
   """,
   examples = """
     Examples:
@@ -1680,16 +1680,16 @@ case class TruncDate(date: Expression, format: Expression)
   arguments = """
      Arguments:
        * fmt - the format representing the unit to be truncated to
-           - "YEAR", "YYYY", "YY"
-           - "QUARTER"
-           - "MONTH", "MM", "MON"
-           - "WEEK"
-           - "DAY", "DD"
-           - "HOUR"
-           - "MINUTE"
-           - "SECOND"
-           - "MILLISECOND"
-           - "MICROSECOND"
+           - "YEAR", "YYYY", "YY" - truncate to the first date of the year, the time part will be zero out
+           - "QUARTER" - truncate to the closest quarter start date, the time part will be zero out
+           - "MONTH", "MM", "MON" - truncate to the first date of the month, the time part will be zero out
+           - "WEEK" - truncate to the closest Monday, the time part will be zero out
+           - "DAY", "DD" - truncate to the closest midnight, the time part will be zero out
+           - "HOUR" - truncate to the closest hour, the minute and second with fraction will be zero out
+           - "MINUTE"- truncate to the closest minute, the second with fraction will be zero out
+           - "SECOND" - truncate to the closest second, the second fraction part will be zero out
+           - "MILLISECOND" - truncate to the closest millisecond, the microseconds will be zero out
+           - "MICROSECOND" - everything remains
        * ts - datetime value or valid timestamp string
   """,
   examples = """
