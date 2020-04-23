@@ -748,7 +748,8 @@ SELECT float('NaN');
 +------------------+
 {% endhighlight %}
 
-### -Infinity/Infinity Semantics
+### Negative/positive Infinity Semantics
+There is special handling for negative and positive infinity. They have the following semantics:
 
  - Infinity = Infinity, Inf = Infinity, -Infinity = -Infinity and -Inf = -Infinity return true.
  - In aggregations, all Inf/Infinity or -Inf/-Infinity values are grouped together.
