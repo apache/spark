@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.util
 
 import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.util.SchemaUtils
