@@ -41,7 +41,7 @@ abstract class LogicalPlan
   }
 
   override protected def doCanonicalize(): LogicalPlan = {
-    if (!resolved) {
+    if (!expressions.forall(_.childrenResolved) || !childrenResolved) {
       throw new AnalysisException(s"Failed canonicalize because $this is not resolved")
     }
     super.doCanonicalize()
