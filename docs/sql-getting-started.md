@@ -348,16 +348,12 @@ For example:
 
 ## Scalar Functions
 
-Scalar functions are functions that return a single value per row, as opposed to aggregation functions, which return a value for a group of rows. Spark SQL supports a variety of built-in scalar functions such as [Array Functions](sql-ref-functions-builtin.html#array-functions), [Map Functions](sql-ref-functions-builtin.html#map-functions), [Date and Timestamp Functions](sql-ref-functions-builtin.html#date-and-timestamp-functions), etc. It also supports [User Defined Scalar Functions](sql-ref-functions-udf-scalar.html).
+Scalar functions are functions that return a single value per row, as opposed to aggregation functions, which return a value for a group of rows. Spark SQL supports a variety of [Built-in Scalar Functions](sql-ref-functions.html#scalar-functions). It also supports [User Defined Scalar Functions](sql-ref-functions-udf-scalar.html).
 
-## Aggregations
+## Aggregate Functions
 
-The [built-in DataFrames functions](api/scala/org/apache/spark/sql/functions$.html) provide common
-aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
-While those functions are designed for DataFrames, Spark SQL also has type-safe versions for some of them in
-[Scala](api/scala/org/apache/spark/sql/expressions/scalalang/typed$.html) and
-[Java](api/java/org/apache/spark/sql/expressions/javalang/typed.html) to work with strongly typed Datasets.
-Moreover, users are not limited to the predefined aggregate functions and can create their own. For more details
+Aggregate functions are functions that return a single value on a group of rows. The [Built-in Aggregation Functions](sql-ref-functions.html#aggregate-functions) provide common aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
+Users are not limited to the predefined aggregate functions and can create their own. For more details
 about user defined aggregate functions, please refer to the documentation of
 [User Defined Aggregate Functions](sql-ref-functions-udf-aggregate.html).
 
