@@ -49,7 +49,8 @@ case class CustomShuffleReaderExec private(
     // If it is a local shuffle reader with one mapper per task, then the output partitioning is
     // the same as the plan before shuffle.
     // TODO this check is based on assumptions of callers' behavior but is sufficient for now.
-    if (partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]) &&
+    if (partitionSpecs.nonEmpty &&
+        partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]) &&
         partitionSpecs.map(_.asInstanceOf[PartialMapperPartitionSpec].mapIndex).toSet.size ==
           partitionSpecs.length) {
       child match {
@@ -98,7 +99,7 @@ case class CustomShuffleReaderExec private(
   }
 
   @transient private lazy val partitionDataSizes: Option[Seq[Long]] = {
-    if (!isLocalReader && shuffleStage.get.mapStats.isDefined) {
+    if (partitionSpecs.nonEmpty && !isLocalReader && shuffleStage.get.mapStats.isDefined) {
       val bytesByPartitionId = shuffleStage.get.mapStats.get.bytesByPartitionId
       Some(partitionSpecs.map {
         case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
