@@ -437,11 +437,11 @@ SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;
 |1997-01-31 09:26:56.123|
 +-----------------------+
 
-SELECT TIMESTAMP '1997-01-31 09:26:56.66666666CST' AS col;
+SELECT TIMESTAMP '1997-01-31 09:26:56.66666666UTC+08:00' AS col;
 +--------------------------+
 |                      col |
 +--------------------------+
-|1997-01-31 07:26:56.666666|
+|1997-01-30 17:26:56.666666|
 +--------------------------+
 
 SELECT TIMESTAMP '1997-01' AS col;
@@ -508,7 +508,7 @@ SELECT INTERVAL -2 HOUR '3' MINUTE AS col;
 |-1 hours -57 minutes|
 +--------------------+
 
-SELECT INTERVAL 'INTERVAL 1 YEAR 2 DAYS 3 HOURS';
+SELECT INTERVAL '1 YEAR 2 DAYS 3 HOURS';
 +----------------------+
 |                   col|
 +----------------------+
@@ -522,6 +522,13 @@ SELECT INTERVAL 1 YEARS 2 MONTH 3 WEEK 4 DAYS 5 HOUR 6 MINUTES 7 SECOND 8
 +-----------------------------------------------------------+
 |1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds|
 +-----------------------------------------------------------+
+
+SELECT INTERVAL '2-3' YEAR TO MONTH AS col;
++----------------+
+|             col|
++----------------+
+|2 years 3 months|
++----------------+
 
 SELECT INTERVAL '20 15:40:32.99899999' DAY TO SECOND AS col;
 +---------------------------------------------+
