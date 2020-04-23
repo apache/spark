@@ -290,6 +290,6 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
         iter
       }.collect()
     }.getMessage
-    assert(errorMsg.contains("Fail current round of resource offers for barrier stage"))
+    assert(errorMsg.contains("Fail resource offers for barrier stage"))
   }
 }
