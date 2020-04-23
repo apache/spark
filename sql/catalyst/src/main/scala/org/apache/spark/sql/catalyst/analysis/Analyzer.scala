@@ -268,17 +268,21 @@ class Analyzer(
   /**
    * For [[Add]]:
    * 1. if both side are interval, stays the same;
-   * 2. else if one side is interval, turns it to [[TimeAdd]];
-   * 3. else if one side is date, turns it to [[DateAdd]] ;
-   * 4. else stays the same.
+   * 2. else if ansi is on and one side is date and the other is interval,
+   *    turns it to [[ANSIDateAdd]];
+   * 3. else if one side is interval, turns it to [[TimeAdd]];
+   * 4. else if one side is date, turns it to [[DateAdd]] ;
+   * 5. else stays the same.
    *
    * For [[Subtract]]:
    * 1. if both side are interval, stays the same;
-   * 2. else if the right side is an interval, turns it to [[TimeSub]];
-   * 3. else if one side is timestamp, turns it to [[SubtractTimestamps]];
-   * 4. else if the right side is date, turns it to [[DateDiff]]/[[SubtractDates]];
-   * 5. else if the left side is date, turns it to [[DateSub]];
-   * 6. else turns it to stays the same.
+   * 2. else if ansi is on, the left side is date and the right side is interval,
+   *    turns it to [[ANSIDateAdd(l, -r)]];
+   * 3. else if the right side is an interval, turns it to [[TimeSub]];
+   * 4. else if one side is timestamp, turns it to [[SubtractTimestamps]];
+   * 5. else if the right side is date, turns it to [[DateDiff]]/[[SubtractDates]];
+   * 6. else if the left side is date, turns it to [[DateSub]];
+   * 7. else turns it to stays the same.
    *
    * For [[Multiply]]:
    * 1. If one side is interval, turns it to [[MultiplyInterval]];
@@ -293,7 +297,9 @@ class Analyzer(
       case p: LogicalPlan => p.transformExpressionsUp {
         case a @ Add(l, r) if a.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, CalendarIntervalType) => a
+          case (DateType, CalendarIntervalType) if conf.ansiEnabled => ANSIDateAdd(l, r)
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
+          case (CalendarIntervalType, DateType) if conf.ansiEnabled => ANSIDateAdd(r, l)
           case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
           case (DateType, dt) if dt != StringType => DateAdd(l, r)
           case (dt, DateType) if dt != StringType => DateAdd(r, l)
@@ -301,6 +307,7 @@ class Analyzer(
         }
         case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, CalendarIntervalType) => s
+          case (DateType, CalendarIntervalType) if conf.ansiEnabled => ANSIDateAdd(l, UnaryMinus(r))
           case (_, CalendarIntervalType) => Cast(TimeSub(l, r), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)

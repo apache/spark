@@ -1158,6 +1158,34 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
+ * Adds an interval with day precision to date.
+ */
+case class ANSIDateAdd(start: Expression, interval: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = start
+  override def right: Expression = interval
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, CalendarIntervalType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, interval: Any): Any = {
+    DateTimeUtils.dateAddInterval(
+      start.asInstanceOf[Int], interval.asInstanceOf[CalendarInterval])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (sd, i) => {
+      s"""$dtu.dateAddInterval($sd, $i)"""
+    })
+  }
+}
+
+/**
  * This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
  * takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in UTC, and
  * renders that timestamp as a timestamp in the given time zone.

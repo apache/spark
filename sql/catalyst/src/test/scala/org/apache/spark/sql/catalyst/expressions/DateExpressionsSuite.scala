@@ -359,6 +359,24 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
   }
 
+  test("ansi_date_add") {
+    val d = Date.valueOf("2016-02-28")
+    checkEvaluation(
+      ANSIDateAdd(Literal(d), Literal(new CalendarInterval(0, 1, 0))),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+    checkEvaluation(
+      ANSIDateAdd(Literal(d), Literal(new CalendarInterval(1, 1, 0))),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-29")))
+    checkEvaluation(ANSIDateAdd(Literal(d), Literal.create(null, CalendarIntervalType)),
+      null)
+    checkEvaluation(ANSIDateAdd(Literal.create(null, DateType),
+      Literal(new CalendarInterval(1, 1, 0))),
+      null)
+    checkExceptionInExpression[IllegalArgumentException](
+      ANSIDateAdd(Literal(d), Literal(new CalendarInterval(1, 1, 1))),
+      "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
+  }
+
   test("date_sub") {
     checkEvaluation(
       DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1.toByte)),
