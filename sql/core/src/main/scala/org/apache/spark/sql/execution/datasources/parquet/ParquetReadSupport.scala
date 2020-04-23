@@ -50,16 +50,18 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-class ParquetReadSupport(val convertTz: Option[ZoneId],
-    enableVectorizedReader: Boolean)
+class ParquetReadSupport(
+    val convertTz: Option[ZoneId],
+    enableVectorizedReader: Boolean,
+    rebaseDateTime: Boolean)
   extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
   def this() {
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
-    // used in the vectorized reader, where we get the convertTz value directly, and the value here
-    // is ignored.
-    this(None, enableVectorizedReader = true)
+    // used in the vectorized reader, where we get the convertTz/rebaseDateTime value directly,
+    // and the values here are ignored.
+    this(None, enableVectorizedReader = true, rebaseDateTime = false)
   }
 
   /**
@@ -127,7 +129,8 @@ class ParquetReadSupport(val convertTz: Option[ZoneId],
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
-      convertTz)
+      convertTz,
+      rebaseDateTime)
   }
 }
 

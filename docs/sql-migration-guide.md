@@ -216,6 +216,10 @@ license: |
 
     * The decimal string representation can be different between Hive 1.2 and Hive 2.3 when using `TRANSFORM` operator in SQL for script transformation, which depends on hive's behavior. In Hive 1.2, the string representation omits trailing zeroes. But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
 
+## Upgrading from Spark SQL 2.4.5 to 2.4.6
+
+  - In Spark 2.4.6, the `RESET` command does not reset the static SQL configuration values to the default. It only clears the runtime SQL configuration values.
+
 ## Upgrading from Spark SQL 2.4.4 to 2.4.5
 
   - Since Spark 2.4.5, `TRUNCATE TABLE` command tries to set back original permission and ACLs during re-creating the table/partition paths. To restore the behaviour of earlier versions, set `spark.sql.truncateTable.ignorePermissionAcl.enabled` to `true`.
@@ -789,7 +793,7 @@ Python UDF registration is unchanged.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently, Hive SerDes and UDFs are based on built-in Hive,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 2.3.6 and 3.0.0 to 3.1.2. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
+(from 0.12.0 to 2.3.7 and 3.0.0 to 3.1.2. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 {:.no_toc}

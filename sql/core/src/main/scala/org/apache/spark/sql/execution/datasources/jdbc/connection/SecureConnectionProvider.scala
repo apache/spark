@@ -43,6 +43,18 @@ private[jdbc] abstract class SecureConnectionProvider(driver: Driver, options: J
    * then later calls must be no op.
    */
   def setAuthenticationConfigIfNeeded(): Unit
+
+  protected def getConfigWithAppEntry(): (Configuration, Array[AppConfigurationEntry]) = {
+    val parent = Configuration.getConfiguration
+    (parent, parent.getAppConfigurationEntry(appEntry))
+  }
+
+  protected def setAuthenticationConfig(parent: Configuration) = {
+    val config = new SecureConnectionProvider.JDBCConfiguration(
+      parent, appEntry, options.keytab, options.principal)
+    logDebug("Adding database specific security configuration")
+    Configuration.setConfiguration(config)
+  }
 }
 
 object SecureConnectionProvider {

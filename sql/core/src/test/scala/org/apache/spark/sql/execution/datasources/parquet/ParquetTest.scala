@@ -156,7 +156,10 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   }
 
   protected def readResourceParquetFile(name: String): DataFrame = {
-    val url = Thread.currentThread().getContextClassLoader.getResource(name)
-    spark.read.parquet(url.toString)
+    spark.read.parquet(getResourceParquetFilePath(name))
+  }
+
+  protected def getResourceParquetFilePath(name: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(name).toString
   }
 }
