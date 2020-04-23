@@ -314,7 +314,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
-       
+     
 (9) AdaptiveSparkPlan 
 Output [4]: [key#x, val#x, key#x, val#x]
 Arguments: isFinalPlan=false
@@ -368,7 +368,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
-       
+     
 (7) AdaptiveSparkPlan 
 Output [4]: [key#x, val#x, key#x, val#x]
 Arguments: isFinalPlan=false
@@ -539,7 +539,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
-       
+     
 (9) AdaptiveSparkPlan 
 Output [4]: [key#x, val#x, key#x, val#x]
 Arguments: isFinalPlan=false
@@ -649,7 +649,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
-       
+     
 (15) AdaptiveSparkPlan 
 Output [4]: [key#x, max(val)#x, key#x, max(val)#x]
 Arguments: isFinalPlan=false
