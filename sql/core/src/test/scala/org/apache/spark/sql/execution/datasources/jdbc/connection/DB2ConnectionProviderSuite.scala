@@ -17,19 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
-import java.sql.{Connection, Driver}
+class DB2ConnectionProviderSuite extends ConnectionProviderSuiteBase {
+  test("setAuthenticationConfigIfNeeded must set authentication if not set") {
+    val driver = registerDriver(DB2ConnectionProvider.driverClass)
+    val provider = new DB2ConnectionProvider(driver, options("jdbc:db2://localhost/db2"))
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-
-private[jdbc] class BasicConnectionProvider(driver: Driver, options: JDBCOptions)
-    extends ConnectionProvider {
-  def getConnection(): Connection = {
-    val properties = getAdditionalProperties()
-    options.asConnectionProperties.entrySet().asScala.foreach { e =>
-      properties.put(e.getKey(), e.getValue())
-    }
-    driver.connect(options.url, properties)
+    testSecureConnectionProvider(provider)
   }
 }

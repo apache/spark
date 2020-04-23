@@ -17,31 +17,45 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
-import java.sql.Driver
+import java.security.PrivilegedExceptionAction
+import java.sql.{Connection, Driver}
+import java.util.Properties
+
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-private[jdbc] class MariaDBConnectionProvider(driver: Driver, options: JDBCOptions)
+private[sql] class DB2ConnectionProvider(driver: Driver, options: JDBCOptions)
     extends SecureConnectionProvider(driver, options) {
-  override val appEntry: String = {
-    "Krb5ConnectorContext"
+  override val appEntry: String = "JaasClient"
+
+  override def getConnection(): Connection = {
+    setAuthenticationConfigIfNeeded()
+    UserGroupInformation.loginUserFromKeytabAndReturnUGI(options.principal, options.keytab).doAs(
+      new PrivilegedExceptionAction[Connection]() {
+        override def run(): Connection = {
+          DB2ConnectionProvider.super.getConnection()
+        }
+      }
+    )
+  }
+
+  override def getAdditionalProperties(): Properties = {
+    val result = new Properties()
+    // 11 is the integer value for kerberos
+    result.put("securityMechanism", new String("11"))
+    result.put("KerberosServerPrincipal", options.principal)
+    result
   }
 
   override def setAuthenticationConfigIfNeeded(): Unit = {
     val (parent, configEntry) = getConfigWithAppEntry()
-    /**
-     * Couple of things to mention here:
-     * 1. MariaDB doesn't support JAAS application name configuration
-     * 2. MariaDB sets a default JAAS config if "java.security.auth.login.config" is not set
-     */
-    val entryUsesKeytab = configEntry != null &&
-      configEntry.exists(_.getOptions().get("useKeyTab") == "true")
-    if (configEntry == null || configEntry.isEmpty || !entryUsesKeytab) {
+    if (configEntry == null || configEntry.isEmpty) {
       setAuthenticationConfig(parent)
     }
   }
 }
 
-private[sql] object MariaDBConnectionProvider {
-  val driverClass = "org.mariadb.jdbc.Driver"
+private[sql] object DB2ConnectionProvider {
+  val driverClass = "com.ibm.db2.jcc.DB2Driver"
 }

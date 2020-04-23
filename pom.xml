@@ -964,6 +964,12 @@
         <scope>test</scope>
       </dependency>
       <dependency>
+        <groupId>com.ibm.db2</groupId>
+        <artifactId>jcc</artifactId>
+        <version>11.5.0.0</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-recipes</artifactId>
         <version>${curator.version}</version>
