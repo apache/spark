@@ -177,7 +177,7 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
       "`a` - INTERVAL '1 hours'"
     )
     checkSQL(
-      ANSIDateAdd('a, interval),
+      DateAddInterval('a, interval),
       "`a` + INTERVAL '1 hours'"
     )
   }

@@ -246,7 +246,7 @@ class Analyzer(
       ResolveLambdaVariables(conf) ::
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
-      ResolveBinaryArithmetic(conf) ::
+      ResolveBinaryArithmetic ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
@@ -268,16 +268,16 @@ class Analyzer(
   /**
    * For [[Add]]:
    * 1. if both side are interval, stays the same;
-   * 2. else if ansi is on and one side is date and the other is interval,
-   *    turns it to [[ANSIDateAdd]];
+   * 2. else if one side is date and the other is interval,
+   *    turns it to [[DateAddInterval]];
    * 3. else if one side is interval, turns it to [[TimeAdd]];
    * 4. else if one side is date, turns it to [[DateAdd]] ;
    * 5. else stays the same.
    *
    * For [[Subtract]]:
    * 1. if both side are interval, stays the same;
-   * 2. else if ansi is on, the left side is date and the right side is interval,
-   *    turns it to [[ANSIDateAdd(l, -r)]];
+   * 2. else if the left side is date and the right side is interval,
+   *    turns it to [[DateAddInterval(l, -r)]];
    * 3. else if the right side is an interval, turns it to [[TimeSub]];
    * 4. else if one side is timestamp, turns it to [[SubtractTimestamps]];
    * 5. else if the right side is date, turns it to [[DateDiff]]/[[SubtractDates]];
@@ -292,14 +292,14 @@ class Analyzer(
    * 1. If the left side is interval, turns it to [[DivideInterval]];
    * 2. otherwise, stays the same.
    */
-  case class ResolveBinaryArithmetic(conf: SQLConf) extends Rule[LogicalPlan] {
+  object ResolveBinaryArithmetic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformExpressionsUp {
         case a @ Add(l, r) if a.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, CalendarIntervalType) => a
-          case (DateType, CalendarIntervalType) if conf.ansiEnabled => ANSIDateAdd(l, r)
+          case (DateType, CalendarIntervalType) => DateAddInterval(l, r)
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
-          case (CalendarIntervalType, DateType) if conf.ansiEnabled => ANSIDateAdd(r, l)
+          case (CalendarIntervalType, DateType) => DateAddInterval(r, l)
           case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
           case (DateType, dt) if dt != StringType => DateAdd(l, r)
           case (dt, DateType) if dt != StringType => DateAdd(r, l)
@@ -307,7 +307,7 @@ class Analyzer(
         }
         case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, CalendarIntervalType) => s
-          case (DateType, CalendarIntervalType) if conf.ansiEnabled => ANSIDateAdd(l, UnaryMinus(r))
+          case (DateType, CalendarIntervalType) => DateAddInterval(l, UnaryMinus(r))
           case (_, CalendarIntervalType) => Cast(TimeSub(l, r), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)

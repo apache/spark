@@ -163,7 +163,7 @@ select date'2011-11-11 11:11:11' + interval '2' second
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-requirement failed: Cannot add hours, minutes or seconds, milliseconds, microseconds to a date
+requirement failed: Cannot add hours, minutes or seconds, milliseconds, microseconds to a date in ansi mode
 
 
 -- !query
@@ -172,7 +172,7 @@ select date'2011-11-11 11:11:11' - interval '2' second
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-requirement failed: Cannot add hours, minutes or seconds, milliseconds, microseconds to a date
+requirement failed: Cannot add hours, minutes or seconds, milliseconds, microseconds to a date in ansi mode
 
 
 -- !query

@@ -735,7 +735,7 @@ from interval_arithmetic
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-requirement failed: Cannot add hours, minutes or seconds, milliseconds, microseconds to a date
+requirement failed: Cannot add hours, minutes or seconds, milliseconds, microseconds to a date in ansi mode
 
 
 -- !query

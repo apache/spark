@@ -623,18 +623,15 @@ object DateTimeUtils {
    * Returns a date value, expressed in days since 1.1.1970.
    *
    * @throws DateTimeException if the result exceeds the supported date range
-   * @throws IllegalArgumentException if the interval has
+   * @throws IllegalArgumentException if the interval has `microseconds` part in ansi mode
    */
   def dateAddInterval(
      start: SQLDate,
      interval: CalendarInterval): SQLDate = {
     require(interval.microseconds == 0,
-      "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
-    LocalDate.ofEpochDay(start)
-      .plusMonths(interval.months)
-      .plusDays(interval.days)
-      .toEpochDay
-      .toInt
+      "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date in ansi mode")
+    val ld = LocalDate.ofEpochDay(start).plusMonths(interval.months).plusDays(interval.days)
+    localDateToDays(ld)
   }
 
   /**
