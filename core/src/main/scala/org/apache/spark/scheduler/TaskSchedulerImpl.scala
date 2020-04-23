@@ -58,6 +58,11 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Ut
  *      scheduling
  *   * task-result-getter threads
  *
+ * CAUTION: Any non fatal exception thrown within Spark RPC framework can be swallowed.
+ * Thus, throwing exception in methods like resourceOffers, statusUpdate won't fail
+ * the application, but could lead to undefined behavior. Instead, we shall use method like
+ * TaskSetManger.abort() to abort a stage and then fail the application (SPARK-31485).
+ *
  * Delay Scheduling:
  *  Delay scheduling is an optimization that sacrifices job fairness for data locality in order to
  *  improve cluster and workload throughput. One useful definition of "delay" is how much time
