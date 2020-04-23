@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.TimeZone
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -85,5 +87,12 @@ class CanonicalizeSuite extends SparkFunSuite {
     val addExpr = Add(range.output.head, Literal(1))
     val subExpr = Subtract(range.output.head, Literal(1))
     assert(addExpr.canonicalized.hashCode() != subExpr.canonicalized.hashCode())
+  }
+
+  test("SPARK-31515: Canonicalize Cast should consider the value of needTimeZone") {
+    val literal = Literal(1)
+    val cast = Cast(literal, LongType)
+    val castWithTimeZoneId = Cast(literal, LongType, Some(TimeZone.getDefault.getID))
+    assert(castWithTimeZoneId.semanticEquals(cast))
   }
 }
