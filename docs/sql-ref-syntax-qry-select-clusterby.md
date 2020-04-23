@@ -64,32 +64,32 @@ SET spark.sql.shuffle.partitions = 2;
 -- of a query when `CLUSTER BY` is not used vs when it's used. The query below produces rows
 -- where age column is not sorted.
 SELECT age, name FROM person;
-  +---+-------+
-  |age|   name|
-  +---+-------+
-  | 16|Shone S|
-  | 25|Zen Hui|
-  | 16| Jack N|
-  | 25| Mike A|
-  | 18| John A|
-  | 18| Anil B|
-  +---+-------+
++---+-------+
+|age|   name|
++---+-------+
+| 16|Shone S|
+| 25|Zen Hui|
+| 16| Jack N|
+| 25| Mike A|
+| 18| John A|
+| 18| Anil B|
++---+-------+
 
 -- Produces rows clustered by age. Persons with same age are clustered together.
 -- In the query below, persons with age 18 and 25 are in first partition and the
 -- persons with age 16 are in the second partition. The rows are sorted based
 -- on age within each partition.
 SELECT age, name FROM person CLUSTER BY age;
-  +---+-------+
-  |age|   name|
-  +---+-------+
-  | 18| John A|
-  | 18| Anil B|
-  | 25|Zen Hui|
-  | 25| Mike A|
-  | 16|Shone S|
-  | 16| Jack N|
-  +---+-------+
++---+-------+
+|age|   name|
++---+-------+
+| 18| John A|
+| 18| Anil B|
+| 25|Zen Hui|
+| 25| Mike A|
+| 16|Shone S|
+| 16| Jack N|
++---+-------+
 {% endhighlight %}
 
 ### Related Statements

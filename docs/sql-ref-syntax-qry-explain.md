@@ -68,68 +68,68 @@ EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED ] statement
 {% highlight sql %}
 -- Default Output
 EXPLAIN select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k;
-  +----------------------------------------------------+
-  |                                                plan|
-  +----------------------------------------------------+
-  | == Physical Plan ==
-   *(2) HashAggregate(keys=[k#33], functions=[sum(cast(v#34 as bigint))])
-   +- Exchange hashpartitioning(k#33, 200), true, [id=#59]
-      +- *(1) HashAggregate(keys=[k#33], functions=[partial_sum(cast(v#34 as bigint))])
-         +- *(1) LocalTableScan [k#33, v#34]
-  |
-  +----------------------------------------------------
++----------------------------------------------------+
+|                                                plan|
++----------------------------------------------------+
+| == Physical Plan ==
+ *(2) HashAggregate(keys=[k#33], functions=[sum(cast(v#34 as bigint))])
+ +- Exchange hashpartitioning(k#33, 200), true, [id=#59]
+    +- *(1) HashAggregate(keys=[k#33], functions=[partial_sum(cast(v#34 as bigint))])
+       +- *(1) LocalTableScan [k#33, v#34]
+|
++----------------------------------------------------
 
 -- Using Extended
 EXPLAIN EXTENDED select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k;
-  +----------------------------------------------------+
-  |                                                plan|
-  +----------------------------------------------------+
-  | == Parsed Logical Plan ==
-   'Aggregate ['k], ['k, unresolvedalias('sum('v), None)]
-   +- 'SubqueryAlias `t`
-      +- 'UnresolvedInlineTable [k, v], [List(1, 2), List(1, 3)]
++----------------------------------------------------+
+|                                                plan|
++----------------------------------------------------+
+| == Parsed Logical Plan ==
+ 'Aggregate ['k], ['k, unresolvedalias('sum('v), None)]
+ +- 'SubqueryAlias `t`
+    +- 'UnresolvedInlineTable [k, v], [List(1, 2), List(1, 3)]
    
-   == Analyzed Logical Plan ==
-   k: int, sum(v): bigint
-   Aggregate [k#47], [k#47, sum(cast(v#48 as bigint)) AS sum(v)#50L]
-   +- SubqueryAlias `t`
-      +- LocalRelation [k#47, v#48]
+ == Analyzed Logical Plan ==
+ k: int, sum(v): bigint
+ Aggregate [k#47], [k#47, sum(cast(v#48 as bigint)) AS sum(v)#50L]
+ +- SubqueryAlias `t`
+    +- LocalRelation [k#47, v#48]
    
-   == Optimized Logical Plan ==
-   Aggregate [k#47], [k#47, sum(cast(v#48 as bigint)) AS sum(v)#50L]
-   +- LocalRelation [k#47, v#48]
+ == Optimized Logical Plan ==
+ Aggregate [k#47], [k#47, sum(cast(v#48 as bigint)) AS sum(v)#50L]
+ +- LocalRelation [k#47, v#48]
    
-   == Physical Plan ==
-   *(2) HashAggregate(keys=[k#47], functions=[sum(cast(v#48 as bigint))], output=[k#47, sum(v)#50L])
-  +- Exchange hashpartitioning(k#47, 200), true, [id=#79]
-     +- *(1) HashAggregate(keys=[k#47], functions=[partial_sum(cast(v#48 as bigint))], output=[k#47, sum#52L])
-      +- *(1) LocalTableScan [k#47, v#48]
-  |
-  +----------------------------------------------------+
+ == Physical Plan ==
+ *(2) HashAggregate(keys=[k#47], functions=[sum(cast(v#48 as bigint))], output=[k#47, sum(v)#50L])
++- Exchange hashpartitioning(k#47, 200), true, [id=#79]
+   +- *(1) HashAggregate(keys=[k#47], functions=[partial_sum(cast(v#48 as bigint))], output=[k#47, sum#52L])
+    +- *(1) LocalTableScan [k#47, v#48]
+|
++----------------------------------------------------+
 
 -- Using Formatted
 EXPLAIN FORMATTED select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k;
-  +----------------------------------------------------+
-  |                                                plan|
-  +----------------------------------------------------+
-  | == Physical Plan ==
-   * HashAggregate (4)
-   +- Exchange (3)
-      +- * HashAggregate (2)
-         +- * LocalTableScan (1)
++----------------------------------------------------+
+|                                                plan|
++----------------------------------------------------+
+| == Physical Plan ==
+ * HashAggregate (4)
+ +- Exchange (3)
+    +- * HashAggregate (2)
+       +- * LocalTableScan (1)
    
    
-   (1) LocalTableScan [codegen id : 1]
-   Output: [k#19, v#20]
+ (1) LocalTableScan [codegen id : 1]
+ Output: [k#19, v#20]
         
-   (2) HashAggregate [codegen id : 1]
-   Input: [k#19, v#20]
+ (2) HashAggregate [codegen id : 1]
+ Input: [k#19, v#20]
         
-   (3) Exchange 
-   Input: [k#19, sum#24L]
+ (3) Exchange
+ Input: [k#19, sum#24L]
         
-   (4) HashAggregate [codegen id : 2]
-   Input: [k#19, sum#24L] 
-  |
-  +----------------------------------------------------+
+ (4) HashAggregate [codegen id : 2]
+ Input: [k#19, sum#24L]
+|
++----------------------------------------------------+
 {% endhighlight %}

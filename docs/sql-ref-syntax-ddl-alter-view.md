@@ -141,83 +141,83 @@ ALTER VIEW tempdb1.v1 RENAME TO tempdb1.v2;
 
 -- Verify that the new view is created.
 DESCRIBE TABLE EXTENDED tempdb1.v2;
-  +----------------------------+----------+-------+
-  |                    col_name|data_type |comment|
-  +----------------------------+----------+-------+
-  |                          c1|       int|   null|
-  |                          c2|    string|   null|
-  |                            |          |       |
-  |# Detailed Table Information|          |       |
-  |                    Database|   tempdb1|       |
-  |                       Table|        v2|       |
-  +----------------------------+----------+-------+
++----------------------------+----------+-------+
+|                    col_name|data_type |comment|
++----------------------------+----------+-------+
+|                          c1|       int|   null|
+|                          c2|    string|   null|
+|                            |          |       |
+|# Detailed Table Information|          |       |
+|                    Database|   tempdb1|       |
+|                       Table|        v2|       |
++----------------------------+----------+-------+
 
 -- Before ALTER VIEW SET TBLPROPERTIES
 DESC TABLE EXTENDED tempdb1.v2;
-  +----------------------------+----------+-------+
-  |                    col_name| data_type|comment|
-  +----------------------------+----------+-------+
-  |                          c1|       int|   null|
-  |                          c2|    string|   null|
-  |                            |          |       |
-  |# Detailed Table Information|          |       |
-  |                    Database|   tempdb1|       |
-  |                       Table|        v2|       |
-  |            Table Properties|    [....]|       |
-  +----------------------------+----------+-------+
++----------------------------+----------+-------+
+|                    col_name| data_type|comment|
++----------------------------+----------+-------+
+|                          c1|       int|   null|
+|                          c2|    string|   null|
+|                            |          |       |
+|# Detailed Table Information|          |       |
+|                    Database|   tempdb1|       |
+|                       Table|        v2|       |
+|            Table Properties|    [....]|       |
++----------------------------+----------+-------+
 
 -- Set properties in TBLPROPERTIES
 ALTER VIEW tempdb1.v2 SET TBLPROPERTIES ('created.by.user' = "John", 'created.date' = '01-01-2001' );
 
 -- Use `DESCRIBE TABLE EXTENDED tempdb1.v2` to verify
 DESC TABLE EXTENDED tempdb1.v2;
-  +----------------------------+-----------------------------------------------------+-------+
-  |                    col_name|                                            data_type|comment|
-  +----------------------------+-----------------------------------------------------+-------+
-  |                          c1|                                                  int|   null|
-  |                          c2|                                               string|   null|
-  |                            |                                                     |       |
-  |# Detailed Table Information|                                                     |       |
-  |                    Database|                                              tempdb1|       |
-  |                       Table|                                                   v2|       |
-  |            Table Properties|[created.by.user=John, created.date=01-01-2001, ....]|       |
-  +----------------------------+-----------------------------------------------------+-------+
++----------------------------+-----------------------------------------------------+-------+
+|                    col_name|                                            data_type|comment|
++----------------------------+-----------------------------------------------------+-------+
+|                          c1|                                                  int|   null|
+|                          c2|                                               string|   null|
+|                            |                                                     |       |
+|# Detailed Table Information|                                                     |       |
+|                    Database|                                              tempdb1|       |
+|                       Table|                                                   v2|       |
+|            Table Properties|[created.by.user=John, created.date=01-01-2001, ....]|       |
++----------------------------+-----------------------------------------------------+-------+
 
 -- Remove the key `created.by.user` and `created.date` from `TBLPROPERTIES`
 ALTER VIEW tempdb1.v2 UNSET TBLPROPERTIES ('created.by.user', 'created.date');
 
 --Use `DESC TABLE EXTENDED tempdb1.v2` to verify the changes
 DESC TABLE EXTENDED tempdb1.v2;
-  +----------------------------+----------+-------+
-  |                    col_name| data_type|comment|
-  +----------------------------+----------+-------+
-  |                          c1|       int|   null|
-  |                          c2|    string|   null|
-  |                            |          |       |
-  |# Detailed Table Information|          |       |
-  |                    Database|   tempdb1|       |
-  |                       Table|        v2|       |
-  |            Table Properties|    [....]|       |
-  +----------------------------+----------+-------+
++----------------------------+----------+-------+
+|                    col_name| data_type|comment|
++----------------------------+----------+-------+
+|                          c1|       int|   null|
+|                          c2|    string|   null|
+|                            |          |       |
+|# Detailed Table Information|          |       |
+|                    Database|   tempdb1|       |
+|                       Table|        v2|       |
+|            Table Properties|    [....]|       |
++----------------------------+----------+-------+
 
 -- Change the view definition
 ALTER VIEW tempdb1.v2 AS SELECT * FROM tempdb1.v1;
 
 -- Use `DESC TABLE EXTENDED` to verify
 DESC TABLE EXTENDED tempdb1.v2;
-  +----------------------------+---------------------------+-------+
-  |                    col_name|                  data_type|comment|
-  +----------------------------+---------------------------+-------+
-  |                          c1|                        int|   null|
-  |                          c2|                     string|   null|
-  |                            |                           |       |
-  |# Detailed Table Information|                           |       |
-  |                    Database|                    tempdb1|       |
-  |                       Table|                         v2|       |
-  |                        Type|                       VIEW|       |
-  |                   View Text|   select * from tempdb1.v1|       |
-  |          View Original Text|   select * from tempdb1.v1|       |
-  +----------------------------+---------------------------+-------+
++----------------------------+---------------------------+-------+
+|                    col_name|                  data_type|comment|
++----------------------------+---------------------------+-------+
+|                          c1|                        int|   null|
+|                          c2|                     string|   null|
+|                            |                           |       |
+|# Detailed Table Information|                           |       |
+|                    Database|                    tempdb1|       |
+|                       Table|                         v2|       |
+|                        Type|                       VIEW|       |
+|                   View Text|   select * from tempdb1.v1|       |
+|          View Original Text|   select * from tempdb1.v1|       |
++----------------------------+---------------------------+-------+
 {% endhighlight %}
 
 ### Related Statements
