@@ -356,7 +356,7 @@ private[spark] class TaskSchedulerImpl(
    *                           value at index 'i' corresponds to shuffledOffers[i]
    * @param tasks tasks scheduled per offer, value at index 'i' corresponds to shuffledOffers[i]
    * @param addressesWithDescs tasks scheduler per host:port, used for barrier tasks
-   * @return tuple of (had delay schedule rejects?, option of min locality of launched task)
+   * @return tuple of (no delay schedule rejects?, option of min locality of launched task)
    */
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
