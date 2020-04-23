@@ -199,8 +199,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     if (elapsedMs >= COMPACT_LATENCY_WARN_THRESHOLD_MS) {
       logWarning(s"Compacting took $elapsedMs ms (load: $loadElapsedMs ms," +
         s" write: $writeElapsedMs ms) for compact batch $batchId")
-      logWarning(s"Loaded ${allLogs.size} entries (${SizeEstimator.estimate(allLogs)} bytes in " +
-        s"memory), and wrote ${compactedLogs.size} entries for compact batch $batchId")
+      logWarning(s"Loaded ${allLogs.size} entries (estimated ${SizeEstimator.estimate(allLogs)} " +
+        s"bytes in memory), and wrote ${compactedLogs.size} entries for compact batch $batchId")
     } else {
       logDebug(s"Compacting took $elapsedMs ms (load: $loadElapsedMs ms," +
         s" write: $writeElapsedMs ms) for compact batch $batchId")
