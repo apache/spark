@@ -905,7 +905,10 @@ object SparkSession extends Logging {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+        for ((k, v) <- options if !SQLConf.staticConfKeys.contains(k)) {
+          session.sessionState.conf.setConfString(k, v)
+
+        }
         if (options.nonEmpty) {
           logWarning("Using an existing SparkSession; some configuration may not take effect.")
         }
@@ -917,7 +920,10 @@ object SparkSession extends Logging {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+          for ((k, v) <- options if !SQLConf.staticConfKeys.contains(k)) {
+            session.sessionState.conf.setConfString(k, v)
+
+          }
           if (options.nonEmpty) {
             logWarning("Using an existing SparkSession; some configuration may not take effect.")
           }
