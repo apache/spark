@@ -460,7 +460,7 @@ class TestingUtilsSuite extends SparkFunSuite {
       Matrices.dense(0, 0, Array()) relTol 0.01)
   }
 
-  test("Valid class of dataType") {
+  test("SPARK-31400, catalogString distinguish Vectors in ml and mllib") {
     val schema = StructType(Array[StructField] {
       StructField("features", new org.apache.spark.mllib.linalg.VectorUDT)
     })
