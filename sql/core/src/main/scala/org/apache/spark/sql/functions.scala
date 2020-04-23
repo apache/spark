@@ -4857,7 +4857,7 @@ object functions {
    * @since 2.0.0
    */
   @deprecated("udf() with `dataType` parameter is deprecated. " +
-    "Please use udf() without `dataType`.", "3.0.0")
+    "Please use udf() without `dataType` parameter.", "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
     if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
       val errorMsg = "You're using untyped Scala UDF, which does not have the input type " +
