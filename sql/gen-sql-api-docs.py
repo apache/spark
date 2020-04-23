@@ -43,7 +43,7 @@ def _list_function_infos(jvm):
             usage=usage,
             arguments=jinfo.getArguments().replace("_FUNC_", name),
             examples=jinfo.getExamples().replace("_FUNC_", name),
-            note=jinfo.getNote(),
+            note=jinfo.getNote().replace("_FUNC_", name),
             since=jinfo.getSince(),
             deprecated=jinfo.getDeprecated()))
     return sorted(infos, key=lambda i: i.name)
