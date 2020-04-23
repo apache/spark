@@ -354,8 +354,6 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
     // trigger the final plan for AQE
     testDf.collect()
-    // whitespace
-    val ws = " "
     //   == Physical Plan ==
     //   AdaptiveSparkPlan (14)
     //   +- * HashAggregate (13)
@@ -375,22 +373,22 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       testDf,
       FormattedMode,
       s"""
-         |(6) BroadcastQueryStage$ws
+         |(6) BroadcastQueryStage
          |Output [2]: [k#x, v2#x]
          |Arguments: 0
          |""".stripMargin,
       s"""
-         |(11) ShuffleQueryStage$ws
+         |(11) ShuffleQueryStage
          |Output [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
          |Arguments: 1
          |""".stripMargin,
       s"""
-         |(12) CustomShuffleReader$ws
+         |(12) CustomShuffleReader
          |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
          |Arguments: coalesced
          |""".stripMargin,
       s"""
-         |(14) AdaptiveSparkPlan$ws
+         |(14) AdaptiveSparkPlan
          |Output [4]: [k#x, count(v1)#xL, sum(v1)#xL, avg(v2)#x]
          |Arguments: isFinalPlan=true
          |""".stripMargin
