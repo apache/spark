@@ -494,18 +494,11 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 
-/*
- * Replace `/n` with `<br/>`
- */
-function replaceLineBreak(str) {
-    return str.replace("\\n", "<br/>");
-}
-
 /* (Job page only) Helper function to add tooltips for RDDs. */
 function addTooltipsForRDDs(svgContainer) {
   svgContainer.selectAll("g.node").each(function() {
     var node = d3.select(this);
-    var tooltipText = replaceLineBreak(node.attr("name"));
+    var tooltipText = node.attr("name");
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
