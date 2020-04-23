@@ -75,7 +75,6 @@ private[spark] object HiveUtils extends Logging {
   val FAKE_HIVE_VERSION = buildConf("spark.sql.hive.version")
     .doc(s"deprecated, please use ${HIVE_METASTORE_VERSION.key} to get the Hive version in Spark.")
     .version("1.1.1")
-    .internal()
     .fallbackConf(HIVE_METASTORE_VERSION)
 
   val HIVE_METASTORE_JARS = buildStaticConf("spark.sql.hive.metastore.jars")
