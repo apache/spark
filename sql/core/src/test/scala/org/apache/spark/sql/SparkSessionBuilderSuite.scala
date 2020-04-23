@@ -189,9 +189,12 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     val session2 = SparkSession
       .builder()
       .config(WAREHOUSE_PATH.key, "SPARK-31532-db")
+      .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31532-2")
       .getOrCreate()
 
     assert(!session.conf.get(WAREHOUSE_PATH).contains("SPARK-31532-db"))
     assert(session.conf.get(WAREHOUSE_PATH) === session2.conf.get(WAREHOUSE_PATH))
+    assert(session2.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
+
   }
 }
