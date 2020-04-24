@@ -2397,14 +2397,12 @@ class DataFrameSuite extends QueryTest
     implicit def newArrayEncoder[T <: Array[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
     // decimals
-    val decSchema = new StructType()
-      .add("value", "array<decimal(38,18)>")
     val decSpark = Array(decOne, decTwo)
     val decScala = decSpark.map(_.toBigDecimal)
     val decJava = decSpark.map(_.toJavaBigDecimal)
-    checkAnswer(Seq(decSpark).toDF(), new GenericRowWithSchema(Array(decJava), decSchema))
-    checkAnswer(Seq(decScala).toDF(), new GenericRowWithSchema(Array(decJava), decSchema))
-    checkAnswer(Seq(decJava).toDF(), new GenericRowWithSchema(Array(decJava), decSchema))
+    checkAnswer(Seq(decSpark).toDF(), Row(decJava))
+    checkAnswer(Seq(decScala).toDF(), Row(decJava))
+    checkAnswer(Seq(decJava).toDF(), Row(decJava))
 
     // datetimes and intervals
     val dates = strings.map(Date.valueOf)
@@ -2428,10 +2426,7 @@ class DataFrameSuite extends QueryTest
 
     // nested
     val nestArray = Array(Array(1), Array(2))
-    val nestArraySchema = new StructType()
-      .add("value", "array<array<int>>")
-    checkAnswer(Seq(nestArray).toDF(),
-      new GenericRowWithSchema(Array(nestArray.map(wrapIntArray)), nestArraySchema))
+    checkAnswer(Seq(nestArray).toDF(), Row(nestArray.map(wrapIntArray)))
   }
 }
 
