@@ -22,8 +22,6 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.parallel.immutable.ParVector
-
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -31,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -122,83 +119,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
-      }
-    }
-  }
-
-  test("using _FUNC_ instead of function names in examples") {
-    val exampleRe = "(>.*;)".r
-    val setStmtRe = "(?i)^(>\\s+set\\s+).+".r
-    val ignoreSet = Set(
-      // Examples for CaseWhen show simpler syntax:
-      // `CASE WHEN ... THEN ... WHEN ... THEN ... END`
-      "org.apache.spark.sql.catalyst.expressions.CaseWhen",
-      // _FUNC_ is replaced by `locate` but `locate(... IN ...)` is not supported
-      "org.apache.spark.sql.catalyst.expressions.StringLocate",
-      // _FUNC_ is replaced by `%` which causes a parsing error on `SELECT %(2, 1.8)`
-      "org.apache.spark.sql.catalyst.expressions.Remainder",
-      // Examples demonstrate alternative names, see SPARK-20749
-      "org.apache.spark.sql.catalyst.expressions.Length")
-    spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
-      val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
-      val className = info.getClassName
-      withClue(s"Expression class '$className'") {
-        val exprExamples = info.getOriginalExamples
-        if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
-          assert(exampleRe.findAllIn(exprExamples).toIterable
-            .filter(setStmtRe.findFirstIn(_).isEmpty) // Ignore SET commands
-            .forall(_.contains("_FUNC_")))
-        }
-      }
-    }
-  }
-
-  test("check outputs of expression examples") {
-    def unindentAndTrim(s: String): String = {
-      s.replaceAll("\n\\s+", "\n").trim
-    }
-    val beginSqlStmtRe = "  > ".r
-    val endSqlStmtRe = ";\n".r
-    def checkExampleSyntax(example: String): Unit = {
-      val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
-      val endStmtNum = endSqlStmtRe.findAllIn(example).length
-      assert(beginStmtNum === endStmtNum,
-        "The number of ` > ` does not match to the number of `;`")
-    }
-    val exampleRe = """^(.+);\n(?s)(.+)$""".r
-    val ignoreSet = Set(
-      // One of examples shows getting the current timestamp
-      "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
-      // Random output without a seed
-      "org.apache.spark.sql.catalyst.expressions.Rand",
-      "org.apache.spark.sql.catalyst.expressions.Randn",
-      "org.apache.spark.sql.catalyst.expressions.Shuffle",
-      "org.apache.spark.sql.catalyst.expressions.Uuid",
-      // The example calls methods that return unstable results.
-      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
-
-    val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
-    parFuncs.foreach { funcId =>
-      // Examples can change settings. We clone the session to prevent tests clashing.
-      val clonedSpark = spark.cloneSession()
-      // Coalescing partitions can change result order, so disable it.
-      clonedSpark.sessionState.conf.setConf(SQLConf.COALESCE_PARTITIONS_ENABLED, false)
-      val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
-      val className = info.getClassName
-      if (!ignoreSet.contains(className)) {
-        withClue(s"Function '${info.getName}', Expression class '$className'") {
-          val example = info.getExamples
-          checkExampleSyntax(example)
-          example.split("  > ").toList.foreach(_ match {
-            case exampleRe(sql, output) =>
-              val df = clonedSpark.sql(sql)
-              val actual = unindentAndTrim(
-                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
-              val expected = unindentAndTrim(output)
-              assert(actual === expected)
-            case _ =>
-          })
-        }
       }
     }
   }
