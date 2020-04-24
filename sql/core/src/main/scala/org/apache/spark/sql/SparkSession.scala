@@ -955,14 +955,16 @@ object SparkSession extends Logging {
     }
 
     private def applyModifiableSettings(session: SparkSession): Unit = {
-      for ((k, v) <- options) {
-        if (SQLConf.staticConfKeys.contains(k)) {
-          logWarning(s"Using an existing SparkSession, the static configuration $k is ignored.")
-        } else {
-          session.sessionState.conf.setConfString(k, v)
-        }
+      val (staticConfs, otherConfs) =
+        options.partition(kv => SQLConf.staticConfKeys.contains(kv._1))
+
+      otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+
+      if (staticConfs.nonEmpty) {
+        logWarning("Using an existing SparkSession; the static sql configurations will not take" +
+          " effect.")
       }
-      if ((options -- SQLConf.staticConfKeys.asScala).nonEmpty) {
+      if (otherConfs.nonEmpty) {
         logWarning("Using an existing SparkSession; some spark core configurations may not take" +
           " effect.")
       }
