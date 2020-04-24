@@ -32,10 +32,10 @@ This subsection presents the usages and descriptions of these functions.
  * [Map Functions](sql-ref-functions-builtin.html#map-functions)
  * [Date and Timestamp Functions](sql-ref-functions-builtin.html#date-and-timestamp-functions)
  * [JSON Functions](sql-ref-functions-builtin.html#json-functions)
- * [Window Functions](sql-ref-functions-builtin.html#window-functions)
 
-#### Aggregate Functions
+#### Aggregate-like Functions
  * [Aggregate Functions](sql-ref-functions-builtin.html#aggregate-functions)
+ * [Window Functions](sql-ref-functions-builtin.html#window-functions)
 
 ### UDFs (User-Defined Functions)
 
