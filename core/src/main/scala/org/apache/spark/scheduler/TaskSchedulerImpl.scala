@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.{Locale, Timer, TimerTask}
+import java.util.{Timer, TimerTask}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
@@ -57,6 +57,11 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Ut
  *   * Periodic revival of all offers from the CoarseGrainedSchedulerBackend, to accommodate delay
  *      scheduling
  *   * task-result-getter threads
+ *
+ * CAUTION: Any non fatal exception thrown within Spark RPC framework can be swallowed.
+ * Thus, throwing exception in methods like resourceOffers, statusUpdate won't fail
+ * the application, but could lead to undefined behavior. Instead, we shall use method like
+ * TaskSetManger.abort() to abort a stage and then fail the application (SPARK-31485).
  *
  * Delay Scheduling:
  *  Delay scheduling is an optimization that sacrifices job fairness for data locality in order to
@@ -402,9 +407,7 @@ private[spark] class TaskSchedulerImpl(
                 // addresses are the same as that we allocated in taskResourceAssignments since it's
                 // synchronized. We don't remove the exact addresses allocated because the current
                 // approach produces the identical result with less time complexity.
-                availableResources(i).getOrElse(rName,
-                  throw new SparkException(s"Try to acquire resource $rName that doesn't exist."))
-                  .remove(0, rInfo.addresses.size)
+                availableResources(i)(rName).remove(0, rInfo.addresses.size)
               }
               // Only update hosts for a barrier task.
               if (taskSet.isBarrier) {
@@ -469,8 +472,9 @@ private[spark] class TaskSchedulerImpl(
       resourceProfileIds: Array[Int],
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Buffer[String]]],
-      rpId: Int): Int = {
-    val resourceProfile = sc.resourceProfileManager.resourceProfileFromId(rpId)
+      taskSet: TaskSetManager): Int = {
+    val resourceProfile = sc.resourceProfileManager.resourceProfileFromId(
+      taskSet.taskSet.resourceProfileId)
     val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter { case (id, _) =>
       (id == resourceProfile.id)
     }
@@ -485,9 +489,12 @@ private[spark] class TaskSchedulerImpl(
         numTasksPerExecCores
       } else {
         val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount)
-          .getOrElse(throw new SparkException("limitingResource returns from ResourceProfile" +
-            s" $resourceProfile doesn't actually contain that task resource!")
-          )
+          .getOrElse {
+            val errorMsg = "limitingResource returns from ResourceProfile " +
+              s"$resourceProfile doesn't actually contain that task resource!"
+            taskSet.abort(errorMsg)
+            throw new SparkException(errorMsg)
+          }
         // available addresses already takes into account if there are fractional
         // task resource requests
         val availAddrs = availableResources(index).get(limitingResource).map(_.size).getOrElse(0)
@@ -583,7 +590,7 @@ private[spark] class TaskSchedulerImpl(
       // value is -1
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
         val slots = calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
-          taskSet.taskSet.resourceProfileId)
+          taskSet)
         slots
       } else {
         -1
@@ -677,11 +684,18 @@ private[spark] class TaskSchedulerImpl(
           // Check whether the barrier tasks are partially launched.
           // TODO SPARK-24818 handle the assert failure case (that can happen when some locality
           // requirements are not fulfilled, and we should revert the launched tasks).
-          require(addressesWithDescs.size == taskSet.numTasks,
-            s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
-              s"because only ${addressesWithDescs.size} out of a total number of " +
-              s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
-              "been blacklisted or cannot fulfill task locality requirements.")
+          if (addressesWithDescs.size != taskSet.numTasks) {
+            val errorMsg =
+              s"Fail resource offers for barrier stage ${taskSet.stageId} because only " +
+                s"${addressesWithDescs.size} out of a total number of ${taskSet.numTasks}" +
+                s" tasks got resource offers. This happens because barrier execution currently " +
+                s"does not work gracefully with delay scheduling. We highly recommend you to " +
+                s"disable delay scheduling by setting spark.locality.wait=0 as a workaround if " +
+                s"you see this error frequently."
+            logWarning(errorMsg)
+            taskSet.abort(errorMsg)
+            throw new SparkException(errorMsg)
+          }
 
           // materialize the barrier coordinator.
           maybeInitBarrierCoordinator()
@@ -743,8 +757,12 @@ private[spark] class TaskSchedulerImpl(
             if (state == TaskState.LOST) {
               // TaskState.LOST is only used by the deprecated Mesos fine-grained scheduling mode,
               // where each executor corresponds to a single task, so mark the executor as failed.
-              val execId = taskIdToExecutorId.getOrElse(tid, throw new IllegalStateException(
-                "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"))
+              val execId = taskIdToExecutorId.getOrElse(tid, {
+                val errorMsg =
+                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"
+                taskSet.abort(errorMsg)
+                throw new SparkException(errorMsg)
+              })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(
                   SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
