@@ -33,6 +33,9 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
   private final int vlen;
   private final int recordLength;
 
+  @Override
+  public String name() { return  "FixedLengthRowBasedKeyValueBatch"; }
+
   private long getKeyOffsetForFixedLengthRecords(int rowId) {
     return recordStartOffset + rowId * (long) recordLength;
   }

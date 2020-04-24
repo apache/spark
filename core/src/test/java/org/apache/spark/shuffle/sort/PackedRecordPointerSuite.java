@@ -37,7 +37,7 @@ public class PackedRecordPointerSuite {
   public void heap() throws IOException {
     final SparkConf conf = new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new TestMemoryManager(conf), 0);
+      new TaskMemoryManager(new TestMemoryManager(conf), 0, "task");
     final MemoryConsumer c = new TestMemoryConsumer(memoryManager, MemoryMode.ON_HEAP);
     final MemoryBlock page0 = memoryManager.allocatePage(128, c);
     final MemoryBlock page1 = memoryManager.allocatePage(128, c);
@@ -59,7 +59,7 @@ public class PackedRecordPointerSuite {
       .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), true)
       .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 10000L);
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new TestMemoryManager(conf), 0);
+      new TaskMemoryManager(new TestMemoryManager(conf), 0, "task");
     final MemoryConsumer c = new TestMemoryConsumer(memoryManager, MemoryMode.OFF_HEAP);
     final MemoryBlock page0 = memoryManager.allocatePage(128, c);
     final MemoryBlock page1 = memoryManager.allocatePage(128, c);

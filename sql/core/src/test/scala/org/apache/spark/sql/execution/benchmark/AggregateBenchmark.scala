@@ -478,7 +478,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
               Long.MaxValue,
               Long.MaxValue / 2,
               1),
-            0)
+            0,
+            "task")
           val map = new LongToUnsafeRowMap(taskMemoryManager, 64)
           while (i < 65536) {
             value.setInt(0, i)
@@ -510,7 +511,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
               Long.MaxValue,
               Long.MaxValue / 2,
               1),
-            0)
+            0
+            , "task")
           val map = new BytesToBytesMap(taskMemoryManager, 1024, 64L << 20)
           val keyBytes = new Array[Byte](16)
           val valueBytes = new Array[Byte](16)

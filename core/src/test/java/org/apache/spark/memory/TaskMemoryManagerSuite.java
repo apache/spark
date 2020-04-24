@@ -35,7 +35,8 @@ public class TaskMemoryManagerSuite {
         Long.MAX_VALUE,
         Long.MAX_VALUE / 2,
         1),
-      0);
+      0,
+            "task");
     final MemoryConsumer c = new TestMemoryConsumer(manager);
     manager.allocatePage(4096, c);  // leak memory
     Assert.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
@@ -47,7 +48,8 @@ public class TaskMemoryManagerSuite {
     final SparkConf conf = new SparkConf()
       .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), true)
       .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 1000L);
-    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
+    final TaskMemoryManager manager =
+      new TaskMemoryManager(new TestMemoryManager(conf), 0, "task");
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
@@ -63,7 +65,7 @@ public class TaskMemoryManagerSuite {
   public void encodePageNumberAndOffsetOnHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(
-        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0, "task");
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
@@ -75,7 +77,7 @@ public class TaskMemoryManagerSuite {
   public void freeingPageSetsPageNumberToSpecialConstant() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(
-        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0, "task");
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     c.freePage(dataPage);
@@ -86,7 +88,7 @@ public class TaskMemoryManagerSuite {
   public void freeingPageDirectlyInAllocatorTriggersAssertionError() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(
-        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0, "task");
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     MemoryAllocator.HEAP.free(dataPage);
@@ -96,7 +98,7 @@ public class TaskMemoryManagerSuite {
   public void callingFreePageOnDirectlyAllocatedPageTriggersAssertionError() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(
-        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0, "task");
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = MemoryAllocator.HEAP.allocate(256);
     manager.freePage(dataPage, c);
@@ -106,7 +108,7 @@ public class TaskMemoryManagerSuite {
   public void cooperativeSpilling() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(100);
-    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, "task");
 
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
@@ -148,7 +150,7 @@ public class TaskMemoryManagerSuite {
   public void cooperativeSpilling2() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(100);
-    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, "task");
 
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
@@ -183,7 +185,7 @@ public class TaskMemoryManagerSuite {
   public void shouldNotForceSpillingInDifferentModes() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(100);
-    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, "task");
 
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
@@ -205,7 +207,8 @@ public class TaskMemoryManagerSuite {
     final SparkConf conf = new SparkConf()
       .set("spark.unsafe.offHeap", "true")
       .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 1000L);
-    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
+    final TaskMemoryManager manager =
+      new TaskMemoryManager(new TestMemoryManager(conf), 0, "task");
     Assert.assertSame(MemoryMode.OFF_HEAP, manager.tungstenMemoryMode);
   }
 

@@ -85,6 +85,7 @@ private[spark] class UnifiedMemoryManager(
   override private[memory] def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
+      taskIdentifier: String,
       memoryMode: MemoryMode): Long = synchronized {
     assertInvariants()
     assert(numBytes >= 0)
@@ -144,8 +145,8 @@ private[spark] class UnifiedMemoryManager(
       maxMemory - math.min(storagePool.memoryUsed, storageRegionSize)
     }
 
-    executionPool.acquireMemory(
-      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize)
+    executionPool.acquireMemory(numBytes, taskAttemptId, taskIdentifier,
+      maybeGrowExecutionPool, () => computeMaxExecutionPoolSize)
   }
 
   override def acquireStorageMemory(

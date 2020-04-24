@@ -190,14 +190,21 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
+  @Override
+  public String name() { return "UnsafeExternalSorter"; }
+
   /**
    * Sort and spill the current records in response to memory pressure.
    */
   @Override
   public long spill(long size, MemoryConsumer trigger) throws IOException {
+    String task = taskMemoryManager.taskIdentifier();
     if (trigger != this) {
       if (readingIterator != null) {
-        return readingIterator.spill();
+        logger.info("{} starts spilling {}, triggered by {}.", task, name(), trigger.name());
+        long spilled = readingIterator.spill();
+        logger.info("{} finishes spilling {}.", task, name());
+        return spilled;
       }
       return 0L; // this should throw exception
     }
@@ -206,8 +213,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       return 0L;
     }
 
-    logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
+    logger.info("Thread {} ({}) spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
+      task,
       Utils.bytesToString(getMemoryUsage()),
       spillWriters.size(),
       spillWriters.size() > 1 ? " times" : " time");

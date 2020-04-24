@@ -34,6 +34,9 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
   // full addresses for key rows and value rows
   private final long[] keyOffsets;
 
+  @Override
+  public String name() { return "VariableLengthRowBasedKeyValueBatch"; }
+
   /**
    * Append a key value pair.
    * It copies data into the backing MemoryBlock.

@@ -258,6 +258,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     }
   }
 
+  @Override
+  public String name() { return "ShuffleExternalSorter"; }
+
   /**
    * Sort and spill the current records in response to memory pressure.
    */
@@ -267,8 +270,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       return 0L;
     }
 
-    logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
+    String task = taskMemoryManager.taskIdentifier();
+    logger.info("Thread {} ({}) spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
+      task,
       Utils.bytesToString(getMemoryUsage()),
       spills.size(),
       spills.size() > 1 ? " times" : " time");

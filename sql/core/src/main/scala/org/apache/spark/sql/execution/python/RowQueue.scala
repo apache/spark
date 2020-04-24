@@ -21,7 +21,8 @@ import java.io._
 
 import com.google.common.io.Closeables
 
-import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.memory.{MemoryConsumer, SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.serializer.SerializerManager
@@ -174,7 +175,7 @@ private[python] case class HybridRowQueue(
     tempDir: File,
     numFields: Int,
     serMgr: SerializerManager)
-  extends MemoryConsumer(memManager) with RowQueue {
+  extends MemoryConsumer(memManager) with RowQueue with Logging {
 
   // Each buffer should have at least one row
   private var queues = new java.util.LinkedList[RowQueue]()
@@ -185,12 +186,17 @@ private[python] case class HybridRowQueue(
   // exposed for testing
   private[python] def numQueues(): Int = queues.size()
 
+  override def name(): String = "HybridRowQueue"
+
   def spill(size: Long, trigger: MemoryConsumer): Long = {
     if (trigger == this) {
       // When it's triggered by itself, it should write upcoming rows into disk instead of copying
       // the rows already in the queue.
       return 0L
     }
+    val task = taskMemoryManager.taskIdentifier()
+    logInfo(s"$task starts spilling $name," +
+      s" triggered by ${Option(trigger).map(_.name()).getOrElse("unknown")}.")
     var released = 0L
     synchronized {
       // poll out all the buffers and add them back in the same order to make sure that the rows
@@ -215,6 +221,7 @@ private[python] case class HybridRowQueue(
       }
       queues = newQueues
     }
+    logInfo(s"$task finishes spilling $name.")
     released
   }
 

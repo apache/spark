@@ -117,6 +117,7 @@ private[spark] abstract class MemoryManager(
   def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
+      taskIdentifier: String,
       memoryMode: MemoryMode): Long
 
   /**

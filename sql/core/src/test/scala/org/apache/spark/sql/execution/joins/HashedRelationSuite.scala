@@ -43,7 +43,8 @@ class HashedRelationSuite extends SharedSparkSession {
       Long.MaxValue,
       Long.MaxValue / 2,
       1),
-    0)
+    0,
+    "task")
 
   val rand = new Random(100)
 
@@ -107,7 +108,8 @@ class HashedRelationSuite extends SharedSparkSession {
         Long.MaxValue,
         Long.MaxValue / 2,
         1),
-      0)
+      0,
+      "task")
     val binaryMap = new BytesToBytesMap(taskMemoryManager, 1, 1)
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
@@ -179,7 +181,8 @@ class HashedRelationSuite extends SharedSparkSession {
         Long.MaxValue,
         Long.MaxValue / 2,
         1),
-      0)
+      0,
+    "task")
     val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
 
     {
@@ -224,7 +227,8 @@ class HashedRelationSuite extends SharedSparkSession {
         Long.MaxValue,
         Long.MaxValue / 2,
         1),
-      0)
+      0,
+    "task")
     val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
 
     val N = 1000000
@@ -278,7 +282,8 @@ class HashedRelationSuite extends SharedSparkSession {
         Long.MaxValue,
         Long.MaxValue / 2,
         1),
-      0)
+      0,
+      "task")
     val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
     val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
 

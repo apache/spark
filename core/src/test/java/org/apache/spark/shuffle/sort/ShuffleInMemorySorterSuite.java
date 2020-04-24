@@ -40,7 +40,7 @@ public class ShuffleInMemorySorterSuite {
 
   final TestMemoryManager memoryManager =
     new TestMemoryManager(new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false));
-  final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
+  final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0, "task");
   final TestMemoryConsumer consumer = new TestMemoryConsumer(taskMemoryManager);
 
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int strLength) {
@@ -72,7 +72,7 @@ public class ShuffleInMemorySorterSuite {
     };
     final SparkConf conf = new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
     final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new TestMemoryManager(conf), 0);
+      new TaskMemoryManager(new TestMemoryManager(conf), 0, "task");
     final MemoryConsumer c = new TestMemoryConsumer(memoryManager);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, c);
     final Object baseObject = dataPage.getBaseObject();

@@ -214,6 +214,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
       pageSizeBytes);
   }
 
+  @Override
+  public String name() { return "BytesToBytesMap"; }
+
   /**
    * Returns the number of keys defined in the map.
    */
@@ -771,7 +774,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
   @Override
   public long spill(long size, MemoryConsumer trigger) throws IOException {
     if (trigger != this && destructiveIterator != null) {
-      return destructiveIterator.spill(size);
+      String task = taskMemoryManager.taskIdentifier();
+      logger.info("{} starts spilling {}, triggered by {}.", task, name(), trigger.name());
+      long spilled = destructiveIterator.spill(size);
+      logger.info("{} finishes spilling {}", task, name());
+      return spilled;
     }
     return 0L;
   }

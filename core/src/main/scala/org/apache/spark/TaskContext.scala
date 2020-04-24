@@ -67,7 +67,7 @@ object TaskContext {
    * An empty task context that does not represent an actual task.  This is only used in tests.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, 0, null, new Properties, null)
+    new TaskContextImpl(0, 0, 0, 0, 0, "task", null, new Properties, null)
   }
 }
 
@@ -170,6 +170,11 @@ abstract class TaskContext extends Serializable {
    * will share the same attempt ID).  This is roughly equivalent to Hadoop's TaskAttemptID.
    */
   def taskAttemptId(): Long
+
+  /**
+   * The task name, e.g. "task 0.0 in stage 1.0"
+   */
+  def taskName(): String
 
   /**
    * Get a local property set upstream in the driver, or null if it is missing. See also

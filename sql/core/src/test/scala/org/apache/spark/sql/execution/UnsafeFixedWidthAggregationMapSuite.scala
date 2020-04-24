@@ -69,7 +69,7 @@ class UnsafeFixedWidthAggregationMapSuite
     test(name) {
       val conf = new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false")
       memoryManager = new TestMemoryManager(conf)
-      taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+      taskMemoryManager = new TaskMemoryManager(memoryManager, 0, "task")
       taskContext = mock(classOf[TaskContext])
       when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
 
@@ -79,6 +79,7 @@ class UnsafeFixedWidthAggregationMapSuite
         partitionId = 0,
         taskAttemptId = Random.nextInt(10000),
         attemptNumber = 0,
+        taskName = "",
         taskMemoryManager = taskMemoryManager,
         localProperties = new Properties,
         metricsSystem = null))

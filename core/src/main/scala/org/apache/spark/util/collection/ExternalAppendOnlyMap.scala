@@ -124,6 +124,8 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   private[collection] def numSpills: Int = spilledMaps.size
 
+  override def name(): String = "ExternalAppendOnlyMap"
+
   /**
    * Insert the given key and value into the map.
    */

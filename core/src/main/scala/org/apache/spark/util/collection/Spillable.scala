@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
@@ -94,8 +94,11 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
     // Actually spill
     if (shouldSpill) {
       _spillCount += 1
-      logSpillage(currentMemory)
+      val task = taskMemoryManager.taskIdentifier()
+      logInfo(s"$task starts spilling $name.")
+      logSpillage(currentMemory, task)
       spill(collection)
+      logInfo(s"$task finishes spilling $name.")
       _elementsRead = 0
       _memoryBytesSpilled += currentMemory
       releaseMemory()
@@ -109,7 +112,10 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    */
   override def spill(size: Long, trigger: MemoryConsumer): Long = {
     if (trigger != this && taskMemoryManager.getTungstenMemoryMode == MemoryMode.ON_HEAP) {
+      val task = taskMemoryManager.taskIdentifier()
+      logInfo(s"$task starts spilling $name, triggered by ${trigger.name}.")
       val isSpilled = forceSpill()
+      logInfo(s"$task finishes spilling $name.")
       if (!isSpilled) {
         0L
       } else {
@@ -140,11 +146,12 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    * Prints a standard log message detailing spillage.
    *
    * @param size number of bytes spilled
+   * @param task TaskContext.taskDescription()
    */
-  @inline private def logSpillage(size: Long): Unit = {
+  @inline private def logSpillage(size: Long, task: String): Unit = {
     val threadId = Thread.currentThread().getId
-    logInfo("Thread %d spilling in-memory map of %s to disk (%d time%s so far)"
-      .format(threadId, org.apache.spark.util.Utils.bytesToString(size),
+    logInfo("Thread %d (%s) spilling in-memory map of %s to disk (%d time%s so far)"
+      .format(threadId, task, org.apache.spark.util.Utils.bytesToString(size),
         _spillCount, if (_spillCount > 1) "s" else ""))
   }
 }

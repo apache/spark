@@ -108,7 +108,7 @@ public class UnsafeShuffleWriterSuite {
       .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
     taskMetrics = new TaskMetrics();
     memoryManager = new TestMemoryManager(conf);
-    taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
+    taskMemoryManager = new TaskMemoryManager(memoryManager, 0, "task");
 
     // Some tests will override this manager because they change the configuration. This is a
     // default for tests that don't need a specific one.

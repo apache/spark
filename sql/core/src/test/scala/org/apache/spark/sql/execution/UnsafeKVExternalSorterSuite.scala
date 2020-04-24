@@ -114,13 +114,14 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSparkSession 
       spill: Boolean): Unit = {
     val memoryManager =
       new TestMemoryManager(new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"))
-    val taskMemMgr = new TaskMemoryManager(memoryManager, 0)
+    val taskMemMgr = new TaskMemoryManager(memoryManager, 0, "task")
     TaskContext.setTaskContext(new TaskContextImpl(
       stageId = 0,
       stageAttemptNumber = 0,
       partitionId = 0,
       taskAttemptId = 98456,
       attemptNumber = 0,
+      taskName = "",
       taskMemoryManager = taskMemMgr,
       localProperties = new Properties,
       metricsSystem = null))
@@ -209,7 +210,7 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSparkSession 
 
   test("SPARK-23376: Create UnsafeKVExternalSorter with BytesToByteMap having duplicated keys") {
     val memoryManager = new TestMemoryManager(new SparkConf())
-    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0, "task")
     val map = new BytesToBytesMap(taskMemoryManager, 64, taskMemoryManager.pageSizeBytes())
 
     // Key/value are a unsafe rows with a single int column
@@ -231,7 +232,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSparkSession 
     // Make sure we can successfully create a UnsafeKVExternalSorter with a `BytesToBytesMap`
     // which has duplicated keys and the number of entries exceeds its capacity.
     try {
-      val context = new TaskContextImpl(0, 0, 0, 0, 0, taskMemoryManager, new Properties(), null)
+      val context = new TaskContextImpl(0, 0, 0, 0, 0,
+        "", taskMemoryManager, new Properties(), null)
       TaskContext.setTaskContext(context)
       new UnsafeKVExternalSorter(
         schema,

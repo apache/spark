@@ -26,13 +26,14 @@ import org.apache.spark.{SparkEnv, TaskContext, TaskContextImpl}
  */
 object MemoryTestingUtils {
   def fakeTaskContext(env: SparkEnv): TaskContext = {
-    val taskMemoryManager = new TaskMemoryManager(env.memoryManager, 0)
+    val taskMemoryManager = new TaskMemoryManager(env.memoryManager, 0, "task")
     new TaskContextImpl(
       stageId = 0,
       stageAttemptNumber = 0,
       partitionId = 0,
       taskAttemptId = 0,
       attemptNumber = 0,
+      taskName = "",
       taskMemoryManager = taskMemoryManager,
       localProperties = new Properties,
       metricsSystem = env.metricsSystem)

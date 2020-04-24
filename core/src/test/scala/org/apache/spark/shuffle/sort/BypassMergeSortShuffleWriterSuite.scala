@@ -68,7 +68,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       dependency = dependency
     )
     val memoryManager = new TestMemoryManager(conf)
-    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0, "task")
     when(dependency.partitioner).thenReturn(new HashPartitioner(7))
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)

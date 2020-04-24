@@ -81,6 +81,7 @@ private[spark] abstract class Task[T](
   final def run(
       taskAttemptId: Long,
       attemptNumber: Int,
+      taskName: String,
       metricsSystem: MetricsSystem,
       resources: Map[String, ResourceInformation]): T = {
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
@@ -92,6 +93,7 @@ private[spark] abstract class Task[T](
       partitionId,
       taskAttemptId,
       attemptNumber,
+      taskName,
       taskMemoryManager,
       localProperties,
       metricsSystem,

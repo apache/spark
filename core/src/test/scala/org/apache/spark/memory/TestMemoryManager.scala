@@ -37,6 +37,7 @@ class TestMemoryManager(conf: SparkConf)
   override private[memory] def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
+      taskIdentifier: String,
       memoryMode: MemoryMode): Long = synchronized {
     require(numBytes >= 0)
     val acquired = {

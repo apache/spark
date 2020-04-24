@@ -158,4 +158,6 @@ public abstract class MemoryConsumer {
       got);
     // checkstyle.on: RegexpSinglelineJava
   }
+
+  public String name() { return "MemoryConsumer"; }
 }
