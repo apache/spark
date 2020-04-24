@@ -2388,7 +2388,7 @@ class DataFrameSuite extends QueryTest
     val decTwo = Decimal(2, 38, 18)
     val tuple1 = (1, 2.2, "3.33", decOne, Date.valueOf("2012-11-22"))
     val tuple2 = (2, 3.3, "4.44", decTwo, Date.valueOf("2022-11-22"))
-    checkAnswer(Seq(Array(tuple1, tuple2)).toDF(),  Seq(Seq(tuple1, tuple2)).toDF())
+    checkAnswer(Seq(Array(tuple1, tuple2)).toDF(), Seq(Seq(tuple1, tuple2)).toDF())
 
     // TODO: we can move this implicit def to [[SQLImplicits]] when we eventually make fully
     // support for array encoder like Seq and Set
