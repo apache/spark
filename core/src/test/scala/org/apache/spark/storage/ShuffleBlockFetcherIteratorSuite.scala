@@ -1082,28 +1082,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val block3 = FetchBlockInfo(bId3, 60, 0)
     val inputBlocks = Seq(block1, block2, block3)
 
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
-    val taskContext = TaskContext.empty()
-    doReturn(localBmId).when(blockManager).blockManagerId
-    val iterator = new ShuffleBlockFetcherIterator(
-      taskContext,
-      createMockTransfer(Map.empty),
-      blockManager,
-      Iterator.empty,
-      (_, in) => in,
-      48 * 1024 * 1024,
-      Int.MaxValue,
-      Int.MaxValue,
-      Int.MaxValue,
-      true,
-      false,
-      taskContext.taskMetrics.createTempShuffleReadMetrics(),
-      true)
-
-    val mergeMethod =
-      PrivateMethod[Seq[FetchBlockInfo]](Symbol("mergeContinuousShuffleBlockIdsIfNeeded"))
-    val mergedBlocks = iterator.invokePrivate(mergeMethod(inputBlocks))
+    val mergedBlocks = ShuffleBlockFetcherIterator.
+      mergeContinuousShuffleBlockIdsIfNeeded(inputBlocks, true)
     assert(mergedBlocks.size === 1)
     val mergedBlock = mergedBlocks.head
     val mergedBlockId = mergedBlock.blockId.asInstanceOf[ShuffleBlockBatchId]
