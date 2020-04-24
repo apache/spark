@@ -61,8 +61,8 @@ SHOW [ function_kind ] FUNCTIONS ( [ LIKE ] function_name | regex_pattern )
     Specifies a regular expression pattern that is used to limit the results of the
     statement.
     <ul>
-      <li>Only `*` and `|` are allowed as wildcard pattern.</li>
-      <li>Excluding `*` and `|` the remaining pattern follows the regex semantics.</li>
+      <li>Only <code>*</code> and <code>|</code> are allowed as wildcard pattern.</li>
+      <li>Excluding <code>*</code> and <code>|</code> the remaining pattern follows the regex semantics.</li>
       <li>The leading and trailing blanks are trimmed in the input pattern before processing.</li> 
     </ul>
   </dd>

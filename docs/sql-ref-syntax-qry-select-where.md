@@ -37,7 +37,32 @@ WHERE boolean_expression
   <dd>
     Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
     more expressions may be combined together using the logical
-    operators ( <code>AND</code>, <code>OR</code> ).
+    operators ( <code>AND</code>, <code>OR</code> ). <br><br>
+    <b>Syntax:</b><br>
+      <code>
+        NOT boolean_expression | EXISTS ( query ) | column_name LIKE regex_pattern | value_expression |<br>
+        boolean_expression AND boolean_expression | boolean_expression OR boolean_expression
+      </code>
+    <dl>
+      <dt><code><em>query</em></code></dt>
+      <dd>
+        Specifies a <a href="sql-ref-syntax-qry-select.html">select statement</a>.
+      </dd>
+      <dt><code><em>regex_pattern</em></code></dt>
+      <dd>
+         Specifies the regular expression pattern that is used to limit the results of the statement.
+         <ul>
+            <li> Except for <code>*</code> and <code>|</code> character, the pattern works like a regex.</li>
+            <li>  <code>* </code> alone matches 0 or more characters and  <code>|</code> is used to separate multiple different regexes,
+             any of which can match. </li>
+            <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
+         </ul>
+      </dd>
+      <dt><code><em>value_expression</em></code></dt>
+      <dd>
+        Specifies a combination of one or more values, operators, and SQL functions that evaluates to a value.
+      </dd>
+    </dl>
   </dd>
 </dl>
 
@@ -68,6 +93,15 @@ SELECT * FROM person WHERE id = 200 OR id = 300 ORDER BY id;
   |200|Mary|null|
   |300|Mike|  80|
   +---+----+----+
+
+-- `LIKE` in `WHERE` clause.
+SELECT * FROM person WHERE name LIKE 'M%';
+  +---+----+---+
+  | id|name|age|
+  +---+----+---+
+  |200|Mary|null|
+  |300|Mike| 80|
+  +---+----+---+
 
 -- IS NULL expression in `WHERE` clause.
 SELECT * FROM person WHERE id > 300 OR age IS NULL ORDER BY id;

@@ -29,16 +29,21 @@ and mean the same thing.
 ### Syntax
 
 {% highlight sql %}
-SHOW { DATABASES | SCHEMAS } [ LIKE string_pattern ]
+SHOW { DATABASES | SCHEMAS } [ LIKE regex_pattern ]
 {% endhighlight %}
 
 ### Parameters
 
 <dl>
-  <dt><code><em>LIKE string_pattern</em></code></dt>
+  <dt><code><em>regex_pattern</em></code></dt>
   <dd>
-    Specifies a string pattern that is used to match the databases in the system. In 
-    the specified string pattern <code>'*'</code> matches any number of characters.
+    Specifies a regular expression pattern that is used to limit the results of the
+    statement.
+    <ul>
+      <li>Only <code>*</code> and <code>|</code> are allowed as wildcard pattern.</li>
+      <li>Excluding <code>*</code> and <code>|</code> the remaining pattern follows the regex semantics.</li>
+      <li>The leading and trailing blanks are trimmed in the input pattern before processing.</li>
+    </ul>
   </dd>
 </dl>
 
