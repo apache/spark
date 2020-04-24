@@ -4833,8 +4833,8 @@ object functions {
    * @group udf_funcs
    * @since 2.0.0
    */
-  @deprecated("Untyped Scala UDF API is deprecated, please use typed Scala UDF API such as " +
-    "'def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction' instead.", "3.0.0")
+  @deprecated("Scala `udf` method with return type parameter is deprecated. " +
+    "Please use Scala `udf` method without return type parameter.", "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
     if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
       val errorMsg = "You're using untyped Scala UDF, which does not have the input type " +
@@ -4842,7 +4842,7 @@ object functions {
         "argument, and the closure will see the default value of the Java type for the null " +
         "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
         "To get rid of this error, you could:\n" +
-        "1. use typed Scala UDF APIs, e.g. `udf((x: Int) => x)`\n" +
+        "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
         "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
         "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
         "if input types are all non primitive\n" +
