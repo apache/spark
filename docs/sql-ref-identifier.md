@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-An identifier is a string used to identify a database object such as a table, view, schema, column, etc. Spark SQL has regular identifiers and delimited identifiers, which are enclosed within backticks. When `spark.sql.caseSensitive` is set to false (default behavior since Spark 2.4), both regular identifiers and delimited identifiers are case-insensitive.
+An identifier is a string used to identify a database object such as a table, view, schema, column, etc. Spark SQL has regular identifiers and delimited identifiers, which are enclosed within backticks. Both regular identifiers and delimited identifiers are case-insensitive.
 
 ### Syntax
 
@@ -30,7 +30,7 @@ An identifier is a string used to identify a database object such as a table, vi
 {% highlight sql %}
 { letter | digit | '_' } [ , ... ]
 {% endhighlight %}
-Note: If `spark.sql.ansi.enabled` is set to true, ANSI SQL reserved keywords cannot be used as identifiers. For more details, please refer to [ANSI Compliance](sql-ref-ansi-compliance.html) for a complete list of the keywords.
+Note: If `spark.sql.ansi.enabled` is set to true, ANSI SQL reserved keywords cannot be used as identifiers. For more details, please refer to [ANSI Compliance](sql-ref-ansi-compliance.html).
 
 #### Delimited Identifier
 
@@ -62,13 +62,13 @@ Note: If `spark.sql.ansi.enabled` is set to true, ANSI SQL reserved keywords can
 ### Examples
 
 {% highlight sql %}
--- This CREATE TABLE fails because of the illegal identifier name a.b
+-- This CREATE TABLE fails with ParseException because of the illegal identifier name a.b
 CREATE TABLE test (a.b int);
 
 -- This CREATE TABLE works
 CREATE TABLE test (`a.b` int);
 
--- This CREATE TABLE fails
+-- This CREATE TABLE fails with ParseException because special character ` is not escaped
 CREATE TABLE test1 (`a`b` int);
 
 -- This CREATE TABLE works
