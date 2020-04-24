@@ -64,15 +64,9 @@ private[spark] class SparkHadoopUtil extends Logging {
   }
 
   def createSparkUser(): UserGroupInformation = {
-    val user = Utils.getCurrentUserName()
-    logDebug("creating UGI for user: " + user)
-    val ugi = UserGroupInformation.createRemoteUser(user)
-    transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
+    val ugi = Utils.getCurrentUgi()
+    logDebug("created UGI for user: " + ugi)
     ugi
-  }
-
-  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation): Unit = {
-    dest.addCredentials(source.getCredentials())
   }
 
   /**

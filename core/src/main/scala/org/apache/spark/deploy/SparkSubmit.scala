@@ -842,10 +842,10 @@ private[spark] class SparkSubmit extends Logging {
   // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos or Kubernetes
   // mode, we must trick it into thinking we're YARN.
   private def setRMPrincipal(sparkConf: SparkConf): Unit = {
-    val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
+    val userName = UserGroupInformation.getCurrentUser.getUserName
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
-    logInfo(s"Setting ${key} to ${shortUserName}")
-    sparkConf.set(key, shortUserName)
+    logInfo(s"Setting ${key} to ${userName}")
+    sparkConf.set(key, userName)
   }
 
   private def getSubmitClassLoader(sparkConf: SparkConf): MutableURLClassLoader = {
