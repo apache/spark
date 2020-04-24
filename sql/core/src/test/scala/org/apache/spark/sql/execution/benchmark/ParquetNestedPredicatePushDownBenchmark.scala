@@ -39,15 +39,6 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
   private val N = 100 * 1024 * 1024
   private val NUMBER_OF_ITER = 10
 
-  override def getSparkSession: SparkSession = {
-    val conf = new SparkConf()
-      .setAppName(this.getClass.getSimpleName)
-      // Since `spark.master` always exists, overrides this value
-      .set("spark.master", "local[1]")
-
-    SparkSession.builder().config(conf).getOrCreate()
-  }
-
   private val df: DataFrame = spark
     .range(1, N, 1, 4)
     .toDF("id")
