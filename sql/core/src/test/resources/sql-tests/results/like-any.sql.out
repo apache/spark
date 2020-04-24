@@ -139,7 +139,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error: expected something between '(' and ')'.(line 1, pos 49)
+Expected something between '(' and ')'.(line 1, pos 49)
 
 == SQL ==
 SELECT company FROM like_any_table WHERE company LIKE ANY ()
