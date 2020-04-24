@@ -744,10 +744,10 @@ There is special handling for not-a-number (NaN) when dealing with `float` or `d
 do not exactly match standard floating point semantics.
 Specifically:
 
- - NaN = NaN returns true.
- - In aggregations, all NaN values are grouped together.
- - NaN is treated as a normal value in join keys.
- - NaN values go last when in ascending order, larger than any other numeric value.
+ * NaN = NaN returns true.
+ * In aggregations, all NaN values are grouped together.
+ * NaN is treated as a normal value in join keys.
+ * NaN values go last when in ascending order, larger than any other numeric value.
 
 #### Examples
 
@@ -818,7 +818,7 @@ INSERT INTO test VALUES (6, double('NaN'));
 INSERT INTO test VALUES (7, double('-infinity'));
 SELECT COUNT(*), c2 FROM test GROUP BY c2;
 +---------+---------+
-|count(c1)|       c2|
+| count(1)|       c2|
 +---------+---------+
 |        2|      NaN|
 |        2|-Infinity|
