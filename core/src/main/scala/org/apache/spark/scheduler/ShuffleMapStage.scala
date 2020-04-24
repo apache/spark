@@ -63,7 +63,7 @@ private[spark] class ShuffleMapStage(
   /**
    * Returns the list of active jobs,
    * i.e. map-stage jobs that were submitted to execute this stage independently (if any).
-   */
+   */core/src/main/scala/org/apache/spark/scheduler/TaskSchedulerImpl.scala
   def mapStageJobs: Seq[ActiveJob] = _mapStageJobs
 
   /** Adds the job to the active job list. */
