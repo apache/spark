@@ -46,13 +46,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
    */
   private def assertNoNameConflictsInCTE(
       plan: LogicalPlan,
-      namesInChildren: Set[String] = Set.empty,
-      namesInExpressions: Set[String] = Set.empty): Unit = {
+      outerCTERelationNames: Set[String] = Set.empty,
+      namesInSubqueries: Set[String] = Set.empty): Unit = {
     plan match {
       case w @ With(child, relations) =>
         val newNames = relations.map {
           case (cteName, _) =>
-            if (namesInChildren.contains(cteName)) {
+            if (outerCTERelationNames.contains(cteName)) {
               throw new AnalysisException(s"Name $cteName is ambiguous in nested CTE. " +
                 s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
                 "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
@@ -60,14 +60,15 @@ object CTESubstitution extends Rule[LogicalPlan] {
             } else {
               cteName
             }
-        }.toSet ++ namesInExpressions
-        assertNoNameConflictsInCTE(child, namesInChildren, newNames)
+        }.toSet ++ namesInSubqueries
+        assertNoNameConflictsInCTE(child, outerCTERelationNames, newNames)
         w.innerChildren.foreach(assertNoNameConflictsInCTE(_, newNames, newNames))
 
       case other =>
         other.subqueries.foreach(
-          assertNoNameConflictsInCTE(_, namesInExpressions, namesInExpressions))
-        other.children.foreach(assertNoNameConflictsInCTE(_, namesInChildren, namesInExpressions))
+          assertNoNameConflictsInCTE(_, namesInSubqueries, namesInSubqueries))
+        other.children.foreach(
+          assertNoNameConflictsInCTE(_, outerCTERelationNames, namesInSubqueries))
     }
   }
 
