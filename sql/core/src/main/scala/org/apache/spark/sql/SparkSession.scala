@@ -895,7 +895,7 @@ object SparkSession extends Logging {
      * SparkSession exists, the method creates a new SparkSession and assigns the
      * newly created SparkSession as the global default.
      *
-     * In case an existing SparkSession is returned, the config options specified in
+     * In case an existing SparkSession is returned, the non-static config options specified in
      * this builder will be applied to the existing SparkSession.
      *
      * @since 2.0.0
@@ -905,12 +905,7 @@ object SparkSession extends Logging {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        for ((k, v) <- options if !SQLConf.staticConfKeys.contains(k)) {
-          session.sessionState.conf.setConfString(k, v)
-        }
-        if (options.nonEmpty) {
-          logWarning("Using an existing SparkSession; some configuration may not take effect.")
-        }
+        applyModifiableSettings(session)
         return session
       }
 
@@ -919,12 +914,7 @@ object SparkSession extends Logging {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          for ((k, v) <- options if !SQLConf.staticConfKeys.contains(k)) {
-            session.sessionState.conf.setConfString(k, v)
-          }
-          if (options.nonEmpty) {
-            logWarning("Using an existing SparkSession; some configuration may not take effect.")
-          }
+          applyModifiableSettings(session)
           return session
         }
 
@@ -962,6 +952,20 @@ object SparkSession extends Logging {
       }
 
       return session
+    }
+
+    private def applyModifiableSettings(session: SparkSession): Unit = {
+      for ((k, v) <- options) {
+        if (SQLConf.staticConfKeys.contains(k)) {
+          logWarning(s"Using an existing SparkSession, the static configuration $k is ignored.")
+        } else {
+          session.sessionState.conf.setConfString(k, v)
+        }
+      }
+      if ((options -- SQLConf.staticConfKeys.asScala).nonEmpty) {
+        logWarning("Using an existing SparkSession; some spark core configurations may not take" +
+          " effect.")
+      }
     }
   }
 
