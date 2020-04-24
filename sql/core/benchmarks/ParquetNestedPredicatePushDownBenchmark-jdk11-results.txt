@@ -1,20 +1,21 @@
 OpenJDK 64-Bit Server VM 11.0.2+9 on Mac OS X 10.14.6
 Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
-LoadNoRowGroupsWhenPredicatePushedDown:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+CanSkipAllRowGroupsWithNestedPredicatePushdown:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-NestedFieldsPredicatePushDownDisabled             35852          36874         793          2.9         341.9       1.0X
-NestedFieldsPredicatePushDownEnabled                 85            101          12       1238.9           0.8     423.6X
+Without nested predicate Pushdown                 36379          37296         781          2.9         346.9       1.0X
+With nested predicate Pushdown                       89            100           9       1183.5           0.8     410.6X
 
 OpenJDK 64-Bit Server VM 11.0.2+9 on Mac OS X 10.14.6
 Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
-LoadSomeRowGroupsWhenPredicatePushedDown:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+CanSkipSomeRowGroupsWithNestedPredicatePushdown:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-NestedFieldsPredicatePushDownDisabled             36277          36626         314          2.9         346.0       1.0X
-NestedFieldsPredicatePushDownEnabled               3714           4513         NaN         28.2          35.4       9.8X
+Without nested predicate Pushdown                 36174          37605         NaN          2.9         345.0       1.0X
+With nested predicate Pushdown                     3653           3684          22         28.7          34.8       9.9X
 
 OpenJDK 64-Bit Server VM 11.0.2+9 on Mac OS X 10.14.6
 Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
-LoadAllRowGroupsWhenPredicatePushedDown:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+NoRowGroupSkippedWithNestedPredicatePushdown:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-NestedFieldsPredicatePushDownDisabled             44274          46513         586          2.4         422.2       1.0X
-NestedFieldsPredicatePushDownEnabled              45424          46303         NaN          2.3         433.2       1.0X
+Without nested predicate Pushdown                 39290          40747         NaN          2.7         374.7       1.0X
+With nested predicate Pushdown                    38936          39447         587          2.7         371.3       1.0X
+

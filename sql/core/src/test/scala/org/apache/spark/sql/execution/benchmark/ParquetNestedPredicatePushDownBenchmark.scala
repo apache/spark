@@ -52,29 +52,27 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
     .selectExpr("id", "STRUCT(id x, STRUCT(CAST(id AS STRING) z) y) nested")
     .sort("id")
 
-  private def addCase(benchmark: Benchmark, inputPath: String,
-                      enableNestedPD: Boolean,
-                      name: String, filterFn: DataFrame => DataFrame): Unit = {
+  private def addCase(benchmark: Benchmark, inputPath: String, enableNestedPD: Boolean,
+      name: String, withFilter: DataFrame => DataFrame): Unit = {
     val loadDF = spark.read.parquet(inputPath)
-    benchmark.addCase(name) {
-      _ =>
-        withSQLConf((SQLConf.NESTED_PREDICATE_PUSHDOWN_ENABLED.key,
-          enableNestedPD.toString)) {
-          filterFn(loadDF).noop()
-        }
+    benchmark.addCase(name) { _ =>
+      withSQLConf((SQLConf.NESTED_PREDICATE_PUSHDOWN_ENABLED.key,
+        enableNestedPD.toString)) {
+        withFilter(loadDF).noop()
+      }
     }
   }
 
-  private def createAndRunBenchmark(name: String, filterFn: DataFrame => DataFrame): Unit = {
+  private def createAndRunBenchmark(name: String, withFilter: DataFrame => DataFrame): Unit = {
     withTempPath {
       tempDir =>
         val outputPath = tempDir.getCanonicalPath
         df.write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
         val benchmark = new Benchmark(name, N, NUMBER_OF_ITER, output = output)
         addCase(benchmark, outputPath, enableNestedPD = false,
-          "NestedFieldsPredicatePushDownDisabled", filterFn)
+          "Without nested predicate Pushdown", withFilter)
         addCase(benchmark, outputPath, enableNestedPD = true,
-          "NestedFieldsPredicatePushDownEnabled", filterFn)
+          "With nested predicate Pushdown", withFilter)
         benchmark.run()
     }
   }
@@ -84,9 +82,8 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
    * when nested fields predicate push down enabled
    */
   def runLoadNoRowGroupWhenPredicatePushedDown(): Unit = {
-    // no row group will be loaded when predicate pushed down
-    val filterFn: DataFrame => DataFrame = df => df.filter("nested.x < 0")
-    createAndRunBenchmark("LoadNoRowGroupsWhenPredicatePushedDown", filterFn)
+    createAndRunBenchmark("CanSkipAllRowGroupsWithNestedPredicatePushdown",
+      _.filter("nested.x < 0"))
   }
 
   /**
@@ -94,9 +91,8 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
    * when nested fields predicate push down enabled
    */
   def runLoadSomeRowGroupWhenPredicatePushedDown(): Unit = {
-    // only a row group will be loaded when predicate pushed down
-    val filterFn: DataFrame => DataFrame = df => df.filter("nested.x = 100")
-    createAndRunBenchmark("LoadSomeRowGroupsWhenPredicatePushedDown", filterFn)
+    createAndRunBenchmark("CanSkipSomeRowGroupsWithNestedPredicatePushdown",
+      _.filter("nested.x = 100"))
   }
 
   /**
@@ -105,11 +101,8 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
    * overhead or not if enable nested predicate push down.
    */
   def runLoadAllRowGroupsWhenPredicatePushedDown(): Unit = {
-    // all row groups will be loaded with a whole range filter
-    val filterFn: DataFrame => DataFrame = { df =>
-      df.filter("nested.x >= 0").filter(s"nested.x <= $N")
-    }
-    createAndRunBenchmark("LoadAllRowGroupsWhenPredicatePushedDown", filterFn)
+    createAndRunBenchmark("NoRowGroupSkippedWithNestedPredicatePushdown",
+      _.filter(s"nested.x >= 0 and nested.x <= $N"))
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
