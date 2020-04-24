@@ -103,6 +103,12 @@ public @interface ExpressionDescription {
     String arguments() default "";
     String examples() default "";
     String note() default "";
+    /**
+     * Valid group names are almost the same with one defined as `groupname` in
+     * `sql/functions.scala`. But, `collection_funcs` is split into fine-grained three groups:
+     * `array_funcs`, `map_funcs`, and `json_funcs`. See `ExpressionInfo` for the
+     * detailed group names.
+     */
     String group() default "";
     String since() default "";
     String deprecated() default "";
