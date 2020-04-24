@@ -828,11 +828,11 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.4.0
    */
   def isInCollection(values: scala.collection.Iterable[_]): Column = withExpr {
-    val hSet = values.toSet[Any]
-    if (hSet.size > SQLConf.get.optimizerInSetConversionThreshold) {
-      InSet(expr, hSet)
+    val exprValues = values.toSeq.map(lit(_).expr)
+    if (exprValues.size > SQLConf.get.optimizerInSetConversionThreshold) {
+      InSet(expr, exprValues.map(_.eval()).toSet)
     } else {
-      In(expr, values.toSeq.map(lit(_).expr))
+      In(expr, exprValues)
     }
   }
 
