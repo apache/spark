@@ -17,7 +17,7 @@
 
 import os
 import re
-import sys
+
 from collections import namedtuple
 from textwrap import dedent
 
@@ -31,11 +31,11 @@ SQLConfEntry = namedtuple(
     "SQLConfEntry", ["name", "default", "description", "version"])
 
 
-def get_public_sql_configs(jvm, group):
+def get_sql_configs(jvm, group):
     if group == "static":
         config_set = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listStaticSQLConfigs()
     else:
-        config_set = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listSQLConfigs()
+        config_set = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listRuntimeSQLConfigs()
     sql_configs = [
         SQLConfEntry(
             name=_sql_config._1(),
@@ -119,17 +119,13 @@ def generate_sql_configs_table_html(sql_configs, path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: ./bin/spark-submit sql/gen-sql-config-docs.py <static|runtime>")
-        sys.exit(-1)
-    else:
-        group = sys.argv[1]
-
     jvm = launch_gateway().jvm
-    sql_configs = get_public_sql_configs(jvm, group)
+    docs_root_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs")
 
-    spark_root_dir = os.path.dirname(os.path.dirname(__file__))
-    sql_configs_table_path = os.path\
-        .join(spark_root_dir, "docs", "generated-" + group + "-sql-config-table.html")
+    sql_configs = get_sql_configs(jvm, "runtime")
+    sql_configs_table_path = os.path.join(docs_root_dir, "generated-runtime-sql-config-table.html")
+    generate_sql_configs_table_html(sql_configs, path=sql_configs_table_path)
 
+    sql_configs = get_sql_configs(jvm, "static")
+    sql_configs_table_path = os.path.join(docs_root_dir, "generated-static-sql-config-table.html")
     generate_sql_configs_table_html(sql_configs, path=sql_configs_table_path)
