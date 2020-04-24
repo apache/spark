@@ -78,6 +78,8 @@
   subitems:
     - text: Data Types
       url: sql-ref-datatypes.html
+    - text: Identifiers
+      url: sql-ref-identifier.html
     - text: Literals
       url: sql-ref-literals.html
     - text: Null Semantics
