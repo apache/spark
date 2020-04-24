@@ -468,7 +468,9 @@ class TestingUtilsSuite extends SparkFunSuite {
     val e = intercept[IllegalArgumentException] {
       SchemaUtils.checkColumnType(schema, "features", new VectorUDT)
     }
-    assert(e.getMessage.contains("org.apache.spark.mllib.linalg.VectorUDT"), "dataType is not desired")
+    assert(e.getMessage.contains(
+      "org.apache.spark.mllib.linalg.VectorUDT:struct<type:tinyint,size:int,indices:array<int>"),
+      "dataType is not desired")
 
     val normalSchema = StructType(Array[StructField] {
       StructField("features", new VectorUDT)
