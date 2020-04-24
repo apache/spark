@@ -869,4 +869,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       df.select(typedLit(("a", 2, 1.0))),
       Row(Row("a", 2, 1.0)) :: Nil)
   }
+
+  test("fix in set") {
+    val set = (0 to 20).map(_.toString).toSet
+    val data = Seq("1").toDF("x")
+    assert(set.contains("1"))
+    checkAnswer(data.select($"x".isInCollection(set)), Row(true))
+  }
 }
