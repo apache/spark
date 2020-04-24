@@ -2383,16 +2383,22 @@ class DataFrameSuite extends QueryTest
     val strings = Array("2020-04-24", "2020-04-25")
     checkAnswer(Seq(strings).toDF(), Row(strings))
 
+    // tuples
+    val decOne = Decimal(1, 38, 18)
+    val decTwo = Decimal(2, 38, 18)
+    val tuple1 = (1, 2.2, "3.33", decOne, Date.valueOf("2012-11-22"))
+    val tuple2 = (2, 3.3, "4.44", decTwo, Date.valueOf("2022-11-22"))
+    checkAnswer(Seq(Array(tuple1, tuple2)).toDF(),  Seq(Seq(tuple1, tuple2)).toDF())
+
     // TODO: we can move this implicit def to [[SQLImplicits]] when we eventually make fully
     // support for array encoder like Seq and Set
-    // for now decimal/datetime/interval/binary/nested types etc are not supported by array
+    // for now cases below, decimal/datetime/interval/binary/nested types, etc,
+    // are not supported by array
     implicit def newArrayEncoder[T <: Array[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
     // decimals
     val decSchema = new StructType()
       .add("value", "array<decimal(38,18)>")
-    val decOne = Decimal(1, 38, 18)
-    val decTwo = Decimal(2, 38, 18)
     val decSpark = Array(decOne, decTwo)
     val decScala = decSpark.map(_.toBigDecimal)
     val decJava = decSpark.map(_.toJavaBigDecimal)
