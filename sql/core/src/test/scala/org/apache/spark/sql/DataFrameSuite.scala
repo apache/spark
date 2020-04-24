@@ -2406,9 +2406,11 @@ class DataFrameSuite extends QueryTest
     val localDates = dates.map(d => DateTimeUtils.daysToLocalDate(DateTimeUtils.fromJavaDate(d)))
     checkAnswer(Seq(localDates).toDF(), Row(dates))
 
-    val timestamps = Array(Timestamp.valueOf("2020-04-24 12:34:56"), Timestamp.valueOf("2020-04-24 11:22:33"))
+    val timestamps =
+      Array(Timestamp.valueOf("2020-04-24 12:34:56"), Timestamp.valueOf("2020-04-24 11:22:33"))
     checkAnswer(Seq(timestamps).toDF(), Row(timestamps))
-    val instants = timestamps.map(t => DateTimeUtils.microsToInstant(DateTimeUtils.fromJavaTimestamp(t)))
+    val instants =
+      timestamps.map(t => DateTimeUtils.microsToInstant(DateTimeUtils.fromJavaTimestamp(t)))
     checkAnswer(Seq(instants).toDF(), Row(timestamps))
 
     val intervals = Array(new CalendarInterval(1, 2, 3), new CalendarInterval(4, 5, 6))
