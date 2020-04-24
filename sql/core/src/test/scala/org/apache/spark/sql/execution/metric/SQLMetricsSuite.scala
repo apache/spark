@@ -341,6 +341,62 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("ShuffledHashJoin(outer) metrics") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+      val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
+
+      Seq(("right_outer", 0L, df1, df2, false), ("left_outer", 0L, df2, df1, false),
+        ("right_outer", 0L, df1, df2, true), ("left_outer", 0L, df2, df1, true))
+        .foreach { case (joinType, nodeId, df1, df2, enableWholeStage) =>
+          val df = df1.join(df2, $"key" === $"key2", joinType)
+          testSparkPlanMetrics(df, 1, Map(
+            nodeId -> (("ShuffledHashJoin", Map(
+              "number of output rows" -> 10L)))),
+            enableWholeStage
+          )
+        }
+    }
+  }
+
+  test("ShuffledHashJoin(left-anti) metrics") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+      val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
+
+      Seq((2L, true), (1L, false)).foreach { case (nodeId, enableWholeStage) =>
+        val df = df2.join(df1.hint("shuffle_hash"), $"key" === $"key2", "left_anti")
+        testSparkPlanMetrics(df, 1, Map(
+          nodeId -> (("ShuffledHashJoin", Map(
+            "number of output rows" -> 8L)))),
+          enableWholeStage
+        )
+      }
+    }
+  }
+
+  test("ShuffledHashJoin(left-semi) metrics") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+      val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
+
+      Seq((1L, false), (2L, true)).foreach { case (nodeId, enableWholeStage) =>
+        val df = df2.join(df1.hint("shuffle_hash"), $"key" === $"key2", "left_semi")
+        testSparkPlanMetrics(df, 1, Map(
+          nodeId -> (("ShuffledHashJoin", Map(
+            "number of output rows" -> 2L)))),
+          enableWholeStage
+        )
+      }
+    }
+  }
+
   test("BroadcastHashJoin(outer) metrics") {
     val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
     val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
@@ -365,9 +421,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       withTempView("testDataForJoin") {
         // Assume the execution plan is
         // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-        val query = "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+        val leftQuery = "SELECT * FROM testData2 LEFT JOIN testDataForJoin ON " +
           "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a"
-        Seq(false, true).foreach { enableWholeStage =>
+        val rightQuery = "SELECT * FROM testData2 RIGHT JOIN testDataForJoin ON " +
+          "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a"
+        Seq((leftQuery, false), (rightQuery, false), (leftQuery, true), (rightQuery, true))
+          .foreach { case (query, enableWholeStage) =>
           val df = spark.sql(query)
           testSparkPlanMetrics(df, 2, Map(
             0L -> (("BroadcastNestedLoopJoin", Map(
@@ -386,6 +445,21 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // ... -> BroadcastHashJoin(nodeId = 1)
     Seq((1L, false), (2L, true)).foreach { case (nodeId, enableWholeStage) =>
       val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
+      testSparkPlanMetrics(df, 2, Map(
+        nodeId -> (("BroadcastHashJoin", Map(
+          "number of output rows" -> 2L)))),
+        enableWholeStage
+      )
+    }
+  }
+
+  test("BroadcastLeftAntiJoinHash metrics") {
+    val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
+    // Assume the execution plan is
+    // ... -> BroadcastHashJoin(nodeId = 1)
+    Seq((1L, false), (2L, true)).foreach { case (nodeId, enableWholeStage) =>
+      val df = df2.join(broadcast(df1), $"key" === $"key2", "left_anti")
       testSparkPlanMetrics(df, 2, Map(
         nodeId -> (("BroadcastHashJoin", Map(
           "number of output rows" -> 2L)))),
