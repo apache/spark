@@ -121,7 +121,7 @@ public class CommandBuilderUtilsSuite {
       findJarsDir(sparkHome, "2.13", true);
     } catch (IllegalStateException e) {
       assertEquals(
-        "Library directory '" + sparkHome + 
+        "Library directory '" + sparkHome +
         "/assembly/target/scala-2.13/jars' does not exist; make sure Spark is built.",
         e.getMessage());
     }
@@ -142,23 +142,25 @@ public class CommandBuilderUtilsSuite {
 
     // if we have SPARK_JARS_DIR, use it as jars dir
     File spefifiedJarsDir = tempFolder.newFolder("jars-dir");
-    environmentVariables.set("SPARK_JARS_DIR", spefifiedJarsDir.getAbsolutePath());
+    environmentVariables.set(ENV_SPARK_JARS_DIR, spefifiedJarsDir.getAbsolutePath());
     assertEquals(join(File.separator, tmpRoot, "jars-dir"),
       findJarsDir(sparkHome, "2.13", true));
 
     // if SPARK_JARS_DIR is specified but not exists, throws IllegalStateException
-    environmentVariables.set("SPARK_JARS_DIR", join(File.separator, tmpRoot, "jars-dir-not-exists"));
+    environmentVariables.set(ENV_SPARK_JARS_DIR,
+      join(File.separator, tmpRoot, "jars-dir-not-exists"));
     try {
       findJarsDir(sparkHome, "2.13", true);
     } catch (IllegalStateException e) {
       assertEquals(
-          "The specified SPARK_JARS_DIR '" + tmpRoot + File.separator + 
+          "The specified SPARK_JARS_DIR '" + tmpRoot + File.separator +
           "jars-dir-not-exists' does not exist; make sure SPARK_JARS_DIR is set appropriately.",
           e.getMessage());
     }
 
-    // but if failIfNotFound is false, return null without exception
-    assertEquals(null, findJarsDir(sparkHome, "2.13", false));
+    // but if failIfNotFound is false, warn and continue the old lookup behavior
+    assertEquals(join(File.separator, tmpRoot, "spark", "home", "jars"),
+      findJarsDir(sparkHome, "2.13", false));
   }
 
   private static void testOpt(String opts, List<String> expected) {

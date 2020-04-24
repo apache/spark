@@ -319,31 +319,45 @@ class CommandBuilderUtils {
    * or a distribution directory.
    */
   static String findJarsDir(String sparkHome, String scalaVersion, boolean failIfNotFound) {
+    String envJarsDir = findEnvJarsDir(sparkHome, scalaVersion, failIfNotFound);
+    if (envJarsDir != null) {
+      return envJarsDir;
+    }
+    return findHomeJarsDir(sparkHome, scalaVersion, failIfNotFound);
+  }
+
+  private static String findEnvJarsDir(String sparkHome, String scalaVersion,
+          boolean failIfNotFound) {
     String envSparkJarsDir = System.getenv(ENV_SPARK_JARS_DIR);
     if (envSparkJarsDir != null && !envSparkJarsDir.isEmpty()) {
       File envJarsDir = new File(envSparkJarsDir);
       return handleJarsDir(envJarsDir, failIfNotFound,
-        "The specified SPARK_JARS_DIR '%s' does not exist; make sure SPARK_JARS_DIR is set appropriately.");
+        "The specified SPARK_JARS_DIR '%s' does not exist;" +
+        " make sure SPARK_JARS_DIR is set appropriately.");
     }
-    
+    return null;
+  }
+
+  private static String findHomeJarsDir(String sparkHome, String scalaVersion,
+          boolean failIfNotFound) {
     // TODO: change to the correct directory once the assembly build is changed.
     File libdir = new File(sparkHome, "jars");
     if (!libdir.isDirectory()) {
       libdir = new File(sparkHome, String.format("assembly/target/scala-%s/jars", scalaVersion));
       return handleJarsDir(libdir, failIfNotFound,
-          "Library directory '%s' does not exist; make sure Spark is built.");
+        "Library directory '%s' does not exist; make sure Spark is built.");
     }
     return libdir.getAbsolutePath();
   }
 
-  private static String handleJarsDir(File theDir, boolean failIfNotFound, String message) { 
-    if (!theDir.isDirectory()) {
+  private static String handleJarsDir(File dir, boolean failIfNotFound, String message) {
+    if (!dir.isDirectory()) {
       LOG.log(Level.WARNING, "The jar dir candidate {0} is skipped because it is not a directory.",
-          new Object[] { theDir });
-      checkState(!failIfNotFound, message, theDir.getAbsolutePath());
+          new Object[] { dir });
+      checkState(!failIfNotFound, message, dir.getAbsolutePath());
       return null;
     }
-    return theDir.getAbsolutePath();
+    return dir.getAbsolutePath();
   }
 
 }
