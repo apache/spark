@@ -18,7 +18,7 @@
 package org.apache.spark.ml.impl
 
 
-private[ml] object Utils {
+private[spark] object Utils {
 
   lazy val EPSILON = {
     var eps = 1.0
@@ -26,5 +26,56 @@ private[ml] object Utils {
       eps /= 2.0
     }
     eps
+  }
+
+  /**
+   * Convert an n * (n + 1) / 2 dimension array representing the upper triangular part of a matrix
+   * into an n * n array representing the full symmetric matrix (column major).
+   *
+   * @param n The order of the n by n matrix.
+   * @param triangularValues The upper triangular part of the matrix packed in an array
+   *                         (column major).
+   * @return A dense matrix which represents the symmetric matrix in column major.
+   */
+  def unpackUpperTriangular(
+      n: Int,
+      triangularValues: Array[Double]): Array[Double] = {
+    val symmetricValues = new Array[Double](n * n)
+    var r = 0
+    var i = 0
+    while (i < n) {
+      var j = 0
+      while (j <= i) {
+        symmetricValues(i * n + j) = triangularValues(r)
+        symmetricValues(j * n + i) = triangularValues(r)
+        r += 1
+        j += 1
+      }
+      i += 1
+    }
+    symmetricValues
+  }
+
+  /**
+   * Indexing in an array representing the upper triangular part of a matrix
+   * into an n * n array representing the full symmetric matrix (column major).
+   *    val symmetricValues = unpackUpperTriangularMatrix(n, triangularValues)
+   *    val matrix = new DenseMatrix(n, n, symmetricValues)
+   *    val index = indexUpperTriangularMatrix(n, i, j)
+   *    then: symmetricValues(index) == matrix(i, j)
+   *
+   * @param n The order of the n by n matrix.
+   */
+  def indexUpperTriangular(
+      n: Int,
+      i: Int,
+      j: Int): Int = {
+    require(i >= 0 && i < n, s"Expected 0 <= i < $n, got i = $i.")
+    require(j >= 0 && j < n, s"Expected 0 <= j < $n, got j = $j.")
+    if (i <= j) {
+      j * (j + 1) / 2 + i
+    } else {
+      i * (i + 1) / 2 + j
+    }
   }
 }
