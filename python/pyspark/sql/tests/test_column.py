@@ -85,7 +85,7 @@ class ColumnTests(ReusedSQLTestCase):
                                 "Cannot apply 'in' operator against a column",
                                 lambda: 1 in cs)
 
-    def test_column_getitem(self):
+    def test_column_accessor(self):
         from pyspark.sql.functions import col
 
         self.assertIsInstance(col("foo")[1:3], Column)

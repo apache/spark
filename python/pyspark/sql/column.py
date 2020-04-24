@@ -17,10 +17,13 @@
 
 import sys
 import json
+import warnings
 
 if sys.version >= '3':
     basestring = str
     long = int
+
+from py4j.java_gateway import is_instance_of
 
 from pyspark import copy_func, since
 from pyspark.context import SparkContext
@@ -296,13 +299,16 @@ class Column(object):
         +----+------+
         |   1| value|
         +----+------+
-        >>> df.select(df.l[0], df.d["key"]).show()
-        +----+------+
-        |l[0]|d[key]|
-        +----+------+
-        |   1| value|
-        +----+------+
         """
+        if isinstance(key, Column) and not is_instance_of(
+                SparkContext._gateway,
+                key._jc.expr(),
+                "org.apache.spark.sql.catalyst.expressions.Literal"):
+            warnings.warn(
+                "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[key]` or `column.key` syntax "
+                "instead.",
+                DeprecationWarning)
         return self[key]
 
     @since(1.3)
