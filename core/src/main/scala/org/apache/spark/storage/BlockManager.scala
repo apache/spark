@@ -24,9 +24,9 @@ import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
-import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -1819,6 +1819,12 @@ private[spark] class BlockManager(
     @volatile var running = true
     override def run(): Unit = {
       var migrating: Option[(Int, Long)] = None
+      val storageLevel = StorageLevel(
+        useDisk = true,
+        useMemory = false,
+        useOffHeap = false,
+        deserialized = false,
+        replication = 1)
       // Once a block fails to transfer to an executor stop trying to transfer more blocks
       try {
         while (running) {
@@ -1839,12 +1845,7 @@ private[spark] class BlockManager(
                 peer.executorId,
                 indexBlockId,
                 indexBuffer,
-                StorageLevel(
-                  useDisk=true,
-                  useMemory=false,
-                  useOffHeap=false,
-                  deserialized=false,
-                  replication=1),
+                storageLevel,
                 null)// class tag, we don't need for shuffle
               blockTransferService.uploadBlockSync(
                 peer.host,
@@ -1852,12 +1853,7 @@ private[spark] class BlockManager(
                 peer.executorId,
                 dataBlockId,
                 dataBuffer,
-                StorageLevel(
-                  useDisk=true,
-                  useMemory=false,
-                  useOffHeap=false,
-                  deserialized=false,
-                  replication=1),
+                storageLevel,
                 null)// class tag, we don't need for shuffle
           }
         }

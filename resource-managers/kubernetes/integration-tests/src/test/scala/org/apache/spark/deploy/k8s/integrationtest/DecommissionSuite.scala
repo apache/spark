@@ -31,7 +31,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set("spark.storage.decommission.enabled", "true")
       .set("spark.storage.decommission.shuffle_blocks", "true")
       .set("spark.storage.decommission.shuffle_blocks", "true")
-      //Ensure we have somewhere to migrate our data too
+      // Ensure we have somewhere to migrate our data too
       .set("spark.executor.instances", "3")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
       .set("spark.storage.decommission.replicationReattemptInterval", "1s")
