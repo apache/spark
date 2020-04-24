@@ -756,8 +756,8 @@ There is special handling for positive and negative infinity. They have the foll
  - Positive infinity multiplied by any negative value returns negative infinity.
  - Negative infinity multiplied by any negative value returns positive infinity.
  - Positive infinity/Negtive infinity multiplied by 0 returns NaN.
- - Infinity = Infinity, Inf = Infinity, -Infinity = -Infinity and -Inf = -Infinity return true.
- - In aggregations, all positive infinity values are grouped together. Similarly,  all negative infinity values are grouped together.
+ - Infinity values equal to each other, no matter positive or negative.
+ - In aggregations, all positive infinity values are grouped together. Similarly, all negative infinity values are grouped together.
  - Positive infinity and negative infinity are treated as normal values in join keys.
  - Positive infinity sorts lower than NaN and higher than any other value.
  - Negatie infinity sorts lower than any other value.
