@@ -901,4 +901,46 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("bucket coalescing is not satisfied") {
+    def run(testSpec1: BucketedTableTestSpec, testSpec2: BucketedTableTestSpec): Unit = {
+      Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
+        testBucketing(
+          bucketedTableTestSpecLeft = specs._1,
+          bucketedTableTestSpecRight = specs._2,
+          joinCondition = joinCondition(Seq("i", "j")))
+      }
+    }
+
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
+      // Coalescing buckets is disabled by a config.
+      run(
+        BucketedTableTestSpec(
+          Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
+        BucketedTableTestSpec(
+          Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
+    }
+
+    withSQLConf(
+      SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+      SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_NUM_BUCKETS_DIFF.key -> "2") {
+      // Coalescing buckets is not applied because the difference in the number of buckets (4)
+      // is greater than max allowed (2).
+      run(
+        BucketedTableTestSpec(
+          Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
+        BucketedTableTestSpec(
+          Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
+    }
+
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      run(
+        // Coalescing buckets is not applied because the bigger number of buckets (8) is not
+        // divisible by the smaller number of buckets (7).
+        BucketedTableTestSpec(
+          Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
+        BucketedTableTestSpec(
+          Some(BucketSpec(7, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
+    }
+  }
 }
