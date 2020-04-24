@@ -41,6 +41,14 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
 
   test(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor") {
+    // runDecomTest(true, false)
+  }
+
+  test(s"verify that shuffle blocks are migrated.") {
+    runDecomTest(false, true)
+  }
+
+  private def runDecomTest(persist: Boolean, shuffle: Boolean) = {
     // Create input RDD with 10 partitions
     val input = sc.parallelize(1 to 10, 10)
     val accum = sc.longAccumulator("mapperRunAccumulator")
@@ -52,7 +60,11 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     val sleepyRdd = input.mapPartitions { x =>
       Thread.sleep(500)
       accum.add(1)
-      x
+      x.map(y => (y, y))
+    }
+    val testRdd = shuffle match {
+      case true => sleepyRdd.reduceByKey(_ + _)
+      case false => sleepyRdd
     }
 
     // Listen for the job
@@ -69,10 +81,12 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     })
 
     // Cache the RDD lazily
-    sleepyRdd.persist()
+    if (persist) {
+      testRdd.persist()
+    }
 
     // Start the computation of RDD - this step will also cache the RDD
-    val asyncCount = sleepyRdd.countAsync()
+    val asyncCount = testRdd.countAsync()
 
     // Wait for the job to have started
     sem.acquire(1)
@@ -82,23 +96,41 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     val execs = sched.getExecutorIds()
     assert(execs.size == 3, s"Expected 3 executors but found ${execs.size}")
     val execToDecommission = execs.head
-    sched.decommissionExecutor(execToDecommission)
+    // sched.decommissionExecutor(execToDecommission)
 
     // Wait for job to finish
-    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 3.seconds)
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 5.seconds)
     assert(asyncCountResult === 10)
     // All 10 tasks finished, so accum should have been increased 10 times
     assert(accum.value === 10)
 
     // All tasks should be successful, nothing should have failed
     sc.listenerBus.waitUntilEmpty()
-    assert(taskEndEvents.size === 10) // 10 mappers
+    if (shuffle) {
+      assert(taskEndEvents.size === 20) // 10 mappers & 10 reducers
+    } else {
+      assert(taskEndEvents.size === 10) // 10 mappers
+    }
     assert(taskEndEvents.map(_.reason).toSet === Set(Success))
 
-    // Since the RDD is cached, so further usage of same RDD should use the
+    // all blocks should have been shifted from decommissioned block manager
+    // after some time
+    Thread.sleep(1000)
+
+    // Since the RDD is cached or shuffled so further usage of same RDD should use the
     // cached data. Original RDD partitions should not be recomputed i.e. accum
     // should have same value like before
-    assert(sleepyRdd.count() === 10)
+    assert(testRdd.count() === 10)
     assert(accum.value === 10)
+
+    val storageStatus = sc.env.blockManager.master.getStorageStatus
+    val execIdToBlocksMapping = storageStatus.map(
+      status => (status.blockManagerId.executorId, status.blocks)).toMap
+    // No cached blocks should be present on executor which was decommissioned
+    assert(execIdToBlocksMapping(execToDecommission).keys.filter(_.isRDD).toSeq === Seq())
+    if (persist) {
+      // There should still be all 10 RDD blocks cached
+      assert(execIdToBlocksMapping.values.flatMap(_.keys).count(_.isRDD) === 10)
+    }
   }
 }

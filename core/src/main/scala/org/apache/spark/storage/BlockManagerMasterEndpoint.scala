@@ -28,7 +28,7 @@ import scala.util.Random
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
@@ -48,7 +48,8 @@ class BlockManagerMasterEndpoint(
     conf: SparkConf,
     listenerBus: LiveListenerBus,
     externalBlockStoreClient: Option[ExternalBlockStoreClient],
-    blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo])
+    blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo],
+    mapOutputTracker: MapOutputTrackerMaster)
   extends IsolatedRpcEndpoint with Logging {
 
   // Mapping from executor id to the block manager's local disk directories.
@@ -157,7 +158,8 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case DecommissionBlockManagers(executorIds) =>
-      decommissionBlockManagers(executorIds.flatMap(blockManagerIdByExecutor.get))
+      val bmIds = executorIds.flatMap(blockManagerIdByExecutor.get)
+      decommissionBlockManagers(bmIds)
       context.reply(true)
 
     case GetReplicateInfoForRDDBlocks(blockManagerId) =>
@@ -489,6 +491,7 @@ class BlockManagerMasterEndpoint(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
+    logDebug(s"Updating block info on master ${blockId}")
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
@@ -503,6 +506,18 @@ class BlockManagerMasterEndpoint(
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       return true
+    }
+
+    if (blockId.isInternalShuffle && storageLevel.isValid) {
+      blockId match {
+        case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+          // Don't update the map output on just the index block
+          logDebug("Received shuffle index block update for ${shuffleId} ${mapId}")
+        case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
+          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
+        case _ =>
+          logError(s"Unexpected shuffle block type ${blockId}")
+      }
     }
 
     blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
