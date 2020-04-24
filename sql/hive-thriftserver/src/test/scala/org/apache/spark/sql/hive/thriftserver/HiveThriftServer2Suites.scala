@@ -82,7 +82,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
 
         Seq(s"ADD JAR $jarFile",
-          "CREATE TABLE smallKV(key INT, val STRING)",
+          "CREATE TABLE smallKV(key INT, val STRING) USING hive",
           s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV")
           .foreach(query => client.executeStatement(sessionHandle, query, confOverlay))
 
