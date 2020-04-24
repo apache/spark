@@ -32,15 +32,17 @@ if __name__ == "__main__":
         .getOrCreate()
     sc = spark._sc
     acc = sc.accumulator(0)
+
     def addToAcc(x):
         acc.add(1)
         return x
+
     initialRdd = sc.parallelize(range(100), 5)
     accRdd = initialRdd.map(addToAcc)
     # Trigger a shuffle so there are shuffle blocks to migrate
     rdd = accRdd.map(lambda x: (x, x)).groupByKey()
     rdd.collect()
-    print("1st accumulator value is: "+ str(acc.value))
+    print("1st accumulator value is: " + str(acc.value))
     print("Waiting to give nodes time to finish migration, decom exec 1.")
     print("...")
     time.sleep(5)
@@ -51,7 +53,7 @@ if __name__ == "__main__":
     print("Executor node should be deleted now")
     rdd.count()
     rdd.collect()
-    print("Final accumulator value is: "+ str(acc.value))
+    print("Final accumulator value is: " + str(acc.value))
     print("Finished waiting, stopping Spark.")
     spark.stop()
     print("Done, exiting Python")
