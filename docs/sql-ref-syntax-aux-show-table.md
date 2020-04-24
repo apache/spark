@@ -46,12 +46,12 @@ SHOW TABLE EXTENDED [ IN | FROM database_name ] LIKE regex_pattern
   </dd>
   <dt><code><em>regex_pattern</em></code></dt>
   <dd>
-    Specifies a regular expression pattern that is used to limit the results of the
-    statement.
+    Specifies the regular expression pattern that is used to filter out unwanted tables.
     <ul>
-      <li>Only <code>*</code> and <code>|</code> are allowed as wildcard pattern.</li>
-      <li>Excluding <code>*</code> and <code>|</code> the remaining pattern follows the regex semantics.</li>
-      <li>The leading and trailing blanks are trimmed in the input pattern before processing.</li>
+       <li> Except for <code>*</code> and <code>|</code> character, the pattern works like a regex.</li>
+       <li> <code>*</code> alone matches 0 or more characters and <code>|</code> is used to separate multiple different regexes,
+             any of which can match. </li>
+       <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
     </ul>
   </dd>
   <dt><code><em>partition_spec</em></code></dt>
