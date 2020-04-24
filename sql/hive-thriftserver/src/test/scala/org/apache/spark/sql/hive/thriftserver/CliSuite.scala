@@ -40,6 +40,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * A test suite for the `spark-sql` CLI tool.
  */
 class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach with Logging {
+  val retries = 8
+
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
@@ -176,13 +178,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     }
   }
 
-  test("load warehouse dir from hive-site.xml") {
+  testRetry("load warehouse dir from hive-site.xml", retries) {
     runCliWithin(1.minute, maybeWarehouse = None, useExternalHiveFile = true)(
       "desc database default;" -> "hive_one",
       "set spark.sql.warehouse.dir;" -> "hive_one")
   }
 
-  test("load warehouse dir from --hiveconf") {
+  testRetry("load warehouse dir from --hiveconf", retries) {
     // --hiveconf will overrides hive-site.xml
     runCliWithin(2.minute, useExternalHiveFile = true)(
       "desc database default;" -> warehousePath.getAbsolutePath,
@@ -191,7 +193,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       "set spark.sql.warehouse.dir;" -> warehousePath.getAbsolutePath)
   }
 
-  test("load warehouse dir from --conf spark(.hadoop).hive.*") {
+  testRetry("load warehouse dir from --conf spark(.hadoop).hive.*", retries) {
     // override conf from hive-site.xml
     runCliWithin(
       2.minute,
@@ -213,7 +215,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
   }
 
-  test("load warehouse dir from spark.sql.warehouse.dir") {
+  testRetry("load warehouse dir from spark.sql.warehouse.dir", retries) {
     // spark.sql.warehouse.dir overrides all hive ones
     runCliWithin(
       2.minute,
@@ -224,7 +226,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       "desc database default;" -> sparkWareHouseDir.getAbsolutePath.concat("1"))
   }
 
-  test("Simple commands") {
+  testRetry("Simple commands", retries) {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
 
@@ -244,11 +246,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("Single command with -e") {
+  testRetry("Single command with -e", retries) {
     runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "")
   }
 
-  test("Single command with --database") {
+  testRetry("Single command with --database", retries) {
     runCliWithin(2.minute)(
       "CREATE DATABASE hive_test_db;"
         -> "",
@@ -265,7 +267,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("Commands using SerDe provided in --jars") {
+  testRetry("Commands using SerDe provided in --jars", retries) {
     val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
 
     val dataFilePath =
@@ -291,7 +293,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("SPARK-29022: Commands using SerDe provided in --hive.aux.jars.path") {
+  testRetry("SPARK-29022: Commands using SerDe provided in --hive.aux.jars.path", retries) {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
@@ -317,7 +319,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("SPARK-11188 Analysis error reporting") {
+  testRetry("SPARK-11188 Analysis error reporting", retries) {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
       "select * from nonexistent_table;"
@@ -325,12 +327,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("SPARK-11624 Spark SQL CLI should set sessionState only once") {
+  testRetry("SPARK-11624 Spark SQL CLI should set sessionState only once", retries) {
     runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
       "" -> "This is a test for Spark-11624")
   }
 
-  test("list jars") {
+  testRetry("list jars", retries) {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
@@ -338,7 +340,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("list jar <jarfile>") {
+  testRetry("list jar <jarfile>", retries) {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
@@ -346,7 +348,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("list files") {
+  testRetry("list files", retries) {
     val dataFilePath = Thread.currentThread().
       getContextClassLoader.getResource("data/files/small_kv.txt")
     runCliWithin(2.minute)(
@@ -355,7 +357,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("list file <filepath>") {
+  testRetry("list file <filepath>", retries) {
     val dataFilePath = Thread.currentThread().
       getContextClassLoader.getResource("data/files/small_kv.txt")
     runCliWithin(2.minute)(
@@ -364,7 +366,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("apply hiveconf from cli command") {
+  testRetry("apply hiveconf from cli command", retries) {
     runCliWithin(2.minute)(
       "SET conf1;" -> "conftest",
       "SET conf2;" -> "1",
@@ -373,7 +375,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("Support hive.aux.jars.path") {
+  testRetry("Support hive.aux.jars.path", retries) {
     val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
       1.minute,
@@ -384,7 +386,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("SPARK-28840 test --jars command") {
+  testRetry("SPARK-28840 test --jars command", retries) {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
     runCliWithin(
       1.minute,
@@ -395,7 +397,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("SPARK-28840 test --jars and hive.aux.jars.path command") {
+  testRetry("SPARK-28840 test --jars and hive.aux.jars.path command", retries) {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
     val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
@@ -411,7 +413,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("SPARK-29022 Commands using SerDe provided in ADD JAR sql") {
+  testRetry("SPARK-29022 Commands using SerDe provided in ADD JAR sql", retries) {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
@@ -437,7 +439,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("SPARK-26321 Should not split semicolon within quoted string literals") {
+  testRetry("SPARK-26321 Should not split semicolon within quoted string literals", retries) {
     runCliWithin(3.minute)(
       """select 'Test1', "^;^";""" -> "Test1\t^;^",
       """select 'Test2', "\";";""" -> "Test2\t\";",
@@ -446,21 +448,21 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("Pad Decimal numbers with trailing zeros to the scale of the column") {
+  testRetry("Pad Decimal numbers with trailing zeros to the scale of the column", retries) {
     runCliWithin(1.minute)(
       "SELECT CAST(1 AS DECIMAL(38, 18));"
         -> "1.000000000000000000"
     )
   }
 
-  test("SPARK-30049 Should not complain for quotes in commented lines") {
+  testRetry("SPARK-30049 Should not complain for quotes in commented lines", retries) {
     runCliWithin(1.minute)(
       """SELECT concat('test', 'comment') -- someone's comment here
         |;""".stripMargin -> "testcomment"
     )
   }
 
-  test("SPARK-30049 Should not complain for quotes in commented with multi-lines") {
+  testRetry("SPARK-30049 Should not complain for quotes in commented with multi-lines", retries) {
     runCliWithin(1.minute)(
       """SELECT concat('test', 'comment') -- someone's comment here \\
         | comment continues here with single ' quote \\
