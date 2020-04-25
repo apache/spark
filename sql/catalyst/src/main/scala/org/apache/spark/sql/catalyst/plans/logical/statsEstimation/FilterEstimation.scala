@@ -172,7 +172,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
         val hSet = expList.map(e => e.eval())
         evaluateInSet(ar, HashSet() ++ hSet, update)
 
-      case InSet(ar: Attribute, set) =>
+      case InSet(ar: Attribute, set, _) =>
         evaluateInSet(ar, set, update)
 
       // In current stage, we don't have advanced statistics such as sketches or histograms.
