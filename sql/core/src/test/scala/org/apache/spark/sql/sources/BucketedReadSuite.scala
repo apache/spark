@@ -876,6 +876,32 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("bucket coalescing eliminates shuffle") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      // The side with bucketedTableTestSpec1 will be coalesced to have 4 output partitions.
+      // Currently, sort will be introduced for the side that is coalesced.
+      val testSpec1 = BucketedTableTestSpec(
+        Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = true,
+        expectedNumOutputPartitions = Some(4))
+      val testSpec2 = BucketedTableTestSpec(
+        Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = false,
+        expectedNumOutputPartitions = Some(4))
+
+      Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
+        testBucketing(
+          bucketedTableTestSpecLeft = specs._1,
+          bucketedTableTestSpecRight = specs._2,
+          joinCondition = joinCondition(Seq("i", "j")))
+      }
+    }
+  }
+
   test("bucket coalescing is not satisfied") {
     def run(testSpec1: BucketedTableTestSpec, testSpec2: BucketedTableTestSpec): Unit = {
       Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
@@ -915,30 +941,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
         BucketedTableTestSpec(
           Some(BucketSpec(7, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
-    }
-  }
-
-  test("bucket coalescing should eliminate shuffle") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
-      // The side with bucketedTableTestSpec1 will be coalesced to have 4 output partitions.
-      // Currently, sort will be introduced for the side that is coalesced.
-      val testSpec1 = BucketedTableTestSpec(
-        Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
-        numPartitions = 1,
-        expectedShuffle = false,
-        expectedSort = true,
-        expectedNumOutputPartitions = Some(2))
-      val testSpec2 = BucketedTableTestSpec(
-        Some(BucketSpec(2, Seq("i", "j"), Seq("i", "j"))),
-        numPartitions = 1,
-        expectedShuffle = false,
-        expectedSort = false,
-        expectedNumOutputPartitions = Some(2))
-
-      testBucketing(
-        bucketedTableTestSpecLeft = testSpec1,
-        bucketedTableTestSpecRight = testSpec2,
-        joinCondition = joinCondition(Seq("i", "j")))
     }
   }
 }

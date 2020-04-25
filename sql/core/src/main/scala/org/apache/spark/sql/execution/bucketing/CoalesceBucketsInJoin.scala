@@ -29,8 +29,6 @@ import org.apache.spark.sql.internal.SQLConf
  * when the two bucketed tables are inner-joined and they differ in the number of buckets.
  */
 object CoalesceBucketsInJoin extends Rule[LogicalPlan]  {
-  private val sqlConf = SQLConf.get
-
   private def isPlanEligible(plan: LogicalPlan): Boolean = {
     def forall(plan: LogicalPlan)(p: LogicalPlan => Boolean): Boolean = {
       p(plan) && plan.children.forall(forall(_)(p))
@@ -53,13 +51,16 @@ object CoalesceBucketsInJoin extends Rule[LogicalPlan]  {
     }
   }
 
-  private def mayCoalesce(numBuckets1: Int, numBuckets2: Int): Option[Int] = {
+  private def mayCoalesce(
+      numBuckets1: Int,
+      numBuckets2: Int,
+      maxNumBucketsDiff: Int): Option[Int] = {
     assert(numBuckets1 != numBuckets2)
     val (small, large) = (math.min(numBuckets1, numBuckets2), math.max(numBuckets1, numBuckets2))
     // A bucket can be coalesced only if the bigger number of buckets is divisible by the smaller
     // number of buckets because bucket id is calculated by modding the total number of buckets.
     if ((large % small == 0) &&
-      ((large - small) <= sqlConf.coalesceBucketsInJoinMaxNumBucketsDiff)) {
+      ((large - small) <= maxNumBucketsDiff)) {
       Some(small)
     } else {
       None
@@ -90,11 +91,15 @@ object CoalesceBucketsInJoin extends Rule[LogicalPlan]  {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
+    val sqlConf = SQLConf.get
     if (sqlConf.coalesceBucketsInJoinEnabled) {
       plan transform {
         case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
             if numLeftBuckets != numRightBuckets =>
-          mayCoalesce(numLeftBuckets, numRightBuckets).map { numCoalescedBuckets =>
+          mayCoalesce(
+            numLeftBuckets,
+            numRightBuckets,
+            sqlConf.coalesceBucketsInJoinMaxNumBucketsDiff).map { numCoalescedBuckets =>
             if (numCoalescedBuckets != numLeftBuckets) {
               join.copy(left = addCoalesceBuckets(join.left, numCoalescedBuckets))
             } else {
