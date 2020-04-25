@@ -426,7 +426,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
+case class InSet(
+    child: Expression,
+    hset: Set[Any],
+    hsetElemType: Option[DataType] = None) extends UnaryExpression with Predicate {
 
   require(hset != null, "hset could not be null")
 
@@ -520,8 +523,9 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   override def sql: String = {
     val valueSQL = child.sql
+    val elemType = hsetElemType.getOrElse(child.dataType)
     val listSQL = hset.toSeq
-      .map(elem => Literal(convertToScala(elem, child.dataType)).sql)
+      .map(elem => Literal(convertToScala(elem, elemType)).sql)
       .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
