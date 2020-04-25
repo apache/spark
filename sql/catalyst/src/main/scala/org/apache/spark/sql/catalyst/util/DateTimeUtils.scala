@@ -714,7 +714,7 @@ object DateTimeUtils {
    * Returns the trunc date from original date and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 6 and 9.
    */
-  def truncDate(days: Int, level: Int): SQLDate = {
+  def truncDate(days: Int, level: Int): Int = {
     level match {
       case TRUNC_TO_WEEK => getNextDateForDayOfWeek(days - 7, MONDAY)
       case TRUNC_TO_MONTH => days - DateTimeUtils.getDayOfMonth(days) + 1
