@@ -66,9 +66,9 @@ trait LegacyDateFormatter extends DateFormatter {
   def formatDate(d: Date): String
 
   override def parse(s: String): Int = {
-    val micros = DateTimeUtils.millisToMicros(parseToDate(s).getTime)
-    val julianDays = DateTimeUtils.microsToDays(micros)
-    RebaseDateTime.rebaseJulianToGregorianDays(julianDays)
+    val julianMicros = DateTimeUtils.millisToMicros(parseToDate(s).getTime)
+    val micros = RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros)
+    DateTimeUtils.microsToDays(micros)
   }
 
   override def format(days: Int): String = {
