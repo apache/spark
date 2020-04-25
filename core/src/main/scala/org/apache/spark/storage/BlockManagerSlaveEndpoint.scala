@@ -61,9 +61,6 @@ class BlockManagerSlaveEndpoint(
         SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
       }
 
-    case DecommissionBlockManager =>
-      context.reply(blockManager.decommissionBlockManager())
-
     case RemoveBroadcast(broadcastId, _) =>
       doAsync[Int]("removing broadcast " + broadcastId, context) {
         blockManager.removeBroadcast(broadcastId, tellMaster = true)
