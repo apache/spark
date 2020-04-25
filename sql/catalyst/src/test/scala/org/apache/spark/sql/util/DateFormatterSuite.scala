@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, localDateToDays}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
 class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   test("parsing dates") {
@@ -47,45 +48,54 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("roundtrip date -> days -> date") {
-    Seq(
-      "0050-01-01",
-      "0953-02-02",
-      "1423-03-08",
-      "1969-12-31",
-      "1972-08-25",
-      "1975-09-26",
-      "2018-12-12",
-      "2038-01-01",
-      "5010-11-17").foreach { date =>
-      DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-          val formatter = DateFormatter(getZoneId(timeZone))
-          val days = formatter.parse(date)
-          val formatted = formatter.format(days)
-          assert(date === formatted)
+    LegacyBehaviorPolicy.values.foreach { parserPolicy =>
+      withSQLConf("spark.sql.legacy.timeParserPolicy" -> parserPolicy.toString) {
+        Seq(
+          "0050-01-01",
+          "0953-02-02",
+          "1582-10-15",
+          "1423-03-08",
+          "1969-12-31",
+          "1972-08-25",
+          "1975-09-26",
+          "2018-12-12",
+          "2038-01-01",
+          "5010-11-17").foreach { date =>
+          DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+            withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+              val formatter = DateFormatter(getZoneId(timeZone))
+              val days = formatter.parse(date)
+              val formatted = formatter.format(days)
+              assert(date === formatted)
+            }
+          }
         }
       }
     }
   }
 
   test("roundtrip days -> date -> days") {
-    Seq(
-      -701265,
-      -371419,
-      -199722,
-      -1,
-      0,
-      967,
-      2094,
-      17877,
-      24837,
-      1110657).foreach { days =>
-      DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-          val formatter = DateFormatter(getZoneId(timeZone))
-          val date = formatter.format(days)
-          val parsed = formatter.parse(date)
-          assert(days === parsed)
+    LegacyBehaviorPolicy.values.foreach { parserPolicy =>
+      withSQLConf("spark.sql.legacy.timeParserPolicy" -> parserPolicy.toString) {
+        Seq(
+          -701265,
+          -371419,
+          -199722,
+          -1,
+          0,
+          967,
+          2094,
+          17877,
+          24837,
+          1110657).foreach { days =>
+          DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+            withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+              val formatter = DateFormatter(getZoneId(timeZone))
+              val date = formatter.format(days)
+              val parsed = formatter.parse(date)
+              assert(days === parsed)
+            }
+          }
         }
       }
     }
