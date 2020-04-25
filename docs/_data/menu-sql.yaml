@@ -170,6 +170,8 @@
                   url: sql-ref-syntax-qry-select-inline-table.html
                 - text: Common Table Expression
                   url: sql-ref-syntax-qry-select-cte.html
+                - text: LIKE Predicate
+                  url: sql-ref-syntax-qry-select-like.html
                 - text: Window Function
                   url: sql-ref-syntax-qry-window.html
             - text: EXPLAIN

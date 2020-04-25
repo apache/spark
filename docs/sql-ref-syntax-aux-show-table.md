@@ -48,10 +48,10 @@ SHOW TABLE EXTENDED [ IN | FROM database_name ] LIKE regex_pattern
   <dd>
     Specifies the regular expression pattern that is used to filter out unwanted tables.
     <ul>
-       <li> Except for <code>*</code> and <code>|</code> character, the pattern works like a regex.</li>
-       <li> <code>*</code> alone matches 0 or more characters and <code>|</code> is used to separate multiple different regexes,
+       <li> Except for <code>*</code> and <code>|</code> character, the pattern works like a regular expression.</li>
+       <li> <code>*</code> alone matches 0 or more characters and <code>|</code> is used to separate multiple different regular expressions,
              any of which can match. </li>
-       <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
+       <li> The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
     </ul>
   </dd>
   <dt><code><em>partition_spec</em></code></dt>

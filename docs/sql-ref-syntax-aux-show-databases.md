@@ -37,12 +37,12 @@ SHOW { DATABASES | SCHEMAS } [ LIKE regex_pattern ]
 <dl>
   <dt><code><em>regex_pattern</em></code></dt>
   <dd>
-    Specifies a regular expression pattern that is used to limit the results of the
+    Specifies a regular expression pattern that is used to filter the results of the
     statement.
     <ul>
       <li>Only <code>*</code> and <code>|</code> are allowed as wildcard pattern.</li>
-      <li>Excluding <code>*</code> and <code>|</code> the remaining pattern follows the regex semantics.</li>
-      <li>The leading and trailing blanks are trimmed in the input pattern before processing.</li>
+      <li>Excluding <code>*</code> and <code>|</code>, the remaining pattern follows the regular expression semantics.</li>
+      <li>The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
     </ul>
   </dd>
 </dl>
