@@ -42,6 +42,7 @@ import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -867,6 +868,20 @@ object ApplicationMaster extends Logging {
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()
+
+        if (master.isClusterMode) {
+          // Set the context class loader so that the token manager has access to jars
+          // distributed by the user.
+          Utils.withContextClassLoader(master.userClassLoader) {
+            // Re-obtain delegation tokens, as they might be outdated as of now. Add the fresh
+            // tokens on top of the original user's credentials (overwrite).
+            // This is only needed in cluster mode, because in client mode, AM will soon retrieve
+            // the latest tokens from the driver.
+            val credentialManager = new HadoopDelegationTokenManager(sparkConf, yarnConf, null)
+            credentialManager.obtainDelegationTokens(originalCreds)
+          }
+        }
+
         // Transfer the original user's tokens to the new user, since it may contain needed tokens
         // (such as those user to connect to YARN).
         newUGI.addCredentials(originalCreds)
