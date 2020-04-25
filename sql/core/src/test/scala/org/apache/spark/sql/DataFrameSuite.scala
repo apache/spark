@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
@@ -34,7 +35,6 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
@@ -43,7 +43,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.{NullInts, NullStrings, TestData2}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -2711,7 +2710,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     // binary
     val bins = Array(Array(1.toByte), Array(2.toByte), Array(3.toByte), Array(4.toByte))
-    checkAnswer(Seq(bins).toDF(), Row(bins))
+
+    val binsRes = Seq(bins).toDF().collect().head.get(0)
+      .asInstanceOf[mutable.WrappedArray.ofRef[Array[Byte]]].array
+    assert(binsRes.zip(bins).forall { case (a, b) => a.diff(b).isEmpty})
 
     // nested
     val nestedIntArray = Array(Array(1), Array(2))
