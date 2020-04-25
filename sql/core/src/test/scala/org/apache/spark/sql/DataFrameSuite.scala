@@ -2701,16 +2701,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(Seq(decScala).toDF(), Row(decJava))
     checkAnswer(Seq(decJava).toDF(), Row(decJava))
 
-    // datetimes and intervals
+    // datetimes
     val dates = strings.map(Date.valueOf)
     checkAnswer(Seq(dates).toDF(), Row(dates))
 
     val timestamps =
       Array(Timestamp.valueOf("2020-04-24 12:34:56"), Timestamp.valueOf("2020-04-24 11:22:33"))
     checkAnswer(Seq(timestamps).toDF(), Row(timestamps))
-
-    val intervals = Array(new CalendarInterval(1, 2), new CalendarInterval(4, 5))
-    checkAnswer(Seq(intervals).toDF(), Row(intervals))
 
     // binary
     val bins = Array(Array(1.toByte), Array(2.toByte), Array(3.toByte), Array(4.toByte))
