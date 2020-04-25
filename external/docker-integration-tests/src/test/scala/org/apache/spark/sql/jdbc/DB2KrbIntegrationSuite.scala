@@ -39,7 +39,9 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override val env = Map(
       "DB2INST1_PASSWORD" -> "rootpass",
       "LICENSE" -> "accept",
-      "DBNAME" -> "db2"
+      "DBNAME" -> "db2",
+      "ARCHIVE_LOGS" -> "false",
+      "AUTOCONFIG" -> "false"
     )
     override val usesIpc = false
     override val jdbcPort = 50000
