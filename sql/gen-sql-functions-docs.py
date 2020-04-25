@@ -106,7 +106,7 @@ def _make_pretty_usage(infos):
     for info in infos:
         # Extracts (signature, description) pairs from `info.usage`, e.g.,
         # the signature is `func(expr)` and the description is `...` in an usage `func(expr) - ...`.
-        usages = iter(re.split(r"(%s\(.*\)) - " % info.name, info.usage.strip())[1:])
+        usages = iter(re.split(r"(%s.*) - " % info.name, info.usage.strip())[1:])
         for (sig, description) in zip(usages, usages):
             result.append("    <tr>")
             result.append("      <td>%s</td>" % sig)
