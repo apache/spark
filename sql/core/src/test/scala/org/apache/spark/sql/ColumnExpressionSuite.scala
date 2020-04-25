@@ -26,12 +26,13 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.catalyst.expressions.{In, InSet, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{In, InSet, Literal, NamedExpression}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -868,5 +869,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(typedLit(("a", 2, 1.0))),
       Row(Row("a", 2, 1.0)) :: Nil)
+  }
+
+  test("SPARK-31563: sql of InSet for UTF8String collection") {
+    val inSet = InSet(Literal("a"), Set("a", "b").map(UTF8String.fromString))
+    assert(inSet.sql === "('a' IN ('a', 'b'))")
   }
 }
