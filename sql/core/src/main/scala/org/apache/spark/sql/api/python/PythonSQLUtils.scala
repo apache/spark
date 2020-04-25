@@ -49,7 +49,7 @@ private[sql] object PythonSQLUtils {
       case p @ (SQLConf.SESSION_LOCAL_TIMEZONE.key, _, _, _) =>
         p.copy(_2 = "value of local timezone")
       case p @ (StaticSQLConf.WAREHOUSE_PATH.key, _, _, _) =>
-        p.copy(_2 = "value of $SPARK_HOME/spark-warehouse")
+        p.copy(_2 = "value of $PWD/spark-warehouse")
       case o => o
     }
   }
