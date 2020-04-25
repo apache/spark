@@ -40,6 +40,7 @@ def _find_spark_home():
     paths = ["../", os.path.dirname(os.path.realpath(__file__))]
 
     # Add the path of the PySpark module if it exists
+    import_error_raised = False
     if sys.version < "3":
         import imp
         try:
@@ -49,7 +50,7 @@ def _find_spark_home():
             paths.append(os.path.join(module_home, "../../"))
         except ImportError:
             # Not pip installed no worries
-            pass
+            import_error_raised = True
     else:
         from importlib.util import find_spec
         try:
@@ -59,7 +60,7 @@ def _find_spark_home():
             paths.append(os.path.join(module_home, "../../"))
         except ImportError:
             # Not pip installed no worries
-            pass
+            import_error_raised = True
 
     # Normalize the paths
     paths = [os.path.abspath(p) for p in paths]
@@ -68,6 +69,19 @@ def _find_spark_home():
         return next(path for path in paths if is_spark_home(path))
     except StopIteration:
         print("Could not find valid SPARK_HOME while searching {0}".format(paths), file=sys.stderr)
+        if import_error_raised:
+            print(
+                "\nDid you install PySpark via a package manager such as pip or Conda? If so,\n"
+                "PySpark was not found in your Python environment. It is possible your\n"
+                "Python environment does not properly bind with your package manager.\n"
+                "\nPlease check your default 'python' and if you set PYSPARK_PYTHON and/or\n"
+                "PYSPARK_DRIVER_PYTHON environment variables, and see if you can import\n"
+                "PySpark, for example, 'python -c 'import pyspark'.\n"
+                "\nIf you cannot import, you can install by using the Python executable directly,\n"
+                "for example, 'python -m pip install pyspark [--user]'. Otherwise, you can also\n"
+                "explicitly set the Python executable, that has PySpark installed, to\n"
+                "PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON environment variables, for example,\n"
+                "'PYSPARK_PYTHON=python3 pyspark'.\n", file=sys.stderr)
         sys.exit(-1)
 
 if __name__ == "__main__":

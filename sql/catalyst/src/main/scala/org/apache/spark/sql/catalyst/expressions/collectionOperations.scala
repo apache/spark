@@ -77,9 +77,9 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns the size of an array or a map.
-    The function returns -1 if its input is null and spark.sql.legacy.sizeOfNull is set to true.
-    If spark.sql.legacy.sizeOfNull is set to false, the function returns null for null input.
-    By default, the spark.sql.legacy.sizeOfNull parameter is set to true.
+    The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+    spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+    With the default settings, the function returns -1 for null input.
   """,
   examples = """
     Examples:
@@ -138,7 +138,8 @@ object Size {
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
        [1,2]
-  """)
+  """,
+  group = "map_funcs")
 case class MapKeys(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -169,6 +170,7 @@ case class MapKeys(child: Expression)
       > SELECT _FUNC_(array(1, 2), array(2, 3), array(3, 4));
        [{"0":1,"1":2,"2":3},{"0":2,"1":3,"2":4}]
   """,
+  group = "array_funcs",
   since = "2.4.0")
 case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
 
@@ -327,7 +329,8 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
        ["a","b"]
-  """)
+  """,
+  group = "map_funcs")
 case class MapValues(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -356,6 +359,7 @@ case class MapValues(child: Expression)
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
        [{"key":1,"value":"a"},{"key":2,"value":"b"}]
   """,
+  group = "map_funcs",
   since = "3.0.0")
 case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
@@ -523,7 +527,9 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(3, 'c'));
        {1:"a",2:"b",3:"c"}
-  """, since = "2.4.0")
+  """,
+  group = "map_funcs",
+  since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -641,6 +647,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
        {1:"a",2:"b"}
   """,
+  group = "map_funcs",
   since = "2.4.0")
 case class MapFromEntries(child: Expression) extends UnaryExpression {
 
@@ -862,7 +869,8 @@ object ArraySortLike {
     Examples:
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'), true);
        [null,"a","b","c","d"]
-  """)
+  """,
+  group = "array_funcs")
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with ArraySortLike {
@@ -920,6 +928,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   note = """
     The function is non-deterministic.
   """,
+  group = "array_funcs",
   since = "2.4.0")
 case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
   extends UnaryExpression with ExpectsInputTypes with Stateful with ExpressionWithRandomSeed {
@@ -1002,6 +1011,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       > SELECT _FUNC_(array(2, 1, 4, 3));
        [3,4,1,2]
   """,
+  group = "array_funcs",
   since = "1.5.0",
   note = """
     Reverse logic for arrays is available since 2.4.0.
@@ -1073,7 +1083,8 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 2);
        true
-  """)
+  """,
+  group = "array_funcs")
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -1169,7 +1180,9 @@ case class ArrayContains(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(3, 4, 5));
        true
-  """, since = "2.4.0")
+  """,
+  group = "array_funcs",
+  since = "2.4.0")
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
   extends BinaryArrayExpressionWithImplicitCast {
@@ -1392,7 +1405,9 @@ case class ArraysOverlap(left: Expression, right: Expression)
        [2,3]
       > SELECT _FUNC_(array(1, 2, 3, 4), -2, 2);
        [3,4]
-  """, since = "2.4.0")
+  """,
+  group = "array_funcs",
+  since = "2.4.0")
 // scalastyle:on line.size.limit
 case class Slice(x: Expression, start: Expression, length: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -1505,7 +1520,9 @@ case class Slice(x: Expression, start: Expression, length: Expression)
        hello world
       > SELECT _FUNC_(array('hello', null ,'world'), ' ', ',');
        hello , world
-  """, since = "2.4.0")
+  """,
+  group = "array_funcs",
+  since = "2.4.0")
 case class ArrayJoin(
     array: Expression,
     delimiter: Expression,
@@ -1668,7 +1685,9 @@ case class ArrayJoin(
     Examples:
       > SELECT _FUNC_(array(1, 20, null, 3));
        1
-  """, since = "2.4.0")
+  """,
+  group = "array_funcs",
+  since = "2.4.0")
 case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = true
@@ -1733,7 +1752,9 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
     Examples:
       > SELECT _FUNC_(array(1, 20, null, 3));
        20
-  """, since = "2.4.0")
+  """,
+  group = "array_funcs",
+  since = "2.4.0")
 case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = true
@@ -1807,6 +1828,7 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
       > SELECT _FUNC_(array(3, 2, 1), 1);
        3
   """,
+  group = "array_funcs",
   since = "2.4.0")
 case class ArrayPosition(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -2021,7 +2043,8 @@ case class ElementAt(left: Expression, right: Expression)
   """,
   note = """
     Concat logic for arrays is available since 2.4.0.
-  """)
+  """,
+  group = "array_funcs")
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
@@ -2220,6 +2243,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       > SELECT _FUNC_(array(array(1, 2), array(3, 4)));
        [1,2,3,4]
   """,
+  group = "array_funcs",
   since = "2.4.0")
 case class Flatten(child: Expression) extends UnaryExpression {
 
@@ -2352,6 +2376,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval 1 month);
        [2018-01-01,2018-02-01,2018-03-01]
   """,
+  group = "array_funcs",
   since = "2.4.0"
 )
 case class Sequence(
@@ -2734,6 +2759,7 @@ object Sequence {
       > SELECT _FUNC_('123', 2);
        ["123","123"]
   """,
+  group = "array_funcs",
   since = "2.4.0")
 case class ArrayRepeat(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
@@ -2854,7 +2880,9 @@ case class ArrayRepeat(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3), 3);
        [1,2,null]
-  """, since = "2.4.0")
+  """,
+  group = "array_funcs",
+  since = "2.4.0")
 case class ArrayRemove(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -3049,7 +3077,9 @@ trait ArraySetLike {
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3));
        [1,2,3,null]
-  """, since = "2.4.0")
+  """,
+  group = "array_funcs",
+  since = "2.4.0")
 case class ArrayDistinct(child: Expression)
   extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
 
@@ -3226,6 +3256,7 @@ object ArrayBinaryLike {
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
        [1,2,3,5]
   """,
+  group = "array_funcs",
   since = "2.4.0")
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
@@ -3437,6 +3468,7 @@ object ArrayUnion {
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
        [1,3]
   """,
+  group = "array_funcs",
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
@@ -3678,6 +3710,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
        [2]
   """,
+  group = "array_funcs",
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {

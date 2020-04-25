@@ -21,11 +21,13 @@ license: |
 
 There are several common scenarios for datetime usage in Spark:
 
-- CSV/JSON datasources use the pattern string for parsing and formatting time content.
+- CSV/JSON datasources use the pattern string for parsing and formatting datetime content.
 
-- Datetime functions related to convert string to/from `DateType` or `TimestampType`. For example, unix_timestamp, date_format, to_unix_timestamp, from_unixtime, to_date, to_timestamp, from_utc_timestamp, to_utc_timestamp, etc.
+- Datetime functions related to convert `StringType` to/from `DateType` or `TimestampType`.
+  For example, `unix_timestamp`, `date_format`, `to_unix_timestamp`, `from_unixtime`, `to_date`, `to_timestamp`, `from_utc_timestamp`, `to_utc_timestamp`, etc.
 
-Spark uses the below letters in date and timestamp parsing and formatting:
+Spark uses pattern letters in the following table for date and timestamp parsing and formatting:
+
 <table class="table">
 <tr>
   <th> <b>Symbol</b> </th>
@@ -52,7 +54,7 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> 189 </td>
 </tr>
 <tr>
-  <td> <b>M</b> </td>
+  <td> <b>M/L</b> </td>
   <td> month-of-year </td>
   <td> number/text </td>
   <td> 7; 07; Jul; July; J </td>
@@ -62,6 +64,12 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> day-of-month </td>
   <td> number </td>
   <td> 28 </td>
+</tr>
+<tr>
+  <td> <b>Q/q</b> </td>
+  <td> quarter-of-year </td>
+  <td> number/text </td>
+  <td> 3; 03; Q3; 3rd quarter </td>
 </tr>
 <tr>
   <td> <b>Y</b> </td>
@@ -88,7 +96,7 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> Tue; Tuesday; T </td>
 </tr>
 <tr>
-  <td> <b>e</b> </td>
+  <td> <b>u</b> </td>
   <td> localized day-of-week </td>
   <td> number/text </td>
   <td> 2; 02; Tue; Tuesday; T </td>
@@ -148,6 +156,12 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> 978 </td>
 </tr>
 <tr>
+  <td> <b>V</b> </td>
+  <td> time-zone ID </td>
+  <td> zone-id </td>
+  <td> America/Los_Angeles; Z; -08:30 </td>
+</tr>
+<tr>
   <td> <b>z</b> </td>
   <td> time-zone name </td>
   <td> zone-name </td>
@@ -189,6 +203,18 @@ Spark uses the below letters in date and timestamp parsing and formatting:
   <td> literal </td>
   <td> ' </td>
 </tr>
+<tr>
+  <td> <b>[</b> </td>
+  <td> optional section start </td>
+  <td>  </td>
+  <td>  </td>
+</tr>
+<tr>
+  <td> <b>]</b> </td>
+  <td> optional section end </td>
+  <td>  </td>
+  <td>  </td>
+</tr>
 </table>
 
 The count of pattern letters determines the format.
@@ -199,17 +225,27 @@ The count of pattern letters determines the format.
 
 - Number/Text: If the count of pattern letters is 3 or greater, use the Text rules above. Otherwise use the Number rules above.
 
-- Fraction: Outputs the micro-of-second field as a fraction-of-second. The micro-of-second value has six digits, thus the count of pattern letters is from 1 to 6. If it is less than 6, then the micro-of-second value is truncated, with only the most significant digits being output.
+- Fraction: Use one or more (up to 9) contiguous `'S'` characters, e,g `SSSSSS`, to parse and format fraction of second.
+  For parsing, the acceptable fraction length can be [1, the number of contiguous 'S'].
+  For formatting, the fraction length would be padded to the number of contiguous 'S' with zeros.
+  Spark supports datetime of micro-of-second precision, which has up to 6 significant digits, but can parse nano-of-second with exceeded part truncated.
 
 - Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present.
 
-- Zone names: This outputs the display name of the time-zone ID. If the count of letters is one, two or three, then the short name is output. If the count of letters is four, then the full name is output. Five or more letters will fail.
+- Zone ID(V): This outputs the display the time-zone ID. Pattern letter count must be 2.
+
+- Zone names(z): This outputs the display textual name of the time-zone ID. If the count of letters is one, two or three, then the short name is output. If the count of letters is four, then the full name is output. Five or more letters will fail.
 
 - Offset X and x: This formats the offset based on the number of pattern letters. One letter outputs just the hour, such as '+01', unless the minute is non-zero in which case the minute is also output, such as '+0130'. Two letters outputs the hour and minute, without a colon, such as '+0130'. Three letters outputs the hour and minute, with a colon, such as '+01:30'. Four letters outputs the hour and minute and optional second, without a colon, such as '+013015'. Five letters outputs the hour and minute and optional second, with a colon, such as '+01:30:15'. Six or more letters will fail. Pattern letter 'X' (upper case) will output 'Z' when the offset to be output would be zero, whereas pattern letter 'x' (lower case) will output '+00', '+0000', or '+00:00'.
 
 - Offset O: This formats the localized offset based on the number of pattern letters. One letter outputs the short form of the localized offset, which is localized offset text, such as 'GMT', with hour without leading zero, optional 2-digit minute and second if non-zero, and colon, for example 'GMT+8'. Four letters outputs the full form, which is localized offset text, such as 'GMT, with 2-digit hour and minute field, optional second field if non-zero, and colon, for example 'GMT+08:00'. Any other count of letters will fail.
 
 - Offset Z: This formats the offset based on the number of pattern letters. One, two or three letters outputs the hour and minute, without a colon, such as '+0130'. The output will be '+0000' when the offset is zero. Four letters outputs the full form of localized offset, equivalent to four letters of Offset-O. The output will be the corresponding localized offset text if the offset is zero. Five letters outputs the hour, minute, with optional second if non-zero, with colon. It outputs 'Z' if the offset is zero. Six or more letters will fail.
+
+- Optional section start and end: Use `[]` to define an optional section and maybe nested.
+  During formatting, all valid data will be output even it is in the optional section.
+  During parsing, the whole section may be missing from the parsed string.
+  An optional section is started by `[` and ended using `]` (or at the end of the pattern).
 
 More details for the text style:
 

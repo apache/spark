@@ -21,6 +21,7 @@ if sys.version >= '3':
     xrange = range
 else:
     from itertools import izip as zip
+from collections import Counter
 
 from pyspark import since
 from pyspark.rdd import _load_from_socket
@@ -102,13 +103,17 @@ class PandasConversionMixin(object):
                 try:
                     from pyspark.sql.pandas.types import _check_series_localize_timestamps
                     import pyarrow
-                    batches = self._collect_as_arrow()
+                    # Rename columns to avoid duplicated column names.
+                    tmp_column_names = ['col_{}'.format(i) for i in range(len(self.columns))]
+                    batches = self.toDF(*tmp_column_names)._collect_as_arrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
                         # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
                         # values, but we should use datetime.date to match the behavior with when
                         # Arrow optimization is disabled.
                         pdf = table.to_pandas(date_as_object=True)
+                        # Rename back to the original column names.
+                        pdf.columns = self.columns
                         for field in self.schema:
                             if isinstance(field.dataType, TimestampType):
                                 pdf[field.name] = \
@@ -131,9 +136,16 @@ class PandasConversionMixin(object):
 
         # Below is toPandas without Arrow optimization.
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+        column_counter = Counter(self.columns)
 
-        dtype = {}
-        for field in self.schema:
+        dtype = [None] * len(self.schema)
+        for fieldIdx, field in enumerate(self.schema):
+            # For duplicate column name, we use `iloc` to access it.
+            if column_counter[field.name] > 1:
+                pandas_col = pdf.iloc[:, fieldIdx]
+            else:
+                pandas_col = pdf[field.name]
+
             pandas_type = PandasConversionMixin._to_corrected_pandas_type(field.dataType)
             # SPARK-21766: if an integer field is nullable and has null values, it can be
             # inferred by pandas as float column. Once we convert the column with NaN back
@@ -141,16 +153,36 @@ class PandasConversionMixin(object):
             # float type, not the corrected type from the schema in this case.
             if pandas_type is not None and \
                 not(isinstance(field.dataType, IntegralType) and field.nullable and
-                    pdf[field.name].isnull().any()):
-                dtype[field.name] = pandas_type
+                    pandas_col.isnull().any()):
+                dtype[fieldIdx] = pandas_type
             # Ensure we fall back to nullable numpy types, even when whole column is null:
-            if isinstance(field.dataType, IntegralType) and pdf[field.name].isnull().any():
-                dtype[field.name] = np.float64
-            if isinstance(field.dataType, BooleanType) and pdf[field.name].isnull().any():
-                dtype[field.name] = np.object
+            if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
+                dtype[fieldIdx] = np.float64
+            if isinstance(field.dataType, BooleanType) and pandas_col.isnull().any():
+                dtype[fieldIdx] = np.object
 
-        for f, t in dtype.items():
-            pdf[f] = pdf[f].astype(t, copy=False)
+        df = pd.DataFrame()
+        for index, t in enumerate(dtype):
+            column_name = self.schema[index].name
+
+            # For duplicate column name, we use `iloc` to access it.
+            if column_counter[column_name] > 1:
+                series = pdf.iloc[:, index]
+            else:
+                series = pdf[column_name]
+
+            if t is not None:
+                series = series.astype(t, copy=False)
+
+            # `insert` API makes copy of data, we only do it for Series of duplicate column names.
+            # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work because `iloc` could
+            # return a view or a copy depending by context.
+            if column_counter[column_name] > 1:
+                df.insert(index, column_name, series, allow_duplicates=True)
+            else:
+                df[column_name] = series
+
+        pdf = df
 
         if timezone is None:
             return pdf

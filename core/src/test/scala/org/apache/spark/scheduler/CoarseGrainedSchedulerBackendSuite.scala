@@ -251,6 +251,9 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       assert(execResources(GPU).assignedAddrs === Array("0"))
     }
 
+    // To avoid allocating any resources immediately after releasing the resource from the task to
+    // make sure that `availableAddrs` below won't change
+    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenReturn(Seq.empty)
     backend.driverEndpoint.send(
       StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskResources))
 

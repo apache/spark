@@ -34,7 +34,7 @@
 }
 
 /* Highlight the SparkPlan node name */
-#plan-viz-graph svg text :first-child {
+#plan-viz-graph svg text :first-child:not(.stageId-and-taskId-metrics) {
   font-weight: bold;
 }
 

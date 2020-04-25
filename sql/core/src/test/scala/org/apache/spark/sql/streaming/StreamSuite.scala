@@ -1244,9 +1244,10 @@ class StreamSuite extends StreamTest {
       failAfter(60.seconds) {
         val startTime = System.nanoTime()
         withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "2000") {
-          intercept[TimeoutException] {
+          val ex = intercept[TimeoutException] {
             sq.stop()
           }
+          assert(ex.getMessage.contains(sq.id.toString))
         }
         val duration = (System.nanoTime() - startTime) / 1e6
         assert(duration >= 2000,

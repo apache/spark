@@ -249,10 +249,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
             }
           }
-          // Note: some tests expect the reply to come after we put the executor in the map
-          context.reply(true)
           listenerBus.post(
             SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
+          // Note: some tests expect the reply to come after we put the executor in the map
+          context.reply(true)
         }
 
       case StopDriver =>

@@ -1208,15 +1208,13 @@ class ArrowConvertersSuite extends SharedSparkSession {
     spark.conf.unset(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key)
   }
 
-  testQuietly("unsupported types") {
-    def runUnsupported(block: => Unit): Unit = {
-      val msg = intercept[UnsupportedOperationException] {
-        block
-      }
-      assert(msg.getMessage.contains("is not supported"))
+  testQuietly("interval is unsupported for arrow") {
+    val e = intercept[SparkException] {
+      calenderIntervalData.toDF().toArrowBatchRdd.collect()
     }
 
-    runUnsupported { calenderIntervalData.toDF().toArrowBatchRdd.collect() }
+    assert(e.getCause.isInstanceOf[UnsupportedOperationException])
+    assert(e.getCause.getMessage.contains("Unsupported data type: interval"))
   }
 
   test("test Arrow Validator") {

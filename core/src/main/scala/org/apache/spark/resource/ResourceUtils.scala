@@ -149,7 +149,7 @@ private[spark] object ResourceUtils extends Logging {
   def listResourceIds(sparkConf: SparkConf, componentName: String): Seq[ResourceID] = {
     sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_PREFIX.").map { case (key, _) =>
       key.substring(0, key.indexOf('.'))
-    }.toSet.toSeq.map(name => new ResourceID(componentName, name))
+    }.distinct.map(name => new ResourceID(componentName, name))
   }
 
   def parseAllResourceRequests(

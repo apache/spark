@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.io.File
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark._
@@ -65,7 +64,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       Thread.sleep(Random.nextInt(1000))
       // Pass partitionId message in
       val message: String = context.partitionId().toString
-      val messages: ArrayBuffer[String] = context.allGather(message)
+      val messages: Array[String] = context.allGather(message)
       messages.toList.iterator
     }
     // Take a sorted list of all the partitionId messages

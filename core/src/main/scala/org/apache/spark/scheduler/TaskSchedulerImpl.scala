@@ -408,7 +408,7 @@ private[spark] class TaskSchedulerImpl(
         newExecAvail = true
       }
     }
-    val hosts = offers.map(_.host).toSet.toSeq
+    val hosts = offers.map(_.host).distinct
     for ((host, Some(rack)) <- hosts.zip(getRacksForHosts(hosts))) {
       hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += host
     }

@@ -47,6 +47,7 @@ function renderPlanViz() {
   }
 
   resizeSvg(svg);
+  postprocessForAdditionalMetrics();
 }
 
 /* -------------------- *
@@ -75,6 +76,10 @@ function setupTooltipForSparkPlanNode(nodeId) {
     })
 }
 
+// labelSeparator should be a non-graphical character in order not to affect the width of boxes.
+var labelSeparator = "\x01";
+var stageAndTaskMetricsPattern = "^(.*)(\\(stage.*task[^)]*\\))(.*)$";
+
 /*
  * Helper function to pre-process the graph layout.
  * This step is necessary for certain styles that affect the positioning
@@ -84,8 +89,29 @@ function preprocessGraphLayout(g) {
   g.graph().ranksep = "70";
   var nodes = g.nodes();
   for (var i = 0; i < nodes.length; i++) {
-      var node = g.node(nodes[i]);
-      node.padding = "5";
+    var node = g.node(nodes[i]);
+    node.padding = "5";
+
+    var firstSearator;
+    var secondSeparator;
+    var splitter;
+    if (node.isCluster) {
+      firstSearator = secondSeparator = labelSeparator;
+      splitter = "\\n";
+    } else {
+      firstSearator = "<span class='stageId-and-taskId-metrics'>";
+      secondSeparator = "</span>";
+      splitter = "<br>";
+    }
+
+    node.label.split(splitter).forEach(function(text, i) {
+      var newTexts = text.match(stageAndTaskMetricsPattern);
+      if (newTexts) {
+        node.label = node.label.replace(
+            newTexts[0],
+            newTexts[1] + firstSearator + newTexts[2] + secondSeparator + newTexts[3]);
+      }
+    });
   }
   // Curve the edges
   var edges = g.edges();
@@ -162,4 +188,48 @@ function getAbsolutePosition(d3selection) {
     }
   }
   return { x: _x, y: _y };
+}
+
+/*
+ * Helper function for postprocess for additional metrics.
+ */
+function postprocessForAdditionalMetrics() {
+  // With dagre-d3, we can choose normal text (default) or HTML as a label type.
+  // HTML label for node works well but not for cluster so we need to choose the default label type
+  // and manipulate DOM.
+  $("g.cluster text tspan")
+    .each(function() {
+      var originalText = $(this).text();
+        if (originalText.indexOf(labelSeparator) > 0) {
+          var newTexts = originalText.split(labelSeparator);
+          var thisD3Node = d3.selectAll($(this));
+          thisD3Node.text(newTexts[0]);
+          thisD3Node.append("tspan").attr("class", "stageId-and-taskId-metrics").text(newTexts[1]);
+          $(this).append(newTexts[2]);
+        } else {
+          return originalText;
+        }
+  });
+
+  var checkboxNode = $("#stageId-and-taskId-checkbox");
+  checkboxNode.click(function() {
+      onClickAdditionalMetricsCheckbox($(this));
+  });
+  var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") == "true";
+  $("#stageId-and-taskId-checkbox").prop("checked", isChecked);
+  onClickAdditionalMetricsCheckbox(checkboxNode);
+}
+
+/*
+ * Helper function which defines the action on click the checkbox.
+ */
+function onClickAdditionalMetricsCheckbox(checkboxNode) {
+  var additionalMetrics = $(".stageId-and-taskId-metrics");
+  var isChecked = checkboxNode.prop("checked");
+  if (isChecked) {
+    additionalMetrics.show();
+  } else {
+    additionalMetrics.hide();
+  }
+  window.localStorage.setItem("stageId-and-taskId-checked", isChecked);
 }

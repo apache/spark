@@ -23,14 +23,18 @@ import java.net.URI
 import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.OptimizeLocalShuffleReader.LOCAL_SHUFFLE_READER_DESCRIPTION
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
@@ -49,7 +53,7 @@ class AdaptiveQueryExecSuite
         event match {
           case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
             if (sparkPlanInfo.simpleString.startsWith(
-              "AdaptiveSparkPlan(isFinalPlan=true)")) {
+              "AdaptiveSparkPlan isFinalPlan=true")) {
               finalPlanCnt += 1
             }
           case _ => // ignore other events
@@ -60,14 +64,14 @@ class AdaptiveQueryExecSuite
 
     val dfAdaptive = sql(query)
     val planBefore = dfAdaptive.queryExecution.executedPlan
-    assert(planBefore.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=false)"))
+    assert(planBefore.toString.startsWith("AdaptiveSparkPlan isFinalPlan=false"))
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = sql(query)
       QueryTest.sameRows(result.toSeq, df.collect().toSeq)
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
-    assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
+    assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
 
     spark.sparkContext.listenerBus.waitUntilEmpty()
     assert(finalPlanCnt == 1)
@@ -94,14 +98,14 @@ class AdaptiveQueryExecSuite
   }
 
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
-    collectInPlanAndSubqueries(plan) {
+    collectWithSubqueries(plan) {
       case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
       case BroadcastQueryStageExec(_, e: ReusedExchangeExec) => e
     }
   }
 
   private def findReusedSubquery(plan: SparkPlan): Seq[ReusedSubqueryExec] = {
-    collectInPlanAndSubqueries(plan) {
+    collectWithSubqueries(plan) {
       case e: ReusedSubqueryExec => e
     }
   }
@@ -615,6 +619,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "2000",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000") {
       withTempView("skewData1", "skewData2") {
         spark
@@ -780,5 +785,63 @@ class AdaptiveQueryExecSuite
       }
     }
   }
-}
 
+  test("SPARK-31384: avoid NPE in OptimizeSkewedJoin when there's 0 partition plan") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t2") {
+        // create DataFrame with 0 partition
+        spark.createDataFrame(sparkContext.emptyRDD[Row], new StructType().add("b", IntegerType))
+          .createOrReplaceTempView("t2")
+        // should run successfully without NPE
+        runAdaptiveAndVerifyResult("SELECT * FROM testData2 t1 left semi join t2 ON t1.a=t2.b")
+      }
+    }
+  }
+
+  test("SPARK-30953: InsertAdaptiveSparkPlan should apply AQE on child plan of write commands") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      val plan = sql("CREATE TABLE t1 AS SELECT 1 col").queryExecution.executedPlan
+      assert(plan.isInstanceOf[DataWritingCommandExec])
+      assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+    }
+  }
+
+  test("AQE should set active session during execution") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = spark.range(10).select(sum('id))
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      SparkSession.setActiveSession(null)
+      checkAnswer(df, Seq(Row(45)))
+      SparkSession.setActiveSession(spark) // recover the active session.
+    }
+  }
+
+  test("No deadlock in UI update") {
+    object TestStrategy extends Strategy {
+      def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        case _: Aggregate =>
+          withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+            SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+            spark.range(5).rdd
+          }
+          Nil
+        case _ => Nil
+      }
+    }
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      try {
+        spark.experimental.extraStrategies = TestStrategy :: Nil
+        val df = spark.range(10).groupBy('id).count()
+        df.collect()
+      } finally {
+        spark.experimental.extraStrategies = Nil
+      }
+    }
+  }
+}

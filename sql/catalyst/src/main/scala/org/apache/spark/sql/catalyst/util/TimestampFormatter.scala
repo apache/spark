@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.text.{ParseException, ParsePosition, SimpleDateFormat}
 import java.time._
-import java.time.format.DateTimeParseException
+import java.time.format.{DateTimeFormatter, DateTimeParseException}
 import java.time.temporal.ChronoField.MICRO_OF_SECOND
 import java.time.temporal.TemporalQueries
 import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
@@ -55,10 +55,12 @@ class Iso8601TimestampFormatter(
     pattern: String,
     zoneId: ZoneId,
     locale: Locale,
-    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT)
+    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
+    needVarLengthSecondFraction: Boolean)
   extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
-  protected lazy val formatter = getOrCreateFormatter(pattern, locale)
+  protected lazy val formatter: DateTimeFormatter =
+    getOrCreateFormatter(pattern, locale, needVarLengthSecondFraction)
 
   @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
@@ -95,7 +97,8 @@ class Iso8601TimestampFormatter(
  * @param zoneId the time zone identifier in which the formatter parses or format timestamps
  */
 class FractionTimestampFormatter(zoneId: ZoneId)
-  extends Iso8601TimestampFormatter("", zoneId, TimestampFormatter.defaultLocale) {
+  extends Iso8601TimestampFormatter(
+    "", zoneId, TimestampFormatter.defaultLocale, needVarLengthSecondFraction = false) {
 
   @transient
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
@@ -199,12 +202,14 @@ object TimestampFormatter {
       format: Option[String],
       zoneId: ZoneId,
       locale: Locale = defaultLocale,
-      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): TimestampFormatter = {
+      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
+      needVarLengthSecondFraction: Boolean = false): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      new Iso8601TimestampFormatter(pattern, zoneId, locale, legacyFormat)
+      new Iso8601TimestampFormatter(
+        pattern, zoneId, locale, legacyFormat, needVarLengthSecondFraction)
     }
   }
 
@@ -227,16 +232,24 @@ object TimestampFormatter {
       format: String,
       zoneId: ZoneId,
       locale: Locale,
-      legacyFormat: LegacyDateFormat): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, locale, legacyFormat)
+      legacyFormat: LegacyDateFormat,
+      needVarLengthSecondFraction: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, locale, legacyFormat, needVarLengthSecondFraction)
   }
 
-  def apply(format: String, zoneId: ZoneId, legacyFormat: LegacyDateFormat): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat)
+  def apply(
+      format: String,
+      zoneId: ZoneId,
+      legacyFormat: LegacyDateFormat,
+      needVarLengthSecondFraction: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, needVarLengthSecondFraction)
   }
 
-  def apply(format: String, zoneId: ZoneId): TimestampFormatter = {
-    getFormatter(Some(format), zoneId)
+  def apply(
+      format: String,
+      zoneId: ZoneId,
+      needVarLengthSecondFraction: Boolean = false): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, needVarLengthSecondFraction = needVarLengthSecondFraction)
   }
 
   def apply(zoneId: ZoneId): TimestampFormatter = {

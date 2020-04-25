@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
-import java.time.{LocalDate, LocalDateTime, ZoneId}
+import java.time.LocalDate
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -35,6 +35,7 @@ import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
+import org.apache.spark.sql.execution.adaptive.AdaptiveTestUtils.assertExceptionMessage
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1329,7 +1330,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
 
   test("SPARK-6245 JsonInferSchema.infer on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val options = new JSONOptions(Map.empty[String, String], "GMT")
+    val options = new JSONOptions(Map.empty[String, String], "UTC")
     val emptySchema = new JsonInferSchema(options).infer(
       empty.rdd,
       CreateJacksonParser.string)
@@ -1356,7 +1357,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val options = new JSONOptions(Map.empty[String, String], "GMT")
+    val options = new JSONOptions(Map.empty[String, String], "UTC")
     val emptySchema = new JsonInferSchema(options).infer(
       emptyRecords.rdd,
       CreateJacksonParser.string)
@@ -1730,7 +1731,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       timestampsWithFormat.write
         .format("json")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1748,7 +1749,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val readBack = spark.read
         .schema(customSchema)
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .json(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)
@@ -2192,9 +2193,8 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
         .json(testFile(fileName))
         .count()
     }
-    val errMsg = exception.getMessage
 
-    assert(errMsg.contains("Malformed records are detected in record parsing"))
+    assertExceptionMessage(exception, "Malformed records are detected in record parsing")
   }
 
   def checkEncoding(expectedEncoding: String, pathToJsonFiles: String,

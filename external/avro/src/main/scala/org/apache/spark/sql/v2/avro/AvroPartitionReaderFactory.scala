@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.PartitionReader
-import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.{EmptyPartitionReader, FilePartitionReaderFactory, PartitionReaderWithPartitionValues}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -88,8 +88,12 @@ case class AvroPartitionReaderFactory(
       reader.sync(partitionedFile.start)
       val stop = partitionedFile.start + partitionedFile.length
 
-      val deserializer =
-        new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), readDataSchema)
+      val rebaseDateTime = DataSourceUtils.needRebaseDateTime(
+        reader.asInstanceOf[DataFileReader[_]].getMetaString).getOrElse {
+        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ)
+      }
+      val deserializer = new AvroDeserializer(
+        userProvidedSchema.getOrElse(reader.getSchema), readDataSchema, rebaseDateTime)
 
       val fileReader = new PartitionReader[InternalRow] {
         private[this] var completed = false

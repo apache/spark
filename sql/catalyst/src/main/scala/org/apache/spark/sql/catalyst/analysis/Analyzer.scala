@@ -295,8 +295,8 @@ class Analyzer(
           case (CalendarIntervalType, CalendarIntervalType) => a
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
-          case (DateType, _) => DateAdd(l, r)
-          case (_, DateType) => DateAdd(r, l)
+          case (DateType, dt) if dt != StringType => DateAdd(l, r)
+          case (dt, DateType) if dt != StringType => DateAdd(r, l)
           case _ => a
         }
         case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
@@ -305,7 +305,7 @@ class Analyzer(
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
-          case (DateType, _) => DateSub(l, r)
+          case (DateType, dt) if dt != StringType => DateSub(l, r)
           case _ => s
         }
         case m @ Multiply(l, r) if m.childrenResolved => (l.dataType, r.dataType) match {
@@ -742,6 +742,8 @@ class Analyzer(
     extends Rule[LogicalPlan] with LookupCatalog {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case s @ ShowTables(UnresolvedNamespace(Seq()), _) =>
+        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+      case s @ ShowViews(UnresolvedNamespace(Seq()), _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
         ResolvedNamespace(currentCatalog, Seq.empty[String])
@@ -2703,13 +2705,13 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, inputPrimitives, _, _, _, _)
-            if inputPrimitives.contains(true) =>
+        case udf @ ScalaUDF(_, _, inputs, _, _, _, _)
+            if udf.inputPrimitives.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
-          assert(inputPrimitives.length == inputs.length)
+          assert(udf.inputPrimitives.length == inputs.length)
 
-          val inputPrimitivesPair = inputPrimitives.zip(inputs)
+          val inputPrimitivesPair = udf.inputPrimitives.zip(inputs)
           val inputNullCheck = inputPrimitivesPair.collect {
             case (isPrimitive, input) if isPrimitive && input.nullable =>
               IsNull(input)
