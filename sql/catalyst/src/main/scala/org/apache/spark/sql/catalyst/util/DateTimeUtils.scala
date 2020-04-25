@@ -732,40 +732,25 @@ object DateTimeUtils {
   private[sql] val TRUNC_TO_MINUTE = 3
   private[sql] val TRUNC_TO_HOUR = 4
   private[sql] val TRUNC_TO_DAY = 5
-  // The levels from TRUNC_TO_WEEK to TRUNC_TO_MILLENNIUM are used in truncations
+  // The levels from TRUNC_TO_WEEK to TRUNC_TO_YEAR are used in truncations
   // of DATE and TIMESTAMP values.
   private[sql] val TRUNC_TO_WEEK = 6
   private[sql] val MIN_LEVEL_OF_DATE_TRUNC = TRUNC_TO_WEEK
   private[sql] val TRUNC_TO_MONTH = 7
   private[sql] val TRUNC_TO_QUARTER = 8
   private[sql] val TRUNC_TO_YEAR = 9
-  private[sql] val TRUNC_TO_DECADE = 10
-  private[sql] val TRUNC_TO_CENTURY = 11
-  private[sql] val TRUNC_TO_MILLENNIUM = 12
 
   /**
    * Returns the trunc date from original date and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 6.
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 6 and 9.
    */
   def truncDate(d: SQLDate, level: Int): SQLDate = {
-    def truncToYearLevel(divider: Int, adjust: Int): SQLDate = {
-      val oldYear = getYear(d)
-      var newYear = Math.floorDiv(oldYear, divider) * divider
-      if (adjust > 0 && newYear == oldYear) {
-        newYear -= divider
-      }
-      newYear += adjust
-      localDateToDays(LocalDate.of(newYear, 1, 1))
-    }
     level match {
       case TRUNC_TO_WEEK => getNextDateForDayOfWeek(d - 7, MONDAY)
       case TRUNC_TO_MONTH => d - DateTimeUtils.getDayOfMonth(d) + 1
       case TRUNC_TO_QUARTER =>
         localDateToDays(daysToLocalDate(d).`with`(IsoFields.DAY_OF_QUARTER, 1L))
       case TRUNC_TO_YEAR => d - DateTimeUtils.getDayInYear(d) + 1
-      case TRUNC_TO_DECADE => truncToYearLevel(10, 0)
-      case TRUNC_TO_CENTURY => truncToYearLevel(100, 1)
-      case TRUNC_TO_MILLENNIUM => truncToYearLevel(1000, 1)
       case _ =>
         // caller make sure that this should never be reached
         sys.error(s"Invalid trunc level: $level")
@@ -779,7 +764,7 @@ object DateTimeUtils {
 
   /**
    * Returns the trunc date time from original date time and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 12.
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
    */
   def truncTimestamp(t: SQLTimestamp, level: Int, zoneId: ZoneId): SQLTimestamp = {
     level match {
@@ -799,7 +784,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_MILLENNIUM,
+   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR,
    * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
   def parseTruncLevel(format: UTF8String): Int = {
@@ -817,9 +802,6 @@ object DateTimeUtils {
         case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
         case "QUARTER" => TRUNC_TO_QUARTER
         case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
-        case "DECADE" => TRUNC_TO_DECADE
-        case "CENTURY" => TRUNC_TO_CENTURY
-        case "MILLENNIUM" => TRUNC_TO_MILLENNIUM
         case _ => TRUNC_INVALID
       }
     }
