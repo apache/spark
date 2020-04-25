@@ -65,6 +65,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(10.0, 0.5, 100);
        10.0
   """,
+  group = "agg_funcs",
   since = "2.1.0")
 case class ApproximatePercentile(
     child: Expression,

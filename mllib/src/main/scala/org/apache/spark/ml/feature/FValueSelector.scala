@@ -27,7 +27,7 @@ import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.stat.{FValueTest, SelectionTestResult}
+import org.apache.spark.ml.stat.FValueTest
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -200,46 +200,54 @@ final class FValueSelector @Since("3.1.0") (override val uid: String)
   @Since("3.1.0")
   override def fit(dataset: Dataset[_]): FValueSelectorModel = {
     transformSchema(dataset.schema, logging = true)
+    val spark = dataset.sparkSession
+    import spark.implicits._
 
-    val testResult = FValueTest.testRegression(dataset, getFeaturesCol, getLabelCol)
-      .zipWithIndex
-    val features = $(selectorType) match {
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val resultDF = FValueTest.test(dataset.toDF, $(featuresCol), $(labelCol), true)
+
+    def getTopIndices(k: Int): Array[Int] = {
+      resultDF.sort("pValue", "featureIndex")
+        .select("featureIndex")
+        .limit(k)
+        .as[Int]
+        .collect()
+    }
+
+    val indices = $(selectorType) match {
       case "numTopFeatures" =>
-        testResult
-          .sortBy { case (res, _) => res.pValue }
-          .take(getNumTopFeatures)
+        getTopIndices($(numTopFeatures))
       case "percentile" =>
-        testResult
-          .sortBy { case (res, _) => res.pValue }
-          .take((testResult.length * getPercentile).toInt)
+        getTopIndices((numFeatures * getPercentile).toInt)
       case "fpr" =>
-        testResult
-          .filter { case (res, _) => res.pValue < getFpr }
+        resultDF.select("featureIndex")
+          .where(col("pValue") < $(fpr))
+          .as[Int].collect()
       case "fdr" =>
         // This uses the Benjamini-Hochberg procedure.
         // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
-        val tempRes = testResult
-          .sortBy { case (res, _) => res.pValue }
-        val selected = tempRes
+        val f = $(fdr) / numFeatures
+        val maxIndex = resultDF.sort("pValue", "featureIndex")
+          .select("pValue")
+          .as[Double].rdd
           .zipWithIndex
-          .filter { case ((res, _), index) =>
-            res.pValue <= getFdr * (index + 1) / testResult.length
-          }
-        if (selected.isEmpty) {
-          Array.empty[(SelectionTestResult, Int)]
-        } else {
-          val maxIndex = selected.map(_._2).max
-          tempRes.take(maxIndex + 1)
-        }
+          .flatMap { case (pValue, index) =>
+            if (pValue <= f * (index + 1)) {
+              Iterator.single(index.toInt)
+            } else Iterator.empty
+          }.fold(-1)(math.max)
+        if (maxIndex >= 0) {
+          getTopIndices(maxIndex + 1)
+        } else Array.emptyIntArray
       case "fwe" =>
-        testResult
-          .filter { case (res, _) => res.pValue < getFwe / testResult.length }
+        resultDF.select("featureIndex")
+          .where(condition = col("pValue") < $(fwe) / numFeatures)
+          .as[Int].collect()
       case errorType =>
         throw new IllegalStateException(s"Unknown Selector Type: $errorType")
     }
-    val indices = features.map { case (_, index) => index }
-    copyValues(new FValueSelectorModel(uid, indices.sorted)
-      .setParent(this))
+
+    copyValues(new FValueSelectorModel(uid, indices.sorted).setParent(this))
   }
 
   @Since("3.1.0")
@@ -269,10 +277,12 @@ class FValueSelectorModel private[ml](
     val selectedFeatures: Array[Int])
   extends Model[FValueSelectorModel] with FValueSelectorParams with MLWritable {
 
-  var prev = -1
-  selectedFeatures.foreach { i =>
-    require(prev < i, s"Index $i follows $prev and is not strictly increasing")
-    prev = i
+  {
+    var prev = -1
+    selectedFeatures.foreach { i =>
+      require(prev < i, s"Index $i follows $prev and is not strictly increasing")
+      prev = i
+    }
   }
 
   /** @group setParam */

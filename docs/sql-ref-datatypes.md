@@ -19,6 +19,7 @@ license: |
   limitations under the License.
 ---
 
+### Supported Data Types
 
 Spark SQL and DataFrames support the following data types:
 
@@ -632,7 +633,7 @@ from pyspark.sql.types import *
 </table>
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 The following table shows the type names as well as aliases used in Spark SQL parser for each data type.
 
@@ -707,3 +708,120 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 </table>
 </div>
 </div>
+
+### Floating Point Special Values
+
+Spark SQL supports several special floating point values in a case-insensitive manner:
+
+ * Inf/+Inf/Infinity/+Infinity: positive infinity
+   * ```FloatType```: equivalent to Scala <code>Float.PositiveInfinity</code>.
+   * ```DoubleType```: equivalent to Scala <code>Double.PositiveInfinity</code>.
+ * -Inf/-Infinity: negative infinity
+   * ```FloatType```: equivalent to Scala <code>Float.NegativeInfinity</code>.
+   * ```DoubleType```: equivalent to Scala <code>Double.NegativeInfinity</code>.
+ * NaN: not a number
+   * ```FloatType```: equivalent to Scala <code>Float.NaN</code>.
+   * ```DoubleType```:  equivalent to Scala <code>Double.NaN</code>.
+
+#### Positive/Negative Infinity Semantics
+
+There is special handling for positive and negative infinity. They have the following semantics:
+
+ * Positive infinity multiplied by any positive value returns positive infinity.
+ * Negative infinity multiplied by any positive value returns negative infinity.
+ * Positive infinity multiplied by any negative value returns negative infinity.
+ * Negative infinity multiplied by any negative value returns positive infinity.
+ * Positive/negative infinity multiplied by 0 returns NaN.
+ * Positive/negative infinity is equal to itself.
+ * In aggregations, all positive infinity values are grouped together. Similarly, all negative infinity values are grouped together.
+ * Positive infinity and negative infinity are treated as normal values in join keys.
+ * Positive infinity sorts lower than NaN and higher than any other values.
+ * Negative infinity sorts lower than any other values.
+
+#### NaN Semantics
+
+There is special handling for not-a-number (NaN) when dealing with `float` or `double` types that
+do not exactly match standard floating point semantics.
+Specifically:
+
+ * NaN = NaN returns true.
+ * In aggregations, all NaN values are grouped together.
+ * NaN is treated as a normal value in join keys.
+ * NaN values go last when in ascending order, larger than any other numeric value.
+
+#### Examples
+
+{% highlight sql %}
+SELECT double('infinity') AS col;
++--------+
+|     col|
++--------+
+|Infinity|
++--------+
+
+SELECT float('-inf') AS col;
++---------+
+|      col|
++---------+
+|-Infinity|
++---------+
+
+SELECT float('NaN') AS col;
++---+
+|col|
++---+
+|NaN|
++---+
+
+SELECT double('infinity') * 0 AS col;
++---+
+|col|
++---+
+|NaN|
++---+
+
+SELECT double('-infinity') * (-1234567) AS col;
++--------+
+|     col|
++--------+
+|Infinity|
++--------+
+
+SELECT double('infinity') < double('NaN') AS col;
++----+
+| col|
++----+
+|true|
++----+
+
+SELECT double('NaN') = double('NaN') AS col;
++----+
+| col|
++----+
+|true|
++----+
+
+SELECT double('inf') = double('infinity') AS col;
++----+
+| col|
++----+
+|true|
++----+
+
+CREATE TABLE test (c1 int, c2 double);
+INSERT INTO test VALUES (1, double('infinity'));
+INSERT INTO test VALUES (2, double('infinity'));
+INSERT INTO test VALUES (3, double('inf'));
+INSERT INTO test VALUES (4, double('-inf'));
+INSERT INTO test VALUES (5, double('NaN'));
+INSERT INTO test VALUES (6, double('NaN'));
+INSERT INTO test VALUES (7, double('-infinity'));
+SELECT COUNT(*), c2 FROM test GROUP BY c2;
++---------+---------+
+| count(1)|       c2|
++---------+---------+
+|        2|      NaN|
+|        2|-Infinity|
+|        3| Infinity|
++---------+---------+
+{% endhighlight %}

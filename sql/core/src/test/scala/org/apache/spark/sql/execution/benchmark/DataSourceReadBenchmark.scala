@@ -169,7 +169,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -203,7 +203,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -458,7 +458,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           var sum = 0
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
               val batch = reader.resultBatch()

@@ -30,7 +30,6 @@ exception will be thrown if the database does not exist in the system.
 DROP ( DATABASE | SCHEMA ) [ IF EXISTS ] dbname [ RESTRICT | CASCADE ]
 {% endhighlight %}
 
-
 ### Parameters
 
 <dl>
@@ -54,27 +53,20 @@ DROP ( DATABASE | SCHEMA ) [ IF EXISTS ] dbname [ RESTRICT | CASCADE ]
 </dl>
 
 ### Example
+
 {% highlight sql %}
 -- Create `inventory_db` Database
 CREATE DATABASE inventory_db COMMENT 'This database is used to maintain Inventory';
 
 -- Drop the database and it's tables
 DROP DATABASE inventory_db CASCADE;
-+---------+
-| Result  |
-+---------+
-+---------+
 
 -- Drop the database using IF EXISTS
 DROP DATABASE IF EXISTS inventory_db CASCADE;
-+---------+
-| Result  |
-+---------+
-+---------+
-
 {% endhighlight %}
 
-### Related statements
-- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
-- [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)
+### Related Statements
+
+ * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+ * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+ * [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)

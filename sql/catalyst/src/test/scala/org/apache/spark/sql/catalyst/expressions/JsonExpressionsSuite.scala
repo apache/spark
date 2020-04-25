@@ -813,4 +813,44 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         checkDecimalInfer(_, """struct<d:decimal(7,3)>""")
     }
   }
+
+  test("Length of JSON array") {
+    Seq(
+      ("", null),
+      ("[1,2,3]", 3),
+      ("[]", 0),
+      ("[[1],[2,3],[]]", 3),
+      ("""[{"a":123},{"b":"hello"}]""", 2),
+      ("""[1,2,3,[33,44],{"key":[2,3,4]}]""", 5),
+      ("""[1,2,3,4,5""", null),
+      ("Random String", null),
+      ("""{"key":"not a json array"}""", null),
+      ("""{"key": 25}""", null)
+    ).foreach {
+      case(literal, expectedValue) =>
+        checkEvaluation(LengthOfJsonArray(Literal(literal)), expectedValue)
+    }
+  }
+
+  test("json_object_keys") {
+    Seq(
+      // Invalid inputs
+      ("", null),
+      ("[]", null),
+      ("""[{"key": "JSON"}]""", null),
+      ("""{"key": 45, "random_string"}""", null),
+      ("""{[1, 2, {"Key": "Invalid JSON"}]}""", null),
+      // JSON objects
+      ("{}", Seq.empty[UTF8String]),
+      ("""{"key": 1}""", Seq("key")),
+      ("""{"key": "value", "key2": 2}""", Seq("key", "key2")),
+      ("""{"arrayKey": [1, 2, 3]}""", Seq("arrayKey")),
+      ("""{"key":[1,2,3,{"key":"value"},[1,2,3]]}""", Seq("key")),
+      ("""{"f1":"abc","f2":{"f3":"a", "f4":"b"}}""", Seq("f1", "f2")),
+      ("""{"k1": [1, 2, {"key": 5}], "k2": {"key2": [1, 2]}}""", Seq("k1", "k2"))
+    ).foreach {
+      case (input, expected) =>
+        checkEvaluation(JsonObjectKeys(Literal(input)), expected)
+    }
+  }
 }

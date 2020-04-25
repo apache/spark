@@ -20,16 +20,19 @@ license: |
 ---
 
 ### Description
+
 The `DESCRIBE QUERY` statement is used to return the metadata of output
 of a query. A shorthand `DESC` may be used instead of `DESCRIBE` to
 describe the query output.
 
 ### Syntax
+
 {% highlight sql %}
 { DESC | DESCRIBE } [ QUERY ] input_statement
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>QUERY</em></code></dt>
   <dd>This clause is optional and may be omitted.</dd>
@@ -49,6 +52,7 @@ describe the query output.
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- Create table `person`
 CREATE TABLE person (name STRING , age INT COMMENT 'Age column', address STRING);
@@ -56,19 +60,19 @@ CREATE TABLE person (name STRING , age INT COMMENT 'Age column', address STRING)
 -- Returns column metadata information for a simple select query
 DESCRIBE QUERY select age, sum(age) FROM person GROUP BY age;
   +--------+---------+----------+
-  |col_name|data_type|comment   |
+  |col_name|data_type|   comment|
   +--------+---------+----------+
-  |age     |int      |Age column|
-  |sum(age)|bigint   |null      |
+  |     age|      int|Age column|
+  |sum(age)|   bigint|      null|
   +--------+---------+----------+
 
 -- Returns column metadata information for common table expression (`CTE`).
 DESCRIBE QUERY WITH all_names_cte
-  AS (SELECT name from person) SELECT * FROM all_names_cte;
+    AS (SELECT name from person) SELECT * FROM all_names_cte;
   +--------+---------+-------+
   |col_name|data_type|comment|
   +--------+---------+-------+
-  |name    |string   |null   |
+  |    name|   string|   null|
   +--------+---------+-------+
 
 -- Returns column metadata information for a inline table.
@@ -76,32 +80,33 @@ DESC QUERY VALUES(100, 'John', 10000.20D) AS employee(id, name, salary);
   +--------+---------+-------+
   |col_name|data_type|comment|
   +--------+---------+-------+
-  |id      |int      |null   |
-  |name    |string   |null   |
-  |salary  |double   |null   |
+  |      id|      int|   null|
+  |    name|   string|   null|
+  |  salary|   double|   null|
   +--------+---------+-------+
 
 -- Returns column metadata information for `TABLE` statement.
 DESC QUERY TABLE person;
   +--------+---------+----------+
-  |col_name|data_type|comment   |
+  |col_name|data_type|   comment|
   +--------+---------+----------+
-  |name    |string   |null      |
-  |age     |int      |Age column|
-  |address |string   |null      |
+  |    name|   string|      null|
+  |     age|      int| Agecolumn|
+  | address|   string|      null|
   +--------+---------+----------+
 
 -- Returns column metadata information for a `FROM` statement.
 -- `QUERY` clause is optional and can be omitted.
 DESCRIBE FROM person SELECT age;
   +--------+---------+----------+
-  |col_name|data_type|comment   |
+  |col_name|data_type|   comment|
   +--------+---------+----------+
-  |age     |int      |Age column|
+  |     age|      int| Agecolumn|
   +--------+---------+----------+
 {% endhighlight %}
 
 ### Related Statements
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
-- [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
-- [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+
+ * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+ * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+ * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)

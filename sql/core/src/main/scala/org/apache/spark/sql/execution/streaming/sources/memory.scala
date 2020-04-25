@@ -172,10 +172,10 @@ class MemoryDataWriter(partition: Int, schema: StructType)
 
   private val data = mutable.Buffer[Row]()
 
-  private val encoder = RowEncoder(schema).resolveAndBind()
+  private val fromRow = RowEncoder(schema).resolveAndBind().createDeserializer()
 
   override def write(row: InternalRow): Unit = {
-    data.append(encoder.fromRow(row))
+    data.append(fromRow(row))
   }
 
   override def commit(): MemoryWriterCommitMessage = {

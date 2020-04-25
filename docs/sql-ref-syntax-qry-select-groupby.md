@@ -18,15 +18,19 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
+### Description
+
 The <code>GROUP BY</code> clause is used to group the rows based on a set of specified grouping expressions and compute aggregations on
 the group of rows based on one or more specified aggregate functions. Spark also supports advanced aggregations to do multiple
 aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
 When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
 
 ### Syntax
+
 {% highlight sql %}
 GROUP BY group_expression [ , group_expression [ , ... ] ]
-  [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
+    [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
 
 GROUP BY GROUPING SETS (grouping_set [ , ...])
 {% endhighlight %}
@@ -37,6 +41,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>GROUPING SETS</em></code></dt>
   <dd>
@@ -92,6 +97,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 CREATE TABLE dealer (id INT, city STRING, car_model STRING, quantity INT);
 INSERT INTO dealer VALUES
@@ -106,42 +112,38 @@ INSERT INTO dealer VALUES
 
 -- Sum of quantity per dealership. Group by `id`.
 SELECT id, sum(quantity) FROM dealer GROUP BY id ORDER BY id;
-
   +---+-------------+
-  |id |sum(quantity)|
+  | id|sum(quantity)|
   +---+-------------+
-  |100|32           |
-  |200|33           |
-  |300|13           |
+  |100|           32|
+  |200|           33|
+  |300|           13|
   +---+-------------+
 
 -- Use column position in GROUP by clause.
 SELECT id, sum(quantity) FROM dealer GROUP BY 1 ORDER BY 1;
-
   +---+-------------+
-  |id |sum(quantity)|
+  | id|sum(quantity)|
   +---+-------------+
-  |100|32           |
-  |200|33           |
-  |300|13           |
+  |100|           32|
+  |200|           33|
+  |300|           13|
   +---+-------------+
 
 -- Multiple aggregations.
 -- 1. Sum of quantity per dealership.
 -- 2. Max quantity per dealership.
 SELECT id, sum(quantity) AS sum, max(quantity) AS max FROM dealer GROUP BY id ORDER BY id;
-
   +---+---+---+
-  |id |sum|max|
+  | id|sum|max|
   +---+---+---+
-  |100|32 |15 |
-  |200|33 |20 |
-  |300|13 |8  |
+  |100| 32| 15|
+  |200| 33| 20|
+  |300| 13|  8|
   +---+---+---+
 
 -- Count the number of distinct dealer cities per car_model.
 SELECT car_model, count(DISTINCT city) AS count FROM dealer GROUP BY car_model;
-
   +------------+-----+
   |   car_model|count|
   +------------+-----+
@@ -155,14 +157,13 @@ SELECT id, sum(quantity) FILTER (
             WHERE car_model IN ('Honda Civic', 'Honda CRV')
         ) AS `sum(quantity)` FROM dealer
     GROUP BY id ORDER BY id;
-
-   +---+-------------+
-   | id|sum(quantity)|
-   +---+-------------+
-   |100|           17|
-   |200|           23|
-   |300|            5|
-   +---+-------------+
+  +---+-------------+
+  | id|sum(quantity)|
+  +---+-------------+
+  |100|           17|
+  |200|           23|
+  |300|            5|
+  +---+-------------+
 
 -- Aggregations using multiple sets of grouping columns in a single statement.
 -- Following performs aggregations based on four sets of grouping columns.
@@ -171,112 +172,108 @@ SELECT id, sum(quantity) FILTER (
 -- 3. car_model
 -- 4. Empty grouping set. Returns quantities for all city and car models.
 SELECT city, car_model, sum(quantity) AS sum FROM dealer
-   GROUP BY GROUPING SETS ((city, car_model), (city), (car_model), ())
-   ORDER BY city;
-
+    GROUP BY GROUPING SETS ((city, car_model), (city), (car_model), ())
+    ORDER BY city;
   +--------+------------+---+
-  |city    |car_model   |sum|
+  |    city|   car_model|sum|
   +--------+------------+---+
-  |null    |null        |78 |
-  |null    |Honda Accord|33 |
-  |null    |Honda CRV   |10 |
-  |null    |Honda Civic |35 |
-  |Dublin  |null        |33 |
-  |Dublin  |Honda Accord|10 |
-  |Dublin  |Honda CRV   |3  |
-  |Dublin  |Honda Civic |20 |
-  |Fremont |null        |32 |
-  |Fremont |Honda Accord|15 |
-  |Fremont |Honda CRV   |7  |
-  |Fremont |Honda Civic |10 |
-  |San Jose|null        |13 |
-  |San Jose|Honda Accord|8  |
-  |San Jose|Honda Civic |5  |
+  |    null|        null| 78|
+  |    null| HondaAccord| 33|
+  |    null|    HondaCRV| 10|
+  |    null|  HondaCivic| 35|
+  |  Dublin|        null| 33|
+  |  Dublin| HondaAccord| 10|
+  |  Dublin|    HondaCRV|  3|
+  |  Dublin|  HondaCivic| 20|
+  | Fremont|        null| 32|
+  | Fremont| HondaAccord| 15|
+  | Fremont|    HondaCRV|  7|
+  | Fremont|  HondaCivic| 10|
+  | SanJose|        null| 13|
+  | SanJose| HondaAccord|  8|
+  | SanJose|  HondaCivic|  5|
   +--------+------------+---+
 
 -- Alternate syntax for `GROUPING SETS` in which both `GROUP BY` and `GROUPING SETS`
 -- specifications are present.
 SELECT city, car_model, sum(quantity) AS sum FROM dealer
-   GROUP BY city, car_model GROUPING SETS ((city, car_model), (city), (car_model), ())
-   ORDER BY city, car_model;
-
+    GROUP BY city, car_model GROUPING SETS ((city, car_model), (city), (car_model), ())
+    ORDER BY city, car_model;
   +--------+------------+---+
-  |city    |car_model   |sum|
+  |    city|   car_model|sum|
   +--------+------------+---+
-  |null    |null        |78 |
-  |null    |Honda Accord|33 |
-  |null    |Honda CRV   |10 |
-  |null    |Honda Civic |35 |
-  |Dublin  |null        |33 |
-  |Dublin  |Honda Accord|10 |
-  |Dublin  |Honda CRV   |3  |
-  |Dublin  |Honda Civic |20 |
-  |Fremont |null        |32 |
-  |Fremont |Honda Accord|15 |
-  |Fremont |Honda CRV   |7  |
-  |Fremont |Honda Civic |10 |
-  |San Jose|null        |13 |
-  |San Jose|Honda Accord|8  |
-  |San Jose|Honda Civic |5  |
+  |    null|        null| 78|
+  |    null| HondaAccord| 33|
+  |    null|    HondaCRV| 10|
+  |    null|  HondaCivic| 35|
+  |  Dublin|        null| 33|
+  |  Dublin| HondaAccord| 10|
+  |  Dublin|    HondaCRV|  3|
+  |  Dublin|  HondaCivic| 20|
+  | Fremont|        null| 32|
+  | Fremont| HondaAccord| 15|
+  | Fremont|    HondaCRV|  7|
+  | Fremont|  HondaCivic| 10|
+  | SanJose|        null| 13|
+  | SanJose| HondaAccord|  8|
+  | SanJose|  HondaCivic|  5|
   +--------+------------+---+
 
 -- Group by processing with `ROLLUP` clause.
 -- Equivalent GROUP BY GROUPING SETS ((city, car_model), (city), ())
 SELECT city, car_model, sum(quantity) AS sum FROM dealer
-   GROUP BY city, car_model WITH ROLLUP
-   ORDER BY city, car_model;
-
+    GROUP BY city, car_model WITH ROLLUP
+    ORDER BY city, car_model;
   +--------+------------+---+
-  |city    |car_model   |sum|
+  |    city|   car_model|sum|
   +--------+------------+---+
-  |null    |null        |78 |
-  |Dublin  |null        |33 |
-  |Dublin  |Honda Accord|10 |
-  |Dublin  |Honda CRV   |3  |
-  |Dublin  |Honda Civic |20 |
-  |Fremont |null        |32 |
-  |Fremont |Honda Accord|15 |
-  |Fremont |Honda CRV   |7  |
-  |Fremont |Honda Civic |10 |
-  |San Jose|null        |13 |
-  |San Jose|Honda Accord|8  |
-  |San Jose|Honda Civic |5  |
+  |    null|        null| 78|
+  |  Dublin|        null| 33|
+  |  Dublin| HondaAccord| 10|
+  |  Dublin|    HondaCRV|  3|
+  |  Dublin|  HondaCivic| 20|
+  | Fremont|        null| 32|
+  | Fremont| HondaAccord| 15|
+  | Fremont|    HondaCRV|  7|
+  | Fremont|  HondaCivic| 10|
+  | SanJose|        null| 13|
+  | SanJose| HondaAccord|  8|
+  | SanJose|  HondaCivic|  5|
   +--------+------------+---+
 
 -- Group by processing with `CUBE` clause.
 -- Equivalent GROUP BY GROUPING SETS ((city, car_model), (city), (car_model), ())
 SELECT city, car_model, sum(quantity) AS sum FROM dealer
-   GROUP BY city, car_model WITH CUBE
-   ORDER BY city, car_model;
-
+    GROUP BY city, car_model WITH CUBE
+    ORDER BY city, car_model;
   +--------+------------+---+
-  |city    |car_model   |sum|
+  |    city|   car_model|sum|
   +--------+------------+---+
-  |null    |null        |78 |
-  |null    |Honda Accord|33 |
-  |null    |Honda CRV   |10 |
-  |null    |Honda Civic |35 |
-  |Dublin  |null        |33 |
-  |Dublin  |Honda Accord|10 |
-  |Dublin  |Honda CRV   |3  |
-  |Dublin  |Honda Civic |20 |
-  |Fremont |null        |32 |
-  |Fremont |Honda Accord|15 |
-  |Fremont |Honda CRV   |7  |
-  |Fremont |Honda Civic |10 |
-  |San Jose|null        |13 |
-  |San Jose|Honda Accord|8  |
-  |San Jose|Honda Civic |5  |
+  |    null|        null| 78|
+  |    null| HondaAccord| 33|
+  |    null|    HondaCRV| 10|
+  |    null|  HondaCivic| 35|
+  |  Dublin|        null| 33|
+  |  Dublin| HondaAccord| 10|
+  |  Dublin|    HondaCRV|  3|
+  |  Dublin|  HondaCivic| 20|
+  | Fremont|        null| 32|
+  | Fremont| HondaAccord| 15|
+  | Fremont|    HondaCRV|  7|
+  | Fremont|  HondaCivic| 10|
+  | SanJose|        null| 13|
+  | SanJose| HondaAccord|  8|
+  | SanJose|  HondaCivic|  5|
   +--------+------------+---+
-
 {% endhighlight %}
 
-### Related clauses
-- [SELECT Main](sql-ref-syntax-qry-select.html)
-- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
-- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
-- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
-- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
-- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
-- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
-- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+### Related Statements
+
+ * [SELECT Main](sql-ref-syntax-qry-select.html)
+ * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+ * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+ * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+ * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+ * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+ * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+ * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

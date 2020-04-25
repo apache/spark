@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.impl.Utils.EPSILON
+import org.apache.spark.ml.impl.Utils.{unpackUpperTriangular, EPSILON}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -583,19 +583,7 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
   private[clustering] def unpackUpperTriangularMatrix(
       n: Int,
       triangularValues: Array[Double]): DenseMatrix = {
-    val symmetricValues = new Array[Double](n * n)
-    var r = 0
-    var i = 0
-    while (i < n) {
-      var j = 0
-      while (j <= i) {
-        symmetricValues(i * n + j) = triangularValues(r)
-        symmetricValues(j * n + i) = triangularValues(r)
-        r += 1
-        j += 1
-      }
-      i += 1
-    }
+    val symmetricValues = unpackUpperTriangular(n, triangularValues)
     new DenseMatrix(n, n, symmetricValues)
   }
 
