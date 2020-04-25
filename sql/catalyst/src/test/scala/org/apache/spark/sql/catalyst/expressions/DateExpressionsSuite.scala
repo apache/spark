@@ -609,103 +609,100 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
 
+  private def testTruncDate(input: Date, fmt: String, expected: Date): Unit = {
+    checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
+      expected)
+    checkEvaluation(
+      TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
+      expected)
+  }
+
   test("TruncDate") {
-    def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
-      checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
-        expected)
-      checkEvaluation(
-        TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
-        expected)
-    }
     val date = Date.valueOf("2015-07-22")
     Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
-      testTrunc(date, fmt, Date.valueOf("2015-01-01"))
+      testTruncDate(date, fmt, Date.valueOf("2015-01-01"))
     }
     Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
-      testTrunc(date, fmt, Date.valueOf("2015-07-01"))
+      testTruncDate(date, fmt, Date.valueOf("2015-07-01"))
     }
-    testTrunc(date, "DD", null)
-    testTrunc(date, "SECOND", null)
-    testTrunc(date, "HOUR", null)
-    testTrunc(date, null, null)
-    testTrunc(null, "MON", null)
-    testTrunc(null, null, null)
+    testTruncDate(date, "DD", null)
+    testTruncDate(date, "SECOND", null)
+    testTruncDate(date, "HOUR", null)
+    testTruncDate(null, "MON", null)
+  }
 
-    testTrunc(Date.valueOf("2000-03-08"), "decade", Date.valueOf("2000-01-01"))
-    testTrunc(Date.valueOf("2000-03-08"), "century", Date.valueOf("1901-01-01"))
+  private def testTruncTimestamp(input: Timestamp, fmt: String, expected: Timestamp): Unit = {
+    checkEvaluation(
+      TruncTimestamp(Literal.create(fmt, StringType), Literal.create(input, TimestampType)),
+      expected)
+    checkEvaluation(
+      TruncTimestamp(
+        NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
+      expected)
   }
 
   test("TruncTimestamp") {
-    def testTrunc(input: Timestamp, fmt: String, expected: Timestamp): Unit = {
-      checkEvaluation(
-        TruncTimestamp(Literal.create(fmt, StringType), Literal.create(input, TimestampType)),
-        expected)
-      checkEvaluation(
-        TruncTimestamp(
-          NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
-        expected)
-    }
-
     withDefaultTimeZone(TimeZoneGMT) {
       val inputDate = Timestamp.valueOf("2015-07-22 05:30:06")
 
       Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-01-01 00:00:00"))
       }
 
       Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-01 00:00:00"))
       }
 
       Seq("DAY", "day", "DD", "dd").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-22 00:00:00"))
       }
 
       Seq("HOUR", "hour").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-22 05:00:00"))
       }
 
       Seq("MINUTE", "minute").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-22 05:30:00"))
       }
 
       Seq("SECOND", "second").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-22 05:30:06"))
       }
 
       Seq("WEEK", "week").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-20 00:00:00"))
       }
 
       Seq("QUARTER", "quarter").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-01 00:00:00"))
       }
 
-      testTrunc(inputDate, "INVALID", null)
-      testTrunc(inputDate, null, null)
-      testTrunc(null, "MON", null)
-      testTrunc(null, null, null)
+      testTruncTimestamp(null, "MON", null)
+    }
+  }
 
-      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "decade",
-        Timestamp.valueOf("2000-01-01 00:00:00"))
-      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "century",
-        Timestamp.valueOf("1901-01-01 00:00:00"))
+  test("unsupported fmt fields for trunc/date_trunc results null") {
+    Seq("INVALID", "decade", "century", "millennium", "whatever", null).foreach { field =>
+      testTruncDate(Date.valueOf("2000-03-08"), field, null)
+      testTruncDate(null, field, null)
+      testTruncTimestamp(Timestamp.valueOf("2000-03-08 11:12:13"), field, null)
+      testTruncTimestamp(null, field, null)
     }
   }
 
