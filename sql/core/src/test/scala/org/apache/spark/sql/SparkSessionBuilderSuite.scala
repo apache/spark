@@ -158,7 +158,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     "spark context conf values in SessionState") {
     val session = SparkSession.builder()
       .master("local")
-      .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31234")
+      .config(GLOBAL_TEMP_DATABASE.key, value = "globaltempdb-spark-31234")
       .config("spark.app.name", "test-app-SPARK-31234")
       .getOrCreate()
 
@@ -173,13 +173,13 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     " active/default SparkSession") {
     val session = SparkSession.builder()
       .master("local")
-      .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31532")
+      .config(GLOBAL_TEMP_DATABASE.key, value = "globaltempdb-spark-31532")
       .config("spark.app.name", "test-app-SPARK-31532")
       .getOrCreate()
     // do not propagate static sql configs to the existing active session
     val session1 = SparkSession
       .builder()
-      .config(GLOBAL_TEMP_DATABASE.key, "globalTempDB-SPARK-31532-1")
+      .config(GLOBAL_TEMP_DATABASE.key, "globaltempdb-spark-31532-1")
       .getOrCreate()
     assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
     assert(session1.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
@@ -189,7 +189,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     val session2 = SparkSession
       .builder()
       .config(WAREHOUSE_PATH.key, "SPARK-31532-db")
-      .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31532-2")
+      .config(GLOBAL_TEMP_DATABASE.key, value = "globaltempdb-spark-31532-2")
       .getOrCreate()
 
     assert(!session.conf.get(WAREHOUSE_PATH).contains("SPARK-31532-db"))
@@ -208,7 +208,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     // propagate static sql configs if no existing session
     val session = SparkSession
       .builder()
-      .config(GLOBAL_TEMP_DATABASE.key, "globalTempDB-SPARK-31532-2")
+      .config(GLOBAL_TEMP_DATABASE.key, "globaltempdb-spark-31532-2")
       .config(WAREHOUSE_PATH.key, "SPARK-31532-db-2")
       .getOrCreate()
     assert(session.conf.get("spark.app.name") === "test-app-SPARK-31532-2")
