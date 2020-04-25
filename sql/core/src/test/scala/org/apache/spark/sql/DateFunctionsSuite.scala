@@ -474,10 +474,6 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("trunc(t, 'Month')"),
       Seq(Row(Date.valueOf("2015-07-01")), Row(Date.valueOf("2014-12-01"))))
-
-    checkAnswer(
-      df.selectExpr("trunc(t, 'decade')"),
-      Seq(Row(Date.valueOf("2010-01-01")), Row(Date.valueOf("2010-01-01"))))
   }
 
   test("function date_trunc") {
@@ -529,17 +525,15 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("date_trunc('MILLISECOND', t)"),
       Seq(Row(Timestamp.valueOf("2015-07-22 10:01:40.123")),
         Row(Timestamp.valueOf("2014-12-31 05:29:06.123"))))
+  }
 
+  test("unsupported fmt fields for trunc/date_trunc results null") {
+    Seq("INVALID", "decade", "century", "millennium", "whatever", null).foreach { f =>
     checkAnswer(
-      df.selectExpr("date_trunc('DECADE', t)"),
-      Seq(Row(Timestamp.valueOf("2010-01-01 00:00:00")),
-        Row(Timestamp.valueOf("2010-01-01 00:00:00"))))
-
-    Seq("century", "millennium").foreach { level =>
-      checkAnswer(
-        df.selectExpr(s"date_trunc('$level', t)"),
-        Seq(Row(Timestamp.valueOf("2001-01-01 00:00:00")),
-          Row(Timestamp.valueOf("2001-01-01 00:00:00"))))
+      Seq(Date.valueOf("2014-12-31"))
+        .toDF("dt")
+        .selectExpr(s"date_trunc('$f', dt)", "trunc(dt, '$f')"),
+      Row(null, null))
     }
   }
 
