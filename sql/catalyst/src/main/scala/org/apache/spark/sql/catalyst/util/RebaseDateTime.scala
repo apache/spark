@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{LocalDate, LocalDateTime, ZoneId}
+import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.time.temporal.ChronoField
 import java.util.{Calendar, TimeZone}
 
@@ -148,8 +148,8 @@ object RebaseDateTime {
   // in Proleptic Gregorian calendar.
   private final val gregorianCommonEraStartDay = gregJulianDiffSwitchDay(0)
 
-  private final val gregorianStartDay = LocalDate.of(1582, 10, 15)
-  private final val julianEndDay = LocalDate.of(1582, 10, 4)
+  private final val gregorianStartDate = LocalDate.of(1582, 10, 15)
+  private final val julianEndDate = LocalDate.of(1582, 10, 4)
 
   /**
    * Converts the given number of days since the epoch day 1970-01-01 to a local date in Proleptic
@@ -171,8 +171,8 @@ object RebaseDateTime {
    */
   private[sql] def localRebaseGregorianToJulianDays(days: Int): Int = {
     var localDate = LocalDate.ofEpochDay(days)
-    if (localDate.isAfter(julianEndDay) && localDate.isBefore(gregorianStartDay)) {
-      localDate = gregorianStartDay
+    if (localDate.isAfter(julianEndDate) && localDate.isBefore(gregorianStartDate)) {
+      localDate = gregorianStartDate
     }
     val utcCal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
@@ -284,6 +284,11 @@ object RebaseDateTime {
    */
   private val gregJulianRebaseMap = loadRebaseRecords("gregorian-julian-rebase-micros.json")
 
+  private final val gregorianStartTs = LocalDateTime.of(gregorianStartDate, LocalTime.MIDNIGHT)
+  private final val julianEndTs = LocalDateTime.of(
+    julianEndDate,
+    LocalTime.of(23, 59, 59, 999999999))
+
   /**
    * Converts the given number of microseconds since the epoch '1970-01-01T00:00:00Z', to a local
    * date-time in Proleptic Gregorian calendar with timezone identified by `zoneId`, interprets the
@@ -306,7 +311,10 @@ object RebaseDateTime {
    */
   private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
     val instant = microsToInstant(micros)
-    val ldt = instant.atZone(zoneId).toLocalDateTime
+    var ldt = instant.atZone(zoneId).toLocalDateTime
+    if (ldt.isAfter(julianEndTs) && ldt.isBefore(gregorianStartTs)) {
+      ldt = LocalDateTime.of(gregorianStartDate, ldt.toLocalTime)
+    }
     val cal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems

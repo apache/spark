@@ -213,7 +213,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
             val rebased = rebaseGregorianToJulianMicros(zid, micros)
             val rebasedAndOptimized = rebaseGregorianToJulianMicros(micros)
             assert(rebasedAndOptimized === rebased)
-            micros += (MICROS_PER_MONTH * (0.5 + Math.random())).toLong
+            micros += (MICROS_PER_DAY * 30 * (0.5 + Math.random())).toLong
           } while (micros <= end)
         }
       }
@@ -233,7 +233,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
             val rebased = rebaseJulianToGregorianMicros(zid, micros)
             val rebasedAndOptimized = rebaseJulianToGregorianMicros(micros)
             assert(rebasedAndOptimized === rebased)
-            micros += (MICROS_PER_MONTH * (0.5 + Math.random())).toLong
+            micros += (MICROS_PER_DAY * 30 * (0.5 + Math.random())).toLong
           } while (micros <= end)
         }
       }
@@ -256,22 +256,16 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
 
     val result = new ArrayBuffer[RebaseRecord]()
-    // The time zones are excluded because:
-    // 1. Julian to Gregorian rebasing doesn't match to the opposite rebasing from
-    //    Gregorian to Julian rebasing.
-    // 2. Linear searching over switch points might be slow.
-    // 3. Results after the end time point 2100-01-01 are wrong.
-    // See SPARK-31385
-    val blacklist = Set("Asia/Tehran", "Iran", "Africa/Casablanca", "Africa/El_Aaiun")
     ALL_TIMEZONES
-      .filterNot(zid => blacklist.contains(zid.getId))
       .sortBy(_.getId)
       .foreach { zid =>
       withDefaultTimeZone(zid) {
         val start = adjustFunc(instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0)
           .atZone(zid)
           .toInstant))
-        val end = adjustFunc(instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0)
+        // sun.util.calendar.ZoneInfo resolves DST after 2037 year incorrectly.
+        // See https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8073446
+        val end = adjustFunc(instantToMicros(LocalDateTime.of(2037, 1, 1, 0, 0, 0)
           .atZone(zid)
           .toInstant))
 
@@ -373,14 +367,43 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
           "1582-10-05" -> "1582-10-15", "1582-10-06" -> "1582-10-15", "1582-10-07" -> "1582-10-15",
           "1582-10-08" -> "1582-10-15", "1582-10-09" -> "1582-10-15", "1582-10-11" -> "1582-10-15",
           "1582-10-12" -> "1582-10-15", "1582-10-13" -> "1582-10-15", "1582-10-14" -> "1582-10-15",
-          "1582-10-15" -> "1582-10-15").foreach { case (hybridDate, gregDate) =>
-          withClue(s"tz = ${zid.getId} hybrid date = $hybridDate greg date = $gregDate") {
-            val date = Date.valueOf(gregDate)
+          "1582-10-15" -> "1582-10-15").foreach { case (gregDate, hybridDate) =>
+          withClue(s"tz = ${zid.getId} greg date = $gregDate hybrid date = $hybridDate ") {
+            val date = Date.valueOf(hybridDate)
             val hybridDays = fromJavaDateLegacy(date)
-            val gregorianDays = localDateToDays(LocalDate.parse(hybridDate))
+            val gregorianDays = localDateToDays(LocalDate.parse(gregDate))
 
             assert(localRebaseGregorianToJulianDays(gregorianDays) === hybridDays)
             assert(rebaseGregorianToJulianDays(gregorianDays) === hybridDays)
+          }
+        }
+      }
+    }
+  }
+
+  test("rebase not-existed timestamps in the hybrid calendar") {
+    outstandingZoneIds.foreach { zid =>
+      withDefaultTimeZone(zid) {
+        Seq(
+          "1582-10-04T23:59:59.999999" -> "1582-10-04 23:59:59.999999",
+          "1582-10-05T00:00:00.000000" -> "1582-10-15 00:00:00.000000",
+          "1582-10-06T01:02:03.000001" -> "1582-10-15 01:02:03.000001",
+          "1582-10-07T00:00:00.000000" -> "1582-10-15 00:00:00.000000",
+          "1582-10-08T23:59:59.999999" -> "1582-10-15 23:59:59.999999",
+          "1582-10-09T23:59:59.001001" -> "1582-10-15 23:59:59.001001",
+          "1582-10-10T00:11:22.334455" -> "1582-10-15 00:11:22.334455",
+          "1582-10-11T11:12:13.111111" -> "1582-10-15 11:12:13.111111",
+          "1582-10-12T10:11:12.131415" -> "1582-10-15 10:11:12.131415",
+          "1582-10-13T00:00:00.123321" -> "1582-10-15 00:00:00.123321",
+          "1582-10-14T23:59:59.999999" -> "1582-10-15 23:59:59.999999",
+          "1582-10-15T00:00:00.000000" -> "1582-10-15 00:00:00.000000"
+        ).foreach { case (gregTs, hybridTs) =>
+          withClue(s"tz = ${zid.getId} greg ts = $gregTs hybrid ts = $hybridTs") {
+            val hybridMicros = parseToJulianMicros(hybridTs)
+            val gregorianMicros = parseToGregMicros(gregTs, zid)
+
+            assert(rebaseGregorianToJulianMicros(zid, gregorianMicros) === hybridMicros)
+            assert(rebaseGregorianToJulianMicros(gregorianMicros) === hybridMicros)
           }
         }
       }

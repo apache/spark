@@ -521,10 +521,10 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  test("SPARK-31284: rebasing timestamps in write") {
+  test("SPARK-31284, SPARK-31423: rebasing timestamps in write") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      Seq("1001-01-01 01:02:03.123456").toDF("tsS")
+      Seq("1001-01-01 01:02:03.123456", "1582-10-10 11:12:13.654321").toDF("tsS")
         .select($"tsS".cast("timestamp").as("ts"))
         .write
         .orc(path)
@@ -533,7 +533,9 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
           checkAnswer(
             spark.read.orc(path),
-            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+            Seq(
+              Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
+              Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
         }
       }
     }

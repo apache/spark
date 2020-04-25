@@ -550,7 +550,7 @@ package object config {
       "anytime a task is scheduled. See Delay Scheduling section of TaskSchedulerImpl's class " +
       "documentation for more details.")
     .internal()
-    .version("3.0.0")
+    .version("3.1.0")
     .booleanConf
     .createWithDefault(false)
 

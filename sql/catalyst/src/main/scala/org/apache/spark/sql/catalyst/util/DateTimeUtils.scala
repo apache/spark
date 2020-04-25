@@ -520,16 +520,6 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns local seconds, including fractional parts, multiplied by 1000.
-   *
-   * @param micros The number of microseconds since the epoch.
-   * @param zoneId The time zone id which milliseconds should be obtained in.
-   */
-  def getMilliseconds(micros: Long, zoneId: ZoneId): Decimal = {
-    Decimal(getMicroseconds(micros, zoneId), 8, 3)
-  }
-
-  /**
    * Returns local seconds, including fractional parts, multiplied by 1000000.
    *
    * @param micros The number of microseconds since the epoch.
@@ -547,30 +537,6 @@ object DateTimeUtils {
     LocalDate.ofEpochDay(days).getDayOfYear
   }
 
-  private def extractFromYear(days: Int, divider: Int): Int = {
-    val localDate = daysToLocalDate(days)
-    val yearOfEra = localDate.get(ChronoField.YEAR_OF_ERA)
-    var result = yearOfEra / divider
-    if ((yearOfEra % divider) != 0 || yearOfEra <= 1) result += 1
-    if (localDate.get(ChronoField.ERA) == 0) result = -result
-    result
-  }
-
-  /**
-   * Returns the millennium for the given number of days since 1970-01-01.
-   */
-  def getMillennium(days: Int): Int = extractFromYear(days, 1000)
-
-  /**
-   * Returns the century for the given number of days since 1970-01-01.
-   */
-  def getCentury(days: Int): Int = extractFromYear(days, 100)
-
-  /**
-   * Returns the decade for the given number of days since 1970-01-01.
-   */
-  def getDecade(days: Int): Int = Math.floorDiv(getYear(days), 10)
-
   /**
    * Returns the year value for the given number of days since 1970-01-01.
    */
@@ -582,7 +548,7 @@ object DateTimeUtils {
    * Returns the year which conforms to ISO 8601. Each ISO 8601 week-numbering
    * year begins with the Monday of the week containing the 4th of January.
    */
-  def getIsoYear(days: Int): Int = {
+  def getWeekBasedYear(days: Int): Int = {
     daysToLocalDate(days).get(IsoFields.WEEK_BASED_YEAR)
   }
 
@@ -736,40 +702,25 @@ object DateTimeUtils {
   private[sql] val TRUNC_TO_MINUTE = 3
   private[sql] val TRUNC_TO_HOUR = 4
   private[sql] val TRUNC_TO_DAY = 5
-  // The levels from TRUNC_TO_WEEK to TRUNC_TO_MILLENNIUM are used in truncations
+  // The levels from TRUNC_TO_WEEK to TRUNC_TO_YEAR are used in truncations
   // of DATE and TIMESTAMP values.
   private[sql] val TRUNC_TO_WEEK = 6
   private[sql] val MIN_LEVEL_OF_DATE_TRUNC = TRUNC_TO_WEEK
   private[sql] val TRUNC_TO_MONTH = 7
   private[sql] val TRUNC_TO_QUARTER = 8
   private[sql] val TRUNC_TO_YEAR = 9
-  private[sql] val TRUNC_TO_DECADE = 10
-  private[sql] val TRUNC_TO_CENTURY = 11
-  private[sql] val TRUNC_TO_MILLENNIUM = 12
 
   /**
    * Returns the trunc date from original date and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 6.
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 6 and 9.
    */
-  def truncDate(days: Int, level: Int): Int = {
-    def truncToYearLevel(divider: Int, adjust: Int): Int = {
-      val oldYear = getYear(days)
-      var newYear = Math.floorDiv(oldYear, divider) * divider
-      if (adjust > 0 && newYear == oldYear) {
-        newYear -= divider
-      }
-      newYear += adjust
-      localDateToDays(LocalDate.of(newYear, 1, 1))
-    }
+  def truncDate(days: Int, level: Int): SQLDate = {
     level match {
       case TRUNC_TO_WEEK => getNextDateForDayOfWeek(days - 7, MONDAY)
-      case TRUNC_TO_MONTH => days - getDayOfMonth(days) + 1
+      case TRUNC_TO_MONTH => days - DateTimeUtils.getDayOfMonth(days) + 1
       case TRUNC_TO_QUARTER =>
         localDateToDays(daysToLocalDate(days).`with`(IsoFields.DAY_OF_QUARTER, 1L))
-      case TRUNC_TO_YEAR => days - getDayInYear(days) + 1
-      case TRUNC_TO_DECADE => truncToYearLevel(10, 0)
-      case TRUNC_TO_CENTURY => truncToYearLevel(100, 1)
-      case TRUNC_TO_MILLENNIUM => truncToYearLevel(1000, 1)
+      case TRUNC_TO_YEAR => days - DateTimeUtils.getDayInYear(days) + 1
       case _ =>
         // caller make sure that this should never be reached
         sys.error(s"Invalid trunc level: $level")
@@ -783,7 +734,7 @@ object DateTimeUtils {
 
   /**
    * Returns the trunc date time from original date time and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 12.
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
    */
   def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long = {
     level match {
@@ -803,7 +754,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_MILLENNIUM,
+   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR,
    * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
   def parseTruncLevel(format: UTF8String): Int = {
@@ -821,9 +772,6 @@ object DateTimeUtils {
         case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
         case "QUARTER" => TRUNC_TO_QUARTER
         case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
-        case "DECADE" => TRUNC_TO_DECADE
-        case "CENTURY" => TRUNC_TO_CENTURY
-        case "MILLENNIUM" => TRUNC_TO_MILLENNIUM
         case _ => TRUNC_INVALID
       }
     }
@@ -855,17 +803,6 @@ object DateTimeUtils {
    */
   def toUTCTime(micros: Long, timeZone: String): Long = {
     convertTz(micros, getZoneId(timeZone), ZoneOffset.UTC)
-  }
-
-  /**
-   * Returns the number of seconds with fractional part in microsecond precision
-   * since 1970-01-01 00:00:00 local time.
-   */
-  def getEpoch(micros: Long, zoneId: ZoneId): Decimal = {
-    val offset = SECONDS.toMicros(
-      zoneId.getRules.getOffset(microsToInstant(micros)).getTotalSeconds)
-    val sinceEpoch = micros + offset
-    Decimal(sinceEpoch, 20, 6)
   }
 
   def currentTimestamp(): Long = instantToMicros(Instant.now())

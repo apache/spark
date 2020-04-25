@@ -1056,7 +1056,6 @@ This is the component with the largest amount of instrumented metrics
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
-  - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
 - namespace=DAGScheduler

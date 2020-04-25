@@ -1324,7 +1324,7 @@ object CodeGenerator extends Logging {
 
   // Reset compile time.
   // Visible for testing
-  def resetCompileTime: Unit = _compileTime.reset()
+  def resetCompileTime(): Unit = _compileTime.reset()
 
   /**
    * Compile the Java source code into a Java class, using Janino.

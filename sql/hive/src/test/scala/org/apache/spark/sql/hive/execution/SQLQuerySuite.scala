@@ -2493,6 +2493,16 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-31522: hive metastore related configurations should be static") {
+    Seq("spark.sql.hive.metastore.version",
+      "spark.sql.hive.metastore.jars",
+      "spark.sql.hive.metastore.sharedPrefixes",
+      "spark.sql.hive.metastore.barrierPrefixes").foreach { key =>
+      val e = intercept[AnalysisException](sql(s"set $key=abc"))
+      assert(e.getMessage.contains("Cannot modify the value of a static config"))
+    }
+  }
 }
 
 class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
