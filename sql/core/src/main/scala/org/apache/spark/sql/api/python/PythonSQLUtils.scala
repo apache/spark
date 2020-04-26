@@ -44,14 +44,7 @@ private[sql] object PythonSQLUtils {
     val conf = new SQLConf()
     // Force to build static SQL configurations
     StaticSQLConf
-    // set nondeterministic configurations with general meanings
-    conf.getAllDefinedConfs.map {
-      case p @ (SQLConf.SESSION_LOCAL_TIMEZONE.key, _, _, _) =>
-        p.copy(_2 = "value of local timezone")
-      case p @ (StaticSQLConf.WAREHOUSE_PATH.key, _, _, _) =>
-        p.copy(_2 = "value of $PWD/spark-warehouse")
-      case o => o
-    }
+    conf.getAllDefinedConfs
   }
 
   def listRuntimeSQLConfigs(): Array[(String, String, String, String)] = {
