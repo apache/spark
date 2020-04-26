@@ -1676,7 +1676,8 @@ setMethod("dapplyCollect",
 #' The second, herein \code{x}, will be a local \code{\link{data.frame}} with the
 #' columns of the input not in \code{cols} for the rows corresponding to \code{key}.
 #'
-#' The output of \code{func} must be a \code{data.frame} matching \code{schema}.
+#' The output of \code{func} must be a \code{data.frame} matching \code{schema} --
+#' in particular this means the names of the output \code{data.frame} are irrelevant
 #'
 #' @seealso \link{gapplyCollect}
 #' @examples
