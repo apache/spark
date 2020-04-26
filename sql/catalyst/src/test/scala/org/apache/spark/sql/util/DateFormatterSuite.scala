@@ -76,7 +76,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("roundtrip days -> date -> days") {
     LegacyBehaviorPolicy.values.foreach { parserPolicy =>
-      withSQLConf("spark.sql.legacy.timeParserPolicy" -> parserPolicy.toString) {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> parserPolicy.toString) {
         Seq(
           -701265,
           -371419,
