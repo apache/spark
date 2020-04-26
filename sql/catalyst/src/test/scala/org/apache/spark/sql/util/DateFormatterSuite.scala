@@ -49,12 +49,12 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("roundtrip date -> days -> date") {
     LegacyBehaviorPolicy.values.foreach { parserPolicy =>
-      withSQLConf("spark.sql.legacy.timeParserPolicy" -> parserPolicy.toString) {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> parserPolicy.toString) {
         Seq(
           "0050-01-01",
           "0953-02-02",
-          "1582-10-15",
           "1423-03-08",
+          "1582-10-15",
           "1969-12-31",
           "1972-08-25",
           "1975-09-26",
