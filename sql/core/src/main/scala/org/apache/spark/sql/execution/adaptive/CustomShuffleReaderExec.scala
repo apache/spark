@@ -113,19 +113,11 @@ case class CustomShuffleReaderExec private(
     }
   }
 
-  @transient private lazy val skewedPartitionMetrics: Option[Seq[Long]] = {
+  @transient private lazy val skewedSpecs: Option[Seq[PartialReducerPartitionSpec]] = {
     if (hasSkewedPartition) {
-      val skewedMetrics = new mutable.HashMap[Int, Long]()
-      partitionSpecs.foreach {
-        case p: PartialReducerPartitionSpec =>
-          if (skewedMetrics.contains(p.reducerIndex)) {
-            skewedMetrics(p.reducerIndex) = skewedMetrics(p.reducerIndex) + 1
-          } else {
-            skewedMetrics.put(p.reducerIndex, 1)
-          }
-        case _ => None
-      }
-      Some(skewedMetrics.values.toSeq)
+      Some(partitionSpecs.collect {
+        case p: PartialReducerPartitionSpec => p
+      })
     } else {
       None
     }
@@ -139,17 +131,19 @@ case class CustomShuffleReaderExec private(
     numPartitionsMetric.set(partitionSpecs.length)
     driverAccumUpdates += (numPartitionsMetric.id -> partitionSpecs.length.toLong)
 
-    skewedPartitionMetrics.foreach { skewedPartitionMetric =>
+    skewedSpecs.foreach { skewedSpec =>
       val skewedPartitions = metrics("numSkewedPartitions")
       val skewedSplits = metrics("numSkewedSplits")
 
-      skewedPartitions.set(skewedPartitionMetric.size)
-      driverAccumUpdates += (skewedPartitions.id -> skewedPartitionMetric.size.toLong)
+      val numSkewedPartitions = skewedSpec.map(_.reducerIndex).distinct.length
+      val numSplits = skewedSpec.length
 
-      driverAccumUpdates ++= skewedPartitionMetric.map(skewedSplits.id -> _)
+      skewedPartitions.set(numSkewedPartitions)
+      driverAccumUpdates += (skewedPartitions.id -> numSkewedPartitions)
 
       // Set sum value to "skewedSplits" metric.
-      skewedSplits.set(skewedPartitionMetric.sum)
+      skewedSplits.set(numSplits)
+      driverAccumUpdates += (skewedSplits.id -> numSplits)
     }
 
     partitionDataSizes.foreach { dataSizes =>
