@@ -18,12 +18,13 @@
 package org.apache.spark.mllib.util
 
 import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.mllib.linalg.{Matrices, VectorUDT, Vectors}
+import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.types.{StructField, StructType}
-
 class TestingUtilsSuite extends SparkFunSuite {
 
   test("Comparing doubles using relative error.") {
