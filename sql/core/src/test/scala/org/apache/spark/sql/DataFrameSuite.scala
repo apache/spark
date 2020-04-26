@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 
-import scala.collection.mutable
+import scala.collection.mutable.WrappedArray
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
@@ -2711,8 +2711,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // binary
     val bins = Array(Array(1.toByte), Array(2.toByte), Array(3.toByte), Array(4.toByte))
 
-    val binsRes = Seq(bins).toDF().head.get(0)
-      .asInstanceOf[mutable.WrappedArray.ofRef[Array[Byte]]].array
+    val binsRes = Seq(bins).toDF().head().get(0)
+      .asInstanceOf[WrappedArray.ofRef[Array[Byte]]].array
     assert(binsRes.zip(bins).forall { case (a, b) => a.diff(b).isEmpty})
 
     // nested
