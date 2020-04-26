@@ -421,7 +421,7 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
         """
         return self._set(aggregationDepth=value)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setBlockSize(self, value):
         """
         Sets the value of :py:attr:`blockSize`.

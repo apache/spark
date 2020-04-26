@@ -162,7 +162,7 @@ class LinearSVC @Since("2.2.0") (
    *
    * @group expertSetParam
    */
-  @Since("3.0.0")
+  @Since("3.1.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
   setDefault(blockSize -> 1)
 
@@ -197,7 +197,8 @@ class LinearSVC @Since("2.2.0") (
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
     instr.logSumOfWeights(summarizer.weightSum)
     if ($(blockSize) > 1) {
-      val sparsity = 1 - summarizer.numNonzeros.toArray.sum / numFeatures
+      val scale = 1.0 / summarizer.count / numFeatures
+      val sparsity = 1 - summarizer.numNonzeros.toArray.map(_ * scale).sum
       instr.logNamedValue("sparsity", sparsity.toString)
       if (sparsity > 0.5) {
         logWarning(s"sparsity of input dataset is $sparsity, " +
