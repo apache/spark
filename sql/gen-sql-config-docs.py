@@ -81,7 +81,7 @@ def generate_sql_configs_table_html(sql_configs, path):
             """
         ))
         for config in sorted(sql_configs, key=lambda x: x.name):
-            if config.name =="spark.sql.session.timeZone":
+            if config.name == "spark.sql.session.timeZone":
                 default = "(value of local timezone)"
             elif config.name == "spark.sql.warehouse.dir":
                 default = "(value of <code>$PWD/spark-warehouse</code>)"
