@@ -207,6 +207,30 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
   }
 
+  test("LinearSVC on blocks") {
+    Seq(smallBinaryDataset, smallSparseBinaryDataset).foreach { dataset =>
+      {
+        val lsvc = new LinearSVC().setFitIntercept(false).setBlockSize(1).setMaxIter(5)
+        val model = lsvc.fit(dataset)
+        Seq(2, 4, 8, 16, 32).foreach { blockSize =>
+          val model2 = lsvc.setBlockSize(blockSize).fit(dataset)
+          assert(model.intercept ~== model2.intercept relTol 1e-9)
+          assert(model.coefficients ~== model2.coefficients relTol 1e-9)
+        }
+      }
+
+      {
+        val lsvc = new LinearSVC().setFitIntercept(true).setBlockSize(1).setMaxIter(5)
+        val model = lsvc.fit(dataset)
+        Seq(2, 4, 8, 16, 32).foreach { blockSize =>
+          val model2 = lsvc.setBlockSize(blockSize).fit(dataset)
+          assert(model.intercept ~== model2.intercept relTol 1e-9)
+          assert(model.coefficients ~== model2.coefficients relTol 1e-9)
+        }
+      }
+    }
+  }
+
   test("prediction on single instance") {
     val trainer = new LinearSVC()
     val model = trainer.fit(smallBinaryDataset)

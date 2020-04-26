@@ -26,21 +26,23 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.optim.aggregator.HingeAggregator
+import org.apache.spark.ml.optim.aggregator._
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.storage.StorageLevel
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasAggregationDepth with HasThreshold {
+  with HasAggregationDepth with HasThreshold with HasBlockSize {
 
   /**
    * Param for threshold in binary classification prediction.
@@ -154,31 +156,54 @@ class LinearSVC @Since("2.2.0") (
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /**
+   * Set block size for stacking input data in matrices.
+   * Default is 1.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+  setDefault(blockSize -> 1)
+
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
   override protected def train(dataset: Dataset[_]): LinearSVCModel = instrumented { instr =>
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-
-    val instances = extractInstances(dataset)
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
-
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
-      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
+      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth, blockSize)
 
-    val (summarizer, labelSummarizer) =
+    val instances = extractInstances(dataset).setName("training instances")
+
+    val (summarizer, labelSummarizer) = if ($(blockSize) == 1) {
+      if (dataset.storageLevel == StorageLevel.NONE) {
+        instances.persist(StorageLevel.MEMORY_AND_DISK)
+      }
       Summarizer.getClassificationSummarizers(instances, $(aggregationDepth))
-    instr.logNumExamples(summarizer.count)
-    instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
-    instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
-    instr.logSumOfWeights(summarizer.weightSum)
+    } else {
+      // instances will be standardized and converted to blocks, so no need to cache instances.
+      Summarizer.getClassificationSummarizers(instances, $(aggregationDepth),
+        Seq("mean", "std", "count", "numNonZeros"))
+    }
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
     val numFeatures = summarizer.mean.size
-    val numFeaturesPlusIntercept = if (getFitIntercept) numFeatures + 1 else numFeatures
+
+    instr.logNumExamples(summarizer.count)
+    instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
+    instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
+    instr.logSumOfWeights(summarizer.weightSum)
+    if ($(blockSize) > 1) {
+      val sparsity = 1 - summarizer.numNonzeros.toArray.sum / numFeatures
+      instr.logNamedValue("sparsity", sparsity.toString)
+      if (sparsity > 0.5) {
+        logWarning(s"sparsity of input dataset is $sparsity, " +
+          s"which may hurt performance in high-level BLAS.")
+      }
+    }
 
     val numClasses = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
       case Some(n: Int) =>
@@ -192,78 +217,122 @@ class LinearSVC @Since("2.2.0") (
     instr.logNumClasses(numClasses)
     instr.logNumFeatures(numFeatures)
 
-    val (coefficientVector, interceptVector, objectiveHistory) = {
-      if (numInvalid != 0) {
-        val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
-          s"Found $numInvalid invalid labels."
-        instr.logError(msg)
-        throw new SparkException(msg)
-      }
-
-      val featuresStd = summarizer.std.toArray
-      val getFeaturesStd = (j: Int) => featuresStd(j)
-      val regParamL2 = $(regParam)
-      val bcFeaturesStd = instances.context.broadcast(featuresStd)
-      val regularization = if (regParamL2 != 0.0) {
-        val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
-        Some(new L2Regularization(regParamL2, shouldApply,
-          if ($(standardization)) None else Some(getFeaturesStd)))
-      } else {
-        None
-      }
-
-      val getAggregatorFunc = new HingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
-      val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
-        $(aggregationDepth))
-
-      def regParamL1Fun = (index: Int) => 0D
-      val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
-      val initialCoefWithIntercept = Vectors.zeros(numFeaturesPlusIntercept)
-
-      val states = optimizer.iterations(new CachedDiffFunction(costFun),
-        initialCoefWithIntercept.asBreeze.toDenseVector)
-
-      val scaledObjectiveHistory = mutable.ArrayBuilder.make[Double]
-      var state: optimizer.State = null
-      while (states.hasNext) {
-        state = states.next()
-        scaledObjectiveHistory += state.adjustedValue
-      }
-
-      bcFeaturesStd.destroy()
-      if (state == null) {
-        val msg = s"${optimizer.getClass.getName} failed."
-        instr.logError(msg)
-        throw new SparkException(msg)
-      }
-
-      /*
-         The coefficients are trained in the scaled space; we're converting them back to
-         the original space.
-         Note that the intercept in scaled space and original space is the same;
-         as a result, no scaling is needed.
-       */
-      val rawCoefficients = state.x.toArray
-      val coefficientArray = Array.tabulate(numFeatures) { i =>
-        if (featuresStd(i) != 0.0) {
-          rawCoefficients(i) / featuresStd(i)
-        } else {
-          0.0
-        }
-      }
-
-      val intercept = if ($(fitIntercept)) {
-        rawCoefficients(numFeaturesPlusIntercept - 1)
-      } else {
-        0.0
-      }
-      (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
+    if (numInvalid != 0) {
+      val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
+        s"Found $numInvalid invalid labels."
+      instr.logError(msg)
+      throw new SparkException(msg)
     }
 
-    if (handlePersistence) instances.unpersist()
+    val featuresStd = summarizer.std.toArray
+    val getFeaturesStd = (j: Int) => featuresStd(j)
+    val regularization = if ($(regParam) != 0.0) {
+      val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
+      Some(new L2Regularization($(regParam), shouldApply,
+        if ($(standardization)) None else Some(getFeaturesStd)))
+    } else None
 
-    copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
+    def regParamL1Fun = (index: Int) => 0D
+    val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
+
+    /*
+       The coefficients are trained in the scaled space; we're converting them back to
+       the original space.
+       Note that the intercept in scaled space and original space is the same;
+       as a result, no scaling is needed.
+     */
+    val state = if ($(blockSize) == 1) {
+      trainOnRows(instances, featuresStd, regularization, optimizer)
+    } else {
+      trainOnBlocks(instances, featuresStd, regularization, optimizer)
+    }
+    if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
+
+    if (state == null) {
+      val msg = s"${optimizer.getClass.getName} failed."
+      instr.logError(msg)
+      throw new SparkException(msg)
+    }
+    val rawCoefficients = state.x.toArray
+
+    val coefficientArray = Array.tabulate(numFeatures) { i =>
+      if (featuresStd(i) != 0.0) rawCoefficients(i) / featuresStd(i) else 0.0
+    }
+    val intercept = if ($(fitIntercept)) rawCoefficients.last else 0.0
+    copyValues(new LinearSVCModel(uid, Vectors.dense(coefficientArray), intercept))
   }
+
+  private def trainOnRows(
+      instances: RDD[Instance],
+      featuresStd: Array[Double],
+      regularization: Option[L2Regularization],
+      optimizer: BreezeOWLQN[Int, BDV[Double]]): optimizer.State = {
+    val numFeatures = featuresStd.length
+    val numFeaturesPlusIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
+
+    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+    val getAggregatorFunc = new HingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
+    val costFun = new RDDLossFunction(instances, getAggregatorFunc,
+      regularization, $(aggregationDepth))
+
+    val states = optimizer.iterations(new CachedDiffFunction(costFun),
+      Vectors.zeros(numFeaturesPlusIntercept).asBreeze.toDenseVector)
+
+    val scaledObjectiveHistory = mutable.ArrayBuilder.make[Double]
+    var state: optimizer.State = null
+    while (states.hasNext) {
+      state = states.next()
+      scaledObjectiveHistory += state.adjustedValue
+    }
+    bcFeaturesStd.destroy()
+
+    state
+  }
+
+  private def trainOnBlocks(
+      instances: RDD[Instance],
+      featuresStd: Array[Double],
+      regularization: Option[L2Regularization],
+      optimizer: BreezeOWLQN[Int, BDV[Double]]): optimizer.State = {
+    val numFeatures = featuresStd.length
+    val numFeaturesPlusIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
+
+    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+
+    val standardized = instances.map {
+      case Instance(label, weight, features) =>
+        val featuresStd = bcFeaturesStd.value
+        val array = Array.ofDim[Double](numFeatures)
+        features.foreachNonZero { (i, v) =>
+          val std = featuresStd(i)
+          if (std != 0) array(i) = v / std
+        }
+        Instance(label, weight, Vectors.dense(array))
+    }
+    val blocks = InstanceBlock.blokify(standardized, $(blockSize))
+      .persist(StorageLevel.MEMORY_AND_DISK)
+      .setName(s"training dataset (blockSize=${$(blockSize)})")
+
+    val getAggregatorFunc = new BlockHingeAggregator(numFeatures,
+      $(fitIntercept), $(blockSize))(_)
+    val costFun = new RDDLossFunction(blocks, getAggregatorFunc,
+      regularization, $(aggregationDepth))
+
+    val states = optimizer.iterations(new CachedDiffFunction(costFun),
+      Vectors.zeros(numFeaturesPlusIntercept).asBreeze.toDenseVector)
+
+    val scaledObjectiveHistory = mutable.ArrayBuilder.make[Double]
+    var state: optimizer.State = null
+    while (states.hasNext) {
+      state = states.next()
+      scaledObjectiveHistory += state.adjustedValue
+    }
+    blocks.unpersist()
+    bcFeaturesStd.destroy()
+
+    state
+  }
+
 }
 
 @Since("2.2.0")
