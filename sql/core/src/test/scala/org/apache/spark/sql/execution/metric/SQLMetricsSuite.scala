@@ -310,8 +310,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("ShuffledHashJoin metrics") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
-        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key", "value")
       // Assume the execution plan is
@@ -325,18 +325,18 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       // +- LocalTableScan(nodeId = 7)
       Seq((1L, 2L, 5L, false), (2L, 3L, 7L, true)).foreach {
         case (nodeId1, nodeId2, nodeId3, enableWholeStage) =>
-        val df = df1.join(df2, "key")
-        testSparkPlanMetrics(df, 1, Map(
-          nodeId1 -> (("ShuffledHashJoin", Map(
-            "number of output rows" -> 2L))),
-          nodeId2 -> (("Exchange", Map(
-            "shuffle records written" -> 2L,
-            "records read" -> 2L))),
-          nodeId3 -> (("Exchange", Map(
-            "shuffle records written" -> 10L,
-            "records read" -> 10L)))),
-          enableWholeStage
-        )
+          val df = df1.join(df2, "key")
+          testSparkPlanMetrics(df, 1, Map(
+            nodeId1 -> (("ShuffledHashJoin", Map(
+              "number of output rows" -> 2L))),
+            nodeId2 -> (("Exchange", Map(
+              "shuffle records written" -> 2L,
+              "records read" -> 2L))),
+            nodeId3 -> (("Exchange", Map(
+              "shuffle records written" -> 10L,
+              "records read" -> 10L)))),
+            enableWholeStage
+          )
       }
     }
   }
@@ -345,55 +345,43 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
+      val leftDf = Seq((1, "1"), (2, "2")).toDF("key", "value")
+      val rightDf = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
 
-      Seq(("right_outer", 0L, df1, df2, false), ("left_outer", 0L, df2, df1, false),
-        ("right_outer", 0L, df1, df2, true), ("left_outer", 0L, df2, df1, true))
-        .foreach { case (joinType, nodeId, df1, df2, enableWholeStage) =>
-          val df = df1.join(df2, $"key" === $"key2", joinType)
+      Seq((0L, "right_outer", leftDf, rightDf, 10L, false),
+        (0L, "left_outer", rightDf, leftDf, 10L, false),
+        (0L, "right_outer", leftDf, rightDf, 10L, true),
+        (0L, "left_outer", rightDf, leftDf, 10L, true))
+        .foreach { case (nodeId, joinType, leftDf, rightDf, rows, enableWholeStage) =>
+          val df = leftDf.join(rightDf, $"key" === $"key2", joinType)
           testSparkPlanMetrics(df, 1, Map(
             nodeId -> (("ShuffledHashJoin", Map(
-              "number of output rows" -> 10L)))),
+              "number of output rows" -> rows)))),
             enableWholeStage
           )
         }
     }
   }
 
-  test("ShuffledHashJoin(left-anti) metrics") {
+  test("ShuffledHashJoin(left) metrics") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
+      val leftDf = Seq((1, "1"), (2, "2")).toDF("key", "value")
+      val rightDf = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
 
-      Seq((2L, true), (1L, false)).foreach { case (nodeId, enableWholeStage) =>
-        val df = df2.join(df1.hint("shuffle_hash"), $"key" === $"key2", "left_anti")
-        testSparkPlanMetrics(df, 1, Map(
-          nodeId -> (("ShuffledHashJoin", Map(
-            "number of output rows" -> 8L)))),
-          enableWholeStage
-        )
-      }
-    }
-  }
-
-  test("ShuffledHashJoin(left-semi) metrics") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
-      SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
-
-      Seq((1L, false), (2L, true)).foreach { case (nodeId, enableWholeStage) =>
-        val df = df2.join(df1.hint("shuffle_hash"), $"key" === $"key2", "left_semi")
-        testSparkPlanMetrics(df, 1, Map(
-          nodeId -> (("ShuffledHashJoin", Map(
-            "number of output rows" -> 2L)))),
-          enableWholeStage
-        )
-      }
+      Seq((2L, "left_anti", leftDf, rightDf, 8L, true),
+        (2L, "left_semi", leftDf, rightDf, 2L, true),
+        (1L, "left_anti", leftDf, rightDf, 8L, false),
+        (1L, "left_semi", leftDf, rightDf, 2L, false))
+        .foreach { case (nodeId, joinType, leftDf, rightDf, rows, enableWholeStage) =>
+          val df = rightDf.join(leftDf.hint("shuffle_hash"), $"key" === $"key2", joinType)
+          testSparkPlanMetrics(df, 1, Map(
+            nodeId -> (("ShuffledHashJoin", Map(
+              "number of output rows" -> rows)))),
+            enableWholeStage
+          )
+        }
     }
   }
 
@@ -402,15 +390,15 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 0)
-    Seq(("left_outer", 0L, 5L, false), ("right_outer", 0L, 6L, false),
-      ("left_outer", 1L, 5L, true), ("right_outer", 1L, 6L, true)).foreach {
+    Seq(("left_outer", 0L, 5L, false), ("right_outer", 0L, 6L, false), ("left_outer", 1L, 5L, true),
+      ("right_outer", 1L, 6L, true)).foreach {
       case (joinType, nodeId, numRows, enableWholeStage) =>
-      val df = df1.join(broadcast(df2), $"key" === $"key2", joinType)
-      testSparkPlanMetrics(df, 2, Map(
-        nodeId -> (("BroadcastHashJoin", Map(
-          "number of output rows" -> numRows)))),
-        enableWholeStage
-      )
+        val df = df1.join(broadcast(df2), $"key" === $"key2", joinType)
+        testSparkPlanMetrics(df, 2, Map(
+          nodeId -> (("BroadcastHashJoin", Map(
+            "number of output rows" -> numRows)))),
+          enableWholeStage
+        )
     }
   }
 
@@ -427,13 +415,13 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a"
         Seq((leftQuery, false), (rightQuery, false), (leftQuery, true), (rightQuery, true))
           .foreach { case (query, enableWholeStage) =>
-          val df = spark.sql(query)
-          testSparkPlanMetrics(df, 2, Map(
-            0L -> (("BroadcastNestedLoopJoin", Map(
-              "number of output rows" -> 12L)))),
-            enableWholeStage
-          )
-        }
+            val df = spark.sql(query)
+            testSparkPlanMetrics(df, 2, Map(
+              0L -> (("BroadcastNestedLoopJoin", Map(
+                "number of output rows" -> 12L)))),
+              enableWholeStage
+            )
+          }
       }
     }
   }
@@ -621,9 +609,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SPARK-25602: SparkPlan.getByteArrayRdd should not consume the input when not necessary") {
     def checkFilterAndRangeMetrics(
-        df: DataFrame,
-        filterNumOutputs: Int,
-        rangeNumOutputs: Int): Unit = {
+                                    df: DataFrame,
+                                    filterNumOutputs: Int,
+                                    rangeNumOutputs: Int): Unit = {
       val plan = df.queryExecution.executedPlan
 
       val filters = collectNodeWithinWholeStage[FilterExec](plan)
