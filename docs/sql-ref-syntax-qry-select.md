@@ -1,4 +1,4 @@
-f---
+---
 layout: global
 title: SELECT
 displayTitle: SELECT

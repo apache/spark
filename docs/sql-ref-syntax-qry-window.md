@@ -178,7 +178,7 @@ SELECT name, dept, salary, MIN(salary) OVER (PARTITION BY dept ORDER BY salary) 
 | Fred|Engineering| 21000|21000|
 |  Tom|Engineering| 23000|21000|
 |Chloe|Engineering| 23000|21000|
-  Paul|Engineering| 29000|21000|
+| Paul|Engineering| 29000|21000|
 +-----+-----------+------+-----+
 
 SELECT name, salary,
