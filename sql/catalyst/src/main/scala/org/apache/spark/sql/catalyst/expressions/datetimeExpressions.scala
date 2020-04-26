@@ -73,6 +73,9 @@ trait TimeZoneAwareExpression extends Expression {
       > SELECT _FUNC_;
        2020-04-25
   """,
+  note = """
+    The syntax without braces has been supported since 2.0.1.
+  """,
   group = "datetime_funcs",
   since = "1.5.0")
 case class CurrentDate(timeZoneId: Option[String] = None)
@@ -119,6 +122,9 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
       > SELECT _FUNC_;
        2020-04-25 15:49:11.914
   """,
+  note = """
+    The syntax without braces has been supported since 2.0.1.
+  """,
   group = "datetime_funcs",
   since = "1.5.0")
 case class CurrentTimestamp() extends CurrentTimestampLike {
@@ -127,8 +133,13 @@ case class CurrentTimestamp() extends CurrentTimestampLike {
 
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+  """,
   group = "datetime_funcs",
-  since = "1.5.0")
+  since = "1.6.0")
 case class Now() extends CurrentTimestampLike {
   override def prettyName: String = "now"
 }
