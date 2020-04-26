@@ -1669,9 +1669,9 @@ setMethod("dapplyCollect",
 #' @name gapply
 #' @details
 #' \code{func} is a function of two arguments. The first, usually named \code{key}
-#' (though this is not enforced) corresponds to the grouping key, will be a \code{list}
-#' of \code{length(cols)} length-one objects corresponding to the grouping columns' values
-#' for the current group.
+#' (though this is not enforced) corresponds to the grouping key, will be an
+#' unnamed \code{list} of \code{length(cols)} length-one objects corresponding
+#' to the grouping columns' values for the current group.
 #'
 #' The second, herein \code{x}, will be a local \code{\link{data.frame}} with the
 #' columns of the input not in \code{cols} for the rows corresponding to \code{key}.
