@@ -241,7 +241,8 @@ class _JavaProbabilisticClassificationModel(ProbabilisticClassificationModel,
 
 
 class _LinearSVCParams(_ClassifierParams, HasRegParam, HasMaxIter, HasFitIntercept, HasTol,
-                       HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold):
+                       HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold,
+                       HasBlockSize):
     """
     Params for :py:class:`LinearSVC` and :py:class:`LinearSVCModel`.
 
