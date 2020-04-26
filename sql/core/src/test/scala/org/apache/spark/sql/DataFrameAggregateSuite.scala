@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable
 import scala.util.Random
 
 import org.scalatest.Matchers.the
@@ -32,8 +33,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-
-import scala.collection.mutable
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
