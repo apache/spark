@@ -213,7 +213,7 @@ class HivePartitionFilteringSuite(version: String)
       0 to 4,
       "aa" :: "ab" :: "ba" :: "bb" :: Nil, {
         case expr @ In(v, list) if expr.inSetConvertible =>
-          InSet(v, list.map(_.eval(EmptyRow)).toSet)
+          InSet(v, list.map(_.eval(EmptyRow)).toSet, v.dataType)
       })
   }
 
@@ -225,7 +225,7 @@ class HivePartitionFilteringSuite(version: String)
       0 to 4,
       "aa" :: "ab" :: "ba" :: "bb" :: Nil, {
         case expr @ In(v, list) if expr.inSetConvertible =>
-          InSet(v, list.map(_.eval(EmptyRow)).toSet)
+          InSet(v, list.map(_.eval(EmptyRow)).toSet, v.dataType)
       })
   }
 
@@ -244,7 +244,7 @@ class HivePartitionFilteringSuite(version: String)
       0 to 4,
       "ab" :: "ba" :: Nil, {
         case expr @ In(v, list) if expr.inSetConvertible =>
-          InSet(v, list.map(_.eval(EmptyRow)).toSet)
+          InSet(v, list.map(_.eval(EmptyRow)).toSet, v.dataType)
       })
   }
 

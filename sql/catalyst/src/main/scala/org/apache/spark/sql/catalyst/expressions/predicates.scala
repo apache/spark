@@ -429,7 +429,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 case class InSet(
     child: Expression,
     hset: Set[Any],
-    hsetElemType: Option[DataType] = None) extends UnaryExpression with Predicate {
+    hsetElemType: DataType) extends UnaryExpression with Predicate {
 
   require(hset != null, "hset could not be null")
 
@@ -449,12 +449,12 @@ case class InSet(
     }
   }
 
-  @transient lazy val set: Set[Any] = child.dataType match {
+  @transient lazy val set: Set[Any] = hsetElemType match {
     case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
     case _: NullType => hset
     case _ =>
       // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ (hset - null)
+      TreeSet.empty(TypeUtils.getInterpretedOrdering(hsetElemType)) ++ (hset - null)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -465,7 +465,7 @@ case class InSet(
     }
   }
 
-  private def canBeComputedUsingSwitch: Boolean = child.dataType match {
+  private def canBeComputedUsingSwitch: Boolean = hsetElemType match {
     case ByteType | ShortType | IntegerType | DateType => true
     case _ => false
   }
@@ -523,9 +523,8 @@ case class InSet(
 
   override def sql: String = {
     val valueSQL = child.sql
-    val elemType = hsetElemType.getOrElse(child.dataType)
     val listSQL = hset.toSeq
-      .map(elem => Literal(convertToScala(elem, elemType)).sql)
+      .map(elem => Literal(convertToScala(elem, hsetElemType)).sql)
       .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }

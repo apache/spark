@@ -872,7 +872,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-31563: sql of InSet for UTF8String collection") {
-    val inSet = InSet(Literal("a"), Set("a", "b").map(UTF8String.fromString))
+    val inSet = InSet(Literal("a"), Set("a", "b").map(UTF8String.fromString), StringType)
     assert(inSet.sql === "('a' IN ('a', 'b'))")
   }
 

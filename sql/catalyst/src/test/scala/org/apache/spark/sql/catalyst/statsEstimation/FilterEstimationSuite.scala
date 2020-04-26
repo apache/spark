@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{ColumnStatsM
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * In this test suite, we test predicates containing the following operators:
@@ -352,7 +353,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("cint IN (3, 4, 5)") {
     validateEstimatedStats(
-      Filter(InSet(attrInt, Set(3, 4, 5)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Filter(InSet(attrInt, Set(3, 4, 5), IntegerType), childStatsTestPlan(Seq(attrInt), 10L)),
       Seq(attrInt -> ColumnStat(distinctCount = Some(3), min = Some(3), max = Some(5),
         nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))),
       expectedRowCount = 3)
@@ -360,7 +361,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("evaluateInSet with all zeros") {
     validateEstimatedStats(
-      Filter(InSet(attrString, Set(3, 4, 5)),
+      Filter(InSet(attrString, Set(3, 4, 5), IntegerType),
         StatsTestPlan(Seq(attrString), 0,
           AttributeMap(Seq(attrString ->
             ColumnStat(distinctCount = Some(0), min = None, max = None,
@@ -371,7 +372,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("evaluateInSet with string") {
     validateEstimatedStats(
-      Filter(InSet(attrString, Set("A0")),
+      Filter(InSet(attrString, Set(UTF8String.fromString("A0")), StringType),
         StatsTestPlan(Seq(attrString), 10,
           AttributeMap(Seq(attrString ->
             ColumnStat(distinctCount = Some(10), min = None, max = None,
@@ -383,14 +384,14 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("cint NOT IN (3, 4, 5)") {
     validateEstimatedStats(
-      Filter(Not(InSet(attrInt, Set(3, 4, 5))), childStatsTestPlan(Seq(attrInt), 10L)),
+      Filter(Not(InSet(attrInt, Set(3, 4, 5), IntegerType)), childStatsTestPlan(Seq(attrInt), 10L)),
       Seq(attrInt -> colStatInt.copy(distinctCount = Some(7))),
       expectedRowCount = 7)
   }
 
   test("cbool IN (true)") {
     validateEstimatedStats(
-      Filter(InSet(attrBool, Set(true)), childStatsTestPlan(Seq(attrBool), 10L)),
+      Filter(InSet(attrBool, Set(true), BooleanType), childStatsTestPlan(Seq(attrBool), 10L)),
       Seq(attrBool -> ColumnStat(distinctCount = Some(1), min = Some(true), max = Some(true),
         nullCount = Some(0), avgLen = Some(1), maxLen = Some(1))),
       expectedRowCount = 5)
@@ -510,7 +511,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(Seq(attrInt -> cornerChildColStatInt))
     )
     validateEstimatedStats(
-      Filter(InSet(attrInt, Set(1, 2, 3, 4, 5)), cornerChildStatsTestplan),
+      Filter(InSet(attrInt, Set(1, 2, 3, 4, 5), IntegerType), cornerChildStatsTestplan),
       Seq(attrInt -> ColumnStat(distinctCount = Some(2), min = Some(1), max = Some(5),
         nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))),
       expectedRowCount = 2)

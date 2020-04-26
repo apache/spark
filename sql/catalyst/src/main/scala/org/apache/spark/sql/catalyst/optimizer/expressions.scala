@@ -251,7 +251,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
           EqualTo(v, newList.head)
         } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
-          InSet(v, HashSet() ++ hSet)
+          InSet(v, HashSet() ++ hSet, v.dataType)
         } else if (newList.length < list.length) {
           expr.copy(list = newList)
         } else { // newList.length == list.length && newList.length > 1

@@ -130,7 +130,9 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def checkInAndInSet(in: In, expected: Any): Unit = {
     // expecting all in.list are Literal or NonFoldableLiteral.
     checkEvaluation(in, expected)
-    checkEvaluation(InSet(in.value, HashSet() ++ in.list.map(_.eval())), expected)
+    checkEvaluation(
+      InSet(in.value, HashSet() ++ in.list.map(_.eval()), in.value.dataType),
+      expected)
   }
 
   test("basic IN/INSET predicate test") {
@@ -154,7 +156,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal(2)))),
       true)
     checkEvaluation(
-      And(InSet(Literal(1), HashSet(1, 2)), InSet(Literal(2), Set(1, 2))),
+      And(InSet(Literal(1), HashSet(1, 2), IntegerType), InSet(Literal(2), Set(1, 2), IntegerType)),
       true)
 
     val ns = NonFoldableLiteral.create(null, StringType)
@@ -256,12 +258,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       val nullLiteral = Literal(null, presentValue.dataType)
 
-      checkEvaluation(InSet(nullLiteral, values), expected = null)
-      checkEvaluation(InSet(nullLiteral, values + null), expected = null)
-      checkEvaluation(InSet(presentValue, values), expected = true)
-      checkEvaluation(InSet(presentValue, values + null), expected = true)
-      checkEvaluation(InSet(absentValue, values), expected = false)
-      checkEvaluation(InSet(absentValue, values + null), expected = null)
+      checkEvaluation(InSet(nullLiteral, values, nullLiteral.dataType), expected = null)
+      checkEvaluation(InSet(nullLiteral, values + null, nullLiteral.dataType), expected = null)
+      checkEvaluation(InSet(presentValue, values, presentValue.dataType), expected = true)
+      checkEvaluation(InSet(presentValue, values + null, presentValue.dataType), expected = true)
+      checkEvaluation(InSet(absentValue, values, absentValue.dataType), expected = false)
+      checkEvaluation(InSet(absentValue, values + null, absentValue.dataType), expected = null)
     }
 
     def checkAllTypes(): Unit = {
@@ -498,7 +500,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-22693: InSet should not use global variables") {
     val ctx = new CodegenContext
-    InSet(Literal(1), Set(1, 2, 3, 4)).genCode(ctx)
+    InSet(Literal(1), Set(1, 2, 3, 4), IntegerType).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
   }
 
@@ -535,7 +537,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-29100: InSet with empty input set") {
     val row = create_row(1)
-    val inSet = InSet(BoundReference(0, IntegerType, true), Set.empty)
+    val inSet = InSet(BoundReference(0, IntegerType, true), Set.empty, IntegerType)
     checkEvaluation(inSet, false, row)
   }
 }

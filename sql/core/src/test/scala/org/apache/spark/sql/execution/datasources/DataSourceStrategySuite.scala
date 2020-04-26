@@ -110,7 +110,9 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     testTranslateFilter(LessThanOrEqual(1, attrInt),
       Some(sources.GreaterThanOrEqual(intColName, 1)))
 
-    testTranslateFilter(InSet(attrInt, Set(1, 2, 3)), Some(sources.In(intColName, Array(1, 2, 3))))
+    testTranslateFilter(
+      InSet(attrInt, Set(1, 2, 3), IntegerType),
+      Some(sources.In(intColName, Array(1, 2, 3))))
 
     testTranslateFilter(In(attrInt, Seq(1, 2, 3)), Some(sources.In(intColName, Array(1, 2, 3))))
 

@@ -159,7 +159,7 @@ case class InSubqueryExec(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     prepareResult()
-    InSet(child, result.toSet).doGenCode(ctx, ev)
+    InSet(child, result.toSet, child.dataType).doGenCode(ctx, ev)
   }
 
   override lazy val canonicalized: InSubqueryExec = {

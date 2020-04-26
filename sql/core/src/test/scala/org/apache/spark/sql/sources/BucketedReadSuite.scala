@@ -37,6 +37,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -188,8 +189,10 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         df)
 
       // Case 4: InSet
-      val inSetExpr = expressions.InSet($"j".expr,
-        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3).map(lit(_).expr))
+      val inSetExpr = expressions.InSet(
+        $"j".expr,
+        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3).map(lit(_).expr),
+        IntegerType)
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
