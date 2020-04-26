@@ -404,7 +404,7 @@ object FunctionRegistry {
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
-    expression[CurrentTimestamp]("now", true),
+    expression[Now]("now"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ParseToTimestamp]("to_timestamp"),
