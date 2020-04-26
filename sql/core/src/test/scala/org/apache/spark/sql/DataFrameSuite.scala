@@ -2686,7 +2686,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val gbks = Array(GroupByKey(1, 2), GroupByKey(4, 5))
     checkAnswer(Seq(gbks).toDF(), Row(Array(Row(1, 2), Row(4, 5))))
 
-    // We can move this implicit def to [[SQLImplicits]] when we eventually make fully
+    // We can move this implicit def to `SQLImplicits` when we eventually make fully
     // support for array encoder like Seq and Set
     // For now cases below, decimal/datetime/interval/binary/nested types, etc,
     // are not supported by array

@@ -114,8 +114,8 @@ object ScalaReflection extends ScalaReflection {
    * Given a type `T` this function constructs `ObjectType` that holds a class of type
    * `Array[T]`.
    *
-   * Special handling is performed for primitive types to map them back to their raw
-   * JVM form instead of the Scala Array that handles auto boxing.
+   * Special handling is performed for primitive types, Array[Byte], CalendarInterval and Decimal
+   * to map them back to their raw JVM form instead of the Scala Array that handles auto boxing.
    */
   private def arrayClassFor(tpe: `Type`): ObjectType = cleanUpReflectionObjects {
     val cls = tpe.dealias match {
