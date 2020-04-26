@@ -120,6 +120,9 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     val ignoreSet = Set(
       // One of examples shows getting the current timestamp
       "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
+      "org.apache.spark.sql.catalyst.expressions.CurrentDate",
+      "org.apache.spark.sql.catalyst.expressions.CurrentTimestamp",
+      "org.apache.spark.sql.catalyst.expressions.Now",
       // Random output without a seed
       "org.apache.spark.sql.catalyst.expressions.Rand",
       "org.apache.spark.sql.catalyst.expressions.Randn",
