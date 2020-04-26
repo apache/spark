@@ -33,6 +33,8 @@ import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
+import scala.collection.mutable
+
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
 class DataFrameAggregateSuite extends QueryTest
@@ -514,6 +516,13 @@ class DataFrameAggregateSuite extends QueryTest
     checkDataset(
       df.select(collect_set($"a"), collect_set($"b")).as[(Set[Int], Set[Int])],
       Seq(Set(1, 2, 3) -> Set(2, 4)): _*)
+
+    val bytesTest1 = "test1".getBytes
+    val bytesTest2 = "test2".getBytes
+    val df1 = Seq(bytesTest1, bytesTest1, bytesTest2).toDF("a")
+    val ret = df1.select(collect_set($"a")).collect()
+      .map(r => r.getAs[mutable.WrappedArray[_]](0)).head
+    assert(ret.length == 2)
   }
 
   test("collect functions structs") {
@@ -528,6 +537,17 @@ class DataFrameAggregateSuite extends QueryTest
       df.select(collect_set($"a"), sort_array(collect_set($"b"))),
       Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(4, 1))))
     )
+
+    val a = "aa".getBytes
+    val b = "bb".getBytes
+    val c = "cc".getBytes
+    val d = "dd".getBytes
+    val df1 = Seq((a, b), (a, b), (c, d))
+      .toDF("x", "y")
+      .select(struct($"x", $"y").as("a"))
+    val ret = df1.select(collect_set($"a")).collect()
+      .map(r => r.getAs[mutable.WrappedArray[_]](0)).head
+    assert(ret.length == 2)
   }
 
   test("collect_set functions cannot have maps") {

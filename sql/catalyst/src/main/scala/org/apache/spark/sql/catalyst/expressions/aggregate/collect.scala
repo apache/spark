@@ -139,6 +139,23 @@ case class CollectSet(
 
   def this(child: Expression) = this(child, 0, 0)
 
+  override def eval(buffer: mutable.HashSet[Any]): Any = {
+    /* SPARK-31500
+     * Array[Byte](BinaryType) Scala equality don't works as expected
+     * so HashSet return duplicates, we have to change types to drop
+     * this duplicates and make collect_set work as expected for this
+     * data type
+     * */
+    val bufferUpdated: mutable.HashSet[Any] =
+      buffer match {
+        case b if b.exists(_.isInstanceOf[Array[Byte]]) =>
+          b.map(_.asInstanceOf[Array[Byte]].toSeq)
+            .map(_.asInstanceOf[mutable.WrappedArray[Byte]].toArray)
+        case other => other
+      }
+    super.eval(bufferUpdated)
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!child.dataType.existsRecursively(_.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckSuccess
