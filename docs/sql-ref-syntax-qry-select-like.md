@@ -44,7 +44,7 @@ A LIKE predicate is used to search for a specific pattern.
 <dl>
   <dt><code><em>esc_char</em></code></dt>
   <dd>
-    Specifies the escape character.
+    Specifies the escape character. The default escape character is <code>\</code>.
   </dd>
 </dl>
 <dl>
@@ -98,6 +98,13 @@ SELECT * FROM person WHERE name RLIKE '[MD]';
 |400| Dan|  50|
 |200|Mary|null|
 +---+----+----+
+
+SELECT * FROM person WHERE name LIKE '%\_%';
++---+------+---+
+| id|  name|age|
++---+------+---+
+|500|Evan_W| 16|
++---+------+---+
 
 SELECT * FROM person WHERE name LIKE '%$_%' ESCAPE '$';
 +---+------+---+
