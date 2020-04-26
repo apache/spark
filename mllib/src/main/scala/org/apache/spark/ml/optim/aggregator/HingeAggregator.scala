@@ -107,7 +107,7 @@ private[ml] class HingeAggregator(
 
 /**
  * BlockHingeAggregator computes the gradient and loss for Hinge loss function as used in
- * binary classification for instances in sparse or dense vector in an online fashion.
+ * binary classification for blocks in sparse or dense matrix in an online fashion.
  *
  * Two BlockHingeAggregators can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
@@ -166,24 +166,25 @@ private[ml] class BlockHingeAggregator(
     val size = block.size
     val localGradientSumArray = gradientSumArray
 
-    // vec here represents dotProducts
+    // vec/arr here represents dotProducts
     val vec = if (size == blockSize) {
       auxiliaryVec
     } else {
       // the last block within one partition may be of size less than blockSize
       new DenseVector(Array.ofDim[Double](size))
     }
+    val arr = vec.values
 
     if (fitIntercept) {
       var i = 0
-      while (i < size) { vec.values(i) = intercept; i += 1 }
+      while (i < size) { arr(i) = intercept; i += 1 }
       BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
     } else {
       BLAS.gemv(1.0, block.matrix, linear, 0.0, vec)
     }
 
     // in-place convert dotProducts to gradient scales
-    // then, vec represents gradient scales
+    // then, vec/arr represents gradient scales
     var i = 0
     while (i < size) {
       val weight = block.getWeight(i)
@@ -193,33 +194,33 @@ private[ml] class BlockHingeAggregator(
         // Therefore the gradient is -(2y - 1)*x
         val label = block.getLabel(i)
         val labelScaled = 2 * label - 1.0
-        val loss = (1.0 - labelScaled * vec(i)) * weight
+        val loss = (1.0 - labelScaled * arr(i)) * weight
         if (loss > 0) {
           lossSum += loss
           val gradScale = -labelScaled * weight
-          vec.values(i) = gradScale
+          arr(i) = gradScale
         } else {
-          vec.values(i) = 0.0
+          arr(i) = 0.0
         }
       } else {
-        vec.values(i) = 0.0
+        arr(i) = 0.0
       }
       i += 1
     }
 
     // predictions are all correct, no gradient signal
-    if (vec.values.forall(_ == 0)) return this
+    if (arr.forall(_ == 0)) return this
 
     block.matrix match {
       case dm: DenseMatrix =>
         BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
-          vec.values, 1, 1.0, localGradientSumArray, 1)
-        if (fitIntercept) localGradientSumArray(numFeatures) += vec.values.sum
+          arr, 1, 1.0, localGradientSumArray, 1)
+        if (fitIntercept) localGradientSumArray(numFeatures) += arr.sum
 
       case sm: SparseMatrix if fitIntercept =>
         BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
         linearGradSumVec.foreachNonZero { (i, v) => localGradientSumArray(i) += v }
-        localGradientSumArray(numFeatures) += vec.values.sum
+        localGradientSumArray(numFeatures) += arr.sum
 
       case sm: SparseMatrix if !fitIntercept =>
         val gradSumVec = new DenseVector(localGradientSumArray)
