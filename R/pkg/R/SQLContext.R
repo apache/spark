@@ -34,7 +34,7 @@ getInternalType <- function(x) {
          Date = "date",
          POSIXlt = "timestamp",
          POSIXct = "timestamp",
-         stop("Unsupported type for SparkDataFrame:", class(x)))
+         stop("Unsupported type for SparkDataFrame: ", class(x)))
 }
 
 #' return the SparkSession
