@@ -1652,8 +1652,9 @@ setMethod("dapplyCollect",
 
 #' gapply
 #'
-#' \code{gapply} groups the SparkDataFrame using the specified columns and applies the R function to each
-#' group. \code{gapplyCollect} further \code{\link{collect}()}s this to the driver.
+#' \code{gapply} groups the SparkDataFrame using the specified columns and applies
+#' the R function to each group. \code{gapplyCollect} further \code{\link{collect}()}s
+#' this to the driver.
 #'
 #' @param cols grouping columns.
 #' @param func a function to be applied to each group partition specified by grouping
