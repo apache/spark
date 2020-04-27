@@ -3262,21 +3262,10 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
   def trimNonTopLevelAliases(e: Expression): Expression = e match {
     case a: Alias =>
-      val newChild = trimAliases(a.child)
-      // Specific logic for keeping the eventTime watermark metadata in the top level alias.
-      val metadata = if (newChild != a.child) {
-        newChild match {
-          case attr: AttributeReference if attr.metadata.contains(EventTimeWatermark.delayKey) =>
-            attr.metadata
-          case _ => a.metadata
-        }
-      } else {
-        a.metadata
-      }
-      a.copy(child = newChild)(
+      a.copy(child = trimAliases(a.child))(
         exprId = a.exprId,
         qualifier = a.qualifier,
-        explicitMetadata = Some(metadata))
+        explicitMetadata = Some(a.metadata))
     case a: MultiAlias =>
       a.copy(child = trimAliases(a.child))
     case other => trimAliases(other)
