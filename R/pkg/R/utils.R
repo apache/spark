@@ -818,7 +818,8 @@ captureJVMException <- function(e, method) {
   }
 
   # StreamingQueryException could wrap an IllegalArgumentException, so look for that first
-  if (any(grep("org.apache.spark.sql.streaming.StreamingQueryException: ", stacktrace))) {
+  if (any(grep("org.apache.spark.sql.streaming.StreamingQueryException: ",
+               stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.streaming.StreamingQueryException: ",
                     fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
@@ -826,14 +827,14 @@ captureJVMException <- function(e, method) {
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
     stop(paste0(rmsg, "streaming query error - ", first), call. = FALSE)
-  } else if (any(grep("java.lang.IllegalArgumentException: ", stacktrace))) {
+  } else if (any(grep("java.lang.IllegalArgumentException: ", stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "java.lang.IllegalArgumentException: ", fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
     stop(paste0(rmsg, "illegal argument - ", first), call. = FALSE)
-  } else if (any(grep("org.apache.spark.sql.AnalysisException: ", stacktrace))) {
+  } else if (any(grep("org.apache.spark.sql.AnalysisException: ", stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.AnalysisException: ", fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
@@ -841,7 +842,8 @@ captureJVMException <- function(e, method) {
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
     stop(paste0(rmsg, "analysis error - ", first), call. = FALSE)
   } else
-    if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ", stacktrace))) {
+    if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ",
+                 stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ",
                     fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
@@ -850,7 +852,8 @@ captureJVMException <- function(e, method) {
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
     stop(paste0(rmsg, "no such database - ", first), call. = FALSE)
   } else
-    if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ", stacktrace))) {
+    if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ",
+                 stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ",
                     fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
@@ -858,7 +861,8 @@ captureJVMException <- function(e, method) {
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
     stop(paste0(rmsg, "no such table - ", first), call. = FALSE)
-  } else if (any(grep("org.apache.spark.sql.catalyst.parser.ParseException: ", stacktrace))) {
+  } else if (any(grep("org.apache.spark.sql.catalyst.parser.ParseException: ",
+                      stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.parser.ParseException: ",
                     fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
