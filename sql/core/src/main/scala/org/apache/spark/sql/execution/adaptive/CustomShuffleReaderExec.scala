@@ -134,7 +134,7 @@ case class CustomShuffleReaderExec private(
 
       skewedPartitions.set(numSkewedPartitions)
       driverAccumUpdates += (skewedPartitions.id -> numSkewedPartitions)
-      
+
       skewedSplits.set(numSplits)
       driverAccumUpdates += (skewedSplits.id -> numSplits)
     }
