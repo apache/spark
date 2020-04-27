@@ -198,7 +198,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    */
   @Override
   public long spill(long size, MemoryConsumer trigger) throws IOException {
-    String task = taskMemoryManager.taskIdentifier();
+    String task = taskContext.taskName();
     if (trigger != this) {
       if (readingIterator != null) {
         logger.info("{} starts spilling {}, triggered by {}.", task, name(), trigger.name());

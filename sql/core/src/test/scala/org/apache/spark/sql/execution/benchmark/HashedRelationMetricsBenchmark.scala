@@ -50,8 +50,7 @@ object HashedRelationMetricsBenchmark extends SqlBasedBenchmark {
             Long.MaxValue,
             Long.MaxValue / 2,
             1),
-          0,
-          "task")
+          0)
         val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
 
         val keys = Range.Long(0, numRows, 1)

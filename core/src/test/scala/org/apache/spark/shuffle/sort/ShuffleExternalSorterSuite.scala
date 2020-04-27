@@ -47,7 +47,7 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
 
     // Mock `TaskMemoryManager` to allocate free memory when `shouldAllocate` is true.
     // This will trigger a nested spill and expose issues if we don't handle this case properly.
-    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0, "task") {
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0) {
       override def acquireExecutionMemory(required: Long, consumer: MemoryConsumer): Long = {
         // ExecutionMemoryPool.acquireMemory will wait until there are 400 bytes for a task to use.
         // So we leave 400 bytes for the task.

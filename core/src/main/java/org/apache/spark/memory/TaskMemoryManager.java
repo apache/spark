@@ -29,6 +29,9 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.spark.TaskContext;
+import org.apache.spark.TaskContext$;
+import org.apache.spark.api.java.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,8 +104,6 @@ public class TaskMemoryManager {
 
   private final long taskAttemptId;
 
-  private final String taskIdentifier;
-
   /**
    * Tracks whether we're on-heap or off-heap. For off-heap, we short-circuit most of these methods
    * without doing any masking or lookups. Since this branching should be well-predicted by the JIT,
@@ -126,12 +127,10 @@ public class TaskMemoryManager {
    */
   public TaskMemoryManager(
       MemoryManager memoryManager,
-      long taskAttemptId,
-      String taskIdentifier) {
+      long taskAttemptId) {
     this.tungstenMemoryMode = memoryManager.tungstenMemoryMode();
     this.memoryManager = memoryManager;
     this.taskAttemptId = taskAttemptId;
-    this.taskIdentifier = taskIdentifier;
     this.consumers = new HashSet<>();
   }
 
@@ -150,7 +149,9 @@ public class TaskMemoryManager {
     // off-heap memory. This is subject to change, though, so it may be risky to make this
     // optimization now in case we forget to undo it late when making changes.
     synchronized (this) {
-      long got = memoryManager.acquireExecutionMemory(required, taskAttemptId, taskIdentifier, mode);
+      TaskContext context = TaskContext$.MODULE$.get();
+      String taskName = context == null ? "driver" : context.taskName();
+      long got = memoryManager.acquireExecutionMemory(required, taskAttemptId, taskName, mode);
 
       // Try to release memory from other consumers first, then we can reduce the frequency of
       // spilling, avoid to have too many spilled files.
@@ -185,7 +186,7 @@ public class TaskMemoryManager {
               logger.debug("Task {} released {} from {} for {}", taskAttemptId,
                 Utils.bytesToString(released), c, consumer);
               got += memoryManager.acquireExecutionMemory(
-                required - got, taskAttemptId, taskIdentifier, mode);
+                required - got, taskAttemptId, taskName, mode);
               if (got >= required) {
                 break;
               }
@@ -217,7 +218,7 @@ public class TaskMemoryManager {
             logger.debug("Task {} released {} from itself ({})", taskAttemptId,
               Utils.bytesToString(released), consumer);
             got += memoryManager.acquireExecutionMemory(
-              required - got, taskAttemptId, taskIdentifier, mode);
+              required - got, taskAttemptId, taskName, mode);
           }
         } catch (ClosedByInterruptException e) {
           // This called by user to kill a task (e.g: speculative task).
@@ -472,6 +473,4 @@ public class TaskMemoryManager {
   public MemoryMode getTungstenMemoryMode() {
     return tungstenMemoryMode;
   }
-
-  public String taskIdentifier() { return taskIdentifier; }
 }

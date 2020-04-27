@@ -97,8 +97,6 @@ private[execution] object HashedRelation {
       key: Seq[Expression],
       sizeEstimate: Int = 64,
       taskMemoryManager: TaskMemoryManager = null): HashedRelation = {
-    val task = Option(TaskContext.get()).map(_.taskMemoryManager().taskIdentifier())
-      .getOrElse("driver")
     val mm = Option(taskMemoryManager).getOrElse {
       new TaskMemoryManager(
         new UnifiedMemoryManager(
@@ -106,8 +104,7 @@ private[execution] object HashedRelation {
           Long.MaxValue,
           Long.MaxValue / 2,
           1),
-        0,
-        task)
+        0)
     }
 
     if (key.length == 1 && key.head.dataType == LongType) {
@@ -254,8 +251,6 @@ private[joins] class UnsafeHashedRelation(
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()
     val nValues = readLong()
-    val task = Option(TaskContext.get()).map(_.taskMemoryManager().taskIdentifier())
-      .getOrElse("driver")
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     // TODO(josh): This needs to be revisited before we merge this patch; making this change now
     // so that tests compile:
@@ -265,8 +260,7 @@ private[joins] class UnsafeHashedRelation(
         Long.MaxValue,
         Long.MaxValue / 2,
         1),
-      0,
-      task)
+      0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
@@ -430,8 +424,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
           Long.MaxValue,
           Long.MaxValue / 2,
           1),
-        0,
-        Option(TaskContext.get()).map(_.taskMemoryManager().taskIdentifier()).getOrElse("driver")),
+        0),
       0)
   }
 

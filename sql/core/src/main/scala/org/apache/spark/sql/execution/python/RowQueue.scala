@@ -194,7 +194,7 @@ private[python] case class HybridRowQueue(
       // the rows already in the queue.
       return 0L
     }
-    val task = taskMemoryManager.taskIdentifier()
+    val task = Option(TaskContext.get()).map(_.taskName()).getOrElse("testTask")
     logInfo(s"$task starts spilling $name," +
       s" triggered by ${Option(trigger).map(_.name()).getOrElse("unknown")}.")
     var released = 0L

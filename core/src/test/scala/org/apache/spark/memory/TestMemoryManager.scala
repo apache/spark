@@ -34,10 +34,17 @@ class TestMemoryManager(conf: SparkConf)
   @GuardedBy("this")
   private val memoryForTask = mutable.HashMap[Long, Long]().withDefaultValue(0L)
 
+  private[memory] def acquireExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = synchronized {
+    acquireExecutionMemory(numBytes, taskAttemptId, "testTask", memoryMode)
+  }
+
   override private[memory] def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      taskIdentifier: String,
+      taskName: String,
       memoryMode: MemoryMode): Long = synchronized {
     require(numBytes >= 0)
     val acquired = {

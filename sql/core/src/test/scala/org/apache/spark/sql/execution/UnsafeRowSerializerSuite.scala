@@ -111,7 +111,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
     val data = (1 to 10000).iterator.map { i =>
       (i, converter(Row(i)))
     }
-    val taskMemoryManager = new TaskMemoryManager(spark.sparkContext.env.memoryManager, 0, "task")
+    val taskMemoryManager = new TaskMemoryManager(spark.sparkContext.env.memoryManager, 0)
     val taskContext = new TaskContextImpl(0, 0, 0, 0, 0,
       "", taskMemoryManager, new Properties, null)
 

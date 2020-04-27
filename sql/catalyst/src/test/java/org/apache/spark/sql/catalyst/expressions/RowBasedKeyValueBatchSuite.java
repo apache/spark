@@ -108,7 +108,7 @@ public class RowBasedKeyValueBatchSuite {
             .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)
             .set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false)
             .set(package$.MODULE$.SHUFFLE_COMPRESS(), false));
-    taskMemoryManager = new TaskMemoryManager(memoryManager, 0, "task");
+    taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   }
 
   @After

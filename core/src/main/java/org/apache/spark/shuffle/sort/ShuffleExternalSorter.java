@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
 
+import org.apache.spark.TaskContext$;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -270,7 +271,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       return 0L;
     }
 
-    String task = taskMemoryManager.taskIdentifier();
+    String task = TaskContext$.MODULE$.get().taskName();
     logger.info("Thread {} ({}) spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
       task,

@@ -54,7 +54,7 @@ public class UnsafeInMemorySorterSuite {
   public void testSortingEmptyInput() {
     final TaskMemoryManager memoryManager = new TaskMemoryManager(
       new TestMemoryManager(
-        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0, "task");
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
     final UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer,
       memoryManager,
@@ -81,7 +81,7 @@ public class UnsafeInMemorySorterSuite {
     };
     final TaskMemoryManager memoryManager = new TaskMemoryManager(
       new TestMemoryManager(
-        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0, "task");
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, consumer);
     final Object baseObject = dataPage.getBaseObject();
@@ -153,8 +153,7 @@ public class UnsafeInMemorySorterSuite {
 
     final TestMemoryManager testMemoryManager =
             new TestMemoryManager(sparkConf);
-    final TaskMemoryManager memoryManager = new TaskMemoryManager(
-            testMemoryManager, 0, "task");
+    final TaskMemoryManager memoryManager = new TaskMemoryManager(testMemoryManager, 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, consumer);
     final Object baseObject = dataPage.getBaseObject();

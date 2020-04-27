@@ -44,7 +44,7 @@ public class RecordBinaryComparatorSuite {
 
   private final TaskMemoryManager memoryManager = new TaskMemoryManager(
       new TestMemoryManager(
-        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0, "task");
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
   private final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
 
   private final int uaoSize = UnsafeAlignedOffset.getUaoSize();

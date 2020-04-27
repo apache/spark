@@ -73,6 +73,13 @@ private[spark] class UnifiedMemoryManager(
     maxOffHeapMemory - offHeapExecutionMemoryPool.memoryUsed
   }
 
+  // used for test only
+  private[memory] def acquireExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = synchronized {
+    acquireExecutionMemory(numBytes, taskAttemptId, "testTask", memoryMode)
+  }
   /**
    * Try to acquire up to `numBytes` of execution memory for the current task and return the
    * number of bytes obtained, or 0 if none can be allocated.
@@ -85,7 +92,7 @@ private[spark] class UnifiedMemoryManager(
   override private[memory] def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      taskIdentifier: String,
+      taskName: String,
       memoryMode: MemoryMode): Long = synchronized {
     assertInvariants()
     assert(numBytes >= 0)
@@ -145,7 +152,7 @@ private[spark] class UnifiedMemoryManager(
       maxMemory - math.min(storagePool.memoryUsed, storageRegionSize)
     }
 
-    executionPool.acquireMemory(numBytes, taskAttemptId, taskIdentifier,
+    executionPool.acquireMemory(numBytes, taskAttemptId, taskName,
       maybeGrowExecutionPool, () => computeMaxExecutionPoolSize)
   }
 

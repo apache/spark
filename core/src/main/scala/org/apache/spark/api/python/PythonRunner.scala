@@ -573,9 +573,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         Thread.sleep(taskKillTimeout)
         if (!context.isCompleted) {
           try {
-            // Mimic the task name used in `Executor` to help the user find out the task to blame.
-            val taskName = s"${context.partitionId}.${context.attemptNumber} " +
-              s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
+            val taskName = context.taskName()
             logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
             env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
           } catch {

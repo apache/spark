@@ -83,7 +83,7 @@ public abstract class AbstractBytesToBytesMapSuite {
           .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 256 * 1024 * 1024L)
           .set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false)
           .set(package$.MODULE$.SHUFFLE_COMPRESS(), false));
-    taskMemoryManager = new TaskMemoryManager(memoryManager, 0, "task");
+    taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
 
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
     spillFilesCreated.clear();

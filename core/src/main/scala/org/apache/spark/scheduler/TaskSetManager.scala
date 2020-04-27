@@ -474,8 +474,8 @@ private[spark] class TaskSetManager(
         // We used to log the time it takes to serialize the task, but task size is already
         // a good proxy to task serialization time.
         // val timeTaken = clock.getTime() - startTime
-        val taskName = s"task ${info.id} in stage ${taskSet.id}"
-        logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
+        val tName = taskName(taskId)
+        logInfo(s"Starting $tName ($host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
           s"taskResourceAssignments ${taskResourceAssignments}")
 
@@ -484,7 +484,7 @@ private[spark] class TaskSetManager(
           taskId,
           attemptNum,
           execId,
-          taskName,
+          tName,
           index,
           task.partitionId,
           addedFiles,
@@ -502,6 +502,11 @@ private[spark] class TaskSetManager(
     } else {
       (None, false)
     }
+  }
+
+  def taskName(tid: Long): String = taskInfos.get(tid) match {
+    case Some(info) => s"${info.id} in stage ${taskSet.id} (TID $tid)"
+    case None => s"TID $tid"
   }
 
   private def maybeFinishTaskSet(): Unit = {

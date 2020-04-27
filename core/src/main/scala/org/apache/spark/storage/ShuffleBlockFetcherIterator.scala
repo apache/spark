@@ -841,7 +841,7 @@ private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterat
       // ShuffleBlockFetcherIterator, after we're done reading from it, to let it be
       // collected during GC. Otherwise we can hold metadata on block locations(blocksByAddress)
       data = null
-      logInfo(s"${context.taskMemoryManager().taskIdentifier()} finished shuffle data fetching.")
+      logInfo(s"${context.taskName()} finished shuffle data fetching.")
     }
   }
 

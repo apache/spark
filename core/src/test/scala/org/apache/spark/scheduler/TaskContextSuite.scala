@@ -217,7 +217,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val taskMetrics = TaskMetrics.empty
     val task = new Task[Int](0, 0, 0) {
       context = new TaskContextImpl(0, 0, 0, 0L, 0, "",
-        new TaskMemoryManager(SparkEnv.get.memoryManager, 0L, "task"),
+        new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,
         SparkEnv.get.metricsSystem,
         taskMetrics)
@@ -240,7 +240,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val taskMetrics = TaskMetrics.registered
     val task = new Task[Int](0, 0, 0) {
       context = new TaskContextImpl(0, 0, 0, 0L, 0, "",
-        new TaskMemoryManager(SparkEnv.get.memoryManager, 0L, "task"),
+        new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,
         SparkEnv.get.metricsSystem,
         taskMetrics)

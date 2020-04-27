@@ -98,7 +98,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
     val serManager = createSerializerManager(conf)
     val mem = new TestMemoryManager(conf)
     mem.limit(4<<10)
-    val taskM = new TaskMemoryManager(mem, 0, "task")
+    val taskM = new TaskMemoryManager(mem, 0)
     val queue = HybridRowQueue(taskM, Utils.createTempDir().getCanonicalFile, 1, serManager)
     val row = new UnsafeRow(1)
     row.pointTo(new Array[Byte](16), 16)

@@ -59,7 +59,7 @@ private[spark] class TaskDescription(
     val resources: immutable.Map[String, ResourceInformation],
     val serializedTask: ByteBuffer) {
 
-  override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
+  override def toString: String = s"TaskDescription($name)"
 }
 
 private[spark] object TaskDescription {

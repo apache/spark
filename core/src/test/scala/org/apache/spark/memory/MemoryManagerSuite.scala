@@ -154,7 +154,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
 
   test("single task requesting on-heap execution memory") {
     val manager = createMemoryManager(1000L)
-    val taskMemoryManager = new TaskMemoryManager(manager, 0, "task")
+    val taskMemoryManager = new TaskMemoryManager(manager, 0)
     val c = new TestMemoryConsumer(taskMemoryManager)
 
     assert(taskMemoryManager.acquireExecutionMemory(100L, c) === 100L)
@@ -175,8 +175,8 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
 
   test("two tasks requesting full on-heap execution memory") {
     val memoryManager = createMemoryManager(1000L)
-    val t1MemManager = new TaskMemoryManager(memoryManager, 1, "task1")
-    val t2MemManager = new TaskMemoryManager(memoryManager, 2, "task2")
+    val t1MemManager = new TaskMemoryManager(memoryManager, 1)
+    val t2MemManager = new TaskMemoryManager(memoryManager, 2)
     val c1 = new TestMemoryConsumer(t1MemManager)
     val c2 = new TestMemoryConsumer(t2MemManager)
     val futureTimeout: Duration = 20.seconds
@@ -197,8 +197,8 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
 
   test("two tasks cannot grow past 1 / N of on-heap execution memory") {
     val memoryManager = createMemoryManager(1000L)
-    val t1MemManager = new TaskMemoryManager(memoryManager, 1, "task1")
-    val t2MemManager = new TaskMemoryManager(memoryManager, 2, "task2")
+    val t1MemManager = new TaskMemoryManager(memoryManager, 1)
+    val t2MemManager = new TaskMemoryManager(memoryManager, 2)
     val c1 = new TestMemoryConsumer(t1MemManager)
     val c2 = new TestMemoryConsumer(t2MemManager)
     val futureTimeout: Duration = 20.seconds
@@ -219,8 +219,8 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
 
   test("tasks can block to get at least 1 / 2N of on-heap execution memory") {
     val memoryManager = createMemoryManager(1000L)
-    val t1MemManager = new TaskMemoryManager(memoryManager, 1, "task1")
-    val t2MemManager = new TaskMemoryManager(memoryManager, 2, "task2")
+    val t1MemManager = new TaskMemoryManager(memoryManager, 1)
+    val t2MemManager = new TaskMemoryManager(memoryManager, 2)
     val c1 = new TestMemoryConsumer(t1MemManager)
     val c2 = new TestMemoryConsumer(t2MemManager)
     val futureTimeout: Duration = 20.seconds
@@ -242,8 +242,8 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
 
   test("TaskMemoryManager.cleanUpAllAllocatedMemory") {
     val memoryManager = createMemoryManager(1000L)
-    val t1MemManager = new TaskMemoryManager(memoryManager, 1, "task1")
-    val t2MemManager = new TaskMemoryManager(memoryManager, 2, "task2")
+    val t1MemManager = new TaskMemoryManager(memoryManager, 1)
+    val t2MemManager = new TaskMemoryManager(memoryManager, 2)
     val c1 = new TestMemoryConsumer(t1MemManager)
     val c2 = new TestMemoryConsumer(t2MemManager)
     val futureTimeout: Duration = 20.seconds
@@ -267,8 +267,8 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
   test("tasks should not be granted a negative amount of execution memory") {
     // This is a regression test for SPARK-4715.
     val memoryManager = createMemoryManager(1000L)
-    val t1MemManager = new TaskMemoryManager(memoryManager, 1, "task1")
-    val t2MemManager = new TaskMemoryManager(memoryManager, 2, "task2")
+    val t1MemManager = new TaskMemoryManager(memoryManager, 1)
+    val t2MemManager = new TaskMemoryManager(memoryManager, 2)
     val c1 = new TestMemoryConsumer(t1MemManager)
     val c2 = new TestMemoryConsumer(t2MemManager)
     val futureTimeout: Duration = 20.seconds
@@ -288,7 +288,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
       maxOnHeapExecutionMemory = 2L,
       maxOffHeapExecutionMemory = 1000L)
 
-    val tMemManager = new TaskMemoryManager(memoryManager, 1, "task")
+    val tMemManager = new TaskMemoryManager(memoryManager, 1)
     val c = new TestMemoryConsumer(tMemManager, MemoryMode.OFF_HEAP)
     val result1 = Future { tMemManager.acquireExecutionMemory(1000L, c) }
     assert(ThreadUtils.awaitResult(result1, 200.millis) === 1000L)

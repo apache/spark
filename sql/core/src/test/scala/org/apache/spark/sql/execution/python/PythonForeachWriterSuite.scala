@@ -93,7 +93,7 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
       SparkEnv.set(mockEnv)
       val mem = new TestMemoryManager(conf)
       mem.limit(memBytes)
-      val taskM = new TaskMemoryManager(mem, 0, "task")
+      val taskM = new TaskMemoryManager(mem, 0)
       new UnsafeRowBuffer(taskM, Utils.createTempDir(), 1)
     }
     private val iterator = buffer.iterator

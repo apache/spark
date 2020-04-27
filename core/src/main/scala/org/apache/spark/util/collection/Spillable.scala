@@ -94,7 +94,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
     // Actually spill
     if (shouldSpill) {
       _spillCount += 1
-      val task = taskMemoryManager.taskIdentifier()
+      val task = TaskContext.get().taskName()
       logInfo(s"$task starts spilling $name.")
       logSpillage(currentMemory, task)
       spill(collection)
@@ -112,7 +112,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    */
   override def spill(size: Long, trigger: MemoryConsumer): Long = {
     if (trigger != this && taskMemoryManager.getTungstenMemoryMode == MemoryMode.ON_HEAP) {
-      val task = taskMemoryManager.taskIdentifier()
+      val task = TaskContext.get().taskName()
       logInfo(s"$task starts spilling $name, triggered by ${trigger.name}.")
       val isSpilled = forceSpill()
       logInfo(s"$task finishes spilling $name.")

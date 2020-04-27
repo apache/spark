@@ -356,7 +356,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     val manager = sc.env.shuffleManager
 
-    val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0L, "task")
+    val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0L)
     val metricsSystem = sc.env.metricsSystem
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))

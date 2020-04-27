@@ -25,6 +25,8 @@ import java.util.LinkedList;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
+import org.apache.spark.TaskContext;
+import org.apache.spark.TaskContext$;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -774,7 +776,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
   @Override
   public long spill(long size, MemoryConsumer trigger) throws IOException {
     if (trigger != this && destructiveIterator != null) {
-      String task = taskMemoryManager.taskIdentifier();
+      TaskContext context = TaskContext$.MODULE$.get();
+      String task = context == null ? "driver" : context.taskName();
       logger.info("{} starts spilling {}, triggered by {}.", task, name(), trigger.name());
       long spilled = destructiveIterator.spill(size);
       logger.info("{} finishes spilling {}", task, name());

@@ -172,7 +172,7 @@ abstract class TaskContext extends Serializable {
   def taskAttemptId(): Long
 
   /**
-   * The task name, e.g. "task 0.0 in stage 1.0"
+   * An unique and uniform task name across the application, e.g. "task 0.0 in stage 1.0 (TID 0)"
    */
   def taskName(): String
 
