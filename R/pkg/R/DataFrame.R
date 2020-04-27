@@ -1679,7 +1679,6 @@ setMethod("dapplyCollect",
 #' The output of \code{func} must be a \code{data.frame} matching \code{schema} --
 #' in particular this means the names of the output \code{data.frame} are irrelevant
 #'
-#' @seealso \link{gapplyCollect}
 #' @examples
 #'
 #' \dontrun{
@@ -1715,12 +1714,12 @@ setMethod("dapplyCollect",
 #' # We can also group the data and afterwards call gapply on GroupedData.
 #' # For example:
 #' gdf <- group_by(df, "a", "c")
-#' result <- gapply(
+#' # combine gapply and collect in one step:
+#' result <- gapplyCollect(
 #'   gdf,
 #'   function(key, x) {
 #'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
 #' }, schema)
-#' collect(result)
 #'
 #' # Result
 #' # ------
@@ -1736,7 +1735,6 @@ setMethod("dapplyCollect",
 #' schema <- structType(structField("(Intercept)", "double"),
 #'   structField("Sepal_Width", "double"),structField("Petal_Length", "double"),
 #'   structField("Petal_Width", "double"))
-#' # combine gapply and collect in one step:
 #' df1 <- gapplyCollect(
 #'   df,
 #'   df$"Species",
@@ -1754,7 +1752,8 @@ setMethod("dapplyCollect",
 #' # 3        2.351890    0.6548350    0.2375602     0.2521257
 #'
 #'}
-#' @note gapply(SparkDataFrame), gapplyCollect(SparkDataFrame) since 2.0.0
+#' @note gapply(SparkDataFrame) since 2.0.0
+#' @note gapplyCollect(SparkDataFrame) since 2.0.0
 setMethod("gapply",
           signature(x = "SparkDataFrame"),
           function(x, cols, func, schema) {
