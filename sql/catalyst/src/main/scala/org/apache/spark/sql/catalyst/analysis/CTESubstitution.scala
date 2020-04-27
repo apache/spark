@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, With}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, With}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_CTE_PRECEDENCE_POLICY, LegacyBehaviorPolicy}
@@ -41,34 +43,45 @@ object CTESubstitution extends Rule[LogicalPlan] {
   }
 
   /**
-   * Check the plan to be traversed has naming conflicts in nested CTE or not, traverse through
-   * child, innerChildren and subquery expressions for the current plan.
+   * Spark 3.0 changes the CTE relations resolution, and inner relations take precedence. This is
+   * correct but we need to warn users about this behavior change under EXCEPTION mode, when we see
+   * CTE relations with conflicting names.
+   *
+   * Note that, before Spark 3.0 the parser didn't support CTE in the FROM clause. For example,
+   * `WITH ... SELECT * FROM (WITH ... SELECT ...)` was not supported. We should not fail for this
+   * case, as Spark versions before 3.0 can't run it anyway. The parameter `startOfQuery` is used
+   * to indicate where we can define CTE relations before Spark 3.0, and we should only check
+   * name conflicts when `startOfQuery` is true.
    */
   private def assertNoNameConflictsInCTE(
       plan: LogicalPlan,
-      outerCTERelationNames: Set[String] = Set.empty,
-      namesInSubqueries: Set[String] = Set.empty): Unit = {
+      outerCTERelationNames: Seq[String] = Nil,
+      startOfQuery: Boolean = true): Unit = {
+    val resolver = SQLConf.get.resolver
     plan match {
-      case w @ With(child, relations) =>
-        val newNames = relations.map {
-          case (cteName, _) =>
-            if (outerCTERelationNames.contains(cteName)) {
-              throw new AnalysisException(s"Name $cteName is ambiguous in nested CTE. " +
+      case With(child, relations) =>
+        val newNames = mutable.ArrayBuffer.empty[String]
+        newNames ++= outerCTERelationNames
+        relations.foreach {
+          case (name, relation) =>
+            if (startOfQuery && outerCTERelationNames.exists(resolver(_, name))) {
+              throw new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
                 s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
                 "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
                 "definitions will take precedence. See more details in SPARK-28228.")
-            } else {
-              cteName
             }
-        }.toSet ++ namesInSubqueries
-        assertNoNameConflictsInCTE(child, outerCTERelationNames, newNames)
-        w.innerChildren.foreach(assertNoNameConflictsInCTE(_, newNames, newNames))
+            assertNoNameConflictsInCTE(relation, newNames)
+            newNames += name
+        }
+        assertNoNameConflictsInCTE(child, newNames, startOfQuery = false)
+
+      case s: SubqueryAlias if startOfQuery =>
+        assertNoNameConflictsInCTE(s.child, outerCTERelationNames)
 
       case other =>
-        other.subqueries.foreach(
-          assertNoNameConflictsInCTE(_, namesInSubqueries, namesInSubqueries))
+        other.subqueries.foreach(assertNoNameConflictsInCTE(_, outerCTERelationNames))
         other.children.foreach(
-          assertNoNameConflictsInCTE(_, outerCTERelationNames, namesInSubqueries))
+          assertNoNameConflictsInCTE(_, outerCTERelationNames, startOfQuery = false))
     }
   }
 
