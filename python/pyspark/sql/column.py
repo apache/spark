@@ -300,10 +300,7 @@ class Column(object):
         |   1| value|
         +----+------+
         """
-        if isinstance(key, Column) and not is_instance_of(
-                SparkContext._gateway,
-                key._jc.expr(),
-                "org.apache.spark.sql.catalyst.expressions.Literal"):
+        if isinstance(key, Column):
             warnings.warn(
                 "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
                 "be supported in the future release. Use `column[key]` or `column.key` syntax "
@@ -331,12 +328,18 @@ class Column(object):
         |  1|
         +---+
         """
+        if isinstance(name, Column):
+            warnings.warn(
+                "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[name]` or `column.name` syntax "
+                "instead.",
+                DeprecationWarning)
         return self[name]
 
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)
-        return self.getField(item)
+        return self[item]
 
     def __getitem__(self, k):
         if isinstance(k, slice):
