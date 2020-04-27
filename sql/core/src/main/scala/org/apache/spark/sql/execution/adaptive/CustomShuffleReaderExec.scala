@@ -113,16 +113,6 @@ case class CustomShuffleReaderExec private(
     }
   }
 
-  @transient private lazy val skewedSpecs: Option[Seq[PartialReducerPartitionSpec]] = {
-    if (hasSkewedPartition) {
-      Some(partitionSpecs.collect {
-        case p: PartialReducerPartitionSpec => p
-      })
-    } else {
-      None
-    }
-  }
-
   private def sendDriverMetrics(): Unit = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val driverAccumUpdates = ArrayBuffer.empty[(Long, Long)]
@@ -131,12 +121,16 @@ case class CustomShuffleReaderExec private(
     numPartitionsMetric.set(partitionSpecs.length)
     driverAccumUpdates += (numPartitionsMetric.id -> partitionSpecs.length.toLong)
 
-    skewedSpecs.foreach { skewedSpec =>
+    if (hasSkewedPartition) {
+      val skewedSpecs = partitionSpecs.collect {
+        case p: PartialReducerPartitionSpec => p
+      }
+
       val skewedPartitions = metrics("numSkewedPartitions")
       val skewedSplits = metrics("numSkewedSplits")
 
-      val numSkewedPartitions = skewedSpec.map(_.reducerIndex).distinct.length
-      val numSplits = skewedSpec.length
+      val numSkewedPartitions = skewedSpecs.map(_.reducerIndex).distinct.length
+      val numSplits = skewedSpecs.length
 
       skewedPartitions.set(numSkewedPartitions)
       driverAccumUpdates += (skewedPartitions.id -> numSkewedPartitions)
@@ -172,7 +166,7 @@ case class CustomShuffleReaderExec private(
           Map("numSkewedPartitions" ->
             SQLMetrics.createMetric(sparkContext, "number of skewed partitions"),
             "numSkewedSplits" ->
-              SQLMetrics.createNumMetric(sparkContext, "number of skewed partition splits"))
+              SQLMetrics.createMetric(sparkContext, "number of skewed partition splits"))
         } else {
           Map.empty
         }
