@@ -27,6 +27,7 @@ import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 import org.apache.spark.sql.internal.SQLConf
@@ -357,6 +358,40 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ByteType)
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ShortType)
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
+  }
+
+  test("date add interval") {
+    val d = Date.valueOf("2016-02-28")
+    Seq("true", "false") foreach { flag =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, flag)) {
+        checkEvaluation(
+          DateAddInterval(Literal(d), Literal(new CalendarInterval(0, 1, 0))),
+          DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+        checkEvaluation(
+          DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 0))),
+          DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-29")))
+        checkEvaluation(DateAddInterval(Literal(d), Literal.create(null, CalendarIntervalType)),
+          null)
+        checkEvaluation(DateAddInterval(Literal.create(null, DateType),
+          Literal(new CalendarInterval(1, 1, 0))),
+          null)
+      }
+    }
+
+    withSQLConf((SQLConf.ANSI_ENABLED.key, "true")) {
+      checkExceptionInExpression[IllegalArgumentException](
+        DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
+        "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
+    }
+
+    withSQLConf((SQLConf.ANSI_ENABLED.key, "false")) {
+      checkEvaluation(
+        DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25))),
+        DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-29")))
+      checkEvaluation(
+        DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
+        DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-30")))
+    }
   }
 
   test("date_sub") {

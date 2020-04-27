@@ -19,7 +19,7 @@
   font-size: 0.85rem;
   font-weight: normal;
   text-shadow: none;
-  color: black;
+  color: #333;
 }
 
 #plan-viz-graph svg g.cluster rect {
