@@ -70,13 +70,12 @@ object CTESubstitution extends Rule[LogicalPlan] {
                 "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
                 "definitions will take precedence. See more details in SPARK-28228.")
             }
-            assertNoNameConflictsInCTE(relation, newNames)
+            // CTE relation is defined as `SubqueryAlias`. Here we skip it and check the child
+            // directly, so that `startOfQuery` is set correctly.
+            assertNoNameConflictsInCTE(relation.child, newNames)
             newNames += name
         }
         assertNoNameConflictsInCTE(child, newNames, startOfQuery = false)
-
-      case s: SubqueryAlias if startOfQuery =>
-        assertNoNameConflictsInCTE(s.child, outerCTERelationNames)
 
       case other =>
         other.subqueries.foreach(assertNoNameConflictsInCTE(_, outerCTERelationNames))
