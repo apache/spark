@@ -1540,7 +1540,6 @@ dapplyInternal <- function(x, func, schema) {
 setClassUnion("characterOrstructType", c("character", "structType"))
 
 #' dapply
-#' @family SparkDataFrame functions
 #' @rdname distributed-group-apply
 #' @aliases dapply,SparkDataFrame,function,characterOrstructType-method
 #' @examples
@@ -1637,8 +1636,9 @@ setMethod("dapplyCollect",
 #' unnamed \code{list} of \code{length(cols)} length-one objects corresponding
 #' to the grouping columns' values for the current group.
 #'
-#' The second, herein \code{x}, will be a local \code{\link{data.frame}} with the
-#' columns of the input not in \code{cols} for the rows corresponding to \code{key}.
+#' The second, \code{x}, analogously to \code{dapply}, will be a local
+#' \code{\link{data.frame}} with the columns of the input not in \code{cols} for
+#' the rows corresponding to \code{key}.
 #'
 #' For both \code{gapply} and \code{dapply}, the output of \code{func} must be a
 #' \code{data.frame} matching \code{schema} -- in particular this means the names of
@@ -1726,7 +1726,7 @@ setMethod("gapply",
           })
 
 #' @aliases gapplyCollect,SparkDataFrame-method
-#' @rdname gapply
+#' @rdname distributed-group-apply
 #' @note gapplyCollect(SparkDataFrame) since 2.0.0
 setMethod("gapplyCollect",
           signature(x = "SparkDataFrame"),

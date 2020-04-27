@@ -194,7 +194,7 @@ createMethods()
 
 #' gapply
 #'
-#' @rdname gapply
+#' @rdname distributed-group-apply
 #' @aliases gapply,GroupedData-method
 #' @name gapply
 #' @note gapply(GroupedData) since 2.0.0
@@ -207,7 +207,7 @@ setMethod("gapply",
 
 #' gapplyCollect
 #'
-#' @rdname gapply
+#' @rdname distributed-group-apply
 setMethod("gapplyCollect",
           signature(x = "GroupedData"),
           function(x, func) {
