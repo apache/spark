@@ -1713,7 +1713,7 @@ setMethod("dapplyCollect",
 #' }, schema)
 #'
 #' # We can also group the data and afterwards call gapply on GroupedData.
-#' # For Example:
+#' # For example:
 #' gdf <- group_by(df, "a", "c")
 #' result <- gapply(
 #'   gdf,
