@@ -1,5 +1,3 @@
-
-
 ---
 layout: global
 title: Monitoring and Instrumentation
