@@ -21,9 +21,7 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 
@@ -97,17 +95,14 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     // The example calls methods that return unstable results.
     "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
 
-  val MISSING_EXAMPLE = "Example is missing"
-
   /** A single SQL query's SQL and schema. */
   protected case class QueryOutput(
-    number: String = "0",
     className: String,
     funcName: String,
-    sql: String = MISSING_EXAMPLE,
-    schema: String = MISSING_EXAMPLE) {
+    sql: String = "N/A",
+    schema: String = "N/A") {
     override def toString: String = {
-      s"| $number | $className | $funcName | $sql | $schema |"
+      s"| $className | $funcName | $sql | $schema |"
     }
   }
 
@@ -122,22 +117,17 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     val outputs = new ArrayBuffer[QueryOutput]
     val missingExamples = new ArrayBuffer[String]
 
-    var _curNumber = 0
-    def curNumber: String = {
-      _curNumber += 1
-      _curNumber.toString
-    }
-
     classFunsMap.foreach { kv =>
       val className = kv._1
       if (!ignoreSet.contains(className)) {
         kv._2.foreach { funInfo =>
           val example = funInfo.getExamples
+          val funcName = funInfo.getName.replaceAll("\\|", "&#124;")
           if (example == "") {
-            val queryOutput = QueryOutput(curNumber, className, funInfo.getName)
+            val queryOutput = QueryOutput(className, funcName)
             outputBuffer += queryOutput.toString
             outputs += queryOutput
-            missingExamples += queryOutput.funcName
+            missingExamples += funcName
           }
 
           // If expression exists 'Examples' segment, the first element is 'Examples'. Because
@@ -145,31 +135,34 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
           // Therefore, we only need to output the first SQL and its corresponding schema.
           // Note: We need to filter out the commands that set the parameters, such as:
           // SET spark.sql.parser.escapedStringLiterals=true
-          example.split("  > ").tail
-            .filterNot(_.trim.startsWith("SET")).take(1).foreach(_ match {
-              case exampleRe(sql, expected) =>
+          example.split("  > ").tail.filterNot(_.trim.startsWith("SET")).take(1).foreach {
+            _ match {
+              case exampleRe(sql, _) =>
                 val df = spark.sql(sql)
-                val schema = df.schema.catalogString
-                val queryOutput = QueryOutput(curNumber, className, funInfo.getName, sql, schema)
+                val escapedSql = sql.replaceAll("\\|", "&#124;")
+                val schema = df.schema.catalogString.replaceAll("\\|", "&#124;")
+                val queryOutput = QueryOutput(className, funcName, escapedSql, schema)
                 outputBuffer += queryOutput.toString
                 outputs += queryOutput
               case _ =>
-            })
+            }
           }
+        }
       }
     }
 
     if (regenerateGoldenFiles) {
       val missingExampleStr = missingExamples.mkString(",")
       val goldenOutput = {
-        "## Summary\n" +
-        s"  - Number of queries: ${outputs.size}\n" +
-        s"  - Number of expressions that missing example: ${missingExamples.size}\n" +
-        s"  - Expressions missing examples: $missingExampleStr\n" +
-        "## Schema of Built-in Functions\n" +
-        "| No | Class name | Function name or alias | Query example | Output schema |\n" +
-        "| -- | ---------- | ---------------------- | ------------- | ------------- |\n" +
-        outputBuffer.mkString("\n")
+        s"""## Summary
+           |  - Number of queries: ${outputs.size}
+           |  - Number of expressions that missing example: ${missingExamples.size}
+           |  - Expressions missing examples: $missingExampleStr
+           |## Schema of Built-in Functions
+           || Class name | Function name or alias | Query example | Output schema |
+           || ---------- | ---------------------- | ------------- | ------------- |
+         """.stripMargin +
+         outputBuffer.mkString("\n")
       }
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
@@ -189,25 +182,11 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
       Seq.tabulate(outputs.size) { i =>
         val segments = lines(i + 7).split('|')
-        if (segments(2).trim == "org.apache.spark.sql.catalyst.expressions.BitwiseOr") {
-          // scalastyle:off line.size.limit
-          // The name of `BitwiseOr` is '|', so the line in golden file looks like below.
-          // | 40 | org.apache.spark.sql.catalyst.expressions.BitwiseOr | | | SELECT 3 | 5 | struct<(3 | 5):int> |
-          QueryOutput(
-            className = segments(2).trim,
-            funcName = "|",
-            sql = (segments(5) + "|" + segments(6)).trim,
-            schema = (segments(7) + "|" + segments(8)).trim)
-        } else {
-          // The lines most expressions output to a file are in the following format
-          // | 1 | org.apache.spark.sql.catalyst.expressions.Abs | abs | SELECT abs(-1) | struct<abs(-1):int> |
-          // scalastyle:on line.size.limit
-          QueryOutput(
-            className = segments(2).trim,
-            funcName = segments(3).trim,
-            sql = segments(4).trim,
-            schema = segments(5).trim)
-        }
+        QueryOutput(
+          className = segments(1).trim,
+          funcName = segments(2).trim,
+          sql = segments(3).trim,
+          schema = segments(4).trim)
       }
     }
 
