@@ -417,7 +417,7 @@ private[spark] class Executor(
         // requires access to properties contained within (e.g. for access control).
         Executor.taskDeserializationProps.set(taskDescription.properties)
 
-        updateDependencies(taskDescription.addedFiles, taskDescription.addedJars)
+        updateDependencies(taskDescription)
         task = ser.deserialize[Task[Any]](
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
         task.localProperties = taskDescription.properties
@@ -865,12 +865,15 @@ private[spark] class Executor(
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
-  private def updateDependencies(newFiles: Map[String, Long], newJars: Map[String, Long]): Unit = {
+  private def updateDependencies(taskDescription: TaskDescription): Unit = {
+    val newFiles = taskDescription.addedFiles
+    val newJars = taskDescription.addedJars
+    val taskName = taskDescription.name
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
-        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        logInfo(s"$taskName fetching $name with timestamp $timestamp")
         // Fetch file with useCache mode, close cache for local mode.
         Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
           env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
@@ -882,7 +885,7 @@ private[spark] class Executor(
           .orElse(currentJars.get(localName))
           .getOrElse(-1L)
         if (currentTimeStamp < timestamp) {
-          logInfo("Fetching " + name + " with timestamp " + timestamp)
+          logInfo(s"$taskName fetching $name with timestamp $timestamp")
           // Fetch file with useCache mode, close cache for local mode.
           Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
             env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
@@ -890,7 +893,7 @@ private[spark] class Executor(
           // Add it to our class loader
           val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
           if (!urlClassLoader.getURLs().contains(url)) {
-            logInfo("Adding " + url + " to class loader")
+            logInfo(s"$taskName adding $url to class loader")
             urlClassLoader.addURL(url)
           }
         }

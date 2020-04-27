@@ -176,7 +176,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           }
         }
         val taskDesc = TaskDescription.decode(data.value)
-        logInfo(s"Got assigned ${taskDesc.name} (TID ${taskDesc.taskId})")
+        logInfo(s"Got assigned ${taskDesc.name}")
         taskResources(taskDesc.taskId) = taskDesc.resources
         executor.launchTask(this, taskDesc)
       }
