@@ -72,7 +72,7 @@ case class CartesianProductExec(
     } else "None"
 
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
      """.stripMargin
   }
