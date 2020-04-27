@@ -39,8 +39,8 @@ private[ml] class HingeAggregator(
     fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[Instance, HingeAggregator] {
 
-  private val numFeatures: Int = bcFeaturesStd.value.length
-  private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
+  private val numFeatures = bcFeaturesStd.value.length
+  private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   @transient private lazy val coefficientsArray = bcCoefficients.value match {
     case DenseVector(values) => values
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
@@ -131,22 +131,19 @@ private[ml] class BlockHingeAggregator(
       s" but got type ${bcCoefficients.value.getClass}.")
   }
 
-  @transient private lazy val linear = {
-    if (fitIntercept) {
-      new DenseVector(coefficientsArray.take(numFeatures))
-    } else {
-      new DenseVector(coefficientsArray)
-    }
+  @transient private lazy val linear = if (fitIntercept) {
+    Vectors.dense(coefficientsArray.take(numFeatures)).toDense
+  } else {
+    Vectors.dense(coefficientsArray).toDense
   }
 
   @transient private lazy val intercept =
     if (fitIntercept) coefficientsArray(numFeatures) else 0.0
 
   @transient private lazy val linearGradSumVec =
-    if (fitIntercept) new DenseVector(Array.ofDim[Double](numFeatures)) else null
+    if (fitIntercept) Vectors.zeros(numFeatures).toDense else null
 
-  @transient private lazy val auxiliaryVec =
-    new DenseVector(Array.ofDim[Double](blockSize))
+  @transient private lazy val auxiliaryVec = Vectors.zeros(blockSize).toDense
 
   /**
    * Add a new training instance block to this HingeAggregator, and update the loss and gradient
@@ -167,15 +164,10 @@ private[ml] class BlockHingeAggregator(
     val localGradientSumArray = gradientSumArray
 
     // vec/arr here represents dotProducts
-    val vec = if (size == blockSize) {
-      auxiliaryVec
-    } else {
-      // the last block within one partition may be of size less than blockSize
-      new DenseVector(Array.ofDim[Double](size))
-    }
+    val vec = if (size == blockSize) auxiliaryVec else Vectors.zeros(size).toDense
     val arr = vec.values
 
-    if (fitIntercept) {
+    if (fitIntercept && intercept != 0) {
       var i = 0
       while (i < size) { arr(i) = intercept; i += 1 }
       BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
@@ -193,7 +185,7 @@ private[ml] class BlockHingeAggregator(
         // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
         // Therefore the gradient is -(2y - 1)*x
         val label = block.getLabel(i)
-        val labelScaled = 2 * label - 1.0
+        val labelScaled = label + label - 1.0
         val loss = (1.0 - labelScaled * arr(i)) * weight
         if (loss > 0) {
           lossSum += loss
