@@ -3,7 +3,7 @@
   - Number of expressions that missing example: 37
   - Expressions missing examples: and,string,tinyint,double,smallint,date,decimal,boolean,float,binary,bigint,int,timestamp,cume_dist,current_date,current_timestamp,now,dense_rank,input_file_block_length,input_file_block_start,input_file_name,lag,lead,monotonically_increasing_id,ntile,struct,!,not,or,percent_rank,rank,row_number,spark_partition_id,version,window,positive,count_min_sketch
 ## Schema of Built-in Functions
-| No | Class name | Function name or alias | Query example | Output schema |
+| Class name | Function name or alias | Query example | Output schema |
 | -- | ---------- | ---------------------- | ------------- | ------------- |
 | org.apache.spark.sql.catalyst.expressions.Abs | abs | SELECT abs(-1) | struct<abs(-1):int> |
 | org.apache.spark.sql.catalyst.expressions.Acos | acos | SELECT acos(1) | struct<ACOS(CAST(1 AS DOUBLE)):double> |
