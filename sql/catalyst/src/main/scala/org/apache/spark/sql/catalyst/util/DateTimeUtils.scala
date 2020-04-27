@@ -615,8 +615,8 @@ object DateTimeUtils {
    * @throws IllegalArgumentException if the interval has `microseconds` part
    */
   def dateAddInterval(
-     start: SQLDate,
-     interval: CalendarInterval): SQLDate = {
+     start: Int,
+     interval: CalendarInterval): Int = {
     require(interval.microseconds == 0,
       "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
     val ld = LocalDate.ofEpochDay(start).plusMonths(interval.months).plusDays(interval.days)
