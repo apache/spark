@@ -146,35 +146,6 @@ case class CheckOverflow(
   override def sql: String = child.sql
 }
 
-case class HasOverflow(
-    child: Expression,
-    inputType: DecimalType) extends UnaryExpression {
-
-  override def dataType: DataType = BooleanType
-
-  override def nullable: Boolean = true
-
-  override def nullSafeEval(input: Any): Any =
-    !input.asInstanceOf[Decimal].changePrecision(
-      inputType.precision,
-      inputType.scale,
-      Decimal.ROUND_HALF_UP)
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-         |${ev.value} = !$eval.changePrecision(
-         |  ${inputType.precision}, ${inputType.scale}, Decimal.ROUND_HALF_UP());
-         |${ev.isNull} = false;
-       """.stripMargin
-    })
-  }
-
-  override def toString: String = s"HasOverflow($child, $inputType)"
-
-  override def sql: String = child.sql
-}
-
 case class OverflowException(dtype: DataType, msg: String) extends LeafExpression {
 
   override def dataType: DataType = dtype

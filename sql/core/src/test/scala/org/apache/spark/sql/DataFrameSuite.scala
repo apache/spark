@@ -224,7 +224,6 @@ class DataFrameSuite extends QueryTest
           withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled)) {
             val df = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
             checkAnswer(df.agg(sum($"d")), Row(null))
-            df.agg(sum($"d")).show
           }
         }
       }
@@ -267,6 +266,12 @@ class DataFrameSuite extends QueryTest
             val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
               lit(1).as("key")).groupBy("key").agg(sum($"d").alias("sumd")).select($"sumd")
             checkAnsi(d5, ansiEnabled)
+
+            val nullsDf = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
+
+            val largeDecimals = Seq(BigDecimal("1"* 20 + ".123"), BigDecimal("9"* 20 + ".123")).
+              toDF("d")
+            checkAnsi(nullsDf.union(largeDecimals).agg(sum($"d")), ansiEnabled)
           }
         }
       }
