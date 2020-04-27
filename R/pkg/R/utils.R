@@ -46,9 +46,9 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
                 res <- list(unserialize(keyBytes),
                   unserialize(valBytes))
               } else {
-                stop(paste("utils.R: convertJListToRList only supports",
-                  "RDD[Array[Byte]] and",
-                  "JavaPairRDD[Array[Byte], Array[Byte]] for now"))
+                stop("utils.R: convertJListToRList only supports ",
+                  "RDD[Array[Byte]] and ",
+                  "JavaPairRDD[Array[Byte], Array[Byte]] for now")
               }
             } else {
               if (inherits(obj, "raw")) {
@@ -137,7 +137,7 @@ hashCode <- function(key) {
       as.integer(hashC)
     }
   } else {
-    warning(paste("Could not hash object, returning 0", sep = ""))
+    warning("Could not hash object, returning 0")
     as.integer(0)
   }
 }
@@ -354,8 +354,10 @@ varargsToStrEnv <- function(...) {
       } else {
         value <- pairs[[name]]
         if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
-          stop(paste0("Unsupported type for ", name, " : ", class(value),
-               ". Supported types are logical, numeric, character and NULL."), call. = FALSE)
+          stop(gettextf("Unsupported type for %s : %s. ",
+                        name, class(value), domain = "R-SparkR"),
+               "Supported types are logical, numeric, character and NULL.",
+               call. = FALSE, domain = NA)
         }
         if (is.logical(value)) {
           env[[name]] <- tolower(as.character(value))
@@ -369,8 +371,9 @@ varargsToStrEnv <- function(...) {
   }
 
   if (length(ignoredNames) != 0) {
-    warning(paste0("Unnamed arguments ignored: ", paste(ignoredNames, collapse = ", "), "."),
-            call. = FALSE)
+    warning(gettextf("Unnamed arguments ignored: %s.",
+                     paste(ignoredNames, collapse = ", "), domain = "R-SparkR"),
+            call. = FALSE, domain = NA)
   }
   env
 }
@@ -449,7 +452,7 @@ storageLevelToString <- function(levelObj) {
 # the user to type (for example) `5` instead of `5L` to avoid a confusing error message.
 numToInt <- function(num) {
   if (as.integer(num) != num) {
-    warning(paste("Coercing", as.list(sys.call())[[2]], "to integer."))
+    warning("Coercing ", as.list(sys.call())[[2L]], " to integer.")
   }
   as.integer(num)
 }
@@ -650,8 +653,8 @@ mergePartitions <- function(rdd, zip) {
         # For zip operation, check if corresponding partitions
         # of both RDDs have the same number of elements.
         if (zip && lengthOfKeys != lengthOfValues) {
-          stop(paste("Can only zip RDDs with same number of elements",
-                     "in each pair of corresponding partitions."))
+          stop("Can only zip RDDs with same number of elements ",
+               "in each pair of corresponding partitions.")
         }
 
         if (lengthOfKeys > 1) {
@@ -825,21 +828,21 @@ captureJVMException <- function(e, method) {
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "streaming query error - ", first), call. = FALSE)
+    stop(rmsg, "streaming query error - ", first, call. = FALSE)
   } else if (any(grep("java.lang.IllegalArgumentException: ", stacktrace))) {
     msg <- strsplit(stacktrace, "java.lang.IllegalArgumentException: ", fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "illegal argument - ", first), call. = FALSE)
+    stop(rmsg, "illegal argument - ", first, call. = FALSE)
   } else if (any(grep("org.apache.spark.sql.AnalysisException: ", stacktrace))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.AnalysisException: ", fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "analysis error - ", first), call. = FALSE)
+    stop(rmsg, "analysis error - ", first, call. = FALSE)
   } else
     if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ", stacktrace))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ",
@@ -848,7 +851,7 @@ captureJVMException <- function(e, method) {
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "no such database - ", first), call. = FALSE)
+    stop(rmsg, "no such database - ", first, call. = FALSE)
   } else
     if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ", stacktrace))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ",
@@ -857,7 +860,7 @@ captureJVMException <- function(e, method) {
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "no such table - ", first), call. = FALSE)
+    stop(rmsg, "no such table - ", first, call. = FALSE)
   } else if (any(grep("org.apache.spark.sql.catalyst.parser.ParseException: ", stacktrace))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.parser.ParseException: ",
                     fixed = TRUE)[[1]]
@@ -865,7 +868,7 @@ captureJVMException <- function(e, method) {
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "parse error - ", first), call. = FALSE)
+    stop(rmsg, "parse error - ", first, call. = FALSE)
   } else {
     stop(stacktrace, call. = FALSE)
   }
