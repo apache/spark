@@ -372,14 +372,12 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // Assume the execution plan is
     // ... -> BroadcastHashJoin(nodeId = 0)
     Seq(("left_outer", 0L, 5L, false), ("right_outer", 0L, 6L, false), ("left_outer", 1L, 5L, true),
-      ("right_outer", 1L, 6L, true)).foreach {
-      case (joinType, nodeId, numRows, enableWholeStage) =>
-        val df = df1.join(broadcast(df2), $"key" === $"key2", joinType)
-        testSparkPlanMetrics(df, 2, Map(
-          nodeId -> (("BroadcastHashJoin", Map(
-            "number of output rows" -> numRows)))),
-          enableWholeStage
-        )
+      ("right_outer", 1L, 6L, true)).foreach { case (joinType, nodeId, numRows, enableWholeStage) =>
+      val df = df1.join(broadcast(df2), $"key" === $"key2", joinType)
+      testSparkPlanMetrics(df, 2, Map(
+        nodeId -> (("BroadcastHashJoin", Map("number of output rows" -> numRows)))),
+        enableWholeStage
+      )
     }
   }
 
@@ -590,9 +588,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SPARK-25602: SparkPlan.getByteArrayRdd should not consume the input when not necessary") {
     def checkFilterAndRangeMetrics(
-                                    df: DataFrame,
-                                    filterNumOutputs: Int,
-                                    rangeNumOutputs: Int): Unit = {
+        df: DataFrame,
+        filterNumOutputs: Int,
+        rangeNumOutputs: Int): Unit = {
       val plan = df.queryExecution.executedPlan
 
       val filters = collectNodeWithinWholeStage[FilterExec](plan)
