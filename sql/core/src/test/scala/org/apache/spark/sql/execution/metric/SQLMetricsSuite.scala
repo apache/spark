@@ -342,8 +342,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("ShuffledHashJoin(left,outer) metrics") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       val leftDf = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val rightDf = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
@@ -356,7 +355,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         (1L, "left_anti", rightDf, leftDf, 8L, false),
         (1L, "left_semi", rightDf, leftDf, 2L, false))
         .foreach { case (nodeId, joinType, leftDf, rightDf, rows, enableWholeStage) =>
-          val df = leftDf.join(rightDf.hint("shuffle_hash"), $"key" === $"key2", joinType)
+          val df = leftDf.hint("shuffle_hash").join(
+            rightDf.hint("shuffle_hash"), $"key" === $"key2", joinType)
           testSparkPlanMetrics(df, 1, Map(
             nodeId -> (("ShuffledHashJoin", Map(
               "number of output rows" -> rows)))),
