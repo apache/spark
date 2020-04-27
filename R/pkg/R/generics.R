@@ -429,7 +429,7 @@ setGeneric("gapply", function(x, ...) { standardGeneric("gapply") })
 
 #' @param x a SparkDataFrame or GroupedData.
 #' @param ... additional argument(s) passed to the method.
-#' @rdname gapplyCollect
+#' @rdname gapply
 setGeneric("gapplyCollect", function(x, ...) { standardGeneric("gapplyCollect") })
 
 # @rdname getNumPartitions

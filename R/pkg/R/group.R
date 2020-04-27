@@ -207,10 +207,7 @@ setMethod("gapply",
 
 #' gapplyCollect
 #'
-#' @rdname gapplyCollect
-#' @aliases gapplyCollect,GroupedData-method
-#' @name gapplyCollect
-#' @note gapplyCollect(GroupedData) since 2.0.0
+#' @rdname gapply
 setMethod("gapplyCollect",
           signature(x = "GroupedData"),
           function(x, func) {
