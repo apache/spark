@@ -464,7 +464,7 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
 class _LogisticRegressionParams(_ProbabilisticClassifierParams, HasRegParam,
                                 HasElasticNetParam, HasMaxIter, HasFitIntercept, HasTol,
                                 HasStandardization, HasWeightCol, HasAggregationDepth,
-                                HasThreshold):
+                                HasThreshold, HasBlockSize):
     """
     Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
 
@@ -652,6 +652,8 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
     LogisticRegressionModel...
     >>> blorModel.getProbabilityCol()
     'newProbability'
+    >>> blorModel.getBlockSize()
+    1
     >>> blorModel.setThreshold(0.1)
     LogisticRegressionModel...
     >>> blorModel.getThreshold()
@@ -714,7 +716,8 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
                  aggregationDepth=2, family="auto",
                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
-                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
+                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None,
+                 blockSize=1):
 
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -723,13 +726,15 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
                  aggregationDepth=2, family="auto", \
                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
-                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
+                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
+                 blockSize=1):
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto")
+        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto",
+                         blockSize=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
@@ -742,7 +747,8 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                   rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
                   aggregationDepth=2, family="auto",
                   lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
-                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
+                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None,
+                  blockSize=1):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
@@ -750,7 +756,8 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                   rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
                   aggregationDepth=2, family="auto", \
                   lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
-                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
+                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
+                  blockSize=1):
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
@@ -844,6 +851,13 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
         Sets the value of :py:attr:`aggregationDepth`.
         """
         return self._set(aggregationDepth=value)
+
+    @since("3.1.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
 
 class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRegressionParams,

@@ -180,8 +180,8 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
         val blockAgg = getNewBlockAggregator(Vectors.dense(coefArray ++ Array(intercept)),
           fitIntercept = true)
         blocks.foreach(blockAgg.add)
-        assert(loss ~== blockAgg.loss relTol 1e-9)
-        assert(gradient ~== blockAgg.gradient relTol 1e-9)
+        assert(agg.loss ~== blockAgg.loss relTol 1e-9)
+        assert(agg.gradient ~== blockAgg.gradient relTol 1e-9)
       }
     }
   }
