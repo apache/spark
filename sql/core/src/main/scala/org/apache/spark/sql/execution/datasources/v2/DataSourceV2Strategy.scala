@@ -212,7 +212,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           // correctness depends on removing all matching data.
           val filters = DataSourceStrategy.normalizeExprs(condition.toSeq, output)
               .flatMap(splitConjunctivePredicates(_).map {
-                f => DataSourceStrategy.translateFilter(f).getOrElse(
+                f => DataSourceStrategy.translateFilter(f, true).getOrElse(
                   throw new AnalysisException(s"Exec update failed:" +
                       s" cannot translate expression to source filter: $f"))
               }).toArray

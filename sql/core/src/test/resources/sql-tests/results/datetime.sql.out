@@ -134,7 +134,7 @@ struct<CAST(TIMESTAMP '2011-11-11 11:11:11' - INTERVAL '2 days' AS TIMESTAMP):ti
 -- !query
 select date'2011-11-11 11:11:11' + interval '2' second
 -- !query schema
-struct<CAST(CAST(DATE '2011-11-11' AS TIMESTAMP) + INTERVAL '2 seconds' AS DATE):date>
+struct<DATE '2011-11-11' + INTERVAL '2 seconds':date>
 -- !query output
 2011-11-11
 
@@ -142,7 +142,7 @@ struct<CAST(CAST(DATE '2011-11-11' AS TIMESTAMP) + INTERVAL '2 seconds' AS DATE)
 -- !query
 select date'2011-11-11 11:11:11' - interval '2' second
 -- !query schema
-struct<CAST(CAST(DATE '2011-11-11' AS TIMESTAMP) - INTERVAL '2 seconds' AS DATE):date>
+struct<DATE '2011-11-11' + (- INTERVAL '2 seconds'):date>
 -- !query output
 2011-11-10
 

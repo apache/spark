@@ -127,8 +127,8 @@
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.6</hive.version>
-    <hive23.version>2.3.6</hive23.version>
+    <hive.version>2.3.7</hive.version>
+    <hive23.version>2.3.7</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
@@ -961,6 +961,12 @@
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
         <version>42.2.6</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.ibm.db2</groupId>
+        <artifactId>jcc</artifactId>
+        <version>11.5.0.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>

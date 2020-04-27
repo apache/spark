@@ -78,10 +78,12 @@
   subitems:
     - text: Data Types
       url: sql-ref-datatypes.html
+    - text: Identifiers
+      url: sql-ref-identifier.html
+    - text: Literals
+      url: sql-ref-literals.html
     - text: Null Semantics
       url: sql-ref-null-semantics.html
-    - text: NaN Semantics
-      url: sql-ref-nan-semantics.html
     - text: ANSI Compliance
       url: sql-ref-ansi-compliance.html
       subitems:
@@ -246,6 +248,8 @@
     - text: Functions
       url: sql-ref-functions.html
       subitems:
+      - text: Built-in Functions
+        url: sql-ref-functions-builtin.html
       - text: Scalar UDFs (User-Defined Functions)
         url: sql-ref-functions-udf-scalar.html
       - text: UDAFs (User-Defined Aggregate Functions)
