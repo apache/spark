@@ -154,15 +154,14 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     if (regenerateGoldenFiles) {
       val missingExampleStr = missingExamples.mkString(",")
       val goldenOutput = {
-        s"""## Summary
-           |  - Number of queries: ${outputs.size}
-           |  - Number of expressions that missing example: ${missingExamples.size}
-           |  - Expressions missing examples: $missingExampleStr
-           |## Schema of Built-in Functions
-           || Class name | Function name or alias | Query example | Output schema |
-           || ---------- | ---------------------- | ------------- | ------------- |
-         """.stripMargin +
-         outputBuffer.mkString("\n")
+        "## Summary\n" +
+        s"  - Number of queries: ${outputs.size}\n" +
+        s"  - Number of expressions that missing example: ${missingExamples.size}\n" +
+        s"  - Expressions missing examples: $missingExampleStr\n" +
+        "## Schema of Built-in Functions\n" +
+        "| No | Class name | Function name or alias | Query example | Output schema |\n" +
+        "| -- | ---------- | ---------------------- | ------------- | ------------- |\n" +
+        outputBuffer.mkString("\n")
       }
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
