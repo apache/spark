@@ -108,7 +108,7 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
               domain = NA)
     } else {
       message(gettextf("%s for Hadoop %s found, setting SPARK_HOME to %s",
-                       version, if (hadoopVersion == 'without') 'Free build' else hadoopVersion,
+                       version, if (hadoopVersion == "without") "Free build" else hadoopVersion,
                        packageLocalDir, domain = "R-SparkR"),
               domain = NA)
     }
@@ -141,11 +141,11 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   # or, tar command can return failure code
   success <- tryCatch(untar(tarfile = packageLocalPath, exdir = localDir) == 0,
                      error = function(e) {
-                       message(e, '\n')
+                       message(e, "\n")
                        FALSE
                      },
                      warning = function(w) {
-                       message(w, '\n')
+                       message(w, "\n")
                        FALSE
                      })
   if (!tarExists || overwrite || !success) {
@@ -240,11 +240,11 @@ directDownloadTar <- function(mirrorUrl, version, hadoopVersion, packageName, pa
 downloadUrl <- function(remotePath, localPath) {
   isFail <- tryCatch(download.file(remotePath, localPath),
                      error = function(e) {
-                       message(e, '\n')
+                       message(e, "\n")
                        TRUE
                      },
                      warning = function(w) {
-                       message(w, '\n')
+                       message(w, "\n")
                        TRUE
                      })
   !isFail
