@@ -712,5 +712,31 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       assertNumStateRows(total = 2, updated = 2)
     )
   }
+
+  test("SPARK-27340 Windowed left out join with Alias on TimeWindow") {
+    val (leftInput, df1) = setupStream("left", 2)
+    val (rightInput, df2) = setupStream("right", 3)
+    val left = df1.select('key, window('leftTime, "10 second") as 'leftWindow, 'leftValue)
+    val right = df2.select('key, window('rightTime, "10 second") as 'rightWindow, 'rightValue)
+    val joined = left.join(
+      right,
+      left("key") === right("key") && left("leftWindow") === right("rightWindow"),
+      "left_outer")
+      .select(left("key"), $"leftWindow.end".cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      // Test inner part of the join.
+      MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
+      CheckNewAnswer((3, 10, 6, 9), (4, 10, 8, 12), (5, 10, 10, 15)),
+
+      MultiAddData(leftInput, 21)(rightInput, 22), // watermark = 11, no-data-batch computes nulls
+      CheckNewAnswer(Row(1, 10, 2, null), Row(2, 10, 4, null)),
+      assertNumStateRows(total = 2, updated = 12),
+
+      AddData(leftInput, 22),
+      CheckNewAnswer(Row(22, 30, 44, 66)),
+      assertNumStateRows(total = 3, updated = 1)
+    )
+  }
 }
 
