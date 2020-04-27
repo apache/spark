@@ -5,9 +5,15 @@
 -- !query
 select current_date = current_date(), current_timestamp = current_timestamp()
 -- !query schema
-struct<(current_date() = current_date()):boolean,(current_timestamp() = current_timestamp()):boolean>
+struct<>
 -- !query output
-true	true
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'current_date'(line 1, pos 22)
+
+== SQL ==
+select current_date = current_date(), current_timestamp = current_timestamp()
+----------------------^^^
 
 
 -- !query
@@ -42,16 +48,25 @@ create temporary view ttf1 as select * from values
 -- !query schema
 struct<>
 -- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
 
+no viable alternative at input 'current_date'(line 4, pos 10)
+
+== SQL ==
+create temporary view ttf1 as select * from values
+  (1, 2),
+  (2, 3)
+  as ttf1(current_date, current_timestamp)
+----------^^^
 
 
 -- !query
 select current_date, current_timestamp from ttf1
 -- !query schema
-struct<current_date:int,current_timestamp:int>
+struct<>
 -- !query output
-1	2
-2	3
+org.apache.spark.sql.AnalysisException
+Table or view not found: ttf1; line 1 pos 44
 
 
 -- !query
@@ -68,10 +83,15 @@ struct<>
 -- !query
 select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2
 -- !query schema
-struct<(current_date() = current_date()):boolean,(current_timestamp() = current_timestamp()):boolean,a:int,b:int>
+struct<>
 -- !query output
-true	true	1	2
-true	true	2	3
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'current_date'(line 1, pos 22)
+
+== SQL ==
+select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2
+----------------------^^^
 
 
 -- !query
@@ -94,9 +114,15 @@ struct<weekday(CAST(2007-02-03 AS DATE)):int,weekday(CAST(2009-07-30 AS DATE)):i
 -- !query
 select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01')
 -- !query schema
-struct<year(CAST(1500-01-01 AS DATE)):int,month(CAST(1500-01-01 AS DATE)):int,dayofyear(CAST(1500-01-01 AS DATE)):int>
+struct<>
 -- !query output
-1500	1	1
+org.apache.spark.sql.catalyst.parser.ParseException
+
+no viable alternative at input 'year'(line 1, pos 7)
+
+== SQL ==
+select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01')
+-------^^^
 
 
 -- !query
@@ -134,17 +160,19 @@ struct<CAST(TIMESTAMP '2011-11-11 11:11:11' - INTERVAL '2 days' AS TIMESTAMP):ti
 -- !query
 select date'2011-11-11 11:11:11' + interval '2' second
 -- !query schema
-struct<DATE '2011-11-11' + INTERVAL '2 seconds':date>
+struct<>
 -- !query output
-2011-11-11
+java.lang.IllegalArgumentException
+requirement failed: Cannot add hours, minutes or seconds, milliseconds, microseconds to a date
 
 
 -- !query
 select date'2011-11-11 11:11:11' - interval '2' second
 -- !query schema
-struct<DATE '2011-11-11' + (- INTERVAL '2 seconds'):date>
+struct<>
 -- !query output
-2011-11-10
+java.lang.IllegalArgumentException
+requirement failed: Cannot add hours, minutes or seconds, milliseconds, microseconds to a date
 
 
 -- !query

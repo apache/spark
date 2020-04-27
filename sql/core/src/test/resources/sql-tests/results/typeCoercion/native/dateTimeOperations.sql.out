@@ -118,7 +118,7 @@ struct<CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2 days' AS TIME
 -- !query
 select cast('2017-12-11 09:30:00' as date) + interval 2 day
 -- !query schema
-struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) + INTERVAL '2 days' AS DATE):date>
+struct<CAST(2017-12-11 09:30:00 AS DATE) + INTERVAL '2 days':date>
 -- !query output
 2017-12-13
 
@@ -231,7 +231,7 @@ struct<CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2 days' AS TIME
 -- !query
 select interval 2 day + cast('2017-12-11 09:30:00' as date)
 -- !query schema
-struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) + INTERVAL '2 days' AS DATE):date>
+struct<CAST(2017-12-11 09:30:00 AS DATE) + INTERVAL '2 days':date>
 -- !query output
 2017-12-13
 
@@ -344,6 +344,6 @@ struct<CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - INTERVAL '2 days' AS TIME
 -- !query
 select cast('2017-12-11 09:30:00' as date) - interval 2 day
 -- !query schema
-struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) - INTERVAL '2 days' AS DATE):date>
+struct<CAST(2017-12-11 09:30:00 AS DATE) + (- INTERVAL '2 days'):date>
 -- !query output
 2017-12-09
