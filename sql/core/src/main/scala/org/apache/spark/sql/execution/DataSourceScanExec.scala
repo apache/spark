@@ -75,10 +75,10 @@ trait DataSourceScanExec extends LeafExecNode {
     }
 
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
-     """.stripMargin
+       |""".stripMargin
   }
 
   /**
@@ -377,10 +377,10 @@ case class FileSourceScanExec(
     }
 
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
-     """.stripMargin
+       |""".stripMargin
   }
 
   lazy val inputRDD: RDD[InternalRow] = {
