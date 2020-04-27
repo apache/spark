@@ -433,6 +433,15 @@ case class InSet(
 
   require(hset != null, "hset could not be null")
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!DataType.equalsStructurally(child.dataType, hsetElemType, ignoreNullability = true)) {
+      TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
+        s"${child.dataType.catalogString} != ${hsetElemType.catalogString}")
+    } else {
+      TypeUtils.checkForOrderingExpr(child.dataType, s"function $prettyName")
+    }
+  }
+
   override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)

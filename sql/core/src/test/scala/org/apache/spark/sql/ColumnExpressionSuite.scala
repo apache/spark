@@ -483,6 +483,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           "due to data type mismatch: Arguments must be same type but were").foreach { s =>
             assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
           }
+        val errMsg = intercept[AnalysisException] {
+          df.select($"a".isInCollection(Seq(0, 1).map(new java.sql.Timestamp(_)))).collect()
+        }.getMessage
+        assert(errMsg.contains("Arguments must be same type"))
       }
     }
   }
