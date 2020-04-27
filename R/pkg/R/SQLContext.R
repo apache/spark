@@ -110,7 +110,7 @@ sparkR.conf <- function(key, defaultValue) {
     value <- if (missing(defaultValue)) {
       tryCatch(callJMethod(conf, "get", key),
               error = function(e) {
-                estr = as.character(e)
+                estr <- as.character(e)
                 if (any(grep("java.util.NoSuchElementException", estr, fixed = TRUE))) {
                   stop(paste0("Config '", key, "' is not set"))
                 } else {
