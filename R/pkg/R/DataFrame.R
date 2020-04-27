@@ -1540,22 +1540,9 @@ dapplyInternal <- function(x, func, schema) {
 setClassUnion("characterOrstructType", c("character", "structType"))
 
 #' dapply
-#'
-#' Apply a function to each partition of a SparkDataFrame.
-#'
-#' @param x A SparkDataFrame
-#' @param func A function to be applied to each partition of the SparkDataFrame.
-#'             func should have only one parameter, to which a R data.frame corresponds
-#'             to each partition will be passed.
-#'             The output of func should be a R data.frame.
-#' @param schema The schema of the resulting SparkDataFrame after the function is applied.
-#'               It must match the output of func. Since Spark 2.3, the DDL-formatted string
-#'               is also supported for the schema.
 #' @family SparkDataFrame functions
-#' @rdname dapply
+#' @rdname distributed-group-apply
 #' @aliases dapply,SparkDataFrame,function,characterOrstructType-method
-#' @name dapply
-#' @seealso \link{dapplyCollect}
 #' @examples
 #' \dontrun{
 #'   df <- createDataFrame(iris)
@@ -1578,7 +1565,8 @@ setClassUnion("characterOrstructType", c("character", "structType"))
 #'
 #'   # The schema also can be specified in a DDL-formatted string.
 #'   schema <- "a INT, d DOUBLE, c STRING, d INT"
-#'   df1 <- dapply(
+#'   dapplyCollect combines dapply and collect() to the driver
+#'   df1 <- dapplyCollect(
 #'            df,
 #'            function(x) {
 #'              y <- x[x[1] > 1, ]
@@ -1586,7 +1574,7 @@ setClassUnion("characterOrstructType", c("character", "structType"))
 #'            },
 #'            schema)
 #'
-#'   collect(df1)
+#'   df1
 #'   # the result
 #'   #       a b c d
 #'   #     1 2 2 2 3
@@ -1600,40 +1588,8 @@ setMethod("dapply",
           })
 
 #' dapplyCollect
-#'
-#' Apply a function to each partition of a SparkDataFrame and collect the result back
-#' to R as a data.frame.
-#'
-#' @param x A SparkDataFrame
-#' @param func A function to be applied to each partition of the SparkDataFrame.
-#'             func should have only one parameter, to which a R data.frame corresponds
-#'             to each partition will be passed.
-#'             The output of func should be a R data.frame.
-#' @family SparkDataFrame functions
-#' @rdname dapplyCollect
+#' @rdname distributed-group-apply
 #' @aliases dapplyCollect,SparkDataFrame,function-method
-#' @name dapplyCollect
-#' @seealso \link{dapply}
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(iris)
-#'   ldf <- dapplyCollect(df, function(x) { x })
-#'
-#'   # filter and add a column
-#'   df <- createDataFrame(
-#'           list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
-#'           c("a", "b", "c"))
-#'   ldf <- dapplyCollect(
-#'            df,
-#'            function(x) {
-#'              y <- x[x[1] > 1, ]
-#'              y <- cbind(y, y[1] + 1L)
-#'            })
-#'   # the result
-#'   #       a b c d
-#'   #       2 2 2 3
-#'   #       3 3 3 4
-#' }
 #' @note dapplyCollect since 2.0.0
 setMethod("dapplyCollect",
           signature(x = "SparkDataFrame", func = "function"),
@@ -1656,9 +1612,13 @@ setMethod("dapplyCollect",
 #' the R function to each group. \code{gapplyCollect} further \code{\link{collect}()}s
 #' this to the driver.
 #'
+#' \code{dapply} and \code{dapplyCollect} similarly apply a function to the
+#' existing partitions of a SparkDataFrame.
+#'
 #' @param cols grouping columns.
-#' @param func a function to be applied to each group partition specified by grouping
-#'             column of the SparkDataFrame. See Details.
+#' @param func a function to be applied to each partition (\code{dapply}) or
+#'             group partition specified by grouping column
+#'             (\code{gapply}) of the SparkDataFrame. See Details.
 #' @param schema the schema of the resulting SparkDataFrame after the function is applied.
 #'               The schema must match to output of \code{func}. It has to be defined for each
 #'               output column with preferred output column name and corresponding data type.
@@ -1666,19 +1626,23 @@ setMethod("dapplyCollect",
 #' @return For \code{gapply}, a SparkDataFrame; for \code{gapplyCollect}, a \code{data.frame}
 #' @family SparkDataFrame functions
 #' @aliases gapply,SparkDataFrame-method
-#' @rdname gapply
-#' @name gapply
+#' @rdname distributed-group-apply
+#' @name gapply and dapply
 #' @details
-#' \code{func} is a function of two arguments. The first, usually named \code{key}
-#' (though this is not enforced) corresponds to the grouping key, will be an
+#' For \code{dapply}, \code{func} is a function of one argument, herein \code{x}.
+#' \code{x} will be a local \code{\link{data.frame}} with the data in each partition.
+#'
+#' For \code{gapply}, \code{func} is a function of two arguments. The first, usually
+#' named \code{key} (though this is not enforced) corresponds to the grouping key, will be an
 #' unnamed \code{list} of \code{length(cols)} length-one objects corresponding
 #' to the grouping columns' values for the current group.
 #'
 #' The second, herein \code{x}, will be a local \code{\link{data.frame}} with the
 #' columns of the input not in \code{cols} for the rows corresponding to \code{key}.
 #'
-#' The output of \code{func} must be a \code{data.frame} matching \code{schema} --
-#' in particular this means the names of the output \code{data.frame} are irrelevant
+#' For both \code{gapply} and \code{dapply}, the output of \code{func} must be a
+#' \code{data.frame} matching \code{schema} -- in particular this means the names of
+#' the output \code{data.frame} are irrelevant
 #'
 #' @examples
 #'
@@ -1754,7 +1718,6 @@ setMethod("dapplyCollect",
 #'
 #'}
 #' @note gapply(SparkDataFrame) since 2.0.0
-#' @note gapplyCollect(SparkDataFrame) since 2.0.0
 setMethod("gapply",
           signature(x = "SparkDataFrame"),
           function(x, cols, func, schema) {
@@ -1764,6 +1727,7 @@ setMethod("gapply",
 
 #' @aliases gapplyCollect,SparkDataFrame-method
 #' @rdname gapply
+#' @note gapplyCollect(SparkDataFrame) since 2.0.0
 setMethod("gapplyCollect",
           signature(x = "SparkDataFrame"),
           function(x, cols, func) {

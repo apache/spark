@@ -416,10 +416,10 @@ setGeneric("crossJoin", function(x, y) { standardGeneric("crossJoin") })
 #' @rdname cube
 setGeneric("cube", function(x, ...) { standardGeneric("cube") })
 
-#' @rdname dapply
+#' @rdname distributed-group-apply
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
 
-#' @rdname dapplyCollect
+#' @rdname distributed-group-apply
 setGeneric("dapplyCollect", function(x, func) { standardGeneric("dapplyCollect") })
 
 #' @param x a SparkDataFrame or GroupedData.
