@@ -21,9 +21,9 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.stat.SelectionTestResult
 import org.apache.spark.ml.util._
-import org.apache.spark.sql._
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
 
@@ -185,53 +185,58 @@ private[ml] abstract class PSelector[T <: PSelectorModel[T]]
   /**
    * get the SelectionTestResult for every feature against the label
    */
-  protected[this] def getSelectionTestResult(dataset: Dataset[_]): Array[SelectionTestResult]
+  protected[this] def getSelectionTestResult(df: DataFrame): DataFrame
 
   /**
    * get the indices of the selected features
    */
   protected[this] override def getSelectionIndices(dataset: Dataset[_]): Array[Int] = {
-    val testResult = getSelectionTestResult(dataset)
-      .zipWithIndex
-    val features = $(selectorType) match {
+    val spark = dataset.sparkSession
+    import spark.implicits._
+
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val resultDF = getSelectionTestResult(dataset.toDF)
+
+    def getTopIndices(k: Int): Array[Int] = {
+      resultDF.sort("pValue", "featureIndex")
+        .select("featureIndex")
+        .limit(k)
+        .as[Int]
+        .collect()
+    }
+
+    $(selectorType) match {
       case "numTopFeatures" =>
-        if (testResult.length <= getNumTopFeatures) {
-          testResult
-        } else {
-          testResult
-            .sortBy { case (res, _) => res.pValue }
-            .take(getNumTopFeatures)
-        }
+        getTopIndices($(numTopFeatures))
       case "percentile" =>
-        testResult
-          .sortBy { case (res, _) => res.pValue }
-          .take((testResult.length * getPercentile).toInt)
+        getTopIndices((numFeatures * getPercentile).toInt)
       case "fpr" =>
-        testResult
-          .filter { case (res, _) => res.pValue < getFpr }
+        resultDF.select("featureIndex")
+          .where(col("pValue") < $(fpr))
+          .as[Int].collect()
       case "fdr" =>
         // This uses the Benjamini-Hochberg procedure.
         // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
-        val tempRes = testResult
-          .sortBy { case (res, _) => res.pValue }
-        val selected = tempRes
+        val f = $(fdr) / numFeatures
+        val maxIndex = resultDF.sort("pValue", "featureIndex")
+          .select("pValue")
+          .as[Double].rdd
           .zipWithIndex
-          .filter { case ((res, _), index) =>
-            res.pValue <= getFdr * (index + 1) / testResult.length
-          }
-        if (selected.isEmpty) {
-          Array.empty[(SelectionTestResult, Int)]
-        } else {
-          val maxIndex = selected.map(_._2).max
-          tempRes.take(maxIndex + 1)
-        }
+          .flatMap { case (pValue, index) =>
+            if (pValue <= f * (index + 1)) {
+              Iterator.single(index.toInt)
+            } else Iterator.empty
+          }.fold(-1)(math.max)
+        if (maxIndex >= 0) {
+          getTopIndices(maxIndex + 1)
+        } else Array.emptyIntArray
       case "fwe" =>
-        testResult
-          .filter { case (res, _) => res.pValue < getFwe / testResult.length }
+        resultDF.select("featureIndex")
+          .where(col("pValue") < $(fwe) / numFeatures)
+          .as[Int].collect()
       case errorType =>
         throw new IllegalStateException(s"Unknown Selector Type: $errorType")
     }
-    features.map { case (_, index) => index }
   }
 
   @Since("3.1.0")

@@ -21,9 +21,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.stat.{ChiSquareTest, SelectionTestResult}
+import org.apache.spark.ml.stat.ChiSquareTest
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 
@@ -90,9 +90,8 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   /**
    * get the SelectionTestResult for every feature against the label
    */
-  protected[this] override def getSelectionTestResult(dataset: Dataset[_]):
-    Array[SelectionTestResult] = {
-    ChiSquareTest.testChiSquare(dataset, getFeaturesCol, getLabelCol)
+  protected[this] override def getSelectionTestResult(df: DataFrame): DataFrame = {
+    ChiSquareTest.test(df, getFeaturesCol, getLabelCol, true)
   }
 
   /**

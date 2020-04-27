@@ -21,9 +21,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.stat.{ANOVATest, SelectionTestResult}
+import org.apache.spark.ml.stat.ANOVATest
 import org.apache.spark.ml.util._
-import org.apache.spark.sql._
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 
 /**
@@ -90,9 +90,8 @@ final class ANOVASelector @Since("3.1.0")(@Since("3.1.0") override val uid: Stri
   /**
    * get the SelectionTestResult for every feature against the label
    */
-  protected[this] override def getSelectionTestResult(dataset: Dataset[_]):
-    Array[SelectionTestResult] = {
-    ANOVATest.testClassification(dataset, getFeaturesCol, getLabelCol)
+  protected[this] override def getSelectionTestResult(df: DataFrame): DataFrame = {
+    ANOVATest.test(df, getFeaturesCol, getLabelCol, true)
   }
 
   /**

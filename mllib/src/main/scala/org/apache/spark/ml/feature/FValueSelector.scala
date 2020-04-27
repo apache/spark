@@ -21,9 +21,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.stat.{FValueTest, SelectionTestResult}
+import org.apache.spark.ml.stat.FValueTest
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 
 /**
@@ -90,9 +90,8 @@ final class FValueSelector @Since("3.1.0") (@Since("3.1.0") override val uid: St
   /**
    * get the SelectionTestResult for every feature against the label
    */
-  protected[this] override def getSelectionTestResult(dataset: Dataset[_]):
-    Array[SelectionTestResult] = {
-    FValueTest.testRegression(dataset, getFeaturesCol, getLabelCol)
+  protected[this] override def getSelectionTestResult(df: DataFrame): DataFrame = {
+    FValueTest.test(df, getFeaturesCol, getLabelCol, true)
   }
 
   /**
