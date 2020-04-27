@@ -70,7 +70,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
-      task.run(0, 0, "", null, null)
+      task.run(0, 0, "testTask", null, null)
     }
     assert(TaskContextSuite.completed)
   }
@@ -92,7 +92,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
-      task.run(0, 0, "", null, null)
+      task.run(0, 0, "testTask", null, null)
     }
     assert(TaskContextSuite.lastError.getMessage == "damn error")
   }
@@ -216,7 +216,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // accumulator updates from it.
     val taskMetrics = TaskMetrics.empty
     val task = new Task[Int](0, 0, 0) {
-      context = new TaskContextImpl(0, 0, 0, 0L, 0, "",
+      context = new TaskContextImpl(0, 0, 0, 0L, 0, "testTask",
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,
         SparkEnv.get.metricsSystem,
@@ -239,7 +239,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // accumulator updates from it.
     val taskMetrics = TaskMetrics.registered
     val task = new Task[Int](0, 0, 0) {
-      context = new TaskContextImpl(0, 0, 0, 0L, 0, "",
+      context = new TaskContextImpl(0, 0, 0, 0L, 0, "testTask",
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,
         SparkEnv.get.metricsSystem,

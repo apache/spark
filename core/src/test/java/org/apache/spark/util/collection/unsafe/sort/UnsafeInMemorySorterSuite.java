@@ -153,7 +153,8 @@ public class UnsafeInMemorySorterSuite {
 
     final TestMemoryManager testMemoryManager =
             new TestMemoryManager(sparkConf);
-    final TaskMemoryManager memoryManager = new TaskMemoryManager(testMemoryManager, 0);
+    final TaskMemoryManager memoryManager = new TaskMemoryManager(
+            testMemoryManager, 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, consumer);
     final Object baseObject = dataPage.getBaseObject();

@@ -121,7 +121,7 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSparkSession 
       partitionId = 0,
       taskAttemptId = 98456,
       attemptNumber = 0,
-      taskName = "",
+      taskName = "testTask",
       taskMemoryManager = taskMemMgr,
       localProperties = new Properties,
       metricsSystem = null))
@@ -233,7 +233,7 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSparkSession 
     // which has duplicated keys and the number of entries exceeds its capacity.
     try {
       val context = new TaskContextImpl(0, 0, 0, 0, 0,
-        "", taskMemoryManager, new Properties(), null)
+        "testTask", taskMemoryManager, new Properties(), null)
       TaskContext.setTaskContext(context)
       new UnsafeKVExternalSorter(
         schema,

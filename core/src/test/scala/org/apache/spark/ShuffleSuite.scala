@@ -364,8 +364,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     mapTrackerMaster.registerShuffle(0, 1)
 
     // first attempt -- its successful
-    val context1 =
-      new TaskContextImpl(0, 0, 0, 0L, 0, "", taskMemoryManager, new Properties, metricsSystem)
+    val context1 = new TaskContextImpl(0, 0, 0, 0L, 0, "testTask",
+      taskMemoryManager, new Properties, metricsSystem)
     val writer1 = manager.getWriter[Int, Int](
       shuffleHandle, 0, context1, context1.taskMetrics.shuffleWriteMetrics)
     val data1 = (1 to 10).map { x => x -> x}
@@ -373,8 +373,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // second attempt -- also successful.  We'll write out different data,
     // just to simulate the fact that the records may get written differently
     // depending on what gets spilled, what gets combined, etc.
-    val context2 =
-      new TaskContextImpl(0, 0, 0, 1L, 0, "", taskMemoryManager, new Properties, metricsSystem)
+    val context2 = new TaskContextImpl(0, 0, 0, 1L, 0, "testTask",
+      taskMemoryManager, new Properties, metricsSystem)
     val writer2 = manager.getWriter[Int, Int](
       shuffleHandle, 0, context2, context2.taskMetrics.shuffleWriteMetrics)
     val data2 = (11 to 20).map { x => x -> x}
@@ -409,7 +409,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     }
 
     val taskContext = new TaskContextImpl(
-      1, 0, 0, 2L, 0, "", taskMemoryManager, new Properties, metricsSystem)
+      1, 0, 0, 2L, 0, "testTask", taskMemoryManager, new Properties, metricsSystem)
     val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1, taskContext, metrics)
     TaskContext.unset()

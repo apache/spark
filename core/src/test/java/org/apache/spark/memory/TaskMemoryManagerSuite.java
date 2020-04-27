@@ -47,8 +47,7 @@ public class TaskMemoryManagerSuite {
     final SparkConf conf = new SparkConf()
       .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), true)
       .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 1000L);
-    final TaskMemoryManager manager =
-      new TaskMemoryManager(new TestMemoryManager(conf), 0);
+    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
@@ -206,8 +205,7 @@ public class TaskMemoryManagerSuite {
     final SparkConf conf = new SparkConf()
       .set("spark.unsafe.offHeap", "true")
       .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 1000L);
-    final TaskMemoryManager manager =
-      new TaskMemoryManager(new TestMemoryManager(conf), 0);
+    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     Assert.assertSame(MemoryMode.OFF_HEAP, manager.tungstenMemoryMode);
   }
 
