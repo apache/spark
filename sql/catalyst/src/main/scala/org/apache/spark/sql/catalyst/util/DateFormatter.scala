@@ -66,8 +66,7 @@ trait LegacyDateFormatter extends DateFormatter {
   def formatDate(d: Date): String
 
   override def parse(s: String): Int = {
-    val milliseconds = parseToDate(s).getTime
-    DateTimeUtils.millisToDays(milliseconds)
+    fromJavaDate(new java.sql.Date(parseToDate(s).getTime))
   }
 
   override def format(days: Int): String = {
