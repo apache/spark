@@ -60,6 +60,22 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
     withDefaultTimeZone(LA) {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId) {
         val N = 10000000
+        runBenchmark("datetime +/- interval") {
+          val ts = "cast(id as timestamp)"
+          val dt = s"cast($ts as date)"
+          run(N, "date + interval(m)", s"$dt + interval 1 month")
+          run(N, "date + interval(m, d)", s"$dt + interval 1 month 2 day")
+          run(N, "date + interval(m, d, ms)", s"$dt + interval 1 month 2 day 5 hour")
+          run(N, "date - interval(m)", s"$dt - interval 1 month")
+          run(N, "date - interval(m, d)", s"$dt - interval 1 month 2 day")
+          run(N, "date - interval(m, d, ms)", s"$dt - interval 1 month 2 day 5 hour")
+          run(N, "timestamp + interval(m)", s"$ts + interval 1 month")
+          run(N, "timestamp + interval(m, d)", s"$ts + interval 1 month 2 day")
+          run(N, "timestamp + interval(m, d, ms)", s"$ts + interval 1 month 2 day 5 hour")
+          run(N, "timestamp - interval(m)", s"$ts - interval 1 month")
+          run(N, "timestamp - interval(m, d)", s"$ts - interval 1 month 2 day")
+          run(N, "timestamp - interval(m, d, ms)", s"$ts - interval 1 month 2 day 5 hour")
+        }
         runBenchmark("Extract components") {
           run(N, "cast to timestamp", "cast(id as timestamp)")
           run(N, "year")
