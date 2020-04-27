@@ -138,7 +138,7 @@ private[ml] class BlockHingeAggregator(
   }
 
   @transient private lazy val intercept =
-    if (fitIntercept) coefficientsArray(numFeatures) else 0.0
+    if (fitIntercept) coefficientsArray.last else 0.0
 
   @transient private lazy val linearGradSumVec =
     if (fitIntercept) Vectors.zeros(numFeatures).toDense else null
@@ -161,15 +161,13 @@ private[ml] class BlockHingeAggregator(
 
     if (block.weightIter.forall(_ == 0)) return this
     val size = block.size
-    val localGradientSumArray = gradientSumArray
 
     // vec/arr here represents dotProducts
     val vec = if (size == blockSize) auxiliaryVec else Vectors.zeros(size).toDense
     val arr = vec.values
 
     if (fitIntercept && intercept != 0) {
-      var i = 0
-      while (i < size) { arr(i) = intercept; i += 1 }
+      java.util.Arrays.fill(arr, intercept)
       BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
     } else {
       BLAS.gemv(1.0, block.matrix, linear, 0.0, vec)
@@ -206,16 +204,16 @@ private[ml] class BlockHingeAggregator(
     block.matrix match {
       case dm: DenseMatrix =>
         BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
-          arr, 1, 1.0, localGradientSumArray, 1)
-        if (fitIntercept) localGradientSumArray(numFeatures) += arr.sum
+          arr, 1, 1.0, gradientSumArray, 1)
+        if (fitIntercept) gradientSumArray(numFeatures) += arr.sum
 
       case sm: SparseMatrix if fitIntercept =>
         BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
-        linearGradSumVec.foreachNonZero { (i, v) => localGradientSumArray(i) += v }
-        localGradientSumArray(numFeatures) += arr.sum
+        BLAS.nativeBLAS.daxpy(numFeatures, 1.0, linearGradSumVec.values, 1, gradientSumArray, 1)
+        gradientSumArray(numFeatures) += arr.sum
 
       case sm: SparseMatrix if !fitIntercept =>
-        val gradSumVec = new DenseVector(localGradientSumArray)
+        val gradSumVec = new DenseVector(gradientSumArray)
         BLAS.gemv(1.0, sm.transpose, vec, 1.0, gradSumVec)
     }
 

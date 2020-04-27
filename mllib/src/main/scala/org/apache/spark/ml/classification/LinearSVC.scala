@@ -242,19 +242,18 @@ class LinearSVC @Since("2.2.0") (
        Note that the intercept in scaled space and original space is the same;
        as a result, no scaling is needed.
      */
-    val state = if ($(blockSize) == 1) {
+    val rawCoefficients = if ($(blockSize) == 1) {
       trainOnRows(instances, featuresStd, regularization, optimizer)
     } else {
       trainOnBlocks(instances, featuresStd, regularization, optimizer)
     }
     if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
 
-    if (state == null) {
+    if (rawCoefficients == null) {
       val msg = s"${optimizer.getClass.getName} failed."
       instr.logError(msg)
       throw new SparkException(msg)
     }
-    val rawCoefficients = state.x.toArray
 
     val coefficientArray = Array.tabulate(numFeatures) { i =>
       if (featuresStd(i) != 0.0) rawCoefficients(i) / featuresStd(i) else 0.0
@@ -267,7 +266,7 @@ class LinearSVC @Since("2.2.0") (
       instances: RDD[Instance],
       featuresStd: Array[Double],
       regularization: Option[L2Regularization],
-      optimizer: BreezeOWLQN[Int, BDV[Double]]): optimizer.State = {
+      optimizer: BreezeOWLQN[Int, BDV[Double]]): Array[Double] = {
     val numFeatures = featuresStd.length
     val numFeaturesPlusIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
 
@@ -287,14 +286,14 @@ class LinearSVC @Since("2.2.0") (
     }
     bcFeaturesStd.destroy()
 
-    state
+    if (state == null) null else state.x.toArray
   }
 
   private def trainOnBlocks(
       instances: RDD[Instance],
       featuresStd: Array[Double],
       regularization: Option[L2Regularization],
-      optimizer: BreezeOWLQN[Int, BDV[Double]]): optimizer.State = {
+      optimizer: BreezeOWLQN[Int, BDV[Double]]): Array[Double] = {
     val numFeatures = featuresStd.length
     val numFeaturesPlusIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
 
@@ -331,9 +330,8 @@ class LinearSVC @Since("2.2.0") (
     blocks.unpersist()
     bcFeaturesStd.destroy()
 
-    state
+    if (state == null) null else state.x.toArray
   }
-
 }
 
 @Since("2.2.0")
