@@ -54,7 +54,7 @@ private[sql] object PythonSQLUtils extends Logging {
       ScalaReflection.mirror.reflectModule(symbol).instance
     } catch {
       case NonFatal(e) =>
-        logError("Cannot generated sql configurations from hive module", e)
+        logWarning("Cannot generated sql configurations from hive module", e)
     }
     conf.getAllDefinedConfs
   }
