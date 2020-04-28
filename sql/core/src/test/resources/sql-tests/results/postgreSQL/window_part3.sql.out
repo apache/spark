@@ -294,7 +294,7 @@ SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE and HAVING clauses;
+It is not allowed to use window functions inside WHERE clause;
 
 
 -- !query
@@ -341,7 +341,7 @@ SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE and HAVING clauses;
+It is not allowed to use window functions inside WHERE clause;
 
 
 -- !query
@@ -350,7 +350,7 @@ SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random())
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE and HAVING clauses;
+It is not allowed to use window functions inside WHERE clause;
 
 
 -- !query
