@@ -122,7 +122,7 @@ writeObject.list <- function(object, con, writeType = TRUE) {
     writeObject(0L, con) # i.e., length(object)
     return(invisible())
   }
-  serde_types = unique(sapply(object, getSerdeType))
+  serde_types <- unique(sapply(object, getSerdeType))
   if (length(serde_types) == 1L) {
     # getSerdeType has already recursively searched object & found
     #   any "node" with "real" data has the same type, so we're writing an array
