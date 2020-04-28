@@ -229,7 +229,8 @@ gapplyInternal <- function(x, func, schema) {
   if (is.character(schema)) {
     schema <- structType(schema)
   }
-  if (is_arrow_conf_set()) {
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
+  if (arrowEnabled) {
     if (inherits(schema, "structType")) {
       checkSchemaInArrow(schema)
     } else if (is.null(schema)) {
