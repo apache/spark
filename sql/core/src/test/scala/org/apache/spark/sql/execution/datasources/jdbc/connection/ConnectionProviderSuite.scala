@@ -20,14 +20,6 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import javax.security.auth.login.Configuration
 
 class ConnectionProviderSuite extends ConnectionProviderSuiteBase {
-  override def afterEach(): Unit = {
-    try {
-      Configuration.setConfiguration(null)
-    } finally {
-      super.afterEach()
-    }
-  }
-
   test("Multiple security configs must be reachable") {
     Configuration.setConfiguration(null)
     val postgresDriver = registerDriver(PostgresConnectionProvider.driverClass)
