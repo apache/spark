@@ -126,9 +126,11 @@ writeObject.list <- function(object, con, writeType = TRUE) {
   if (has_unique_serde_type(object)) {
     # list(1L) is treated as an array, but unlist would treat it as scalar
     if (length(object) == 1L) {
+      object = object[[1L]]
       # writeType needs length>1 to treat as array
-      writeType(vector(mode(object), 2L), con)
-      return(writeObject(object[[1L]], con, FALSE))
+      writeType(vector(typeof(object), 2L), con)
+      writeObject(1L, con, FALSE)
+      return(writeObject(object, con, FALSE))
     } else {
       return(writeObject(unlist(object, recursive = FALSE), con, writeType))
     }
@@ -158,7 +160,10 @@ writeObject.environment <- function(object, con, writeType = TRUE) {
   writeObject(len, con, writeType = FALSE)
   if (len > 0L) {
     envObj <- ls(object)
-    writeObject(envObj, con)
+    # vector of names for environment doesn't include the array marker,
+    #   so manually write the character marker & then the names object itself
+    writeType("", con)
+    writeObject(envObj, con, writeType = FALSE)
     writeObject(mget(envObj, object), con, writeType = FALSE)
   }
 }
@@ -222,29 +227,28 @@ writeType.default <- function(object, con) {
 
 # 'is.na' only handles atomic vectors, lists and pairlists;
 #   all atomic classes except complex are handled; complex will error
+
+# typically, non-scalar value written as array; array writes array marker,
+#   then the component type, then the length, then the elements. the exception
+#   is for writeObject.environment, which writes the names of the objects
+#   without an array marker
+atomic_write_type <- function(object, con, r) {
+  if (length(object) > 1L) {
+    writeBin(as.raw(0x61), con)
+  } else if (is.na(object)) return(writeBin(as.raw(0x6e), con))
+  writeBin(r, con)
+}
 writeType.integer <- function(object, con) {
-  # non-scalar value written as array
-  if (length(object) > 1L) return(writeBin(as.raw(0x61), con))
-  if (is.na(object)) return(writeBin(as.raw(0x6e), con))
-  writeBin(as.raw(0x69), con)
+  atomic_write_type(object, con, as.raw(0x69))
 }
 writeType.character <- function(object, con) {
-  # non-scalar value written as array
-  if (length(object) > 1L) return(writeBin(as.raw(0x61), con))
-  if (is.na(object)) return(writeBin(as.raw(0x6e), con))
-  writeBin(as.raw(0x63), con)
+  atomic_write_type(object, con, as.raw(0x63))
 }
 writeType.logical <- function(object, con) {
-  # non-scalar value written as array
-  if (length(object) > 1L) return(writeBin(as.raw(0x61), con))
-  if (is.na(object)) return(writeBin(as.raw(0x6e), con))
-  writeBin(as.raw(0x62), con)
+  atomic_write_type(object, con, as.raw(0x62))
 }
 writeType.numeric <- function(object, con) {
-  # non-scalar value written as array
-  if (length(object) > 1L) return(writeBin(as.raw(0x61), con))
-  if (is.na(object)) return(writeBin(as.raw(0x6e), con))
-  writeBin(as.raw(0x64), con)
+  atomic_write_type(object, con, as.raw(0x64))
 }
 writeType.raw <- function(object, con) {
   writeBin(as.raw(0x72), con)
