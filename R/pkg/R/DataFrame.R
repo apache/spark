@@ -1226,8 +1226,7 @@ setMethod("collect",
               # empty data.frame with 0 columns and 0 rows
               data.frame()
             } else if (useArrow) {
-              requireNamespace1 <- requireNamespace
-              if (requireNamespace1("arrow", quietly = TRUE)) {
+              if (requireNamespace("arrow", quietly = TRUE)) {
                 read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
                 # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
                 useAsTibble <- exists("as_tibble", envir = asNamespace("arrow"))
