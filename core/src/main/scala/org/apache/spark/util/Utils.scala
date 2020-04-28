@@ -293,7 +293,7 @@ private[spark] object Utils extends Logging {
    * Create a directory inside the given parent directory. The directory is guaranteed to be
    * newly created, and is not marked for automatic deletion.
    */
-  def createDirectory(root: String, namePrefix: String = null): File = {
+  def createDirectory(root: String, namePrefix: String = "spark"): File = {
     var attempts = 0
     val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
     var dir: File = null
