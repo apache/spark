@@ -37,7 +37,7 @@
 
 getSerdeType <- function(object) {
   type <- class(object)[[1L]]
-  if (is.atomic(object) & !is.raw(object) & length(object) > 1L) {
+  if (is.atomic(object) && !is.raw(object) && length(object) > 1L) {
     "array"
   } else if (type != "list") {
      type
@@ -56,6 +56,8 @@ has_unique_serde_type = function(object) {
 }
 
 # NOTE: In R vectors have same type as objects
+# NOTE: handle writeType in the respective methods because of
+#         some minor idiosyncrasies, e.g. handling of writeObject(list(), con)
 writeObject <- function(object, con, writeType = TRUE) UseMethod("writeObject")
 writeObject.default <- function(object, con, writeType = TRUE) {
   stop(paste("Unsupported type for serialization", class(object)))
@@ -68,33 +70,42 @@ writeObject.logical <- function(object, con, writeType = TRUE) {
     writeType(object, con)
   }
   # non-scalar value written as array
-  if (length(object) > 1L) return(writeArray(object, con, FALSE))
-  if (is.na(object)) return() # no value for NULL
+  if (length(object) > 1L) {
+    writeObject(length(object), con, writeType = FALSE)
+    for (elem in object) writeBin(as.integer(elem), con, endian = 'big')
+  } else if (is.na(object)) return() # no value for NULL
 
-  writeBin(as.integer(object), con, endian = "big")
+  for (elem in object) writeBin(as.integer(elem), con, endian = "big")
 }
+
 writeObject.character <- function(object, con, writeType = TRUE) {
   if (writeType) {
     writeType(object, con)
   }
   # non-scalar value written as array
-  if (length(object) > 1L) return(writeArray(object, con, FALSE))
-  if (is.na(object)) return() # no value for NULL
+  if (length(object) > 1L) {
+    writeObject(length(object), con, writeType = FALSE)
+  } else if (is.na(object)) return() # no value for NULL
 
   utfVal <- enc2utf8(object)
-  writeObject(as.integer(nchar(utfVal, type = "bytes") + 1L), con, writeType = FALSE)
-  writeBin(utfVal, con, endian = "big", useBytes = TRUE)
+  for (elem in object) {
+    writeObject(as.integer(nchar(elem, type = "bytes") + 1L), con, writeType = FALSE)
+    writeBin(elem, con, endian = "big", useBytes = TRUE)
+  }
 }
+
 writeObject.numeric <- function(object, con, writeType = TRUE) {
   if (writeType) {
     writeType(object, con)
   }
   # non-scalar value written as array
-  if (length(object) > 1L) return(writeArray(object, con, FALSE))
-  if (is.na(object)) return() # no value for NULL
+  if (length(object) > 1L) {
+    writeObject(length(object), con, writeType = FALSE)
+  } else if (is.na(object)) return() # no value for NULL
 
-  writeBin(object, con, endian = "big")
+  for (elem in object) writeBin(elem, con, endian = "big")
 }
+
 writeObject.raw <- function(object, con, writeType = TRUE) {
   if (writeType) {
     writeType(object, con)
@@ -102,23 +113,25 @@ writeObject.raw <- function(object, con, writeType = TRUE) {
   writeObject(length(object), con, writeType = FALSE)
   writeBin(object, con, endian = "big")
 }
+
 writeObject.struct <-
 writeObject.list <- function(object, con, writeType = TRUE) {
   if (has_unique_serde_type(object)) {
-    return(writeArray(object, con, writeType))
+    return(writeObject(unlist(object, recursive = FALSE), con, writeType))
   }
   if (writeType) {
     writeType(object, con)
   }
   writeObject(length(object), con, writeType = FALSE)
-  for (elem in object) writeBin(elem, con, endian = "big")
+  for (elem in object) writeObject(elem, con, writeType = TRUE)
 }
+
 writeObject.jobj <- function(object, con, writeType = TRUE) {
-  if (writeType) {
-    writeType(object, con)
-  }
   if (!isValidJobj(object)) {
     stop("invalid jobj ", object$id)
+  }
+  if (writeType) {
+    writeType(object, con)
   }
   writeObject(object$id, writeType = FALSE)
 }
@@ -131,16 +144,18 @@ writeObject.environment <- function(object, con, writeType = TRUE) {
   writeObject(len, con, writeType = FALSE)
   if (len > 0L) {
     envObj <- ls(object)
-    writeArray(as.list(envObj), con)
+    writeObject(envObj, con)
     writeObject(mget(envObj, object), con, writeType = FALSE)
   }
 }
+
 writeObject.Date <- function(object, con, writeType = TRUE) {
   if (writeType) {
     writeType(object, con)
   }
   writeObject(as.character(object), con, writeType = FALSE)
 }
+
 # covers POSIXct and POSIXt
 writeObject.POSIXt <- function(object, con, writeType = TRUE) {
   if (writeType) {
@@ -222,10 +237,8 @@ writeType.raw <- function(object, con) {
 }
 writeType.list <- function(object, con) {
   # only called from writeObject.list, which already confirmed
-  #   we cannot use writeArray
+  #   we cannot use a single type
   writeBin(as.raw(0x6c), con)
-  # emit TRUE to signal that this object is being treated as a list
-  return(TRUE)
 }
 writeType.struct <- function(object, con) {
   writeBin(as.raw(0x73), con)
@@ -242,19 +255,6 @@ writeType.Date <- function(object, con) {
 # covers POSIXct and POSIXt
 writeType.POSIXt <- function(object, con) {
   writeBin(as.raw(0x74), con)
-}
-
-# Used to pass arrays where all the elements are of the same type
-writeArray <- function(arr, con, writeType = TRUE) {
-  # TODO: Empty lists are given type "character" right now.
-  # This may not work if the Java side expects array of any other type.
-  if (writeType) {
-    writeType(if (length(arr) > 0L) arr[[1L]] else "", con)
-  }
-  writeObject(length(arr), con, writeType = FALSE)
-
-  for (elem in arr) writeObject(elem, con, writeType = FALSE)
-  return(NULL)
 }
 
 # Used to serialize in a list of objects where each
