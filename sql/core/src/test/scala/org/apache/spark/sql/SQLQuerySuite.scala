@@ -3425,6 +3425,28 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
     }
   }
+
+  test("Do not display the seed of rand/randn with no argument in output schema") {
+    def checkIfSeedExistsInExplain(df: DataFrame): Unit = {
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        df.explain()
+      }
+      output.toString.matches("""randn?\(-?[0-9]+\)""")
+    }
+    val df1 = sql("SELECT rand()")
+    assert(df1.schema.head.name === "rand()")
+    checkIfSeedExistsInExplain(df1)
+    val df2 = sql("SELECT rand(1L)")
+    assert(df2.schema.head.name === "rand(1)")
+    checkIfSeedExistsInExplain(df2)
+    val df3 = sql("SELECT randn()")
+    assert(df3.schema.head.name === "randn()")
+    checkIfSeedExistsInExplain(df1)
+    val df4 = sql("SELECT randn(1L)")
+    assert(df4.schema.head.name === "randn(1)")
+    checkIfSeedExistsInExplain(df2)
+  }
 }
 
 case class Foo(bar: Option[String])
