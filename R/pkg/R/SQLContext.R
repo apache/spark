@@ -248,6 +248,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
 createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                             numPartitions = NULL) {
   sparkSession <- getSparkSession()
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
   useArrow <- FALSE
   firstRow <- NULL
 
@@ -268,7 +269,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
     data[] <- lapply(data, cleanCols)
 
     args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
-    if (is_arrow_conf_set()) {
+    if (arrowEnabled) {
       useArrow <- tryCatch({
         stopifnot(length(data) > 0)
         firstRow <- do.call(mapply, append(args, head(data, 1)))[[1]]
