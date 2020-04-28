@@ -50,7 +50,7 @@ public class HeapMemoryAllocator implements MemoryAllocator {
     long alignedSize = numWords * 8L;
     assert (alignedSize >= size);
     if (shouldPool(alignedSize)) {
-      synchronized (this) {
+      synchronized (bufferPoolsBySize) {
         final LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(alignedSize);
         if (pool != null) {
           while (!pool.isEmpty()) {
@@ -103,7 +103,7 @@ public class HeapMemoryAllocator implements MemoryAllocator {
 
     long alignedSize = ((size + 7) / 8) * 8;
     if (shouldPool(alignedSize)) {
-      synchronized (this) {
+      synchronized (bufferPoolsBySize) {
         LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(alignedSize);
         if (pool == null) {
           pool = new LinkedList<>();
