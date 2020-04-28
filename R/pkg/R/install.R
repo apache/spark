@@ -214,9 +214,9 @@ getPreferredMirror <- function(version, packageName) {
                         file.path("spark", version, packageName),
                         ".tgz&as_json=1")
   textLines <- readLines(jsonUrl, warn = FALSE)
-  rowNum <- grep("\"preferred\"", textLines)
+  rowNum <- grep('"preferred"', textLines, fixed = TRUE)
   linePreferred <- textLines[rowNum]
-  matchInfo <- regexpr("\"[A-Za-z][A-Za-z0-9+-.]*://.+\"", linePreferred)
+  matchInfo <- regexpr('"[A-Za-z][A-Za-z0-9+-.]*://.+"', linePreferred)
   if (matchInfo != -1) {
     startPos <- matchInfo + 1
     endPos <- matchInfo + attr(matchInfo, "match.length") - 2
