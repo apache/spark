@@ -656,7 +656,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case MemoryPlan(sink, output) =>
         val encoder = RowEncoder(StructType.fromAttributes(output))
-        LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
+        val toRow = encoder.createSerializer()
+        LocalTableScanExec(output, sink.allData.map(r => toRow(r).copy())) :: Nil
 
       case logical.Distinct(child) =>
         throw new IllegalStateException(

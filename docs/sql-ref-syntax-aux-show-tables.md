@@ -18,6 +18,7 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
 ### Description
 
 The `SHOW TABLES` statement returns all the tables for an optionally specified database.
@@ -26,11 +27,13 @@ pattern. If no database is specified then the tables are returned from the
 current database.
 
 ### Syntax
+
 {% highlight sql %}
 SHOW TABLES [ { FROM | IN } database_name ] [ LIKE 'regex_pattern' ]
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>{ FROM | IN } database_name</em></code></dt>
   <dd>
@@ -50,58 +53,59 @@ SHOW TABLES [ { FROM | IN } database_name ] [ LIKE 'regex_pattern' ]
 </dl>
 
 ### Example
+
 {% highlight sql %}
 -- List all tables in default database
 SHOW TABLES;
-  +-----------+------------+--------------+--+
-  | database  | tableName  | isTemporary  |
-  +-----------+------------+--------------+--+
-  | default   | sam        | false        |
-  | default   | sam1       | false        |
-  | default   | suj        | false        |
-  +-----------+------------+--------------+--+
+  +--------+---------+-----------+
+  |database|tableName|isTemporary|
+  +--------+---------+-----------+
+  | default|      sam|      false|
+  | default|     sam1|      false|
+  | default|      suj|      false|
+  +--------+---------+-----------+
 
 -- List all tables from userdb database 
 SHOW TABLES FROM userdb;
-  +-----------+------------+--------------+--+
-  | database  | tableName  | isTemporary  |
-  +-----------+------------+--------------+--+
-  | userdb    | user1      | false        |
-  | userdb    | user2      | false        |
-  +-----------+------------+--------------+--+
+  +--------+---------+-----------+
+  |database|tableName|isTemporary|
+  +--------+---------+-----------+
+  |  userdb|    user1|      false|
+  |  userdb|    user2|      false|
+  +--------+---------+-----------+
 
 -- List all tables in userdb database
 SHOW TABLES IN userdb;
-  +-----------+------------+--------------+--+
-  | database  | tableName  | isTemporary  |
-  +-----------+------------+--------------+--+
-  | userdb    | user1      | false        |
-  | userdb    | user2      | false        |
-  +-----------+------------+--------------+--+
+  +--------+---------+-----------+
+  |database|tableName|isTemporary|
+  +--------+---------+-----------+
+  |  userdb|    user1|      false|
+  |  userdb|    user2|      false|
+  +--------+---------+-----------+
 
 -- List all tables from default database matching the pattern `sam*`
 SHOW TABLES FROM default LIKE 'sam*';
-  +-----------+------------+--------------+--+
-  | database  | tableName  | isTemporary  |
-  +-----------+------------+--------------+--+
-  | default   | sam        | false        |
-  | default   | sam1       | false        |
-  +-----------+------------+--------------+--+
+  +--------+---------+-----------+
+  |database|tableName|isTemporary|
+  +--------+---------+-----------+
+  | default|      sam|      false|
+  | default|     sam1|      false|
+  +--------+---------+-----------+
   
 -- List all tables matching the pattern `sam*|suj`
 SHOW TABLES LIKE 'sam*|suj';
-  +-----------+------------+--------------+--+
-  | database  | tableName  | isTemporary  |
-  +-----------+------------+--------------+--+
-  | default   | sam        | false        |
-  | default   | sam1       | false        |
-  | default   | suj        | false        |
-  +-----------+------------+--------------+--+
-
+  +--------+---------+-----------+
+  |database|tableName|isTemporary|
+  +--------+---------+-----------+
+  | default|      sam|      false|
+  | default|     sam1|      false|
+  | default|      suj|      false|
+  +--------+---------+-----------+
 {% endhighlight %}
 
-### Related statements
-- [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
-- [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
-- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
-- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+### Related Statements
+
+ * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+ * [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
+ * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+ * [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)

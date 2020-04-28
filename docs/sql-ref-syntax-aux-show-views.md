@@ -18,6 +18,7 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
 ### Description
 
 The `SHOW VIEWS` statement returns all the views for an optionally specified database.

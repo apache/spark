@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -131,20 +133,42 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           import spark.implicits._
           val rowsNum = 5000000
           val numIters = 3
-          val benchmark = new Benchmark("To/from java.sql.Timestamp", rowsNum, output = output)
+          val benchmark = new Benchmark("To/from Java's date-time", rowsNum, output = output)
+          benchmark.addCase("From java.sql.Date", numIters) { _ =>
+            spark.range(rowsNum).map(millis => new Date(millis)).noop()
+          }
+          benchmark.addCase("From java.time.LocalDate", numIters) { _ =>
+            spark.range(rowsNum).map(millis => LocalDate.ofEpochDay(millis / MILLIS_PER_DAY)).noop()
+          }
+          benchmark.addCase("Collect java.sql.Date", numIters) { _ =>
+            spark.range(0, rowsNum, 1, 1).map(millis => new Date(millis)).collect()
+          }
+          benchmark.addCase("Collect java.time.LocalDate", numIters) { _ =>
+            withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+              spark.range(0, rowsNum, 1, 1)
+                .map(millis => LocalDate.ofEpochDay(millis / MILLIS_PER_DAY))
+                .collect()
+            }
+          }
           benchmark.addCase("From java.sql.Timestamp", numIters) { _ =>
-            spark.range(rowsNum)
-              .map(millis => new Timestamp(millis))
-              .noop()
+            spark.range(rowsNum).map(millis => new Timestamp(millis)).noop()
+          }
+          benchmark.addCase("From java.time.Instant", numIters) { _ =>
+            spark.range(rowsNum).map(millis => Instant.ofEpochMilli(millis)).noop()
           }
           benchmark.addCase("Collect longs", numIters) { _ =>
             spark.range(0, rowsNum, 1, 1)
               .collect()
           }
-          benchmark.addCase("Collect timestamps", numIters) { _ =>
-            spark.range(0, rowsNum, 1, 1)
-              .map(millis => new Timestamp(millis))
-              .collect()
+          benchmark.addCase("Collect java.sql.Timestamp", numIters) { _ =>
+            spark.range(0, rowsNum, 1, 1).map(millis => new Timestamp(millis)).collect()
+          }
+          benchmark.addCase("Collect java.time.Instant", numIters) { _ =>
+            withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+              spark.range(0, rowsNum, 1, 1)
+                .map(millis => Instant.ofEpochMilli(millis))
+                .collect()
+            }
           }
           benchmark.run()
         }

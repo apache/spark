@@ -29,7 +29,6 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
-import org.apache.spark.util.Utils
 
 /**
  * Resource profile to associate with an RDD. A ResourceProfile allows the user to
@@ -74,6 +73,10 @@ class ResourceProfile(
 
   private[spark] def getTaskCpus: Option[Int] = {
     taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
+  }
+
+  private[spark] def getPySparkMemory: Option[Long] = {
+    executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount.toLong)
   }
 
   /*
@@ -330,4 +333,7 @@ object ResourceProfile extends Logging {
   private[spark] def getTaskCpusOrDefaultForProfile(rp: ResourceProfile, conf: SparkConf): Int = {
     rp.getTaskCpus.getOrElse(conf.get(CPUS_PER_TASK))
   }
+
+  private[spark] val PYSPARK_MEMORY_LOCAL_PROPERTY = "resource.pyspark.memory"
+  private[spark] val EXECUTOR_CORES_LOCAL_PROPERTY = "resource.executor.cores"
 }

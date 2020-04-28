@@ -69,18 +69,15 @@ When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric
 {% highlight sql %}
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
-
   java.lang.ArithmeticException: integer overflow
 
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
-
   +----------------+
   |(2147483647 + 1)|
   +----------------+
   |     -2147483648|
   +----------------+
-
 {% endhighlight %}
 
 ### Type Conversion
@@ -97,16 +94,13 @@ In future releases, the behaviour of type coercion might change along with the o
 
 -- `spark.sql.ansi.enabled=true`
 SELECT CAST('a' AS INT);
-
   java.lang.NumberFormatException: invalid input syntax for type numeric: a
 
 SELECT CAST(2147483648L AS INT);
-
   java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
 
 -- `spark.sql.ansi.enabled=false` (This is a default behaviour)
 SELECT CAST('a' AS INT);
-
   +--------------+
   |CAST(a AS INT)|
   +--------------+
@@ -114,7 +108,6 @@ SELECT CAST('a' AS INT);
   +--------------+
 
 SELECT CAST(2147483648L AS INT);
-
   +-----------------------+
   |CAST(2147483648 AS INT)|
   +-----------------------+
@@ -126,20 +119,17 @@ CREATE TABLE t (v INT);
 
 -- `spark.sql.storeAssignmentPolicy=ANSI`
 INSERT INTO t VALUES ('1');
-
   org.apache.spark.sql.AnalysisException: Cannot write incompatible data to table '`default`.`t`':
   - Cannot safely cast 'v': StringType to IntegerType;
 
 -- `spark.sql.storeAssignmentPolicy=LEGACY` (This is a legacy behaviour until Spark 2.x)
 INSERT INTO t VALUES ('1');
 SELECT * FROM t;
-
   +---+
   |  v|
   +---+
   |  1|
   +---+
-
 {% endhighlight %}
 
 ### SQL Functions

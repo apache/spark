@@ -31,9 +31,9 @@ Note: `TABLESAMPLE` returns the approximate number of rows or fraction requested
 ### Syntax
 
 {% highlight sql %}
-    TABLESAMPLE ((integer_expression | decimal_expression) PERCENT)
-        | TABLESAMPLE (integer_expression ROWS)
-        | TABLESAMPLE (BUCKET integer_expression OUT OF integer_expression)
+TABLESAMPLE ((integer_expression | decimal_expression) PERCENT)
+    | TABLESAMPLE (integer_expression ROWS)
+    | TABLESAMPLE (BUCKET integer_expression OUT OF integer_expression)
 {% endhighlight %}
 
 ### Examples

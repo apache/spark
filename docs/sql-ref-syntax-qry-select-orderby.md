@@ -18,16 +18,21 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
+### Description
+
 The <code>ORDER BY</code> clause is used to return the result rows in a sorted manner
 in the user specified order. Unlike the [SORT BY](sql-ref-syntax-qry-select-sortby.html)
 clause, this clause guarantees a total order in the output.
 
 ### Syntax
+
 {% highlight sql %}
 ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ... ] }
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>ORDER BY</em></code></dt>
   <dd>
@@ -64,6 +69,7 @@ ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ... ] }
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 CREATE TABLE person (id INT, name STRING, age INT);
 INSERT INTO person VALUES
@@ -75,77 +81,73 @@ INSERT INTO person VALUES
 
 -- Sort rows by age. By default rows are sorted in ascending manner with NULL FIRST.
 SELECT name, age FROM person ORDER BY age;
-
   +-----+----+
-  |name |age |
+  | name| age|
   +-----+----+
   |Jerry|null|
-  |Mary |null|
-  |John |30  |
-  |Dan  |50  |
-  |Mike |80  |
+  | Mary|null|
+  | John|  30|
+  |  Dan|  50|
+  | Mike|  80|
   +-----+----+
 
 -- Sort rows in ascending manner keeping null values to be last.
 SELECT name, age FROM person ORDER BY age NULLS LAST;
-
   +-----+----+
-  |name |age |
+  | name| age|
   +-----+----+
-  |John |30  |
-  |Dan  |50  |
-  |Mike |80  |
-  |Mary |null|
+  | John|  30|
+  |  Dan|  50|
+  | Mike|  80|
+  | Mary|null|
   |Jerry|null|
   +-----+----+
 
 -- Sort rows by age in descending manner, which defaults to NULL LAST.
 SELECT name, age FROM person ORDER BY age DESC;
-
   +-----+----+
-  |name |age |
+  | name| age|
   +-----+----+
-  |Mike |80  |
-  |Dan  |50  |
-  |John |30  |
+  | Mike|  80|
+  |  Dan|  50|
+  | John|  30|
   |Jerry|null|
-  |Mary |null|
+  | Mary|null|
   +-----+----+
 
 -- Sort rows in ascending manner keeping null values to be first.
 SELECT name, age FROM person ORDER BY age DESC NULLS FIRST;
-
   +-----+----+
-  |name |age |
+  | name| age|
   +-----+----+
   |Jerry|null|
-  |Mary |null|
-  |Mike |80  |
-  |Dan  |50  |
-  |John |30  |
+  | Mary|null|
+  | Mike|  80|
+  |  Dan|  50|
+  | John|  30|
   +-----+----+
 
 -- Sort rows based on more than one column with each column having different
 -- sort direction.
 SELECT * FROM person ORDER BY name ASC, age DESC;
-
   +---+-----+----+
-  |id |name |age |
+  | id| name| age|
   +---+-----+----+
-  |500|Dan  |50  |
+  |500|  Dan|  50|
   |400|Jerry|null|
-  |100|John |30  |
-  |200|Mary |null|
-  |300|Mike |80  |
+  |100| John|  30|
+  |200| Mary|null|
+  |300| Mike|  80|
   +---+-----+----+
 {% endhighlight %}
 
-### Related Clauses
-- [SELECT Main](sql-ref-syntax-qry-select.html)
-- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
-- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
-- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
-- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
-- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
-- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
-- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+### Related Statements
+
+ * [SELECT Main](sql-ref-syntax-qry-select.html)
+ * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+ * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+ * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+ * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+ * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+ * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+ * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

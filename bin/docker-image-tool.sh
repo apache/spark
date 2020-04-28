@@ -248,6 +248,10 @@ Examples:
   - Build and push image with tag "v2.3.0" to docker.io/myrepo
     $0 -r docker.io/myrepo -t v2.3.0 build
     $0 -r docker.io/myrepo -t v2.3.0 push
+
+  - Build and push JDK11-based image with tag "v3.0.0" to docker.io/myrepo
+    $0 -r docker.io/myrepo -t v3.0.0 -b java_image_tag=11-jre-slim build
+    $0 -r docker.io/myrepo -t v3.0.0 push
 EOF
 }
 
