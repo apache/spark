@@ -35,20 +35,125 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * Params for [[Selector]] and [[SelectorModel]].
  */
 private[feature] trait SelectorParams extends Params
-  with HasFeaturesCol with HasOutputCol {
+  with HasFeaturesCol with HasLabelCol with HasOutputCol {
+
+  /**
+   * Number of features that selector will select, ordered by ascending p-value. If the
+   * number of features is less than numTopFeatures, then this will select all features.
+   * Only applicable when selectorType = "numTopFeatures".
+   * The default value of numTopFeatures is 50.
+   *
+   * @group param
+   */
+  @Since("3.1.0")
+  final val numTopFeatures = new IntParam(this, "numTopFeatures",
+    "Number of features that selector will select, ordered by ascending p-value. If the" +
+      " number of features is < numTopFeatures, then this will select all features.",
+    ParamValidators.gtEq(1))
+  setDefault(numTopFeatures -> 50)
+
+  /** @group getParam */
+  @Since("3.1.0")
+  def getNumTopFeatures: Int = $(numTopFeatures)
+
+  /**
+   * Percentile of features that selector will select, ordered by ascending p-value.
+   * Only applicable when selectorType = "percentile".
+   * Default value is 0.1.
+   * @group param
+   */
+  @Since("3.1.0")
+  final val percentile = new DoubleParam(this, "percentile",
+    "Percentile of features that selector will select, ordered by ascending p-value.",
+    ParamValidators.inRange(0, 1))
+  setDefault(percentile -> 0.1)
+
+  /** @group getParam */
+  @Since("3.1.0")
+  def getPercentile: Double = $(percentile)
+
+  /**
+   * The highest p-value for features to be kept.
+   * Only applicable when selectorType = "fpr".
+   * Default value is 0.05.
+   * @group param
+   */
+  @Since("3.1.0")
+  final val fpr = new DoubleParam(this, "fpr", "The higest p-value for features to be kept.",
+    ParamValidators.inRange(0, 1))
+  setDefault(fpr -> 0.05)
+
+  /** @group getParam */
+  @Since("3.1.0")
+  def getFpr: Double = $(fpr)
+
+  /**
+   * The upper bound of the expected false discovery rate.
+   * Only applicable when selectorType = "fdr".
+   * Default value is 0.05.
+   * @group param
+   */
+  @Since("3.1.0")
+  final val fdr = new DoubleParam(this, "fdr",
+    "The upper bound of the expected false discovery rate.", ParamValidators.inRange(0, 1))
+  setDefault(fdr -> 0.05)
+
+  /** @group getParam */
+  def getFdr: Double = $(fdr)
+
+  /**
+   * The upper bound of the expected family-wise error rate.
+   * Only applicable when selectorType = "fwe".
+   * Default value is 0.05.
+   * @group param
+   */
+  @Since("3.1.0")
+  final val fwe = new DoubleParam(this, "fwe",
+    "The upper bound of the expected family-wise error rate.", ParamValidators.inRange(0, 1))
+  setDefault(fwe -> 0.05)
+
+  /** @group getParam */
+  def getFwe: Double = $(fwe)
+
+  /**
+   * The selector type.
+   * Supported options: "numTopFeatures" (default), "percentile", "fpr", "fdr", "fwe"
+   * @group param
+   */
+  @Since("3.1.0")
+  final val selectorType = new Param[String](this, "selectorType",
+    "The selector type. Supported options: numTopFeatures, percentile, fpr, fdr, fwe",
+    ParamValidators.inArray(Array("numTopFeatures", "percentile", "fpr", "fdr",
+      "fwe")))
+  setDefault(selectorType -> "numTopFeatures")
+
+  /** @group getParam */
+  @Since("3.1.0")
+  def getSelectorType: String = $(selectorType)
+
 }
 
 /**
- * Super class for all the feature selectors. The following selectors are supported:
+ * Super class for feature selectors.
  * 1. Chi-Square Selector
  * This feature selector is for categorical features and categorical labels.
  * 2. ANOVA F-value Classification Selector
  * This feature selector is for continuous features and categorical labels.
  * 3. Regression F-value Selector
  * This feature selector is for continuous features and continuous labels.
- * 4. Variance Threshold Selector
- * This feature selector removes all low-variance features. Features with a
- * variance not greater than the threshold will be removed.
+ * The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
+ * `fdr`, `fwe`.
+ *  - `numTopFeatures` chooses a fixed number of top features according to a hypothesis.
+ *  - `percentile` is similar but chooses a fraction of all features instead of a fixed number.
+ *  - `fpr` chooses all features whose p-value are below a threshold, thus controlling the false
+ *    positive rate of selection.
+ *  - `fdr` uses the [Benjamini-Hochberg procedure]
+ *    (https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure)
+ *    to choose all features whose false discovery rate is below a threshold.
+ *  - `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
+ *    1/numFeatures, thus controlling the family-wise error rate of selection.
+ * By default, the selection method is `numTopFeatures`, with the default number of top features
+ * set to 50.
  */
 @Since("3.1.0")
 private[ml] abstract class Selector[T <: SelectorModel[T]]
@@ -62,10 +167,38 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
   @Since("3.1.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group setParam */
+  @Since("3.1.0")
+  def setNumTopFeatures(value: Int): this.type = set(numTopFeatures, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setPercentile(value: Double): this.type = set(percentile, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setFpr(value: Double): this.type = set(fpr, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setFdr(value: Double): this.type = set(fdr, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setFwe(value: Double): this.type = set(fwe, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setSelectorType(value: String): this.type = set(selectorType, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
   /**
-   * get the indices of the selected features
+   * get the SelectionTestResult for every feature against the label
    */
-  protected[this] def getSelectionIndices(dataset: Dataset[_]): Array[Int]
+  protected[this] def getSelectionTestResult(df: DataFrame): DataFrame
 
   /**
    * Create a new instance of concrete SelectorModel.
@@ -79,11 +212,66 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
   @Since("3.1.0")
   override def fit(dataset: Dataset[_]): T = {
     transformSchema(dataset.schema, logging = true)
-    val indices = getSelectionIndices(dataset).sorted
+    val spark = dataset.sparkSession
+    import spark.implicits._
 
-    copyValues(createSelectorModel(uid, indices)
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val resultDF = getSelectionTestResult(dataset.toDF)
+
+    def getTopIndices(k: Int): Array[Int] = {
+      resultDF.sort("pValue", "featureIndex")
+        .select("featureIndex")
+        .limit(k)
+        .as[Int]
+        .collect()
+    }
+
+    val indices = $(selectorType) match {
+      case "numTopFeatures" =>
+        getTopIndices($(numTopFeatures))
+      case "percentile" =>
+        getTopIndices((numFeatures * getPercentile).toInt)
+      case "fpr" =>
+        resultDF.select("featureIndex")
+          .where(col("pValue") < $(fpr))
+          .as[Int].collect()
+      case "fdr" =>
+        // This uses the Benjamini-Hochberg procedure.
+        // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
+        val f = $(fdr) / numFeatures
+        val maxIndex = resultDF.sort("pValue", "featureIndex")
+          .select("pValue")
+          .as[Double].rdd
+          .zipWithIndex
+          .flatMap { case (pValue, index) =>
+            if (pValue <= f * (index + 1)) {
+              Iterator.single(index.toInt)
+            } else Iterator.empty
+          }.fold(-1)(math.max)
+        if (maxIndex >= 0) {
+          getTopIndices(maxIndex + 1)
+        } else Array.emptyIntArray
+      case "fwe" =>
+        resultDF.select("featureIndex")
+          .where(col("pValue") < $(fwe) / numFeatures)
+          .as[Int].collect()
+      case errorType =>
+        throw new IllegalStateException(s"Unknown Selector Type: $errorType")
+    }
+
+    copyValues(createSelectorModel(uid, indices.sorted)
       .setParent(this))
   }
+
+  @Since("3.1.0")
+  override def transformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.checkNumericType(schema, $(labelCol))
+    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+  }
+
+  @Since("3.1.0")
+  override def copy(extra: ParamMap): Selector[T] = defaultCopy(extra)
 }
 
 /**
@@ -113,11 +301,32 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
+    SelectorObject.transform(dataset, selectedFeatures, outputSchema, $(outputCol), $(featuresCol))
+  }
+
+  @Since("3.1.0")
+  override def transformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    val newField =
+      SelectorObject.prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol))
+    SchemaUtils.appendColumn(schema, newField)
+  }
+}
+
+object SelectorObject {
+
+  private[ml] def transform(
+      dataset: Dataset[_],
+      selectedFeatures: Array[Int],
+      outputSchema: StructType,
+      outputCol: String,
+      featuresCol: String): DataFrame = {
     val newSize = selectedFeatures.length
     val func = { vector: Vector =>
       vector match {
         case SparseVector(_, indices, values) =>
-          val (newIndices, newValues) = compressSparse(indices, values)
+          val (newIndices, newValues) =
+            SelectorObject.compressSparse(indices, values, selectedFeatures)
           Vectors.sparse(newSize, newIndices, newValues)
         case DenseVector(values) =>
           Vectors.dense(selectedFeatures.map(values))
@@ -128,35 +337,33 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
     }
 
     val transformer = udf(func)
-    dataset.withColumn($(outputCol), transformer(col($(featuresCol))),
-      outputSchema($(outputCol)).metadata)
-  }
-
-  @Since("3.1.0")
-  override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    val newField = prepOutputField(schema)
-    SchemaUtils.appendColumn(schema, newField)
+    dataset.withColumn(outputCol, transformer(col(featuresCol)),
+      outputSchema(outputCol).metadata)
   }
 
   /**
    * Prepare the output column field, including per-feature metadata.
    */
-  private def prepOutputField(schema: StructType): StructField = {
+  private[ml] def prepOutputField(
+      schema: StructType,
+      selectedFeatures: Array[Int],
+      outputCol: String,
+      featuresCol: String): StructField = {
     val selector = selectedFeatures.toSet
-    val origAttrGroup = AttributeGroup.fromStructField(schema($(featuresCol)))
+    val origAttrGroup = AttributeGroup.fromStructField(schema(featuresCol))
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
     } else {
       Array.fill[Attribute](selector.size)(NominalAttribute.defaultAttr)
     }
-    val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
+    val newAttributeGroup = new AttributeGroup(outputCol, featureAttributes)
     newAttributeGroup.toStructField()
   }
 
   private[ml] def compressSparse(
       indices: Array[Int],
-      values: Array[Double]): (Array[Int], Array[Double]) = {
+      values: Array[Double],
+      selectedFeatures: Array[Int]): (Array[Int], Array[Double]) = {
     val newValues = new ArrayBuilder.ofDouble
     val newIndices = new ArrayBuilder.ofInt
     var i = 0
@@ -181,3 +388,4 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
     (newIndices.result(), newValues.result())
   }
 }
+

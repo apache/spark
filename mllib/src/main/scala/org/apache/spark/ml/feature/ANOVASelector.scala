@@ -46,7 +46,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
  */
 @Since("3.1.0")
 final class ANOVASelector @Since("3.1.0")(@Since("3.1.0") override val uid: String)
-  extends PSelector[ANOVASelectorModel] {
+  extends Selector[ANOVASelectorModel] {
 
   @Since("3.1.0")
   def this() = this(Identifiable.randomUID("ANOVASelector"))
@@ -127,7 +127,7 @@ object ANOVASelector extends DefaultParamsReadable[ANOVASelector] {
 class ANOVASelectorModel private[ml](
     @Since("3.1.0") override val uid: String,
     @Since("3.1.0") override val selectedFeatures: Array[Int])
-  extends PSelectorModel[ANOVASelectorModel] (uid, selectedFeatures) {
+  extends SelectorModel[ANOVASelectorModel] (uid, selectedFeatures) {
 
   /** @group setParam */
   @Since("3.1.0")

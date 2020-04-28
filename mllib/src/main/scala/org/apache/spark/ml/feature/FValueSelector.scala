@@ -46,7 +46,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
  */
 @Since("3.1.0")
 final class FValueSelector @Since("3.1.0") (@Since("3.1.0") override val uid: String) extends
-  PSelector[FValueSelectorModel] {
+  Selector[FValueSelectorModel] {
 
   @Since("3.1.0")
   def this() = this(Identifiable.randomUID("FValueSelector"))
@@ -127,7 +127,7 @@ object FValueSelector extends DefaultParamsReadable[FValueSelector] {
 class FValueSelectorModel private[ml](
     @Since("3.1.0") override val uid: String,
     @Since("3.1.0") override val selectedFeatures: Array[Int])
-  extends PSelectorModel[FValueSelectorModel] (uid, selectedFeatures) {
+  extends SelectorModel[FValueSelectorModel] (uid, selectedFeatures) {
 
   /** @group setParam */
   @Since("3.1.0")

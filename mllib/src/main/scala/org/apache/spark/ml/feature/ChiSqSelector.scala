@@ -46,7 +46,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Since("1.6.0")
 final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: String)
-  extends PSelector[ChiSqSelectorModel] {
+  extends Selector[ChiSqSelectorModel] {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("chiSqSelector"))
@@ -130,7 +130,7 @@ object ChiSqSelector extends DefaultParamsReadable[ChiSqSelector] {
 final class ChiSqSelectorModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("3.1.0") override val selectedFeatures: Array[Int])
-  extends PSelectorModel[ChiSqSelectorModel](uid, selectedFeatures)  {
+  extends SelectorModel[ChiSqSelectorModel](uid, selectedFeatures)  {
 
   import ChiSqSelectorModel._
 
