@@ -2243,6 +2243,8 @@ class Analyzer(
         child)
     }
 
+    // This method extracts all generators from given expressions and then returns a sequence of
+    // pairs (a found generator, the generator is outer or not).
     private def collectAdjacentGenerators(children: Seq[Expression]): Seq[(Generator, Boolean)] = {
       // We've already checked that all the `Generator` has unary nodes only
       // in `hasUnsupportedNestedGenerator`.
