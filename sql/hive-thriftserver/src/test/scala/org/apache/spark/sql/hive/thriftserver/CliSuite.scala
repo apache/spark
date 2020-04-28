@@ -500,4 +500,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
         |   ;""".stripMargin -> "testcomment"
     )
   }
+
+  test("Should allow unescaped quote mark in quoted string") {
+    runCliWithin(1.minute)(
+      """SELECT '"legal string a';select 1 + 234;""".stripMargin -> "235"
+    )
+    runCliWithin(1.minute)(
+      """SELECT "legal 'string b";select 22222 + 1;""".stripMargin -> "22223"
+    )
+  }
 }

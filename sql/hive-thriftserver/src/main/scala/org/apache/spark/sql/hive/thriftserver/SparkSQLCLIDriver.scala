@@ -507,6 +507,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   }
 
   // Adapted splitSemiColon from Hive 2.3's CliDriver.splitSemiColon.
+  // Allow "'" and '"' as closing legal string
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
@@ -519,13 +520,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     for (index <- 0 until line.length) {
       if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
-        if (!escape) {
+        if (!escape && !insideDoubleQuote) {
           // flip the boolean variable
           insideSingleQuote = !insideSingleQuote
         }
       } else if (line.charAt(index) == '\"' && !insideComment) {
         // take a look to see if it is escaped
-        if (!escape) {
+        if (!escape && !insideSingleQuote) {
           // flip the boolean variable
           insideDoubleQuote = !insideDoubleQuote
         }
