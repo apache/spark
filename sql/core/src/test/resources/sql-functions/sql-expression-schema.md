@@ -1,5 +1,5 @@
 ## Summary
-  - Number of queries: 325
+  - Number of queries: 330
   - Number of expressions that missing example: 34
   - Expressions missing examples: and,string,tinyint,double,smallint,date,decimal,boolean,float,binary,bigint,int,timestamp,cume_dist,dense_rank,input_file_block_length,input_file_block_start,input_file_name,lag,lead,monotonically_increasing_id,ntile,struct,!,not,or,percent_rank,rank,row_number,spark_partition_id,version,window,positive,count_min_sketch
 ## Schema of Built-in Functions
@@ -46,6 +46,8 @@
 | org.apache.spark.sql.catalyst.expressions.BitwiseNot | ~ | SELECT ~ 0 | struct<~0:int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseOr | &#124; | SELECT 3 &#124; 5 | struct<(3 &#124; 5):int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseXor | ^ | SELECT 3 ^ 5 | struct<(3 ^ 5):int> |
+| org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection | java_method | SELECT java_method('java.util.UUID', 'randomUUID') | struct<java_method(java.util.UUID, randomUUID):string> |
+| org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection | reflect | SELECT reflect('java.util.UUID', 'randomUUID') | struct<reflect(java.util.UUID, randomUUID):string> |
 | org.apache.spark.sql.catalyst.expressions.CaseWhen | when | SELECT CASE WHEN 1 > 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END | struct<CASE WHEN (1 > 0) THEN CAST(1 AS DECIMAL(11,1)) WHEN (2 > 0) THEN CAST(2.0 AS DECIMAL(11,1)) ELSE CAST(1.2 AS DECIMAL(11,1)) END:decimal(11,1)> |
 | org.apache.spark.sql.catalyst.expressions.Cast | string | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | cast | SELECT cast('10' as int) | struct<CAST(10 AS INT):int> |
@@ -225,6 +227,7 @@
 | org.apache.spark.sql.catalyst.expressions.ShiftLeft | shiftleft | SELECT shiftleft(2, 1) | struct<shiftleft(2, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.ShiftRight | shiftright | SELECT shiftright(4, 1) | struct<shiftright(4, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | shiftrightunsigned | SELECT shiftrightunsigned(4, 1) | struct<shiftrightunsigned(4, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.Shuffle | shuffle | SELECT shuffle(array(1, 20, 3, 5)) | struct<shuffle(array(1, 20, 3, 5)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.Signum | signum | SELECT signum(40) | struct<SIGNUM(CAST(40 AS DOUBLE)):double> |
 | org.apache.spark.sql.catalyst.expressions.Signum | sign | SELECT sign(40) | struct<sign(CAST(40 AS DOUBLE)):double> |
 | org.apache.spark.sql.catalyst.expressions.Sin | sin | SELECT sin(0) | struct<SIN(CAST(0 AS DOUBLE)):double> |
@@ -274,8 +277,10 @@
 | org.apache.spark.sql.catalyst.expressions.UnaryMinus | negative | SELECT negative(1) | struct<(- 1):int> |
 | org.apache.spark.sql.catalyst.expressions.UnaryPositive | positive | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Unhex | unhex | SELECT decode(unhex('537061726B2053514C'), 'UTF-8') | struct<decode(unhex(537061726B2053514C), UTF-8):string> |
+| org.apache.spark.sql.catalyst.expressions.UnixTimestamp | unix_timestamp | SELECT unix_timestamp() | struct<unix_timestamp(current_timestamp(), yyyy-MM-dd HH:mm:ss):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Upper | ucase | SELECT ucase('SparkSql') | struct<ucase(SparkSql):string> |
 | org.apache.spark.sql.catalyst.expressions.Upper | upper | SELECT upper('SparkSql') | struct<upper(SparkSql):string> |
+| org.apache.spark.sql.catalyst.expressions.Uuid | uuid | SELECT uuid() | struct<uuid():string> |
 | org.apache.spark.sql.catalyst.expressions.WeekDay | weekday | SELECT weekday('2009-07-30') | struct<weekday(CAST(2009-07-30 AS DATE)):int> |
 | org.apache.spark.sql.catalyst.expressions.WeekOfYear | weekofyear | SELECT weekofyear('2008-02-20') | struct<weekofyear(CAST(2008-02-20 AS DATE)):int> |
 | org.apache.spark.sql.catalyst.expressions.XxHash64 | xxhash64 | SELECT xxhash64('Spark', array(123), 2) | struct<xxhash64(Spark, array(123), 2):bigint> |

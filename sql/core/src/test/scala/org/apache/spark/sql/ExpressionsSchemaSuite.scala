@@ -58,7 +58,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  * The format for golden result files look roughly like:
  * {{{
  *   ...
- *   | 238 | org.apache.spark.sql.catalyst.expressions.StringRepeat | repeat | SELECT repeat('123', 2) | struct<repeat(123, 2):string> |
+ *   | org.apache.spark.sql.catalyst.expressions.StringRepeat | repeat | SELECT repeat('123', 2) | struct<repeat(123, 2):string> |
  *   ...
  * }}}
  */
@@ -85,15 +85,9 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
   private val resultFile = new File(baseResourcePath, "sql-expression-schema.md")
 
   val ignoreSet = Set(
-    // One of examples shows getting the current timestamp
-    "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
     // Random output without a seed
     "org.apache.spark.sql.catalyst.expressions.Rand",
-    "org.apache.spark.sql.catalyst.expressions.Randn",
-    "org.apache.spark.sql.catalyst.expressions.Shuffle",
-    "org.apache.spark.sql.catalyst.expressions.Uuid",
-    // The example calls methods that return unstable results.
-    "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
+    "org.apache.spark.sql.catalyst.expressions.Randn")
 
   /** A single SQL query's SQL and schema. */
   protected case class QueryOutput(
