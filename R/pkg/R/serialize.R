@@ -72,7 +72,6 @@ writeObject.logical <- function(object, con, writeType = TRUE) {
   # non-scalar value written as array
   if (length(object) > 1L) {
     writeObject(length(object), con, writeType = FALSE)
-    for (elem in object) writeBin(as.integer(elem), con, endian = "big")
   } else if (is.na(object)) return() # no value for NULL
 
   for (elem in object) writeBin(as.integer(elem), con, endian = "big")
@@ -123,13 +122,15 @@ writeObject.list <- function(object, con, writeType = TRUE) {
     writeObject(0L, con) # i.e., length(object)
     return(invisible())
   }
-  if (has_unique_serde_type(object)) {
+  serde_types = unique(sapply(object, getSerdeType))
+  if (length(serde_types) == 1L) {
+    # getSerdeType has already recursively searched object & found
+    #   any "node" with "real" data has the same type, so we're writing an array
+    writeType(array(), con)
+    for (elem in object)
     # list(1L) is treated as an array, but unlist would treat it as scalar
     if (length(object) == 1L) {
-      object = object[[1L]]
-      # writeType needs length>1 to treat as array
-      writeType(vector(typeof(object), 2L), con)
-      writeObject(1L, con, FALSE)
+      writeType(array(), con)
       return(writeObject(object, con, FALSE))
     } else {
       return(writeObject(unlist(object, recursive = FALSE), con, writeType))
@@ -253,9 +254,17 @@ writeType.numeric <- function(object, con) {
 writeType.raw <- function(object, con) {
   writeBin(as.raw(0x72), con)
 }
+# mostly we can rely on atomic_write_type for the array flag,
+#   but e.g. for list(as.list(1:5)), we have a (serde) array
+#   because all the elements are also (serde) arrays. Using
+#   writeType(array(), con) for this case seems like a good
+#   compromise to me
+writeType.array <- function(object, con) {
+  writeBin(as.raw(0x61), con)
+}
+# only called from writeObject.list, which already confirmed
+#   we cannot use a single type
 writeType.list <- function(object, con) {
-  # only called from writeObject.list, which already confirmed
-  #   we cannot use a single type
   writeBin(as.raw(0x6c), con)
 }
 writeType.struct <- function(object, con) {
