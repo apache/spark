@@ -88,10 +88,6 @@ specialtypeshandle <- function(type) {
 checkSchemaInArrow <- function(schema) {
   stopifnot(inherits(schema, "structType"))
 
-  if (!requireNamespace("arrow", quietly = TRUE)) {
-    stop("'arrow' package should be installed.")
-  }
-
   # Both cases below produce a corrupt value for unknown reason. It needs to be investigated.
   field_strings <- sapply(schema$fields(), function(x) x$dataType.toString())
   if (any(field_strings == "FloatType")) {
