@@ -78,7 +78,7 @@ writeObject.character <- function(object, con, writeType = TRUE) {
   if (length(object) > 1L) return(writeArray(object, con))
   if (is.na(object)) return() # no value for NULL
 
-  utfVal <- enc2utf8(value)
+  utfVal <- enc2utf8(object)
   writeObject(as.integer(nchar(utfVal, type = "bytes") + 1L), writeType = FALSE)
   writeBin(utfVal, con, endian = "big", useBytes = TRUE)
 }
