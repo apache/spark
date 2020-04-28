@@ -119,6 +119,10 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
       }
     }
 
+    if (normalizedFilters.exists(_.find(_.isInstanceOf[Unevaluable]).isDefined)) {
+      return child
+    }
+
     child transform {
       case plan if plan eq relation =>
         relation match {
