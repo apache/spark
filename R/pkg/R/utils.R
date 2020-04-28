@@ -137,7 +137,7 @@ hashCode <- function(key) {
       as.integer(hashC)
     }
   } else {
-    warning(paste("Could not hash object, returning 0", sep = ""))
+    warning("Could not hash object, returning 0")
     as.integer(0)
   }
 }

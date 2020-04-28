@@ -39,6 +39,10 @@
   font-weight: bold;
 }
 
+#plan-viz-graph svg text {
+  fill: #333;
+}
+
 #plan-viz-graph svg path {
   stroke: #444;
   stroke-width: 1.5px;
