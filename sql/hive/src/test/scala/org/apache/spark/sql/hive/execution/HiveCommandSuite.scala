@@ -193,19 +193,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("prop2Val"))
   }
 
-  test("show tblproperties for spark temporary table - empty row") {
-    withTempView("parquet_temp") {
-      sql(
-        """
-         |CREATE TEMPORARY VIEW parquet_temp (c1 INT, c2 STRING)
-         |USING org.apache.spark.sql.parquet.DefaultSource
-        """.stripMargin)
-
-      // An empty sequence of row is returned for session temporary table.
-      checkAnswer(sql("SHOW TBLPROPERTIES parquet_temp"), Nil)
-    }
-  }
-
   Seq(true, false).foreach { local =>
     val loadQuery = if (local) "LOAD DATA LOCAL" else "LOAD DATA"
     test(loadQuery) {
