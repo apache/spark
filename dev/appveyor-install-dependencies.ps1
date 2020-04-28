@@ -50,8 +50,7 @@ Function InstallR {
 
 Function InstallRtools {
   $rtoolsver = $rToolsVer.Split('.')[0..1] -Join ''
-  # R Tools 4.0 is not available on cloud.r-project.org yet
-  $rtoolsurl = "https://cran.r-project.org/bin/windows/Rtools/rtools$rtoolsver-x86_64.exe"
+  $rtoolsurl = CRAN + "/bin/windows/Rtools/rtools$rtoolsver-x86_64.exe"
 
   # Downloading Rtools
   Start-FileDownload $rtoolsurl "Rtools-current.exe"
@@ -116,7 +115,7 @@ $env:Path += ";$env:HADOOP_HOME\bin"
 Pop-Location
 
 # ========================== R
-$rVer = "4.0.0"
+$rVer = "3.6.2"
 $rToolsVer = "4.0.0"
 
 InstallR
