@@ -69,7 +69,7 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serializedMode,
 
 setMethod("showRDD", "RDD",
           function(object) {
-              cat(paste(callJMethod(getJRDD(object), "toString"), "\n", sep = ""))
+              cat(paste0(callJMethod(getJRDD(object), "toString"), "\n"))
           })
 
 setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) {

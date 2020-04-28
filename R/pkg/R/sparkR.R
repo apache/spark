@@ -244,7 +244,7 @@ sparkR.sparkContext <- function(
     uriSep <- "////"
   }
   localJarPaths <- lapply(jars,
-                          function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
+                          function(j) { utils::URLencode(paste0("file:", uriSep, j)) })
 
   # Set the start time to identify jobjs
   # Seconds resolution is good enough for this purpose, so use ints
