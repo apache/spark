@@ -95,13 +95,13 @@ class SingletonReplSuite extends SparkFunSuite {
     out.getBuffer.substring(currentOffset)
   }
 
-  def assertContains(message: String, output: String) {
+  def assertContains(message: String, output: String): Unit = {
     val isContain = output.contains(message)
     assert(isContain,
       "Interpreter output did not contain '" + message + "':\n" + output)
   }
 
-  def assertDoesNotContain(message: String, output: String) {
+  def assertDoesNotContain(message: String, output: String): Unit = {
     val isContain = output.contains(message)
     assert(!isContain,
       "Interpreter output contained '" + message + "':\n" + output)

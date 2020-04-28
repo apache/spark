@@ -29,7 +29,7 @@ import scala.util.{Failure, Success, Try}
 import com.google.common.io.CharStreams
 import org.mockito.Mockito._
 import org.scalatest.Matchers
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
@@ -122,7 +122,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     val blockString = "Hello, world!"
     val blockBuffer = new NioManagedBuffer(ByteBuffer.wrap(
       blockString.getBytes(StandardCharsets.UTF_8)))
-    when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)
+    when(blockManager.getLocalBlockData(blockId)).thenReturn(blockBuffer)
 
     val securityManager0 = new SecurityManager(conf0)
     val exec0 = new NettyBlockTransferService(conf0, securityManager0, "localhost", "localhost", 0,

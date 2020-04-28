@@ -34,31 +34,16 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
     }
   }
 
-
   test("with no minPartition: N TopicPartitions to N offset ranges") {
     val calc = KafkaOffsetRangeCalculator(CaseInsensitiveStringMap.empty())
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 1),
-        untilOffsets = Map(tp1 -> 2)) ==
+        Seq(KafkaOffsetRange(tp1, 1, 2))) ==
       Seq(KafkaOffsetRange(tp1, 1, 2, None)))
 
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 1),
-        untilOffsets = Map(tp1 -> 2, tp2 -> 1), Seq.empty) ==
-      Seq(KafkaOffsetRange(tp1, 1, 2, None)))
-
-    assert(
-      calc.getRanges(
-        fromOffsets = Map(tp1 -> 1, tp2 -> 1),
-        untilOffsets = Map(tp1 -> 2)) ==
-      Seq(KafkaOffsetRange(tp1, 1, 2, None)))
-
-    assert(
-      calc.getRanges(
-        fromOffsets = Map(tp1 -> 1, tp2 -> 1),
-        untilOffsets = Map(tp1 -> 2),
+        Seq(KafkaOffsetRange(tp1, 1, 2)),
         executorLocations = Seq("location")) ==
       Seq(KafkaOffsetRange(tp1, 1, 2, Some("location"))))
   }
@@ -67,16 +52,19 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
     val calc = KafkaOffsetRangeCalculator(CaseInsensitiveStringMap.empty())
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 1, tp2 -> 1),
-        untilOffsets = Map(tp1 -> 2, tp2 -> 1)) ==
+        Seq(
+          KafkaOffsetRange(tp1, 1, 2),
+          KafkaOffsetRange(tp2, 1, 1))) ===
       Seq(KafkaOffsetRange(tp1, 1, 2, None)))
   }
 
   testWithMinPartitions("N TopicPartitions to N offset ranges", 3) { calc =>
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 1, tp2 -> 1, tp3 -> 1),
-        untilOffsets = Map(tp1 -> 2, tp2 -> 2, tp3 -> 2)) ==
+        Seq(
+          KafkaOffsetRange(tp1, 1, 2),
+          KafkaOffsetRange(tp2, 1, 2),
+          KafkaOffsetRange(tp3, 1, 2))) ===
       Seq(
         KafkaOffsetRange(tp1, 1, 2, None),
         KafkaOffsetRange(tp2, 1, 2, None),
@@ -86,18 +74,16 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   testWithMinPartitions("1 TopicPartition to N offset ranges", 4) { calc =>
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 1),
-        untilOffsets = Map(tp1 -> 5)) ==
-      Seq(
-        KafkaOffsetRange(tp1, 1, 2, None),
-        KafkaOffsetRange(tp1, 2, 3, None),
-        KafkaOffsetRange(tp1, 3, 4, None),
-        KafkaOffsetRange(tp1, 4, 5, None)))
+        Seq(KafkaOffsetRange(tp1, 1, 5))) ==
+        Seq(
+          KafkaOffsetRange(tp1, 1, 2, None),
+          KafkaOffsetRange(tp1, 2, 3, None),
+          KafkaOffsetRange(tp1, 3, 4, None),
+          KafkaOffsetRange(tp1, 4, 5, None)))
 
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 1),
-        untilOffsets = Map(tp1 -> 5),
+        Seq(KafkaOffsetRange(tp1, 1, 5)),
         executorLocations = Seq("location")) ==
         Seq(
           KafkaOffsetRange(tp1, 1, 2, None),
@@ -109,8 +95,9 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   testWithMinPartitions("N skewed TopicPartitions to M offset ranges", 3) { calc =>
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 1, tp2 -> 1),
-        untilOffsets = Map(tp1 -> 5, tp2 -> 21)) ==
+        Seq(
+          KafkaOffsetRange(tp1, 1, 5),
+          KafkaOffsetRange(tp2, 1, 21))) ===
         Seq(
           KafkaOffsetRange(tp1, 1, 5, None),
           KafkaOffsetRange(tp2, 1, 7, None),
@@ -118,11 +105,51 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp2, 14, 21, None)))
   }
 
+  testWithMinPartitions("SPARK-30656: ignore empty ranges and split the rest", 4) { calc =>
+    assert(
+      calc.getRanges(
+        Seq(
+          KafkaOffsetRange(tp1, 1, 1),
+          KafkaOffsetRange(tp2, 1, 21))) ===
+        Seq(
+          KafkaOffsetRange(tp2, 1, 6, None),
+          KafkaOffsetRange(tp2, 6, 11, None),
+          KafkaOffsetRange(tp2, 11, 16, None),
+          KafkaOffsetRange(tp2, 16, 21, None)))
+  }
+
+  testWithMinPartitions(
+      "SPARK-30656: N very skewed TopicPartitions to M offset ranges",
+      3) { calc =>
+    assert(
+      calc.getRanges(
+        Seq(
+          KafkaOffsetRange(tp1, 1, 2),
+          KafkaOffsetRange(tp2, 1, 1001))) ===
+        Seq(
+          KafkaOffsetRange(tp1, 1, 2, None),
+          KafkaOffsetRange(tp2, 1, 334, None),
+          KafkaOffsetRange(tp2, 334, 667, None),
+          KafkaOffsetRange(tp2, 667, 1001, None)))
+  }
+
+  testWithMinPartitions(
+      "SPARK-30656: minPartitions less than the length of topic partitions",
+      1) { calc =>
+    assert(
+      calc.getRanges(
+        Seq(
+          KafkaOffsetRange(tp1, 1, 5),
+          KafkaOffsetRange(tp2, 1, 21))) ===
+        Seq(
+          KafkaOffsetRange(tp1, 1, 5, None),
+          KafkaOffsetRange(tp2, 1, 21, None)))
+  }
+
   testWithMinPartitions("range inexact multiple of minPartitions", 3) { calc =>
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 1),
-        untilOffsets = Map(tp1 -> 11)) ==
+        Seq(KafkaOffsetRange(tp1, 1, 11))) ==
         Seq(
           KafkaOffsetRange(tp1, 1, 4, None),
           KafkaOffsetRange(tp1, 4, 7, None),
@@ -132,8 +159,10 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   testWithMinPartitions("empty ranges ignored", 3) { calc =>
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 1, tp2 -> 1, tp3 -> 1),
-        untilOffsets = Map(tp1 -> 5, tp2 -> 21, tp3 -> 1)) ==
+        Seq(
+          KafkaOffsetRange(tp1, 1, 5),
+          KafkaOffsetRange(tp2, 1, 21),
+          KafkaOffsetRange(tp3, 1, 1))) ==
         Seq(
           KafkaOffsetRange(tp1, 1, 5, None),
           KafkaOffsetRange(tp2, 1, 7, None),
@@ -144,8 +173,10 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   testWithMinPartitions("SPARK-28489: never drop offsets", 6) { calc =>
     assert(
       calc.getRanges(
-        fromOffsets = Map(tp1 -> 0, tp2 -> 0, tp3 -> 0),
-        untilOffsets = Map(tp1 -> 10, tp2 -> 10, tp3 -> 1)) ==
+        Seq(
+          KafkaOffsetRange(tp1, 0, 10),
+          KafkaOffsetRange(tp2, 0, 10),
+          KafkaOffsetRange(tp3, 0, 1))) ==
         Seq(
           KafkaOffsetRange(tp1, 0, 3, None),
           KafkaOffsetRange(tp1, 3, 6, None),

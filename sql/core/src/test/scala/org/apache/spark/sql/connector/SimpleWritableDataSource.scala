@@ -27,10 +27,11 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder}
 import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -40,7 +41,7 @@ import org.apache.spark.util.SerializableConfiguration
  * Each task writes data to `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`.
  * Each job moves files from `target/_temporary/uniqueId/` to `target`.
  */
-class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
+class SimpleWritableDataSource extends SimpleTableProvider with SessionConfigSupport {
 
   private val tableSchema = new StructType().add("i", "long").add("j", "long")
 
@@ -70,14 +71,10 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     override def readSchema(): StructType = tableSchema
   }
 
-  class MyWriteBuilder(path: String) extends WriteBuilder with SupportsTruncate {
-    private var queryId: String = _
+  class MyWriteBuilder(path: String, info: LogicalWriteInfo)
+      extends WriteBuilder with SupportsTruncate {
+    private val queryId: String = info.queryId()
     private var needTruncate = false
-
-    override def withQueryId(queryId: String): WriteBuilder = {
-      this.queryId = queryId
-      this
-    }
 
     override def truncate(): WriteBuilder = {
       this.needTruncate = true
@@ -99,7 +96,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
   }
 
   class MyBatchWrite(queryId: String, path: String, conf: Configuration) extends BatchWrite {
-    override def createBatchWriterFactory(): DataWriterFactory = {
+    override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       SimpleCounter.resetCounter
       new CSVDataWriterFactory(path, queryId, new SerializableConfiguration(conf))
     }
@@ -143,8 +140,8 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
       new MyScanBuilder(new Path(path).toUri.toString, conf)
     }
 
-    override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-      new MyWriteBuilder(path)
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+      new MyWriteBuilder(path, info)
     }
 
     override def capabilities(): util.Set[TableCapability] =
@@ -240,4 +237,6 @@ class CSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[InternalRow] 
       fs.delete(file, false)
     }
   }
+
+  override def close(): Unit = {}
 }

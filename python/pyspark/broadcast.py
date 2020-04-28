@@ -21,10 +21,9 @@ import sys
 from tempfile import NamedTemporaryFile
 import threading
 
-from pyspark.cloudpickle import print_exec
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import ChunkedStream, pickle_protocol
-from pyspark.util import _exception_message
+from pyspark.util import _exception_message, print_exec
 
 if sys.version < '3':
     import cPickle as pickle

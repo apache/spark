@@ -109,10 +109,17 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
       case sample: Sample =>
         sample.copy(seed = 0L)
       case Join(left, right, joinType, condition, hint) if condition.isDefined =>
+        val newJoinType = joinType match {
+          case ExistenceJoin(a: Attribute) =>
+            val newAttr = AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+            ExistenceJoin(newAttr)
+          case other => other
+        }
+
         val newCondition =
           splitConjunctivePredicates(condition.get).map(rewriteEqual).sortBy(_.hashCode())
             .reduce(And)
-        Join(left, right, joinType, Some(newCondition), hint)
+        Join(left, right, newJoinType, Some(newCondition), hint)
     }
   }
 
@@ -160,7 +167,7 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
   }
 
   /** Fails the test if the join order in the two plans do not match */
-  protected def compareJoinOrder(plan1: LogicalPlan, plan2: LogicalPlan) {
+  protected def compareJoinOrder(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
     val normalized1 = normalizePlan(normalizeExprIds(plan1))
     val normalized2 = normalizePlan(normalizeExprIds(plan2))
     if (!sameJoinPlan(normalized1, normalized2)) {

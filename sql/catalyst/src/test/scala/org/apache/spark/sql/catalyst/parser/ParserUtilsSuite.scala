@@ -40,7 +40,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   val showDbsContext = buildContext("show databases like 'identifier_with_wildcards'") { parser =>
-    parser.statement().asInstanceOf[ShowDatabasesContext]
+    parser.statement().asInstanceOf[ShowNamespacesContext]
   }
 
   val createDbContext = buildContext(
@@ -50,7 +50,7 @@ class ParserUtilsSuite extends SparkFunSuite {
       |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
     """.stripMargin
   ) { parser =>
-    parser.statement().asInstanceOf[CreateDatabaseContext]
+    parser.statement().asInstanceOf[CreateNamespaceContext]
   }
 
   val emptyContext = buildContext("") { parser =>
@@ -151,7 +151,7 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   test("string") {
     assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
-    assert(string(createDbContext.comment) == "database_comment")
+    assert(string(createDbContext.commentSpec().get(0).STRING()) == "database_comment")
 
     assert(string(createDbContext.locationSpec.asScala.head.STRING) == "/home/user/db")
   }

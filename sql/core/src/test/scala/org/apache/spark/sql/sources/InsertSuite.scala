@@ -20,10 +20,13 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.sql.Date
 
+import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -268,6 +271,55 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       "INSERT OVERWRITE to a table while querying it should not be allowed.")
   }
 
+  test("SPARK-30112: it is allowed to write to a table while querying it for " +
+    "dynamic partition overwrite.") {
+    Seq(PartitionOverwriteMode.DYNAMIC.toString,
+        PartitionOverwriteMode.STATIC.toString).foreach { mode =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {
+        withTable("insertTable") {
+          sql(
+            """
+              |CREATE TABLE insertTable(i int, part1 int, part2 int) USING PARQUET
+              |PARTITIONED BY (part1, part2)
+            """.stripMargin)
+
+          sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2=1) SELECT 1")
+          checkAnswer(spark.table("insertTable"), Row(1, 1, 1))
+          sql("INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2=2) SELECT 2")
+          checkAnswer(spark.table("insertTable"), Row(1, 1, 1) :: Row(2, 1, 2) :: Nil)
+
+          if (mode == PartitionOverwriteMode.DYNAMIC.toString) {
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                |SELECT i + 1, part2 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"), Row(2, 1, 1) :: Row(3, 1, 2) :: Nil)
+
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                |SELECT i + 1, part2 + 1 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"),
+              Row(2, 1, 1) :: Row(3, 1, 2) :: Row(4, 1, 3) :: Nil)
+          } else {
+            val message = intercept[AnalysisException] {
+              sql(
+                """
+                  |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                  |SELECT i + 1, part2 FROM insertTable
+                """.stripMargin)
+            }.getMessage
+            assert(
+              message.contains("Cannot overwrite a path that is also being read from."),
+              "INSERT OVERWRITE to a table while querying it should not be allowed.")
+          }
+        }
+      }
+    }
+  }
+
   test("Caching")  {
     // write something to the jsonTable
     sql(
@@ -470,6 +522,20 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("new partitions should be added to catalog after writing to catalog table") {
+    val table = "partitioned_catalog_table"
+    val numParts = 210
+    withTable(table) {
+      val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
+      val tempTable = "partitioned_catalog_temp_table"
+      df.createOrReplaceTempView(tempTable)
+      sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
+      sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
+      val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
+      assert(partitions.size == numParts)
+    }
+  }
+
   test("SPARK-20236: dynamic partition overwrite without catalog table") {
     withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       withTempPath { path =>
@@ -634,6 +700,81 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("Throw exceptions on inserting out-of-range int value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b int) using parquet")
+        val outOfRangeValue1 = (Int.MaxValue + 1L).toString
+        var msg = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue1)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue1 to int causes overflow"))
+
+        val outOfRangeValue2 = (Int.MinValue - 1L).toString
+        msg = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue2)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue2 to int causes overflow"))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range long value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b long) using parquet")
+        val outOfRangeValue1 = Math.nextUp(Long.MaxValue)
+        var msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue1}D)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue1 to long causes overflow"))
+
+        val outOfRangeValue2 = Math.nextDown(Long.MinValue)
+        msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue2}D)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue2 to long causes overflow"))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range decimal value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b decimal(3,2)) using parquet")
+        val outOfRangeValue = "123.45"
+        val msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue})")
+        }.getCause.getMessage
+        assert(msg.contains("cannot be represented as Decimal(3, 2)"))
+      }
+    }
+  }
+
+  test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
+    SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
+      withSQLConf(
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
+        withTable("t") {
+          sql("create table t(a int, b string) using parquet partitioned by (a)")
+          policy match {
+            case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+              val errorMsg = intercept[NumberFormatException] {
+                sql("insert into t partition(a='ansi') values('ansi')")
+              }.getMessage
+              assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+            case SQLConf.StoreAssignmentPolicy.LEGACY =>
+              sql("insert into t partition(a='ansi') values('ansi')")
+              checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
     withTempPath { path =>
       Seq((1, 1), (2, 2)).toDF("i", "part")
@@ -675,7 +816,63 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      sql("INSERT INTO TABLE test_table SELECT 2, null")
+      val msg = intercept[AnalysisException] {
+        sql("INSERT INTO TABLE test_table SELECT 2, null")
+      }.getMessage
+      assert(msg.contains("Cannot write nullable values to non-null column 's'"))
     }
+  }
+
+  test("Stop task set if FileAlreadyExistsException was thrown") {
+    withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(i INT, part1 INT) USING PARQUET
+            |PARTITIONED BY (part1)
+          """.stripMargin)
+
+        val df = Seq((1, 1)).toDF("i", "part1")
+        val err = intercept[SparkException] {
+          df.write.mode("overwrite").format("parquet").insertInto("t")
+        }
+        assert(err.getCause.getMessage.contains("can not write to output file: " +
+          "org.apache.hadoop.fs.FileAlreadyExistsException"))
+      }
+    }
+  }
+
+  test("SPARK-29174 Support LOCAL in INSERT OVERWRITE DIRECTORY to data source") {
+    withTempPath { dir =>
+      val path = dir.toURI.getPath
+      sql(s"""create table tab1 ( a int) using parquet location '$path'""")
+      sql("insert into tab1 values(1)")
+      checkAnswer(sql("select * from tab1"), Seq(1).map(i => Row(i)))
+      sql("create table tab2 ( a int) using parquet")
+      sql("insert into tab2 values(2)")
+      checkAnswer(sql("select * from tab2"), Seq(2).map(i => Row(i)))
+      sql(s"""insert overwrite local directory '$path' using parquet select * from tab2""")
+      sql("refresh table tab1")
+      checkAnswer(sql("select * from tab1"), Seq(2).map(i => Row(i)))
+    }
+  }
+
+  test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {
+    val message = intercept[ParseException] {
+      sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
+    }.getMessage
+    assert(message.contains("LOCAL is supported only with file: scheme"))
+  }
+}
+
+class FileExistingTestFileSystem extends RawLocalFileSystem {
+  override def create(
+      f: Path,
+      overwrite: Boolean,
+      bufferSize: Int,
+      replication: Short,
+      blockSize: Long): FSDataOutputStream = {
+    throw new FileAlreadyExistsException(s"${f.toString} already exists")
   }
 }

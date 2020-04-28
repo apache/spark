@@ -20,7 +20,7 @@ package org.apache.spark.mllib.tree
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.{LabeledPoint => NewLabeledPoint}
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.tree.impl.{GradientBoostedTrees => NewGBT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
@@ -67,8 +67,9 @@ class GradientBoostedTrees private[spark] (
   @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
-    val (trees, treeWeights) = NewGBT.run(input.map { point =>
-      NewLabeledPoint(point.label, point.features.asML)
+    val (trees, treeWeights) = NewGBT.run(input.map {
+      case LabeledPoint(label, features) =>
+        Instance(label, 1.0, features.asML)
     }, boostingStrategy, seed.toLong, "all")
     new GradientBoostedTreesModel(algo, trees.map(_.toOld), treeWeights)
   }
@@ -97,10 +98,12 @@ class GradientBoostedTrees private[spark] (
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
-    val (trees, treeWeights) = NewGBT.runWithValidation(input.map { point =>
-      NewLabeledPoint(point.label, point.features.asML)
-    }, validationInput.map { point =>
-      NewLabeledPoint(point.label, point.features.asML)
+    val (trees, treeWeights) = NewGBT.runWithValidation(input.map {
+      case LabeledPoint(label, features) =>
+        Instance(label, 1.0, features.asML)
+    }, validationInput.map {
+      case LabeledPoint(label, features) =>
+        Instance(label, 1.0, features.asML)
     }, boostingStrategy, seed.toLong, "all")
     new GradientBoostedTreesModel(algo, trees.map(_.toOld), treeWeights)
   }

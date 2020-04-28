@@ -43,7 +43,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
   extends CLIService(hiveServer)
   with ReflectedCompositeService {
 
-  override def init(hiveConf: HiveConf) {
+  override def init(hiveConf: HiveConf): Unit = {
     setSuperField(this, "hiveConf", hiveConf)
 
     val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, sqlContext)
@@ -105,7 +105,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
 }
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
-  def initCompositeService(hiveConf: HiveConf) {
+  def initCompositeService(hiveConf: HiveConf): Unit = {
     // Emulating `CompositeService.init(hiveConf)`
     val serviceList = getAncestorField[JList[Service]](this, 2, "serviceList")
     serviceList.asScala.foreach(_.init(hiveConf))

@@ -30,7 +30,6 @@ import scala.Tuple2$;
 import scala.collection.Iterator;
 
 import com.google.common.collect.HashMultiset;
-import com.google.common.collect.Iterators;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -135,7 +134,7 @@ public class UnsafeShuffleWriterSuite {
         );
       });
 
-    when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
+    when(shuffleBlockResolver.getDataFile(anyInt(), anyLong())).thenReturn(mergedOutputFile);
 
     Answer<?> renameTempAnswer = invocationOnMock -> {
       partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
@@ -153,11 +152,11 @@ public class UnsafeShuffleWriterSuite {
 
     doAnswer(renameTempAnswer)
         .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class), any(File.class));
+        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), any(File.class));
 
     doAnswer(renameTempAnswer)
         .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class), eq(null));
+        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), eq(null));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
@@ -172,13 +171,13 @@ public class UnsafeShuffleWriterSuite {
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
   }
 
-  private UnsafeShuffleWriter createWriter(boolean transferToEnabled) {
+  private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled) {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
-    return new UnsafeShuffleWriter(
+    return new UnsafeShuffleWriter<>(
       blockManager,
-        taskMemoryManager,
-      new SerializedShuffleHandle<>(0, 1, shuffleDep),
-      0, // map id
+      taskMemoryManager,
+      new SerializedShuffleHandle<>(0, shuffleDep),
+      0L, // map id
       taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics(),
@@ -249,7 +248,7 @@ public class UnsafeShuffleWriterSuite {
   @Test
   public void writeEmptyIterator() throws Exception {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(Iterators.emptyIterator());
+    writer.write(new ArrayList<Product2<Object, Object>>().iterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
@@ -533,11 +532,11 @@ public class UnsafeShuffleWriterSuite {
     final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
     taskMemoryManager = spy(taskMemoryManager);
     when(taskMemoryManager.pageSizeBytes()).thenReturn(pageSizeBytes);
-    final UnsafeShuffleWriter writer = new UnsafeShuffleWriter(
+    final UnsafeShuffleWriter<Object, Object> writer = new UnsafeShuffleWriter<>(
         blockManager,
         taskMemoryManager,
-        new SerializedShuffleHandle<>(0, 1, shuffleDep),
-        0, // map id
+        new SerializedShuffleHandle<>(0, shuffleDep),
+        0L, // map id
         taskContext,
         conf,
         taskContext.taskMetrics().shuffleWriteMetrics(),

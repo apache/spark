@@ -759,7 +759,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsHadoopFiles(prefix: String, suffix: String) {
+  def saveAsHadoopFiles(prefix: String, suffix: String): Unit = {
     dstream.saveAsHadoopFiles(prefix, suffix)
   }
 
@@ -772,7 +772,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       suffix: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     dstream.saveAsHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass)
   }
 
@@ -786,7 +786,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: JobConf) {
+      conf: JobConf): Unit = {
     dstream.saveAsHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
 
@@ -794,7 +794,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsNewAPIHadoopFiles(prefix: String, suffix: String) {
+  def saveAsNewAPIHadoopFiles(prefix: String, suffix: String): Unit = {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix)
   }
 
@@ -807,7 +807,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       suffix: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass)
   }
 
@@ -821,7 +821,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: Configuration = dstream.context.sparkContext.hadoopConfiguration) {
+      conf: Configuration = dstream.context.sparkContext.hadoopConfiguration): Unit = {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
 

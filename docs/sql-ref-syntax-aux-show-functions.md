@@ -20,18 +20,21 @@ license: |
 ---
 
 ### Description
+
 Returns the list of functions after applying an optional regex pattern.
 Given number of functions supported by Spark is quite large, this statement
-in conjuction with [describe function](sql-ref-syntax-aux-describe-function.html)
+in conjunction with [describe function](sql-ref-syntax-aux-describe-function.html)
 may be used to quickly find the function and understand its usage. The `LIKE` 
 clause is optional and supported only for compatibility with other systems.
 
 ### Syntax
+
 {% highlight sql %}
-SHOW [ function_kind ] FUNCTIONS ([LIKE] function_name | regex_pattern)
+SHOW [ function_kind ] FUNCTIONS ( [ LIKE ] function_name | regex_pattern )
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>function_kind</em></code></dt>
   <dd>
@@ -66,6 +69,7 @@ SHOW [ function_kind ] FUNCTIONS ([LIKE] function_name | regex_pattern)
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- List a system function `trim` by searching both user defined and system
 -- defined functions.
@@ -73,7 +77,7 @@ SHOW FUNCTIONS trim;
   +--------+
   |function|
   +--------+
-  |trim    |
+  |    trim|
   +--------+
 
 -- List a system function `concat` by searching system defined functions.
@@ -81,7 +85,7 @@ SHOW SYSTEM FUNCTIONS concat;
   +--------+
   |function|
   +--------+
-  |concat  |
+  |  concat|
   +--------+
 
 -- List a qualified function `max` from database `salesdb`. 
@@ -89,30 +93,31 @@ SHOW SYSTEM FUNCTIONS salesdb.max;
   +--------+
   |function|
   +--------+
-  |max     |
+  |     max|
   +--------+
 
 -- List all functions starting with `t`
 SHOW FUNCTIONS LIKE 't*';
   +-----------------+
-  |function         |
+  |         function|
   +-----------------+
-  |tan              |
-  |tanh             |
-  |timestamp        |
-  |tinyint          |
-  |to_csv           |
-  |to_date          |
-  |to_json          |
-  |to_timestamp     |
+  |              tan|
+  |             tanh|
+  |        timestamp|
+  |          tinyint|
+  |           to_csv|
+  |          to_date|
+  |          to_json|
+  |     to_timestamp|
   |to_unix_timestamp|
-  |to_utc_timestamp |
-  |transform        |
-  |transform_keys   |
-  |transform_values |
-  |translate        |
-  |trim             |
-  |trunc            |
+  | to_utc_timestamp|
+  |        transform|
+  |   transform_keys|
+  | transform_values|
+  |        translate|
+  |             trim|
+  |            trunc|
+  |           typeof|
   +-----------------+
 
 -- List all functions starting with `yea` or `windo`
@@ -120,8 +125,8 @@ SHOW FUNCTIONS LIKE 'yea*|windo*';
   +--------+
   |function|
   +--------+
-  |window  |
-  |year    |
+  |  window|
+  |    year|
   +--------+
 
 -- Use normal regex pattern to list function names that has 4 characters
@@ -130,10 +135,11 @@ SHOW FUNCTIONS LIKE 't[a-z][a-z][a-z]';
   +--------+
   |function|
   +--------+
-  |tanh    |
-  |trim    |
+  |    tanh|
+  |    trim|
   +--------+
 {% endhighlight %}
 
-### Related statements
-- [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+### Related Statements
+
+ * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)

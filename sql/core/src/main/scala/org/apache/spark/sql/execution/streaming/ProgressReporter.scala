@@ -24,9 +24,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, SparkDataStream}
 import org.apache.spark.sql.execution.QueryExecution
@@ -84,11 +85,11 @@ trait ProgressReporter extends Logging {
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
 
-  // The timestamp we report an event that has no input data
-  private var lastNoDataProgressEventTime = Long.MinValue
+  // The timestamp we report an event that has not executed anything
+  private var lastNoExecutionProgressEventTime = Long.MinValue
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(getTimeZone("UTC"))
+  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
 
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
@@ -141,14 +142,21 @@ trait ProgressReporter extends Logging {
     logInfo(s"Streaming query made progress: $newProgress")
   }
 
-  /** Finalizes the query progress and adds it to list of recent status updates. */
-  protected def finishTrigger(hasNewData: Boolean): Unit = {
+  /**
+   * Finalizes the query progress and adds it to list of recent status updates.
+   *
+   * @param hasNewData Whether the sources of this stream had new data for this trigger.
+   * @param hasExecuted Whether any batch was executed during this trigger. Streaming queries that
+   *                    perform stateful aggregations with timeouts can still run batches even
+   *                    though the sources don't have any new data.
+   */
+  protected def finishTrigger(hasNewData: Boolean, hasExecuted: Boolean): Unit = {
     assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null)
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
-    val executionStats = extractExecutionStats(hasNewData)
-    val processingTimeSec =
-      (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
+    val executionStats = extractExecutionStats(hasNewData, hasExecuted)
+    val processingTimeMills = currentTriggerEndTimestamp - currentTriggerStartTimestamp
+    val processingTimeSec = Math.max(1L, processingTimeMills).toDouble / MILLIS_PER_SECOND
 
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
       (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
@@ -169,9 +177,13 @@ trait ProgressReporter extends Logging {
       )
     }
 
-    val sinkProgress = SinkProgress(
-      sink.toString,
-      sinkCommitProgress.map(_.numOutputRows))
+    val sinkOutput = if (hasExecuted) {
+      sinkCommitProgress.map(_.numOutputRows)
+    } else {
+      sinkCommitProgress.map(_ => 0L)
+    }
+    val sinkProgress = SinkProgress(sink.toString, sinkOutput)
+    val observedMetrics = extractObservedMetrics(hasNewData, lastExecution)
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -179,20 +191,22 @@ trait ProgressReporter extends Logging {
       name = name,
       timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
+      batchDuration = processingTimeMills,
       durationMs = new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
-      sink = sinkProgress)
+      sink = sinkProgress,
+      observedMetrics = new java.util.HashMap(observedMetrics.asJava))
 
-    if (hasNewData) {
+    if (hasExecuted) {
       // Reset noDataEventTimestamp if we processed any data
-      lastNoDataProgressEventTime = Long.MinValue
+      lastNoExecutionProgressEventTime = Long.MinValue
       updateProgress(newProgress)
     } else {
       val now = triggerClock.getTimeMillis()
-      if (now - noDataProgressEventInterval >= lastNoDataProgressEventTime) {
-        lastNoDataProgressEventTime = now
+      if (now - noDataProgressEventInterval >= lastNoExecutionProgressEventTime) {
+        lastNoExecutionProgressEventTime = now
         updateProgress(newProgress)
       }
     }
@@ -201,26 +215,26 @@ trait ProgressReporter extends Logging {
   }
 
   /** Extract statistics about stateful operators from the executed query plan. */
-  private def extractStateOperatorMetrics(hasNewData: Boolean): Seq[StateOperatorProgress] = {
+  private def extractStateOperatorMetrics(hasExecuted: Boolean): Seq[StateOperatorProgress] = {
     if (lastExecution == null) return Nil
-    // lastExecution could belong to one of the previous triggers if `!hasNewData`.
+    // lastExecution could belong to one of the previous triggers if `!hasExecuted`.
     // Walking the plan again should be inexpensive.
     lastExecution.executedPlan.collect {
       case p if p.isInstanceOf[StateStoreWriter] =>
         val progress = p.asInstanceOf[StateStoreWriter].getProgress()
-        if (hasNewData) progress else progress.copy(newNumRowsUpdated = 0)
+        if (hasExecuted) progress else progress.copy(newNumRowsUpdated = 0)
     }
   }
 
   /** Extracts statistics from the most recent query execution. */
-  private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
+  private def extractExecutionStats(hasNewData: Boolean, hasExecuted: Boolean): ExecutionStats = {
     val hasEventTime = logicalPlan.collect { case e: EventTimeWatermark => e }.nonEmpty
     val watermarkTimestamp =
       if (hasEventTime) Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
       else Map.empty[String, String]
 
     // SPARK-19378: Still report metrics even though no data was processed while reporting progress.
-    val stateOperators = extractStateOperatorMetrics(hasNewData)
+    val stateOperators = extractStateOperatorMetrics(hasExecuted)
 
     if (!hasNewData) {
       return ExecutionStats(Map.empty, stateOperators, watermarkTimestamp)
@@ -322,6 +336,16 @@ trait ProgressReporter extends Logging {
     }
   }
 
+  /** Extracts observed metrics from the most recent query execution. */
+  private def extractObservedMetrics(
+      hasNewData: Boolean,
+      lastExecution: QueryExecution): Map[String, Row] = {
+    if (!hasNewData || lastExecution == null) {
+      return Map.empty
+    }
+    lastExecution.observedMetrics
+  }
+
   /** Records the duration of running `body` for the next query progress update. */
   protected def reportTimeTaken[T](triggerDetailKey: String)(body: => T): T = {
     val startTime = triggerClock.getTimeMillis()
@@ -335,7 +359,7 @@ trait ProgressReporter extends Logging {
     result
   }
 
-  private def formatTimestamp(millis: Long): String = {
+  protected def formatTimestamp(millis: Long): String = {
     timestampFormat.format(new Date(millis))
   }
 

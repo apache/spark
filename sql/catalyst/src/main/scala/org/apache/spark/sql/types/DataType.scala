@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -30,6 +31,8 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
@@ -40,7 +43,10 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
+
 @Stable
+@JsonSerialize(using = classOf[DataTypeJsonSerializer])
+@JsonDeserialize(using = classOf[DataTypeJsonDeserializer])
 abstract class DataType extends AbstractDataType {
   /**
    * Enables matching against DataType for expressions:
@@ -216,16 +222,17 @@ object DataType {
   }
 
   protected[types] def buildFormattedString(
-    dataType: DataType,
-    prefix: String,
-    builder: StringBuilder): Unit = {
+      dataType: DataType,
+      prefix: String,
+      stringConcat: StringConcat,
+      maxDepth: Int): Unit = {
     dataType match {
       case array: ArrayType =>
-        array.buildFormattedString(prefix, builder)
+        array.buildFormattedString(prefix, stringConcat, maxDepth - 1)
       case struct: StructType =>
-        struct.buildFormattedString(prefix, builder)
+        struct.buildFormattedString(prefix, stringConcat, maxDepth - 1)
       case map: MapType =>
-        map.buildFormattedString(prefix, builder)
+        map.buildFormattedString(prefix, stringConcat, maxDepth - 1)
       case _ =>
     }
   }
@@ -455,6 +462,8 @@ object DataType {
         } else {
           true
         }
+
+      case (_: NullType, _) if storeAssignmentPolicy == ANSI => true
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
         if (!Cast.canANSIStoreAssign(w, r)) {

@@ -47,14 +47,14 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private var sc: SparkContext = _
 
-  override def beforeAll {
+  override def beforeAll: Unit = {
     super.beforeAll()
     sc = new SparkContext(sparkConf)
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
-  override def afterAll {
+  override def afterAll: Unit = {
     try {
       try {
         if (sc != null) {
@@ -81,7 +81,8 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private val preferredHosts = LocationStrategies.PreferConsistent
 
-  private def compactLogs(topic: String, partition: Int, messages: Array[(String, String)]) {
+  private def compactLogs(topic: String, partition: Int,
+      messages: Array[(String, String)]): Unit = {
     val mockTime = new MockTime()
     val logs = new Pool[TopicPartition, Log]()
     val logDir = kafkaTestUtils.brokerLogDir

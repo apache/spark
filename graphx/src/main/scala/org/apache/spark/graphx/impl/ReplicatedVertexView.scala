@@ -58,7 +58,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * `vertices`. This operation modifies the `ReplicatedVertexView`, and callers can access `edges`
    * afterwards to obtain the upgraded view.
    */
-  def upgrade(vertices: VertexRDD[VD], includeSrc: Boolean, includeDst: Boolean) {
+  def upgrade(vertices: VertexRDD[VD], includeSrc: Boolean, includeDst: Boolean): Unit = {
     val shipSrc = includeSrc && !hasSrcId
     val shipDst = includeDst && !hasDstId
     if (shipSrc || shipDst) {

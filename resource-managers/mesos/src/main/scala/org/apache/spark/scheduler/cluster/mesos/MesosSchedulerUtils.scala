@@ -149,7 +149,7 @@ trait MesosSchedulerUtils extends Logging {
       // until the scheduler exists
       new Thread(Utils.getFormattedClassName(this) + "-mesos-driver") {
         setDaemon(true)
-        override def run() {
+        override def run(): Unit = {
           try {
             val ret = newDriver.run()
             logInfo("driver.run() returned with code " + ret)
@@ -285,7 +285,6 @@ trait MesosSchedulerUtils extends Logging {
    * The attribute values are the mesos attribute types and they are
    *
    * @param offerAttributes the attributes offered
-   * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute])
     : Map[String, GeneratedMessageV3] = {
@@ -553,7 +552,7 @@ trait MesosSchedulerUtils extends Logging {
    * the same frameworkID.  To enforce that only the first driver registers with the configured
    * framework ID, the driver calls this method after the first registration.
    */
-  def unsetFrameworkID(sc: SparkContext) {
+  def unsetFrameworkID(sc: SparkContext): Unit = {
     sc.conf.remove(mesosConfig.DRIVER_FRAMEWORK_ID)
     System.clearProperty(mesosConfig.DRIVER_FRAMEWORK_ID.key)
   }

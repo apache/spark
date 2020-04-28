@@ -1,8 +1,4 @@
 -- This test file was converted from outer-join.sql.
--- List of configuration the test suite is run against:
---SET spark.sql.autoBroadcastJoinThreshold=10485760
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
 
 -- SPARK-17099: Incorrect result when HAVING clause is added to group by query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES

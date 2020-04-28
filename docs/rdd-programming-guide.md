@@ -149,8 +149,8 @@ $ PYSPARK_PYTHON=/opt/pypy-2.5/bin/pypy bin/spark-submit examples/src/main/pytho
 
 <div data-lang="scala"  markdown="1">
 
-The first thing a Spark program must do is to create a [SparkContext](api/scala/index.html#org.apache.spark.SparkContext) object, which tells Spark
-how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object
+The first thing a Spark program must do is to create a [SparkContext](api/scala/org/apache/spark/SparkContext.html) object, which tells Spark
+how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/scala/org/apache/spark/SparkConf.html) object
 that contains information about your application.
 
 Only one SparkContext should be active per JVM. You must `stop()` the active SparkContext before creating a new one.
@@ -500,7 +500,7 @@ then this approach should work well for such cases.
 
 If you have custom serialized binary data (such as loading data from Cassandra / HBase), then you will first need to
 transform that data on the Scala/Java side to something which can be handled by Pyrolite's pickler.
-A [Converter](api/scala/index.html#org.apache.spark.api.python.Converter) trait is provided
+A [Converter](api/scala/org/apache/spark/api/python/Converter.html) trait is provided
 for this. Simply extend this trait and implement your transformation code in the ```convert```
 method. Remember to ensure that this class, along with any dependencies required to access your ```InputFormat```, are packaged into your Spark job jar and included on the PySpark
 classpath.
@@ -856,7 +856,7 @@ by a key.
 In Scala, these operations are automatically available on RDDs containing
 [Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
 (the built-in tuples in the language, created by simply writing `(a, b)`). The key-value pair operations are available in the
-[PairRDDFunctions](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) class,
+[PairRDDFunctions](api/scala/org/apache/spark/rdd/PairRDDFunctions.html) class,
 which automatically wraps around an RDD of tuples.
 
 For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
@@ -946,12 +946,12 @@ We could also use `counts.sortByKey()`, for example, to sort the pairs alphabeti
 
 The following table lists some of the common transformations supported by Spark. Refer to the
 RDD API doc
-([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
+([Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
  [Python](api/python/pyspark.html#pyspark.RDD),
  [R](api/R/index.html))
 and pair RDD functions doc
-([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
+([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
@@ -1060,13 +1060,13 @@ for details.
 
 The following table lists some of the common actions supported by Spark. Refer to the
 RDD API doc
-([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
+([Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
  [Python](api/python/pyspark.html#pyspark.RDD),
  [R](api/R/index.html))
 
 and pair RDD functions doc
-([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
+([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
@@ -1208,7 +1208,7 @@ In addition, each persisted RDD can be stored using a different *storage level*,
 to persist the dataset on disk, persist it in memory but as serialized Java objects (to save space),
 replicate it across nodes.
 These levels are set by passing a
-`StorageLevel` object ([Scala](api/scala/index.html#org.apache.spark.storage.StorageLevel),
+`StorageLevel` object ([Scala](api/scala/org/apache/spark/storage/StorageLevel.html),
 [Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
 [Python](api/python/pyspark.html#pyspark.StorageLevel))
 to `persist()`. The `cache()` method is a shorthand for using the default storage level,
@@ -1404,11 +1404,11 @@ res2: Long = 10
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Long, programmers can also
-create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
+create their own types by subclassing [AccumulatorV2](api/scala/org/apache/spark/util/AccumulatorV2.html).
 The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
 the accumulator to zero, `add` for adding another value into the accumulator,
 `merge` for merging another same-type accumulator into this one. Other methods that must be overridden
-are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
+are contained in the [API documentation](api/scala/org/apache/spark/util/AccumulatorV2.html). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight scala %}
@@ -1457,11 +1457,11 @@ accum.value();
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Long, programmers can also
-create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
+create their own types by subclassing [AccumulatorV2](api/scala/org/apache/spark/util/AccumulatorV2.html).
 The AccumulatorV2 abstract class has several methods which one has to override: `reset` for resetting
 the accumulator to zero, `add` for adding another value into the accumulator,
 `merge` for merging another same-type accumulator into this one. Other methods that must be overridden
-are contained in the [API documentation](api/scala/index.html#org.apache.spark.util.AccumulatorV2). For example, supposing we had a `MyVector` class
+are contained in the [API documentation](api/scala/org/apache/spark/util/AccumulatorV2.html). For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight java %}
@@ -1620,4 +1620,4 @@ For help on deploying, the [cluster mode overview](cluster-overview.html) descri
 in distributed operation and supported cluster managers.
 
 Finally, full API documentation is available in
-[Scala](api/scala/#org.apache.spark.package), [Java](api/java/), [Python](api/python/) and [R](api/R/).
+[Scala](api/scala/org/apache/spark/), [Java](api/java/), [Python](api/python/) and [R](api/R/).

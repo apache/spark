@@ -23,8 +23,8 @@ import org.apache.spark.annotation.Evolving;
  * An interface that defines how to write the data to data source for batch processing.
  *
  * The writing procedure is:
- *   1. Create a writer factory by {@link #createBatchWriterFactory()}, serialize and send it to all
- *      the partitions of the input data(RDD).
+ *   1. Create a writer factory by {@link #createBatchWriterFactory(PhysicalWriteInfo)}, serialize
+ *      and send it to all the partitions of the input data(RDD).
  *   2. For each partition, create the data writer, and write the data of the partition with this
  *      writer. If all the data are written successfully, call {@link DataWriter#commit()}. If
  *      exception happens during the writing, call {@link DataWriter#abort()}.
@@ -36,6 +36,8 @@ import org.apache.spark.annotation.Evolving;
  * do it manually in their Spark applications if they want to retry.
  *
  * Please refer to the documentation of commit/abort methods for detailed specifications.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface BatchWrite {
@@ -45,8 +47,10 @@ public interface BatchWrite {
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
+   *
+   * @param info Physical information about the input data that will be written to this table.
    */
-  DataWriterFactory createBatchWriterFactory();
+  DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo info);
 
   /**
    * Returns whether Spark should use the commit coordinator to ensure that at most one task for

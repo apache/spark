@@ -19,4 +19,23 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+
+Reset any runtime configurations specific to the current session which were set via the [SET](sql-ref-syntax-aux-conf-mgmt-set.html) command to their default values.
+
+### Syntax
+
+{% highlight sql %}
+RESET
+{% endhighlight %}
+
+### Examples
+
+{% highlight sql %}
+-- Reset any runtime configurations specific to the current session which were set via the SET command to their default values.
+RESET;
+{% endhighlight %}
+
+### Related Statements
+
+ * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)

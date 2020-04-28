@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
@@ -72,8 +75,8 @@ public final class OneWayMessage extends AbstractMessage implements RequestMessa
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("body", body())
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("body", body())
       .toString();
   }
 }

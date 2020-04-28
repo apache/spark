@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
@@ -35,24 +34,21 @@ case class ShowTablesExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: Option[String])
-    extends LeafExecNode {
-  override protected def doExecute(): RDD[InternalRow] = {
+    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
+  override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    val encoder = RowEncoder(schema).resolveAndBind()
+    val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
 
     val tables = catalog.listTables(namespace.toArray)
     tables.map { table =>
       if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
-        rows += encoder
-          .toRow(
-            new GenericRowWithSchema(
-              Array(table.namespace().quoted, table.name()),
-              schema))
-          .copy()
+        val result = new GenericRowWithSchema(
+          Array(table.namespace().quoted, table.name()),
+          schema)
+        rows += toRow(result).copy()
       }
     }
 
-    sparkContext.parallelize(rows, 1)
+    rows
   }
 }

@@ -234,6 +234,21 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
   }
 
+  test ("SPARK-29537: throw exception when user defined a wrong base path") {
+    withTempPath { p =>
+      val path = new Path(p.toURI).toString
+      Seq((1, 1), (2, 2)).toDF("c1", "c2")
+        .write.partitionBy("c1").mode(SaveMode.Overwrite).parquet(path)
+      val wrongBasePath = new File(p, "unknown")
+      // basePath must be a directory
+      wrongBasePath.mkdir()
+      val msg = intercept[IllegalArgumentException] {
+        spark.read.option("basePath", wrongBasePath.getCanonicalPath).parquet(path)
+      }.getMessage
+      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+    }
+  }
+
   test("save mode") {
     spark.range(10).write
       .format("org.apache.spark.sql.test")
@@ -267,7 +282,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         plan = qe.analyzed
 
       }
-      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
 
     spark.listenerManager.register(listener)
@@ -277,7 +292,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         .format(classOf[NoopDataSource].getName)
         .mode(SaveMode.Append)
         .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(plan.isInstanceOf[AppendData])
 
       // overwrite mode creates `OverwriteByExpression`
@@ -285,22 +300,24 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         .format(classOf[NoopDataSource].getName)
         .mode(SaveMode.Overwrite)
         .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(plan.isInstanceOf[OverwriteByExpression])
 
       // By default the save mode is `ErrorIfExists` for data source v2.
-      spark.range(10).write
-        .format(classOf[NoopDataSource].getName)
-        .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
-      assert(plan.isInstanceOf[AppendData])
+      val e = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .save()
+      }
+      assert(e.getMessage.contains("ErrorIfExists"))
 
-      spark.range(10).write
-        .format(classOf[NoopDataSource].getName)
-        .mode("default")
-        .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
-      assert(plan.isInstanceOf[AppendData])
+      val e2 = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .mode("default")
+          .save()
+      }
+      assert(e2.getMessage.contains("ErrorIfExists"))
     } finally {
       spark.listenerManager.unregister(listener)
     }
@@ -472,11 +489,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     // when users do not specify the schema
     checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
 
-    // when users specify the schema
+    // when users specify a wrong schema
     val inputSchema = new StructType().add("s", IntegerType, nullable = false)
     val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
-    assert(e.getMessage.contains(
-      "org.apache.spark.sql.sources.SimpleScanSource does not allow user-specified schemas"))
+    assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
   }
 
   test("read a data source that does not extend RelationProvider") {
@@ -1058,7 +1074,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           checkDatasetUnorderly(
             spark.read.parquet(dir.getCanonicalPath).as[(Long, Long)],
             0L -> 0L, 1L -> 1L, 2L -> 2L)
-          sparkContext.listenerBus.waitUntilEmpty(10000)
+          sparkContext.listenerBus.waitUntilEmpty()
           assert(jobDescriptions.asScala.toList.exists(
             _.contains("Listing leaf files and directories for 3 paths")))
         } finally {

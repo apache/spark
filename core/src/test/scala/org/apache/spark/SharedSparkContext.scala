@@ -43,12 +43,12 @@ trait SharedSparkContext extends BeforeAndAfterAll with BeforeAndAfterEach { sel
     }
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     initializeContext()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       LocalSparkContext.stop(_sc)
       _sc = null

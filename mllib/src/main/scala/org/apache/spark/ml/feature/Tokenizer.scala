@@ -158,6 +158,12 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"RegexTokenizer: uid=$uid, minTokenLength=${$(minTokenLength)}, gaps=${$(gaps)}, " +
+      s"pattern=${$(pattern)}, toLowercase=${$(toLowercase)}"
+  }
 }
 
 @Since("1.6.0")

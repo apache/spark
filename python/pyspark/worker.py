@@ -19,6 +19,7 @@
 Worker that receives input from Piped RDD.
 """
 from __future__ import print_function
+from __future__ import absolute_import
 import os
 import sys
 import time
@@ -39,8 +40,10 @@ from pyspark.resourceinformation import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowStreamPandasUDFSerializer
-from pyspark.sql.types import to_arrow_type, StructType
+    BatchedSerializer
+from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
+from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.types import StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
 
@@ -119,6 +122,33 @@ def wrap_pandas_iter_udf(f, return_type):
 
     return lambda *iterator: map(lambda res: (res, arrow_return_type),
                                  map(verify_result_type, f(*iterator)))
+
+
+def wrap_cogrouped_map_pandas_udf(f, return_type, argspec):
+
+    def wrapped(left_key_series, left_value_series, right_key_series, right_value_series):
+        import pandas as pd
+
+        left_df = pd.concat(left_value_series, axis=1)
+        right_df = pd.concat(right_value_series, axis=1)
+
+        if len(argspec.args) == 2:
+            result = f(left_df, right_df)
+        elif len(argspec.args) == 3:
+            key_series = left_key_series if not left_df.empty else right_key_series
+            key = tuple(s[0] for s in key_series)
+            result = f(key, left_df, right_df)
+        if not isinstance(result, pd.DataFrame):
+            raise TypeError("Return type of the user-defined function should be "
+                            "pandas.DataFrame, but is {}".format(type(result)))
+        if not len(result.columns) == len(return_type):
+            raise RuntimeError(
+                "Number of columns of the returned pandas.DataFrame "
+                "doesn't match specified schema. "
+                "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
+        return result
+
+    return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec):
@@ -244,6 +274,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = _get_argspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
+    elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+        argspec = _get_argspec(chained_func)  # signature was lost when wrapping it
+        return arg_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
@@ -258,6 +291,7 @@ def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
     if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                     PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                      PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
@@ -273,20 +307,23 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
-        safecheck = runner_conf.get("spark.sql.execution.pandas.arrowSafeTypeConversion",
+        safecheck = runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely",
                                     "false").lower() == 'true'
         # Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
         assign_cols_by_name = runner_conf.get(
             "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")\
             .lower() == "true"
 
-        # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
-        # pandas Series. See SPARK-27240.
-        df_for_struct = (eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
-                         eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF or
-                         eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
-        ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name,
-                                             df_for_struct)
+        if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+            ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
+        else:
+            # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
+            # pandas Series. See SPARK-27240.
+            df_for_struct = (eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
+                             eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF or
+                             eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
+            ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name,
+                                                 df_for_struct)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 
@@ -305,7 +342,7 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
         def func(_, iterator):
-            num_input_rows = [0]
+            num_input_rows = [0]  # TODO(SPARK-29909): Use nonlocal after we drop Python 2.
 
             def map_batch(batch):
                 udf_args = [batch[offset] for offset in arg_offsets]
@@ -321,8 +358,13 @@ def read_udfs(pickleSer, infile, eval_type):
             num_output_rows = 0
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
+                # This assert is for Scalar Iterator UDF to fail fast.
+                # The length of the entire input can only be explicitly known
+                # by consuming the input iterator in user side. Therefore,
+                # it's very unlikely the output length is higher than
+                # input length.
                 assert is_map_iter or num_output_rows <= num_input_rows[0], \
-                    "Pandas MAP_ITER UDF outputted more rows than input rows."
+                    "Pandas SCALAR_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
 
             if is_scalar_iter:
@@ -331,52 +373,88 @@ def read_udfs(pickleSer, infile, eval_type):
                 except StopIteration:
                     pass
                 else:
-                    raise RuntimeError("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input "
+                    raise RuntimeError("pandas iterator UDF should exhaust the input "
                                        "iterator.")
 
-            if is_scalar_iter and num_output_rows != num_input_rows[0]:
-                raise RuntimeError("The number of output rows of pandas iterator UDF should be "
-                                   "the same with input rows. The input rows number is %d but the "
-                                   "output rows number is %d." %
-                                   (num_input_rows[0], num_output_rows))
+                if num_output_rows != num_input_rows[0]:
+                    raise RuntimeError(
+                        "The length of output in Scalar iterator pandas UDF should be "
+                        "the same with the input's; however, the length of output was %d and the "
+                        "length of input was %d." % (num_output_rows, num_input_rows[0]))
 
         # profiling is not supported for UDF
         return func, None, ser, ser
 
-    udfs = {}
-    call_udf = []
-    mapper_str = ""
-    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        # Create function like this:
-        #   lambda a: f([a[0]], [a[0], a[1]])
+    def extract_key_value_indexes(grouped_arg_offsets):
+        """
+        Helper function to extract the key and value indexes from arg_offsets for the grouped and
+        cogrouped pandas udfs. See BasePandasGroupExec.resolveArgOffsets for equivalent scala code.
 
+        :param grouped_arg_offsets:  List containing the key and value indexes of columns of the
+            DataFrames to be passed to the udf. It consists of n repeating groups where n is the
+            number of DataFrames.  Each group has the following format:
+                group[0]: length of group
+                group[1]: length of key indexes
+                group[2.. group[1] +2]: key attributes
+                group[group[1] +3 group[0]]: value attributes
+        """
+        parsed = []
+        idx = 0
+        while idx < len(grouped_arg_offsets):
+            offsets_len = grouped_arg_offsets[idx]
+            idx += 1
+            offsets = grouped_arg_offsets[idx: idx + offsets_len]
+            split_index = offsets[0] + 1
+            offset_keys = offsets[1: split_index]
+            offset_values = offsets[split_index:]
+            parsed.append([offset_keys, offset_values])
+            idx += offsets_len
+        return parsed
+
+    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, udf = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0)
-        udfs['f'] = udf
-        split_offset = arg_offsets[0] + 1
-        arg0 = ["a[%d]" % o for o in arg_offsets[1: split_offset]]
-        arg1 = ["a[%d]" % o for o in arg_offsets[split_offset:]]
-        mapper_str = "lambda a: f([%s], [%s])" % (", ".join(arg0), ", ".join(arg1))
-    else:
-        # Create function like this:
-        #   lambda a: (f0(a[0]), f1(a[1], a[2]), f2(a[3]))
-        # In the special case of a single UDF this will return a single result rather
-        # than a tuple of results; this is the format that the JVM side expects.
-        for i in range(num_udfs):
-            arg_offsets, udf = read_single_udf(
-                pickleSer, infile, eval_type, runner_conf, udf_index=i)
-            udfs['f%d' % i] = udf
-            args = ["a[%d]" % o for o in arg_offsets]
-            call_udf.append("f%d(%s)" % (i, ", ".join(args)))
-        mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
+        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-    mapper = eval(mapper_str, udfs)
+        # Create function like this:
+        #   mapper a: f([a[0]], [a[0], a[1]])
+        def mapper(a):
+            keys = [a[o] for o in parsed_offsets[0][0]]
+            vals = [a[o] for o in parsed_offsets[0][1]]
+            return f(keys, vals)
+    elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+        # We assume there is only one UDF here because cogrouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+
+        def mapper(a):
+            df1_keys = [a[0][o] for o in parsed_offsets[0][0]]
+            df1_vals = [a[0][o] for o in parsed_offsets[0][1]]
+            df2_keys = [a[1][o] for o in parsed_offsets[1][0]]
+            df2_vals = [a[1][o] for o in parsed_offsets[1][1]]
+            return f(df1_keys, df1_vals, df2_keys, df2_vals)
+    else:
+        udfs = []
+        for i in range(num_udfs):
+            udfs.append(read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i))
+
+        def mapper(a):
+            result = tuple(f(*[a[o] for o in arg_offsets]) for (arg_offsets, f) in udfs)
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if len(result) == 1:
+                return result[0]
+            else:
+                return result
+
     func = lambda _, it: map(mapper, it)
 
     # profiling is not supported for UDF
@@ -429,6 +507,9 @@ def main(infile, outfile):
         if isBarrier:
             taskContext = BarrierTaskContext._getOrCreate()
             BarrierTaskContext._initialize(boundPort, secret)
+            # Set the task context instance here, so we can get it by TaskContext.get for
+            # both TaskContext and BarrierTaskContext
+            TaskContext._setTaskContext(taskContext)
         else:
             taskContext = TaskContext._getOrCreate()
         # read inputs for TaskContext info
@@ -522,10 +603,22 @@ def main(infile, outfile):
             profiler.profile(process)
         else:
             process()
+
+        # Reset task context to None. This is a guard code to avoid residual context when worker
+        # reuse.
+        TaskContext._setTaskContext(None)
+        BarrierTaskContext._setTaskContext(None)
     except Exception:
         try:
+            exc_info = traceback.format_exc()
+            if isinstance(exc_info, bytes):
+                # exc_info may contains other encoding bytes, replace the invalid bytes and convert
+                # it back to utf-8 again
+                exc_info = exc_info.decode("utf-8", "replace").encode("utf-8")
+            else:
+                exc_info = exc_info.encode("utf-8")
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(traceback.format_exc().encode("utf-8"), outfile)
+            write_with_length(exc_info, outfile)
         except IOError:
             # JVM close the socket
             pass

@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 case class Record(key: Int, value: String)
 
 object RDDRelation {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // $example on:init_session$
     val spark = SparkSession
       .builder

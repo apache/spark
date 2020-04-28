@@ -39,7 +39,7 @@ class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
       StopStream
     )
 
-    spark.sparkContext.listenerBus.waitUntilEmpty(5000)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
 
     assert(TestListener.queryStartedEvent != null)
     assert(TestListener.queryTerminatedEvent != null)

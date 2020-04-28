@@ -113,9 +113,9 @@ private[spark] class PrometheusServlet(
     s"metrics_${key.replaceAll("[^a-zA-Z0-9]", "_")}_"
   }
 
-  override def start() { }
+  override def start(): Unit = { }
 
-  override def stop() { }
+  override def stop(): Unit = { }
 
-  override def report() { }
+  override def report(): Unit = { }
 }

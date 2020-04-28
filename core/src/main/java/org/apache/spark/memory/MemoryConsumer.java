@@ -54,7 +54,7 @@ public abstract class MemoryConsumer {
   /**
    * Returns the size of used memory in bytes.
    */
-  protected long getUsed() {
+  public long getUsed() {
     return used;
   }
 
@@ -78,7 +78,6 @@ public abstract class MemoryConsumer {
    * @param size the amount of memory should be released
    * @param trigger the MemoryConsumer that trigger this spilling
    * @return the amount of released memory in bytes
-   * @throws IOException
    */
   public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
 

@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.{SupportsDelete, SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Implicits {
   implicit class TableHelper(table: Table) {
@@ -52,5 +55,11 @@ object DataSourceV2Implicits {
     def supports(capability: TableCapability): Boolean = table.capabilities.contains(capability)
 
     def supportsAny(capabilities: TableCapability*): Boolean = capabilities.exists(supports)
+  }
+
+  implicit class OptionsHelper(options: Map[String, String]) {
+    def asOptions: CaseInsensitiveStringMap = {
+      new CaseInsensitiveStringMap(options.asJava)
+    }
   }
 }

@@ -71,7 +71,7 @@ private[spark] class AppStatusListener(
   // causing too many writes to the underlying store, and other expensive operations).
   private val liveStages = new ConcurrentHashMap[(Int, Int), LiveStage]()
   private val liveJobs = new HashMap[Int, LiveJob]()
-  private val liveExecutors = new HashMap[String, LiveExecutor]()
+  private[spark] val liveExecutors = new HashMap[String, LiveExecutor]()
   private val deadExecutors = new HashMap[String, LiveExecutor]()
   private val liveTasks = new HashMap[Long, LiveTask]()
   private val liveRDDs = new HashMap[Int, LiveRDD]()
@@ -234,8 +234,8 @@ private[spark] class AppStatusListener(
                 (partition.memoryUsed / partition.executors.length) * -1)
               rdd.diskUsed = addDeltaToValue(rdd.diskUsed,
                 (partition.diskUsed / partition.executors.length) * -1)
-              partition.update(partition.executors
-                .filter(!_.equals(event.executorId)), rdd.storageLevel,
+              partition.update(
+                partition.executors.filter(!_.equals(event.executorId)),
                 addDeltaToValue(partition.memoryUsed,
                   (partition.memoryUsed / partition.executors.length) * -1),
                 addDeltaToValue(partition.diskUsed,
@@ -355,6 +355,8 @@ private[spark] class AppStatusListener(
 
     val lastStageInfo = event.stageInfos.sortBy(_.stageId).lastOption
     val jobName = lastStageInfo.map(_.name).getOrElse("")
+    val description = Option(event.properties)
+      .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)) }
     val jobGroup = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
     val sqlExecutionId = Option(event.properties)
@@ -363,6 +365,7 @@ private[spark] class AppStatusListener(
     val job = new LiveJob(
       event.jobId,
       jobName,
+      description,
       if (event.time > 0) Some(new Date(event.time)) else None,
       event.stageIds,
       jobGroup,
@@ -495,7 +498,7 @@ private[spark] class AppStatusListener(
 
     event.stageInfo.rddInfos.foreach { info =>
       if (info.storageLevel.isValid) {
-        liveUpdate(liveRDDs.getOrElseUpdate(info.id, new LiveRDD(info)), now)
+        liveUpdate(liveRDDs.getOrElseUpdate(info.id, new LiveRDD(info, info.storageLevel)), now)
       }
     }
 
@@ -769,6 +772,11 @@ private[spark] class AppStatusListener(
     event.maxOnHeapMem.foreach { _ =>
       exec.totalOnHeap = event.maxOnHeapMem.get
       exec.totalOffHeap = event.maxOffHeapMem.get
+      // SPARK-30594: whenever(first time or re-register) a BlockManager added, all blocks
+      // from this BlockManager will be reported to driver later. So, we should clean up
+      // used memory to avoid overlapped count.
+      exec.usedOnHeap = 0
+      exec.usedOffHeap = 0
     }
     exec.isActive = true
     exec.maxMemory = event.maxMem
@@ -916,12 +924,6 @@ private[spark] class AppStatusListener(
     val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
     val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
 
-    val updatedStorageLevel = if (storageLevel.isValid) {
-      Some(storageLevel.description)
-    } else {
-      None
-    }
-
     // We need information about the executor to update some memory accounting values in the
     // RDD info, so read that beforehand.
     val maybeExec = liveExecutors.get(executorId)
@@ -936,13 +938,9 @@ private[spark] class AppStatusListener(
     // Update the block entry in the RDD info, keeping track of the deltas above so that we
     // can update the executor information too.
     liveRDDs.get(block.rddId).foreach { rdd =>
-      if (updatedStorageLevel.isDefined) {
-        rdd.setStorageLevel(updatedStorageLevel.get)
-      }
-
       val partition = rdd.partition(block.name)
 
-      val executors = if (updatedStorageLevel.isDefined) {
+      val executors = if (storageLevel.isValid) {
         val current = partition.executors
         if (current.contains(executorId)) {
           current
@@ -957,7 +955,7 @@ private[spark] class AppStatusListener(
 
       // Only update the partition if it's still stored in some executor, otherwise get rid of it.
       if (executors.nonEmpty) {
-        partition.update(executors, rdd.storageLevel,
+        partition.update(executors,
           addDeltaToValue(partition.memoryUsed, memoryDelta),
           addDeltaToValue(partition.diskUsed, diskDelta))
       } else {
@@ -1049,7 +1047,7 @@ private[spark] class AppStatusListener(
     }
   }
 
-  private def updateExecutorMemoryDiskInfo(
+  private[spark] def updateExecutorMemoryDiskInfo(
       exec: LiveExecutor,
       storageLevel: StorageLevel,
       memoryDelta: Long,

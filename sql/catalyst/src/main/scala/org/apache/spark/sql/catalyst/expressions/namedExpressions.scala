@@ -236,8 +236,6 @@ case class AttributeReference(
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
 
-  // currently can only handle qualifier of length 2
-  require(qualifier.length <= 2)
   /**
    * Returns true iff the expression id is the same for both attributes.
    */
@@ -384,6 +382,7 @@ case class OuterReference(e: NamedExpression)
   override def nullable: Boolean = e.nullable
   override def prettyName: String = "outer"
 
+  override def sql: String = s"$prettyName(${e.sql})"
   override def name: String = e.name
   override def qualifier: Seq[String] = e.qualifier
   override def exprId: ExprId = e.exprId

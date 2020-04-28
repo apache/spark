@@ -68,6 +68,9 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("idfValue")
     val idfModel = idfEst.fit(df)
 
+    val transformed = idfModel.transform(df)
+    checkVectorSizeOnDF(transformed, "idfValue", idfModel.idf.size)
+
     MLTestingUtils.checkCopyAndUids(idfEst, idfModel)
 
     testTransformer[(Vector, Vector)](df, idfModel, "idfValue", "expected") {

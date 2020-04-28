@@ -33,11 +33,16 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractSqlParser extends ParserInterface with Logging {
+abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Logging {
 
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
+  }
+
+  /** Similar to `parseDataType`, but without CHAR/VARCHAR replacement. */
+  override def parseRawDataType(sqlText: String): DataType = parse(sqlText) { parser =>
+    astBuilder.parseRawDataType(parser.singleDataType())
   }
 
   /** Creates Expression for a given SQL string. */
@@ -91,16 +96,20 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
-    lexer.ansi = SQLConf.get.ansiParserEnabled
+    lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    lexer.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    lexer.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
+    lexer.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
-    parser.ansi = SQLConf.get.ansiParserEnabled
+    parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
+    parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    parser.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
+    parser.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     try {
       try {
@@ -134,12 +143,12 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
-class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
+class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
   val astBuilder = new AstBuilder(conf)
 }
 
 /** For test-only. */
-object CatalystSqlParser extends AbstractSqlParser {
+object CatalystSqlParser extends AbstractSqlParser(SQLConf.get) {
   val astBuilder = new AstBuilder(SQLConf.get)
 }
 

@@ -27,7 +27,9 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.DataType
 
 private[sql] object PythonSQLUtils {
@@ -36,6 +38,22 @@ private[sql] object PythonSQLUtils {
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
     FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
+  }
+
+  private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
+    val conf = new SQLConf()
+    // Force to build static SQL configurations
+    StaticSQLConf
+    conf.getAllDefinedConfs
+  }
+
+  def listRuntimeSQLConfigs(): Array[(String, String, String, String)] = {
+    // Py4J doesn't seem to translate Seq well, so we convert to an Array.
+    listAllSQLConfigs().filterNot(p => SQLConf.staticConfKeys.contains(p._1)).toArray
+  }
+
+  def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
+    listAllSQLConfigs().filter(p => SQLConf.staticConfKeys.contains(p._1)).toArray
   }
 
   /**
@@ -55,6 +73,10 @@ private[sql] object PythonSQLUtils {
       schemaString: String,
       sqlContext: SQLContext): DataFrame = {
     ArrowConverters.toDataFrame(arrowBatchRDD, schemaString, sqlContext)
+  }
+
+  def explainString(queryExecution: QueryExecution, mode: String): String = {
+    queryExecution.explainString(ExplainMode.fromString(mode))
   }
 }
 

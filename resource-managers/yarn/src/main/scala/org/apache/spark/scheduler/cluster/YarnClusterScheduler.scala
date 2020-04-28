@@ -28,7 +28,7 @@ private[spark] class YarnClusterScheduler(sc: SparkContext) extends YarnSchedule
 
   logInfo("Created YarnClusterScheduler")
 
-  override def postStartHook() {
+  override def postStartHook(): Unit = {
     ApplicationMaster.sparkContextInitialized(sc)
     super.postStartHook()
     logInfo("YarnClusterScheduler.postStartHook done")

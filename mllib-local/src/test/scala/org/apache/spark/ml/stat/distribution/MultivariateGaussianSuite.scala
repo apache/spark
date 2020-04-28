@@ -31,11 +31,15 @@ class MultivariateGaussianSuite extends SparkMLFunSuite {
     val mu = Vectors.dense(0.0)
     val sigma1 = Matrices.dense(1, 1, Array(1.0))
     val dist1 = new MultivariateGaussian(mu, sigma1)
+    assert(dist1.logpdf(x1) ~== -0.9189385332046727 absTol 1E-5)
+    assert(dist1.logpdf(x2) ~== -2.0439385332046727 absTol 1E-5)
     assert(dist1.pdf(x1) ~== 0.39894 absTol 1E-5)
     assert(dist1.pdf(x2) ~== 0.12952 absTol 1E-5)
 
     val sigma2 = Matrices.dense(1, 1, Array(4.0))
     val dist2 = new MultivariateGaussian(mu, sigma2)
+    assert(dist2.logpdf(x1) ~== -1.612085713764618 absTol 1E-5)
+    assert(dist2.logpdf(x2) ~== -1.893335713764618 absTol 1E-5)
     assert(dist2.pdf(x1) ~== 0.19947 absTol 1E-5)
     assert(dist2.pdf(x2) ~== 0.15057 absTol 1E-5)
   }
@@ -47,11 +51,15 @@ class MultivariateGaussianSuite extends SparkMLFunSuite {
     val mu = Vectors.dense(0.0, 0.0)
     val sigma1 = Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0))
     val dist1 = new MultivariateGaussian(mu, sigma1)
+    assert(dist1.logpdf(x1) ~== -1.8378770664093453 absTol 1E-5)
+    assert(dist1.logpdf(x2) ~== -2.8378770664093453 absTol 1E-5)
     assert(dist1.pdf(x1) ~== 0.15915 absTol 1E-5)
     assert(dist1.pdf(x2) ~== 0.05855 absTol 1E-5)
 
     val sigma2 = Matrices.dense(2, 2, Array(4.0, -1.0, -1.0, 2.0))
     val dist2 = new MultivariateGaussian(mu, sigma2)
+    assert(dist2.logpdf(x1) ~== -2.810832140937002 absTol 1E-5)
+    assert(dist2.logpdf(x2) ~== -3.3822607123655732 absTol 1E-5)
     assert(dist2.pdf(x1) ~== 0.060155 absTol 1E-5)
     assert(dist2.pdf(x2) ~== 0.033971 absTol 1E-5)
   }

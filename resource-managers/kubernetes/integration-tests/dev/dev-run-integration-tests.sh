@@ -16,13 +16,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-set -xo errexit
+set -exo errexit
 TEST_ROOT_DIR=$(git rev-parse --show-toplevel)
 
 DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 SPARK_TGZ="N/A"
 IMAGE_TAG="N/A"
+JAVA_IMAGE_TAG=
 BASE_IMAGE_NAME=
 JVM_IMAGE_NAME=
 PYTHON_IMAGE_NAME=
@@ -41,6 +42,9 @@ SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/nu
     | grep -v "WARNING"\
     | tail -n 1)
 
+export SCALA_VERSION
+echo $SCALA_VERSION
+
 # Parse arguments
 while (( "$#" )); do
   case $1 in
@@ -50,6 +54,10 @@ while (( "$#" )); do
       ;;
     --image-tag)
       IMAGE_TAG="$2"
+      shift
+      ;;
+    --java-image-tag)
+      JAVA_IMAGE_TAG="$2"
       shift
       ;;
     --deploy-mode)
@@ -105,7 +113,8 @@ while (( "$#" )); do
       shift
       ;;
     *)
-      break
+      echo "Unexpected command line flag $2 $1."
+      exit 1
       ;;
   esac
   shift
@@ -120,27 +129,32 @@ properties=(
   -Dtest.include.tags=$INCLUDE_TAGS
 )
 
-if [ -n $NAMESPACE ];
+if [ -n "$JAVA_IMAGE_TAG" ];
+then
+  properties=( ${properties[@]} -Dspark.kubernetes.test.javaImageTag=$JAVA_IMAGE_TAG )
+fi
+
+if [ -n "$NAMESPACE" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.namespace=$NAMESPACE )
 fi
 
-if [ -n $SERVICE_ACCOUNT ];
+if [ -n "$SERVICE_ACCOUNT" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.serviceAccountName=$SERVICE_ACCOUNT )
 fi
 
-if [ -n $CONTEXT ];
+if [ -n "$CONTEXT" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.kubeConfigContext=$CONTEXT )
 fi
 
-if [ -n $SPARK_MASTER ];
+if [ -n "$SPARK_MASTER" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.master=$SPARK_MASTER )
 fi
 
-if [ -n $EXCLUDE_TAGS ];
+if [ -n "$EXCLUDE_TAGS" ];
 then
   properties=( ${properties[@]} -Dtest.exclude.tags=$EXCLUDE_TAGS )
 fi
@@ -154,6 +168,7 @@ properties+=(
   -Dspark.kubernetes.test.jvmImage=$JVM_IMAGE_NAME
   -Dspark.kubernetes.test.pythonImage=$PYTHON_IMAGE_NAME
   -Dspark.kubernetes.test.rImage=$R_IMAGE_NAME
+  -Dlog4j.logger.org.apache.spark=DEBUG
 )
 
 $TEST_ROOT_DIR/build/mvn integration-test -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests -am -Pscala-$SCALA_VERSION -Pkubernetes -Pkubernetes-integration-tests ${properties[@]}

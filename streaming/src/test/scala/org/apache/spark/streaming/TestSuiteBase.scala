@@ -62,9 +62,9 @@ private[streaming] class DummyInputDStream(ssc: StreamingContext) extends InputD
 class TestInputStream[T: ClassTag](_ssc: StreamingContext, input: Seq[Seq[T]], numPartitions: Int)
   extends InputDStream[T](_ssc) {
 
-  def start() {}
+  def start(): Unit = {}
 
-  def stop() {}
+  def stop(): Unit = {}
 
   def compute(validTime: Time): Option[RDD[T]] = {
     logInfo("Computing RDD for time " + validTime)
@@ -251,7 +251,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
 
   // Default before function for any streaming test suite. Override this
   // if you want to add your stuff to "beforeEach"
-  def beforeFunction() {
+  def beforeFunction(): Unit = {
     if (useManualClock) {
       logInfo("Using manual clock")
       conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
@@ -263,7 +263,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
 
   // Default after function for any streaming test suite. Override this
   // if you want to add your stuff to "afterEach"
-  def afterFunction() {
+  def afterFunction(): Unit = {
     System.clearProperty("spark.streaming.clock")
   }
 
@@ -458,7 +458,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
       output: Seq[Seq[V]],
       expectedOutput: Seq[Seq[V]],
       useSet: Boolean
-    ) {
+    ): Unit = {
     logInfo("--------------------------------")
     logInfo("output.size = " + output.size)
     logInfo("output")
@@ -498,7 +498,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
       operation: DStream[U] => DStream[V],
       expectedOutput: Seq[Seq[V]],
       useSet: Boolean = false
-    ) {
+    ): Unit = {
     testOperation[U, V](input, operation, expectedOutput, -1, useSet)
   }
 
@@ -517,7 +517,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
       expectedOutput: Seq[Seq[V]],
       numBatches: Int,
       useSet: Boolean
-    ) {
+    ): Unit = {
     val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
     withStreamingContext(setupStreams[U, V](input, operation)) { ssc =>
       val output = runStreams[V](ssc, numBatches_, expectedOutput.size)
@@ -535,7 +535,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
       operation: (DStream[U], DStream[V]) => DStream[W],
       expectedOutput: Seq[Seq[W]],
       useSet: Boolean
-    ) {
+    ): Unit = {
     testOperation[U, V, W](input1, input2, operation, expectedOutput, -1, useSet)
   }
 
@@ -556,7 +556,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
       expectedOutput: Seq[Seq[W]],
       numBatches: Int,
       useSet: Boolean
-    ) {
+    ): Unit = {
     val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
     withStreamingContext(setupStreams[U, V, W](input1, input2, operation)) { ssc =>
       val output = runStreams[W](ssc, numBatches_, expectedOutput.size)

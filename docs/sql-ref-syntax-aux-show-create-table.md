@@ -19,4 +19,50 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+
+`SHOW CREATE TABLE` returns the [CREATE TABLE statement](sql-ref-syntax-ddl-create-table.html) or [CREATE VIEW statement](sql-ref-syntax-ddl-create-view.html) that was used to create a given table or view. `SHOW CREATE TABLE` on a non-existent table or a temporary view throws an exception.
+
+### Syntax
+
+{% highlight sql %}
+SHOW CREATE TABLE table_identifier
+{% endhighlight %}
+
+### Parameters
+
+<dl>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies a table or view name, which may be optionally qualified with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [ database_name. ] table_name
+      </code>
+  </dd>
+</dl>
+
+### Examples
+
+{% highlight sql %}
+CREATE TABLE test (c INT) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+    STORED AS TEXTFILE
+    TBLPROPERTIES ('prop1' = 'value1', 'prop2' = 'value2');
+
+SHOW CREATE TABLE test;
+  +----------------------------------------------------+
+  |                                      createtab_stmt|
+  +----------------------------------------------------+
+  |CREATE TABLE `default`.`test` (`c` INT)
+   USING text
+   TBLPROPERTIES (
+     'transient_lastDdlTime' = '1586269021',
+     'prop1' = 'value1',
+     'prop2' = 'value2')
+  +----------------------------------------------------+
+{% endhighlight %}
+
+### Related Statements
+
+ * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+ * [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)

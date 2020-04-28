@@ -28,6 +28,7 @@ package object config {
       ConfigBuilder(s"spark.mesos.$taskType.secret.names")
         .doc("A comma-separated list of secret reference names. Consult the Mesos Secret " +
           "protobuf for more information.")
+        .version("2.3.0")
         .stringConf
         .toSequence
         .createOptional
@@ -35,6 +36,7 @@ package object config {
     private[spark] val SECRET_VALUES =
       ConfigBuilder(s"spark.mesos.$taskType.secret.values")
         .doc("A comma-separated list of secret values.")
+        .version("2.3.0")
         .stringConf
         .toSequence
         .createOptional
@@ -43,6 +45,7 @@ package object config {
       ConfigBuilder(s"spark.mesos.$taskType.secret.envkeys")
         .doc("A comma-separated list of the environment variables to contain the secrets." +
           "The environment variable will be set on the driver.")
+        .version("2.3.0")
         .stringConf
         .toSequence
         .createOptional
@@ -51,6 +54,7 @@ package object config {
       ConfigBuilder(s"spark.mesos.$taskType.secret.filenames")
         .doc("A comma-separated list of file paths secret will be written to.  Consult the Mesos " +
           "Secret protobuf for more information.")
+        .version("2.3.0")
         .stringConf
         .toSequence
         .createOptional
@@ -59,6 +63,7 @@ package object config {
   private[spark] val CREDENTIAL_PRINCIPAL =
     ConfigBuilder("spark.mesos.principal")
       .doc("Name of the Kerberos principal to authenticate Spark to Mesos.")
+      .version("1.5.0")
       .stringConf
       .createOptional
 
@@ -66,18 +71,21 @@ package object config {
     ConfigBuilder("spark.mesos.principal.file")
       .doc("The path of file which contains the name of the Kerberos principal " +
         "to authenticate Spark to Mesos.")
+      .version("2.4.0")
       .stringConf
       .createOptional
 
   private[spark] val CREDENTIAL_SECRET =
     ConfigBuilder("spark.mesos.secret")
       .doc("The secret value to authenticate Spark to Mesos.")
+      .version("1.5.0")
       .stringConf
       .createOptional
 
   private[spark] val CREDENTIAL_SECRET_FILE =
     ConfigBuilder("spark.mesos.secret.file")
       .doc("The path of file which contains the secret value to authenticate Spark to Mesos.")
+      .version("2.4.0")
       .stringConf
       .createOptional
 
@@ -85,6 +93,7 @@ package object config {
 
   private[spark] val SHUFFLE_CLEANER_INTERVAL_S =
     ConfigBuilder("spark.shuffle.cleaner.interval")
+      .version("2.0.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("30s")
 
@@ -92,6 +101,7 @@ package object config {
     ConfigBuilder("spark.mesos.dispatcher.webui.url")
       .doc("Set the Spark Mesos dispatcher webui_url for interacting with the " +
         "framework. If unset it will point to Spark's internal web UI.")
+      .version("2.0.0")
       .stringConf
       .createOptional
 
@@ -99,6 +109,7 @@ package object config {
     ConfigBuilder("spark.mesos.dispatcher.historyServer.url")
       .doc("Set the URL of the history server. The dispatcher will then " +
         "link each driver to its entry in the history server.")
+      .version("2.1.0")
       .stringConf
       .createOptional
 
@@ -107,6 +118,7 @@ package object config {
       .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs. Key-value " +
         "pairs should be separated by a colon, and commas used to list more than one." +
         "Ex. key:value,key2:value2")
+      .version("2.3.0")
       .stringConf
       .createOptional
 
@@ -114,6 +126,7 @@ package object config {
     ConfigBuilder("spark.mesos.driver.webui.url")
       .doc("Set the Spark Mesos driver webui_url for interacting with the framework. " +
         "If unset it will point to Spark's internal web UI.")
+      .version("2.0.0")
       .stringConf
       .createOptional
 
@@ -125,6 +138,7 @@ package object config {
     ConfigBuilder("spark.mesos.driver.failoverTimeout")
       .doc("Amount of time in seconds that the master will wait to hear from the driver, " +
           "during a temporary disconnection, before tearing down all the executors.")
+      .version("2.3.0")
       .doubleConf
       .createWithDefault(0.0)
 
@@ -132,6 +146,7 @@ package object config {
     ConfigBuilder("spark.mesos.network.name")
       .doc("Attach containers to the given named network. If this job is launched " +
         "in cluster mode, also launch the driver in the given named network.")
+      .version("2.1.0")
       .stringConf
       .createOptional
 
@@ -140,6 +155,7 @@ package object config {
       .doc("Network labels to pass to CNI plugins.  This is a comma-separated list " +
         "of key-value pairs, where each key-value pair has the format key:value. " +
         "Example: key1:val1,key2:val2")
+      .version("2.3.0")
       .stringConf
       .createOptional
 
@@ -147,19 +163,21 @@ package object config {
     ConfigBuilder("spark.mesos.driver.constraints")
       .doc("Attribute based constraints on mesos resource offers. Applied by the dispatcher " +
         "when launching drivers. Default is to accept all offers with sufficient resources.")
+      .version("2.2.1")
       .stringConf
       .createWithDefault("")
 
   private[spark] val DRIVER_FRAMEWORK_ID =
     ConfigBuilder("spark.mesos.driver.frameworkId")
+      .version("2.1.0")
       .stringConf
       .createOptional
 
   private[spark] val EXECUTOR_URI =
-    ConfigBuilder("spark.executor.uri").stringConf.createOptional
+    ConfigBuilder("spark.executor.uri").version("0.8.0").stringConf.createOptional
 
   private[spark] val PROXY_BASE_URL =
-    ConfigBuilder("spark.mesos.proxy.baseURL").stringConf.createOptional
+    ConfigBuilder("spark.mesos.proxy.baseURL").version("2.3.0").stringConf.createOptional
 
   private[spark] val COARSE_MODE =
     ConfigBuilder("spark.mesos.coarse")
@@ -167,22 +185,26 @@ package object config {
         "Spark acquires one long-lived Mesos task on each machine. If set to false, runs over " +
         "Mesos cluster in \"fine-grained\" sharing mode, where one Mesos task is created per " +
         "Spark task.")
-      .booleanConf.createWithDefault(true)
+      .version("0.6.0")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val COARSE_SHUTDOWN_TIMEOUT =
     ConfigBuilder("spark.mesos.coarse.shutdownTimeout")
+      .version("2.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ >= 0, s"spark.mesos.coarse.shutdownTimeout must be >= 0")
       .createWithDefaultString("10s")
 
   private[spark] val MAX_DRIVERS =
-    ConfigBuilder("spark.mesos.maxDrivers").intConf.createWithDefault(200)
+    ConfigBuilder("spark.mesos.maxDrivers").version("1.4.0").intConf.createWithDefault(200)
 
   private[spark] val RETAINED_DRIVERS =
-    ConfigBuilder("spark.mesos.retainedDrivers").intConf.createWithDefault(200)
+    ConfigBuilder("spark.mesos.retainedDrivers").version("1.4.0").intConf.createWithDefault(200)
 
   private[spark] val CLUSTER_RETRY_WAIT_MAX_SECONDS =
     ConfigBuilder("spark.mesos.cluster.retry.wait.max")
+      .version("1.4.0")
       .intConf
       .createWithDefault(60) // 1 minute
 
@@ -190,6 +212,7 @@ package object config {
     ConfigBuilder("spark.mesos.fetcherCache.enable")
       .doc("If set to true, all URIs (example: `spark.executor.uri`, `spark.mesos.uris`) will be " +
         "cached by the Mesos Fetcher Cache.")
+      .version("2.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -201,6 +224,7 @@ package object config {
         "resource from the host's file system. If the value is unknown it prints a warning msg " +
         "in the dispatcher logs and defaults to `host`. If the value is `container` then spark " +
         "submit in the container will use the jar in the container's path: `/path/to/jar`.")
+      .version("2.4.0")
       .stringConf
       .checkValues(Set("host", "container"))
       .createWithDefault("host")
@@ -210,12 +234,14 @@ package object config {
       .doc("Time to consider unused resources refused, serves as a fallback of " +
         "`spark.mesos.rejectOfferDurationForUnmetConstraints`, " +
         "`spark.mesos.rejectOfferDurationForReachedMaxCores`.")
+      .version("2.2.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("120s")
 
   private[spark] val REJECT_OFFER_DURATION_FOR_UNMET_CONSTRAINTS =
     ConfigBuilder("spark.mesos.rejectOfferDurationForUnmetConstraints")
       .doc("Time to consider unused resources refused with unmet constraints.")
+      .version("1.6.0")
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 
@@ -223,6 +249,7 @@ package object config {
     ConfigBuilder("spark.mesos.rejectOfferDurationForReachedMaxCores")
       .doc("Time to consider unused resources refused when maximum number of cores " +
         "`spark.cores.max` is reached.")
+      .version("2.0.0")
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 
@@ -231,6 +258,7 @@ package object config {
       .doc("A comma-separated list of URIs to be downloaded to the sandbox when driver or " +
         "executor is launched by Mesos. This applies to both coarse-grained and fine-grained " +
         "mode.")
+      .version("1.5.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -241,6 +269,7 @@ package object config {
         "By default, the executors will simply use the driver's Spark home directory, which may " +
         "not be visible to them. Note that this is only relevant if a Spark binary package is " +
         "not specified through `spark.executor.uri`.")
+      .version("1.1.1")
       .stringConf
       .createOptional
 
@@ -250,6 +279,7 @@ package object config {
         "include the cores used to run the Spark tasks. In other words, even if no Spark task " +
         "is being run, each Mesos executor will occupy the number of cores configured here. " +
         "The value can be a floating point number.")
+      .version("1.4.0")
       .doubleConf
       .createWithDefault(1.0)
 
@@ -259,6 +289,7 @@ package object config {
         "more cores allocated. It instead means that an executor will \"pretend\" it has more " +
         "cores, so that the driver will send it more tasks. Use this to increase parallelism. " +
         "This setting is only used for Mesos coarse-grained mode.")
+      .version("0.6.0")
       .intConf
       .createWithDefault(0)
 
@@ -267,6 +298,7 @@ package object config {
       .doc("The amount of additional memory, specified in MiB, to be allocated per executor. " +
         "By default, the overhead will be larger of either 384 or 10% of " +
         "`spark.executor.memory`. If set, the final overhead will be this value.")
+      .version("1.1.1")
       .intConf
       .createOptional
 
@@ -277,6 +309,7 @@ package object config {
         "The installed path of Spark in the image can be specified with " +
         "`spark.mesos.executor.home`; the installed path of the Mesos library can be specified " +
         "with `spark.executorEnv.MESOS_NATIVE_JAVA_LIBRARY`.")
+      .version("1.4.0")
       .stringConf
       .createOptional
 
@@ -285,11 +318,13 @@ package object config {
       .doc("Force Mesos agents to pull the image specified in " +
         "`spark.mesos.executor.docker.image`. By default Mesos agents will not pull images they " +
         "already have cached.")
+      .version("2.1.0")
       .booleanConf
       .createOptional
 
   private[spark] val EXECUTOR_DOCKER_PORT_MAPS =
     ConfigBuilder("spark.mesos.executor.docker.portmaps")
+      .version("1.4.0")
       .stringConf
       .toSequence
       .createOptional
@@ -299,6 +334,7 @@ package object config {
       .doc("Set the list of custom parameters which will be passed into the `docker run` " +
         "command when launching the Spark executor on Mesos using the docker containerizer. " +
         "The format of this property is a list of key/value pairs which pair looks key1=value1.")
+      .version("2.2.0")
       .stringConf
       .toSequence
       .createOptional
@@ -309,6 +345,7 @@ package object config {
         "using `spark.mesos.executor.docker.image`. The format of this property is a list of " +
         "mappings following the form passed to `docker run -v`. That is they take the form:  " +
         "`[host_path:]container_path[:ro|:rw]`")
+      .version("1.4.0")
       .stringConf
       .toSequence
       .createOptional
@@ -318,6 +355,7 @@ package object config {
       .doc("Set the maximum number GPU resources to acquire for this job. Note that executors " +
         "will still launch when no GPU resources are found since this configuration is just an " +
         "upper limit and not a guaranteed amount.")
+      .version("2.1.0")
       .intConf
       .createWithDefault(0)
 
@@ -327,6 +365,7 @@ package object config {
         "Key-value pairs should be separated by a colon, and commas used to list more than one. " +
         "If your label includes a colon or comma, you can escape it with a backslash. " +
         "Ex. key:value,key2:a\\:b.")
+      .version("2.2.0")
       .stringConf
       .createWithDefault("")
 
@@ -335,6 +374,7 @@ package object config {
       .doc("Attribute-based constraints on mesos resource offers. By default, all resource " +
         "offers will be accepted. This setting applies only to executors. Refer to Mesos " +
         "Attributes & Resources doc for more information on attributes.")
+      .version("1.5.0")
       .stringConf
       .createWithDefault("")
 
@@ -344,6 +384,7 @@ package object config {
         "Mesos supports two types of containerizers for docker: the \"docker\" containerizer, " +
         "and the preferred \"mesos\" containerizer. " +
         "Read more here: http://mesos.apache.org/documentation/latest/container-image/")
+      .version("2.1.0")
       .stringConf
       .checkValues(Set("docker", "mesos"))
       .createWithDefault("docker")
@@ -352,6 +393,7 @@ package object config {
     ConfigBuilder("spark.mesos.role")
       .doc("Set the role of this Spark framework for Mesos. Roles are used in Mesos for " +
         "reservations and resource weight sharing.")
+      .version("1.5.0")
       .stringConf
       .createOptional
 

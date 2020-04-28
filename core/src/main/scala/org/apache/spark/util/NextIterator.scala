@@ -50,7 +50,7 @@ private[spark] abstract class NextIterator[U] extends Iterator[U] {
    * Ideally you should have another try/catch, as in HadoopRDD, that
    * ensures any resources are closed should iteration fail.
    */
-  protected def close()
+  protected def close(): Unit
 
   /**
    * Calls the subclass-defined close method, but only once.
@@ -58,7 +58,7 @@ private[spark] abstract class NextIterator[U] extends Iterator[U] {
    * Usually calling `close` multiple times should be fine, but historically
    * there have been issues with some InputFormats throwing exceptions.
    */
-  def closeIfNeeded() {
+  def closeIfNeeded(): Unit = {
     if (!closed) {
       // Note: it's important that we set closed = true before calling close(), since setting it
       // afterwards would permit us to call close() multiple times if close() threw an exception.

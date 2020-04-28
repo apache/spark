@@ -19,14 +19,16 @@ package org.apache.spark.sql.internal
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
+import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -153,6 +155,8 @@ abstract class BaseSessionStateBuilder(
 
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, conf)
 
+  protected lazy val catalogManager = new CatalogManager(conf, v2SessionCatalog, catalog)
+
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
@@ -166,12 +170,13 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalog, v2SessionCatalog, conf) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        DataSourceResolution(conf, this.catalogManager) +:
+        new ResolveSessionCatalog(
+          catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -186,6 +191,7 @@ abstract class BaseSessionStateBuilder(
         PreReadCheck +:
         HiveOnlyCheck +:
         TableCapabilityCheck +:
+        CommandCheck(conf) +:
         customCheckRules
   }
 
@@ -225,7 +231,10 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on `catalog` and `experimentalMethods` fields.
    */
   protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalog, experimentalMethods) {
+    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
+      override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
+        super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
+
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
@@ -242,12 +251,20 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
+   * Custom early scan push down rules to add to the Optimizer. Prefer overriding this instead
+   * of creating your own Optimizer.
+   *
+   * Note that this may NOT depend on the `optimizer` function.
+   */
+  protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Planner that converts optimized logical plans to physical plans.
    *
    * Note: this depends on the `conf` and `experimentalMethods` fields.
    */
   protected def planner: SparkPlanner = {
-    new SparkPlanner(session.sparkContext, conf, experimentalMethods) {
+    new SparkPlanner(session, conf, experimentalMethods) {
       override def extraPlanningStrategies: Seq[Strategy] =
         super.extraPlanningStrategies ++ customPlanningStrategies
     }
@@ -313,7 +330,7 @@ abstract class BaseSessionStateBuilder(
       () => analyzer,
       () => optimizer,
       planner,
-      streamingQueryManager,
+      () => streamingQueryManager,
       listenerManager,
       () => resourceLoader,
       createQueryExecution,
@@ -330,8 +347,14 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
 
   override protected lazy val conf: SQLConf = {
     val overrideConfigurations = overrideConfs
-    val conf = parentState.map(_.conf.clone()).getOrElse {
-      new SQLConf {
+    parentState.map { s =>
+      val cloned = s.conf.clone()
+      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
+        mergeSparkConf(conf, session.sparkContext.conf)
+      }
+      cloned
+    }.getOrElse {
+      val conf = new SQLConf {
         clear()
         override def clear(): Unit = {
           super.clear()
@@ -339,8 +362,8 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
           overrideConfigurations.foreach { case (key, value) => setConfString(key, value) }
         }
       }
+      mergeSparkConf(conf, session.sparkContext.conf)
+      conf
     }
-    mergeSparkConf(conf, session.sparkContext.conf)
-    conf
   }
 }

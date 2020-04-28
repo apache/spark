@@ -29,12 +29,12 @@ public class LocalDiskSingleSpillMapOutputWriter
     implements SingleSpillShuffleMapOutputWriter {
 
   private final int shuffleId;
-  private final int mapId;
+  private final long mapId;
   private final IndexShuffleBlockResolver blockResolver;
 
   public LocalDiskSingleSpillMapOutputWriter(
       int shuffleId,
-      int mapId,
+      long mapId,
       IndexShuffleBlockResolver blockResolver) {
     this.shuffleId = shuffleId;
     this.mapId = mapId;

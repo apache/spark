@@ -30,7 +30,7 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
   private[this] val edges = new PrimitiveVector[Edge[ED]](size)
 
   /** Add a new edge to the partition. */
-  def add(src: VertexId, dst: VertexId, d: ED) {
+  def add(src: VertexId, dst: VertexId, d: ED): Unit = {
     edges += Edge(src, dst, d)
   }
 
@@ -90,7 +90,7 @@ class ExistingEdgePartitionBuilder[
   private[this] val edges = new PrimitiveVector[EdgeWithLocalIds[ED]](size)
 
   /** Add a new edge to the partition. */
-  def add(src: VertexId, dst: VertexId, localSrc: Int, localDst: Int, d: ED) {
+  def add(src: VertexId, dst: VertexId, localSrc: Int, localDst: Int, d: ED): Unit = {
     edges += EdgeWithLocalIds(src, dst, localSrc, localDst, d)
   }
 
@@ -153,13 +153,13 @@ private[impl] object EdgeWithLocalIds {
 
       override def copyElement(
           src: Array[EdgeWithLocalIds[ED]], srcPos: Int,
-          dst: Array[EdgeWithLocalIds[ED]], dstPos: Int) {
+          dst: Array[EdgeWithLocalIds[ED]], dstPos: Int): Unit = {
         dst(dstPos) = src(srcPos)
       }
 
       override def copyRange(
           src: Array[EdgeWithLocalIds[ED]], srcPos: Int,
-          dst: Array[EdgeWithLocalIds[ED]], dstPos: Int, length: Int) {
+          dst: Array[EdgeWithLocalIds[ED]], dstPos: Int, length: Int): Unit = {
         System.arraycopy(src, srcPos, dst, dstPos, length)
       }
 

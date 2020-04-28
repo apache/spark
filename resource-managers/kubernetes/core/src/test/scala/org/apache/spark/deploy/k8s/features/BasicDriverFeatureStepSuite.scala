@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder, Quantity}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
@@ -47,7 +47,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
 
   test("Check the pod respects all configurations from the user.") {
-    val resourceID = ResourceID(SPARK_DRIVER_PREFIX, GPU)
+    val resourceID = new ResourceID(SPARK_DRIVER_PREFIX, GPU)
     val resources =
       Map(("nvidia.com/gpu" -> TestResourceInformation(resourceID, "2", "nvidia.com")))
     val sparkConf = new SparkConf()
@@ -93,6 +93,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       assert(envs(v) === v)
     }
     assert(envs(ENV_SPARK_USER) === Utils.getCurrentUserName())
+    assert(envs(ENV_APPLICATION_ID) === kubernetesConf.appId)
 
     assert(configuredPod.pod.getSpec().getImagePullSecrets.asScala ===
       TEST_IMAGE_PULL_SECRET_OBJECTS)
@@ -104,13 +105,13 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
     val resourceRequirements = configuredPod.container.getResources
     val requests = resourceRequirements.getRequests.asScala
-    assert(requests("cpu").getAmount === "2")
-    assert(requests("memory").getAmount === "456Mi")
+    assert(amountAndFormat(requests("cpu")) === "2")
+    assert(amountAndFormat(requests("memory")) === "456Mi")
     val limits = resourceRequirements.getLimits.asScala
-    assert(limits("memory").getAmount === "456Mi")
-    assert(limits("cpu").getAmount === "4")
+    assert(amountAndFormat(limits("memory")) === "456Mi")
+    assert(amountAndFormat(limits("cpu")) === "4")
     resources.foreach { case (k8sName, testRInfo) =>
-      assert(limits(k8sName).getAmount === testRInfo.count)
+      assert(amountAndFormat(limits(k8sName)) === testRInfo.count)
     }
 
     val driverPodMetadata = configuredPod.pod.getMetadata
@@ -140,7 +141,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .configurePod(basePod)
       .container.getResources
       .getRequests.asScala
-    assert(requests1("cpu").getAmount === "1")
+    assert(amountAndFormat(requests1("cpu")) === "1")
 
     // if spark.driver.cores is set it should be used
     sparkConf.set(DRIVER_CORES, 10)
@@ -148,7 +149,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .configurePod(basePod)
       .container.getResources
       .getRequests.asScala
-    assert(requests2("cpu").getAmount === "10")
+    assert(amountAndFormat(requests2("cpu")) === "10")
 
     // spark.kubernetes.driver.request.cores should be preferred over spark.driver.cores
     Seq("0.1", "100m").foreach { value =>
@@ -157,7 +158,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
         .configurePod(basePod)
         .container.getResources
         .getRequests.asScala
-      assert(requests3("cpu").getAmount === value)
+      assert(amountAndFormat(requests3("cpu")) === value)
     }
   }
 
@@ -203,7 +204,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
         mainAppResource = resource)
       val step = new BasicDriverFeatureStep(conf)
       val pod = step.configurePod(SparkPod.initialPod())
-      val mem = pod.container.getResources.getRequests.get("memory").getAmount()
+      val mem = amountAndFormat(pod.container.getResources.getRequests.get("memory"))
       val expected = (driverMem + driverMem * expectedFactor).toInt
       assert(mem === s"${expected}Mi")
 
@@ -218,4 +219,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .withContainerPort(portNumber)
       .withProtocol("TCP")
       .build()
+
+  private def amountAndFormat(quantity: Quantity): String = quantity.getAmount + quantity.getFormat
 }

@@ -20,7 +20,14 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.hadoop.conf.Configuration
 
-private[spark]
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
+
+/**
+ * Hadoop configuration but serializable. Use `value` to access the Hadoop configuration.
+ *
+ * @param value Hadoop configuration
+ */
+@DeveloperApi @Unstable
 class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.defaultWriteObject()

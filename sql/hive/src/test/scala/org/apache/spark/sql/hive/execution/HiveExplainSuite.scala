@@ -21,6 +21,7 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -97,13 +98,14 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("explain create table command") {
-    checkKeywordsExist(sql("explain create table temp__b as select * from src limit 2"),
+    checkKeywordsExist(sql("explain create table temp__b using hive as select * from src limit 2"),
                    "== Physical Plan ==",
                    "InsertIntoHiveTable",
                    "Limit",
                    "src")
 
-    checkKeywordsExist(sql("explain extended create table temp__b as select * from src limit 2"),
+    checkKeywordsExist(
+      sql("explain extended create table temp__b using hive as select * from src limit 2"),
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
@@ -132,7 +134,8 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "src")
   }
 
-  test("explain output of physical plan should contain proper codegen stage ID") {
+  test("explain output of physical plan should contain proper codegen stage ID",
+    DisableAdaptiveExecution("Adaptive explain is different")) {
     checkKeywordsExist(sql(
       """
         |EXPLAIN SELECT t1.id AS a, t2.id AS b FROM

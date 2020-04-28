@@ -28,7 +28,7 @@ import org.apache.avro.io.EncoderFactory
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.functions.{col, struct}
+import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -38,7 +38,9 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
   test("roundtrip in to_avro and from_avro - int and string") {
     val df = spark.range(10).select('id, 'id.cast("string").as("str"))
 
-    val avroDF = df.select(to_avro('id).as("a"), to_avro('str).as("b"))
+    val avroDF = df.select(
+      functions.to_avro('id).as("a"),
+      functions.to_avro('str).as("b"))
     val avroTypeLong = s"""
       |{
       |  "type": "int",
@@ -51,12 +53,14 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  "name": "str"
       |}
     """.stripMargin
-    checkAnswer(avroDF.select(from_avro('a, avroTypeLong), from_avro('b, avroTypeStr)), df)
+    checkAnswer(avroDF.select(
+      functions.from_avro('a, avroTypeLong),
+      functions.from_avro('b, avroTypeStr)), df)
   }
 
   test("roundtrip in to_avro and from_avro - struct") {
     val df = spark.range(10).select(struct('id, 'id.cast("string").as("str")).as("struct"))
-    val avroStructDF = df.select(to_avro('struct).as("avro"))
+    val avroStructDF = df.select(functions.to_avro('struct).as("avro"))
     val avroTypeStruct = s"""
       |{
       |  "type": "record",
@@ -67,13 +71,14 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  ]
       |}
     """.stripMargin
-    checkAnswer(avroStructDF.select(from_avro('avro, avroTypeStruct)), df)
+    checkAnswer(avroStructDF.select(
+      functions.from_avro('avro, avroTypeStruct)), df)
   }
 
   test("handle invalid input in from_avro") {
     val count = 10
     val df = spark.range(count).select(struct('id, 'id.as("id2")).as("struct"))
-    val avroStructDF = df.select(to_avro('struct).as("avro"))
+    val avroStructDF = df.select(functions.to_avro('struct).as("avro"))
     val avroTypeStruct = s"""
       |{
       |  "type": "record",
@@ -87,7 +92,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
 
     intercept[SparkException] {
       avroStructDF.select(
-        org.apache.spark.sql.avro.functions.from_avro(
+        functions.from_avro(
           'avro, avroTypeStruct, Map("mode" -> "FAILFAST").asJava)).collect()
     }
 
@@ -95,7 +100,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
     val expected = (0 until count).map(_ => Row(Row(null, null)))
     checkAnswer(
       avroStructDF.select(
-        org.apache.spark.sql.avro.functions.from_avro(
+       functions.from_avro(
           'avro, avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
       expected)
   }
@@ -115,8 +120,8 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  }, "null" ]
       |}, "null" ]
     """.stripMargin
-    val readBackOne = dfOne.select(to_avro($"array").as("avro"))
-      .select(from_avro($"avro", avroTypeArrStruct).as("array"))
+    val readBackOne = dfOne.select(functions.to_avro($"array").as("avro"))
+      .select(functions.from_avro($"avro", avroTypeArrStruct).as("array"))
     checkAnswer(dfOne, readBackOne)
   }
 
@@ -152,5 +157,48 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(df.queryExecution.executedPlan.isInstanceOf[LocalTableScanExec])
       assert(df.collect().map(_.get(0)) === Seq(Row("one"), Row("two"), Row("three"), Row("four")))
     }
+  }
+
+  test("SPARK-27506: roundtrip in to_avro and from_avro with different compatible schemas") {
+    val df = spark.range(10).select(
+      struct('id.as("col1"), 'id.cast("string").as("col2")).as("struct")
+    )
+    val avroStructDF = df.select(functions.to_avro('struct).as("avro"))
+    val actualAvroSchema =
+      s"""
+         |{
+         |  "type": "record",
+         |  "name": "struct",
+         |  "fields": [
+         |    {"name": "col1", "type": "int"},
+         |    {"name": "col2", "type": "string"}
+         |  ]
+         |}
+         |""".stripMargin
+
+    val evolvedAvroSchema =
+      s"""
+         |{
+         |  "type": "record",
+         |  "name": "struct",
+         |  "fields": [
+         |    {"name": "col1", "type": "int"},
+         |    {"name": "col2", "type": "string"},
+         |    {"name": "col3", "type": "string", "default": ""}
+         |  ]
+         |}
+         |""".stripMargin
+
+    val expected = spark.range(10).select(
+      struct('id.as("col1"), 'id.cast("string").as("col2"), lit("").as("col3")).as("struct")
+    )
+
+    checkAnswer(
+      avroStructDF.select(
+        functions.from_avro(
+          'avro,
+          actualAvroSchema,
+          Map("avroSchema" -> evolvedAvroSchema).asJava)),
+      expected)
   }
 }

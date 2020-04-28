@@ -51,7 +51,7 @@ private[hive] object HiveShim {
   /*
    * This function in hive-0.13 become private, but we have to do this to work around hive bug
    */
-  private def appendReadColumnNames(conf: Configuration, cols: Seq[String]) {
+  private def appendReadColumnNames(conf: Configuration, cols: Seq[String]): Unit = {
     val old: String = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, "")
     val result: StringBuilder = new StringBuilder(old)
     var first: Boolean = old.isEmpty
@@ -70,7 +70,7 @@ private[hive] object HiveShim {
   /*
    * Cannot use ColumnProjectionUtils.appendReadColumns directly, if ids is null
    */
-  def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]) {
+  def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]): Unit = {
     if (ids != null) {
       ColumnProjectionUtils.appendReadColumns(conf, ids.asJava)
     }
@@ -118,9 +118,12 @@ private[hive] object HiveShim {
    *
    * @param functionClassName UDF class name
    * @param instance optional UDF instance which contains additional information (for macro)
+   * @param clazz optional class instance to create UDF instance
    */
-  private[hive] case class HiveFunctionWrapper(var functionClassName: String,
-    private var instance: AnyRef = null) extends java.io.Externalizable {
+  private[hive] case class HiveFunctionWrapper(
+      var functionClassName: String,
+      private var instance: AnyRef = null,
+      private var clazz: Class[_ <: AnyRef] = null) extends java.io.Externalizable {
 
     // for Serialization
     def this() = this(null)
@@ -201,7 +204,7 @@ private[hive] object HiveShim {
       }
     }
 
-    def writeExternal(out: java.io.ObjectOutput) {
+    def writeExternal(out: java.io.ObjectOutput): Unit = {
       // output the function name
       out.writeUTF(functionClassName)
 
@@ -220,7 +223,7 @@ private[hive] object HiveShim {
       }
     }
 
-    def readExternal(in: java.io.ObjectInput) {
+    def readExternal(in: java.io.ObjectInput): Unit = {
       // read the function name
       functionClassName = in.readUTF()
 
@@ -232,8 +235,10 @@ private[hive] object HiveShim {
         in.readFully(functionInBytes)
 
         // deserialize the function object via Hive Utilities
+        clazz = Utils.getContextOrSparkClassLoader.loadClass(functionClassName)
+          .asInstanceOf[Class[_ <: AnyRef]]
         instance = deserializePlan[AnyRef](new java.io.ByteArrayInputStream(functionInBytes),
-          Utils.getContextOrSparkClassLoader.loadClass(functionClassName))
+          clazz)
       }
     }
 
@@ -241,8 +246,11 @@ private[hive] object HiveShim {
       if (instance != null) {
         instance.asInstanceOf[UDFType]
       } else {
-        val func = Utils.getContextOrSparkClassLoader
-          .loadClass(functionClassName).getConstructor().newInstance().asInstanceOf[UDFType]
+        if (clazz == null) {
+          clazz = Utils.getContextOrSparkClassLoader.loadClass(functionClassName)
+            .asInstanceOf[Class[_ <: AnyRef]]
+        }
+        val func = clazz.getConstructor().newInstance().asInstanceOf[UDFType]
         if (!func.isInstanceOf[UDF]) {
           // We cache the function if it's no the Simple UDF,
           // as we always have to create new instance for Simple UDF
@@ -279,25 +287,25 @@ private[hive] object HiveShim {
     var compressType: String = _
     var destTableId: Int = _
 
-    def setCompressed(compressed: Boolean) {
+    def setCompressed(compressed: Boolean): Unit = {
       this.compressed = compressed
     }
 
     def getDirName(): String = dir
 
-    def setDestTableId(destTableId: Int) {
+    def setDestTableId(destTableId: Int): Unit = {
       this.destTableId = destTableId
     }
 
-    def setTableInfo(tableInfo: TableDesc) {
+    def setTableInfo(tableInfo: TableDesc): Unit = {
       this.tableInfo = tableInfo
     }
 
-    def setCompressCodec(intermediateCompressorCodec: String) {
+    def setCompressCodec(intermediateCompressorCodec: String): Unit = {
       compressCodec = intermediateCompressorCodec
     }
 
-    def setCompressType(intermediateCompressType: String) {
+    def setCompressType(intermediateCompressType: String): Unit = {
       compressType = intermediateCompressType
     }
   }

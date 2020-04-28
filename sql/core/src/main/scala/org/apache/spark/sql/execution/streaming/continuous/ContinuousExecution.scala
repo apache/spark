@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
-import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Offset => OffsetV2, PartitionOffset}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Offset => OffsetV2, PartitionOffset, ReadLimit}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
@@ -84,7 +84,7 @@ class ContinuousExecution(
     sources = _logicalPlan.collect {
       case r: StreamingDataSourceV2Relation => r.stream.asInstanceOf[ContinuousStream]
     }
-    uniqueSources = sources.distinct
+    uniqueSources = sources.distinct.map(s => s -> ReadLimit.allAvailable()).toMap
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     WriteToContinuousDataSource(
@@ -252,7 +252,7 @@ class ContinuousExecution(
 
       updateStatusMessage("Running")
       reportTimeTaken("runContinuous") {
-        SQLExecution.withNewExecutionId(sparkSessionForQuery, lastExecution) {
+        SQLExecution.withNewExecutionId(lastExecution) {
           lastExecution.executedPlan.execute()
         }
       }
@@ -427,8 +427,7 @@ class ContinuousExecution(
     if (queryExecutionThread.isAlive) {
       // The query execution thread will clean itself up in the finally clause of runContinuous.
       // We just need to interrupt the long running job.
-      queryExecutionThread.interrupt()
-      queryExecutionThread.join()
+      interruptAndAwaitExecutionThreadTermination()
     }
     logInfo(s"Query $prettyIdString was stopped")
   }

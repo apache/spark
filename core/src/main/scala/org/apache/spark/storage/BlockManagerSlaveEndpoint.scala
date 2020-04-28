@@ -21,7 +21,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{MapOutputTracker, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEnv}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -34,7 +34,7 @@ class BlockManagerSlaveEndpoint(
     override val rpcEnv: RpcEnv,
     blockManager: BlockManager,
     mapOutputTracker: MapOutputTracker)
-  extends ThreadSafeRpcEndpoint with Logging {
+  extends IsolatedRpcEndpoint with Logging {
 
   private val asyncThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-slave-async-thread-pool", 100)
@@ -80,7 +80,7 @@ class BlockManagerSlaveEndpoint(
 
   }
 
-  private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T) {
+  private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T): Unit = {
     val future = Future {
       logDebug(actionMessage)
       body

@@ -87,14 +87,14 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   }
 
   /** Starts the external shuffle service if the user has configured us to. */
-  def startIfEnabled() {
+  def startIfEnabled(): Unit = {
     if (enabled) {
       start()
     }
   }
 
   /** Start the external shuffle service */
-  def start() {
+  def start(): Unit = {
     require(server == null, "Shuffle server already started")
     val authEnabled = securityManager.isAuthenticationEnabled()
     logInfo(s"Starting shuffle service on port $port (auth enabled = $authEnabled)")
@@ -125,7 +125,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     blockHandler.executorRemoved(executorId, appId)
   }
 
-  def stop() {
+  def stop(): Unit = {
     if (server != null) {
       server.close()
       server = null

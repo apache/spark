@@ -16,8 +16,6 @@
  */
 package org.apache.spark.scheduler
 
-import scala.concurrent.duration._
-
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests._

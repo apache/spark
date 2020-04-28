@@ -23,6 +23,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
@@ -50,7 +51,9 @@ class InMemoryFileIndex(
     rootPathsSpecified: Seq[Path],
     parameters: Map[String, String],
     userSpecifiedSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = NoopCache)
+    fileStatusCache: FileStatusCache = NoopCache,
+    userSpecifiedPartitionSpec: Option[PartitionSpec] = None,
+    override val metadataOpsTimeNs: Option[Long] = None)
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
 
@@ -69,7 +72,11 @@ class InMemoryFileIndex(
 
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
-      cachedPartitionSpec = inferPartitioning()
+      if (userSpecifiedPartitionSpec.isDefined) {
+        cachedPartitionSpec = userSpecifiedPartitionSpec.get
+      } else {
+        cachedPartitionSpec = inferPartitioning()
+      }
     }
     logTrace(s"Partition spec: $cachedPartitionSpec")
     cachedPartitionSpec
@@ -111,6 +118,7 @@ class InMemoryFileIndex(
    * This is publicly visible for testing.
    */
   def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
+    val startTime = System.nanoTime()
     val output = mutable.LinkedHashSet[FileStatus]()
     val pathsToFetch = mutable.ArrayBuffer[Path]()
     for (path <- paths) {
@@ -121,7 +129,7 @@ class InMemoryFileIndex(
         case None =>
           pathsToFetch += path
       }
-      Unit // for some reasons scalac 2.12 needs this; return type doesn't matter
+      () // for some reasons scalac 2.12 needs this; return type doesn't matter
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
@@ -131,6 +139,8 @@ class InMemoryFileIndex(
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
       output ++= leafFiles
     }
+    logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to list leaf files" +
+      s" for ${paths.length} paths.")
     output
   }
 }
@@ -171,6 +181,7 @@ object InMemoryFileIndex extends Logging {
       areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
 
     val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
+    val ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
@@ -181,12 +192,14 @@ object InMemoryFileIndex extends Logging {
           filter,
           Some(sparkSession),
           ignoreMissingFiles = ignoreMissingFiles,
+          ignoreLocality = ignoreLocality,
           isRootPath = areRootPaths)
         (path, leafFiles)
       }
     }
 
-    logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
+    logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
+      s" The first several paths are: ${paths.take(10).mkString(", ")}.")
     HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val sparkContext = sparkSession.sparkContext
@@ -221,6 +234,7 @@ object InMemoryFileIndex extends Logging {
               filter,
               None,
               ignoreMissingFiles = ignoreMissingFiles,
+              ignoreLocality = ignoreLocality,
               isRootPath = areRootPaths)
             (path, leafFiles)
           }.iterator
@@ -287,6 +301,7 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sessionOpt: Option[SparkSession],
       ignoreMissingFiles: Boolean,
+      ignoreLocality: Boolean,
       isRootPath: Boolean): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
@@ -299,7 +314,7 @@ object InMemoryFileIndex extends Logging {
         // to retrieve the file status with the file block location. The reason to still fallback
         // to listStatus is because the default implementation would potentially throw a
         // FileNotFoundException which is better handled by doing the lookups manually below.
-        case _: DistributedFileSystem =>
+        case (_: DistributedFileSystem | _: ViewFileSystem) if !ignoreLocality =>
           val remoteIter = fs.listLocatedStatus(path)
           new Iterator[LocatedFileStatus]() {
             def next(): LocatedFileStatus = remoteIter.next
@@ -353,6 +368,7 @@ object InMemoryFileIndex extends Logging {
               filter,
               sessionOpt,
               ignoreMissingFiles = ignoreMissingFiles,
+              ignoreLocality = ignoreLocality,
               isRootPath = false)
           }
       }
@@ -376,7 +392,7 @@ object InMemoryFileIndex extends Logging {
       // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
       //   be a big deal since we always use to `bulkListLeafFiles` when the number of
       //   paths exceeds threshold.
-      case f =>
+      case f if !ignoreLocality =>
         // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
         // which is very slow on some file system (RawLocalFileSystem, which is launch a
         // subprocess and parse the stdout).
@@ -400,6 +416,8 @@ object InMemoryFileIndex extends Logging {
             missingFiles += f.getPath.toString
             None
         }
+
+      case f => Some(f)
     }
 
     if (missingFiles.nonEmpty) {

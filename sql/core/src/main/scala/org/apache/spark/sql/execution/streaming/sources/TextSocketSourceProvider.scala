@@ -26,15 +26,16 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousStream
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TextSocketSourceProvider extends TableProvider with DataSourceRegister with Logging {
+class TextSocketSourceProvider extends SimpleTableProvider with DataSourceRegister with Logging {
 
   private def checkParameters(params: CaseInsensitiveStringMap): Unit = {
     logWarning("The socket source should not be used for production applications! " +

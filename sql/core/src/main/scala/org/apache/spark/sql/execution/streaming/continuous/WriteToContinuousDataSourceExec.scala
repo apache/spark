@@ -24,6 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.write.PhysicalWriteInfoImpl
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.StreamExecution
@@ -38,8 +39,10 @@ case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPl
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = write.createStreamingWriterFactory()
-    val rdd = new ContinuousWriteRDD(query.execute(), writerFactory)
+    val queryRdd = query.execute()
+    val writerFactory = write.createStreamingWriterFactory(
+      PhysicalWriteInfoImpl(queryRdd.getNumPartitions))
+    val rdd = new ContinuousWriteRDD(queryRdd, writerFactory)
 
     logInfo(s"Start processing data source write support: $write. " +
       s"The input RDD has ${rdd.partitions.length} partitions.")

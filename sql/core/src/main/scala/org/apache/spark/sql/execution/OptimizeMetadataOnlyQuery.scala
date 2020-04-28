@@ -133,10 +133,14 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
               CaseInsensitiveMap(relation.tableMeta.storage.properties)
             val timeZoneId = caseInsensitiveProperties.get(DateTimeUtils.TIMEZONE_OPTION)
               .getOrElse(SQLConf.get.sessionLocalTimeZone)
-            val partitions = if (partFilters.nonEmpty) {
-              catalog.listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
-            } else {
-              catalog.listPartitions(relation.tableMeta.identifier)
+            val partitions = relation.prunedPartitions match {
+              // for the case where partitions have already been pruned by PruneHiveTablePartitions
+              case Some(parts) => parts
+              case None => if (partFilters.nonEmpty) {
+                catalog.listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
+              } else {
+                catalog.listPartitions(relation.tableMeta.identifier)
+              }
             }
 
             val partitionData = partitions.map { p =>

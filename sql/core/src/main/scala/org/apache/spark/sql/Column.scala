@@ -200,7 +200,7 @@ class Column(val expr: Expression) extends Logging {
       UnresolvedAlias(a, Some(Column.generateAlias))
 
     // Wait until the struct is resolved. This will generate a nicer looking alias.
-    case struct: CreateNamedStructLike => UnresolvedAlias(struct)
+    case struct: CreateNamedStruct => UnresolvedAlias(struct)
 
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
@@ -318,6 +318,24 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.0.0
     */
   def =!= (other: Any): Column = withExpr{ Not(EqualTo(expr, lit(other).expr)) }
+
+  /**
+   * Inequality test.
+   * {{{
+   *   // Scala:
+   *   df.select( df("colA") !== df("colB") )
+   *   df.select( !(df("colA") === df("colB")) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.functions.*;
+   *   df.filter( col("colA").notEqual(col("colB")) );
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.3.0
+    */
+  @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
+  def !== (other: Any): Column = this =!= other
 
   /**
    * Inequality test.
@@ -841,7 +859,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def like(literal: String): Column = withExpr { Like(expr, lit(literal).expr) }
+  def like(literal: String): Column = withExpr { new Like(expr, lit(literal).expr) }
 
   /**
    * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex
@@ -954,9 +972,6 @@ class Column(val expr: Expression) extends Logging {
    *   df.select($"colA".as("colB"))
    * }}}
    *
-   * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
-   *
    * @group expr_ops
    * @since 1.3.0
    */
@@ -993,9 +1008,6 @@ class Column(val expr: Expression) extends Logging {
    *   df.select($"colA".as('colB))
    * }}}
    *
-   * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
-   *
    * @group expr_ops
    * @since 1.3.0
    */
@@ -1022,17 +1034,11 @@ class Column(val expr: Expression) extends Logging {
    *   df.select($"colA".name("colB"))
    * }}}
    *
-   * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
-   *
    * @group expr_ops
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
-    normalizedExpr() match {
-      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias)()
-    }
+    Alias(expr, alias)()
   }
 
   /**

@@ -21,6 +21,7 @@ import scala.collection.mutable.Map
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AccumulatorV2
@@ -67,11 +68,11 @@ private class DummyExternalClusterManager extends ExternalClusterManager {
 
 private class DummySchedulerBackend extends SchedulerBackend {
   var initialized = false
-  def start() {}
-  def stop() {}
-  def reviveOffers() {}
+  def start(): Unit = {}
+  def stop(): Unit = {}
+  def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
-  def maxNumConcurrentTasks(): Int = 0
+  def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 }
 
 private class DummyTaskScheduler extends TaskScheduler {
@@ -89,6 +90,7 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {}
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
+  override def executorDecommission(executorId: String): Unit = {}
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
   override def applicationAttemptId(): Option[String] = None

@@ -16,6 +16,10 @@
 #
 
 import py4j
+import sys
+
+if sys.version_info.major >= 3:
+    unicode = str
 
 
 class CapturedException(Exception):
@@ -25,7 +29,12 @@ class CapturedException(Exception):
         self.cause = convert_exception(cause) if cause is not None else None
 
     def __str__(self):
-        return repr(self.desc)
+        desc = self.desc
+        # encode unicode instance for python2 for human readable description
+        if sys.version_info.major < 3 and isinstance(desc, unicode):
+            return str(desc.encode('utf-8'))
+        else:
+            return str(desc)
 
 
 class AnalysisException(CapturedException):
@@ -125,46 +134,6 @@ def toJArray(gateway, jtype, arr):
     for i in range(0, len(arr)):
         jarr[i] = arr[i]
     return jarr
-
-
-def require_minimum_pandas_version():
-    """ Raise ImportError if minimum version of Pandas is not installed
-    """
-    # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pandas_version = "0.23.2"
-
-    from distutils.version import LooseVersion
-    try:
-        import pandas
-        have_pandas = True
-    except ImportError:
-        have_pandas = False
-    if not have_pandas:
-        raise ImportError("Pandas >= %s must be installed; however, "
-                          "it was not found." % minimum_pandas_version)
-    if LooseVersion(pandas.__version__) < LooseVersion(minimum_pandas_version):
-        raise ImportError("Pandas >= %s must be installed; however, "
-                          "your version was %s." % (minimum_pandas_version, pandas.__version__))
-
-
-def require_minimum_pyarrow_version():
-    """ Raise ImportError if minimum version of pyarrow is not installed
-    """
-    # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "0.12.1"
-
-    from distutils.version import LooseVersion
-    try:
-        import pyarrow
-        have_arrow = True
-    except ImportError:
-        have_arrow = False
-    if not have_arrow:
-        raise ImportError("PyArrow >= %s must be installed; however, "
-                          "it was not found." % minimum_pyarrow_version)
-    if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
-        raise ImportError("PyArrow >= %s must be installed; however, "
-                          "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
 
 
 def require_test_compiled():

@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.Properties
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
@@ -99,6 +100,10 @@ private[spark] class TaskContextImpl(
       onFailureCallbacks += listener
     }
     this
+  }
+
+  override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
+    resources.asJava
   }
 
   @GuardedBy("this")

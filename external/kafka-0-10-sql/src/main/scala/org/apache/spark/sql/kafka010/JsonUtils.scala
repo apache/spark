@@ -68,11 +68,26 @@ private object JsonUtils {
           partOffsets.map { case (part, offset) =>
               new TopicPartition(topic, part) -> offset
           }
-      }.toMap
+      }
     } catch {
       case NonFatal(x) =>
         throw new IllegalArgumentException(
           s"""Expected e.g. {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}}, got $str""")
+    }
+  }
+
+  def partitionTimestamps(str: String): Map[TopicPartition, Long] = {
+    try {
+      Serialization.read[Map[String, Map[Int, Long]]](str).flatMap { case (topic, partTimestamps) =>
+        partTimestamps.map { case (part, timestamp) =>
+          new TopicPartition(topic, part) -> timestamp
+        }
+      }
+    } catch {
+      case NonFatal(x) =>
+        throw new IllegalArgumentException(
+          s"""Expected e.g. {"topicA": {"0": 123456789, "1": 123456789},
+             |"topicB": {"0": 123456789, "1": 123456789}}, got $str""".stripMargin)
     }
   }
 
@@ -81,7 +96,7 @@ private object JsonUtils {
    */
   def partitionOffsets(partitionOffsets: Map[TopicPartition, Long]): String = {
     val result = new HashMap[String, HashMap[Int, Long]]()
-    implicit val ordering = new Ordering[TopicPartition] {
+    implicit val order = new Ordering[TopicPartition] {
       override def compare(x: TopicPartition, y: TopicPartition): Int = {
         Ordering.Tuple2[String, Int].compare((x.topic, x.partition), (y.topic, y.partition))
       }
@@ -94,5 +109,10 @@ private object JsonUtils {
         result += tp.topic -> parts
     }
     Serialization.write(result)
+  }
+
+  def partitionTimestamps(topicTimestamps: Map[TopicPartition, Long]): String = {
+    // For now it's same as partitionOffsets
+    partitionOffsets(topicTimestamps)
   }
 }

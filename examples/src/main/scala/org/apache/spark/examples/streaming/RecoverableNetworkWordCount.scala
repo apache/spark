@@ -139,7 +139,7 @@ object RecoverableNetworkWordCount {
     ssc
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 4) {
       System.err.println(s"Your arguments were ${args.mkString("[", ", ", "]")}")
       System.err.println(

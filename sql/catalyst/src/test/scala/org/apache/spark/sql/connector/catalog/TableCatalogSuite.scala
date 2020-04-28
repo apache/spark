@@ -368,7 +368,7 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(updated.schema == expectedSchema)
   }
 
-  test("alterTable: update column data type and nullability") {
+  test("alterTable: update column nullability") {
     val catalog = newCatalog()
 
     val originalSchema = new StructType()
@@ -379,25 +379,10 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(table.schema == originalSchema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.updateColumnType(Array("id"), LongType, true))
+      TableChange.updateColumnNullability(Array("id"), true))
 
-    val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
+    val expectedSchema = new StructType().add("id", IntegerType).add("data", StringType)
     assert(updated.schema == expectedSchema)
-  }
-
-  test("alterTable: update optional column to required fails") {
-    val catalog = newCatalog()
-
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
-
-    assert(table.schema == schema)
-
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType, false))
-    }
-
-    assert(exc.getMessage.contains("Cannot change optional column to required"))
-    assert(exc.getMessage.contains("id"))
   }
 
   test("alterTable: update missing column fails") {
@@ -847,19 +832,16 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(catalog.namespaceExists(testNs) === false)
   }
 
-  test("dropNamespace: fail if not empty") {
+  test("dropNamespace: drop even if it's not empty") {
     val catalog = newCatalog()
 
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    val exc = intercept[IllegalStateException] {
-      catalog.dropNamespace(testNs)
-    }
+    assert(catalog.dropNamespace(testNs))
 
-    assert(exc.getMessage.contains(testNs.quoted))
-    assert(catalog.namespaceExists(testNs) === true)
-    assert(catalog.loadNamespaceMetadata(testNs).asScala === Map("property" -> "value"))
+    assert(!catalog.namespaceExists(testNs))
+    assert(catalog.listTables(testNs).isEmpty)
   }
 
   test("alterNamespace: basic behavior") {

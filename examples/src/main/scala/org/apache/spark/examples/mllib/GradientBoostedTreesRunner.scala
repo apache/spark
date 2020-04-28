@@ -50,7 +50,7 @@ object GradientBoostedTreesRunner {
       numIterations: Int = 10,
       fracTest: Double = 0.2) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("GradientBoostedTrees") {

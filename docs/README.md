@@ -6,9 +6,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -36,18 +36,30 @@ You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/
 installed. Also install the following libraries:
 
 ```sh
-$ sudo gem install jekyll jekyll-redirect-from pygments.rb
-$ sudo pip install Pygments
-# Following is needed only for generating API docs
-$ sudo pip install sphinx pypandoc mkdocs
-$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "rmarkdown"), repos="https://cloud.r-project.org/")'
-$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "5.0.1", repos="https://cloud.r-project.org/")'
-$ sudo Rscript -e 'devtools::install_version("testthat", version = "1.0.2", repos="https://cloud.r-project.org/")'
+$ sudo gem install jekyll jekyll-redirect-from rouge
 ```
 
 Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
 
+### R Documentation
+
+If you'd like to generate R documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
+and install these libraries:
+
+```sh
+$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "5.0.1", repos="https://cloud.r-project.org/")'
+```
+
 Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 5.0.1, which is updated if the version is mismatched.
+
+### API Documentation
+
+To generate API docs for any language, you'll need to install these libraries:
+
+```sh
+$ sudo pip install sphinx mkdocs numpy
+```
 
 ## Generating the Documentation HTML
 
@@ -103,3 +115,17 @@ using [MkDocs](https://www.mkdocs.org/).
 NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
 jekyll build`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
 to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates skipping both the Scala and Java docs.
+
+### Automatically Rebuilding API Docs
+
+`jekyll serve --watch` will only watch what's in `docs/`, and it won't follow symlinks. That means it won't monitor your API docs under `python/docs` or elsewhere.
+
+To work around this limitation for Python, install [`entr`](http://eradman.com/entrproject/) and run the following in a separate shell:
+
+```sh
+cd "$SPARK_HOME/python/docs"
+find .. -type f -name '*.py' \
+| entr -s 'make html && cp -r _build/html/. ../../docs/api/python'
+```
+
+Whenever there is a change to your Python code, `entr` will automatically rebuild the Python API docs and copy them to `docs/`, thus triggering a Jekyll update.

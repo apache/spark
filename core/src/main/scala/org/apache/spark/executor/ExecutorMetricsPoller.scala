@@ -48,7 +48,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  */
 private[spark] class ExecutorMetricsPoller(
     memoryManager: MemoryManager,
-    pollingInterval: Long) extends Logging {
+    pollingInterval: Long,
+    executorMetricsSource: Option[ExecutorMetricsSource]) extends Logging {
 
   type StageKey = (Int, Int)
   // Task Count and Metric Peaks
@@ -79,6 +80,7 @@ private[spark] class ExecutorMetricsPoller(
 
     // get the latest values for the metrics
     val latestMetrics = ExecutorMetrics.getCurrentMetrics(memoryManager)
+    executorMetricsSource.foreach(_.updateMetricsSnapshot(latestMetrics))
 
     def updatePeaks(metrics: AtomicLongArray): Unit = {
       (0 until metrics.length).foreach { i =>

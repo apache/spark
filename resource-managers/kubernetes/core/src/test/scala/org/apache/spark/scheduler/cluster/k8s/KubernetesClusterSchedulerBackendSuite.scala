@@ -31,6 +31,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorKilled, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
@@ -86,10 +87,13 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var driverEndpoint: ArgumentCaptor[RpcEndpoint] = _
   private var schedulerBackendUnderTest: KubernetesClusterSchedulerBackend = _
 
+  private val resourceProfileManager = new ResourceProfileManager(sparkConf)
+
   before {
     MockitoAnnotations.initMocks(this)
     when(taskScheduler.sc).thenReturn(sc)
     when(sc.conf).thenReturn(sparkConf)
+    when(sc.resourceProfileManager).thenReturn(resourceProfileManager)
     when(sc.env).thenReturn(env)
     when(env.rpcEnv).thenReturn(rpcEnv)
     driverEndpoint = ArgumentCaptor.forClass(classOf[RpcEndpoint])

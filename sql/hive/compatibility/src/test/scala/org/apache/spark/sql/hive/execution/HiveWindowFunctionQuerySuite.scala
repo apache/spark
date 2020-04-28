@@ -37,7 +37,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   private val originalLocale = Locale.getDefault
   private val testTempDir = Utils.createTempDir()
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
@@ -58,7 +58,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |  p_size INT,
         |  p_container STRING,
         |  p_retailprice DOUBLE,
-        |  p_comment STRING)
+        |  p_comment STRING) USING hive
       """.stripMargin)
     val testData1 = TestHive.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
     sql(
@@ -100,7 +100,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     sql("set mapreduce.jobtracker.address=local")
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)
@@ -751,7 +751,7 @@ class HiveWindowFunctionQueryFileSuite
   private val originalLocale = Locale.getDefault
   private val testTempDir = Utils.createTempDir()
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
@@ -769,7 +769,7 @@ class HiveWindowFunctionQueryFileSuite
     // sql("set mapreduce.jobtracker.address=local")
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)

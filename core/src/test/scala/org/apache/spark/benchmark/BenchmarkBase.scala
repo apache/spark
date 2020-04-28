@@ -21,6 +21,7 @@ import java.io.{File, FileOutputStream, OutputStream}
 
 /**
  * A base class for generate benchmark results to a file.
+ * For JDK9+, JDK major version number is added to the file names to distingush the results.
  */
 abstract class BenchmarkBase {
   var output: Option[OutputStream] = None
@@ -43,7 +44,9 @@ abstract class BenchmarkBase {
   def main(args: Array[String]): Unit = {
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
-      val resultFileName = s"${this.getClass.getSimpleName.replace("$", "")}-results.txt"
+      val version = System.getProperty("java.version").split("\\D+")(0).toInt
+      val jdkString = if (version > 8) s"-jdk$version" else ""
+      val resultFileName = s"${this.getClass.getSimpleName.replace("$", "")}$jdkString-results.txt"
       val file = new File(s"benchmarks/$resultFileName")
       if (!file.exists()) {
         file.createNewFile()

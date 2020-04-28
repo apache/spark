@@ -56,7 +56,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("number of features more than 65535") {
-    val data1 = sc.parallelize(Array(
+    val data1 = sc.parallelize(Seq(
       Vectors.dense(Array.fill(100000)(2.0)),
       Vectors.dense(Array.fill(100000)(0.0))
     ), 2)

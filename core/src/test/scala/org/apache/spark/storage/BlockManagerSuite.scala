@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -28,9 +29,8 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.RandomUtils
-import org.mockito.{ArgumentMatchers => mc}
-import org.mockito.Mockito.{doAnswer, mock, spy, times, verify, when}
-import org.mockito.invocation.InvocationOnMock
+import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
+import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
 import org.scalatest._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
@@ -50,7 +50,7 @@ import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, Transpo
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskUtils, ExternalBlockStoreClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.scheduler.LiveListenerBus
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerBlockUpdated}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -71,6 +71,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   val allStores = ArrayBuffer[BlockManager]()
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
+  var liveListenerBus: LiveListenerBus = null
   val securityMgr = new SecurityManager(new SparkConf(false))
   val bcastManager = new BroadcastManager(true, new SparkConf(false), securityMgr)
   val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false), bcastManager, true)
@@ -143,11 +144,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // need to create a SparkContext is to initialize LiveListenerBus.
     sc = mock(classOf[SparkContext])
     when(sc.conf).thenReturn(conf)
-    master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
-      new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None)), conf, true)
 
-    val initialize = PrivateMethod[Unit]('initialize)
+    val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
+    liveListenerBus = spy(new LiveListenerBus(conf))
+    master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
+      new BlockManagerMasterEndpoint(rpcEnv, true, conf,
+        liveListenerBus, None, blockManagerInfo)),
+      rpcEnv.setupEndpoint("blockmanagerHeartbeat",
+      new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
+
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
   }
 
@@ -160,6 +166,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       rpcEnv.awaitTermination()
       rpcEnv = null
       master = null
+      liveListenerBus = null
     } finally {
       super.afterEach()
     }
@@ -289,14 +296,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(!store.hasLocalBlock("a1-to-remove"))
       master.getLocations("a1-to-remove") should have size 0
+      assertUpdateBlockInfoReportedForRemovingBlock(store, "a1-to-remove",
+        removedFromMemory = true, removedFromDisk = false)
     }
     eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(!store.hasLocalBlock("a2-to-remove"))
       master.getLocations("a2-to-remove") should have size 0
+      assertUpdateBlockInfoReportedForRemovingBlock(store, "a2-to-remove",
+        removedFromMemory = true, removedFromDisk = false)
     }
     eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(store.hasLocalBlock("a3-to-remove"))
       master.getLocations("a3-to-remove") should have size 0
+      assertUpdateBlockInfoNotReported(store, "a3-to-remove")
     }
     eventually(timeout(1.second), interval(10.milliseconds)) {
       val memStatus = master.getMemoryStatus.head._2
@@ -375,16 +387,21 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!executorStore.hasLocalBlock(broadcast0BlockId))
     assert(executorStore.hasLocalBlock(broadcast1BlockId))
     assert(executorStore.hasLocalBlock(broadcast2BlockId))
+    assertUpdateBlockInfoReportedForRemovingBlock(executorStore, broadcast0BlockId,
+      removedFromMemory = false, removedFromDisk = true)
 
     // nothing should be removed from the driver store
     assert(driverStore.hasLocalBlock(broadcast0BlockId))
     assert(driverStore.hasLocalBlock(broadcast1BlockId))
     assert(driverStore.hasLocalBlock(broadcast2BlockId))
+    assertUpdateBlockInfoNotReported(driverStore, broadcast0BlockId)
 
     // remove broadcast 0 block from the driver as well
     master.removeBroadcast(0, removeFromMaster = true, blocking = true)
     assert(!driverStore.hasLocalBlock(broadcast0BlockId))
     assert(driverStore.hasLocalBlock(broadcast1BlockId))
+    assertUpdateBlockInfoReportedForRemovingBlock(driverStore, broadcast0BlockId,
+      removedFromMemory = false, removedFromDisk = true)
 
     // remove broadcast 1 block from both the stores asynchronously
     // and verify all broadcast 1 blocks have been removed
@@ -392,6 +409,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(!driverStore.hasLocalBlock(broadcast1BlockId))
       assert(!executorStore.hasLocalBlock(broadcast1BlockId))
+      assertUpdateBlockInfoReportedForRemovingBlock(driverStore, broadcast1BlockId,
+        removedFromMemory = false, removedFromDisk = true)
+      assertUpdateBlockInfoReportedForRemovingBlock(executorStore, broadcast1BlockId,
+        removedFromMemory = false, removedFromDisk = true)
     }
 
     // remove broadcast 2 from both the stores asynchronously
@@ -402,9 +423,44 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       assert(!driverStore.hasLocalBlock(broadcast2BlockId2))
       assert(!executorStore.hasLocalBlock(broadcast2BlockId))
       assert(!executorStore.hasLocalBlock(broadcast2BlockId2))
+      assertUpdateBlockInfoReportedForRemovingBlock(driverStore, broadcast2BlockId,
+        removedFromMemory = false, removedFromDisk = true)
+      assertUpdateBlockInfoReportedForRemovingBlock(driverStore, broadcast2BlockId2,
+        removedFromMemory = false, removedFromDisk = true)
+      assertUpdateBlockInfoReportedForRemovingBlock(executorStore, broadcast2BlockId,
+        removedFromMemory = false, removedFromDisk = true)
+      assertUpdateBlockInfoReportedForRemovingBlock(executorStore, broadcast2BlockId2,
+        removedFromMemory = false, removedFromDisk = true)
     }
     executorStore.stop()
     driverStore.stop()
+  }
+
+  private def assertUpdateBlockInfoReportedForRemovingBlock(
+      store: BlockManager,
+      blockId: BlockId,
+      removedFromMemory: Boolean,
+      removedFromDisk: Boolean): Unit = {
+    def assertSizeReported(captor: ArgumentCaptor[Long], expectRemoved: Boolean): Unit = {
+      assert(captor.getAllValues().size() === 1)
+      if (expectRemoved) {
+        assert(captor.getValue() > 0)
+      } else {
+        assert(captor.getValue() === 0)
+      }
+    }
+
+    val memSizeCaptor = ArgumentCaptor.forClass(classOf[Long]).asInstanceOf[ArgumentCaptor[Long]]
+    val diskSizeCaptor = ArgumentCaptor.forClass(classOf[Long]).asInstanceOf[ArgumentCaptor[Long]]
+    verify(master).updateBlockInfo(mc.eq(store.blockManagerId), mc.eq(blockId),
+      mc.eq(StorageLevel.NONE), memSizeCaptor.capture(), diskSizeCaptor.capture())
+    assertSizeReported(memSizeCaptor, removedFromMemory)
+    assertSizeReported(diskSizeCaptor, removedFromDisk)
+  }
+
+  private def assertUpdateBlockInfoNotReported(store: BlockManager, blockId: BlockId): Unit = {
+    verify(master, never()).updateBlockInfo(mc.eq(store.blockManagerId), mc.eq(blockId),
+      mc.eq(StorageLevel.NONE), mc.anyInt(), mc.anyInt())
   }
 
   test("reregistration on heart beat") {
@@ -419,7 +475,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    val reregister = !master.driverEndpoint.askSync[Boolean](
+    val reregister = !master.driverHeartbeatEndPoint.askSync[Boolean](
       BlockManagerHeartbeat(store.blockManagerId))
     assert(reregister)
   }
@@ -451,18 +507,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     for (i <- 1 to 100) {
       master.removeExecutor(store.blockManagerId.executorId)
       val t1 = new Thread {
-        override def run() {
+        override def run(): Unit = {
           store.putIterator(
             "a2", a2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
         }
       }
       val t2 = new Thread {
-        override def run() {
+        override def run(): Unit = {
           store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
         }
       }
       val t3 = new Thread {
-        override def run() {
+        override def run(): Unit = {
           store.reregister()
         }
       }
@@ -520,7 +576,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     when(bmMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(bmId1, bmId2, bmId3))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]]('sortLocations)
+    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
     val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
   }
@@ -543,7 +599,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     blockManager.blockManagerId =
       BlockManagerId(SparkContext.DRIVER_IDENTIFIER, localHost, 1, Some(localRack))
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]]('sortLocations)
+    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
     val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
     assert(locations.flatMap(_.topologyInfo)
@@ -601,7 +657,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       // check getRemoteBytes
       val bytesViaStore1 = cleanBm.getRemoteBytes(blockId)
       assert(bytesViaStore1.isDefined)
-      val expectedContent = sameHostBm.getBlockData(blockId).nioByteBuffer().array()
+      val expectedContent = sameHostBm.getLocalBlockData(blockId).nioByteBuffer().array()
       assert(bytesViaStore1.get.toArray === expectedContent)
 
       // check getRemoteValues
@@ -1042,7 +1098,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockStatus = blockStatusOption.get
     assert((blockStatus.diskSize > 0) === !storageLevel.useMemory)
     assert((blockStatus.memSize > 0) === storageLevel.useMemory)
-    assert(blockManager.getBlockData(blockId).nioByteBuffer().array() === ser)
+    assert(blockManager.getLocalBlockData(blockId).nioByteBuffer().array() === ser)
   }
 
   Seq(
@@ -1638,6 +1694,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val locs = BlockManager.blockIdsToLocations(blockIds, env, mockBlockManagerMaster)
     val expectedLocs = Seq("executor_host1_1", "executor_host2_2")
     assert(locs(blockIds(0)) == expectedLocs)
+  }
+
+  test("SPARK-30594: Do not post SparkListenerBlockUpdated when updateBlockInfo returns false") {
+    // update block info for non-existent block manager
+    val updateInfo = UpdateBlockInfo(BlockManagerId("1", "host1", 100),
+      BlockId("test_1"), StorageLevel.MEMORY_ONLY, 1, 1)
+    val result = master.driverEndpoint.askSync[Boolean](updateInfo)
+
+    assert(!result)
+    verify(liveListenerBus, never()).post(SparkListenerBlockUpdated(BlockUpdatedInfo(updateInfo)))
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {

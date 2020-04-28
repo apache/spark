@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.sql.Date
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
@@ -26,10 +28,9 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, CreateArray, DecimalLiteral, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.{PercentileDigest, PercentileDigestSerializer}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.catalyst.util.QuantileSummaries
+import org.apache.spark.sql.catalyst.util.{ArrayData, QuantileSummaries}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
-import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType}
+import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType}
 import org.apache.spark.util.SizeEstimator
 
 class ApproximatePercentileSuite extends SparkFunSuite {
@@ -239,16 +240,18 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       accuracyExpression = Literal(-1))
     assertEqual(
       wrongAccuracy.checkInputDataTypes(),
-      TypeCheckFailure(
-        "The accuracy provided must be a positive integer literal (current value = -1)"))
+      TypeCheckFailure(s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
+        " (current value = -1)"))
 
-    val correctPercentageExpresions = Seq(
+    val correctPercentageExpressions = Seq(
+      Literal(0.1f, FloatType),
+      Literal(Decimal(0.2), DecimalType(2, 1)),
       Literal(0D),
       Literal(1D),
       Literal(0.5D),
       CreateArray(Seq(0D, 1D, 0.5D).map(Literal(_)))
     )
-    correctPercentageExpresions.foreach { percentageExpression =>
+    correctPercentageExpressions.foreach { percentageExpression =>
       val correctPercentage = new ApproximatePercentile(
         AttributeReference("a", DoubleType)(),
         percentageExpression = percentageExpression,
@@ -281,10 +284,15 @@ class ApproximatePercentileSuite extends SparkFunSuite {
   test("class ApproximatePercentile, automatically add type casting for parameters") {
     val testRelation = LocalRelation('a.int)
 
-    // Compatible accuracy types: Long type and decimal type
-    val accuracyExpressions = Seq(Literal(1000L), DecimalLiteral(10000), Literal(123.0D))
-    // Compatible percentage types: float, decimal
+    // accuracy types must be integral, no type casting
+    val accuracyExpressions = Seq(
+      Literal(1.toByte),
+      Literal(100.toShort),
+      Literal(100),
+      Literal(1000L))
+    // Compatible percentage types: float, decimal, string
     val percentageExpressions = Seq(Literal(0.3f), DecimalLiteral(0.5),
+      Literal("0.2"),
       CreateArray(Seq(Literal(0.3f), Literal(0.5D), DecimalLiteral(0.7))))
 
     accuracyExpressions.foreach { accuracyExpression =>
@@ -300,10 +308,49 @@ class ApproximatePercentileSuite extends SparkFunSuite {
             assert(agg.child.dataType == IntegerType)
             assert(agg.percentageExpression.dataType == DoubleType ||
               agg.percentageExpression.dataType == ArrayType(DoubleType, containsNull = false))
-            assert(agg.accuracyExpression.dataType == IntegerType)
+            assert(agg.accuracyExpression.dataType.isInstanceOf[IntegralType])
           case _ => fail()
         }
       }
+    }
+  }
+
+  test("ApproximatePercentile: nulls in percentage expression") {
+
+    assert(new ApproximatePercentile(
+      AttributeReference("a", DoubleType)(),
+      percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
+      TypeCheckFailure("Percentage value must not be null"))
+
+    val nullPercentageExprs =
+      Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))
+    nullPercentageExprs.foreach {
+      percentageExpression =>
+        val wrongPercentage = new ApproximatePercentile(
+          AttributeReference("a", DoubleType)(),
+          percentageExpression = percentageExpression,
+          accuracyExpression = Literal(100))
+        assert(
+          wrongPercentage.checkInputDataTypes() match {
+            case TypeCheckFailure(msg)
+                if msg.contains("argument 2 requires (double or array<double>) type") =>
+              true
+            case _ => false
+          })
+    }
+  }
+
+  test("ApproximatePercentile: invalid accuracy expressions") {
+    val invalidAccuracies = Seq(null, 1.2f, 1.9d, BigDecimal(1.9), new Date(0), "1.5")
+    invalidAccuracies.foreach { acc =>
+      val wrongPercentage = new ApproximatePercentile(
+        AttributeReference("a", DoubleType)(),
+        percentageExpression = Literal(0.5),
+        accuracyExpression = Literal(acc))
+      assert(wrongPercentage.checkInputDataTypes() match {
+        case TypeCheckFailure(msg) if msg.contains("argument 3 requires integral type") => true
+        case _ => false
+      })
     }
   }
 

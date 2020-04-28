@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.BooleanType
 class BooleanBitSetSuite extends SparkFunSuite {
   import BooleanBitSet._
 
-  def skeleton(count: Int) {
+  def skeleton(count: Int): Unit = {
     // -------------
     // Tests encoder
     // -------------
@@ -87,7 +87,7 @@ class BooleanBitSetSuite extends SparkFunSuite {
     assert(!decoder.hasNext)
   }
 
-  def skeletonForDecompress(count: Int) {
+  def skeletonForDecompress(count: Int): Unit = {
     val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
     val rows = Seq.fill[InternalRow](count)(makeRandomRow(BOOLEAN))
     val values = rows.map(_.getBoolean(0))

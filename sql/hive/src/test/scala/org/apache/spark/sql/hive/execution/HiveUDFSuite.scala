@@ -32,6 +32,7 @@ import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -146,13 +147,6 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
     checkAnswer(sql("SELECT percentile(key, array(1, 1)) FROM src LIMIT 1"),
       sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)
-  }
-
-  test("SPARK-16228 Percentile needs explicit cast to double") {
-    sql("select percentile(value, cast(0.5 as double)) from values 1,2,3 T(value)")
-    sql("select percentile_approx(value, cast(0.5 as double)) from values 1.0,2.0,3.0 T(value)")
-    sql("select percentile(value, 0.5) from values 1,2,3 T(value)")
-    sql("select percentile_approx(value, 0.5) from values 1.0,2.0,3.0 T(value)")
   }
 
   test("Generic UDAF aggregates") {
@@ -563,7 +557,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         checkAnswer(
           sql("SELECT testUDFToListInt(s) FROM inputTable"),
           Seq(Row(Seq(1, 2, 3))))
-        assert(sql("show functions").count() == numFunc + 1)
+        assert(sql("show functions").count() ==
+          numFunc + FunctionsCommand.virtualOperators.size + 1)
         assert(spark.catalog.listFunctions().count() == numFunc + 1)
       }
     }

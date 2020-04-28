@@ -17,8 +17,8 @@
 
 package org.apache.spark.storage
 
-import scala.collection.Iterable
 import scala.collection.generic.CanBuildFrom
+import scala.collection.immutable.Iterable
 import scala.concurrent.Future
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -30,6 +30,7 @@ import org.apache.spark.util.{RpcUtils, ThreadUtils}
 private[spark]
 class BlockManagerMaster(
     var driverEndpoint: RpcEndpointRef,
+    var driverHeartbeatEndPoint: RpcEndpointRef,
     conf: SparkConf,
     isDriver: Boolean)
   extends Logging {
@@ -37,7 +38,7 @@ class BlockManagerMaster(
   val timeout = RpcUtils.askRpcTimeout(conf)
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
-  def removeExecutor(execId: String) {
+  def removeExecutor(execId: String): Unit = {
     tell(RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
@@ -45,7 +46,7 @@ class BlockManagerMaster(
   /** Request removal of a dead executor from the driver endpoint.
    *  This is only called on the driver side. Non-blocking
    */
-  def removeExecutorAsync(execId: String) {
+  def removeExecutorAsync(execId: String): Unit = {
     driverEndpoint.ask[Boolean](RemoveExecutor(execId))
     logInfo("Removal of executor " + execId + " requested")
   }
@@ -120,12 +121,12 @@ class BlockManagerMaster(
    * Remove a block from the slaves that have it. This can only be used to remove
    * blocks that the driver knows about.
    */
-  def removeBlock(blockId: BlockId) {
+  def removeBlock(blockId: BlockId): Unit = {
     driverEndpoint.askSync[Boolean](RemoveBlock(blockId))
   }
 
   /** Remove all blocks belonging to the given RDD. */
-  def removeRdd(rddId: Int, blocking: Boolean) {
+  def removeRdd(rddId: Int, blocking: Boolean): Unit = {
     val future = driverEndpoint.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
     future.failed.foreach(e =>
       logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
@@ -136,7 +137,7 @@ class BlockManagerMaster(
   }
 
   /** Remove all blocks belonging to the given shuffle. */
-  def removeShuffle(shuffleId: Int, blocking: Boolean) {
+  def removeShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     val future = driverEndpoint.askSync[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
     future.failed.foreach(e =>
       logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}", e)
@@ -147,7 +148,7 @@ class BlockManagerMaster(
   }
 
   /** Remove all blocks belonging to the given broadcast. */
-  def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean) {
+  def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean): Unit = {
     val future = driverEndpoint.askSync[Future[Seq[Int]]](
       RemoveBroadcast(broadcastId, removeFromMaster))
     future.failed.foreach(e =>
@@ -166,10 +167,12 @@ class BlockManagerMaster(
    * amount of remaining memory.
    */
   def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
+    if (driverEndpoint == null) return Map.empty
     driverEndpoint.askSync[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
   }
 
   def getStorageStatus: Array[StorageStatus] = {
+    if (driverEndpoint == null) return Array.empty
     driverEndpoint.askSync[Array[StorageStatus]](GetStorageStatus)
   }
 
@@ -200,7 +203,7 @@ class BlockManagerMaster(
         Option[BlockStatus],
         Iterable[Option[BlockStatus]]]]
     val blockStatus = timeout.awaitResult(
-      Future.sequence[Option[BlockStatus], Iterable](futures)(cbf, ThreadUtils.sameThread))
+      Future.sequence(futures)(cbf, ThreadUtils.sameThread))
     if (blockStatus == null) {
       throw new SparkException("BlockManager returned null for BlockStatus query: " + blockId)
     }
@@ -226,16 +229,21 @@ class BlockManagerMaster(
   }
 
   /** Stop the driver endpoint, called only on the Spark driver node */
-  def stop() {
+  def stop(): Unit = {
     if (driverEndpoint != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverEndpoint = null
+      if (driverHeartbeatEndPoint.askSync[Boolean](StopBlockManagerMaster)) {
+        driverHeartbeatEndPoint = null
+      } else {
+        logWarning("Failed to stop BlockManagerMasterHeartbeatEndpoint")
+      }
       logInfo("BlockManagerMaster stopped")
     }
   }
 
   /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
-  private def tell(message: Any) {
+  private def tell(message: Any): Unit = {
     if (!driverEndpoint.askSync[Boolean](message)) {
       throw new SparkException("BlockManagerMasterEndpoint returned false, expected true.")
     }
@@ -245,4 +253,5 @@ class BlockManagerMaster(
 
 private[spark] object BlockManagerMaster {
   val DRIVER_ENDPOINT_NAME = "BlockManagerMaster"
+  val DRIVER_HEARTBEAT_ENDPOINT_NAME = "BlockManagerMasterHeartbeat"
 }

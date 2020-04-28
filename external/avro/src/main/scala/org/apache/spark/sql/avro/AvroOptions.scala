@@ -36,7 +36,16 @@ class AvroOptions(
   }
 
   /**
-   * Optional schema provided by an user in JSON format.
+   * Optional schema provided by a user in JSON format.
+   *
+   * When reading Avro, this option can be set to an evolved schema, which is compatible but
+   * different with the actual Avro schema. The deserialization schema will be consistent with
+   * the evolved schema. For example, if we set an evolved schema containing one additional
+   * column with a default value, the reading result in Spark will contain the new column too.
+   *
+   * When writing Avro, this option can be set if the expected output Avro schema doesn't match the
+   * schema converted by Spark. For example, the expected schema of one column is of "enum" type,
+   * instead of "string" type in the default converted schema.
    */
   val schema: Option[String] = parameters.get("avroSchema")
 

@@ -56,6 +56,8 @@ case class ParquetScanBuilder(
     parquetFilters.convertibleFilters(this.filters).toArray
   }
 
+  override protected val supportsNestedSchemaPruning: Boolean = true
+
   private var filters: Array[Filter] = Array.empty
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {

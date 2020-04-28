@@ -1,0 +1,1 @@
+Place files which are being used as resources of tests but shouldn't be added to classpath.

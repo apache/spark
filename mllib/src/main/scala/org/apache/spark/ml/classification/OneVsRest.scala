@@ -24,7 +24,7 @@ import scala.concurrent.duration.Duration
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JObject, _}
+import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
@@ -161,13 +161,23 @@ final class OneVsRestModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false,
+      getClassifier.featuresDataType)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+        $(predictionCol), numClasses)
+    }
+    if ($(rawPredictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(rawPredictionCol), numClasses)
+    }
+    outputSchema
   }
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     // Check schema
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     if (getPredictionCol.isEmpty && getRawPredictionCol.isEmpty) {
       logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
@@ -222,14 +232,15 @@ final class OneVsRestModel private[ml] (
       val numClass = models.length
 
       // output the RawPrediction as vector
-      val rawPredictionUDF = udf { (predictions: Map[Int, Double]) =>
-        val predArray = Array.fill[Double](numClass)(0.0)
+      val rawPredictionUDF = udf { predictions: Map[Int, Double] =>
+        val predArray = Array.ofDim[Double](numClass)
         predictions.foreach { case (idx, value) => predArray(idx) = value }
         Vectors.dense(predArray)
       }
 
       predictionColNames :+= getRawPredictionCol
       predictionColumns :+= rawPredictionUDF(col(accColName))
+        .as($(rawPredictionCol), outputSchema($(rawPredictionCol)).metadata)
     }
 
     if (getPredictionCol.nonEmpty) {
@@ -257,6 +268,12 @@ final class OneVsRestModel private[ml] (
 
   @Since("2.0.0")
   override def write: MLWriter = new OneVsRestModel.OneVsRestModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"OneVsRestModel: uid=$uid, classifier=${$(classifier)}, numClasses=$numClasses, " +
+      s"numFeatures=$numFeatures"
+  }
 }
 
 @Since("2.0.0")

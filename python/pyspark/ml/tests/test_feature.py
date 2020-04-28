@@ -34,12 +34,13 @@ class FeatureTests(SparkSessionTestCase):
 
     def test_binarizer(self):
         b0 = Binarizer()
-        self.assertListEqual(b0.params, [b0.inputCol, b0.outputCol, b0.threshold])
+        self.assertListEqual(b0.params, [b0.inputCol, b0.inputCols, b0.outputCol,
+                                         b0.outputCols, b0.threshold, b0.thresholds])
         self.assertTrue(all([~b0.isSet(p) for p in b0.params]))
         self.assertTrue(b0.hasDefault(b0.threshold))
         self.assertEqual(b0.getThreshold(), 0.0)
         b0.setParams(inputCol="input", outputCol="output").setThreshold(1.0)
-        self.assertTrue(all([b0.isSet(p) for p in b0.params]))
+        self.assertTrue(not all([b0.isSet(p) for p in b0.params]))
         self.assertEqual(b0.getThreshold(), 1.0)
         self.assertEqual(b0.getInputCol(), "input")
         self.assertEqual(b0.getOutputCol(), "output")

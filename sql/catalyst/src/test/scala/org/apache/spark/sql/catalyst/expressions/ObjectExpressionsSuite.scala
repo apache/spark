@@ -35,8 +35,7 @@ import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -446,8 +445,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testTypes.foreach { dt =>
       genSchema(dt).map { schema =>
         val row = RandomDataGenerator.randomRow(random, schema)
-        val rowConverter = RowEncoder(schema)
-        val internalRow = rowConverter.toRow(row)
+        val toRow = RowEncoder(schema).createSerializer()
+        val internalRow = toRow(row)
         val lambda = LambdaVariable("dummy", schema(0).dataType, schema(0).nullable, id = 0)
         checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
       }
@@ -486,7 +485,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("abcd".getBytes, BinaryType),
       ("abcd", StringType),
       (BigDecimal.valueOf(10), DecimalType.IntDecimal),
-      (CalendarInterval.fromString("interval 3 day"), CalendarIntervalType),
+      (IntervalUtils.stringToInterval(UTF8String.fromString("interval 3 day")),
+        CalendarIntervalType),
       (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
       (Array(3, 2, 1), ArrayType(IntegerType))
     ).foreach { case (input, dt) =>

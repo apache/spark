@@ -36,7 +36,7 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   ).map(x => IndexedRow(x._1, x._2))
   var indexedRows: RDD[IndexedRow] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     indexedRows = sc.parallelize(data, 2)
   }

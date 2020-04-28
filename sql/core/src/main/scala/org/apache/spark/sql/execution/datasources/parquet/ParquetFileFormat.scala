@@ -27,7 +27,6 @@ import scala.util.{Failure, Try}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
@@ -296,10 +295,15 @@ class ParquetFileFormat
 
       val convertTz =
         if (timestampConversion && !isCreatedByParquetMr) {
-          Some(DateTimeUtils.getTimeZone(sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
+          Some(DateTimeUtils.getZoneId(sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
         } else {
           None
         }
+
+      val rebaseDateTime = DataSourceUtils.needRebaseDateTime(
+        footerFileMetaData.getKeyValueMetaData.get).getOrElse {
+        SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ)
+      }
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
@@ -313,7 +317,10 @@ class ParquetFileFormat
       val taskContext = Option(TaskContext.get())
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
-          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
+          convertTz.orNull,
+          rebaseDateTime,
+          enableOffHeapColumnVector && taskContext.isDefined,
+          capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
@@ -328,32 +335,29 @@ class ParquetFileFormat
         iter.asInstanceOf[Iterator[InternalRow]]
       } else {
         logDebug(s"Falling back to parquet-mr")
-        // ParquetRecordReader returns UnsafeRow
-        val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
+        // ParquetRecordReader returns InternalRow
+        val readSupport = new ParquetReadSupport(
+          convertTz, enableVectorizedReader = false, rebaseDateTime)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
-          new ParquetRecordReader[UnsafeRow](readSupport, parquetFilter)
+          new ParquetRecordReader[InternalRow](readSupport, parquetFilter)
         } else {
-          new ParquetRecordReader[UnsafeRow](readSupport)
+          new ParquetRecordReader[InternalRow](readSupport)
         }
-        val iter = new RecordReaderIterator(reader)
+        val iter = new RecordReaderIterator[InternalRow](reader)
         // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
         reader.initialize(split, hadoopAttemptContext)
 
         val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-        val joinedRow = new JoinedRow()
-        val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+        val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
-        // This is a horrible erasure hack...  if we type the iterator above, then it actually check
-        // the type in next() and we get a class cast exception.  If we make that function return
-        // Object, then we can defer the cast until later!
         if (partitionSchema.length == 0) {
           // There is no partition columns
-          iter.asInstanceOf[Iterator[InternalRow]]
+          iter.map(unsafeProjection)
         } else {
-          iter.asInstanceOf[Iterator[InternalRow]]
-            .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+          val joinedRow = new JoinedRow()
+          iter.map(d => unsafeProjection(joinedRow(d, file.partitionValues)))
         }
       }
     }
@@ -403,7 +407,7 @@ object ParquetFileFormat extends Logging {
             logInfo(
               "Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
                 "falling back to the deprecated DataType.fromCaseClassString parser.")
-            LegacyTypeStringParser.parse(serializedSchema.get)
+            LegacyTypeStringParser.parseString(serializedSchema.get)
           }
           .recover { case cause: Throwable =>
             logWarning(
@@ -514,7 +518,7 @@ object ParquetFileFormat extends Logging {
         logInfo(
           "Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
             "falling back to the deprecated DataType.fromCaseClassString parser.")
-        LegacyTypeStringParser.parse(schemaString).asInstanceOf[StructType]
+        LegacyTypeStringParser.parseString(schemaString).asInstanceOf[StructType]
     }.recoverWith {
       case cause: Throwable =>
         logWarning(

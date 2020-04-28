@@ -23,13 +23,34 @@ import org.apache.spark.sql.catalyst.util.StringUtils._
 class StringUtilsSuite extends SparkFunSuite {
 
   test("escapeLikeRegex") {
-    assert(escapeLikeRegex("abdef") === "(?s)\\Qa\\E\\Qb\\E\\Qd\\E\\Qe\\E\\Qf\\E")
-    assert(escapeLikeRegex("a\\__b") === "(?s)\\Qa\\E\\Q_\\E.\\Qb\\E")
-    assert(escapeLikeRegex("a_%b") === "(?s)\\Qa\\E..*\\Qb\\E")
-    assert(escapeLikeRegex("a%\\%b") === "(?s)\\Qa\\E.*\\Q%\\E\\Qb\\E")
-    assert(escapeLikeRegex("a%") === "(?s)\\Qa\\E.*")
-    assert(escapeLikeRegex("**") === "(?s)\\Q*\\E\\Q*\\E")
-    assert(escapeLikeRegex("a_b") === "(?s)\\Qa\\E.\\Qb\\E")
+    val expectedEscapedStrOne = "(?s)\\Qa\\E\\Qb\\E\\Qd\\E\\Qe\\E\\Qf\\E"
+    val expectedEscapedStrTwo = "(?s)\\Qa\\E\\Q_\\E.\\Qb\\E"
+    val expectedEscapedStrThree = "(?s)\\Qa\\E..*\\Qb\\E"
+    val expectedEscapedStrFour = "(?s)\\Qa\\E.*\\Q%\\E\\Qb\\E"
+    val expectedEscapedStrFive = "(?s)\\Qa\\E.*"
+    val expectedEscapedStrSix = "(?s)\\Q*\\E\\Q*\\E"
+    val expectedEscapedStrSeven = "(?s)\\Qa\\E.\\Qb\\E"
+    assert(escapeLikeRegex("abdef", '\\') === expectedEscapedStrOne)
+    assert(escapeLikeRegex("abdef", '/') === expectedEscapedStrOne)
+    assert(escapeLikeRegex("abdef", '\"') === expectedEscapedStrOne)
+    assert(escapeLikeRegex("a\\__b", '\\') === expectedEscapedStrTwo)
+    assert(escapeLikeRegex("a/__b", '/') === expectedEscapedStrTwo)
+    assert(escapeLikeRegex("a\"__b", '\"') === expectedEscapedStrTwo)
+    assert(escapeLikeRegex("a_%b", '\\') === expectedEscapedStrThree)
+    assert(escapeLikeRegex("a_%b", '/') === expectedEscapedStrThree)
+    assert(escapeLikeRegex("a_%b", '\"') === expectedEscapedStrThree)
+    assert(escapeLikeRegex("a%\\%b", '\\') === expectedEscapedStrFour)
+    assert(escapeLikeRegex("a%/%b", '/') === expectedEscapedStrFour)
+    assert(escapeLikeRegex("a%\"%b", '\"') === expectedEscapedStrFour)
+    assert(escapeLikeRegex("a%", '\\') === expectedEscapedStrFive)
+    assert(escapeLikeRegex("a%", '/') === expectedEscapedStrFive)
+    assert(escapeLikeRegex("a%", '\"') === expectedEscapedStrFive)
+    assert(escapeLikeRegex("**", '\\') === expectedEscapedStrSix)
+    assert(escapeLikeRegex("**", '/') === expectedEscapedStrSix)
+    assert(escapeLikeRegex("**", '\"') === expectedEscapedStrSix)
+    assert(escapeLikeRegex("a_b", '\\') === expectedEscapedStrSeven)
+    assert(escapeLikeRegex("a_b", '/') === expectedEscapedStrSeven)
+    assert(escapeLikeRegex("a_b", '\"') === expectedEscapedStrSeven)
   }
 
   test("filter pattern") {

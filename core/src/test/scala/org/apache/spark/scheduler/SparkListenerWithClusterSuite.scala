@@ -57,7 +57,7 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
   private class SaveExecutorInfo extends SparkListener {
     val addedExecutorInfo = mutable.Map[String, ExecutorInfo]()
 
-    override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
+    override def onExecutorAdded(executor: SparkListenerExecutorAdded): Unit = {
       addedExecutorInfo(executor.executorId) = executor.executorInfo
     }
   }

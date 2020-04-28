@@ -22,10 +22,12 @@ import java.net.URI
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -78,6 +80,18 @@ class VersionsSuite extends SparkFunSuite with Logging {
     hadoopConf.set("test", "success")
     val client = buildClient(HiveUtils.builtinHiveVersion, hadoopConf)
     assert("success" === client.getConf("test", null))
+  }
+
+  test("override useless and side-effect hive configurations ") {
+    val hadoopConf = new Configuration()
+    // These hive flags should be reset by spark
+    hadoopConf.setBoolean("hive.cbo.enable", true)
+    hadoopConf.setBoolean("hive.session.history.enabled", true)
+    hadoopConf.set("hive.execution.engine", "tez")
+    val client = buildClient(HiveUtils.builtinHiveVersion, hadoopConf)
+    assert(!client.getConf("hive.cbo.enable", "true").toBoolean)
+    assert(!client.getConf("hive.session.history.enabled", "true").toBoolean)
+    assert(client.getConf("hive.execution.engine", "tez") === "mr")
   }
 
   private def getNestedMessages(e: Throwable): String = {
@@ -140,10 +154,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
         .client.version.fullVersion.startsWith(version))
     }
 
-    def table(database: String, tableName: String): CatalogTable = {
+    def table(database: String, tableName: String,
+        tableType: CatalogTableType = CatalogTableType.MANAGED): CatalogTable = {
       CatalogTable(
         identifier = TableIdentifier(tableName, Some(database)),
-        tableType = CatalogTableType.MANAGED,
+        tableType = tableType,
         schema = new StructType().add("key", "int"),
         storage = CatalogStorageFormat(
           locationUri = None,
@@ -167,6 +182,34 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
+    }
+
+    test(s"$version: create/get/alter database should pick right user name as owner") {
+      if (version != "0.12") {
+        val currentUser = UserGroupInformation.getCurrentUser.getUserName
+        val ownerName = "SPARK_29425"
+        val db1 = "SPARK_29425_1"
+        val db2 = "SPARK_29425_2"
+        val ownerProps = Map("owner" -> ownerName)
+
+        // create database with owner
+        val dbWithOwner = CatalogDatabase(db1, "desc", Utils.createTempDir().toURI, ownerProps)
+        client.createDatabase(dbWithOwner, ignoreIfExists = true)
+        val getDbWithOwner = client.getDatabase(db1)
+        assert(getDbWithOwner.properties("owner") === ownerName)
+        // alter database without owner
+        client.alterDatabase(getDbWithOwner.copy(properties = Map()))
+        assert(client.getDatabase(db1).properties("owner") === "")
+
+        // create database without owner
+        val dbWithoutOwner = CatalogDatabase(db2, "desc", Utils.createTempDir().toURI, Map())
+        client.createDatabase(dbWithoutOwner, ignoreIfExists = true)
+        val getDbWithoutOwner = client.getDatabase(db2)
+        assert(getDbWithoutOwner.properties("owner") === currentUser)
+        // alter database with owner
+        client.alterDatabase(getDbWithoutOwner.copy(properties = ownerProps))
+        assert(client.getDatabase(db2).properties("owner") === ownerName)
+      }
     }
 
     test(s"$version: createDatabase with null description") {
@@ -201,6 +244,22 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val database = client.getDatabase("temporary").copy(properties = Map("flag" -> "true"))
       client.alterDatabase(database)
       assert(client.getDatabase("temporary").properties.contains("flag"))
+
+      // test alter database location
+      val tempDatabasePath2 = Utils.createTempDir().toURI
+      // Hive support altering database location since HIVE-8472.
+      if (version == "3.0" || version == "3.1") {
+        client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
+        val uriInCatalog = client.getDatabase("temporary").locationUri
+        assert("file" === uriInCatalog.getScheme)
+        assert(new Path(tempDatabasePath2.getPath).toUri.getPath === uriInCatalog.getPath,
+          "Failed to alter database location")
+      } else {
+        val e = intercept[AnalysisException] {
+          client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
+        }
+        assert(e.getMessage.contains("does not support altering database location"))
+      }
     }
 
     test(s"$version: dropDatabase") {
@@ -215,7 +274,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: createTable") {
       client.createTable(table("default", tableName = "src"), ignoreIfExists = false)
-      client.createTable(table("default", "temporary"), ignoreIfExists = false)
+      client.createTable(table("default", tableName = "temporary"), ignoreIfExists = false)
+      client.createTable(table("default", tableName = "view1", tableType = CatalogTableType.VIEW),
+        ignoreIfExists = false)
     }
 
     test(s"$version: loadTable") {
@@ -274,6 +335,19 @@ class VersionsSuite extends SparkFunSuite with Logging {
       assert(client.getTable("default", "src").properties.contains("changed"))
     }
 
+    test(s"$version: alterTable - should respect the original catalog table's owner name") {
+      val ownerName = "SPARK-29405"
+      val originalTable = client.getTable("default", "src")
+      // mocking the owner is what we declared
+      val newTable = originalTable.copy(owner = ownerName)
+      client.alterTable(newTable)
+      assert(client.getTable("default", "src").owner === ownerName)
+      // mocking the owner is empty
+      val newTable2 = originalTable.copy(owner = "")
+      client.alterTable(newTable2)
+      assert(client.getTable("default", "src").owner === client.userName)
+    }
+
     test(s"$version: alterTable(dbName: String, tableName: String, table: CatalogTable)") {
       val newTable = client.getTable("default", "src").copy(properties = Map("changedAgain" -> ""))
       client.alterTable("default", "src", newTable)
@@ -318,12 +392,19 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: listTables(database)") {
-      assert(client.listTables("default") === Seq("src", "temporary"))
+      assert(client.listTables("default") === Seq("src", "temporary", "view1"))
     }
 
     test(s"$version: listTables(database, pattern)") {
       assert(client.listTables("default", pattern = "src") === Seq("src"))
       assert(client.listTables("default", pattern = "nonexist").isEmpty)
+    }
+
+    test(s"$version: listTablesByType(database, pattern, tableType)") {
+      assert(client.listTablesByType("default", pattern = "view1",
+        CatalogTableType.VIEW) === Seq("view1"))
+      assert(client.listTablesByType("default", pattern = "nonexist",
+        CatalogTableType.VIEW).isEmpty)
     }
 
     test(s"$version: dropTable") {
@@ -339,6 +420,16 @@ class VersionsSuite extends SparkFunSuite with Logging {
         case _: UnsupportedOperationException =>
           assert(versionsWithoutPurge.contains(version))
           client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
+            purge = false)
+      }
+      // Drop table with type CatalogTableType.VIEW.
+      try {
+        client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
+          purge = true)
+        assert(!versionsWithoutPurge.contains(version))
+      } catch {
+        case _: UnsupportedOperationException =>
+          client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
             purge = false)
       }
       assert(client.listTables("default") === Seq("src"))
@@ -891,7 +982,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
            """.stripMargin
           )
 
-          val errorMsg = "data type mismatch: cannot cast decimal(2,1) to binary"
+          val errorMsg = "Cannot safely cast 'f0': DecimalType(2,1) to BinaryType"
 
           if (isPartitioned) {
             val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"

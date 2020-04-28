@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.ml.util.TestingUtils._
@@ -81,6 +83,22 @@ class NormalizerSuite extends MLTest with DefaultReadWriteTest {
         assertTypeOfVector(normalized, features)
         assertValues(normalized, expected)
     }
+
+    val vectorSize = data.head.size
+
+    // Can not infer size of output vector, since no metadata is provided
+    intercept[TestFailedException] {
+      val transformed = normalizer.transform(dataFrame)
+      checkVectorSizeOnDF(transformed, "normalized", vectorSize)
+    }
+
+    val dataFrame2 = new VectorSizeHint()
+      .setSize(vectorSize)
+      .setInputCol("features")
+      .transform(dataFrame)
+
+    val transformed2 = normalizer.transform(dataFrame2)
+    checkVectorSizeOnDF(transformed2, "normalized", vectorSize)
   }
 
   test("Normalization with setter") {

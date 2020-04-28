@@ -14,16 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from datetime import datetime, timedelta
 import hashlib
 import os
 import random
 import sys
 import tempfile
+import time
 from glob import glob
 
 from py4j.protocol import Py4JJavaError
 
 from pyspark import shuffle, RDD
+from pyspark.resource import ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder,\
+    TaskResourceRequests
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
@@ -67,6 +71,26 @@ class RDDTests(ReusedPySparkTestCase):
         rdd2 = rdd.repartition(1000)
         it2 = rdd2.toLocalIterator()
         self.assertEqual([1, 2, 3], sorted(it2))
+
+    def test_to_localiterator_prefetch(self):
+        # Test that we fetch the next partition in parallel
+        # We do this by returning the current time and:
+        # reading the first elem, waiting, and reading the second elem
+        # If not in parallel then these would be at different times
+        # But since they are being computed in parallel we see the time
+        # is "close enough" to the same.
+        rdd = self.sc.parallelize(range(2), 2)
+        times1 = rdd.map(lambda x: datetime.now())
+        times2 = rdd.map(lambda x: datetime.now())
+        times_iter_prefetch = times1.toLocalIterator(prefetchPartitions=True)
+        times_iter = times2.toLocalIterator(prefetchPartitions=False)
+        times_prefetch_head = next(times_iter_prefetch)
+        times_head = next(times_iter)
+        time.sleep(2)
+        times_next = next(times_iter)
+        times_prefetch_next = next(times_iter_prefetch)
+        self.assertTrue(times_next - times_head >= timedelta(seconds=2))
+        self.assertTrue(times_prefetch_next - times_prefetch_head < timedelta(seconds=1))
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
@@ -681,8 +705,8 @@ class RDDTests(ReusedPySparkTestCase):
         data = ['1', '2', '3']
         rdd = self.sc.parallelize(data)
         with QuietTest(self.sc):
-            self.assertEqual([], rdd.pipe('cc').collect())
-            self.assertRaises(Py4JJavaError, rdd.pipe('cc', checkCode=True).collect)
+            self.assertEqual([], rdd.pipe('java').collect())
+            self.assertRaises(Py4JJavaError, rdd.pipe('java', checkCode=True).collect)
         result = rdd.pipe('cat').collect()
         result.sort()
         for x, y in zip(data, result):
@@ -761,6 +785,34 @@ class RDDTests(ReusedPySparkTestCase):
         for i in range(4):
             self.assertEqual(i, next(it))
 
+    def test_resourceprofile(self):
+        rp_builder = ResourceProfileBuilder()
+        ereqs = ExecutorResourceRequests().cores(2).memory("6g").memoryOverhead("1g")
+        ereqs.pysparkMemory("2g").resource("gpu", 2, "testGpus", "nvidia.com")
+        treqs = TaskResourceRequests().cpus(2).resource("gpu", 2)
+
+        def assert_request_contents(exec_reqs, task_reqs):
+            self.assertEqual(len(exec_reqs), 5)
+            self.assertEqual(exec_reqs["cores"].amount, 2)
+            self.assertEqual(exec_reqs["memory"].amount, 6144)
+            self.assertEqual(exec_reqs["memoryOverhead"].amount, 1024)
+            self.assertEqual(exec_reqs["pyspark.memory"].amount, 2048)
+            self.assertEqual(exec_reqs["gpu"].amount, 2)
+            self.assertEqual(exec_reqs["gpu"].discoveryScript, "testGpus")
+            self.assertEqual(exec_reqs["gpu"].resourceName, "gpu")
+            self.assertEqual(exec_reqs["gpu"].vendor, "nvidia.com")
+            self.assertEqual(len(task_reqs), 2)
+            self.assertEqual(task_reqs["cpus"].amount, 2.0)
+            self.assertEqual(task_reqs["gpu"].amount, 2.0)
+
+        assert_request_contents(ereqs.requests, treqs.requests)
+        rp = rp_builder.require(ereqs).require(treqs).build
+        assert_request_contents(rp.executorResources, rp.taskResources)
+        rdd = self.sc.parallelize(range(10)).withResources(rp)
+        return_rp = rdd.getResourceProfile()
+        assert_request_contents(return_rp.executorResources, return_rp.taskResources)
+        rddWithoutRp = self.sc.parallelize(range(10))
+        self.assertEqual(rddWithoutRp.getResourceProfile(), None)
 
 if __name__ == "__main__":
     import unittest

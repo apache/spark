@@ -31,7 +31,7 @@ import org.apache.hadoop.mapreduce.lib.input.{CombineFileRecordReader, CombineFi
  */
 private[spark] trait Configurable extends HConfigurable {
   private var conf: Configuration = _
-  def setConf(c: Configuration) {
+  def setConf(c: Configuration): Unit = {
     conf = c
   }
   def getConf: Configuration = conf

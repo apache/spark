@@ -18,7 +18,8 @@
 import tempfile
 import unittest
 
-from pyspark.ml import Estimator, Model
+from pyspark.ml.feature import HashingTF, Tokenizer
+from pyspark.ml import Estimator, Pipeline, Model
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel, OneVsRest
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
     MulticlassClassificationEvaluator, RegressionEvaluator
@@ -61,6 +62,15 @@ class InducedErrorEstimator(Estimator, HasInducedError):
         model = InducedErrorModel()
         self._copyValues(model)
         return model
+
+
+class ParamGridBuilderTests(SparkSessionTestCase):
+
+    def test_addGrid(self):
+        with self.assertRaises(TypeError):
+            grid = (ParamGridBuilder()
+                    .addGrid("must be an instance of Param", ["not", "string"])
+                    .build())
 
 
 class CrossValidatorTests(SparkSessionTestCase):
@@ -301,6 +311,75 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
+    def test_save_load_pipeline_estimator(self):
+        temp_path = tempfile.mkdtemp()
+        training = self.spark.createDataFrame([
+            (0, "a b c d e spark", 1.0),
+            (1, "b d", 0.0),
+            (2, "spark f g h", 1.0),
+            (3, "hadoop mapreduce", 0.0),
+            (4, "b spark who", 1.0),
+            (5, "g d a y", 0.0),
+            (6, "spark fly", 1.0),
+            (7, "was mapreduce", 0.0),
+        ], ["id", "text", "label"])
+
+        # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
+        tokenizer = Tokenizer(inputCol="text", outputCol="words")
+        hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
+
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(5)
+        lr2 = LogisticRegression().setMaxIter(10)
+
+        pipeline = Pipeline(stages=[tokenizer, hashingTF, ova])
+
+        paramGrid = ParamGridBuilder() \
+            .addGrid(hashingTF.numFeatures, [10, 100]) \
+            .addGrid(ova.classifier, [lr1, lr2]) \
+            .build()
+
+        crossval = CrossValidator(estimator=pipeline,
+                                  estimatorParamMaps=paramGrid,
+                                  evaluator=MulticlassClassificationEvaluator(),
+                                  numFolds=2)  # use 3+ folds in practice
+
+        # Run cross-validation, and choose the best set of parameters.
+        cvModel = crossval.fit(training)
+
+        # test save/load of CrossValidatorModel
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedModel = CrossValidatorModel.load(cvModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+        self.assertEqual(len(loadedModel.bestModel.stages), len(cvModel.bestModel.stages))
+        for loadedStage, originalStage in zip(loadedModel.bestModel.stages,
+                                              cvModel.bestModel.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
+
+        # Test nested pipeline
+        nested_pipeline = Pipeline(stages=[tokenizer, Pipeline(stages=[hashingTF, ova])])
+        crossval2 = CrossValidator(estimator=nested_pipeline,
+                                   estimatorParamMaps=paramGrid,
+                                   evaluator=MulticlassClassificationEvaluator(),
+                                   numFolds=2)  # use 3+ folds in practice
+
+        # Run cross-validation, and choose the best set of parameters.
+        cvModel2 = crossval2.fit(training)
+        # test save/load of CrossValidatorModel
+        cvModelPath2 = temp_path + "/cvModel2"
+        cvModel2.save(cvModelPath2)
+        loadedModel2 = CrossValidatorModel.load(cvModelPath2)
+        self.assertEqual(loadedModel2.bestModel.uid, cvModel2.bestModel.uid)
+        loaded_nested_pipeline_model = loadedModel2.bestModel.stages[1]
+        original_nested_pipeline_model = cvModel2.bestModel.stages[1]
+        self.assertEqual(loaded_nested_pipeline_model.uid, original_nested_pipeline_model.uid)
+        self.assertEqual(len(loaded_nested_pipeline_model.stages),
+                         len(original_nested_pipeline_model.stages))
+        for loadedStage, originalStage in zip(loaded_nested_pipeline_model.stages,
+                                              original_nested_pipeline_model.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
+
 
 class TrainValidationSplitTests(SparkSessionTestCase):
 
@@ -501,6 +580,73 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+
+    def test_save_load_pipeline_estimator(self):
+        temp_path = tempfile.mkdtemp()
+        training = self.spark.createDataFrame([
+            (0, "a b c d e spark", 1.0),
+            (1, "b d", 0.0),
+            (2, "spark f g h", 1.0),
+            (3, "hadoop mapreduce", 0.0),
+            (4, "b spark who", 1.0),
+            (5, "g d a y", 0.0),
+            (6, "spark fly", 1.0),
+            (7, "was mapreduce", 0.0),
+        ], ["id", "text", "label"])
+
+        # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
+        tokenizer = Tokenizer(inputCol="text", outputCol="words")
+        hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
+
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(5)
+        lr2 = LogisticRegression().setMaxIter(10)
+
+        pipeline = Pipeline(stages=[tokenizer, hashingTF, ova])
+
+        paramGrid = ParamGridBuilder() \
+            .addGrid(hashingTF.numFeatures, [10, 100]) \
+            .addGrid(ova.classifier, [lr1, lr2]) \
+            .build()
+
+        tvs = TrainValidationSplit(estimator=pipeline,
+                                   estimatorParamMaps=paramGrid,
+                                   evaluator=MulticlassClassificationEvaluator())
+
+        # Run train validation split, and choose the best set of parameters.
+        tvsModel = tvs.fit(training)
+
+        # test save/load of CrossValidatorModel
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+        self.assertEqual(len(loadedModel.bestModel.stages), len(tvsModel.bestModel.stages))
+        for loadedStage, originalStage in zip(loadedModel.bestModel.stages,
+                                              tvsModel.bestModel.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
+
+        # Test nested pipeline
+        nested_pipeline = Pipeline(stages=[tokenizer, Pipeline(stages=[hashingTF, ova])])
+        tvs2 = TrainValidationSplit(estimator=nested_pipeline,
+                                    estimatorParamMaps=paramGrid,
+                                    evaluator=MulticlassClassificationEvaluator())
+
+        # Run train validation split, and choose the best set of parameters.
+        tvsModel2 = tvs2.fit(training)
+        # test save/load of CrossValidatorModel
+        tvsModelPath2 = temp_path + "/tvsModel2"
+        tvsModel2.save(tvsModelPath2)
+        loadedModel2 = TrainValidationSplitModel.load(tvsModelPath2)
+        self.assertEqual(loadedModel2.bestModel.uid, tvsModel2.bestModel.uid)
+        loaded_nested_pipeline_model = loadedModel2.bestModel.stages[1]
+        original_nested_pipeline_model = tvsModel2.bestModel.stages[1]
+        self.assertEqual(loaded_nested_pipeline_model.uid, original_nested_pipeline_model.uid)
+        self.assertEqual(len(loaded_nested_pipeline_model.stages),
+                         len(original_nested_pipeline_model.stages))
+        for loadedStage, originalStage in zip(loaded_nested_pipeline_model.stages,
+                                              original_nested_pipeline_model.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
 
     def test_copy(self):
         dataset = self.spark.createDataFrame([

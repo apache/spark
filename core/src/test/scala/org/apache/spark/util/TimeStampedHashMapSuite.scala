@@ -63,7 +63,7 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
   }
 
   /** Test basic operations of a Scala mutable Map. */
-  def testMap(hashMapConstructor: => mutable.Map[String, String]) {
+  def testMap(hashMapConstructor: => mutable.Map[String, String]): Unit = {
     def newMap() = hashMapConstructor
     val testMap1 = newMap()
     val testMap2 = newMap()
@@ -134,7 +134,7 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
   }
 
   /** Test thread safety of a Scala mutable map. */
-  def testMapThreadSafety(hashMapConstructor: => mutable.Map[String, String]) {
+  def testMapThreadSafety(hashMapConstructor: => mutable.Map[String, String]): Unit = {
     def newMap() = hashMapConstructor
     val name = newMap().getClass.getSimpleName
     val testMap = newMap()
@@ -150,7 +150,7 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
     }
 
     val threads = (1 to 25).map(i => new Thread() {
-      override def run() {
+      override def run(): Unit = {
         try {
           for (j <- 1 to 1000) {
             Random.nextInt(3) match {

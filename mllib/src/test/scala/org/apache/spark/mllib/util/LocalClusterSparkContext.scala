@@ -25,7 +25,7 @@ import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
   @transient var sc: SparkContext = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val conf = new SparkConf()
       .setMaster("local-cluster[2, 1, 1024]")
@@ -34,7 +34,7 @@ trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
     sc = new SparkContext(conf)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       if (sc != null) {
         sc.stop()

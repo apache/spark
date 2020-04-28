@@ -34,7 +34,7 @@ import org.apache.mesos.Protos.Value.Scalar
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
 import org.mockito.Mockito._
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext,
   SparkFunSuite}
@@ -303,7 +303,8 @@ class MesosFineGrainedSchedulerBackendSuite
     mesosOffers2.add(createOffer(1, minMem, minCpu))
     reset(taskScheduler)
     reset(driver)
-    when(taskScheduler.resourceOffers(any(classOf[IndexedSeq[WorkerOffer]]))).thenReturn(Seq(Seq()))
+    when(taskScheduler.resourceOffers(any(classOf[IndexedSeq[WorkerOffer]]), any[Boolean]))
+      .thenReturn(Seq(Seq()))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
     when(driver.declineOffer(mesosOffers2.get(0).getId)).thenReturn(Status.valueOf(1))
 

@@ -62,6 +62,11 @@ object ArrowWriter {
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
+      case (MapType(_, _, _), vector: MapVector) =>
+        val entryWriter = createFieldWriter(vector.getDataVector).asInstanceOf[StructWriter]
+        val keyWriter = createFieldWriter(entryWriter.valueVector.getChild(MapVector.KEY_NAME))
+        val valueWriter = createFieldWriter(entryWriter.valueVector.getChild(MapVector.VALUE_NAME))
+        new MapWriter(vector, keyWriter, valueWriter)
       case (StructType(_), vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
           createFieldWriter(vector.getChildByOrdinal(ordinal))
@@ -341,5 +346,40 @@ private[arrow] class StructWriter(
   override def reset(): Unit = {
     super.reset()
     children.foreach(_.reset())
+  }
+}
+
+private[arrow] class MapWriter(
+    val valueVector: MapVector,
+    val keyWriter: ArrowFieldWriter,
+    val valueWriter: ArrowFieldWriter) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {}
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val map = input.getMap(ordinal)
+    valueVector.startNewValue(count)
+    val keys = map.keyArray()
+    val values = map.valueArray()
+    var i = 0
+    while (i <  map.numElements()) {
+      keyWriter.write(keys, i)
+      valueWriter.write(values, i)
+      i += 1
+    }
+
+    valueVector.endValue(count, map.numElements())
+  }
+
+  override def finish(): Unit = {
+    super.finish()
+    keyWriter.finish()
+    valueWriter.finish()
+  }
+
+  override def reset(): Unit = {
+    super.reset()
+    keyWriter.reset()
+    valueWriter.reset()
   }
 }

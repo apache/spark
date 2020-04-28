@@ -39,7 +39,7 @@ object LocalFileLR {
     DataPoint(new DenseVector(nums.slice(1, D + 1)), nums(0))
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use org.apache.spark.ml.classification.LogisticRegression
@@ -47,7 +47,7 @@ object LocalFileLR {
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     showWarning()
 

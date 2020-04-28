@@ -68,8 +68,6 @@ public class KVTypeInfo {
 
     Preconditions.checkArgument(indices.containsKey(KVIndex.NATURAL_INDEX_NAME),
         "No natural index defined for type %s.", type.getName());
-    Preconditions.checkArgument(indices.get(KVIndex.NATURAL_INDEX_NAME).parent().isEmpty(),
-        "Natural index of %s cannot have a parent.", type.getName());
 
     for (KVIndex idx : indices.values()) {
       if (!idx.parent().isEmpty()) {
@@ -117,6 +115,11 @@ public class KVTypeInfo {
     return index.parent().isEmpty() ? null : getAccessor(index.parent());
   }
 
+  String getParentIndexName(String indexName) {
+    KVIndex index = indices.get(indexName);
+    return index.parent();
+  }
+
   /**
    * Abstracts the difference between invoking a Field and a Method.
    */
@@ -124,7 +127,7 @@ public class KVTypeInfo {
 
     Object get(Object instance) throws ReflectiveOperationException;
 
-    Class getType();
+    Class<?> getType();
   }
 
   private class FieldAccessor implements Accessor {
@@ -141,7 +144,7 @@ public class KVTypeInfo {
     }
 
     @Override
-    public Class getType() {
+    public Class<?> getType() {
       return field.getType();
     }
   }
@@ -160,7 +163,7 @@ public class KVTypeInfo {
     }
 
     @Override
-    public Class getType() {
+    public Class<?> getType() {
       return method.getReturnType();
     }
   }

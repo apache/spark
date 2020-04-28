@@ -18,8 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{DeprecatedConfig, RemovedConfig}
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
@@ -47,7 +49,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Boolean): Unit = {
-    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
@@ -57,7 +58,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Long): Unit = {
-    requireNonStaticConf(key)
     set(key, value.toString)
   }
 

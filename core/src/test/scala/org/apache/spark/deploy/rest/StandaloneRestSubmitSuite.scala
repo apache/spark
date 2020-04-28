@@ -42,7 +42,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
   private var rpcEnv: Option[RpcEnv] = None
   private var server: Option[RestSubmissionServer] = None
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       rpcEnv.foreach(_.shutdown())
       server.foreach(_.stop())

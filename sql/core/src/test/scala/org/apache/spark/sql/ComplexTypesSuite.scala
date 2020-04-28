@@ -23,14 +23,14 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class ComplexTypesSuite extends QueryTest with SharedSparkSession {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     spark.range(10).selectExpr(
       "id + 1 as i1", "id + 2 as i2", "id + 3 as i3", "id + 4 as i4", "id + 5 as i5")
       .write.saveAsTable("tab")
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       spark.sql("DROP TABLE IF EXISTS tab")
     } finally {

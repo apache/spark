@@ -89,7 +89,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   }
 
   /** Print a welcome message */
-  override def printWelcome() {
+  override def printWelcome(): Unit = {
     import org.apache.spark.SPARK_VERSION
     echo("""Welcome to
       ____              __

@@ -146,7 +146,7 @@ private[kinesis] class KinesisReceiver[T](
    * This is called when the KinesisReceiver starts and must be non-blocking.
    * The KCL creates and manages the receiving/processing thread pool through Worker.run().
    */
-  override def onStart() {
+  override def onStart(): Unit = {
     blockGenerator = supervisor.createBlockGenerator(new GeneratedBlockHandler)
 
     workerId = Utils.localHostName() + ":" + UUID.randomUUID()
@@ -216,7 +216,7 @@ private[kinesis] class KinesisReceiver[T](
    * The KCL worker.shutdown() method stops the receiving/processing threads.
    * The KCL will do its best to drain and checkpoint any in-flight records upon shutdown.
    */
-  override def onStop() {
+  override def onStop(): Unit = {
     if (workerThread != null) {
       if (worker != null) {
         worker.shutdown()

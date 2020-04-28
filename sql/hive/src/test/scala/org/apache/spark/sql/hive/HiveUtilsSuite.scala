@@ -54,6 +54,15 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     }
   }
 
+  test("newTemporaryConfiguration respect spark.hive.foo=bar in SparkConf") {
+    sys.props.put("spark.hive.foo", "bar")
+    Seq(true, false) foreach { useInMemoryDerby =>
+      val hiveConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
+      assert(!hiveConf.contains("spark.hive.foo"))
+      assert(hiveConf("hive.foo") === "bar")
+    }
+  }
+
   test("ChildFirstURLClassLoader's parent is null, get spark classloader instead") {
     val conf = new SparkConf
     val contextClassLoader = Thread.currentThread().getContextClassLoader

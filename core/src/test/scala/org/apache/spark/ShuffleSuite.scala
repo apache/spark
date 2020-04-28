@@ -31,7 +31,7 @@ import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListene
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
-import org.apache.spark.util.{MutablePair, Utils}
+import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
@@ -44,7 +44,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
   test("groupByKey without compression") {
     val myConf = conf.clone().set(config.SHUFFLE_COMPRESS, false)
     sc = new SparkContext("local", "test", myConf)
-    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
+    val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 4)
     val groups = pairs.groupByKey(4).collect()
     assert(groups.size === 2)
     val valuesFor1 = groups.find(_._1 == 1).get._2
@@ -360,7 +360,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val metricsSystem = sc.env.metricsSystem
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+    val shuffleHandle = manager.registerShuffle(0, shuffleDep)
     mapTrackerMaster.registerShuffle(0, 1)
 
     // first attempt -- its successful
@@ -487,7 +487,7 @@ object ShuffleSuite {
     @volatile var bytesWritten: Long = 0
     @volatile var bytesRead: Long = 0
     val listener = new SparkListener {
-      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         recordsWritten += taskEnd.taskMetrics.shuffleWriteMetrics.recordsWritten
         bytesWritten += taskEnd.taskMetrics.shuffleWriteMetrics.bytesWritten
         recordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
@@ -498,7 +498,7 @@ object ShuffleSuite {
 
     job
 
-    sc.listenerBus.waitUntilEmpty(500)
+    sc.listenerBus.waitUntilEmpty()
     AggregatedShuffleMetrics(recordsWritten, recordsRead, bytesWritten, bytesRead)
   }
 }

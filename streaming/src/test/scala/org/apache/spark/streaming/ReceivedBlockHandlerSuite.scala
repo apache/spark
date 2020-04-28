@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import java.io.File
 import java.nio.ByteBuffer
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -87,9 +88,12 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
+    val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None)), conf, true)
+        new LiveListenerBus(conf), None, blockManagerInfo)),
+      rpcEnv.setupEndpoint("blockmanagerHeartbeat",
+      new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
 
     storageLevel = StorageLevel.MEMORY_ONLY_SER
     blockManager = createBlockManager(blockManagerSize, conf)
@@ -242,7 +246,8 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     }
   }
 
-  private def testCountWithBlockManagerBasedBlockHandler(isBlockManagerBasedBlockHandler: Boolean) {
+  private def testCountWithBlockManagerBasedBlockHandler(
+      isBlockManagerBasedBlockHandler: Boolean): Unit = {
     // ByteBufferBlock-MEMORY_ONLY
     testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY,
       ByteBufferBlock(ByteBuffer.wrap(Array.tabulate(100)(i => i.toByte))), blockManager, None)
@@ -298,7 +303,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       receivedBlock: ReceivedBlock,
       bManager: BlockManager,
       expectedNumRecords: Option[Long]
-      ) {
+      ): Unit = {
     blockManager = bManager
     storageLevel = sLevel
     var bId: StreamBlockId = null
@@ -335,10 +340,11 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
    * using the given verification function
    */
   private def testBlockStoring(receivedBlockHandler: ReceivedBlockHandler)
-      (verifyFunc: (Seq[String], Seq[StreamBlockId], Seq[ReceivedBlockStoreResult]) => Unit) {
+      (verifyFunc: (Seq[String], Seq[StreamBlockId], Seq[ReceivedBlockStoreResult]) => Unit)
+      : Unit = {
     val data = Seq.tabulate(100) { _.toString }
 
-    def storeAndVerify(blocks: Seq[ReceivedBlock]) {
+    def storeAndVerify(blocks: Seq[ReceivedBlock]): Unit = {
       blocks should not be empty
       val (blockIds, storeResults) = storeBlocks(receivedBlockHandler, blocks)
       withClue(s"Testing with ${blocks.head.getClass.getSimpleName}s:") {
@@ -361,7 +367,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   }
 
   /** Test error handling when blocks that cannot be stored */
-  private def testErrorHandling(receivedBlockHandler: ReceivedBlockHandler) {
+  private def testErrorHandling(receivedBlockHandler: ReceivedBlockHandler): Unit = {
     // Handle error in iterator (e.g. divide-by-zero error)
     intercept[Exception] {
       val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
@@ -376,12 +382,14 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   }
 
   /** Instantiate a BlockManagerBasedBlockHandler and run a code with it */
-  private def withBlockManagerBasedBlockHandler(body: BlockManagerBasedBlockHandler => Unit) {
+  private def withBlockManagerBasedBlockHandler(
+      body: BlockManagerBasedBlockHandler => Unit): Unit = {
     body(new BlockManagerBasedBlockHandler(blockManager, storageLevel))
   }
 
   /** Instantiate a WriteAheadLogBasedBlockHandler and run a code with it */
-  private def withWriteAheadLogBasedBlockHandler(body: WriteAheadLogBasedBlockHandler => Unit) {
+  private def withWriteAheadLogBasedBlockHandler(
+      body: WriteAheadLogBasedBlockHandler => Unit): Unit = {
     require(WriteAheadLogUtils.getRollingIntervalSecs(conf, isDriver = false) === 1)
     val receivedBlockHandler = new WriteAheadLogBasedBlockHandler(blockManager, serializerManager,
       1, storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)

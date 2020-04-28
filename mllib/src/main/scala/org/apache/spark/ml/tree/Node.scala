@@ -45,6 +45,9 @@ sealed abstract class Node extends Serializable {
   /** Recursive prediction helper method */
   private[ml] def predictImpl(features: Vector): LeafNode
 
+  /** Recursive prediction helper method */
+  private[ml] def predictBinned(binned: Array[Int], splits: Array[Array[Split]]): LeafNode
+
   /**
    * Get the number of nodes in tree below this node, including leaf nodes.
    * E.g., if this is a leaf, returns 0.  If both children are leaves, returns 2.
@@ -119,6 +122,10 @@ class LeafNode private[ml] (
 
   override private[ml] def predictImpl(features: Vector): LeafNode = this
 
+  override private[ml] def predictBinned(
+      binned: Array[Int],
+      splits: Array[Array[Split]]): LeafNode = this
+
   override private[tree] def numDescendants: Int = 0
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
@@ -171,6 +178,17 @@ class InternalNode private[ml] (
       leftChild.predictImpl(features)
     } else {
       rightChild.predictImpl(features)
+    }
+  }
+
+  override private[ml] def predictBinned(
+      binned: Array[Int],
+      splits: Array[Array[Split]]): LeafNode = {
+    val i = split.featureIndex
+    if (split.shouldGoLeft(binned(i), splits(i))) {
+      leftChild.predictBinned(binned, splits)
+    } else {
+      rightChild.predictBinned(binned, splits)
     }
   }
 

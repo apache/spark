@@ -18,21 +18,21 @@
 package org.apache.spark.sql.kafka010
 
 import java.io.{File, IOException}
-import java.lang.{Integer => JInt}
-import java.net.InetSocketAddress
+import java.net.{InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
-import java.util.{Collections, Map => JMap, Properties, UUID}
+import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
 import javax.security.auth.login.Configuration
 
 import scala.collection.JavaConverters._
+import scala.io.Source
 import scala.util.Random
 
 import com.google.common.io.Files
 import kafka.api.Request
-import kafka.server.{KafkaConfig, KafkaServer}
+import kafka.server.{HostedPartition, KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
-import kafka.utils.ZkUtils
+import kafka.zk.KafkaZkClient
 import org.apache.hadoop.minikdc.MiniKdc
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
@@ -41,20 +41,20 @@ import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SaslConfigs
-import org.apache.kafka.common.header.Header
-import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
+import org.apache.kafka.common.utils.SystemTime
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.zookeeper.server.auth.SASLAuthenticationProvider
+import org.scalatest.Assertions._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaTokenUtil
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -68,24 +68,27 @@ class KafkaTestUtils(
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
 
+  private val localCanonicalHostName = InetAddress.getLoopbackAddress().getCanonicalHostName()
+  logInfo(s"Local host name is $localCanonicalHostName")
+
   private var kdc: MiniKdc = _
 
   // Zookeeper related configurations
-  private val zkHost = "localhost"
+  private val zkHost = localCanonicalHostName
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 10000
 
   private var zookeeper: EmbeddedZookeeper = _
-  private var zkUtils: ZkUtils = _
+  private var zkClient: KafkaZkClient = _
 
   // Kafka broker related configurations
-  private val brokerHost = "localhost"
+  private val brokerHost = localCanonicalHostName
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
   private val brokerServiceName = "kafka"
-  private val clientUser = "client/localhost"
+  private val clientUser = s"client/$localCanonicalHostName"
   private var clientKeytabFile: File = _
 
   // Kafka broker server
@@ -111,9 +114,9 @@ class KafkaTestUtils(
     s"$brokerHost:$brokerPort"
   }
 
-  def zookeeperClient: ZkUtils = {
+  def zookeeperClient: KafkaZkClient = {
     assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper client")
-    Option(zkUtils).getOrElse(
+    Option(zkClient).getOrElse(
       throw new IllegalStateException("Zookeeper client is not yet initialized"))
   }
 
@@ -130,26 +133,63 @@ class KafkaTestUtils(
   private def setUpMiniKdc(): Unit = {
     val kdcDir = Utils.createTempDir()
     val kdcConf = MiniKdc.createConf()
+    kdcConf.setProperty(MiniKdc.DEBUG, "true")
     kdc = new MiniKdc(kdcConf, kdcDir)
     kdc.start()
+    // TODO https://issues.apache.org/jira/browse/SPARK-30037
+    // Need to build spark's own MiniKDC and customize krb5.conf like Kafka
+    rewriteKrb5Conf()
     kdcReady = true
+  }
+
+  /**
+   * In this method we rewrite krb5.conf to make kdc and client use the same enctypes
+   */
+  private def rewriteKrb5Conf(): Unit = {
+    val krb5Conf = Source.fromFile(kdc.getKrb5conf, "UTF-8").getLines()
+    var rewritten = false
+    val addedConfig =
+      addedKrb5Config("default_tkt_enctypes", "aes128-cts-hmac-sha1-96") +
+        addedKrb5Config("default_tgs_enctypes", "aes128-cts-hmac-sha1-96")
+    val rewriteKrb5Conf = krb5Conf.map(s =>
+      if (s.contains("libdefaults")) {
+        rewritten = true
+        s + addedConfig
+      } else {
+        s
+      }).filter(!_.trim.startsWith("#")).mkString(System.lineSeparator())
+
+    val krb5confStr = if (!rewritten) {
+      "[libdefaults]" + addedConfig + System.lineSeparator() +
+        System.lineSeparator() + rewriteKrb5Conf
+    } else {
+      rewriteKrb5Conf
+    }
+
+    kdc.getKrb5conf.delete()
+    Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+    logDebug(s"krb5.conf file content: $krb5confStr")
+  }
+
+  private def addedKrb5Config(key: String, value: String): String = {
+    System.lineSeparator() + s"    $key=$value"
   }
 
   private def createKeytabsAndJaasConfigFile(): String = {
     assert(kdcReady, "KDC should be set up beforehand")
     val baseDir = Utils.createTempDir()
 
-    val zkServerUser = "zookeeper/localhost"
+    val zkServerUser = s"zookeeper/$localCanonicalHostName"
     val zkServerKeytabFile = new File(baseDir, "zookeeper.keytab")
     kdc.createPrincipal(zkServerKeytabFile, zkServerUser)
     logDebug(s"Created keytab file: ${zkServerKeytabFile.getAbsolutePath()}")
 
-    val zkClientUser = "zkclient/localhost"
+    val zkClientUser = s"zkclient/$localCanonicalHostName"
     val zkClientKeytabFile = new File(baseDir, "zkclient.keytab")
     kdc.createPrincipal(zkClientKeytabFile, zkClientUser)
     logDebug(s"Created keytab file: ${zkClientKeytabFile.getAbsolutePath()}")
 
-    val kafkaServerUser = "kafka/localhost"
+    val kafkaServerUser = s"kafka/$localCanonicalHostName"
     val kafkaServerKeytabFile = new File(baseDir, "kafka.keytab")
     kdc.createPrincipal(kafkaServerKeytabFile, kafkaServerUser)
     logDebug(s"Created keytab file: ${kafkaServerKeytabFile.getAbsolutePath()}")
@@ -163,25 +203,27 @@ class KafkaTestUtils(
     val content =
       s"""
       |Server {
-      |  ${KafkaTokenUtil.getKrb5LoginModuleName} required
+      |  ${SecurityUtils.getKrb5LoginModuleName()} required
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
+      |  refreshKrb5Config=true
       |  keyTab="${zkServerKeytabFile.getAbsolutePath()}"
       |  principal="$zkServerUser@$realm";
       |};
       |
       |Client {
-      |  ${KafkaTokenUtil.getKrb5LoginModuleName} required
+      |  ${SecurityUtils.getKrb5LoginModuleName()} required
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
+      |  refreshKrb5Config=true
       |  keyTab="${zkClientKeytabFile.getAbsolutePath()}"
       |  principal="$zkClientUser@$realm";
       |};
       |
       |KafkaServer {
-      |  ${KafkaTokenUtil.getKrb5LoginModuleName} required
+      |  ${SecurityUtils.getKrb5LoginModuleName()} required
       |  serviceName="$brokerServiceName"
       |  useKeyTab=true
       |  storeKey=true
@@ -201,7 +243,8 @@ class KafkaTestUtils(
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
-    zkUtils = ZkUtils(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout, false)
+    zkClient = KafkaZkClient(s"$zkHost:$zkPort", isSecure = false, zkSessionTimeout,
+      zkConnectionTimeout, 1, new SystemTime())
     zkReady = true
   }
 
@@ -235,6 +278,7 @@ class KafkaTestUtils(
     }
 
     if (secure) {
+      SecurityUtils.setGlobalKrbDebug(true)
       setUpMiniKdc()
       val jaasConfigFile = createKeytabsAndJaasConfigFile()
       System.setProperty(JAVA_AUTH_CONFIG, jaasConfigFile)
@@ -245,7 +289,7 @@ class KafkaTestUtils(
     setupEmbeddedZookeeper()
     setupEmbeddedKafkaServer()
     eventually(timeout(1.minute)) {
-      assert(zkUtils.getAllBrokersInCluster().nonEmpty, "Broker was not up in 60 seconds")
+      assert(zkClient.getAllBrokersInCluster.nonEmpty, "Broker was not up in 60 seconds")
     }
   }
 
@@ -256,6 +300,7 @@ class KafkaTestUtils(
     }
     brokerReady = false
     zkReady = false
+    kdcReady = false
 
     if (producer != null) {
       producer.close()
@@ -264,6 +309,7 @@ class KafkaTestUtils(
 
     if (adminClient != null) {
       adminClient.close()
+      adminClient = null
     }
 
     if (server != null) {
@@ -284,9 +330,9 @@ class KafkaTestUtils(
       }
     }
 
-    if (zkUtils != null) {
-      zkUtils.close()
-      zkUtils = null
+    if (zkClient != null) {
+      zkClient.close()
+      zkClient = null
     }
 
     if (zookeeper != null) {
@@ -298,8 +344,10 @@ class KafkaTestUtils(
     Configuration.getConfiguration.refresh()
     if (kdc != null) {
       kdc.stop()
+      kdc = null
     }
     UserGroupInformation.reset()
+    SecurityUtils.setGlobalKrbDebug(false)
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
@@ -307,7 +355,7 @@ class KafkaTestUtils(
     var created = false
     while (!created) {
       try {
-        val newTopic = new NewTopic(topic, partitions, 1)
+        val newTopic = new NewTopic(topic, partitions, 1.shortValue())
         adminClient.createTopics(Collections.singleton(newTopic))
         created = true
       } catch {
@@ -324,7 +372,7 @@ class KafkaTestUtils(
   }
 
   def getAllTopicsAndPartitionSize(): Seq[(String, Int)] = {
-    zkUtils.getPartitionsForTopics(zkUtils.getAllTopics()).mapValues(_.size).toSeq
+    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster).mapValues(_.size).toSeq
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
@@ -334,9 +382,9 @@ class KafkaTestUtils(
 
   /** Delete a Kafka topic and wait until it is propagated to the whole cluster */
   def deleteTopic(topic: String): Unit = {
-    val partitions = zkUtils.getPartitionsForTopics(Seq(topic))(topic).size
+    val partitions = zkClient.getPartitionsForTopics(Set(topic))(topic).size
     adminClient.deleteTopics(Collections.singleton(topic))
-    verifyTopicDeletionWithRetries(zkUtils, topic, partitions, List(this.server))
+    verifyTopicDeletionWithRetries(topic, partitions, List(this.server))
   }
 
   /** Add new partitions to a Kafka topic */
@@ -350,57 +398,33 @@ class KafkaTestUtils(
     }
   }
 
-  /** Java-friendly function for sending messages to the Kafka broker */
-  def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
-    sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))
+  def sendMessages(topic: String, msgs: Array[String]): Seq[(String, RecordMetadata)] = {
+    sendMessages(topic, msgs, None)
   }
 
-  /** Send the messages to the Kafka broker */
-  def sendMessages(topic: String, messageToFreq: Map[String, Int]): Unit = {
-    val messages = messageToFreq.flatMap { case (s, freq) => Seq.fill(freq)(s) }.toArray
-    sendMessages(topic, messages)
-  }
-
-  /** Send the array of messages to the Kafka broker */
-  def sendMessages(topic: String, messages: Array[String]): Seq[(String, RecordMetadata)] = {
-    sendMessages(topic, messages, None)
-  }
-
-  /** Send the array of messages to the Kafka broker using specified partition */
   def sendMessages(
       topic: String,
-      messages: Array[String],
-      partition: Option[Int]): Seq[(String, RecordMetadata)] = {
-    sendMessages(topic, messages.map(m => (m, Seq())), partition)
+      msgs: Array[String],
+      part: Option[Int]): Seq[(String, RecordMetadata)] = {
+    val records = msgs.map { msg =>
+      val builder = new RecordBuilder(topic, msg)
+      part.foreach { p => builder.partition(p) }
+      builder.build()
+    }
+    sendMessages(records)
   }
 
-  /** Send record to the Kafka broker with headers using specified partition */
-  def sendMessage(topic: String,
-                  record: (String, Seq[(String, Array[Byte])]),
-                  partition: Option[Int]): Seq[(String, RecordMetadata)] = {
-    sendMessages(topic, Array(record).toSeq, partition)
+  def sendMessage(msg: ProducerRecord[String, String]): Seq[(String, RecordMetadata)] = {
+    sendMessages(Array(msg))
   }
 
-  /** Send the array of records to the Kafka broker with headers using specified partition */
-  def sendMessages(topic: String,
-                   records: Seq[(String, Seq[(String, Array[Byte])])],
-                   partition: Option[Int]): Seq[(String, RecordMetadata)] = {
+  def sendMessages(msgs: Seq[ProducerRecord[String, String]]): Seq[(String, RecordMetadata)] = {
     producer = new KafkaProducer[String, String](producerConfiguration)
     val offsets = try {
-      records.map { case (value, header) =>
-        val headers = header.map { case (k, v) =>
-          new RecordHeader(k, v).asInstanceOf[Header]
-        }
-        val record = partition match {
-          case Some(p) =>
-            new ProducerRecord[String, String](topic, p, null, value, headers.asJava)
-          case None =>
-            new ProducerRecord[String, String](topic, null, null, value, headers.asJava)
-        }
-        val metadata = producer.send(record).get(10, TimeUnit.SECONDS)
-        logInfo(s"\tSent ($value, $header) to partition ${metadata.partition}," +
-          " offset ${metadata.offset}")
-        (value, metadata)
+      msgs.map { msg =>
+        val metadata = producer.send(msg).get(10, TimeUnit.SECONDS)
+        logInfo(s"\tSent ($msg) to partition ${metadata.partition}, offset ${metadata.offset}")
+        (msg.value(), metadata)
       }
     } finally {
       if (producer != null) {
@@ -539,15 +563,12 @@ class KafkaTestUtils(
       servers: Seq[KafkaServer]): Unit = {
     val topicAndPartitions = (0 until numPartitions).map(new TopicPartition(topic, _))
 
-    import ZkUtils._
     // wait until admin path for delete topic is deleted, signaling completion of topic deletion
-    assert(
-      !zkUtils.pathExists(getDeleteTopicPath(topic)),
-      s"${getDeleteTopicPath(topic)} still exists")
-    assert(!zkUtils.pathExists(getTopicPath(topic)), s"${getTopicPath(topic)} still exists")
+    assert(!zkClient.isTopicMarkedForDeletion(topic), "topic is still marked for deletion")
+    assert(!zkClient.topicExists(topic), "topic still exists")
     // ensure that the topic-partition has been deleted from all brokers' replica managers
     assert(servers.forall(server => topicAndPartitions.forall(tp =>
-      server.replicaManager.getPartition(tp) == None)),
+      server.replicaManager.getPartition(tp) == HostedPartition.None)),
       s"topic $topic still exists in the replica manager")
     // ensure that logs from all replicas are deleted if delete topic is marked successful
     assert(servers.forall(server => topicAndPartitions.forall(tp =>
@@ -562,16 +583,15 @@ class KafkaTestUtils(
     }), s"checkpoint for topic $topic still exists")
     // ensure the topic is gone
     assert(
-      !zkUtils.getAllTopics().contains(topic),
+      !zkClient.getAllTopicsInCluster.contains(topic),
       s"topic $topic still exists on zookeeper")
   }
 
   /** Verify topic is deleted. Retry to delete the topic if not. */
   private def verifyTopicDeletionWithRetries(
-      zkUtils: ZkUtils,
       topic: String,
       numPartitions: Int,
-      servers: Seq[KafkaServer]) {
+      servers: Seq[KafkaServer]): Unit = {
     eventually(timeout(1.minute), interval(200.milliseconds)) {
       try {
         verifyTopicDeletion(topic, numPartitions, servers)
@@ -590,9 +610,9 @@ class KafkaTestUtils(
     def isPropagated = server.dataPlaneRequestProcessor.metadataCache
         .getPartitionInfo(topic, partition) match {
       case Some(partitionState) =>
-        zkUtils.getLeaderForPartition(topic, partition).isDefined &&
-          Request.isValidBrokerId(partitionState.basePartitionState.leader) &&
-          !partitionState.basePartitionState.replicas.isEmpty
+        zkClient.getLeaderForPartition(new TopicPartition(topic, partition)).isDefined &&
+          Request.isValidBrokerId(partitionState.leader) &&
+          !partitionState.replicas.isEmpty
 
       case _ =>
         false
@@ -634,7 +654,7 @@ class KafkaTestUtils(
 
     val actualPort = factory.getLocalPort
 
-    def shutdown() {
+    def shutdown(): Unit = {
       factory.shutdown()
       // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
@@ -655,4 +675,3 @@ class KafkaTestUtils(
     }
   }
 }
-

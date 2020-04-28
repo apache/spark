@@ -21,7 +21,7 @@ import java.{lang => jl}
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -62,8 +62,8 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
-  override def toString: String = s"$name($child)"
-  override def prettyName: String = name
+  override def toString: String = s"$prettyName($child)"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
 
   protected override def nullSafeEval(input: Any): Any = {
     f(input.asInstanceOf[Double])
@@ -115,9 +115,9 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
-  override def toString: String = s"$name($left, $right)"
+  override def toString: String = s"$prettyName($left, $right)"
 
-  override def prettyName: String = name
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
 
   override def dataType: DataType = DoubleType
 
@@ -1291,7 +1291,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
-       3.0
+       3
   """)
 // scalastyle:on line.size.limit
 case class Round(child: Expression, scale: Expression)
@@ -1311,7 +1311,7 @@ case class Round(child: Expression, scale: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
-       2.0
+       2
   """)
 // scalastyle:on line.size.limit
 case class BRound(child: Expression, scale: Expression)

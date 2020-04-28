@@ -46,7 +46,7 @@ object LocalLR {
     Array.tabulate(N)(generatePoint)
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use org.apache.spark.ml.classification.LogisticRegression
@@ -54,7 +54,7 @@ object LocalLR {
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     showWarning()
 

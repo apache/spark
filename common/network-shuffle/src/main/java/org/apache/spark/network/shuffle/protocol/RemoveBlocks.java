@@ -17,11 +17,14 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
-import org.apache.spark.network.protocol.Encoders;
-
 import java.util.Arrays;
+import java.util.Objects;
+
+import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+
+import org.apache.spark.network.protocol.Encoders;
 
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
@@ -43,15 +46,15 @@ public class RemoveBlocks extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, execId) * 41 + Arrays.hashCode(blockIds);
+    return Objects.hash(appId, execId) * 41 + Arrays.hashCode(blockIds);
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("appId", appId)
-      .add("execId", execId)
-      .add("blockIds", Arrays.toString(blockIds))
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("appId", appId)
+      .append("execId", execId)
+      .append("blockIds", Arrays.toString(blockIds))
       .toString();
   }
 
@@ -59,8 +62,8 @@ public class RemoveBlocks extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof RemoveBlocks) {
       RemoveBlocks o = (RemoveBlocks) other;
-      return Objects.equal(appId, o.appId)
-        && Objects.equal(execId, o.execId)
+      return Objects.equals(appId, o.appId)
+        && Objects.equals(execId, o.execId)
         && Arrays.equals(blockIds, o.blockIds);
     }
     return false;

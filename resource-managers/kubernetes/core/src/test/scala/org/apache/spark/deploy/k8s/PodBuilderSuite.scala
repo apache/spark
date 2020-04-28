@@ -101,8 +101,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     assert(container.getArgs.contains("arg"))
     assert(container.getCommand.equals(List("command").asJava))
     assert(container.getEnv.asScala.exists(_.getName == "env-key"))
-    assert(container.getResources.getLimits.get("gpu") ===
-      new QuantityBuilder().withAmount("1").build())
+    assert(container.getResources.getLimits.get("gpu") === new Quantity("1"))
     assert(container.getSecurityContext.getRunAsNonRoot)
     assert(container.getStdin)
     assert(container.getTerminationMessagePath === "termination-message-path")
@@ -156,7 +155,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
           .withImagePullPolicy("Always")
           .withName("executor-container")
           .withNewResources()
-            .withLimits(Map("gpu" -> new QuantityBuilder().withAmount("1").build()).asJava)
+            .withLimits(Map("gpu" -> new Quantity("1")).asJava)
             .endResources()
           .withNewSecurityContext()
             .withRunAsNonRoot(true)

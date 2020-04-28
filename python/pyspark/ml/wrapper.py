@@ -20,10 +20,13 @@ import sys
 if sys.version >= '3':
     xrange = range
 
+from pyspark import since
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
-from pyspark.ml import Estimator, Transformer, Model
+from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
+from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param import Params
+from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol
 from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
@@ -278,6 +281,14 @@ class JavaParams(JavaWrapper, Params):
             that._transfer_params_to_java()
         return that
 
+    def clear(self, param):
+        """
+        Clears a param from the param map if it has been explicitly set.
+        """
+        super(JavaParams, self).clear(param)
+        java_param = self._java_obj.getParam(param.name)
+        self._java_obj.clear(java_param)
+
 
 @inherit_doc
 class JavaEstimator(JavaParams, Estimator):
@@ -361,3 +372,37 @@ class JavaModel(JavaTransformer, Model):
             self._create_params_from_java()
 
             self._resetUid(java_model.uid())
+
+    def __repr__(self):
+        return self._call_java("toString")
+
+
+@inherit_doc
+class JavaPredictor(Predictor, JavaEstimator, _PredictorParams):
+    """
+    (Private) Java Estimator for prediction tasks (regression and classification).
+    """
+
+    __metaclass__ = ABCMeta
+
+
+@inherit_doc
+class JavaPredictionModel(PredictionModel, JavaModel, _PredictorParams):
+    """
+    (Private) Java Model for prediction tasks (regression and classification).
+    """
+
+    @property
+    @since("2.1.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")
+
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        return self._call_java("predict", value)

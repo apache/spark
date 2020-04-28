@@ -285,7 +285,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("string parse_url function") {
 
-    def testUrl(url: String, expected: Row) {
+    def testUrl(url: String, expected: Row): Unit = {
       checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
         "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
         "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",

@@ -28,7 +28,7 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
 import org.apache.spark.util.ManualClock
@@ -52,7 +52,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
   private var kinesisCheckpointer: KinesisCheckpointer = _
   private var clock: ManualClock = _
 
-  private val checkpoint = PrivateMethod[Unit]('checkpoint)
+  private val checkpoint = PrivateMethod[Unit](Symbol("checkpoint"))
 
   override def beforeEach(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]

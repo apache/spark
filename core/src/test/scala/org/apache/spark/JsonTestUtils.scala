@@ -20,7 +20,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods
 
 trait JsonTestUtils {
-  def assertValidDataInJson(validateJson: JValue, expectedJson: JValue) {
+  def assertValidDataInJson(validateJson: JValue, expectedJson: JValue): Unit = {
     val Diff(c, a, d) = validateJson.diff(expectedJson)
     val validatePretty = JsonMethods.pretty(validateJson)
     val expectedPretty = JsonMethods.pretty(expectedJson)

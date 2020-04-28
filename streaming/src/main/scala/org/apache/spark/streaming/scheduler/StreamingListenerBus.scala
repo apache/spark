@@ -33,7 +33,7 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
    * Post a StreamingListenerEvent to the Spark listener bus asynchronously. This event will be
    * dispatched to all StreamingListeners in the thread of the Spark listener bus.
    */
-  def post(event: StreamingListenerEvent) {
+  def post(event: StreamingListenerEvent): Unit = {
     sparkListenerBus.post(new WrappedStreamingListenerEvent(event))
   }
 

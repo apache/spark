@@ -32,7 +32,7 @@ import org.apache.spark.util._
  * This is used in standalone cluster mode only.
  */
 object DriverWrapper extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     args.toList match {
       /*
        * IMPORTANT: Spark 1.3 provides a stable application submission gateway that is both

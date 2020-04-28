@@ -123,6 +123,10 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
     logNamedValue(Instrumentation.loggerTags.numExamples, num)
   }
 
+  def logSumOfWeights(num: Double): Unit = {
+    logNamedValue(Instrumentation.loggerTags.sumOfWeights, num)
+  }
+
   /**
    * Logs the value with customized name field.
    */
@@ -179,6 +183,7 @@ private[spark] object Instrumentation {
     val numExamples = "numExamples"
     val meanOfLabels = "meanOfLabels"
     val varianceOfLabels = "varianceOfLabels"
+    val sumOfWeights = "sumOfWeights"
   }
 
   def instrumented[T](body: (Instrumentation => T)): T = {
@@ -205,21 +210,21 @@ private[spark] class OptionalInstrumentation private(
 
   protected override def logName: String = className
 
-  override def logInfo(msg: => String) {
+  override def logInfo(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logInfo(msg)
       case None => super.logInfo(msg)
     }
   }
 
-  override def logWarning(msg: => String) {
+  override def logWarning(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logWarning(msg)
       case None => super.logWarning(msg)
     }
   }
 
-  override def logError(msg: => String) {
+  override def logError(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logError(msg)
       case None => super.logError(msg)

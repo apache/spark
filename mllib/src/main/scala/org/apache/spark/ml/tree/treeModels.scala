@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite.NodeData
@@ -89,6 +90,18 @@ private[spark] trait DecisionTreeModel {
     }
   }
 
+  private[ml] lazy val numLeave: Int =
+    leafIterator(rootNode).size
+
+  private[ml] lazy val leafAttr = {
+    NominalAttribute.defaultAttr
+      .withNumValues(numLeave)
+  }
+
+  private[ml] def getLeafField(leafCol: String) = {
+    leafAttr.withName(leafCol).toStructField()
+  }
+
   @transient private lazy val leafIndices: Map[LeafNode, Int] = {
     leafIterator(rootNode).zipWithIndex.toMap
   }
@@ -145,6 +158,10 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   def predictLeaf(features: Vector): Vector = {
     val indices = trees.map(_.predictLeaf(features))
     Vectors.dense(indices)
+  }
+
+  private[ml] def getLeafField(leafCol: String) = {
+    new AttributeGroup(leafCol, attrs = trees.map(_.leafAttr)).toStructField()
   }
 }
 
@@ -361,7 +378,7 @@ private[ml] object DecisionTreeModelReadWrite {
         (thisNodeData +: (leftNodeData ++ rightNodeData), rightIdx)
       case _: LeafNode =>
         (Seq(NodeData(id, node.prediction, node.impurity, node.impurityStats.stats,
-          node.impurityStats.rawCount, -1.0, -1, -1, SplitData(-1, Array.empty[Double], -1))),
+          node.impurityStats.rawCount, -1.0, -1, -1, SplitData(-1, Array.emptyDoubleArray, -1))),
           id)
     }
   }

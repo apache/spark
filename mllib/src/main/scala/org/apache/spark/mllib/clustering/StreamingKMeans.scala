@@ -95,7 +95,7 @@ class StreamingKMeansModel @Since("1.2.0") (
     val discount = timeUnit match {
       case StreamingKMeans.BATCHES => decayFactor
       case StreamingKMeans.POINTS =>
-        val numNewPoints = pointStats.view.map { case (_, (_, n)) =>
+        val numNewPoints = pointStats.iterator.map { case (_, (_, n)) =>
           n
         }.sum
         math.pow(decayFactor, numNewPoints)
@@ -125,9 +125,8 @@ class StreamingKMeansModel @Since("1.2.0") (
     }
 
     // Check whether the smallest cluster is dying. If so, split the largest cluster.
-    val weightsWithIndex = clusterWeights.view.zipWithIndex
-    val (maxWeight, largest) = weightsWithIndex.maxBy(_._1)
-    val (minWeight, smallest) = weightsWithIndex.minBy(_._1)
+    val (maxWeight, largest) = clusterWeights.iterator.zipWithIndex.maxBy(_._1)
+    val (minWeight, smallest) = clusterWeights.iterator.zipWithIndex.minBy(_._1)
     if (minWeight < 1e-8 * maxWeight) {
       logInfo(s"Cluster $smallest is dying. Split the largest cluster $largest into two.")
       val weight = (maxWeight + minWeight) / 2.0
@@ -269,7 +268,7 @@ class StreamingKMeans @Since("1.2.0") (
    * @param data DStream containing vector data
    */
   @Since("1.2.0")
-  def trainOn(data: DStream[Vector]) {
+  def trainOn(data: DStream[Vector]): Unit = {
     assertInitialized()
     data.foreachRDD { (rdd, time) =>
       model = model.update(rdd, decayFactor, timeUnit)

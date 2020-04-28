@@ -49,7 +49,7 @@ class KeyLockSuite extends SparkFunSuite with TimeLimits {
     @volatile var e: Throwable = null
     val threads = (0 until numThreads).map { i =>
       new Thread() {
-        override def run(): Unit = try {
+        override def run(): Unit = {
           latch.await(foreverMs, TimeUnit.MILLISECONDS)
           keyLock.withLock(keys(i)) {
             var cur = numThreadsHoldingLock.get()

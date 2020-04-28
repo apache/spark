@@ -89,7 +89,7 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("SPARK-23469: Load HashingTF prior to Spark 3.0") {
-    val hashingTFPath = testFile("test-data/hashingTF-pre3.0")
+    val hashingTFPath = testFile("ml-models/hashingTF-2.4.4")
     val loadedHashingTF = HashingTF.load(hashingTFPath)
     val mLlibHashingTF = new MLlibHashingTF(100)
     assert(loadedHashingTF.indexOf("a") === mLlibHashingTF.indexOf("a"))
@@ -99,7 +99,7 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
 
     val metadata = spark.read.json(s"$hashingTFPath/metadata")
     val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
-    assert(sparkVersionStr == "2.3.0-SNAPSHOT")
+    assert(sparkVersionStr == "2.4.4")
   }
 
   test("read/write") {

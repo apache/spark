@@ -177,7 +177,7 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def keys(): Iterator[InternalRow] = {
-    val iter = binaryMap.safeIterator()
+    val iter = binaryMap.iterator()
 
     new Iterator[InternalRow] {
       val unsafeRow = new UnsafeRow(numKeys)
@@ -335,7 +335,7 @@ private[joins] object UnsafeHashedRelation {
         if (!success) {
           binaryMap.free()
           // scalastyle:off throwerror
-          throw new SparkOutOfMemoryError("There is no enough memory to build hash map")
+          throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
           // scalastyle:on throwerror
         }
       }

@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.execution.PartitionedFileUtil
@@ -32,19 +33,43 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-abstract class FileScan(
-    sparkSession: SparkSession,
-    fileIndex: PartitioningAwareFileIndex,
-    readDataSchema: StructType,
-    readPartitionSchema: StructType)
-  extends Scan
-  with Batch with SupportsReportStatistics with Logging {
+trait FileScan extends Scan with Batch with SupportsReportStatistics with Logging {
   /**
    * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(path: Path): Boolean = {
     false
   }
+
+  def sparkSession: SparkSession
+
+  def fileIndex: PartitioningAwareFileIndex
+
+  /**
+   * Returns the required data schema
+   */
+  def readDataSchema: StructType
+
+  /**
+   * Returns the required partition schema
+   */
+  def readPartitionSchema: StructType
+
+  /**
+   * Returns the filters that can be use for partition pruning
+   */
+  def partitionFilters: Seq[Expression]
+
+  /**
+   * Returns the data filters that can be use for file listing
+   */
+  def dataFilters: Seq[Expression]
+
+  /**
+   * Create a new `FileScan` instance from the current one
+   * with different `partitionFilters` and `dataFilters`
+   */
+  def withFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan
 
   /**
    * If a file with `path` is unsplittable, return the unsplittable reason,
@@ -55,11 +80,26 @@ abstract class FileScan(
     "undefined"
   }
 
+  protected def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
+
+  override def equals(obj: Any): Boolean = obj match {
+    case f: FileScan =>
+      fileIndex == f.fileIndex && readSchema == f.readSchema
+        ExpressionSet(partitionFilters) == ExpressionSet(f.partitionFilters) &&
+        ExpressionSet(dataFilters) == ExpressionSet(f.dataFilters)
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = getClass.hashCode()
+
   override def description(): String = {
     val locationDesc =
       fileIndex.getClass.getSimpleName + fileIndex.rootPaths.mkString("[", ", ", "]")
     val metadata: Map[String, String] = Map(
       "ReadSchema" -> readDataSchema.catalogString,
+      "PartitionFilters" -> seqToString(partitionFilters),
+      "DataFilters" -> seqToString(dataFilters),
       "Location" -> locationDesc)
     val metadataStr = metadata.toSeq.sorted.map {
       case (key, value) =>
@@ -71,7 +111,7 @@ abstract class FileScan(
   }
 
   protected def partitions: Seq[FilePartition] = {
-    val selectedPartitions = fileIndex.listFiles(Seq.empty, Seq.empty)
+    val selectedPartitions = fileIndex.listFiles(partitionFilters, dataFilters)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val partitionAttributes = fileIndex.partitionSchema.toAttributes
     val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap

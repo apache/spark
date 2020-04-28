@@ -82,12 +82,7 @@ private[spark] abstract class BaseRRunner[IN, OUT](
       serverSocket.close()
     }
 
-    try {
-      newReaderIterator(dataStream, errThread)
-    } catch {
-      case e: Exception =>
-        throw new SparkException("R computation failed with\n " + errThread.getLines(), e)
-    }
+    newReaderIterator(dataStream, errThread)
   }
 
   /**
@@ -138,6 +133,16 @@ private[spark] abstract class BaseRRunner[IN, OUT](
      * and then returns null.
      */
     protected def read(): OUT
+
+    protected val handleException: PartialFunction[Throwable, OUT] = {
+      case e: Exception =>
+        var msg = "R unexpectedly exited."
+        val lines = errThread.getLines()
+        if (lines.trim().nonEmpty) {
+          msg += s"\nR worker produced errors: $lines\n"
+        }
+        throw new SparkException(msg, e)
+    }
   }
 
   /**
@@ -230,7 +235,7 @@ private[spark] class BufferedStreamThread(
     errBufferSize: Int) extends Thread(name) with Logging {
   val lines = new Array[String](errBufferSize)
   var lineIdx = 0
-  override def run() {
+  override def run(): Unit = {
     for (line <- Source.fromInputStream(in).getLines) {
       synchronized {
         lines(lineIdx) = line

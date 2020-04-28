@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.recommendation.{ALS => NewALS}
@@ -62,6 +62,13 @@ case class Rating @Since("0.8.0") (
  * r &gt; 0 and 0 if r &lt;= 0. The ratings then act as 'confidence' values related to strength of
  * indicated user
  * preferences rather than explicit ratings given to items.
+ *
+ * Note: the input rating RDD to the ALS implementation should be deterministic.
+ * Nondeterministic data can cause failure during fitting ALS model.
+ * For example, an order-sensitive operation like sampling after a repartition makes RDD
+ * output nondeterministic, like `rdd.repartition(2).sample(false, 0.5, 1618)`.
+ * Checkpointing sampled RDD or adding a sort before sampling can help make the RDD
+ * deterministic.
  */
 @Since("0.8.0")
 class ALS private (
@@ -188,12 +195,10 @@ class ALS private (
   }
 
   /**
-   * :: DeveloperApi ::
    * Sets storage level for intermediate RDDs (user/product in/out links). The default value is
    * `MEMORY_AND_DISK`. Users can change it to a serialized storage, e.g., `MEMORY_AND_DISK_SER` and
    * set `spark.rdd.compress` to `true` to reduce the space requirement, at the cost of speed.
    */
-  @DeveloperApi
   @Since("1.1.0")
   def setIntermediateRDDStorageLevel(storageLevel: StorageLevel): this.type = {
     require(storageLevel != StorageLevel.NONE,
@@ -203,13 +208,11 @@ class ALS private (
   }
 
   /**
-   * :: DeveloperApi ::
    * Sets storage level for final RDDs (user/product used in MatrixFactorizationModel). The default
    * value is `MEMORY_AND_DISK`. Users can change it to a serialized storage, e.g.
    * `MEMORY_AND_DISK_SER` and set `spark.rdd.compress` to `true` to reduce the space requirement,
    * at the cost of speed.
    */
-  @DeveloperApi
   @Since("1.3.0")
   def setFinalRDDStorageLevel(storageLevel: StorageLevel): this.type = {
     this.finalRDDStorageLevel = storageLevel
@@ -217,14 +220,12 @@ class ALS private (
   }
 
   /**
-   * :: DeveloperApi ::
    * Set period (in iterations) between checkpoints (default = 10). Checkpointing helps with
    * recovery (when nodes fail) and StackOverflow exceptions caused by long lineage. It also helps
    * with eliminating temporary shuffle files on disk, which can be important when there are many
    * ALS iterations. If the checkpoint directory is not set in [[org.apache.spark.SparkContext]],
    * this setting is ignored.
    */
-  @DeveloperApi
   @Since("1.4.0")
   def setCheckpointInterval(checkpointInterval: Int): this.type = {
     this.checkpointInterval = checkpointInterval

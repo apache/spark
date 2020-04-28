@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
@@ -60,7 +60,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       .createOrReplaceTempView("orc_temp_table")
   }
 
-  protected def testBloomFilterCreation(bloomFilterKind: Kind) {
+  protected def testBloomFilterCreation(bloomFilterKind: Kind): Unit = {
     val tableName = "bloomFilter"
 
     withTempDir { dir =>
@@ -120,7 +120,8 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHive23: Boolean = false) {
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean,
+      isHive23: Boolean = false): Unit = {
     val tableName = "orcTable"
 
     withTempDir { dir =>
@@ -345,7 +346,9 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  test("SPARK-23340 Empty float/double array columns raise EOFException") {
+  // SPARK-28885 String value is not allowed to be stored as numeric type with
+  // ANSI store assignment policy.
+  ignore("SPARK-23340 Empty float/double array columns raise EOFException") {
     Seq(Seq(Array.empty[Float]).toDF(), Seq(Array.empty[Double]).toDF()).foreach { df =>
       withTempPath { path =>
         df.write.format("orc").save(path.getCanonicalPath)
@@ -372,9 +375,10 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
 
       val orcFilePath = new Path(partFiles.head.getAbsolutePath)
       val readerOptions = OrcFile.readerOptions(new Configuration())
-      val reader = OrcFile.createReader(orcFilePath, readerOptions)
-      val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
-      assert(version === SPARK_VERSION_SHORT)
+      Utils.tryWithResource(OrcFile.createReader(orcFilePath, readerOptions)) { reader =>
+        val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
+        assert(version === SPARK_VERSION_SHORT)
+      }
     }
   }
 
@@ -478,6 +482,64 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       }
     }
   }
+
+  test("SPARK-31238: compatibility with Spark 2.4 in reading dates") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        checkAnswer(
+          readResourceOrcFile("test-data/before_1582_date_v2_4.snappy.orc"),
+          Row(java.sql.Date.valueOf("1200-01-01")))
+      }
+    }
+  }
+
+  test("SPARK-31238, SPARK-31423: rebasing dates in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      Seq("1001-01-01", "1582-10-10").toDF("dateS")
+        .select($"dateS".cast("date").as("date"))
+        .write
+        .orc(path)
+
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          checkAnswer(
+            spark.read.orc(path),
+            Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-31284: compatibility with Spark 2.4 in reading timestamps") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        checkAnswer(
+          readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
+          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+      }
+    }
+  }
+
+  test("SPARK-31284, SPARK-31423: rebasing timestamps in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      Seq("1001-01-01 01:02:03.123456", "1582-10-10 11:12:13.654321").toDF("tsS")
+        .select($"tsS".cast("timestamp").as("ts"))
+        .write
+        .orc(path)
+
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          checkAnswer(
+            spark.read.orc(path),
+            Seq(
+              Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
+              Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
+        }
+      }
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSparkSession {
@@ -526,5 +588,11 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
 
   test("SPARK-11412 read and merge orc schemas in parallel") {
     testMergeSchemasInParallel(OrcUtils.readOrcSchemasInParallel)
+  }
+
+  test("SPARK-31580: Read a file written before ORC-569") {
+    // Test ORC file came from ORC-621
+    val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
+    assert(df.where("str < 'row 001000'").count() === 1000)
   }
 }

@@ -73,7 +73,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   /** Size of each block. Default value is 4MB.  This value is only read by the broadcaster. */
   @transient private var blockSize: Int = _
 
-  private def setConf(conf: SparkConf) {
+  private def setConf(conf: SparkConf): Unit = {
     compressionCodec = if (conf.get(config.BROADCAST_COMPRESS)) {
       Some(CompressionCodec.createCodec(conf))
     } else {
@@ -196,7 +196,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   /**
    * Remove all persisted state associated with this Torrent broadcast on the executors.
    */
-  override protected def doUnpersist(blocking: Boolean) {
+  override protected def doUnpersist(blocking: Boolean): Unit = {
     TorrentBroadcast.unpersist(id, removeFromDriver = false, blocking)
   }
 
@@ -204,7 +204,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * Remove all persisted state associated with this Torrent broadcast on the executors
    * and driver.
    */
-  override protected def doDestroy(blocking: Boolean) {
+  override protected def doDestroy(blocking: Boolean): Unit = {
     TorrentBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 

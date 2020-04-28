@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -69,6 +70,8 @@ class KafkaContinuousStream(
       case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
       case LatestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchLatestOffsets(None))
       case SpecificOffsetRangeLimit(p) => offsetReader.fetchSpecificOffsets(p, reportDataLoss)
+      case SpecificTimestampRangeLimit(p) => offsetReader.fetchSpecificTimestampBasedOffsets(p,
+        failsOnNoMatchingOffset = true)
     }
     logInfo(s"Initial offsets: $offsets")
     offsets

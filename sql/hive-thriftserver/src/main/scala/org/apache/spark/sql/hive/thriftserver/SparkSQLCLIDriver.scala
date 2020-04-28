@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.{ArrayList => JArrayList, Locale}
+import java.util.{ArrayList => JArrayList, List => JList, Locale}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -37,13 +37,16 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
+import sun.misc.{Signal, SignalHandler}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
+import org.apache.spark.sql.internal.SharedState
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -63,7 +66,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
    * a signal handler will invoke this registered callback if a Ctrl+C signal is detected while
    * a command is being processed by the current thread.
    */
-  def installSignalHandler() {
+  def installSignalHandler(): Unit = {
     HiveInterruptUtils.add(() => {
       // Handle remote execution mode
       if (SparkSQLEnv.sparkContext != null) {
@@ -77,7 +80,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     })
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val oproc = new OptionsProcessor()
     if (!oproc.process_stage1(args)) {
       System.exit(1)
@@ -87,12 +90,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
     val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
 
-    val cliConf = new HiveConf(classOf[SessionState])
-    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
-      ++ sparkConf.getAll.toMap ++ extraConfigs).foreach {
-      case (k, v) =>
-        cliConf.set(k, v)
-    }
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
 
     val sessionState = new CliSessionState(cliConf)
 
@@ -133,6 +131,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 
+    SharedState.loadHiveConfFile(sparkConf, conf)
     SessionState.start(sessionState)
 
     // Clean up after we exit
@@ -165,6 +164,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
     }
 
+    // The class loader of CliSessionState's conf is current main thread's class loader
+    // used to load jars passed by --jars. One class loader used by AddJarCommand is
+    // sharedState.jarClassLoader which contain jar path passed by --jars in main thread.
+    // We set CliSessionState's conf class loader to sharedState.jarClassLoader.
+    // Thus we can load all jars passed by --jars and AddJarCommand.
+    sessionState.getConf.setClassLoader(SparkSQLEnv.sqlContext.sharedState.jarClassLoader)
+
     // TODO work around for set the log output to console, because the HiveContext
     // will set the output into an invalid buffer.
     sessionState.in = System.in
@@ -184,8 +190,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
 
-    newHiveConf.foreach { kv =>
-      SparkSQLEnv.sqlContext.setConf(kv._1, kv._2)
+    // We don't propagate hive.metastore.warehouse.dir, because it might has been adjusted in
+    // [[SharedState.loadHiveConfFile]] based on the user specified or default values of
+    // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
+    for ((k, v) <- newHiveConf if k != "hive.metastore.warehouse.dir") {
+      SparkSQLEnv.sqlContext.setConf(k, v)
     }
 
     if (sessionState.execString != null) {
@@ -430,6 +439,129 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       }
       ret
     }
+  }
+
+  // Adapted processLine from Hive 2.3's CliDriver.processLine.
+  override def processLine(line: String, allowInterrupting: Boolean): Int = {
+    var oldSignal: SignalHandler = null
+    var interruptSignal: Signal = null
+
+    if (allowInterrupting) {
+      // Remember all threads that were running at the time we started line processing.
+      // Hook up the custom Ctrl+C handler while processing this line
+      interruptSignal = new Signal("INT")
+      oldSignal = Signal.handle(interruptSignal, new SignalHandler() {
+        private var interruptRequested: Boolean = false
+
+        override def handle(signal: Signal) {
+          val initialRequest = !interruptRequested
+          interruptRequested = true
+
+          // Kill the VM on second ctrl+c
+          if (!initialRequest) {
+            console.printInfo("Exiting the JVM")
+            System.exit(127)
+          }
+
+          // Interrupt the CLI thread to stop the current statement and return
+          // to prompt
+          console.printInfo("Interrupting... Be patient, this might take some time.")
+          console.printInfo("Press Ctrl+C again to kill JVM")
+
+          HiveInterruptUtils.interrupt()
+        }
+      })
+    }
+
+    try {
+      var lastRet: Int = 0
+
+      // we can not use "split" function directly as ";" may be quoted
+      val commands = splitSemiColon(line).asScala
+      var command: String = ""
+      for (oneCmd <- commands) {
+        if (StringUtils.endsWith(oneCmd, "\\")) {
+          command += StringUtils.chop(oneCmd) + ";"
+        } else {
+          command += oneCmd
+          if (!StringUtils.isBlank(command)) {
+            val ret = processCmd(command)
+            command = ""
+            lastRet = ret
+            val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
+            if (ret != 0 && !ignoreErrors) {
+              CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
+              ret
+            }
+          }
+        }
+      }
+      CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
+      lastRet
+    } finally {
+      // Once we are done processing the line, restore the old handler
+      if (oldSignal != null && interruptSignal != null) {
+        Signal.handle(interruptSignal, oldSignal)
+      }
+    }
+  }
+
+  // Adapted splitSemiColon from Hive 2.3's CliDriver.splitSemiColon.
+  private def splitSemiColon(line: String): JList[String] = {
+    var insideSingleQuote = false
+    var insideDoubleQuote = false
+    var insideComment = false
+    var escape = false
+    var beginIndex = 0
+    var endIndex = line.length
+    val ret = new JArrayList[String]
+
+    for (index <- 0 until line.length) {
+      if (line.charAt(index) == '\'' && !insideComment) {
+        // take a look to see if it is escaped
+        if (!escape) {
+          // flip the boolean variable
+          insideSingleQuote = !insideSingleQuote
+        }
+      } else if (line.charAt(index) == '\"' && !insideComment) {
+        // take a look to see if it is escaped
+        if (!escape) {
+          // flip the boolean variable
+          insideDoubleQuote = !insideDoubleQuote
+        }
+      } else if (line.charAt(index) == '-') {
+        val hasNext = index + 1 < line.length
+        if (insideDoubleQuote || insideSingleQuote || insideComment) {
+          // Ignores '-' in any case of quotes or comment.
+          // Avoids to start a comment(--) within a quoted segment or already in a comment.
+          // Sample query: select "quoted value --"
+          //                                    ^^ avoids starting a comment if it's inside quotes.
+        } else if (hasNext && line.charAt(index + 1) == '-') {
+          // ignore quotes and ;
+          insideComment = true
+          // ignore eol
+          endIndex = index
+        }
+      } else if (line.charAt(index) == ';') {
+        if (insideSingleQuote || insideDoubleQuote || insideComment) {
+          // do not split
+        } else {
+          // split, do not include ; itself
+          ret.add(line.substring(beginIndex, index))
+          beginIndex = index + 1
+        }
+      } else {
+        // nothing to do
+      }
+      // set the escape
+      if (escape) {
+        escape = false
+      } else if (line.charAt(index) == '\\') {
+        escape = true
+      }
+    }
+    ret.add(line.substring(beginIndex, endIndex))
+    ret
   }
 }
 
