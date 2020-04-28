@@ -61,20 +61,46 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId) {
         val N = 10000000
         runBenchmark("datetime +/- interval") {
+          val benchmark = new Benchmark("datetime +/- interval", 3, output = output)
           val ts = "cast(id as timestamp)"
           val dt = s"cast($ts as date)"
-          run(N, "date + interval(m)", s"$dt + interval 1 month")
-          run(N, "date + interval(m, d)", s"$dt + interval 1 month 2 day")
-          run(N, "date + interval(m, d, ms)", s"$dt + interval 1 month 2 day 5 hour")
-          run(N, "date - interval(m)", s"$dt - interval 1 month")
-          run(N, "date - interval(m, d)", s"$dt - interval 1 month 2 day")
-          run(N, "date - interval(m, d, ms)", s"$dt - interval 1 month 2 day 5 hour")
-          run(N, "timestamp + interval(m)", s"$ts + interval 1 month")
-          run(N, "timestamp + interval(m, d)", s"$ts + interval 1 month 2 day")
-          run(N, "timestamp + interval(m, d, ms)", s"$ts + interval 1 month 2 day 5 hour")
-          run(N, "timestamp - interval(m)", s"$ts - interval 1 month")
-          run(N, "timestamp - interval(m, d)", s"$ts - interval 1 month 2 day")
-          run(N, "timestamp - interval(m, d, ms)", s"$ts - interval 1 month 2 day 5 hour")
+          benchmark.addCase("date + interval(m)") { _ =>
+            doBenchmark(N, s"$dt + interval 1 month")
+          }
+          benchmark.addCase("date + interval(m, d)") { _ =>
+            doBenchmark(N, s"$dt + interval 1 month 2 day")
+          }
+          benchmark.addCase("date + interval(m, d, ms)") { _ =>
+            doBenchmark(N, s"$dt + interval 1 month 2 day 5 hour")
+          }
+          benchmark.addCase("date - interval(m)") { _ =>
+            doBenchmark(N, s"$dt - interval 1 month")
+          }
+          benchmark.addCase("date - interval(m, d)") { _ =>
+            doBenchmark(N, s"$dt - interval 1 month 2 day")
+          }
+          benchmark.addCase("date - interval(m, d, ms)") { _ =>
+            doBenchmark(N, s"$dt - interval 1 month 2 day 5 hour")
+          }
+          benchmark.addCase("timestamp + interval(m)") { _ =>
+            doBenchmark(N, s"$ts + interval 1 month")
+          }
+          benchmark.addCase("timestamp + interval(m, d)") { _ =>
+            doBenchmark(N, s"$ts + interval 1 month 2 day")
+          }
+          benchmark.addCase("timestamp + interval(m, d, ms)") { _ =>
+            doBenchmark(N, s"$ts + interval 1 month 2 day 5 hour")
+          }
+          benchmark.addCase("timestamp - interval(m)") { _ =>
+            doBenchmark(N, s"$ts - interval 1 month")
+          }
+          benchmark.addCase("timestamp - interval(m, d)") { _ =>
+            doBenchmark(N, s"$ts - interval 1 month 2 day")
+          }
+          benchmark.addCase("timestamp - interval(m, d, ms)") { _ =>
+            doBenchmark(N, s"$ts - interval 1 month 2 day 5 hour")
+          }
+          benchmark.run()
         }
         runBenchmark("Extract components") {
           run(N, "cast to timestamp", "cast(id as timestamp)")
