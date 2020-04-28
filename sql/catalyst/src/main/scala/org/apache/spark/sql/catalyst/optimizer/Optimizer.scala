@@ -1553,13 +1553,84 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
  * 1. This rule is only applicable to INTERSECT DISTINCT. Do not use it for INTERSECT ALL.
  * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
  *    join conditions will be incorrect.
+ *
+ * This rule also pushed down the Distinct to left/right side based on the config
+ *   `SQLConf.OPTIMIZE_INTERSECT_ENABLED`
+ * 1. It pushes down Distinct on left side if applying a Distinct on left reduces rows by
+ *   a configured threshold
+ * 2. It pushes down Distinct on right side if applying a Distinct on right side converts the join
+ *   type to broadcast join, or it reduces rows by a configured threshold
+ * If Distinct is pushdown on left side, it won't apply Distinct after Join as it is not needed.
  */
 object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
+  private def canBroadcast(plan: LogicalPlan): Boolean = {
+    plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= SQLConf.get.autoBroadcastJoinThreshold
+  }
+
+  private def shouldApplyDistinctToRightSide(right: LogicalPlan): Boolean = {
+    if (!SQLConf.get.optimizeIntersectEnabled) {
+      false
+    } else if (!canBroadcast(right) && canBroadcast(Distinct(right))) {
+      true
+    } else {
+      shouldApplyDistinctBasedOnReductionThreshold(right)
+    }
+  }
+
+  private def shouldApplyDistinctToLeftSide(left: LogicalPlan): Boolean = {
+    if (!SQLConf.get.optimizeIntersectEnabled) {
+      false
+    } else {
+      shouldApplyDistinctBasedOnReductionThreshold(left)
+    }
+  }
+
+  private def shouldApplyDistinctBasedOnReductionThreshold(plan: LogicalPlan): Boolean = {
+    (plan.stats.rowCount, Distinct(plan).stats.rowCount) match {
+      case (Some(rowCountBefore), Some(rowCountAfter)) =>
+        val reductionRatio = if (rowCountAfter != 0) {
+          rowCountBefore / rowCountAfter
+        } else {
+          // If rowCountAfter=0, Most likely rowCountBefore should also be 0 as applying Distinct()
+          // can make rows 0 only when initial input has 0 rows
+          // Making reductionRatio = rowCountBefore to be on safe side
+          rowCountBefore
+        }
+        if (reductionRatio >= SQLConf.get.optimizeIntersectDistinctReductionThreshold) {
+          true
+        } else {
+          false
+        }
+      case (_, _) =>
+        // Stats are not available
+        false
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Intersect(left, right, false) =>
       assert(left.output.size == right.output.size)
-      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And), JoinHint.NONE))
+      val applyDistinctToLeftSide = shouldApplyDistinctToLeftSide(left)
+      val applyDistinctToRightSide = shouldApplyDistinctToRightSide(right)
+      val newLeft = if (applyDistinctToLeftSide) {
+        Distinct(left)
+      } else {
+        left
+      }
+      val newRight = if (applyDistinctToRightSide) {
+        Distinct(right)
+      } else {
+        right
+      }
+
+      val joinCond = newLeft.output.zip(newRight.output).map { case (l, r) => EqualNullSafe(l, r) }
+      val joinLP = Join(newLeft, newRight, LeftSemi, joinCond.reduceLeftOption(And), JoinHint.NONE)
+
+      if (applyDistinctToLeftSide) {
+        joinLP
+      } else {
+        Distinct(joinLP)
+      }
   }
 }
 

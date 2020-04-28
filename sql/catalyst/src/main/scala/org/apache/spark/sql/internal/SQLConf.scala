@@ -1682,6 +1682,22 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.9)
 
+  val OPTIMIZE_INTERSECT_ENABLED =
+    buildConf("spark.sql.cbo.optimizeIntersect.enabled")
+      .internal()
+      .doc("Whether to use optimized Intersect implementation or not. " +
+        "Optimized Intersect logic tries to pushdown Distinct through Join based on some stats")
+      .booleanConf
+      .createWithDefault(true)
+
+  val OPTIMIZE_INTERSECT_DISTINCT_REDUCTION_THRESHOLD =
+    buildConf("spark.sql.cbo.optimizeIntersect.distinctReductionThreshold")
+      .internal()
+      .doc("Ratio by which Distinct should reduce number of rows to qualify for pushdown" +
+        " in Intersect optimization")
+      .intConf
+      .createWithDefault(100)
+
   private def isValidTimezone(zone: String): Boolean = {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
@@ -3043,6 +3059,11 @@ class SQLConf extends Serializable with Logging {
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
+
+  def optimizeIntersectEnabled: Boolean = getConf(OPTIMIZE_INTERSECT_ENABLED)
+
+  def optimizeIntersectDistinctReductionThreshold: Int = getConf(
+    OPTIMIZE_INTERSECT_DISTINCT_REDUCTION_THRESHOLD)
 
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
 

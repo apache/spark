@@ -66,7 +66,14 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     }
   }
 
-  override def visitDistinct(p: Distinct): Statistics = default(p)
+  /**
+   * For stats of Distinct, reuse [[Aggregate]] stats estimation
+   * [[org.apache.spark.sql.catalyst.optimizer.ReplaceDistinctWithAggregate]] rule replaces
+   *   a Distinct with an Aggregate.
+   */
+  override def visitDistinct(p: Distinct): Statistics = {
+    visitAggregate(Aggregate(p.child.output, p.child.output, p.child))
+  }
 
   override def visitExcept(p: Except): Statistics = p.left.stats.copy()
 
