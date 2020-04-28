@@ -17,7 +17,7 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
@@ -59,6 +59,20 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcCoefficients = spark.sparkContext.broadcast(coefficients)
     new HingeAggregator(bcFeaturesStd, fitIntercept)(bcCoefficients)
+  }
+
+   /** Get summary statistics for some data and create a new BlockHingeAggregator. */
+  private def getNewBlockAggregator(
+      instances: Array[Instance],
+      coefficients: Vector,
+      fitIntercept: Boolean,
+      blockSize: Int): BlockHingeAggregator = {
+    val (featuresSummarizer, ySummarizer) =
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
+    val numFeatures = featuresStd.length
+    val bcCoefficients = spark.sparkContext.broadcast(coefficients)
+    new BlockHingeAggregator(numFeatures, fitIntercept, blockSize)(bcCoefficients)
   }
 
   test("aggregator add method input size") {
@@ -159,4 +173,50 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(aggConstantFeatureBinary.gradient(1) == aggConstantFeatureBinaryFiltered.gradient(0))
   }
 
+  test("Block HingeAggregator") {
+    val coefArray = Array(1.0, 2.0)
+    val intercept = 1.0
+    val blocks1 = instances
+      .grouped(2)
+      .map(seq => InstanceBlock.fromInstances(seq))
+      .toArray
+
+    val blocks2 = blocks1.map { block =>
+      new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)
+    }
+
+    val blocks3 = blocks1.zipWithIndex.map { case (block, i) =>
+      if (i % 2 == 0) {
+        new InstanceBlock(block.labels, block.weights, block.matrix.toDense)
+      } else {
+        new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)
+      }
+    }
+
+    val agg1 = getNewBlockAggregator(instances, Vectors.dense(coefArray ++ Array(intercept)),
+      fitIntercept = true, blockSize = 1)
+    blocks1.foreach(agg1.add)
+    val loss1 = agg1.loss
+    val grad1 = agg1.gradient
+    for (blocks <- Seq(blocks1, blocks2, blocks3); blockSize <- Seq(1, 2, 4)) {
+      val agg = getNewBlockAggregator(instances, Vectors.dense(coefArray ++ Array(intercept)),
+        fitIntercept = true, blockSize = blockSize)
+      blocks.foreach(agg.add)
+      assert(loss1 ~== agg.loss relTol 1e-9)
+      assert(grad1 ~== agg.gradient  relTol 1e-9)
+    }
+
+    val agg2 = getNewBlockAggregator(instances, Vectors.dense(coefArray),
+      fitIntercept = false, blockSize = 1)
+    blocks1.foreach(agg2.add)
+    val loss2 = agg2.loss
+    val grad2 = agg2.gradient
+    for (blocks <- Seq(blocks1, blocks2, blocks3); blockSize <- Seq(1, 2, 4)) {
+      val agg = getNewBlockAggregator(instances, Vectors.dense(coefArray),
+        fitIntercept = false, blockSize = blockSize)
+      blocks.foreach(agg.add)
+      assert(loss2 ~== agg.loss relTol 1e-9)
+      assert(grad2 ~== agg.gradient  relTol 1e-9)
+    }
+  }
 }

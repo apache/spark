@@ -175,7 +175,8 @@ class LinearSVC @Since("2.2.0") (
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth, blockSize)
 
-    val instances = extractInstances(dataset).setName("training instances")
+    val instances = extractInstances(dataset)
+      .setName("training instances")
 
     val (summarizer, labelSummarizer) = if ($(blockSize) == 1) {
       if (dataset.storageLevel == StorageLevel.NONE) {
@@ -201,7 +202,7 @@ class LinearSVC @Since("2.2.0") (
       val sparsity = 1 - summarizer.numNonzeros.toArray.map(_ * scale).sum
       instr.logNamedValue("sparsity", sparsity.toString)
       if (sparsity > 0.5) {
-        logWarning(s"sparsity of input dataset is $sparsity, " +
+        instr.logWarning(s"sparsity of input dataset is $sparsity, " +
           s"which may hurt performance in high-level BLAS.")
       }
     }
@@ -242,7 +243,7 @@ class LinearSVC @Since("2.2.0") (
        Note that the intercept in scaled space and original space is the same;
        as a result, no scaling is needed.
      */
-    val rawCoefficients = if ($(blockSize) == 1) {
+    val (rawCoefficients, objectiveHistory) = if ($(blockSize) == 1) {
       trainOnRows(instances, featuresStd, regularization, optimizer)
     } else {
       trainOnBlocks(instances, featuresStd, regularization, optimizer)
@@ -266,7 +267,7 @@ class LinearSVC @Since("2.2.0") (
       instances: RDD[Instance],
       featuresStd: Array[Double],
       regularization: Option[L2Regularization],
-      optimizer: BreezeOWLQN[Int, BDV[Double]]): Array[Double] = {
+      optimizer: BreezeOWLQN[Int, BDV[Double]]): (Array[Double], Array[Double]) = {
     val numFeatures = featuresStd.length
     val numFeaturesPlusIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
 
@@ -278,22 +279,22 @@ class LinearSVC @Since("2.2.0") (
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       Vectors.zeros(numFeaturesPlusIntercept).asBreeze.toDenseVector)
 
-    val scaledObjectiveHistory = mutable.ArrayBuilder.make[Double]
+    val arrayBuilder = mutable.ArrayBuilder.make[Double]
     var state: optimizer.State = null
     while (states.hasNext) {
       state = states.next()
-      scaledObjectiveHistory += state.adjustedValue
+      arrayBuilder += state.adjustedValue
     }
     bcFeaturesStd.destroy()
 
-    if (state == null) null else state.x.toArray
+    (if (state == null) null else state.x.toArray, arrayBuilder.result)
   }
 
   private def trainOnBlocks(
       instances: RDD[Instance],
       featuresStd: Array[Double],
       regularization: Option[L2Regularization],
-      optimizer: BreezeOWLQN[Int, BDV[Double]]): Array[Double] = {
+      optimizer: BreezeOWLQN[Int, BDV[Double]]): (Array[Double], Array[Double]) = {
     val numFeatures = featuresStd.length
     val numFeaturesPlusIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
 
@@ -321,16 +322,16 @@ class LinearSVC @Since("2.2.0") (
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       Vectors.zeros(numFeaturesPlusIntercept).asBreeze.toDenseVector)
 
-    val scaledObjectiveHistory = mutable.ArrayBuilder.make[Double]
+    val arrayBuilder = mutable.ArrayBuilder.make[Double]
     var state: optimizer.State = null
     while (states.hasNext) {
       state = states.next()
-      scaledObjectiveHistory += state.adjustedValue
+      arrayBuilder += state.adjustedValue
     }
     blocks.unpersist()
     bcFeaturesStd.destroy()
 
-    if (state == null) null else state.x.toArray
+    (if (state == null) null else state.x.toArray, arrayBuilder.result)
   }
 }
 
