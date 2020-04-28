@@ -345,7 +345,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Supported nested inner generators") {
+  test("SPARK-31049: Supported nested inner generators") {
     // Project cases
     checkAnswer(
       sql("SELECT explode(explode(array(array(1, 2), array(3))))"),

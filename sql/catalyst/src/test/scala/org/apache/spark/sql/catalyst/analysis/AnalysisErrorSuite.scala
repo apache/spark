@@ -425,8 +425,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
       "The slide duration" :: " must be greater than 0." :: Nil
   )
-"Nested generators are supported only when inner generators " +
-          "are unary and adjacent with single output, but got: "
+
   errorTest(
     "generator nested in expressions",
     listRelation.select(Explode($"list") + 1),
