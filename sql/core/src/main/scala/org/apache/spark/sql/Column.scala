@@ -948,6 +948,9 @@ class Column(val expr: Expression) extends Logging {
    *   df.select($"colA".as("colB"))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
@@ -984,6 +987,9 @@ class Column(val expr: Expression) extends Logging {
    *   df.select($"colA".as('colB))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
@@ -1009,6 +1015,9 @@ class Column(val expr: Expression) extends Logging {
    *   // Renames colA to colB in select output.
    *   df.select($"colA".name("colB"))
    * }}}
+   *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
    *
    * @group expr_ops
    * @since 2.0.0
