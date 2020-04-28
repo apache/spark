@@ -121,6 +121,7 @@ writeObject.list <- function(object, con, writeType = TRUE) {
   if (!length(object)) {
     writeType('', con)
     writeObject(0L, con) # i.e., length(object)
+    return(invisible())
   }
   if (has_unique_serde_type(object)) {
     return(writeObject(unlist(object, recursive = FALSE), con, writeType))
