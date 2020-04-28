@@ -2613,7 +2613,7 @@ setMethod("join",
                     "left", "leftouter", "left_outer",
                     "right", "rightouter", "right_outer",
                     "semi", "left_semi", "leftsemi", "anti", "left_anti", "leftanti")) {
-                  joinType <- gsub("_", "", joinType)
+                  joinType <- gsub("_", "", joinType, fixed = TRUE)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop(paste("joinType must be one of the following types:",
