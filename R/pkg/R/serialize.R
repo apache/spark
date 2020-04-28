@@ -42,14 +42,17 @@ getSerdeType <- function(object) {
   } else if (type != "list") {
      type
   } else {
-    # Check if all elements are of same type
-    elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
-    if (length(elemType) <= 1L) {
+    if (has_unique_serde_type(object)) {
       "array"
     } else {
       "list"
     }
   }
+}
+
+has_unique_serde_type = function(object) {
+  # i.e., either length-0 or length-1
+  length(unique(sapply(object, getSerdeType))) <= 1L
 }
 
 # NOTE: In R vectors have same type as objects
@@ -79,7 +82,7 @@ writeObject.character <- function(object, con, writeType = TRUE) {
   if (is.na(object)) return() # no value for NULL
 
   utfVal <- enc2utf8(object)
-  writeObject(as.integer(nchar(utfVal, type = "bytes") + 1L), writeType = FALSE)
+  writeObject(as.integer(nchar(utfVal, type = "bytes") + 1L), con, writeType = FALSE)
   writeBin(utfVal, con, endian = "big", useBytes = TRUE)
 }
 writeObject.numeric <- function(object, con, writeType = TRUE) {
@@ -101,22 +104,14 @@ writeObject.raw <- function(object, con, writeType = TRUE) {
 }
 writeObject.struct <-
 writeObject.list <- function(object, con, writeType = TRUE) {
-  if (writeType) {
-    # writeType.list either writes array or list; TRUE is returned for list
-    if (isTRUE(writeType(object, con))) {
-      writeObject(length(object), con, writeType = FALSE)
-      return(writeBin(object, con, endian = "big"))
-    } else {
-      return(writeArray(object, con))
-    }
+  if (has_unique_serde_type(object)) {
+    return(writeArray(object, con, writeType))
   }
-  # Check if all elements are of same type
-  elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
-  if (length(elemType) <= 1L) {
-    return(writeArray(object, con))
+  if (writeType) {
+    writeType(object, con)
   }
   writeObject(length(object), con, writeType = FALSE)
-  writeBin(object, con, endian = "big")
+  for (elem in object) writeBin(elem, con, endian = "big")
 }
 writeObject.jobj <- function(object, con, writeType = TRUE) {
   if (writeType) {
@@ -137,9 +132,8 @@ writeObject.environment <- function(object, con, writeType = TRUE) {
   if (len > 0L) {
     envObj <- ls(object)
     writeArray(as.list(envObj), con)
-    writeObject(mget(envObj, object), writeType = FALSE)
+    writeObject(mget(envObj, object), con, writeType = FALSE)
   }
-  writeBin(object, con, endian = "big")
 }
 writeObject.Date <- function(object, con, writeType = TRUE) {
   if (writeType) {
@@ -227,11 +221,8 @@ writeType.raw <- function(object, con) {
   writeBin(as.raw(0x72), con)
 }
 writeType.list <- function(object, con) {
-  # Check if all elements are of same type
-  elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
-  if (length(elemType) <= 1L) {
-    return(writeBin(as.raw(0x61), con))
-  }
+  # only called from writeObject.list, which already confirmed
+  #   we cannot use writeArray
   writeBin(as.raw(0x6c), con)
   # emit TRUE to signal that this object is being treated as a list
   return(TRUE)
@@ -254,14 +245,16 @@ writeType.POSIXt <- function(object, con) {
 }
 
 # Used to pass arrays where all the elements are of the same type
-writeArray <- function(arr, con) {
+writeArray <- function(arr, con, writeType = TRUE) {
   # TODO: Empty lists are given type "character" right now.
   # This may not work if the Java side expects array of any other type.
-  writeType(if (length(arr) > 0L) arr[[1L]] else "somestring", con)
+  if (writeType) {
+    writeType(if (length(arr) > 0L) arr[[1L]] else "", con)
+  }
   writeObject(length(arr), con, writeType = FALSE)
 
   if (length(arr) > 0L) {
-    sapply(arr, writeObject, con, writeType = FALSE)
+    for (elem in arr) writeObject(elem, con, writeType = FALSE)
   }
   return(NULL)
 }
@@ -271,7 +264,9 @@ writeArray <- function(arr, con) {
 # <object type> <object> for each object
 writeArgs <- function(args, con) {
   if (length(args) > 0L) {
-    sapply(args, writeObject, con)
+    for (arg in args) {
+      writeObject(arg, con)
+    }
   }
 }
 
