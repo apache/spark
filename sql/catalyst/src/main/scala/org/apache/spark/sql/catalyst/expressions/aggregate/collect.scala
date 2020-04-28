@@ -46,13 +46,15 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   // actual order of input rows.
   override lazy val deterministic: Boolean = false
 
+  def getValueOnUpdate(value: Any): Any = InternalRow.copyValue(value)
+
   override def update(buffer: T, input: InternalRow): T = {
     val value = child.eval(input)
 
     // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
     // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator
     if (value != null) {
-      buffer += InternalRow.copyValue(value)
+      buffer += getValueOnUpdate(value)
     }
     buffer
   }
@@ -65,8 +67,10 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
     new GenericArrayData(buffer.toArray)
   }
 
+  lazy val typeChild = child.dataType
+
   private lazy val projection = UnsafeProjection.create(
-    Array[DataType](ArrayType(elementType = child.dataType, containsNull = false)))
+    Array[DataType](ArrayType(elementType = typeChild, containsNull = false)))
   private lazy val row = new UnsafeRow(1)
 
   override def serialize(obj: T): Array[Byte] = {
@@ -77,7 +81,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   override def deserialize(bytes: Array[Byte]): T = {
     val buffer = createAggregationBuffer()
     row.pointTo(bytes, bytes.length)
-    row.getArray(0).foreach(child.dataType, (_, x: Any) => buffer += x)
+    row.getArray(0).foreach(typeChild, (_, x: Any) => buffer += x)
     buffer
   }
 }
@@ -139,19 +143,27 @@ case class CollectSet(
 
   def this(child: Expression) = this(child, 0, 0)
 
+  /* SPARK-31500
+   * Array[Byte](BinaryType) Scala equality don't works as expected
+   * so HashSet return duplicates, we have to change types to drop
+   * this duplicates and make collect_set work as expected for this
+   * data type
+   */
+  override lazy val typeChild = child.dataType match {
+    case BinaryType => ArrayType(BinaryType)
+    case other => other
+  }
+
+  override def getValueOnUpdate(value: Any): Any = InternalRow.copyValue(value) match {
+    case v: Array[Byte] => UnsafeArrayData.fromPrimitiveArray(v)
+    case other => other
+  }
+
   override def eval(buffer: mutable.HashSet[Any]): Any = {
-    /* SPARK-31500
-     * Array[Byte](BinaryType) Scala equality don't works as expected
-     * so HashSet return duplicates, we have to change types to drop
-     * this duplicates and make collect_set work as expected for this
-     * data type
-     * */
     val bufferUpdated: mutable.HashSet[Any] =
-      buffer match {
-        case b if b.exists(_.isInstanceOf[Array[Byte]]) =>
-          b.map(_.asInstanceOf[Array[Byte]].toSeq)
-            .map(_.asInstanceOf[mutable.WrappedArray[Byte]].toArray)
-        case other => other
+      child.dataType match {
+        case BinaryType => buffer.map(_.asInstanceOf[UnsafeArrayData].toByteArray)
+        case _ => buffer
       }
     super.eval(bufferUpdated)
   }
