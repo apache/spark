@@ -2278,7 +2278,7 @@ setMethod("mutate",
             # For named arguments, use the names for arguments as the column names
             # For unnamed arguments, use the argument symbols as the column names
             ns <- names(cols)
-            if (is.null(ns)) ns <- rep('', length(cols))
+            if (is.null(ns)) ns <- rep("", length(cols))
             named_idx <- nzchar(ns)
             args <- character(length(ns))
             if (any(named_idx)) args[named_idx] <- ns[named_idx]
@@ -2287,7 +2287,7 @@ setMethod("mutate",
               #   output is length>1, so need to collapse it to scalar
               colsub <- substitute(list(...))[-1L]
               args[!named_idx] <- sapply(which(!named_idx), function(ii) {
-                paste(trimws(deparse(colsub[[ii]])), collapse = ' ')
+                paste(trimws(deparse(colsub[[ii]])), collapse = " ")
               })
             }
 
