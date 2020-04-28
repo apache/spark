@@ -124,7 +124,14 @@ writeObject.list <- function(object, con, writeType = TRUE) {
     return(invisible())
   }
   if (has_unique_serde_type(object)) {
-    return(writeObject(unlist(object, recursive = FALSE), con, writeType))
+    # list(1L) is treated as an array, but unlist would treat it as scalar
+    if (length(object) == 1L) {
+      # writeType needs length>1 to treat as array
+      writeType(vector(mode(object), 2L), con)
+      return(writeObject(object[[1L]], con, FALSE))
+    } else {
+      return(writeObject(unlist(object, recursive = FALSE), con, writeType))
+    }
   }
   if (writeType) {
     writeType(object, con)
