@@ -35,6 +35,7 @@ Collate:
     'DataFrame.R'
     'SQLContext.R'
     'WindowSpec.R'
+    'backports.R'
     'backend.R'
     'broadcast.R'
     'catalog.R'
