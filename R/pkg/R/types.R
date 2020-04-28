@@ -112,5 +112,4 @@ checkSchemaInArrow <- function(schema) {
   if (any(startsWith(field_strings, "MapType"))) {
     stop("Arrow optimization in R does not support map type yet.")
   }
-  return(invisible())
 }
