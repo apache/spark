@@ -290,9 +290,21 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     "an expression that can be pushed down") {
     attrInts.foreach { case (attrInt, colName) =>
       assert(PushableColumnAndNestedColumn.unapply(attrInt) === Some(colName))
+
+      if (colName.contains(".")) {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrInt) === None)
+      } else {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrInt) === Some(colName))
+      }
     }
     attrStrs.foreach { case (attrStr, colName) =>
       assert(PushableColumnAndNestedColumn.unapply(attrStr) === Some(colName))
+
+      if (colName.contains(".")) {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrStr) === None)
+      } else {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrStr) === Some(colName))
+      }
     }
 
     // `Abs(col)` can not be pushed down, so it returns `None`
