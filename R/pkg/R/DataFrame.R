@@ -2277,16 +2277,19 @@ setMethod("mutate",
 
             # For named arguments, use the names for arguments as the column names
             # For unnamed arguments, use the argument symbols as the column names
-            args <- sapply(substitute(list(...))[-1], deparse)
             ns <- names(cols)
-            if (!is.null(ns)) {
-              lapply(seq_along(args), function(i) {
-                if (ns[[i]] != "") {
-                  args[[i]] <<- ns[[i]]
-                }
+            if (is.null(ns)) ns <- rep('', length(cols))
+            named_idx <- nzchar(ns)
+            args <- character(length(ns))
+            if (any(named_idx)) args[named_idx] <- ns[named_idx]
+            if (!all(named_idx)) {
+              # SPARK-31517: deparse uses width.cutoff on wide input and the
+              #   output is length>1, so need to collapse it to scalar
+              colsub <- substitute(list(...))[-1L]
+              args[!named_idx] <- sapply(which(!named_idx), function(ii) {
+                paste(trimws(deparse(colsub[[ii]])), collapse = ' ')
               })
             }
-            ns <- args
 
             # The last column of the same name in the specific columns takes effect
             deDupCols <- list()
