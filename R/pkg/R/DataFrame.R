@@ -2617,7 +2617,7 @@ setMethod("join",
                     "right", "rightouter", "right_outer",
                     "semi", "left_semi", "leftsemi", "anti", "left_anti", "leftanti")
                 if (joinType %in% valid_join_types) {
-                  joinType <- gsub("_", "", joinType)
+                  joinType <- gsub("_", "", joinType, fixed = TRUE)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop(gettextf("joinType must be one of the following types: '%s'",

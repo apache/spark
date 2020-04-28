@@ -182,7 +182,7 @@ checkType <- function(type) {
                 # strsplit does not return the final empty string, so check if
                 # the final char is ","
                 if (substr(fieldsString, nchar(fieldsString), nchar(fieldsString)) != ",") {
-                  fields <- strsplit(fieldsString, ",")[[1]]
+                  fields <- strsplit(fieldsString, ",", fixed = TRUE)[[1]]
                   for (field in fields) {
                     m <- regexec("^(.+):(.+)$", field)
                     matchedStrings <- regmatches(field, m)

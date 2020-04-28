@@ -110,12 +110,11 @@ sparkR.conf <- function(key, defaultValue) {
     value <- if (missing(defaultValue)) {
       tryCatch(callJMethod(conf, "get", key),
               error = function(e) {
-                if (any(grep("java.util.NoSuchElementException", as.character(e)))) {
-                  stop(gettextf("Config '%s' is not set",
-                                key, domain = "R-SparkR"),
-                       domain = NA)
+                estr <- as.character(e)
+                if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
+                  stop(gettextf("Config '%s' is not set", key, domain = "R-SparkR"), domain = NA)
                 } else {
-                  stop("Unknown error: ", as.character(e))
+                  stop("Unknown error: ", estr)
                 }
               })
     } else {
@@ -207,7 +206,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     # SPAKR-SQL does not support '.' in column name, so replace it with '_'
     # TODO(davies): remove this once SPARK-2775 is fixed
     names <- lapply(names, function(n) {
-      nn <- gsub("[.]", "_", n)
+      nn <- gsub(".", "_", n, fixed = TRUE)
       if (nn != n) {
         warning(gettextf("Use %s instead of %s as column name",
                          nn, n, domain = "R-SparkR"), domain = NA)
