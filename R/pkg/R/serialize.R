@@ -50,7 +50,7 @@ getSerdeType <- function(object) {
   }
 }
 
-has_unique_serde_type = function(object) {
+has_unique_serde_type <- function(object) {
   # i.e., either length-0 or length-1
   length(unique(sapply(object, getSerdeType))) <= 1L
 }
@@ -72,7 +72,7 @@ writeObject.logical <- function(object, con, writeType = TRUE) {
   # non-scalar value written as array
   if (length(object) > 1L) {
     writeObject(length(object), con, writeType = FALSE)
-    for (elem in object) writeBin(as.integer(elem), con, endian = 'big')
+    for (elem in object) writeBin(as.integer(elem), con, endian = "big")
   } else if (is.na(object)) return() # no value for NULL
 
   for (elem in object) writeBin(as.integer(elem), con, endian = "big")
@@ -119,7 +119,7 @@ writeObject.list <- function(object, con, writeType = TRUE) {
   # TODO: Empty lists are given type "character" right now.
   # This may not work if the Java side expects array of any other type.
   if (!length(object)) {
-    writeType('', con)
+    writeType("", con)
     writeObject(0L, con) # i.e., length(object)
     return(invisible())
   }
