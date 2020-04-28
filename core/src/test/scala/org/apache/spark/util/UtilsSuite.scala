@@ -1297,6 +1297,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
     }
   }
+
+  test("Fix null name prefix when create directory") {
+    val tempDir = Utils.createTempDir()
+    try{
+      val withoutNull = Utils.createDirectory(tempDir.getCanonicalPath, null).getName
+      assert(!withoutNull.contains("null"))
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
 }
 
 private class SimpleExtension
