@@ -20,10 +20,14 @@ package org.apache.spark.sql.api.python
 import java.io.InputStream
 import java.nio.channels.Channels
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDDServer
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -32,7 +36,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.DataType
 
-private[sql] object PythonSQLUtils {
+private[sql] object PythonSQLUtils extends Logging {
   def parseDataType(typeText: String): DataType = CatalystSqlParser.parseDataType(typeText)
 
   // This is needed when generating SQL documentation for built-in functions.
@@ -44,6 +48,13 @@ private[sql] object PythonSQLUtils {
     val conf = new SQLConf()
     // Force to build static SQL configurations
     StaticSQLConf
+    try {
+      val symbol = ScalaReflection.mirror.staticModule("org.apache.spark.sql.hive.HiveUtils")
+      ScalaReflection.mirror.reflectModule(symbol).instance
+    } catch {
+      case NonFatal(e) =>
+        logError("Cannot generated sql configurations from hive module", e)
+    }
     conf.getAllDefinedConfs
   }
 
