@@ -40,17 +40,20 @@ private[sql] object PythonSQLUtils {
     FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
   }
 
-  def listSQLConfigs(): Array[(String, String, String, String)] = {
-    val conf = new SQLConf()
-    // Py4J doesn't seem to translate Seq well, so we convert to an Array.
-    conf.getAllDefinedConfs.filterNot(p => SQLConf.staticConfKeys.contains(p._1)).toArray
-  }
-
-  def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
+  private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
     val conf = new SQLConf()
     // Force to build static SQL configurations
     StaticSQLConf
-    conf.getAllDefinedConfs.filter(p => SQLConf.staticConfKeys.contains(p._1)).toArray
+    conf.getAllDefinedConfs
+  }
+
+  def listRuntimeSQLConfigs(): Array[(String, String, String, String)] = {
+    // Py4J doesn't seem to translate Seq well, so we convert to an Array.
+    listAllSQLConfigs().filterNot(p => SQLConf.staticConfKeys.contains(p._1)).toArray
+  }
+
+  def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
+    listAllSQLConfigs().filter(p => SQLConf.staticConfKeys.contains(p._1)).toArray
   }
 
   /**
