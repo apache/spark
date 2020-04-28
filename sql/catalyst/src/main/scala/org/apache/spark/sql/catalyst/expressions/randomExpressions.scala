@@ -102,6 +102,8 @@ case class Rand(child: Expression) extends RDG with ExpressionWithRandomSeed {
   }
 
   override def freshCopy(): Rand = Rand(child)
+
+  override def sql: String = "rand()"
 }
 
 object Rand {
@@ -145,6 +147,8 @@ case class Randn(child: Expression) extends RDG with ExpressionWithRandomSeed {
   }
 
   override def freshCopy(): Randn = Randn(child)
+
+  override def sql: String = "randn()"
 }
 
 object Randn {
