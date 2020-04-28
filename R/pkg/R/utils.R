@@ -930,3 +930,7 @@ getOne <- function(x, envir, inherits = TRUE, ifnotfound = NULL) {
 traverseParentDirs <- function(x, count) {
   if (dirname(x) == x || count <= 0) x else c(x, Recall(dirname(x), count - 1))
 }
+
+is_arrow_conf_set <- function() {
+  sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1L]] == "true"
+}

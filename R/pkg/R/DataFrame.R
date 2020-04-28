@@ -1205,8 +1205,7 @@ setMethod("collect",
           function(x, stringsAsFactors = FALSE) {
             connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
             useArrow <- FALSE
-            arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
-            if (arrowEnabled) {
+            if (is_arrow_conf_set()) {
               useArrow <- tryCatch({
                 checkSchemaInArrow(schema(x))
                 TRUE
@@ -1503,8 +1502,7 @@ dapplyInternal <- function(x, func, schema) {
     schema <- structType(schema)
   }
 
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
-  if (arrowEnabled) {
+  if (is_arrow_conf_set()) {
     if (inherits(schema, "structType")) {
       checkSchemaInArrow(schema)
     } else if (is.null(schema)) {
