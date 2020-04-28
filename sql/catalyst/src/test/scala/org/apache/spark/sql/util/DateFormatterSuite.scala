@@ -158,4 +158,22 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
     assert(formatter2.parse("BC 1234-02-22") === localDateToDays(LocalDate.of(-1233, 2, 22)))
     assert(formatter2.parse("AD 1234-02-22") === localDateToDays(LocalDate.of(1234, 2, 22)))
   }
+
+  test("SPARK-31557: rebasing in legacy formatters/parsers") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> LegacyBehaviorPolicy.LEGACY.toString) {
+      LegacyDateFormats.values.foreach { legacyFormat =>
+        DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+            val formatter = DateFormatter(
+              DateFormatter.defaultPattern,
+              getZoneId(timeZone),
+              DateFormatter.defaultLocale,
+              legacyFormat)
+            assert(LocalDate.ofEpochDay(formatter.parse("1000-01-01")) === LocalDate.of(1000, 1, 1))
+            assert(formatter.format(localDateToDays(LocalDate.of(1000, 1, 1))) === "1000-01-01")
+          }
+        }
+      }
+    }
+  }
 }
