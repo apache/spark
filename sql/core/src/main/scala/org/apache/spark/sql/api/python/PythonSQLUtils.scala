@@ -48,6 +48,7 @@ private[sql] object PythonSQLUtils extends Logging {
     val conf = new SQLConf()
     // Force to build static SQL configurations
     StaticSQLConf
+    // Force to build SQL configurations from Hive module
     try {
       val symbol = ScalaReflection.mirror.staticModule("org.apache.spark.sql.hive.HiveUtils")
       ScalaReflection.mirror.reflectModule(symbol).instance
