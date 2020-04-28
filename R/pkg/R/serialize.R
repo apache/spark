@@ -68,7 +68,7 @@ writeObject.logical <- function(object, con, writeType = TRUE) {
     writeType(object, con)
   }
   # non-scalar value written as array
-  if (length(object) > 1L) return(writeArray(object, con))
+  if (length(object) > 1L) return(writeArray(object, con, FALSE))
   if (is.na(object)) return() # no value for NULL
 
   writeBin(as.integer(object), con, endian = "big")
@@ -78,7 +78,7 @@ writeObject.character <- function(object, con, writeType = TRUE) {
     writeType(object, con)
   }
   # non-scalar value written as array
-  if (length(object) > 1L) return(writeArray(object, con))
+  if (length(object) > 1L) return(writeArray(object, con, FALSE))
   if (is.na(object)) return() # no value for NULL
 
   utfVal <- enc2utf8(object)
@@ -90,7 +90,7 @@ writeObject.numeric <- function(object, con, writeType = TRUE) {
     writeType(object, con)
   }
   # non-scalar value written as array
-  if (length(object) > 1L) return(writeArray(object, con))
+  if (length(object) > 1L) return(writeArray(object, con, FALSE))
   if (is.na(object)) return() # no value for NULL
 
   writeBin(object, con, endian = "big")
@@ -253,9 +253,7 @@ writeArray <- function(arr, con, writeType = TRUE) {
   }
   writeObject(length(arr), con, writeType = FALSE)
 
-  if (length(arr) > 0L) {
-    for (elem in arr) writeObject(elem, con, writeType = FALSE)
-  }
+  for (elem in arr) writeObject(elem, con, writeType = FALSE)
   return(NULL)
 }
 
@@ -263,11 +261,7 @@ writeArray <- function(arr, con, writeType = TRUE) {
 # object can be of a different type. Serialization format is
 # <object type> <object> for each object
 writeArgs <- function(args, con) {
-  if (length(args) > 0L) {
-    for (arg in args) {
-      writeObject(arg, con)
-    }
-  }
+  for (arg in args) writeObject(arg, con)
 }
 
 writeSerializeInArrow <- function(conn, df) {
