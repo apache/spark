@@ -814,6 +814,63 @@ class RDDTests(ReusedPySparkTestCase):
         rddWithoutRp = self.sc.parallelize(range(10))
         self.assertEqual(rddWithoutRp.getResourceProfile(), None)
 
+    def test_collect_with_job_group(self):
+        import time
+        import threading
+
+        group_A_name = "group_A"
+        group_B_name = "group_B"
+
+        def map_func(x):
+            time.sleep(3)
+            return x + 1
+
+        num_threads = 4
+        thread_list = []
+        # an array which record whether job is cancelled.
+        # the index of the array is the thread index which job run in.
+        is_job_cancelled = [False for x in range(num_threads)]
+
+        def run_job(job_group, index):
+            try:
+                result = self.sc.parallelize([3]).map(map_func).collectWithJobGroup(
+                    job_group, "test rdd collect with setting job group")
+                is_job_cancelled[index] = False
+                return result
+            except Exception as e:
+                is_job_cancelled[index] = True
+                return None
+
+        def launch_job_thread(job_group, index):
+            thread = threading.Thread(target=run_job, args=(job_group, index))
+            thread.start()
+            return thread
+
+        # test job succeeded when not cancelled.
+        run_job(group_A_name, 0)
+        self.assertFalse(is_job_cancelled[0], "job didn't succeeded.")
+
+        # launch spark job in multiple threads and cancel half of them.
+        for i in range(num_threads):
+            if i % 2 == 0:
+                thread = launch_job_thread(group_A_name, i)
+            else:
+                thread = launch_job_thread(group_B_name, i)
+            thread_list.append(thread)
+
+        time.sleep(1)
+        self.sc.cancelJobGroup(group_A_name)
+
+        for i in range(num_threads):
+            thread_list[i].join()
+            if i % 2 == 0:
+                # make sure group A job being cancelled.
+                self.assertTrue(is_job_cancelled[i], "Job in group A wasn't cancelled.")
+            else:
+                # make sure group B job succeeded.
+                self.assertFalse(is_job_cancelled[i], "Job in group B didn't succeeded.")
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.tests.test_rdd import *

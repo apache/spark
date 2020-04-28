@@ -877,6 +877,17 @@ class RDD(object):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
         return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
+    def collectWithJobGroup(self, groupId, description, interruptOnCancel=False):
+        """
+        When collect rdd, use this method to specify job group.
+
+        .. note:: This method are temporary, might be removed in future.
+        """
+        with SCCallSiteSync(self.context) as css:
+            sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
+                self._jrdd.rdd(), groupId, description, interruptOnCancel)
+        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+
     def reduce(self, f):
         """
         Reduces the elements of this RDD using the specified commutative and
