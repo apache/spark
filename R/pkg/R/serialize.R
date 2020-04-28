@@ -116,6 +116,12 @@ writeObject.raw <- function(object, con, writeType = TRUE) {
 
 writeObject.struct <-
 writeObject.list <- function(object, con, writeType = TRUE) {
+  # TODO: Empty lists are given type "character" right now.
+  # This may not work if the Java side expects array of any other type.
+  if (!length(object)) {
+    writeType('', con)
+    writeObject(0L, con) # i.e., length(object)
+  }
   if (has_unique_serde_type(object)) {
     return(writeObject(unlist(object, recursive = FALSE), con, writeType))
   }
