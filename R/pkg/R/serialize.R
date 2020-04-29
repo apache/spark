@@ -60,10 +60,7 @@ has_unique_serde_type <- function(object) {
 # NOTE: In R vectors have same type as objects
 # NOTE: handle writeType in the respective methods because of
 #         some minor idiosyncrasies, e.g. handling of writeObject(list(), con)
-writeObject <- function(object, con, writeType = TRUE) {
-  #if (is.environment(object)) print(ls.str(object)) else dput(object)
-  UseMethod("writeObject")
-}
+writeObject <- function(object, con, writeType = TRUE) UseMethod("writeObject")
 writeObject.default <- function(object, con, writeType = TRUE) {
   stop(paste("Unsupported type for serialization", class(object)))
 }
