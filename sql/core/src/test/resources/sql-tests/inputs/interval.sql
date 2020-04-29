@@ -132,7 +132,6 @@ select
   interval '99 11:22:33.123456789' day to second + dateval
 from interval_arithmetic;
 
--- datetimes(in string representation) + intervals
 select
   tsval,
   tsval - interval '99 11:22:33.123456789' day to second,
@@ -143,6 +142,7 @@ select
   interval '99 11:22:33.123456789' day to second + tsval
 from interval_arithmetic;
 
+-- datetimes(in string representation) + intervals
 select
   strval,
   strval - interval '99 11:22:33.123456789' day to second,
