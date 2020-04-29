@@ -50,8 +50,8 @@ struct<(a + CAST(b AS BIGINT)):bigint>
 
 
 -- !query 5
-SELECT SUM(a) AS b, CAST('2020-01-01' AS DATE) AS fake FROM VALUES (1, 10), (2, 20) AS T(a, b) GROUP BY b HAVING b > 10
+SELECT SUM(a) AS b, hour('2020-01-01 12:12:12') AS fake FROM VALUES (1, 10), (2, 20) AS T(a, b) GROUP BY b HAVING b > 10
 -- !query 5 schema
-struct<b:bigint,fake:date>
+struct<b:bigint,fake:int>
 -- !query 5 output
-2	2020-01-01
+2	12
