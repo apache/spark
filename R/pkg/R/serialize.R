@@ -161,8 +161,13 @@ writeObject.environment <- function(object, con, writeType = TRUE) {
     # vector of names for environment doesn't include the array marker,
     #   so manually write the character marker & then the names object itself
     writeType("", con)
-    writeObject(envObj, con, writeType = FALSE)
-    writeObject(mget(envObj, object), con, writeType = FALSE)
+    # force array-like writing (even for singleton object)
+    writeObject(length(envObj), con, writeType = FALSE)
+    for (nm in envObj) writeObject(nm, con, writeType = FALSE)
+    # also force list writing (even for array-able env contents)
+    vals <- mget(envObj, object)
+    writeObject(length(vals), con, writeType = FALSE)
+    for (val in vals) writeObject(val, con, writeType = TRUE)
   }
 }
 
