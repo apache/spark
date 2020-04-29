@@ -3426,7 +3426,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("Do not display the seed of rand/randn with no argument in output schema") {
+  test("SPARK-31594: Do not display the seed of rand/randn with no argument in output schema") {
     def checkIfSeedExistsInExplain(df: DataFrame): Unit = {
       val output = new java.io.ByteArrayOutputStream()
       Console.withOut(output) {
