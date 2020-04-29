@@ -122,25 +122,21 @@ writeObject.list <- function(object, con, writeType = TRUE) {
     writeObject(0L, con) # i.e., length(object)
     return(invisible())
   }
-  serde_types <- unique(sapply(object, getSerdeType))
-  if (length(serde_types) == 1L) {
-    # getSerdeType has already recursively searched object & found
-    #   any "node" with "real" data has the same type, so we're writing an array
-    writeType(array(), con)
-    for (elem in object)
-    # list(1L) is treated as an array, but unlist would treat it as scalar
-    if (length(object) == 1L) {
-      writeType(array(), con)
-      return(writeObject(object, con, FALSE))
-    } else {
-      return(writeObject(unlist(object, recursive = FALSE), con, writeType))
-    }
+  if (has_unique_serde_type(object)) {
+    class(object) = 'ArrayList'
+    return(writeObject(object, con, writeType))
   }
   if (writeType) {
     writeType(object, con)
   }
   writeObject(length(object), con, writeType = FALSE)
   for (elem in object) writeObject(elem, con, writeType = TRUE)
+}
+writeObject.ArrayList <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    writeType(array(), con)
+  }
+  for (elem in object) writeObject(elem, con)
 }
 
 writeObject.jobj <- function(object, con, writeType = TRUE) {
