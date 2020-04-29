@@ -879,9 +879,12 @@ class RDD(object):
 
     def collectWithJobGroup(self, groupId, description, interruptOnCancel=False):
         """
+        .. note:: Experimental
+
         When collect rdd, use this method to specify job group.
 
         .. note:: This method are temporary, might be removed in future.
+        .. versionadded:: 3.0.0
         """
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
