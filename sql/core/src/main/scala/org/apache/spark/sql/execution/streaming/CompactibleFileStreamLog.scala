@@ -163,26 +163,6 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   /**
-   * Return the latest batch Id.
-   *
-   * This method is a complement of getLatest() - while metadata log file per batch tends to be
-   * small, it doesn't apply to the compacted log file. This method only checks for existence of
-   * file to avoid huge cost on reading and deserializing compacted log file.
-   */
-  def getLatestBatchId(): Option[Long] = {
-    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
-      .map(f => pathToBatchId(f.getPath))
-      .sorted(Ordering.Long.reverse)
-    for (batchId <- batchIds) {
-      val batchMetadataFile = batchIdToPath(batchId)
-      if (fileManager.exists(batchMetadataFile)) {
-        return Some(batchId)
-      }
-    }
-    None
-  }
-
-  /**
    * CompactibleFileStreamLog maintains logs by itself, and manual purging might break internal
    * state, specifically which latest compaction batch is purged.
    *
