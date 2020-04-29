@@ -72,48 +72,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     try f(client) finally transport.close()
   }
 
-  test("SPARK-29492: use add jar in sync mode") {
-    withCLIServiceClient { client =>
-      val user = System.getProperty("user.name")
-      val sessionHandle = client.openSession(user, "")
-
-      withJdbcStatement("smallKV", "addJar") { statement =>
-        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
-        val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
-
-        Seq(s"ADD JAR $jarFile",
-          "CREATE TABLE smallKV(key INT, val STRING) USING hive",
-          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV")
-          .foreach(query => client.executeStatement(sessionHandle, query, confOverlay))
-
-        client.executeStatement(sessionHandle,
-          """CREATE TABLE addJar(key string)
-            |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
-          """.stripMargin, confOverlay)
-
-        client.executeStatement(sessionHandle,
-          "INSERT INTO TABLE addJar SELECT 'k1' as key FROM smallKV limit 1", confOverlay)
-
-        val operationHandle = client.executeStatement(
-          sessionHandle,
-          "SELECT key FROM addJar",
-          confOverlay)
-
-        // Fetch result first time
-        assertResult(1, "Fetching result first time from next row") {
-
-          val rows_next = client.fetchResults(
-            operationHandle,
-            FetchOrientation.FETCH_NEXT,
-            1000,
-            FetchType.QUERY_OUTPUT)
-
-          rows_next.numRows()
-        }
-      }
-    }
-  }
-
   test("GetInfo Thrift API") {
     withCLIServiceClient { client =>
       val user = System.getProperty("user.name")
@@ -726,6 +684,48 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
     }
   }
+
+  test("SPARK-29492: use add jar in sync mode") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+
+      withJdbcStatement("smallKV", "addJar") { statement =>
+        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+        val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+
+        Seq(s"ADD JAR $jarFile",
+          "CREATE TABLE smallKV(key INT, val STRING) USING hive",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV")
+          .foreach(query => client.executeStatement(sessionHandle, query, confOverlay))
+
+        client.executeStatement(sessionHandle,
+          """CREATE TABLE addJar(key string)
+            |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
+          """.stripMargin, confOverlay)
+
+        client.executeStatement(sessionHandle,
+          "INSERT INTO TABLE addJar SELECT 'k1' as key FROM smallKV limit 1", confOverlay)
+
+        val operationHandle = client.executeStatement(
+          sessionHandle,
+          "SELECT key FROM addJar",
+          confOverlay)
+
+        // Fetch result first time
+        assertResult(1, "Fetching result first time from next row") {
+
+          val rows_next = client.fetchResults(
+            operationHandle,
+            FetchOrientation.FETCH_NEXT,
+            1000,
+            FetchType.QUERY_OUTPUT)
+
+          rows_next.numRows()
+        }
+      }
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
@@ -1008,7 +1008,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
    */
   val THRIFT_HTTP_SERVICE_LIVE = "Started ThriftHttpCLIService in http"
 
-  val SERVER_STARTUP_TIMEOUT = 3.minutes
+  val SERVER_STARTUP_TIMEOUT = 10.minutes
 
   private def startThriftServer(port: Int, attempt: Int) = {
     warehousePath = Utils.createTempDir()
