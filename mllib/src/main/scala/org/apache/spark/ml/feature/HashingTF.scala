@@ -42,14 +42,17 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
  * otherwise the features will not be mapped evenly to the columns.
  */
 @Since("1.2.0")
-class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+class HashingTF @Since("3.0.0") (
+    @Since("1.4.0") override val uid: String,
+    private[ml] val hashFunc: Any => Int)
   extends Transformer with HasInputCol with HasOutputCol with HasNumFeatures
     with DefaultParamsWritable {
 
-  private var hashFunc: Any => Int = FeatureHasher.murmur3Hash
-
   @Since("1.2.0")
-  def this() = this(Identifiable.randomUID("hashingTF"))
+  def this() = this(Identifiable.randomUID("hashingTF"), hashFunc = FeatureHasher.murmur3Hash)
+
+  @Since("1.4.0")
+  def this(uid: String) = this(uid, hashFunc = FeatureHasher.murmur3Hash)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -143,16 +146,18 @@ object HashingTF extends DefaultParamsReadable[HashingTF] {
 
     override def load(path: String): HashingTF = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val hashingTF = new HashingTF(metadata.uid)
-      metadata.getAndSetParams(hashingTF)
 
       // We support loading old `HashingTF` saved by previous Spark versions.
       // Previous `HashingTF` uses `mllib.feature.HashingTF.murmur3Hash`, but new `HashingTF` uses
       // `ml.Feature.FeatureHasher.murmur3Hash`.
       val (majorVersion, _) = majorMinorVersion(metadata.sparkVersion)
-      if (majorVersion < 3) {
-        hashingTF.hashFunc = OldHashingTF.murmur3Hash
+      val hashFunc = if (majorVersion < 3) {
+        OldHashingTF.murmur3Hash _
+      } else {
+        FeatureHasher.murmur3Hash _
       }
+      val hashingTF = new HashingTF(metadata.uid, hashFunc = hashFunc)
+      metadata.getAndSetParams(hashingTF)
       hashingTF
     }
   }
