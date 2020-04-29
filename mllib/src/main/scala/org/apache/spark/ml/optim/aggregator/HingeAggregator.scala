@@ -209,7 +209,8 @@ private[ml] class BlockHingeAggregator(
 
       case sm: SparseMatrix if fitIntercept =>
         BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
-        BLAS.nativeBLAS.daxpy(numFeatures, 1.0, linearGradSumVec.values, 1, gradientSumArray, 1)
+        BLAS.getBLAS(numFeatures).daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
+          gradientSumArray, 1)
         gradientSumArray(numFeatures) += arr.sum
 
       case sm: SparseMatrix if !fitIntercept =>
