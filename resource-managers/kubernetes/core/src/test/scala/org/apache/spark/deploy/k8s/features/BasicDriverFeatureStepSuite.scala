@@ -52,6 +52,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map(("nvidia.com/gpu" -> TestResourceInformation(resourceID, "2", "nvidia.com")))
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, "spark-executor-pod")
       .set(DRIVER_CORES, 2)
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
       .set(DRIVER_MEMORY.key, "256M")
@@ -124,7 +125,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val expectedSparkConf = Map(
       KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
       "spark.app.id" -> KubernetesTestConf.APP_ID,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> kubernetesConf.resourceNamePrefix,
+      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> "spark-executor-pod",
       "spark.kubernetes.submitInDriver" -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> MEMORY_OVERHEAD_FACTOR.defaultValue.get.toString)
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)

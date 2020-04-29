@@ -154,9 +154,10 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     val additionalProps = mutable.Map(
       KUBERNETES_DRIVER_POD_NAME.key -> driverPodName,
       "spark.app.id" -> conf.appId,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> conf.resourceNamePrefix,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
+    conf.executorPodNamePrefix.foreach(additionalProps.put(KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key, _))
+
     // try upload local, resolvable files to a hadoop compatible file system
     Seq(JARS, FILES).foreach { key =>
       val value = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))

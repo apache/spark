@@ -86,6 +86,9 @@ private[spark] class KubernetesDriverConf(
     custom.getOrElse(KubernetesConf.getResourceNamePrefix(appName))
   }
 
+  // We need to bypass this conf to KubernetesExecutorConf for further processing
+  val executorPodNamePrefix: Option[String] = get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+
   override def labels: Map[String, String] = {
     val presetLabels = Map(
       SPARK_APP_ID_LABEL -> appId,
