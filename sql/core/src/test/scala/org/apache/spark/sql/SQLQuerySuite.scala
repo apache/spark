@@ -3432,7 +3432,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Console.withOut(output) {
         df.explain()
       }
-      output.toString.matches("""randn?\(-?[0-9]+\)""")
+      val projectExplainOutput = output.toString.split("\n").find(_.contains("Project")).get
+      assert(projectExplainOutput.matches(""".*randn?\(-?[0-9]+\).*"""))
     }
     val df1 = sql("SELECT rand()")
     assert(df1.schema.head.name === "rand()")
