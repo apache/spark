@@ -60,9 +60,17 @@ has_unique_serde_type <- function(object) {
 # NOTE: In R vectors have same type as objects
 # NOTE: handle writeType in the respective methods because of
 #         some minor idiosyncrasies, e.g. handling of writeObject(list(), con)
-writeObject <- function(object, con, writeType = TRUE) UseMethod("writeObject")
+writeObject <- function(object, con, writeType = TRUE) {
+  #if (is.environment(object)) print(ls.str(object)) else dput(object)
+  UseMethod("writeObject")
+}
 writeObject.default <- function(object, con, writeType = TRUE) {
   stop(paste("Unsupported type for serialization", class(object)))
+}
+writeObject.NULL <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    writeType(object, con)
+  }
 }
 
 # integer same as logical; will cast TRUE -> 1, FALSE -> 0
@@ -147,7 +155,7 @@ writeObject.jobj <- function(object, con, writeType = TRUE) {
   if (writeType) {
     writeType(object, con)
   }
-  writeObject(object$id, writeType = FALSE)
+  writeObject(object$id, con, writeType = FALSE)
 }
 # Used to pass in hash maps required on Java side.
 writeObject.environment <- function(object, con, writeType = TRUE) {
@@ -209,6 +217,9 @@ serializeRow <- function(row) {
 writeType <- function(object, con) UseMethod("writeType")
 writeType.default <- function(object, con) {
   stop("Unsupported type for serialization", class(object))
+}
+writeType.NULL <- function(object, con) {
+  writeBin(as.raw(0x6e), con)
 }
 
 # markers are written into con to signal incoming object
