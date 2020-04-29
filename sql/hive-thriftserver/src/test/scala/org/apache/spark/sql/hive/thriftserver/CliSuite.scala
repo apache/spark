@@ -71,6 +71,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
    *                       is taken as an immediate error condition. That is: if a line containing
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
+   * @param maybeWarehouse an option for warehouse path, which will be set via
+   *                       `hive.metastore.warehouse.dir`.
+   * @param useExternalHiveFile whether to load the hive-site.xml from `src/test/noclasspath` or
+   *                            not, disabled by default
+   * @param metastore which path the embedded derby database for metastore locates. Use the the
+   *                  global `metastorePath` by default
    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
@@ -79,7 +85,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       errorResponses: Seq[String] = Seq("Error:"),
       maybeWarehouse: Option[File] = Some(warehousePath),
       useExternalHiveFile: Boolean = false,
-      maybeMetastore: Option[File] = Some(metastorePath))(
+      metastore: File = metastorePath)(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
@@ -110,7 +116,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     val warehouseConf =
       maybeWarehouse.map(dir => s"--hiveconf ${ConfVars.METASTOREWAREHOUSE}=$dir").getOrElse("")
     // whether to use a separated derby metastore
-    val metastore = maybeMetastore.getOrElse(metastorePath)
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastore;create=true"
@@ -205,7 +210,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       runCliWithin(1.minute,
         maybeWarehouse = None,
         useExternalHiveFile = true,
-        maybeMetastore = Some(metastore))(
+        metastore = metastore)(
         "desc database default;" -> "hive_one",
         "set spark.sql.warehouse.dir;" -> "hive_one")
     } finally {
@@ -232,7 +237,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
           Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
         maybeWarehouse = None,
         useExternalHiveFile = true,
-        maybeMetastore = Some(metastore))(
+        metastore = metastore)(
         "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
         "create database cliTestDb;" -> "",
         "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
@@ -241,7 +246,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       // override conf from --hiveconf too
       runCliWithin(2.minute,
         extraArgs = Seq("--conf", s"spark.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
-        maybeMetastore = Some(metastore))(
+        metastore = metastore)(
         "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
         "create database cliTestDb;" -> "",
         "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
@@ -260,7 +265,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         extraArgs = Seq(
             "--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}1",
             "--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=${sparkWareHouseDir}2"),
-        maybeMetastore = Some(metastore))(
+        metastore = metastore)(
         "desc database default;" -> sparkWareHouseDir.getAbsolutePath.concat("1"))
     }
   }
