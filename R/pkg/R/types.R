@@ -88,8 +88,7 @@ specialtypeshandle <- function(type) {
 checkSchemaInArrow <- function(schema) {
   stopifnot(inherits(schema, "structType"))
 
-  requireNamespace1 <- requireNamespace
-  if (!requireNamespace1("arrow", quietly = TRUE)) {
+  if (!requireNamespace("arrow", quietly = TRUE)) {
     stop("'arrow' package should be installed.")
   }
 
