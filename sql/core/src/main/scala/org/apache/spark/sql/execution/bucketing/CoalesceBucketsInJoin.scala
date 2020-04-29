@@ -18,15 +18,14 @@
 package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This rule injects a hint if one side of two bucketed tables can be coalesced
- * when the two bucketed tables are inner-joined and they differ in the number of buckets.
+ * This rule adds a `CoalesceBuckets` logical plan if one side of two bucketed tables can be
+ * coalesced when the two bucketed tables are joined and they differ in the number of buckets.
  */
 object CoalesceBucketsInJoin extends Rule[LogicalPlan]  {
   private def isPlanEligible(plan: LogicalPlan): Boolean = {
@@ -51,16 +50,12 @@ object CoalesceBucketsInJoin extends Rule[LogicalPlan]  {
     }
   }
 
-  private def mayCoalesce(
-      numBuckets1: Int,
-      numBuckets2: Int,
-      maxNumBucketsDiff: Int): Option[Int] = {
+  private def mayCoalesce(numBuckets1: Int, numBuckets2: Int, conf: SQLConf): Option[Int] = {
     assert(numBuckets1 != numBuckets2)
     val (small, large) = (math.min(numBuckets1, numBuckets2), math.max(numBuckets1, numBuckets2))
     // A bucket can be coalesced only if the bigger number of buckets is divisible by the smaller
     // number of buckets because bucket id is calculated by modding the total number of buckets.
-    if ((large % small == 0) &&
-      ((large - small) <= maxNumBucketsDiff)) {
+    if ((large % small == 0) && ((large - small) <= conf.coalesceBucketsInJoinMaxNumBucketsDiff)) {
       Some(small)
     } else {
       None
@@ -96,10 +91,7 @@ object CoalesceBucketsInJoin extends Rule[LogicalPlan]  {
       plan transform {
         case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
             if numLeftBuckets != numRightBuckets =>
-          mayCoalesce(
-            numLeftBuckets,
-            numRightBuckets,
-            sqlConf.coalesceBucketsInJoinMaxNumBucketsDiff).map { numCoalescedBuckets =>
+          mayCoalesce(numLeftBuckets, numRightBuckets, sqlConf).map { numCoalescedBuckets =>
             if (numCoalescedBuckets != numLeftBuckets) {
               join.copy(left = addCoalesceBuckets(join.left, numCoalescedBuckets))
             } else {
