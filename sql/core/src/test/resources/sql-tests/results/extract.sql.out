@@ -135,7 +135,7 @@ select extract(day from c), extract(day from i) from t
 -- !query schema
 struct<extract('day' FROM t.`c`):int,extract('day' FROM t.`i`):int>
 -- !query output
-6	30
+6	31
 
 
 -- !query
@@ -143,7 +143,7 @@ select extract(d from c), extract(d from i) from t
 -- !query schema
 struct<extract('d' FROM t.`c`):int,extract('d' FROM t.`i`):int>
 -- !query output
-6	30
+6	31
 
 
 -- !query
@@ -151,7 +151,7 @@ select extract(days from c), extract(days from i) from t
 -- !query schema
 struct<extract('days' FROM t.`c`):int,extract('days' FROM t.`i`):int>
 -- !query output
-6	30
+6	31
 
 
 -- !query
@@ -199,7 +199,7 @@ select extract(hour from c), extract(hour from i) from t
 -- !query schema
 struct<extract('hour' FROM t.`c`):int,extract('hour' FROM t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
@@ -207,7 +207,7 @@ select extract(h from c), extract(h from i) from t
 -- !query schema
 struct<extract('h' FROM t.`c`):int,extract('h' FROM t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
@@ -215,7 +215,7 @@ select extract(hours from c), extract(hours from i) from t
 -- !query schema
 struct<extract('hours' FROM t.`c`):int,extract('hours' FROM t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
@@ -223,7 +223,7 @@ select extract(hr from c), extract(hr from i) from t
 -- !query schema
 struct<extract('hr' FROM t.`c`):int,extract('hr' FROM t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
@@ -231,7 +231,7 @@ select extract(hrs from c), extract(hrs from i) from t
 -- !query schema
 struct<extract('hrs' FROM t.`c`):int,extract('hrs' FROM t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
@@ -457,7 +457,7 @@ select date_part('day', c), date_part('day', i) from t
 -- !query schema
 struct<date_part('day', t.`c`):int,date_part('day', t.`i`):int>
 -- !query output
-6	30
+6	31
 
 
 -- !query
@@ -465,7 +465,7 @@ select date_part('d', c), date_part('d', i) from t
 -- !query schema
 struct<date_part('d', t.`c`):int,date_part('d', t.`i`):int>
 -- !query output
-6	30
+6	31
 
 
 -- !query
@@ -473,7 +473,7 @@ select date_part('days', c), date_part('days', i) from t
 -- !query schema
 struct<date_part('days', t.`c`):int,date_part('days', t.`i`):int>
 -- !query output
-6	30
+6	31
 
 
 -- !query
@@ -521,7 +521,7 @@ select date_part('hour', c), date_part('hour', i) from t
 -- !query schema
 struct<date_part('hour', t.`c`):int,date_part('hour', t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
@@ -529,7 +529,7 @@ select date_part('h', c), date_part('h', i) from t
 -- !query schema
 struct<date_part('h', t.`c`):int,date_part('h', t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
@@ -537,7 +537,7 @@ select date_part('hours', c), date_part('hours', i) from t
 -- !query schema
 struct<date_part('hours', t.`c`):int,date_part('hours', t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
@@ -545,7 +545,7 @@ select date_part('hr', c), date_part('hr', i) from t
 -- !query schema
 struct<date_part('hr', t.`c`):int,date_part('hr', t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
@@ -553,7 +553,7 @@ select date_part('hrs', c), date_part('hrs', i) from t
 -- !query schema
 struct<date_part('hrs', t.`c`):int,date_part('hrs', t.`i`):bigint>
 -- !query output
-7	40
+7	16
 
 
 -- !query
