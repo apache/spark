@@ -2618,7 +2618,7 @@ setMethod("join",
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop("joinType must be one of the following types: ",
-                       toString(sQuote(valid_join_types, FALSE)))
+                       "'", paste(valid_join_types, collapse = "', '"), "'")
                 }
               }
             }
