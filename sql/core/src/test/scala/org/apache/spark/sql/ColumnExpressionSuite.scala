@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.Date
+import java.sql.{Date, Timestamp}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -474,6 +474,48 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       .foreach { s =>
         assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
       }
+  }
+
+  test("SPARK-31553: isInCollection - collection element types") {
+    val expected = Seq(Row(true), Row(false))
+    Seq(0, 1, 10).foreach { threshold =>
+      withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> threshold.toString) {
+        checkAnswer(Seq(0).toDS.select($"value".isInCollection(Seq(null))), Seq(Row(null)))
+        checkAnswer(
+          Seq(true).toDS.select($"value".isInCollection(Seq(true, false))),
+          Seq(Row(true)))
+        checkAnswer(
+          Seq(0.toByte, 1.toByte).toDS.select($"value".isInCollection(Seq(0.toByte, 2.toByte))),
+          expected)
+        checkAnswer(
+          Seq(0.toShort, 1.toShort).toDS.select($"value".isInCollection(Seq(0.toShort, 2.toShort))),
+          expected)
+        checkAnswer(Seq(0, 1).toDS.select($"value".isInCollection(Seq(0, 2))), expected)
+        checkAnswer(Seq(0L, 1L).toDS.select($"value".isInCollection(Seq(0L, 2L))), expected)
+        checkAnswer(Seq(0.0f, 1.0f).toDS.select($"value".isInCollection(Seq(0.0f, 2.0f))), expected)
+        checkAnswer(Seq(0.0D, 1.0D).toDS.select($"value".isInCollection(Seq(0.0D, 2.0D))), expected)
+        checkAnswer(
+          Seq(BigDecimal(0), BigDecimal(2)).toDS
+            .select($"value".isInCollection(Seq(BigDecimal(0), BigDecimal(1)))),
+          expected)
+        checkAnswer(
+          Seq("abc", "def").toDS.select($"value".isInCollection(Seq("abc", "xyz"))),
+          expected)
+        checkAnswer(
+          Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-05-01")).toDS
+            .select($"value".isInCollection(
+              Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-04-30")))),
+          expected)
+        checkAnswer(
+          Seq(new Timestamp(0), new Timestamp(2)).toDS
+            .select($"value".isInCollection(Seq(new Timestamp(0), new Timestamp(1)))),
+          expected)
+        checkAnswer(
+          Seq(Array("a", "b"), Array("c", "d")).toDS
+            .select($"value".isInCollection(Seq(Array("a", "b"), Array("x", "z")))),
+          expected)
+      }
+    }
   }
 
   test("&&") {
