@@ -213,15 +213,6 @@ serializeRow <- function(row) {
   rawConnectionValue(rawObj)
 }
 
-
-writeType <- function(object, con) UseMethod("writeType")
-writeType.default <- function(object, con) {
-  stop("Unsupported type for serialization", class(object))
-}
-writeType.NULL <- function(object, con) {
-  writeBin(as.raw(0x6e), con)
-}
-
 # markers are written into con to signal incoming object
 #   type according to the following mapping:
 #        type marker  raw
@@ -241,6 +232,14 @@ writeType.NULL <- function(object, con) {
 
 # 'is.na' only handles atomic vectors, lists and pairlists;
 #   all atomic classes except complex are handled; complex will error
+
+writeType <- function(object, con) UseMethod("writeType")
+writeType.default <- function(object, con) {
+  stop("Unsupported type for serialization", class(object))
+}
+writeType.NULL <- function(object, con) {
+  writeBin(as.raw(0x6e), con)
+}
 
 # typically, non-scalar value written as array; array writes array marker,
 #   then the component type, then the length, then the elements. the exception
