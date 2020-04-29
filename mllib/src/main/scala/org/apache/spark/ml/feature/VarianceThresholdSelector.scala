@@ -153,7 +153,7 @@ class VarianceThresholdSelectorModel private[ml](
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val newField =
-      SelectorModel.prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol))
+      SelectorModel.prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol), true)
     SchemaUtils.appendColumn(schema, newField)
   }
 

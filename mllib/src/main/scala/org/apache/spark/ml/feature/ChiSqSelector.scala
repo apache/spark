@@ -105,6 +105,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
     new ChiSqSelectorModel(uid, indices)
   }
 
+  @Since("1.6.0")
   override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
      super.fit(dataset)
   }
@@ -133,6 +134,8 @@ final class ChiSqSelectorModel private[ml] (
   extends SelectorModel[ChiSqSelectorModel](uid, selectedFeatures)  {
 
   import ChiSqSelectorModel._
+
+  override protected def isNumericAttribute = false
 
   /** @group setParam */
   @Since("1.6.0")

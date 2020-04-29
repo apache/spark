@@ -155,7 +155,6 @@ private[feature] trait SelectorParams extends Params
  * By default, the selection method is `numTopFeatures`, with the default number of top features
  * set to 50.
  */
-@Since("3.1.0")
 private[ml] abstract class Selector[T <: SelectorModel[T]]
   extends Estimator[T] with SelectorParams with DefaultParamsWritable {
 
@@ -297,6 +296,8 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
   @Since("3.1.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  protected def isNumericAttribute = true
+
   @Since("3.1.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
@@ -308,14 +309,15 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val newField =
-      SelectorModel.prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol))
+      SelectorModel.prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol),
+        isNumericAttribute)
     SchemaUtils.appendColumn(schema, newField)
   }
 }
 
-object SelectorModel {
+private[feature] object SelectorModel {
 
-  private[ml] def transform(
+  def transform(
       dataset: Dataset[_],
       selectedFeatures: Array[Int],
       outputSchema: StructType,
@@ -344,23 +346,28 @@ object SelectorModel {
   /**
    * Prepare the output column field, including per-feature metadata.
    */
-  private[ml] def prepOutputField(
+  def prepOutputField(
       schema: StructType,
       selectedFeatures: Array[Int],
       outputCol: String,
-      featuresCol: String): StructField = {
+      featuresCol: String,
+      isNumericAttribute: Boolean): StructField = {
     val selector = selectedFeatures.toSet
     val origAttrGroup = AttributeGroup.fromStructField(schema(featuresCol))
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
     } else {
-      Array.fill[Attribute](selector.size)(NominalAttribute.defaultAttr)
+      if (isNumericAttribute) {
+        Array.fill[Attribute](selector.size)(NumericAttribute.defaultAttr)
+      } else {
+        Array.fill[Attribute](selector.size)(NominalAttribute.defaultAttr)
+      }
     }
     val newAttributeGroup = new AttributeGroup(outputCol, featureAttributes)
     newAttributeGroup.toStructField()
   }
 
-  private[ml] def compressSparse(
+  def compressSparse(
       indices: Array[Int],
       values: Array[Double],
       selectedFeatures: Array[Int]): (Array[Int], Array[Double]) = {
