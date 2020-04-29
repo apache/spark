@@ -694,9 +694,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         assert(row(0).asInstanceOf[Long] === v)
       }
     }
+
     withCLIServiceClient { client =>
       val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
+      
       val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
       val operationHandle = client.executeStatement(
         sessionHandle,
