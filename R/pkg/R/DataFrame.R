@@ -691,13 +691,13 @@ setMethod("storageLevel",
 
 #' Coalesce
 #'
-#' Returns a new SparkDataFrame that has exactly \code{"rtitions} partitions.
+#' Returns a new SparkDataFrame that has exactly \code{numPartitions} partitions.
 #' This operation results in a narrow dependency, e.g. if you go from 1000 partitions to 100
 #' partitions, there will not be a shuffle, instead each of the 100 new partitions will claim 10 of
 #' the current partitions. If a larger number of partitions is requested, it will stay at the
 #' current number of partitions.
 #'
-#' However, if you're doing a drastic coalesce on a SparkDataFrame, e.g. to "rtitions = 1,
+#' However, if you're doing a drastic coalesce on a SparkDataFrame, e.g. to numPartitions = 1,
 #' this may result in your computation taking place on fewer nodes than
 #' you like (e.g. one node in the case of numPartitions = 1). To avoid this,
 #' call \code{repartition}. This will add a shuffle step, but means the
@@ -2618,7 +2618,7 @@ setMethod("join",
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop("joinType must be one of the following types: ",
-                       "'", paste(valid_join_types, collapse = "', '"), "'")
+                       toString(sQuote(valid_join_types, FALSE)))
                 }
               }
             }

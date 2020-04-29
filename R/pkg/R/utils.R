@@ -355,7 +355,7 @@ varargsToStrEnv <- function(...) {
         value <- pairs[[name]]
         if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
           stop("Unsupported type for ", name, " : ", toString(class(value)), ". ",
-               "Supported types are logical, numeric, character and NULL.")
+               "Supported types are logical, numeric, character and NULL.", call. = FALSE)
         }
         if (is.logical(value)) {
           env[[name]] <- tolower(as.character(value))
@@ -369,7 +369,7 @@ varargsToStrEnv <- function(...) {
   }
 
   if (length(ignoredNames) != 0) {
-    warning("Unnamed arguments ignored: ", toString(ignoredNames), ".")
+    warning("Unnamed arguments ignored: ", toString(ignoredNames), ".", call. = FALSE)
   }
   env
 }
