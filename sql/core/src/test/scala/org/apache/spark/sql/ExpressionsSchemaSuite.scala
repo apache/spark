@@ -86,10 +86,10 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
   /** A single SQL query's SQL and schema. */
   protected case class QueryOutput(
-    className: String,
-    funcName: String,
-    sql: String = "N/A",
-    schema: String = "N/A") {
+      className: String,
+      funcName: String,
+      sql: String = "N/A",
+      schema: String = "N/A") {
     override def toString: String = {
       s"| $className | $funcName | $sql | $schema |"
     }
