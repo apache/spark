@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
@@ -44,6 +45,35 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
     val result =
       s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)} ${scan.description()}"
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, result)
+  }
+
+  /**
+   * Shorthand for calling redactString() without specifying redacting rules
+   */
+  protected def redact(text: String): String = {
+    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
+  }
+
+
+  override def verboseStringWithOperatorId(): String = {
+    val metaDataStr = if (scan.isInstanceOf[SupportsMetadata]) {
+      val scanWithExplainSupport: SupportsMetadata = scan.asInstanceOf[SupportsMetadata]
+      val metadataStr = scanWithExplainSupport.getMetaData.toSeq.sorted.filterNot {
+        case (_, value) if (value.isEmpty || value.equals("[]")) => true
+        case (_, _) => false
+      }.map {
+        case (key, value) => s"$key: ${redact(value)}"
+      }
+      metadataStr
+    } else {
+      Seq(scan.description())
+    }
+
+    s"""
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
+       |${metaDataStr.mkString("\n")}
+       |""".stripMargin
   }
 
   override def outputPartitioning: physical.Partitioning = scan match {

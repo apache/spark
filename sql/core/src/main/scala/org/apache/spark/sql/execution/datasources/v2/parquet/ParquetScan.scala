@@ -93,6 +93,12 @@ case class ParquetScan(
     super.description() + ", PushedFilters: " + seqToString(pushedFilters)
   }
 
+  override def getMetaData(): Map[String, String] = {
+    super.metaData ++ Map(
+      "PushedFilers" -> seqToString(pushedFilters),
+      "Format" -> "parquet")
+  }
+
   override def withFilters(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
     this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)

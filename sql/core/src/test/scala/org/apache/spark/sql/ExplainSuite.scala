@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, E
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
 
@@ -357,6 +357,74 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           joined,
           SimpleMode,
           "SelectedBucketsCount: 8 out of 8 (Coalesced to 4)" :: Nil: _*)
+      }
+    }
+  }
+
+  test("Explain formatted output for scan operator for datasource V2") {
+    withTempDir { dir =>
+      Seq("parquet", "orc", "csv", "json").foreach { format =>
+        val basePath = dir.getCanonicalPath + "/" + format
+        val expected_plan_fragment =
+          s"""
+             |\\(1\\) BatchScan
+             |Output \\[2\\]: \\[value#x, id#x\\]
+             |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
+             |Format: $format
+             |Location: InMemoryFileIndex\\[.*\\]
+             |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
+             |PushedFilers: \\[IsNotNull\\(id\\), IsNotNull\\(value\\), GreaterThan\\(id,1\\), GreaterThan\\(value,2\\)\\]
+             |ReadSchema: struct\\<value:int\\>
+             |""".stripMargin.trim
+
+        val expected_plan_fragment_csv =
+          s"""
+             |\\(1\\) BatchScan
+             |Output \\[2\\]: \\[value#x, id#x\\]
+             |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
+             |Format: $format
+             |Location: InMemoryFileIndex\\[.*\\]
+             |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
+             |PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
+             |ReadSchema: struct\\<value:int\\>
+             |""".stripMargin.trim
+
+        val expected_plan_fragment_json =
+          s"""
+             |\\(1\\) BatchScan
+             |Output \\[2\\]: \\[value#x, id#x\\]
+             |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
+             |Format: $format
+             |Location: InMemoryFileIndex\\[.*\\]
+             |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
+             |ReadSchema: struct\\<value:int\\>
+             |""".stripMargin.trim
+
+        spark.range(10)
+          .select(col("id"), col("id").as("value"))
+          .write.option("header", true)
+          .partitionBy("id")
+          .format(format)
+          .save(basePath)
+        val readSchema =
+          StructType(Seq(StructField("id", IntegerType), StructField("value", IntegerType)))
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+          val df = spark
+            .read
+            .schema(readSchema)
+            .option("header", true)
+            .format(format)
+            .load(basePath).where($"id" > 1 && $"value" > 2)
+          val normalizedOutput = getNormalizedExplain(df, FormattedMode)
+          format match {
+            case "csv" =>
+              assert(expected_plan_fragment_csv.r.findAllMatchIn(normalizedOutput).length == 1)
+            case "json" =>
+              assert(expected_plan_fragment_json.r.findAllMatchIn(normalizedOutput).length == 1)
+            case _ =>
+              assert(expected_plan_fragment.r.findAllMatchIn(normalizedOutput).length == 1)
+          }
+        }
       }
     }
   }

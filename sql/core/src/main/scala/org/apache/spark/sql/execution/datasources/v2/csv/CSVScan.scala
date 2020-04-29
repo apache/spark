@@ -107,4 +107,10 @@ case class CSVScan(
   override def description(): String = {
     super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
   }
+
+  override def getMetaData(): Map[String, String] = {
+    super.metaData ++ Map(
+      "PushedFilers" -> seqToString(pushedFilters),
+      "Format" -> "csv")
+  }
 }
