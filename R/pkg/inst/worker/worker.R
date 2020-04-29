@@ -80,7 +80,7 @@ outputResult <- function(serializer, output, outputCon) {
     SparkR:::writeSerializeInArrow(output, outputCon)
   } else {
     # write lines one-by-one with flag
-    lapply(output, writeObject, outputCon, writeType = FALSE)
+    for (obj in output) writeObject(obj, outputCon, writeType = FALSE)
   }
 }
 
