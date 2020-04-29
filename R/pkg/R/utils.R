@@ -354,10 +354,8 @@ varargsToStrEnv <- function(...) {
       } else {
         value <- pairs[[name]]
         if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
-          stop(gettextf("Unsupported type for %s : %s. ",
-                        name, class(value), domain = "R-SparkR"),
-               "Supported types are logical, numeric, character and NULL.",
-               call. = FALSE, domain = NA)
+          stop("Unsupported type for ", name, " : ", toString(class(value)), ". ",
+               "Supported types are logical, numeric, character and NULL.")
         }
         if (is.logical(value)) {
           env[[name]] <- tolower(as.character(value))
@@ -371,9 +369,7 @@ varargsToStrEnv <- function(...) {
   }
 
   if (length(ignoredNames) != 0) {
-    warning(gettextf("Unnamed arguments ignored: %s.",
-                     paste(ignoredNames, collapse = ", "), domain = "R-SparkR"),
-            call. = FALSE, domain = NA)
+    warning("Unnamed arguments ignored: ", toString(ignoredNames))
   }
   env
 }

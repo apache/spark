@@ -103,14 +103,11 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
   if (!is.na(file.info(packageLocalDir)$isdir) && !overwrite) {
     if (releaseUrl != "") {
-      message(gettextf("%s found, setting SPARK_HOME to %s",
-                       packageName, packageLocalDir, domain = "R-SparkR"),
-              domain = NA)
+      message(packageName, " found, setting SPARK_HOME to ", packageLocalDir)
     } else {
-      message(gettextf("%s for Hadoop %s found, setting SPARK_HOME to %s",
-                       version, if (hadoopVersion == "without") "Free build" else hadoopVersion,
-                       packageLocalDir, domain = "R-SparkR"),
-              domain = NA)
+      message(version, " for Hadoop ",
+              if (hadoopVersion == "without") "Free build" else hadoopVersion,
+              " found, setting SPARK_HOME to ", packageLocalDir)
     }
     Sys.setenv(SPARK_HOME = packageLocalDir)
     return(invisible(packageLocalDir))
@@ -200,11 +197,9 @@ robustDownloadTar <- function(mirrorUrl, version, hadoopVersion, packageName, pa
     # remove any partially downloaded file
     unlink(packageLocalPath)
     message("Unable to download from default mirror site: ", mirrorUrl)
-    stop(gettextf("Unable to download Spark %s for Hadoop %s. ",
-                  version, if (hadoopVersion == "without") "Free build" else hadoopVersion,
-                  domain = "R-SparkR"),
-         "Please check network connection, Hadoop version, or provide other mirror sites.",
-         domain = NA)
+    stop("Unable to download Spark ", version,
+         " for Hadoop ", if (hadoopVersion == "without") "Free build" else hadoopVersion,
+         ". Please check network connection, Hadoop version, or provide other mirror sites.")
   }
 }
 
@@ -230,10 +225,9 @@ getPreferredMirror <- function(version, packageName) {
 
 directDownloadTar <- function(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
   packageRemotePath <- paste0(file.path(mirrorUrl, version, packageName), ".tgz")
-  message(gettextf("Downloading %s for Hadoop %s from:\n- %s",
-                   version, if (hadoopVersion == "without") "Free build" else hadoopVersion,
-                   packageRemotePath, domain = "R-SparkR"),
-          domain = NA)
+  message("Downloading ", version, " for Hadoop ",
+          if (hadoopVersion == "without") "Free build" else hadoopVersion,
+          " from:\n- ", packageRemotePath)
   downloadUrl(packageRemotePath, packageLocalPath)
 }
 
@@ -289,7 +283,7 @@ sparkCachePath <- function() {
         Sys.getenv("XDG_CACHE_HOME", file.path(Sys.getenv("HOME"), ".cache")), "spark")
     }
   } else {
-    stop(gettextf("Unknown OS: %s", .Platform$OS.type, domain = "R-SparkR"), domain = NA)
+    stop("Unknown OS: ", .Platform$OS.type)
   }
   normalizePath(path, mustWork = FALSE)
 }

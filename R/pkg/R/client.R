@@ -102,17 +102,9 @@ checkJavaVersion <- function() {
     javaVersionNum <- as.integer(versions[1])
   }
   if (javaVersionNum < minJavaVersion || javaVersionNum >= maxJavaVersion) {
-    stop(
-      gettextf(
-        "Java version, greater than or equal to %s and less than %s, ",
-        minJavaVersion, maxJavaVersion, domain = "R-SparkR"
-      ),
-      gettextf(
-        "is required for this package; found version: %s",
-        javaVersionStr, domain = "R-SparkR"
-      ),
-      domain = NA
-    )
+    stop("Java version, greater than or equal to ", minJavaVersion,
+         " and less than ", maxJavaVersion, ", is required for this ",
+         "package; found version: ", javaVersionStr)
   }
   return(javaVersionNum)
 }

@@ -112,7 +112,7 @@ sparkR.conf <- function(key, defaultValue) {
               error = function(e) {
                 estr <- as.character(e)
                 if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
-                  stop(gettextf("Config '%s' is not set", key, domain = "R-SparkR"), domain = NA)
+                  stop("Config '", key, "' is not set")
                 } else {
                   stop("Unknown error: ", estr)
                 }
@@ -208,8 +208,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     names <- lapply(names, function(n) {
       nn <- gsub(".", "_", n, fixed = TRUE)
       if (nn != n) {
-        warning(gettextf("Use %s instead of %s as column name",
-                         nn, n, domain = "R-SparkR"), domain = NA)
+        warning("Use ", nn, " instead of ", n, " as column name")
       }
       nn
     })
