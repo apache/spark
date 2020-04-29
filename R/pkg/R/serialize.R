@@ -115,13 +115,6 @@ writeObject.raw <- function(object, con, writeType = TRUE) {
 
 writeObject.struct <-
 writeObject.list <- function(object, con, writeType = TRUE) {
-  # TODO: Empty lists are given type "character" right now.
-  # This may not work if the Java side expects array of any other type.
-  if (!length(object)) {
-    writeType("", con)
-    writeObject(0L, con) # i.e., length(object)
-    return(invisible())
-  }
   if (has_unique_serde_type(object)) {
     class(object) = 'ArrayList'
     return(writeObject(object, con, writeType))
@@ -136,7 +129,13 @@ writeObject.ArrayList <- function(object, con, writeType = TRUE) {
   if (writeType) {
     writeType(array(), con)
   }
-  for (elem in object) writeObject(elem, con)
+
+  # TODO: Empty lists are given type "character" right now.
+  # This may not work if the Java side expects array of any other type.
+  writeType(if (length(object)) object[[1L]] else "", con)
+
+  writeObject(length(object), con, writeType = FALSE)
+  for (elem in object) writeObject(elem, con, writeType = FALSE)
 }
 
 writeObject.jobj <- function(object, con, writeType = TRUE) {
@@ -258,10 +257,12 @@ writeType.raw <- function(object, con) {
 writeType.array <- function(object, con) {
   writeBin(as.raw(0x61), con)
 }
-# only called from writeObject.list, which already confirmed
-#   we cannot use a single type
 writeType.list <- function(object, con) {
-  writeBin(as.raw(0x6c), con)
+  if (has_unique_serde_type(object)) {
+    writeType(array(), con)
+  } else {
+    writeBin(as.raw(0x6c), con)
+  }
 }
 writeType.struct <- function(object, con) {
   writeBin(as.raw(0x73), con)
