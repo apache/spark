@@ -538,6 +538,9 @@ class ResolveSessionCatalog(
     case ShowTableProperties(r: ResolvedTable, propertyKey) if isSessionCatalog(r.catalog) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
+    case ShowTableProperties(r: ResolvedView, propertyKey) =>
+      ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
+
     case DescribeFunctionStatement(nameParts, extended) =>
       val functionIdent =
         parseSessionCatalogFunctionIdentifier(nameParts, "DESCRIBE FUNCTION")
