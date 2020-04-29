@@ -177,19 +177,11 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     }
 
     // Compare results.
-    assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
-      outputs.size
-    }
+    assert(expectedOutputs.size == outputs.size, s"Number of queries not equals")
 
-    outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
-      assertResult(expected.sql,
-        s"SQL query did not match for query #$i\n${expected.sql}") {
-        output.sql
-      }
-      assertResult(expected.schema,
-        s"Schema did not match for query #$i\n${expected.sql}: $output") {
-        output.schema
-      }
+    outputs.zip(expectedOutputs).foreach { case (output, expected) =>
+      assert(expected.sql == output.sql, "SQL query did not match")
+      assert(expected.schema == output.schema, s"Schema did not match for query ${expected.sql}")
     }
   }
 }
