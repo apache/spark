@@ -881,6 +881,25 @@ class SessionCatalog(
   }
 
   /**
+   * List all matching views in the specified database, including local temporary views.
+   */
+  def listViews(db: String, pattern: String): Seq[TableIdentifier] = {
+    val dbName = formatDatabaseName(db)
+    val dbViews = if (dbName == globalTempViewManager.database) {
+      globalTempViewManager.listViewNames(pattern).map { name =>
+        TableIdentifier(name, Some(globalTempViewManager.database))
+      }
+    } else {
+      requireDbExists(dbName)
+      externalCatalog.listViews(dbName, pattern).map { name =>
+        TableIdentifier(name, Some(dbName))
+      }
+    }
+
+    dbViews ++ listLocalTempViews(pattern)
+  }
+
+  /**
    * List all matching local temporary views.
    */
   def listLocalTempViews(pattern: String): Seq[TableIdentifier] = {

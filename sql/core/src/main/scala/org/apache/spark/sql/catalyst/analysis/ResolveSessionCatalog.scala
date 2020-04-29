@@ -291,7 +291,7 @@ class ResolveSessionCatalog(
       }
 
     case c @ CreateTableAsSelectStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
@@ -307,7 +307,7 @@ class ResolveSessionCatalog(
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
           convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
-          writeOptions = c.options,
+          writeOptions = c.writeOptions,
           ignoreIfExists = c.ifNotExists)
       }
 
@@ -335,7 +335,7 @@ class ResolveSessionCatalog(
       }
 
     case c @ ReplaceTableAsSelectStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw new AnalysisException("REPLACE TABLE AS SELECT is only supported with v2 tables.")
@@ -347,7 +347,7 @@ class ResolveSessionCatalog(
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
           convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
-          writeOptions = c.options,
+          writeOptions = c.writeOptions,
           orCreate = c.orCreate)
       }
 
@@ -545,7 +545,24 @@ class ResolveSessionCatalog(
         replace,
         viewType)
 
+    case ShowViews(resolved: ResolvedNamespace, pattern) =>
+      resolved match {
+        case SessionCatalogAndNamespace(_, ns) =>
+          // Fallback to v1 ShowViewsCommand since there is no view API in v2 catalog
+          assert(ns.nonEmpty)
+          if (ns.length != 1) {
+            throw new AnalysisException(s"The database name is not valid: ${ns.quoted}")
+          }
+          ShowViewsCommand(ns.head, pattern)
+        case _ =>
+          throw new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
+            "SHOW VIEWS, only SessionCatalog supports this command.")
+      }
+
     case ShowTableProperties(r: ResolvedTable, propertyKey) if isSessionCatalog(r.catalog) =>
+      ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
+
+    case ShowTableProperties(r: ResolvedView, propertyKey) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
     case DescribeFunctionStatement(nameParts, extended) =>

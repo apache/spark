@@ -39,6 +39,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -185,6 +186,8 @@ private[spark] class DAGScheduler(
 
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.get(TEST_NO_STAGE_RETRY)
+
+  private val shouldMergeResourceProfiles = sc.getConf.get(config.RESOURCE_PROFILE_MERGE_CONFLICTS)
 
   /**
    * Whether to unregister all the outputs on the host in condition that we receive a FetchFailure,
@@ -447,10 +450,27 @@ private[spark] class DAGScheduler(
       stageResourceProfiles: HashSet[ResourceProfile]): ResourceProfile = {
     logDebug(s"Merging stage rdd profiles: $stageResourceProfiles")
     val resourceProfile = if (stageResourceProfiles.size > 1) {
-      // add option later to actually merge profiles - SPARK-29153
-      throw new IllegalArgumentException("Multiple ResourceProfile's specified in the RDDs for " +
-        "this stage, please resolve the conflicting ResourceProfile's as Spark doesn't" +
-        "currently support merging them.")
+      if (shouldMergeResourceProfiles) {
+        val startResourceProfile = stageResourceProfiles.head
+        val mergedProfile = stageResourceProfiles.drop(1)
+          .foldLeft(startResourceProfile)((a, b) => mergeResourceProfiles(a, b))
+        // compared merged profile with existing ones so we don't add it over and over again
+        // if the user runs the same operation multiple times
+        val resProfile = sc.resourceProfileManager.getEquivalentProfile(mergedProfile)
+        resProfile match {
+          case Some(existingRp) => existingRp
+          case None =>
+            // this ResourceProfile could be different if it was merged so we have to add it to
+            // our ResourceProfileManager
+            sc.resourceProfileManager.addResourceProfile(mergedProfile)
+            mergedProfile
+        }
+      } else {
+        throw new IllegalArgumentException("Multiple ResourceProfiles specified in the RDDs for " +
+          "this stage, either resolve the conflicting ResourceProfiles yourself or enable " +
+          s"${config.RESOURCE_PROFILE_MERGE_CONFLICTS.key} and understand how Spark handles " +
+          "the merging them.")
+      }
     } else {
       if (stageResourceProfiles.size == 1) {
         stageResourceProfiles.head
@@ -459,6 +479,27 @@ private[spark] class DAGScheduler(
       }
     }
     resourceProfile
+  }
+
+  // This is a basic function to merge resource profiles that takes the max
+  // value of the profiles. We may want to make this more complex in the future as
+  // you may want to sum some resources (like memory).
+  private[scheduler] def mergeResourceProfiles(
+      r1: ResourceProfile,
+      r2: ResourceProfile): ResourceProfile = {
+    val mergedExecKeys = r1.executorResources ++ r2.executorResources
+    val mergedExecReq = mergedExecKeys.map { case (k, v) =>
+        val larger = r1.executorResources.get(k).map( x =>
+          if (x.amount > v.amount) x else v).getOrElse(v)
+        k -> larger
+    }
+    val mergedTaskKeys = r1.taskResources ++ r2.taskResources
+    val mergedTaskReq = mergedTaskKeys.map { case (k, v) =>
+      val larger = r1.taskResources.get(k).map( x =>
+        if (x.amount > v.amount) x else v).getOrElse(v)
+      k -> larger
+    }
+    new ResourceProfile(mergedExecReq, mergedTaskReq)
   }
 
   /**
@@ -1135,6 +1176,27 @@ private[spark] class DAGScheduler(
     }
   }
 
+  /**
+   * `PythonRunner` needs to know what the pyspark memory and cores settings are for the profile
+   * being run. Pass them in the local properties of the task if it's set for the stage profile.
+   */
+  private def addPySparkConfigsToProperties(stage: Stage, properties: Properties): Unit = {
+    val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
+    val pysparkMem = rp.getPySparkMemory
+    // use the getOption on EXECUTOR_CORES.key instead of using the EXECUTOR_CORES config reader
+    // because the default for this config isn't correct for standalone mode. Here we want
+    // to know if it was explicitly set or not. The default profile always has it set to either
+    // what user specified or default so special case it here.
+    val execCores = if (rp.id == DEFAULT_RESOURCE_PROFILE_ID) {
+      sc.conf.getOption(config.EXECUTOR_CORES.key)
+    } else {
+      val profCores = rp.getExecutorCores.map(_.toString)
+      if (profCores.isEmpty) sc.conf.getOption(config.EXECUTOR_CORES.key) else profCores
+    }
+    pysparkMem.map(mem => properties.setProperty(PYSPARK_MEMORY_LOCAL_PROPERTY, mem.toString))
+    execCores.map(cores => properties.setProperty(EXECUTOR_CORES_LOCAL_PROPERTY, cores))
+  }
+
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     logDebug("submitMissingTasks(" + stage + ")")
@@ -1154,6 +1216,7 @@ private[spark] class DAGScheduler(
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
     val properties = jobIdToActiveJob(jobId).properties
+    addPySparkConfigsToProperties(stage, properties)
 
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are

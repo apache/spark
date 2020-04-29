@@ -481,7 +481,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
     }
 
-    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      val timeZone = TimeZone.getTimeZone(zid)
       checkTimestampStats(DateType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
         assert(stats.min.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(start))
         assert(stats.max.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(end - 1))

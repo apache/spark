@@ -31,10 +31,11 @@ import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
 import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -78,7 +79,8 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     new Array[Byte](Decimal.minBytesForPrecision(DecimalType.MAX_PRECISION))
 
   // Whether to rebase datetimes from Gregorian to Julian calendar in write
-  private val rebaseDateTime: Boolean = SQLConf.get.parquetRebaseDateTimeEnabled
+  private val rebaseDateTime: Boolean =
+    SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE)
 
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
@@ -101,7 +103,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     val metadata = Map(
       SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT,
       ParquetReadSupport.SPARK_METADATA_KEY -> schemaString
-    ).asJava
+    ) ++ (if (rebaseDateTime) Some(SPARK_LEGACY_DATETIME -> "") else None)
 
     logInfo(
       s"""Initialized Parquet WriteSupport with Catalyst schema:
@@ -110,7 +112,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
          |$messageType
        """.stripMargin)
 
-    new WriteContext(messageType, metadata)
+    new WriteContext(messageType, metadata.asJava)
   }
 
   override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
@@ -152,7 +154,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case DateType if rebaseDateTime =>
         (row: SpecializedGetters, ordinal: Int) =>
-          val rebasedDays = DateTimeUtils.rebaseGregorianToJulianDays(row.getInt(ordinal))
+          val rebasedDays = rebaseGregorianToJulianDays(row.getInt(ordinal))
           recordConsumer.addInteger(rebasedDays)
 
       case IntegerType | DateType =>
@@ -187,7 +189,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
           case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS if rebaseDateTime =>
             (row: SpecializedGetters, ordinal: Int) =>
-              val rebasedMicros = DateTimeUtils.rebaseGregorianToJulianMicros(row.getLong(ordinal))
+              val rebasedMicros = rebaseGregorianToJulianMicros(row.getLong(ordinal))
               recordConsumer.addLong(rebasedMicros)
 
           case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
@@ -196,7 +198,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
           case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS if rebaseDateTime =>
             (row: SpecializedGetters, ordinal: Int) =>
-              val rebasedMicros = DateTimeUtils.rebaseGregorianToJulianMicros(row.getLong(ordinal))
+              val rebasedMicros = rebaseGregorianToJulianMicros(row.getLong(ordinal))
               val millis = DateTimeUtils.microsToMillis(rebasedMicros)
               recordConsumer.addLong(millis)
 

@@ -173,8 +173,8 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     )
 
     checkSQL(
-      TimeSub('a, interval),
-      "`a` - INTERVAL '1 hours'"
+      DateAddInterval('a, interval),
+      "`a` + INTERVAL '1 hours'"
     )
   }
 }

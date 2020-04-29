@@ -225,13 +225,14 @@ private[spark] object UIUtils extends Logging {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/bootstrap.min.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri(request, "/static/vis.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/vis-timeline-graph2d.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri(request, "/static/webui.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
     <script src={prependBaseUri(request, "/static/jquery-3.4.1.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/vis.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>
     <script src={prependBaseUri(request, "/static/bootstrap.bundle.min.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>

@@ -153,9 +153,6 @@ private[sql] class SharedState(
    * A manager for global temporary views.
    */
   lazy val globalTempViewManager: GlobalTempViewManager = {
-    // System preserved database should not exists in metastore. However it's hard to guarantee it
-    // for every session, because case-sensitivity differs. Here we always lowercase it to make our
-    // life easier.
     val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(

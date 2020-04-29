@@ -76,7 +76,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     VIRTUALENV_PATH="$VIRTUALENV_BASE"/$python
     rm -rf "$VIRTUALENV_PATH"
     if [ -n "$USE_CONDA" ]; then
-      conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip "setuptools<46.1.0"
+      conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
       source activate "$VIRTUALENV_PATH"
     else
       mkdir -p "$VIRTUALENV_PATH"
