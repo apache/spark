@@ -29,7 +29,7 @@ current database.
 ### Syntax
 
 {% highlight sql %}
-SHOW TABLES [ { FROM | IN } database_name ] [ LIKE 'regex_pattern' ]
+SHOW TABLES [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
 {% endhighlight %}
 
 ### Parameters
@@ -39,14 +39,14 @@ SHOW TABLES [ { FROM | IN } database_name ] [ LIKE 'regex_pattern' ]
   <dd>
      Specifies the database name from which tables are listed.
   </dd>
-  <dt><code><em>LIKE regex_pattern</em></code></dt>
+  <dt><code><em>regex_pattern</em></code></dt>
   <dd>
      Specifies the regular expression pattern that is used to filter out unwanted tables. 
      <ul> 
-          <li> Except for `*` and `|` character, the pattern works like a regex.</li>
-          <li> `*` alone matches 0 or more characters and `|` is used to separate multiple different regexes,
+          <li> Except for <code>*</code> and <code>|</code> character, the pattern works like a regular expression.</li>
+          <li> <code>*</code> alone matches 0 or more characters and <code>|</code> is used to separate multiple different regular expressions,
            any of which can match. </li>
-          <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
+          <li> The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
      </ul>
     
   </dd>
