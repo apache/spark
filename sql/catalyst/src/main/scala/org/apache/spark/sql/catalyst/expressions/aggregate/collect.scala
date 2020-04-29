@@ -105,7 +105,7 @@ case class CollectList(
 
   def this(child: Expression) = this(child, 0, 0)
 
-  override val bufferElementType = child.dataType
+  override lazy val bufferElementType = child.dataType
 
   override def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
 
