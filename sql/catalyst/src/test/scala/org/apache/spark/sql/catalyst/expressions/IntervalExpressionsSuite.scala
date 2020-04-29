@@ -68,6 +68,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Years and months must not be taken into account
     checkEvaluation(ExtractIntervalDays("100 year 10 months 5 days"), 5)
     checkEvaluation(ExtractIntervalDays(largeInterval), 31)
+    checkEvaluation(ExtractIntervalDays("25 hours"), 1)
   }
 
   test("hours") {
@@ -81,6 +82,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Minutes should be taken into account
     checkEvaluation(ExtractIntervalHours("10 hours 100 minutes"), 11L)
     checkEvaluation(ExtractIntervalHours(largeInterval), 11L)
+    checkEvaluation(ExtractIntervalHours("25 hours"), 1L)
+
   }
 
   test("minutes") {
