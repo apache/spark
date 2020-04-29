@@ -43,8 +43,6 @@ __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
 
 class VectorTransformer(object):
     """
-    .. note:: DeveloperApi
-
     Base class for transformation of a vector or RDD of vector
     """
     def transform(self, vector):

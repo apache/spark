@@ -37,8 +37,10 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.command.ExternalCommandExecutor
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
@@ -274,9 +276,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @transient
-  lazy val emptyDataFrame: DataFrame = {
-    createDataFrame(sparkContext.emptyRDD[Row].setName("empty"), StructType(Nil))
-  }
+  lazy val emptyDataFrame: DataFrame = Dataset.ofRows(self, LocalRelation())
 
   /**
    * Creates a new [[Dataset]] of type T containing zero elements.
@@ -293,8 +293,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
-    SparkSession.setActiveSession(this)
+  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = withActive {
     val encoder = Encoders.product[A]
     Dataset.ofRows(self, ExternalRDD(rdd, self)(encoder))
   }
@@ -304,8 +303,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
-    SparkSession.setActiveSession(this)
+  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = withActive {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
@@ -343,11 +341,12 @@ class SparkSession private(
    * @since 2.0.0
    */
   @DeveloperApi
-  def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val encoder = RowEncoder(schema)
-    val catalystRows = rowRDD.map(encoder.toRow)
+    val toRow = encoder.createSerializer()
+    val catalystRows = rowRDD.map(toRow)
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
@@ -373,7 +372,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @DeveloperApi
-  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
+  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
     Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
@@ -385,7 +384,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+  def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = withActive {
     val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
@@ -414,7 +413,7 @@ class SparkSession private(
    *          SELECT * queries will return the columns in an undefined order.
    * @since 1.6.0
    */
-  def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
+  def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = withActive {
     val attrSeq = getSchema(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
     Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
@@ -462,8 +461,9 @@ class SparkSession private(
    */
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
+    val toRow = enc.createSerializer()
     val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d).copy())
+    val encoded = data.map(d => toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
     Dataset[T](self, plan)
   }
@@ -599,12 +599,39 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def sql(sqlText: String): DataFrame = {
+  def sql(sqlText: String): DataFrame = withActive {
     val tracker = new QueryPlanningTracker
     val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
       sessionState.sqlParser.parsePlan(sqlText)
     }
     Dataset.ofRows(self, plan, tracker)
+  }
+
+  /**
+   * Execute an arbitrary string command inside an external execution engine rather than Spark.
+   * This could be useful when user wants to execute some commands out of Spark. For
+   * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch,
+   * creating cores for Solr and so on.
+   *
+   * The command will be eagerly executed after this method is called and the returned
+   * DataFrame will contain the output of the command(if any).
+   *
+   * @param runner The class name of the runner that implements `ExternalCommandRunner`.
+   * @param command The target command to be executed
+   * @param options The options for the runner.
+   *
+   * @since 3.0.0
+   */
+  @Unstable
+  def executeCommand(runner: String, command: String, options: Map[String, String]): DataFrame = {
+    DataSource.lookupDataSource(runner, sessionState.conf) match {
+      case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
+        Dataset.ofRows(self, ExternalCommandExecutor(
+          source.newInstance().asInstanceOf[ExternalCommandRunner], command, options))
+
+      case _ =>
+        throw new AnalysisException(s"Command execution is not supported in runner $runner")
+    }
   }
 
   /**
@@ -724,6 +751,20 @@ class SparkSession private(
     }
   }
 
+  /**
+   * Execute a block of code with the this session set as the active session, and restore the
+   * previous session on completion.
+   */
+  private[sql] def withActive[T](block: => T): T = {
+    // Use the active session thread local directly to make sure we get the session that is actually
+    // set and not the default session. This to prevent that we promote the default session to the
+    // active session once we are done.
+    val old = SparkSession.activeThreadSession.get()
+    SparkSession.setActiveSession(this)
+    try block finally {
+      SparkSession.setActiveSession(old)
+    }
+  }
 }
 
 
@@ -854,7 +895,7 @@ object SparkSession extends Logging {
      * SparkSession exists, the method creates a new SparkSession and assigns the
      * newly created SparkSession as the global default.
      *
-     * In case an existing SparkSession is returned, the config options specified in
+     * In case an existing SparkSession is returned, the non-static config options specified in
      * this builder will be applied to the existing SparkSession.
      *
      * @since 2.0.0
@@ -864,10 +905,7 @@ object SparkSession extends Logging {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-        if (options.nonEmpty) {
-          logWarning("Using an existing SparkSession; some configuration may not take effect.")
-        }
+        applyModifiableSettings(session)
         return session
       }
 
@@ -876,10 +914,7 @@ object SparkSession extends Logging {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-          if (options.nonEmpty) {
-            logWarning("Using an existing SparkSession; some configuration may not take effect.")
-          }
+          applyModifiableSettings(session)
           return session
         }
 
@@ -917,6 +952,22 @@ object SparkSession extends Logging {
       }
 
       return session
+    }
+
+    private def applyModifiableSettings(session: SparkSession): Unit = {
+      val (staticConfs, otherConfs) =
+        options.partition(kv => SQLConf.staticConfKeys.contains(kv._1))
+
+      otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+
+      if (staticConfs.nonEmpty) {
+        logWarning("Using an existing SparkSession; the static sql configurations will not take" +
+          " effect.")
+      }
+      if (otherConfs.nonEmpty) {
+        logWarning("Using an existing SparkSession; some spark core configurations may not take" +
+          " effect.")
+      }
     }
   }
 

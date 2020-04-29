@@ -28,6 +28,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
@@ -149,6 +151,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
+      // The ApplyColumnarRulesAndInsertTransitions rule is not applied when enable AQE
+      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
       assert(session.sessionState.columnarRules.contains(
         MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.sqlContext.implicits._
@@ -168,6 +172,30 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(result(0).getLong(0) == 102L) // Check that broken columnar Add was used.
       assert(result(1).getLong(0) == 202L)
       assert(result(2).getLong(0) == 302L)
+    }
+  }
+
+  test("reset column vectors") {
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(COLUMN_BATCH_SIZE.key, 2)
+      .withExtensions { extensions =>
+        extensions.injectColumnar(session =>
+          MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())) }
+      .getOrCreate()
+
+    try {
+      assert(session.sessionState.columnarRules.contains(
+        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      import session.sqlContext.implicits._
+
+      val input = Seq((100L), (200L), (300L))
+      val data = input.toDF("vals").repartition(1)
+      val df = data.selectExpr("vals + 1")
+      val result = df.collect()
+      assert(result sameElements input.map(x => Row(x + 2)))
+    } finally {
+      stop(session)
     }
   }
 
@@ -299,12 +327,29 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseDataType(sqlText: String): DataType =
     delegate.parseDataType(sqlText)
+
+  override def parseRawDataType(sqlText: String): DataType =
+    delegate.parseRawDataType(sqlText)
 }
 
 object MyExtensions {
 
   val myFunction = (FunctionIdentifier("myFunction"),
-    new ExpressionInfo("noClass", "myDb", "myFunction", "usage", "extended usage"),
+    new ExpressionInfo(
+      "noClass",
+      "myDb",
+      "myFunction",
+      "usage",
+      "extended usage",
+      "    Examples:",
+      """
+       note
+      """,
+      "",
+      "3.0.0",
+      """
+       deprecated
+      """),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -701,7 +746,21 @@ case class MySparkStrategy2(spark: SparkSession) extends SparkStrategy {
 object MyExtensions2 {
 
   val myFunction = (FunctionIdentifier("myFunction2"),
-    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage"),
+    new ExpressionInfo(
+      "noClass",
+      "myDb",
+      "myFunction2",
+      "usage",
+      "extended usage",
+      "    Examples:",
+      """
+       note
+      """,
+      "",
+      "3.0.0",
+      """
+       deprecated
+      """),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -720,7 +779,21 @@ class MyExtensions2 extends (SparkSessionExtensions => Unit) {
 object MyExtensions2Duplicate {
 
   val myFunction = (FunctionIdentifier("myFunction2"),
-    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage"),
+    new ExpressionInfo(
+      "noClass",
+      "myDb",
+      "myFunction2",
+      "usage",
+      "extended usage",
+      "    Examples:",
+      """
+       note
+      """,
+      "",
+      "3.0.0",
+      """
+       deprecated
+      """),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 

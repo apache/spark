@@ -21,22 +21,28 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.connector.write.WriteBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 /**
  * A logical plan representing a data source v2 table.
  *
  * @param table   The table that this relation represents.
+ * @param output the output attributes of this relation.
+ * @param catalog catalogPlugin for the table. None if no catalog is specified.
+ * @param identifier the identifier for the table. None if no identifier is defined.
  * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
  *                and [[WriteBuilder]].
  */
 case class DataSourceV2Relation(
     table: Table,
     output: Seq[AttributeReference],
+    catalog: Option[CatalogPlugin],
+    identifier: Option[Identifier],
     options: CaseInsensitiveStringMap)
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
@@ -50,12 +56,53 @@ case class DataSourceV2Relation(
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
-  def newScanBuilder(): ScanBuilder = {
-    table.asReadable.newScanBuilder(options)
+  override def computeStats(): Statistics = {
+    if (Utils.isTesting) {
+      // when testing, throw an exception if this computeStats method is called because stats should
+      // not be accessed before pushing the projection and filters to create a scan. otherwise, the
+      // stats are not accurate because they are based on a full table scan of all columns.
+      throw new IllegalStateException(
+        s"BUG: computeStats called before pushdown on DSv2 relation: $name")
+    } else {
+      // when not testing, return stats because bad stats are better than failing a query
+      table.asReadable.newScanBuilder(options) match {
+        case r: SupportsReportStatistics =>
+          val statistics = r.estimateStatistics()
+          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+        case _ =>
+          Statistics(sizeInBytes = conf.defaultSizeInBytes)
+      }
+    }
+  }
+
+  override def newInstance(): DataSourceV2Relation = {
+    copy(output = output.map(_.newInstance()))
+  }
+}
+
+/**
+ * A logical plan for a DSv2 table with a scan already created.
+ *
+ * This is used in the optimizer to push filters and projection down before conversion to physical
+ * plan. This ensures that the stats that are used by the optimizer account for the filters and
+ * projection that will be pushed down.
+ *
+ * @param table a DSv2 [[Table]]
+ * @param scan a DSv2 [[Scan]]
+ * @param output the output attributes of this relation
+ */
+case class DataSourceV2ScanRelation(
+    table: Table,
+    scan: Scan,
+    output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
+
+  override def name: String = table.name()
+
+  override def simpleString(maxFields: Int): String = {
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
   override def computeStats(): Statistics = {
-    val scan = newScanBuilder().build()
     scan match {
       case r: SupportsReportStatistics =>
         val statistics = r.estimateStatistics()
@@ -63,10 +110,6 @@ case class DataSourceV2Relation(
       case _ =>
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
-  }
-
-  override def newInstance(): DataSourceV2Relation = {
-    copy(output = output.map(_.newInstance()))
   }
 }
 
@@ -99,12 +142,20 @@ case class StreamingDataSourceV2Relation(
 }
 
 object DataSourceV2Relation {
-  def create(table: Table, options: CaseInsensitiveStringMap): DataSourceV2Relation = {
+  def create(
+      table: Table,
+      catalog: Option[CatalogPlugin],
+      identifier: Option[Identifier],
+      options: CaseInsensitiveStringMap): DataSourceV2Relation = {
     val output = table.schema().toAttributes
-    DataSourceV2Relation(table, output, options)
+    DataSourceV2Relation(table, output, catalog, identifier, options)
   }
 
-  def create(table: Table): DataSourceV2Relation = create(table, CaseInsensitiveStringMap.empty)
+  def create(
+      table: Table,
+      catalog: Option[CatalogPlugin],
+      identifier: Option[Identifier]): DataSourceV2Relation =
+    create(table, catalog, identifier, CaseInsensitiveStringMap.empty)
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.

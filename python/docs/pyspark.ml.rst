@@ -41,6 +41,14 @@ pyspark.ml.clustering module
     :undoc-members:
     :inherited-members:
 
+pyspark.ml.functions module
+----------------------------
+
+.. automodule:: pyspark.ml.functions
+    :members:
+    :undoc-members:
+    :inherited-members:
+
 pyspark.ml.linalg module
 ----------------------------
 

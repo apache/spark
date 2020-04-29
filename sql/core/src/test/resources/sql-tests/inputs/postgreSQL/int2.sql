@@ -8,19 +8,23 @@
 CREATE TABLE INT2_TBL(f1 smallint) USING parquet;
 
 -- [SPARK-28023] Trim the string when cast string type to other types
-INSERT INTO INT2_TBL VALUES (trim('0   '));
+-- PostgreSQL implicitly casts string literals to data with integral types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO INT2_TBL VALUES (smallint(trim('0   ')));
 
-INSERT INTO INT2_TBL VALUES (trim('  1234 '));
+INSERT INTO INT2_TBL VALUES (smallint(trim('  1234 ')));
 
-INSERT INTO INT2_TBL VALUES (trim('    -1234'));
+INSERT INTO INT2_TBL VALUES (smallint(trim('    -1234')));
 
 -- [SPARK-27923] Invalid input syntax for type short throws exception at PostgreSQL
 -- INSERT INTO INT2_TBL VALUES ('34.5');
 
 -- largest and smallest values
-INSERT INTO INT2_TBL VALUES ('32767');
+-- PostgreSQL implicitly casts string literals to data with integral types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO INT2_TBL VALUES (smallint('32767'));
 
-INSERT INTO INT2_TBL VALUES ('-32767');
+INSERT INTO INT2_TBL VALUES (smallint('-32767'));
 
 -- bad input values -- should give errors
 -- INSERT INTO INT2_TBL VALUES ('100000');

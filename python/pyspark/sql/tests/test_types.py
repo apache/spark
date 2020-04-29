@@ -204,10 +204,14 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(df.columns, ['b'])
 
     def test_negative_decimal(self):
-        df = self.spark.createDataFrame([(1, ), (11, )], ["value"])
-        ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
-        actual = list(map(lambda r: int(r.value), ret))
-        self.assertEqual(actual, [0, 10])
+        try:
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true")
+            df = self.spark.createDataFrame([(1, ), (11, )], ["value"])
+            ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
+            actual = list(map(lambda r: int(r.value), ret))
+            self.assertEqual(actual, [0, 10])
+        finally:
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false")
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
@@ -535,6 +539,22 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(_infer_type(2**31), LongType())
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
+
+    @unittest.skipIf(sys.version < "3", "only Python 3 infers bytes as binary type")
+    def test_infer_binary_type(self):
+        binaryrow = [Row(f1='a', f2=b"abcd")]
+        df = self.sc.parallelize(binaryrow).toDF()
+        self.assertEqual(df.schema.fields[1].dataType, BinaryType())
+
+        # this saving as Parquet caused issues as well.
+        output_dir = os.path.join(self.tempdir.name, "infer_binary_type")
+        df.write.parquet(output_dir)
+        df1 = self.spark.read.parquet(output_dir)
+        self.assertEqual('a', df1.first().f1)
+        self.assertEqual(b"abcd", df1.first().f2)
+
+        self.assertEqual(_infer_type(b""), BinaryType())
+        self.assertEqual(_infer_type(b"1234"), BinaryType())
 
     def test_merge_type(self):
         self.assertEqual(_merge_type(LongType(), NullType()), LongType())
@@ -951,6 +971,19 @@ class DataTypeVerificationTests(unittest.TestCase):
             msg = "verify_type(%s, %s, nullable=False) == %s" % (obj, data_type, exp)
             with self.assertRaises(exp, msg=msg):
                 _make_type_verifier(data_type, nullable=False)(obj)
+
+    @unittest.skipIf(sys.version_info[:2] < (3, 6), "Create Row without sorting fields")
+    def test_row_without_field_sorting(self):
+        sorting_enabled_tmp = Row._row_field_sorting_enabled
+        Row._row_field_sorting_enabled = False
+
+        r = Row(b=1, a=2)
+        TestRow = Row("b", "a")
+        expected = TestRow(1, 2)
+
+        self.assertEqual(r, expected)
+        self.assertEqual(repr(r), "Row(b=1, a=2)")
+        Row._row_field_sorting_enabled = sorting_enabled_tmp
 
 
 if __name__ == "__main__":

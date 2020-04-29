@@ -27,7 +27,7 @@ import org.apache.spark.sql.SparkSession
  * This example shows how to register accumulators against the accumulator source.
  * A simple RDD is created, and during the map, the accumulators are incremented.
  *
- * The only argument, numElem, sets the number elements in the collection to parallize.
+ * The only argument, numElem, sets the number elements in the collection to parallelize.
  *
  * The result is output to stdout in the driver with the values of the accumulators.
  * For the long accumulator, it should equal numElem the double accumulator should be

@@ -84,7 +84,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(IS_TESTING, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
-      .set(EVENT_LOG_PROCESS_TREE_METRICS, true)
+      .set(EXECUTOR_PROCESS_TREE_METRICS_ENABLED, true)
     conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()

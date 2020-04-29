@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.security
 
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.Assertions._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager

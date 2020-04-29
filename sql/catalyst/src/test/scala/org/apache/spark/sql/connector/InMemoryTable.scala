@@ -22,9 +22,11 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{IdentityTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{IdentityTransform, NamedReference, Transform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
@@ -57,10 +59,30 @@ class InMemoryTable(
 
   def rows: Seq[InternalRow] = dataMap.values.flatMap(_.rows).toSeq
 
-  private val partFieldNames = partitioning.flatMap(_.references).toSeq.flatMap(_.fieldNames)
-  private val partIndexes = partFieldNames.map(schema.fieldIndex)
+  private val partCols: Array[Array[String]] = partitioning.flatMap(_.references).map { ref =>
+    schema.findNestedField(ref.fieldNames(), includeCollections = false) match {
+      case Some(_) => ref.fieldNames()
+      case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
+    }
+  }
 
-  private def getKey(row: InternalRow): Seq[Any] = partIndexes.map(row.toSeq(schema)(_))
+  private def getKey(row: InternalRow): Seq[Any] = {
+    def extractor(fieldNames: Array[String], schema: StructType, row: InternalRow): Any = {
+      val index = schema.fieldIndex(fieldNames(0))
+      val value = row.toSeq(schema).apply(index)
+      if (fieldNames.length > 1) {
+        (value, schema(index).dataType) match {
+          case (row: InternalRow, nestedSchema: StructType) =>
+            extractor(fieldNames.drop(1), nestedSchema, row)
+          case (_, dataType) =>
+            throw new IllegalArgumentException(s"Unsupported type, ${dataType.simpleString}")
+        }
+      } else {
+        value
+      }
+    }
+    partCols.map(fieldNames => extractor(fieldNames, schema, row))
+  }
 
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
@@ -93,8 +115,9 @@ class InMemoryTable(
     override def createReaderFactory(): PartitionReaderFactory = BufferedRowsReaderFactory
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-    InMemoryTable.maybeSimulateFailedTableWrite(options)
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    InMemoryTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
+    InMemoryTable.maybeSimulateFailedTableWrite(info.options)
 
     new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
       private var writer: BatchWrite = Append
@@ -122,7 +145,7 @@ class InMemoryTable(
   }
 
   private abstract class TestBatchWrite extends BatchWrite {
-    override def createBatchWriterFactory(): DataWriterFactory = {
+    override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory
     }
 
@@ -144,8 +167,10 @@ class InMemoryTable(
   }
 
   private class Overwrite(filters: Array[Filter]) extends TestBatchWrite {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      val deleteKeys = InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+      val deleteKeys = InMemoryTable.filtersToKeys(
+        dataMap.keys, partCols.map(_.toSeq.quoted), filters)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
@@ -159,7 +184,8 @@ class InMemoryTable(
   }
 
   override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
-    dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
   }
 }
 
@@ -250,4 +276,6 @@ private class BufferWriter extends DataWriter[InternalRow] {
   override def commit(): WriterCommitMessage = buffer
 
   override def abort(): Unit = {}
+
+  override def close(): Unit = {}
 }

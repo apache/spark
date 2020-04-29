@@ -32,8 +32,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
-import org.apache.spark.resource.ResourceInformation
-import org.apache.spark.resource.ResourceUtils
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceUtils}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.shuffle.MetadataFetchFailedException
@@ -341,7 +340,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageIds = Seq[Int](1, 2, 3, 4)
     val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
     val dummyStageInfos =
-      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown"))
+      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown",
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
     val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
     val expectedJobStart =
@@ -383,9 +383,11 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("StageInfo backward compatibility (parent IDs)") {
     // Prior to Spark 1.4.0, StageInfo did not have the "Parent IDs" property
-    val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details")
+    val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val oldStageInfo = JsonProtocol.stageInfoToJson(stageInfo).removeField({ _._1 == "Parent IDs"})
-    val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details")
+    val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
   }
 
@@ -480,6 +482,28 @@ class JsonProtocolSuite extends SparkFunSuite {
     // For anything else, we just cast the value to a string
     testAccumValue(Some("anything"), blocks, JString(blocks.toString))
     testAccumValue(Some("anything"), 123, JString("123"))
+  }
+
+  test("SPARK-30936: forwards compatibility - ignore unknown fields") {
+    val expected = TestListenerEvent("foo", 123)
+    val unknownFieldsJson =
+      """{
+        |  "Event" : "org.apache.spark.util.TestListenerEvent",
+        |  "foo" : "foo",
+        |  "bar" : 123,
+        |  "unknown" : "unknown"
+        |}""".stripMargin
+    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
+  }
+
+  test("SPARK-30936: backwards compatibility - set default values for missing fields") {
+    val expected = TestListenerEvent("foo", 0)
+    val unknownFieldsJson =
+      """{
+        |  "Event" : "org.apache.spark.util.TestListenerEvent",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
   }
 }
 
@@ -873,7 +897,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
-    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details")
+    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
     stageInfo.accumulables(acc1.id) = acc1
     stageInfo.accumulables(acc2.id) = acc2
@@ -2310,3 +2335,5 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |}
     """.stripMargin
 }
+
+case class TestListenerEvent(foo: String, bar: Int) extends SparkListenerEvent

@@ -81,12 +81,6 @@ def _gen_param_code(name, doc, defaultValueStr):
     """
     # TODO: How to correctly inherit instance attributes?
     template = '''
-    def set$Name(self, value):
-        """
-        Sets the value of :py:attr:`$name`.
-        """
-        return self._set($name=value)
-
     def get$Name(self):
         """
         Gets the value of $name or its default value.
@@ -129,6 +123,8 @@ if __name__ == "__main__":
         ("seed", "random seed.", "hash(type(self).__name__)", "TypeConverters.toInt"),
         ("tol", "the convergence tolerance for iterative algorithms (>= 0).", None,
          "TypeConverters.toFloat"),
+        ("relativeError", "the relative target precision for the approximate quantile " +
+         "algorithm. Must be in the range [0, 1]", "0.001", "TypeConverters.toFloat"),
         ("stepSize", "Step size to be used for each iteration of optimization (>= 0).", None,
          "TypeConverters.toFloat"),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
@@ -168,7 +164,10 @@ if __name__ == "__main__":
          "'euclidean'", "TypeConverters.toString"),
         ("validationIndicatorCol", "name of the column that indicates whether each row is for " +
          "training or for validation. False indicates training; true indicates validation.",
-         None, "TypeConverters.toString")]
+         None, "TypeConverters.toString"),
+        ("blockSize", "block size for stacking input data in matrices. Data is stacked within "
+         "partitions. If block size is more than remaining data in a partition then it is "
+         "adjusted to the size of this data.", None, "TypeConverters.toInt")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:

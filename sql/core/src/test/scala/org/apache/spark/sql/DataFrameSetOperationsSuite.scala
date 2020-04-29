@@ -307,7 +307,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     val union = df1.union(df2)
     checkAnswer(
-      union.filter('i < rand(7) * 10),
+      union.filter($"i" < rand(7) * 10),
       expected(union)
     )
     checkAnswer(
@@ -321,13 +321,13 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     val intersect = df1.intersect(df2)
     checkAnswer(
-      intersect.filter('i < rand(7) * 10),
+      intersect.filter($"i" < rand(7) * 10),
       expected(intersect)
     )
 
     val except = df1.except(df2)
     checkAnswer(
-      except.filter('i < rand(7) * 10),
+      except.filter($"i" < rand(7) * 10),
       expected(except)
     )
   }
@@ -375,7 +375,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       case j: Union if j.children.size == 5 => j }.size === 1)
 
     checkAnswer(
-      unionDF.agg(avg('key), max('key), min('key), sum('key)),
+      unionDF.agg(avg("key"), max("key"), min("key"), sum("key")),
       Row(50.5, 100, 1, 25250) :: Nil
     )
 

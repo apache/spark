@@ -181,15 +181,6 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
       // codegen cache should work for Datasets of same type.
       val count3 = getCodegenCount()
       assert(count3 == count2)
-
-      withSQLConf(SQLConf.OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID.key -> "false") {
-        // trigger codegen for another Dataset of same type
-        createDataset().collect()
-        // with the rule disabled, codegen happens again for encoder serializer and encoder
-        // deserializer
-        val count4 = getCodegenCount()
-        assert(count4 == (count3 + 2))
-      }
     }
 
     withClue("array type") {

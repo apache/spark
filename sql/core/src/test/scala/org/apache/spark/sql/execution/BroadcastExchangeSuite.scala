@@ -21,13 +21,16 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class BroadcastExchangeSuite extends SparkPlanTest with SharedSparkSession {
+class BroadcastExchangeSuite extends SparkPlanTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -53,8 +56,8 @@ class BroadcastExchangeSuite extends SparkPlanTest with SharedSparkSession {
       }).where("id = value")
 
       // get the exchange physical plan
-      val hashExchange = df.queryExecution.executedPlan
-        .collect { case p: BroadcastExchangeExec => p }.head
+      val hashExchange = collect(
+        df.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }.head
 
       // materialize the future and wait for the job being scheduled
       hashExchange.prepare()
@@ -84,8 +87,8 @@ class BroadcastExchangeSuite extends SparkPlanTest with SharedSparkSession {
     withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> "-1") {
       val df = spark.range(1).toDF()
       val joinDF = df.join(broadcast(df), "id")
-      val broadcastExchangeExec = joinDF.queryExecution.executedPlan
-        .collect { case p: BroadcastExchangeExec => p }
+      val broadcastExchangeExec = collect(
+        joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
       assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
       assert(joinDF.collect().length == 1)
     }

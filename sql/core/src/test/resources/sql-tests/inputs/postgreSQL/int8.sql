@@ -8,11 +8,13 @@
 --
 CREATE TABLE INT8_TBL(q1 bigint, q2 bigint) USING parquet;
 
-INSERT INTO INT8_TBL VALUES(trim('  123   '),trim('  456'));
-INSERT INTO INT8_TBL VALUES(trim('123   '),'4567890123456789');
-INSERT INTO INT8_TBL VALUES('4567890123456789','123');
-INSERT INTO INT8_TBL VALUES(+4567890123456789,'4567890123456789');
-INSERT INTO INT8_TBL VALUES('+4567890123456789','-4567890123456789');
+-- PostgreSQL implicitly casts string literals to data with integral types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO INT8_TBL VALUES(bigint(trim('  123   ')),bigint(trim('  456')));
+INSERT INTO INT8_TBL VALUES(bigint(trim('123   ')),bigint('4567890123456789'));
+INSERT INTO INT8_TBL VALUES(bigint('4567890123456789'),bigint('123'));
+INSERT INTO INT8_TBL VALUES(+4567890123456789,bigint('4567890123456789'));
+INSERT INTO INT8_TBL VALUES(bigint('+4567890123456789'),bigint('-4567890123456789'));
 
 -- [SPARK-27923] Spark SQL insert there bad inputs to NULL
 -- bad inputs

@@ -18,23 +18,27 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
 ### Description
+
 Return the list of columns in a table. If the table does not exist, an exception is thrown.
 
 ### Syntax
+
 {% highlight sql %}
-SHOW COLUMNS table [ database ]
+SHOW COLUMNS table_identifier [ database ]
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
-  <dt><code><em>table</em></code></dt>
+  <dt><code><em>table_identifier</em></code></dt>
   <dd>
     Specifies the table name of an existing table. The table may be optionally qualified
     with a database name.<br><br>
     <b>Syntax:</b>
       <code>
-        { IN | FROM } [database_name.]table_name
+        { IN | FROM } [ database_name . ] table_name
       </code><br><br>
     <b>Note:</b>
     Keywords <code>IN</code> and <code>FROM</code> are interchangeable.
@@ -54,44 +58,47 @@ SHOW COLUMNS table [ database ]
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- Create `customer` table in `salesdb` database;
 USE salesdb;
-CREATE TABLE customer(cust_cd INT,
-  name VARCHAR(100),
-  cust_addr STRING);
+CREATE TABLE customer(
+    cust_cd INT,
+    name VARCHAR(100),
+    cust_addr STRING);
 
 -- List the columns of `customer` table in current database.
 SHOW COLUMNS IN customer;
   +---------+
-  |col_name |
+  | col_name|
   +---------+
-  |cust_cd  |
-  |name     |
+  |  cust_cd|
+  |     name|
   |cust_addr|
   +---------+
 
 -- List the columns of `customer` table in `salesdb` database.
 SHOW COLUMNS IN salesdb.customer;
   +---------+
-  |col_name |
+  | col_name|
   +---------+
-  |cust_cd  |
-  |name     |
+  |  cust_cd|
+  |     name|
   |cust_addr|
   +---------+
 
 -- List the columns of `customer` table in `salesdb` database
 SHOW COLUMNS IN customer IN salesdb;
   +---------+
-  |col_name |
+  | col_name|
   +---------+
-  |cust_cd  |
-  |name     |
+  |  cust_cd|
+  |     name|
   |cust_addr|
   +---------+
 {% endhighlight %}
 
 ### Related Statements
-- [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
-- [SHOW TABLE](sql-ref-syntax-aux-show-table.html)
+
+ * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+ * [SHOW TABLE](sql-ref-syntax-aux-show-table.html)

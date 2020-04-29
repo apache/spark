@@ -40,15 +40,15 @@ object RangeBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("range", N, output = output)
 
       benchmark.addCase("full scan", numIters = 4) { _ =>
-        spark.range(N).queryExecution.toRdd.foreach(_ => ())
+        spark.range(N).noop()
       }
 
       benchmark.addCase("limit after range", numIters = 4) { _ =>
-        spark.range(N).limit(100).queryExecution.toRdd.foreach(_ => ())
+        spark.range(N).limit(100).noop()
       }
 
       benchmark.addCase("filter after range", numIters = 4) { _ =>
-        spark.range(N).filter('id % 100 === 0).queryExecution.toRdd.foreach(_ => ())
+        spark.range(N).filter('id % 100 === 0).noop()
       }
 
       benchmark.addCase("count after range", numIters = 4) { _ =>

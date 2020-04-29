@@ -9,19 +9,23 @@
 CREATE TABLE INT4_TBL(f1 int) USING parquet;
 
 -- [SPARK-28023] Trim the string when cast string type to other types
-INSERT INTO INT4_TBL VALUES (trim('   0  '));
+-- PostgreSQL implicitly casts string literals to data with integral types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO INT4_TBL VALUES (int(trim('   0  ')));
 
-INSERT INTO INT4_TBL VALUES (trim('123456     '));
+INSERT INTO INT4_TBL VALUES (int(trim('123456     ')));
 
-INSERT INTO INT4_TBL VALUES (trim('    -123456'));
+INSERT INTO INT4_TBL VALUES (int(trim('    -123456')));
 
 -- [SPARK-27923] Invalid input syntax for integer: "34.5" at PostgreSQL
 -- INSERT INTO INT4_TBL(f1) VALUES ('34.5');
 
 -- largest and smallest values
-INSERT INTO INT4_TBL VALUES ('2147483647');
+-- PostgreSQL implicitly casts string literals to data with integral types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO INT4_TBL VALUES (int('2147483647'));
 
-INSERT INTO INT4_TBL VALUES ('-2147483647');
+INSERT INTO INT4_TBL VALUES (int('-2147483647'));
 
 -- [SPARK-27923] Spark SQL insert these bad inputs to NULL
 -- bad input values

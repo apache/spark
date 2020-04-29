@@ -26,12 +26,13 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.catalyst.expressions.{In, InSet, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -454,36 +455,25 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("isInCollection: Scala Collection") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    // Test with different types of collections
+    checkAnswer(df.filter($"a".isInCollection(Seq(3, 1))),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+    checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).toSet)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isInCollection(Seq(3, 2).toArray)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isInCollection(Seq(3, 1).toList)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
 
-    Seq(1, 2).foreach { conf =>
-      withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> conf.toString) {
-        if (conf <= 1) {
-          assert($"a".isInCollection(Seq(3, 1)).expr.isInstanceOf[InSet], "Expect expr to be InSet")
-        } else {
-          assert($"a".isInCollection(Seq(3, 1)).expr.isInstanceOf[In], "Expect expr to be In")
-        }
+    val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
 
-        // Test with different types of collections
-        checkAnswer(df.filter($"a".isInCollection(Seq(3, 1))),
-          df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-        checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).toSet)),
-          df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
-        checkAnswer(df.filter($"a".isInCollection(Seq(3, 2).toArray)),
-          df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
-        checkAnswer(df.filter($"a".isInCollection(Seq(3, 1).toList)),
-          df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-
-        val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
-
-        val e = intercept[AnalysisException] {
-          df2.filter($"a".isInCollection(Seq($"b")))
-        }
-        Seq("cannot resolve",
-          "due to data type mismatch: Arguments must be same type but were").foreach { s =>
-            assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
-          }
-      }
+    val e = intercept[AnalysisException] {
+      df2.filter($"a".isInCollection(Seq($"b")))
     }
+    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
+      .foreach { s =>
+        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+      }
   }
 
   test("&&") {
@@ -537,12 +527,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("sqrt") {
     checkAnswer(
-      testData.select(sqrt('key)).orderBy('key.asc),
+      testData.select(sqrt($"key")).orderBy($"key".asc),
       (1 to 100).map(n => Row(math.sqrt(n)))
     )
 
     checkAnswer(
-      testData.select(sqrt('value), 'key).orderBy('key.asc, 'value.asc),
+      testData.select(sqrt($"value"), $"key").orderBy($"key".asc, $"value".asc),
       (1 to 100).map(n => Row(math.sqrt(n), n))
     )
 
@@ -554,12 +544,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("upper") {
     checkAnswer(
-      lowerCaseData.select(upper('l)),
+      lowerCaseData.select(upper($"l")),
       ('a' to 'd').map(c => Row(c.toString.toUpperCase(Locale.ROOT)))
     )
 
     checkAnswer(
-      testData.select(upper('value), 'key),
+      testData.select(upper($"value"), $"key"),
       (1 to 100).map(n => Row(n.toString, n))
     )
 
@@ -575,12 +565,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("lower") {
     checkAnswer(
-      upperCaseData.select(lower('L)),
+      upperCaseData.select(lower($"L")),
       ('A' to 'F').map(c => Row(c.toString.toLowerCase(Locale.ROOT)))
     )
 
     checkAnswer(
-      testData.select(lower('value), 'key),
+      testData.select(lower($"value"), $"key"),
       (1 to 100).map(n => Row(n.toString, n))
     )
 
@@ -753,8 +743,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("columns can be compared") {
-    assert('key.desc == 'key.desc)
-    assert('key.desc != 'key.asc)
+    assert($"key".desc == $"key".desc)
+    assert($"key".desc != $"key".asc)
   }
 
   test("alias with metadata") {
@@ -817,7 +807,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("randn") {
-    val randCol = testData.select('key, randn(5L).as("rand"))
+    val randCol = testData.select($"key", randn(5L).as("rand"))
     randCol.columns.length should be (2)
     val rows = randCol.collect()
     rows.foreach { row =>
@@ -868,5 +858,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(typedLit(("a", 2, 1.0))),
       Row(Row("a", 2, 1.0)) :: Nil)
+  }
+
+  test("SPARK-31563: sql of InSet for UTF8String collection") {
+    val inSet = InSet(Literal("a"), Set("a", "b").map(UTF8String.fromString))
+    assert(inSet.sql === "('a' IN ('a', 'b'))")
   }
 }

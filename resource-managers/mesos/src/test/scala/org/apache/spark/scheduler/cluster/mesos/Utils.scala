@@ -28,6 +28,7 @@ import org.apache.mesos.protobuf.ByteString
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{times, verify}
+import org.scalatest.Assertions._
 
 import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 
@@ -161,12 +162,14 @@ object Utils {
     val variableOne = envVars.filter(_.getName == "USER").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.VALUE)
-    assert(variableOne.getSecret.getValue.getData == ByteString.copyFrom("user".getBytes))
+    assert(variableOne.getSecret.getValue.getData ==
+      ByteString.copyFrom("user".getBytes))
     assert(variableOne.getType == Environment.Variable.Type.SECRET)
     val variableTwo = envVars.filter(_.getName == "PASSWORD").head
     assert(variableTwo.getSecret.isInitialized)
     assert(variableTwo.getSecret.getType == Secret.Type.VALUE)
-    assert(variableTwo.getSecret.getValue.getData == ByteString.copyFrom("password".getBytes))
+    assert(variableTwo.getSecret.getValue.getData ==
+      ByteString.copyFrom("password".getBytes))
     assert(variableTwo.getType == Environment.Variable.Type.SECRET)
   }
 

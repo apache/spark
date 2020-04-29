@@ -45,9 +45,10 @@ private[spark] sealed trait MapStatus {
   def getSizeForBlock(reduceId: Int): Long
 
   /**
-   * The unique ID of this shuffle map task, we use taskContext.taskAttemptId to fill this.
+   * The unique ID of this shuffle map task, if spark.shuffle.useOldFetchProtocol enabled we use
+   * partitionId of the task or taskContext.taskAttemptId is used.
    */
-  def mapTaskId: Long
+  def mapId: Long
 }
 
 
@@ -129,7 +130,7 @@ private[spark] class CompressedMapStatus(
     MapStatus.decompressSize(compressedSizes(reduceId))
   }
 
-  override def mapTaskId: Long = _mapTaskId
+  override def mapId: Long = _mapTaskId
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
@@ -189,7 +190,7 @@ private[spark] class HighlyCompressedMapStatus private (
     }
   }
 
-  override def mapTaskId: Long = _mapTaskId
+  override def mapId: Long = _mapTaskId
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)

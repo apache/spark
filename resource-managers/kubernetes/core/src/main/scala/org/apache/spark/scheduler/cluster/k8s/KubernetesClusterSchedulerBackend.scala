@@ -27,6 +27,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
@@ -54,6 +55,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
+
+  private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
 
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -116,8 +119,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
   }
 
-  override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
-    podAllocator.setTotalExpectedExecutors(requestedTotal)
+  override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
+    podAllocator.setTotalExpectedExecutors(resourceProfileToTotalExecs(defaultProfile))
     Future.successful(true)
   }
 
@@ -179,6 +183,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
+  }
+
+  override protected def isBlacklisted(executorId: String, hostname: String): Boolean = {
+    podAllocator.isDeleted(executorId)
   }
 
   private class KubernetesDriverEndpoint extends DriverEndpoint {

@@ -19,13 +19,15 @@
 DataFrame-based machine learning APIs to let users quickly assemble and configure practical
 machine learning pipelines.
 """
-from pyspark.ml.base import Estimator, Model, Transformer, UnaryTransformer
+from pyspark.ml.base import Estimator, Model, Predictor, PredictionModel, \
+    Transformer, UnaryTransformer
 from pyspark.ml.pipeline import Pipeline, PipelineModel
 from pyspark.ml import classification, clustering, evaluation, feature, fpm, \
     image, pipeline, recommendation, regression, stat, tuning, util, linalg, param
 
 __all__ = [
-    "Transformer", "UnaryTransformer", "Estimator", "Model", "Pipeline", "PipelineModel",
+    "Transformer", "UnaryTransformer", "Estimator", "Model",
+    "Predictor", "PredictionModel", "Pipeline", "PipelineModel",
     "classification", "clustering", "evaluation", "feature", "fpm", "image",
     "recommendation", "regression", "stat", "tuning", "util", "linalg", "param",
 ]

@@ -84,6 +84,15 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     ArrayTransform(expr, createLambda(et, cn, IntegerType, false, f)).bind(validateBinding)
   }
 
+  def arraySort(expr: Expression): Expression = {
+    arraySort(expr, ArraySort.comparator)
+  }
+
+  def arraySort(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    ArraySort(expr, createLambda(et, cn, et, cn, f)).bind(validateBinding)
+  }
+
   def filter(expr: Expression, f: Expression => Expression): Expression = {
     val ArrayType(et, cn) = expr.dataType
     ArrayFilter(expr, createLambda(et, cn, f)).bind(validateBinding)
@@ -165,6 +174,47 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq("[2, 3, 4]", null, "[5, 6]"))
     checkEvaluation(transform(aai, array => Cast(transform(array, plusIndex), StringType)),
       Seq("[1, 3, 5]", null, "[4, 6]"))
+  }
+
+  test("ArraySort") {
+    val a0 = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq("b", "a"), ArrayType(StringType))
+    val a3 = Literal.create(Seq("b", null, "a"), ArrayType(StringType))
+    val d1 = new Decimal().set(10)
+    val d2 = new Decimal().set(100)
+    val a4 = Literal.create(Seq(d2, d1), ArrayType(DecimalType(10, 0)))
+    val a5 = Literal.create(Seq(null, null), ArrayType(NullType))
+
+    val typeAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val arrayStruct = Literal.create(Seq(create_row(2), create_row(1)), typeAS)
+
+    val typeAA = ArrayType(ArrayType(IntegerType))
+    val aa1 = Array[java.lang.Integer](1, 2)
+    val aa2 = Array[java.lang.Integer](3, null, 4)
+    val arrayArray = Literal.create(Seq(aa2, aa1), typeAA)
+
+    val typeAAS = ArrayType(ArrayType(StructType(StructField("a", IntegerType) :: Nil)))
+    val aas1 = Array(create_row(1))
+    val aas2 = Array(create_row(2))
+    val arrayArrayStruct = Literal.create(Seq(aas2, aas1), typeAAS)
+
+    checkEvaluation(arraySort(a0), Seq(1, 2, 3))
+    checkEvaluation(arraySort(a1), Seq[Integer]())
+    checkEvaluation(arraySort(a2), Seq("a", "b"))
+    checkEvaluation(arraySort(a3), Seq("a", "b", null))
+    checkEvaluation(arraySort(a4), Seq(d1, d2))
+    checkEvaluation(arraySort(a5), Seq(null, null))
+    checkEvaluation(arraySort(arrayStruct), Seq(create_row(1), create_row(2)))
+    checkEvaluation(arraySort(arrayArray), Seq(aa1, aa2))
+    checkEvaluation(arraySort(arrayArrayStruct), Seq(aas1, aas2))
+
+    checkEvaluation(arraySort(a0, (left, right) => UnaryMinus(ArraySort.comparator(left, right))),
+      Seq(3, 2, 1))
+    checkEvaluation(arraySort(a3, (left, right) => UnaryMinus(ArraySort.comparator(left, right))),
+      Seq(null, "b", "a"))
+    checkEvaluation(arraySort(a4, (left, right) => UnaryMinus(ArraySort.comparator(left, right))),
+      Seq(d2, d1))
   }
 
   test("MapFilter") {
@@ -415,8 +465,13 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(
       transformKeys(transformKeys(ai0, plusOne), plusValue),
       create_map(3 -> 1, 5 -> 2, 7 -> 3, 9 -> 4))
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(transformKeys(ai0, modKey), create_map(1 -> 4, 2 -> 2, 0 -> 3))
+
+    checkExceptionInExpression[RuntimeException](
+      transformKeys(ai0, modKey), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(transformKeys(ai0, modKey), create_map(1 -> 4, 2 -> 2, 0 -> 3))
+    }
     checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
     checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
     checkEvaluation(

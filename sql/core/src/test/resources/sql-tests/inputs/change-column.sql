@@ -2,56 +2,48 @@
 CREATE TABLE test_change(a INT, b STRING, c INT) using parquet;
 DESC test_change;
 
--- Change column name (not supported yet)
-ALTER TABLE test_change CHANGE a a1 INT;
+-- ALTER TABLE CHANGE COLUMN must change either type or comment
+ALTER TABLE test_change CHANGE a;
+DESC test_change;
+
+-- Change column name (not supported on v1 table)
+ALTER TABLE test_change RENAME COLUMN a TO a1;
 DESC test_change;
 
 -- Change column dataType (not supported yet)
-ALTER TABLE test_change CHANGE a a STRING;
+ALTER TABLE test_change CHANGE a TYPE STRING;
 DESC test_change;
 
 -- Change column position (not supported yet)
-ALTER TABLE test_change CHANGE a a INT AFTER b;
-ALTER TABLE test_change CHANGE b b STRING FIRST;
+ALTER TABLE test_change CHANGE a AFTER b;
+ALTER TABLE test_change CHANGE b FIRST;
 DESC test_change;
 
 -- Change column comment
-ALTER TABLE test_change CHANGE a a INT COMMENT 'this is column a';
-ALTER TABLE test_change CHANGE b b STRING COMMENT '#*02?`';
-ALTER TABLE test_change CHANGE c c INT COMMENT '';
+ALTER TABLE test_change CHANGE a COMMENT 'this is column a';
+ALTER TABLE test_change CHANGE b COMMENT '#*02?`';
+ALTER TABLE test_change CHANGE c COMMENT '';
 DESC test_change;
 
 -- Don't change anything.
-ALTER TABLE test_change CHANGE a a INT COMMENT 'this is column a';
+ALTER TABLE test_change CHANGE a TYPE INT;
+ALTER TABLE test_change CHANGE a COMMENT 'this is column a';
 DESC test_change;
 
 -- Change a invalid column
-ALTER TABLE test_change CHANGE invalid_col invalid_col INT;
+ALTER TABLE test_change CHANGE invalid_col TYPE INT;
 DESC test_change;
 
--- Change column name/dataType/position/comment together (not supported yet)
-ALTER TABLE test_change CHANGE a a1 STRING COMMENT 'this is column a1' AFTER b;
-DESC test_change;
-
--- Check the behavior with different values of CASE_SENSITIVE
-SET spark.sql.caseSensitive=false;
-ALTER TABLE test_change CHANGE a A INT COMMENT 'this is column A';
-SET spark.sql.caseSensitive=true;
-ALTER TABLE test_change CHANGE a A INT COMMENT 'this is column A1';
+-- Check case insensitivity.
+ALTER TABLE test_change CHANGE A COMMENT 'case insensitivity';
 DESC test_change;
 
 -- Change column can't apply to a temporary/global_temporary view
 CREATE TEMPORARY VIEW temp_view(a, b) AS SELECT 1, "one";
-ALTER TABLE temp_view CHANGE a a INT COMMENT 'this is column a';
+ALTER TABLE temp_view CHANGE a TYPE INT;
 CREATE GLOBAL TEMPORARY VIEW global_temp_view(a, b) AS SELECT 1, "one";
-ALTER TABLE global_temp.global_temp_view CHANGE a a INT COMMENT 'this is column a';
-
--- Change column in partition spec (not supported yet)
-CREATE TABLE partition_table(a INT, b STRING, c INT, d STRING) USING parquet PARTITIONED BY (c, d);
-ALTER TABLE partition_table PARTITION (c = 1) CHANGE COLUMN a new_a INT;
-ALTER TABLE partition_table CHANGE COLUMN c c INT COMMENT 'this is column C';
+ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT;
 
 -- DROP TEST TABLE
 DROP TABLE test_change;
-DROP TABLE partition_table;
 DROP VIEW global_temp.global_temp_view;

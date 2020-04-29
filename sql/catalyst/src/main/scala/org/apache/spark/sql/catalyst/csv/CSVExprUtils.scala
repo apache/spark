@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import org.apache.commons.lang3.StringUtils
+
 object CSVExprUtils {
   /**
    * Filter ignorable rows for CSV iterator (lines empty and starting with `comment`).
@@ -78,5 +80,49 @@ object CSVExprUtils {
       case _ =>
         throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
     }
+  }
+
+  /**
+   * Helper method that converts string representation of a character sequence to actual
+   * delimiter characters. The input is processed in "chunks", and each chunk is converted
+   * by calling [[CSVExprUtils.toChar()]].  A chunk is either:
+   * <ul>
+   *   <li>a backslash followed by another character</li>
+   *   <li>a non-backslash character by itself</li>
+   * </ul>
+   * , in that order of precedence. The result of the converting all chunks is returned as
+   * a [[String]].
+   *
+   * <br/><br/>Examples:
+   * <ul><li>`\t` will result in a single tab character as the separator (same as before)
+   * </li><li>`|||` will result in a sequence of three pipe characters as the separator
+   * </li><li>`\\` will result in a single backslash as the separator (same as before)
+   * </li><li>`\.` will result in an error (since a dot is not a character that needs escaped)
+   * </li><li>`\\.` will result in a backslash, then dot, as the separator character sequence
+   * </li><li>`.\t.` will result in a dot, then tab, then dot as the separator character sequence
+   * </li>
+   * </ul>
+   *
+   * @param str the string representing the sequence of separator characters
+   * @return a [[String]] representing the multi-character delimiter
+   * @throws IllegalArgumentException if any of the individual input chunks are illegal
+   */
+  def toDelimiterStr(str: String): String = {
+    var idx = 0
+
+    var delimiter = ""
+
+    while (idx < str.length()) {
+      // if the current character is a backslash, check it plus the next char
+      // in order to use existing escape logic
+      val readAhead = if (str(idx) == '\\') 2 else 1
+      // get the chunk of 1 or 2 input characters to convert to a single delimiter char
+      val chunk = StringUtils.substring(str, idx, idx + readAhead)
+      delimiter += toChar(chunk)
+      // advance the counter by the length of input chunk processed
+      idx += chunk.length()
+    }
+
+    delimiter.mkString("")
   }
 }

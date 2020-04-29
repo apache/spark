@@ -22,7 +22,11 @@ import java.net.URI
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem, RemoteIterator}
+import org.apache.hadoop.fs.viewfs.ViewFileSystem
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -352,6 +356,26 @@ class FileIndexSuite extends SharedSparkSession {
       "driver side must not be negative"))
   }
 
+  test ("SPARK-29537: throw exception when user defined a wrong base path") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val wrongBasePath = new File(dir, "unknown")
+      // basePath must be a directory
+      wrongBasePath.mkdir()
+      val parameters = Map("basePath" -> wrongBasePath.getCanonicalPath)
+      val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
+      val msg = intercept[IllegalArgumentException] {
+        // trigger inferPartitioning()
+        fileIndex.partitionSpec()
+      }.getMessage
+      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+    }
+  }
+
   test("refresh for InMemoryFileIndex with FileStatusCache") {
     withTempDir { dir =>
       val fileStatusCache = FileStatusCache.getOrCreate(spark)
@@ -444,6 +468,25 @@ class FileIndexSuite extends SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-31047 - Improve file listing for ViewFileSystem") {
+    val path = mock(classOf[Path])
+    val dfs = mock(classOf[ViewFileSystem])
+    when(path.getFileSystem(any[Configuration])).thenReturn(dfs)
+    val statuses =
+      Seq(
+        new LocatedFileStatus(
+          new FileStatus(0, false, 0, 100, 0,
+            new Path("file")), Array(new BlockLocation()))
+      )
+    when(dfs.listLocatedStatus(path)).thenReturn(new RemoteIterator[LocatedFileStatus] {
+      val iter = statuses.toIterator
+      override def hasNext: Boolean = iter.hasNext
+      override def next(): LocatedFileStatus = iter.next
+    })
+    val fileIndex = new TestInMemoryFileIndex(spark, path)
+    assert(fileIndex.leafFileStatuses.toSeq == statuses)
   }
 }
 

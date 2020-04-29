@@ -222,7 +222,7 @@ public class UnsafeExternalSorterSuite {
   public void testSortTimeMetric() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
     long prevSortTime = sorter.getSortTimeNanos();
-    assertEquals(prevSortTime, 0);
+    assertEquals(0, prevSortTime);
 
     sorter.insertRecord(null, 0, 0, 0, false);
     sorter.spill();
@@ -230,7 +230,7 @@ public class UnsafeExternalSorterSuite {
     prevSortTime = sorter.getSortTimeNanos();
 
     sorter.spill();  // no sort needed
-    assertEquals(sorter.getSortTimeNanos(), prevSortTime);
+    assertEquals(prevSortTime, sorter.getSortTimeNanos());
 
     sorter.insertRecord(null, 0, 0, 0, false);
     UnsafeSorterIterator iter = sorter.getSortedIterator();

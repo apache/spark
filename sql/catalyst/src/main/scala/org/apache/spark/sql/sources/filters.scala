@@ -18,20 +18,26 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.annotation.{Evolving, Stable}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the filters that we can push down to the data sources.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * A filter predicate for data sources.
+ * A filter predicate for data sources. Mapping between Spark SQL types and filter value
+ * types follow the convention for return type of [[org.apache.spark.sql.Row#get(int)]].
  *
  * @since 1.3.0
  */
 @Stable
-abstract class Filter {
+sealed abstract class Filter {
   /**
    * List of columns that are referenced by this filter.
+   *
+   * Note that, each element in `references` represents a column; `dots` are used as separators
+   * for nested columns. If any part of the names contains `dots`, it is quoted to avoid confusion.
+   *
    * @since 2.1.0
    */
   def references: Array[String]
@@ -40,12 +46,32 @@ abstract class Filter {
     case f: Filter => f.references
     case _ => Array.empty
   }
+
+  /**
+   * List of columns that are referenced by this filter.
+   *
+   * @return each element is a column name as an array of string multi-identifier
+   * @since 3.0.0
+   */
+  def v2references: Array[Array[String]] = {
+    this.references.map(parseColumnPath(_).toArray)
+  }
+
+  /**
+   * If any of the references of this filter contains nested column
+   */
+  private[sql] def containsNestedColumn: Boolean = {
+    this.v2references.exists(_.length > 1)
+  }
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to a value
+ * A filter that evaluates to `true` iff the column evaluates to a value
  * equal to `value`.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -58,6 +84,9 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
  * in that it returns `true` (rather than NULL) if both inputs are NULL, and `false`
  * (rather than NULL) if one of the input is NULL and the other is not NULL.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.5.0
  */
 @Stable
@@ -69,6 +98,9 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
  * A filter that evaluates to `true` iff the attribute evaluates to a value
  * greater than `value`.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -80,6 +112,9 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
  * A filter that evaluates to `true` iff the attribute evaluates to a value
  * greater than or equal to `value`.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -91,6 +126,9 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
  * A filter that evaluates to `true` iff the attribute evaluates to a value
  * less than `value`.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -102,6 +140,9 @@ case class LessThan(attribute: String, value: Any) extends Filter {
  * A filter that evaluates to `true` iff the attribute evaluates to a value
  * less than or equal to `value`.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -112,6 +153,9 @@ case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to one of the values in the array.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -139,6 +183,9 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to null.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -149,6 +196,9 @@ case class IsNull(attribute: String) extends Filter {
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to a non-null value.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.0
  */
 @Stable
@@ -190,6 +240,9 @@ case class Not(child: Filter) extends Filter {
  * A filter that evaluates to `true` iff the attribute evaluates to
  * a string that starts with `value`.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.1
  */
 @Stable
@@ -201,6 +254,9 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
  * A filter that evaluates to `true` iff the attribute evaluates to
  * a string that ends with `value`.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.1
  */
 @Stable
@@ -212,6 +268,9 @@ case class StringEndsWith(attribute: String, value: String) extends Filter {
  * A filter that evaluates to `true` iff the attribute evaluates to
  * a string that contains the string `value`.
  *
+ * @param attribute of the column to be evaluated; `dots` are used as separators
+ *                  for nested columns. If any part of the names contains `dots`,
+ *                  it is quoted to avoid confusion.
  * @since 1.3.1
  */
 @Stable
@@ -221,6 +280,8 @@ case class StringContains(attribute: String, value: String) extends Filter {
 
 /**
  * A filter that always evaluates to `true`.
+ *
+ * @since 3.0.0
  */
 @Evolving
 case class AlwaysTrue() extends Filter {
@@ -233,6 +294,8 @@ object AlwaysTrue extends AlwaysTrue {
 
 /**
  * A filter that always evaluates to `false`.
+ *
+ * @since 3.0.0
  */
 @Evolving
 case class AlwaysFalse() extends Filter {

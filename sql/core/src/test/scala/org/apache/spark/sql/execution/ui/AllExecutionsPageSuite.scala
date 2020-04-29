@@ -57,7 +57,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
 
     val html = renderSQLPage(request, tab, statusStore).toString().toLowerCase(Locale.ROOT)
     assert(html.contains("failed queries"))
-    assert(!html.contains("1970"))
+    assert(!html.contains("1970/01/01"))
   }
 
   test("sorting should be successful") {
@@ -73,7 +73,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     map.put("failed.sort", Array("duration"))
     when(request.getParameterMap()).thenReturn(map)
     val html = renderSQLPage(request, tab, statusStore).toString().toLowerCase(Locale.ROOT)
-    assert(!html.contains("IllegalArgumentException"))
+    assert(!html.contains("illegalargumentexception"))
     assert(html.contains("duration"))
   }
 

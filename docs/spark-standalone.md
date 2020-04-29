@@ -185,13 +185,14 @@ You can optionally configure the cluster further by setting environment variable
 SPARK_MASTER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
   <td>
     The maximum number of completed applications to display. Older applications will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.retainedDrivers</code></td>
@@ -199,6 +200,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
    The maximum number of completed drivers to display. Older drivers will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.spreadOut</code></td>
@@ -208,6 +210,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
   </td>
+  <td>0.6.1</td>
 </tr>
 <tr>
   <td><code>spark.deploy.defaultCores</code></td>
@@ -219,6 +222,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.maxExecutorRetries</code></td>
@@ -234,6 +238,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     <code>-1</code>.
     <br/>
   </td>
+  <td>1.6.3</td>
 </tr>
 <tr>
   <td><code>spark.worker.timeout</code></td>
@@ -242,6 +247,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Number of seconds after which the standalone deploy master considers a worker lost if it
     receives no heartbeats.
   </td>
+  <td>0.6.2</td>
 </tr>
 <tr>
   <td><code>spark.worker.resource.{resourceName}.amount</code></td>
@@ -249,6 +255,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Amount of a particular resource to use on the worker.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
@@ -256,9 +263,8 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Path to resource discovery script, which is used to find a particular resource while worker starting up.
     And the output of the script should be formatted like the <code>ResourceInformation</code> class.
-    When <code>spark.resources.coordinate.enable</code> is off, the discovery script must assign different
-    resources for workers and drivers in client mode that run on the same host to avoid resource conflict.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.resourcesFile</code></td>
@@ -266,20 +272,19 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Path to resources file which is used to find various resources while worker starting up.
     The content of resources file should be formatted like <code>
-    [[{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]]</code>.
-    When <code>spark.resources.coordinate.enable</code> is off, resources file must assign different
-    resources for workers and drivers in client mode that run on the same host to avoid resource conflict.
+    [{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]</code>.
     If a particular resource is not found in the resources file, the discovery script would be used to
     find that resource. If the discovery script also does not find the resources, the worker will fail
     to start up.
   </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
 SPARK_WORKER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
@@ -288,6 +293,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
     This should be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.interval</code></td>
@@ -296,6 +302,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     Controls the interval, in seconds, at which the worker cleans up old application work dirs
     on the local machine.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.appDataTtl</code></td>
@@ -306,6 +313,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.enabled</code></td>
@@ -316,6 +324,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
     eventually gets cleaned up.  This config may be removed in the future.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
@@ -328,6 +337,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     all files/subdirectories of a stopped and timeout application.
     This only affects Standalone mode, support of other cluster manangers can be added in the future.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
@@ -337,6 +347,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     Spark caches the uncompressed file size of compressed log files. This property controls the cache
     size.
   </td>
+  <td>2.0.2</td>
 </tr>
 </table>
 
@@ -346,9 +357,9 @@ Please make sure to have read the Custom Resource Scheduling and Configuration O
 
 Spark Standalone has 2 parts, the first is configuring the resources for the Worker, the second is the resource allocation for a specific application.
 
-The user must configure the Workers to have a set of resources available so that it can assign them out to Executors. The <code>spark.worker.resource.{resourceName}.amount</code> is used to control the amount of each resource the worker has allocated. The user must also specify either <code>spark.worker.resourcesFile</code> or <code>spark.worker.resource.{resourceName}.discoveryScript</code> to specify how the Worker discovers the resources its assigned. See the descriptions above for each of those to see which method works best for your setup. Please take note of <code>spark.resources.coordinate.enable</code> as it indicates whether Spark should handle coordinating resources or if the user has made sure each Worker has separate resources. Also note that if using the resources coordination <code>spark.resources.dir</code> can be used to specify the directory used to do that coordination.
+The user must configure the Workers to have a set of resources available so that it can assign them out to Executors. The <code>spark.worker.resource.{resourceName}.amount</code> is used to control the amount of each resource the worker has allocated. The user must also specify either <code>spark.worker.resourcesFile</code> or <code>spark.worker.resource.{resourceName}.discoveryScript</code> to specify how the Worker discovers the resources its assigned. See the descriptions above for each of those to see which method works best for your setup.
 
-The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesfile</code> or <code>spark.driver.resources.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers or Workers there are 2 ways to make sure the they don't use the same resources. The user can either configure <code>spark.resources.coordinate.enable</code> on and give all the Driver/Workers the same set or resources and Spark will handle make sure each Driver/Worker has separate resources, or the user can make sure the resources file or discovery script only returns resources the do not conflict with other Drivers or Workers running on the same node.
+The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesfile</code> or <code>spark.driver.resource.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers, please make sure the resources file or discovery script only returns resources that do not conflict with other Drivers running on the same node.
 
 Note, the user does not need to specify a discovery script when submitting an application as the Worker will start each Executor with the resources it allocates to it.
 
@@ -488,14 +499,16 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
 <table class="table">
-  <tr><th style="width:21%">System property</th><th>Meaning</th></tr>
+  <tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>Set to FILESYSTEM to enable single-node recovery mode (default: NONE).</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.</td>
+    <td>0.8.1</td>
   </tr>
 </table>
 

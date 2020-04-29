@@ -17,11 +17,19 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import java.util.Collections
+
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan}
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.QueryExecutionListener
 
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
   before {
@@ -123,6 +131,59 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t1 USING foo AS SELECT 'c', 'd'")
       df.write.mode("ignore").saveAsTable(t1)
       checkAnswer(spark.table(t1), Seq(Row("c", "d")))
+    }
+  }
+
+  testQuietly("SPARK-29778: saveAsTable: append mode takes write options") {
+
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+
+    try {
+      spark.listenerManager.register(listener)
+
+      val t1 = "testcat.ns1.ns2.tbl"
+
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df.write.option("other", "20").mode("append").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case p: AppendData =>
+          assert(p.writeOptions == Map("other" -> "20"))
+        case other =>
+          fail(s"Expected to parse ${classOf[AppendData].getName} from query," +
+            s"got ${other.getClass.getName}: $plan")
+      }
+
+      checkAnswer(spark.table(t1), df)
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("Cannot write data with intervals to v2") {
+    withTable("testcat.table_name") {
+      val testCatalog = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+      testCatalog.createTable(
+        Identifier.of(Array(), "table_name"),
+        new StructType().add("i", "interval"),
+        Array.empty, Collections.emptyMap[String, String])
+      val df = sql("select interval 1 day as i")
+      val v2Writer = df.writeTo("testcat.table_name")
+      val e1 = intercept[AnalysisException](v2Writer.append())
+      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+      val e2 = intercept[AnalysisException](v2Writer.overwrite(df("i")))
+      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+      val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
+      assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
     }
   }
 }

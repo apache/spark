@@ -46,7 +46,7 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       courseSales.groupBy("course").pivot("year", Seq(2012, 2013)).agg(sum($"earnings")),
       expected)
     checkAnswer(
-      courseSales.groupBy('course).pivot('year, Seq(2012, 2013)).agg(sum('earnings)),
+      courseSales.groupBy($"course").pivot($"year", Seq(2012, 2013)).agg(sum($"earnings")),
       expected)
   }
 
@@ -206,7 +206,7 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       complexData.groupBy().pivot("b", Seq(true, false)).agg(max("a")),
       expected)
     checkAnswer(
-      complexData.groupBy().pivot('b, Seq(true, false)).agg(max('a)),
+      complexData.groupBy().pivot($"b", Seq(true, false)).agg(max("a")),
       expected)
   }
 
@@ -258,7 +258,7 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
     val ts = "2012-12-31 16:00:10.011"
     val tsWithZone = "2013-01-01 00:00:10.011"
 
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val df = Seq(java.sql.Timestamp.valueOf(ts)).toDF("a").groupBy("a").pivot("a").count()
       val expected = StructType(
         StructField("a", TimestampType) ::

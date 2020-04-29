@@ -320,7 +320,10 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
 
   @Since("2.0.0")
-  override def toString: String = s"RFormula(${get(formula).getOrElse("")}) (uid=$uid)"
+  override def toString: String = {
+    s"RFormula: uid=$uid" +
+      get(formula).map(f => s", formula = $f").getOrElse("")
+  }
 }
 
 @Since("2.0.0")
@@ -376,7 +379,9 @@ class RFormulaModel private[feature](
   }
 
   @Since("2.0.0")
-  override def toString: String = s"RFormulaModel($resolvedFormula) (uid=$uid)"
+  override def toString: String = {
+    s"RFormulaModel: uid=$uid, resolvedFormula=$resolvedFormula"
+  }
 
   private def transformLabel(dataset: Dataset[_]): DataFrame = {
     val labelName = resolvedFormula.label

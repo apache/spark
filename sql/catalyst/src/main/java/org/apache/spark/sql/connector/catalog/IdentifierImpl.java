@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import com.google.common.base.Preconditions;
-import org.apache.spark.annotation.Experimental;
-
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.google.common.base.Preconditions;
+
+import org.apache.spark.annotation.Evolving;
+
 /**
  *  An {@link Identifier} implementation.
  */
-@Experimental
+@Evolving
 class IdentifierImpl implements Identifier {
 
   private String[] namespace;
@@ -51,19 +52,11 @@ class IdentifierImpl implements Identifier {
     return name;
   }
 
-  private String escapeQuote(String part) {
-    if (part.contains("`")) {
-      return part.replace("`", "``");
-    } else {
-      return part;
-    }
-  }
-
   @Override
   public String toString() {
     return Stream.concat(Stream.of(namespace), Stream.of(name))
-        .map(part -> '`' + escapeQuote(part) + '`')
-        .collect(Collectors.joining("."));
+      .map(CatalogV2Implicits::quoteIfNeeded)
+      .collect(Collectors.joining("."));
   }
 
   @Override

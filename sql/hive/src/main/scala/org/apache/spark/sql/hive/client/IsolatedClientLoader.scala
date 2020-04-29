@@ -104,7 +104,8 @@ private[hive] object IsolatedClientLoader extends Logging {
     case "2.0" | "2.0.0" | "2.0.1" => hive.v2_0
     case "2.1" | "2.1.0" | "2.1.1" => hive.v2_1
     case "2.2" | "2.2.0" => hive.v2_2
-    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" | "2.3.3" | "2.3.4" | "2.3.5" | "2.3.6" => hive.v2_3
+    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" | "2.3.3" | "2.3.4" | "2.3.5" | "2.3.6" | "2.3.7" =>
+      hive.v2_3
     case "3.0" | "3.0.0" => hive.v3_0
     case "3.1" | "3.1.0" | "3.1.1" | "3.1.2" => hive.v3_1
     case version =>
@@ -162,7 +163,7 @@ private[hive] object IsolatedClientLoader extends Logging {
  * @param execJars A collection of jar files that must include hive and hadoop.
  * @param config   A set of options that will be added to the HiveConf of the constructed client.
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
- *                    true unless loading the version of hive that is on Sparks classloader.
+ *                    true unless loading the version of hive that is on Spark's classloader.
  * @param sharesHadoopClasses When true, we will share Hadoop classes between Spark and
  * @param baseClassLoader The spark classloader that is used to load shared classes.
  */

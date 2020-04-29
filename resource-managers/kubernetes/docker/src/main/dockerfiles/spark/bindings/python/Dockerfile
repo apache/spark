@@ -25,7 +25,8 @@ USER 0
 
 RUN mkdir ${SPARK_HOME}/python
 # TODO: Investigate running both pip and pip3 via virtualenvs
-RUN apt install -y python python-pip && \
+RUN apt-get update && \
+    apt install -y python python-pip && \
     apt install -y python3 python3-pip && \
     # We remove ensurepip since it adds no functionality since pip is
     # installed on the image and it just takes up 1.6MB on the image

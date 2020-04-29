@@ -7,11 +7,13 @@
 
 CREATE TABLE FLOAT8_TBL(f1 double) USING parquet;
 
-INSERT INTO FLOAT8_TBL VALUES ('    0.0   ');
-INSERT INTO FLOAT8_TBL VALUES ('1004.30  ');
-INSERT INTO FLOAT8_TBL VALUES ('   -34.84');
-INSERT INTO FLOAT8_TBL VALUES ('1.2345678901234e+200');
-INSERT INTO FLOAT8_TBL VALUES ('1.2345678901234e-200');
+-- PostgreSQL implicitly casts string literals to data with floating point types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO FLOAT8_TBL VALUES (double('    0.0   '));
+INSERT INTO FLOAT8_TBL VALUES (double('1004.30  '));
+INSERT INTO FLOAT8_TBL VALUES (double('   -34.84'));
+INSERT INTO FLOAT8_TBL VALUES (double('1.2345678901234e+200'));
+INSERT INTO FLOAT8_TBL VALUES (double('1.2345678901234e-200'));
 
 -- [SPARK-28024] Incorrect numeric values when out of range
 -- test for underflow and overflow handling
@@ -227,15 +229,17 @@ SELECT atanh(double('NaN'));
 
 TRUNCATE TABLE FLOAT8_TBL;
 
-INSERT INTO FLOAT8_TBL VALUES ('0.0');
+-- PostgreSQL implicitly casts string literals to data with floating point types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO FLOAT8_TBL VALUES (double('0.0'));
 
-INSERT INTO FLOAT8_TBL VALUES ('-34.84');
+INSERT INTO FLOAT8_TBL VALUES (double('-34.84'));
 
-INSERT INTO FLOAT8_TBL VALUES ('-1004.30');
+INSERT INTO FLOAT8_TBL VALUES (double('-1004.30'));
 
-INSERT INTO FLOAT8_TBL VALUES ('-1.2345678901234e+200');
+INSERT INTO FLOAT8_TBL VALUES (double('-1.2345678901234e+200'));
 
-INSERT INTO FLOAT8_TBL VALUES ('-1.2345678901234e-200');
+INSERT INTO FLOAT8_TBL VALUES (double('-1.2345678901234e-200'));
 
 SELECT '' AS five, * FROM FLOAT8_TBL;
 

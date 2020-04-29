@@ -28,7 +28,7 @@ import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.python.PythonDStream
-import org.apache.spark.streaming.ui.UIUtils
+import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
 
 
@@ -47,7 +47,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // Use of ConcurrentHashMap.keySet later causes an odd runtime problem due to Java 7/8 diff
   // https://gist.github.com/AlainODea/1375759b8720a3f9f094
   private val jobSets: java.util.Map[Time, JobSet] = new ConcurrentHashMap[Time, JobSet]
-  private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
+  private val numConcurrentJobs = ssc.conf.get(StreamingConf.CONCURRENT_JOBS)
   private val jobExecutor =
     ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor")
   private[streaming] val jobGenerator = new JobGenerator(this)
@@ -230,7 +230,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       val oldProps = ssc.sparkContext.getLocalProperties
       try {
         ssc.sparkContext.setLocalProperties(Utils.cloneProperties(ssc.savedProperties.get()))
-        val formattedTime = UIUtils.formatBatchTime(
+        val formattedTime = SparkUIUtils.formatBatchTime(
           job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
         val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"
         val batchLinkText = s"[output operation ${job.outputOpId}, batch time ${formattedTime}]"

@@ -29,6 +29,8 @@ import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
  *
  * This is an empty interface, data sources should define their own message class and use it when
  * generating messages at executor side and handling the messages at driver side.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface WriterCommitMessage extends Serializable {}

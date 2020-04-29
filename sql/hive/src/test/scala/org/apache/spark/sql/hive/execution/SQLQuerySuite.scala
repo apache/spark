@@ -33,7 +33,8 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Functio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.execution.command.LoadDataCommand
+import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.command.{FunctionsCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -42,7 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -67,7 +68,7 @@ case class Order(
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
 
@@ -192,6 +193,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))
     }
+
+    FunctionsCommand.virtualOperators.foreach { f =>
+      assert(allFunctions.contains(f))
+    }
+
     withTempDatabase { db =>
       def createFunction(names: Seq[String]): Unit = {
         names.foreach { name =>
@@ -771,7 +777,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("CREATE TABLE test2 (key INT, value STRING)")
       testData.write.mode(SaveMode.Append).insertInto("test2")
       testData.write.mode(SaveMode.Append).insertInto("test2")
-      sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
+      sql("CREATE TABLE test USING hive AS " +
+        "SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
       checkAnswer(
         table("test"),
         sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
@@ -932,7 +939,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     read.json(ds).createOrReplaceTempView("data")
 
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
-      sql("CREATE TABLE explodeTest (key bigInt)")
+      sql("CREATE TABLE explodeTest (key bigInt) USING hive")
       table("explodeTest").queryExecution.analyzed match {
         case SubqueryAlias(_, r: HiveTableRelation) => // OK
         case _ =>
@@ -1176,51 +1183,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     read.json(ds).createOrReplaceTempView("t")
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
-  }
-
-  test("Convert hive interval term into Literal of CalendarIntervalType") {
-    checkAnswer(sql("select interval '0 0:0:0.1' day to second"),
-      Row(CalendarInterval.fromString("interval 100 milliseconds")))
-    checkAnswer(sql("select interval '10-9' year to month"),
-      Row(CalendarInterval.fromString("interval 10 years 9 months")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to hour"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to minute"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
-        "32 seconds 998 milliseconds 999 microseconds")))
-    checkAnswer(sql("select interval '15:40:32.99899999' hour to minute"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
-    checkAnswer(sql("select interval '15:40.99899999' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 minutes 40 seconds 998 milliseconds " +
-        "999 microseconds")))
-    checkAnswer(sql("select interval '15:40' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
-    checkAnswer(sql("select interval '15:40:32.99899999' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes 32 seconds 998 milliseconds " +
-        "999 microseconds")))
-    checkAnswer(sql("select interval '20 40:32.99899999' minute to second"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 40 minutes 32 seconds " +
-        "998 milliseconds 999 microseconds")))
-    checkAnswer(sql("select interval '40:32.99899999' minute to second"),
-      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds 998 milliseconds " +
-        "999 microseconds")))
-    checkAnswer(sql("select interval '40:32' minute to second"),
-      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds")))
-    checkAnswer(sql("select interval '30' year"),
-      Row(CalendarInterval.fromString("interval 30 years")))
-    checkAnswer(sql("select interval '25' month"),
-      Row(CalendarInterval.fromString("interval 25 months")))
-    checkAnswer(sql("select interval '-100' day"),
-      Row(CalendarInterval.fromString("interval -14 weeks -2 days")))
-    checkAnswer(sql("select interval '40' hour"),
-      Row(CalendarInterval.fromString("interval 1 days 16 hours")))
-    checkAnswer(sql("select interval '80' minute"),
-      Row(CalendarInterval.fromString("interval 1 hour 20 minutes")))
-    checkAnswer(sql("select interval '299.889987299' second"),
-      Row(CalendarInterval.fromString(
-        "interval 4 minutes 59 seconds 889 milliseconds 987 microseconds")))
   }
 
   test("specifying database name for a temporary view is not allowed") {
@@ -1931,7 +1893,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
 
       withTable("load_t") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/*part-r*' INTO TABLE load_t")
         checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1"), Row("2"), Row("3")))
 
@@ -1951,7 +1913,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8)
       }
       withTable("load_t") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000 1' INTO TABLE load_t")
         checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1")))
       }
@@ -1966,7 +1928,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t_folder_wildcard") {
-        sql("CREATE TABLE load_t (a STRING)")
+        sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '${
           path.substring(0, path.length - 1)
             .concat("*")
@@ -1990,7 +1952,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t1") {
-        sql("CREATE TABLE load_t1 (a STRING)")
+        sql("CREATE TABLE load_t1 (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000?' INTO TABLE load_t1")
         checkAnswer(sql("SELECT * FROM load_t1"), Seq(Row("1"), Row("2"), Row("3")))
       }
@@ -2005,7 +1967,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
       withTable("load_t2") {
-        sql("CREATE TABLE load_t2 (a STRING)")
+        sql("CREATE TABLE load_t2 (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '$path/?art-r-00001' INTO TABLE load_t2")
         checkAnswer(sql("SELECT * FROM load_t2"), Seq(Row("1")))
       }
@@ -2131,7 +2093,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       withTable("t") {
         df.createTempView("tempView")
         val e = intercept[AnalysisException] {
-          sql("CREATE TABLE t AS SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
+          sql("CREATE TABLE t USING hive AS " +
+            "SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
         }.getMessage
         assert(e.contains(expectedMsg))
       }
@@ -2416,7 +2379,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         })
         spark
           .range(5)
-          .select(badUDF('id).as("a"))
+          .select(badUDF($"id").as("a"))
           .createOrReplaceTempView("test")
         val scriptFilePath = getTestResourcePath("data")
         val e = intercept[SparkException] {
@@ -2432,4 +2395,116 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-29295: insert overwrite external partition should not have old data") {
+    Seq("true", "false").foreach { convertParquet =>
+      withTable("test") {
+        withTempDir { f =>
+          sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (name string) STORED AS " +
+            s"PARQUET LOCATION '${f.getAbsolutePath}'")
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet) {
+            sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 1")
+            sql("ALTER TABLE test DROP PARTITION(name='n1')")
+            sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 2")
+            checkAnswer(sql("SELECT id FROM test WHERE name = 'n1' ORDER BY id"),
+              Array(Row(2)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-29295: dynamic insert overwrite external partition should not have old data") {
+    Seq("true", "false").foreach { convertParquet =>
+      withTable("test") {
+        withTempDir { f =>
+          sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (p1 string, p2 string) " +
+            s"STORED AS PARQUET LOCATION '${f.getAbsolutePath}'")
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet,
+            "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+            sql(
+              """
+                |INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2)
+                |SELECT * FROM VALUES (1, 'n2'), (2, 'n3') AS t(id, p2)
+              """.stripMargin)
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n2' ORDER BY id"),
+              Array(Row(1)))
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n3' ORDER BY id"),
+              Array(Row(2)))
+
+            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 4, 'n4'")
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n4' ORDER BY id"),
+              Array(Row(4)))
+
+            sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='n2')")
+            sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='n3')")
+
+            sql(
+              """
+                |INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2)
+                |SELECT * FROM VALUES (5, 'n2'), (6, 'n3') AS t(id, p2)
+              """.stripMargin)
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n2' ORDER BY id"),
+              Array(Row(5)))
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n3' ORDER BY id"),
+              Array(Row(6)))
+            // Partition not overwritten should not be deleted.
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n4' ORDER BY id"),
+              Array(Row(4)))
+          }
+        }
+      }
+
+      withTable("test") {
+        withTempDir { f =>
+          sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (p1 string, p2 string) " +
+            s"STORED AS PARQUET LOCATION '${f.getAbsolutePath}'")
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet,
+            "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+            // We should unescape partition value.
+            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 1, '/'")
+            sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='/')")
+            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 2, '/'")
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = '/' ORDER BY id"),
+              Array(Row(2)))
+          }
+        }
+      }
+    }
+  }
+
+  test("partition pruning should handle date correctly") {
+    withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "2") {
+      withTable("t") {
+        sql("CREATE TABLE t (i INT) PARTITIONED BY (j DATE)")
+        sql("INSERT INTO t PARTITION(j='1990-11-11') SELECT 1")
+        checkAnswer(sql("SELECT i, CAST(j AS STRING) FROM t"), Row(1, "1990-11-11"))
+        checkAnswer(
+          sql(
+            """
+              |SELECT i, CAST(j AS STRING)
+              |FROM t
+              |WHERE j IN (DATE'1990-11-10', DATE'1990-11-11', DATE'1990-11-12')
+              |""".stripMargin),
+          Row(1, "1990-11-11"))
+      }
+    }
+  }
+
+  test("SPARK-31522: hive metastore related configurations should be static") {
+    Seq("spark.sql.hive.metastore.version",
+      "spark.sql.hive.metastore.jars",
+      "spark.sql.hive.metastore.sharedPrefixes",
+      "spark.sql.hive.metastore.barrierPrefixes").foreach { key =>
+      val e = intercept[AnalysisException](sql(s"set $key=abc"))
+      assert(e.getMessage.contains("Cannot modify the value of a static config"))
+    }
+  }
 }
+
+class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
+class SQLQuerySuiteAE extends SQLQuerySuiteBase with EnableAdaptiveExecutionSuite
+

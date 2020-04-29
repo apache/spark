@@ -65,7 +65,8 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
           options = Map.empty)(sparkSession = spark)
 
         val logicalRelation = LogicalRelation(relation, tableMeta)
-        val query = Project(Seq('i, 'p), Filter('p === 1, logicalRelation)).analyze
+        val query = Project(Seq(Symbol("i"), Symbol("p")),
+          Filter(Symbol("p") === 1, logicalRelation)).analyze
 
         val optimized = Optimize.execute(query)
         assert(optimized.missingInput.isEmpty)

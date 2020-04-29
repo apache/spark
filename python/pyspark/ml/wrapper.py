@@ -23,7 +23,8 @@ if sys.version >= '3':
 from pyspark import since
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
-from pyspark.ml import Estimator, Transformer, Model
+from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
+from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol
 from pyspark.ml.util import _jvm
@@ -280,6 +281,14 @@ class JavaParams(JavaWrapper, Params):
             that._transfer_params_to_java()
         return that
 
+    def clear(self, param):
+        """
+        Clears a param from the param map if it has been explicitly set.
+        """
+        super(JavaParams, self).clear(param)
+        java_param = self._java_obj.getParam(param.name)
+        self._java_obj.clear(java_param)
+
 
 @inherit_doc
 class JavaEstimator(JavaParams, Estimator):
@@ -364,62 +373,24 @@ class JavaModel(JavaTransformer, Model):
 
             self._resetUid(java_model.uid())
 
-
-@inherit_doc
-class JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
-    """
-    (Private) Trait for parameters for prediction (regression and classification)
-    """
-    pass
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 @inherit_doc
-class JavaPredictor(JavaEstimator, JavaPredictorParams):
+class JavaPredictor(Predictor, JavaEstimator, _PredictorParams):
     """
     (Private) Java Estimator for prediction tasks (regression and classification).
     """
 
-    @since("3.0.0")
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
-
-    @since("3.0.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("3.0.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
+    __metaclass__ = ABCMeta
 
 
 @inherit_doc
-class JavaPredictionModel(JavaModel, JavaPredictorParams):
+class JavaPredictionModel(PredictionModel, JavaModel, _PredictorParams):
     """
     (Private) Java Model for prediction tasks (regression and classification).
     """
-
-    @since("3.0.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("3.0.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
 
     @property
     @since("2.1.0")

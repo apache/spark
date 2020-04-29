@@ -167,7 +167,7 @@ object InExpressionBenchmark extends SqlBasedBenchmark {
 
     def testClosure(): Unit = {
       val df = spark.sql(s"SELECT * FROM t WHERE id IN (${values.mkString(",")})")
-      df.queryExecution.toRdd.foreach(_ => ())
+      df.noop()
     }
 
     benchmark.addCase("In expression") { _ =>

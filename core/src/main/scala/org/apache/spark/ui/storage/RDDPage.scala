@@ -89,9 +89,9 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
       </script>
 
     val content =
-      <div class="row-fluid">
-        <div class="span12">
-          <ul class="unstyled">
+      <div class="row">
+        <div class="col-12">
+          <ul class="list-unstyled">
             <li>
               <strong>Storage Level:</strong>
               {rddStorageInfo.storageLevel}
@@ -116,8 +116,8 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
         </div>
       </div>
 
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <h4>
             Data Distribution on {rddStorageInfo.dataDistribution.map(_.size).getOrElse(0)}
             Executors
@@ -226,7 +226,7 @@ private[ui] class BlockPagedTable(
   override def tableId: String = "rdd-storage-by-block-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped table-head-clickable"
+    "table table-bordered table-sm table-striped table-head-clickable"
 
   override def pageSizeFormField: String = "block.pageSize"
 

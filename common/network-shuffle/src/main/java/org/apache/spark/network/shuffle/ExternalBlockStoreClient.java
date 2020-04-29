@@ -21,20 +21,21 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.collect.Lists;
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientBootstrap;
+import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.shuffle.protocol.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
-import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.client.TransportClientBootstrap;
-import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.crypto.AuthClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
@@ -53,7 +54,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
 
-  protected TransportClientFactory clientFactory;
+  protected volatile TransportClientFactory clientFactory;
   protected String appId;
 
   /**
@@ -100,14 +101,19 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
+      int maxRetries = conf.maxIORetries();
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
-            TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, appId, execId,
-              blockIds1, listener1, conf, downloadFileManager).start();
+            // Unless this client is closed.
+            if (clientFactory != null) {
+              TransportClient client = clientFactory.createClient(host, port, maxRetries > 0);
+              new OneForOneBlockFetcher(client, appId, execId,
+                blockIds1, listener1, conf, downloadFileManager).start();
+            } else {
+              logger.info("This clientFactory was closed. Skipping further block fetch retries.");
+            }
           };
 
-      int maxRetries = conf.maxIORetries();
       if (maxRetries > 0) {
         // Note this Fetcher will correctly handle maxRetries == 0; we avoid it just in case there's
         // a bug in this code. We should remove the if statement once we're sure of the stability.
@@ -177,12 +183,52 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       @Override
       public void onFailure(Throwable e) {
         logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
-            " via external shuffle service from executor: " + execId, e);
+          " via external shuffle service from executor: " + execId, e);
         numRemovedBlocksFuture.complete(0);
         client.close();
       }
     });
     return numRemovedBlocksFuture;
+  }
+
+  public void getHostLocalDirs(
+      String host,
+      int port,
+      String[] execIds,
+      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
+    checkInit();
+    GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      client.sendRpc(getLocalDirsMessage.toByteBuffer(), new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+          try {
+            BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
+            hostLocalDirsCompletable.complete(
+              ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
+          } catch (Throwable t) {
+            logger.warn("Error trying to get the host local dirs for " +
+              Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
+              t.getCause());
+            hostLocalDirsCompletable.completeExceptionally(t);
+          } finally {
+            client.close();
+          }
+        }
+
+        @Override
+        public void onFailure(Throwable t) {
+          logger.warn("Error trying to get the host local dirs for " +
+            Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
+            t.getCause());
+          hostLocalDirsCompletable.completeExceptionally(t);
+          client.close();
+        }
+      });
+    } catch (IOException | InterruptedException e) {
+      hostLocalDirsCompletable.completeExceptionally(e);
+    }
   }
 
   @Override

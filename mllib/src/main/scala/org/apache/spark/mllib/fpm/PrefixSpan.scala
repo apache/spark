@@ -316,9 +316,9 @@ object PrefixSpan extends Logging {
               ((prefix.id, item), (1L, postfixSize))
             }
           }
-        }.reduceByKey { case ((c0, s0), (c1, s1)) =>
-          (c0 + c1, s0 + s1)
-        }.filter { case (_, (c, _)) => c >= minCount }
+        }.reduceByKey { (cs0, cs1) =>
+          (cs0._1 + cs1._1, cs0._2 + cs1._2)
+        }.filter { case (_, cs) => cs._1 >= minCount }
         .collect()
       val newLargePrefixes = mutable.Map.empty[Int, Prefix]
       freqPrefixes.foreach { case ((id, item), (count, projDBSize)) =>

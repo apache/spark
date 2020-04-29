@@ -110,10 +110,11 @@ sparkR.conf <- function(key, defaultValue) {
     value <- if (missing(defaultValue)) {
       tryCatch(callJMethod(conf, "get", key),
               error = function(e) {
-                if (any(grep("java.util.NoSuchElementException", as.character(e)))) {
+                estr <- as.character(e)
+                if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
                   stop(paste0("Config '", key, "' is not set"))
                 } else {
-                  stop(paste0("Unknown error: ", as.character(e)))
+                  stop(paste0("Unknown error: ", estr))
                 }
               })
     } else {
@@ -166,9 +167,9 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
       for (rdf_slice in rdf_slices) {
         batch <- arrow::record_batch(rdf_slice)
         if (is.null(stream_writer)) {
-          stream <- arrow::FileOutputStream(fileName)
+          stream <- arrow::FileOutputStream$create(fileName)
           schema <- batch$schema
-          stream_writer <- arrow::RecordBatchStreamWriter(stream, schema)
+          stream_writer <- arrow::RecordBatchStreamWriter$create(stream, schema)
         }
 
         stream_writer$write_batch(batch)
@@ -197,7 +198,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
       as.list(schema)
     }
     if (is.null(names)) {
-      names <- lapply(1:length(firstRow), function(x) {
+      names <- lapply(seq_len(length(firstRow)), function(x) {
         paste0("_", as.character(x))
       })
     }
@@ -205,7 +206,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     # SPAKR-SQL does not support '.' in column name, so replace it with '_'
     # TODO(davies): remove this once SPARK-2775 is fixed
     names <- lapply(names, function(n) {
-      nn <- gsub("[.]", "_", n)
+      nn <- gsub(".", "_", n, fixed = TRUE)
       if (nn != n) {
         warning(paste("Use", nn, "instead of", n, "as column name"))
       }
@@ -213,7 +214,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     })
 
     types <- lapply(firstRow, infer_type)
-    fields <- lapply(1:length(firstRow), function(i) {
+    fields <- lapply(seq_len(length(firstRow)), function(i) {
       structField(names[[i]], types[[i]], TRUE)
     })
     schema <- do.call(structType, fields)
@@ -556,7 +557,6 @@ tableToDF <- function(tableName) {
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df4 <- read.df(mapTypeJsonPath, "json", stringSchema, multiLine = TRUE)
 #' }
-#' @name read.df
 #' @note read.df since 1.4.0
 read.df <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   if (!is.null(path) && !is.character(path)) {
@@ -687,7 +687,6 @@ read.jdbc <- function(url, tableName,
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df1 <- read.stream("json", path = jsonDir, schema = stringSchema, maxFilesPerTrigger = 1)
 #' }
-#' @name read.stream
 #' @note read.stream since 2.2.0
 #' @note experimental
 read.stream <- function(source = NULL, schema = NULL, ...) {

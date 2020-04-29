@@ -2,114 +2,114 @@
 -- Number of queries: 14
 
 
--- !query 0
+-- !query
 SELECT ifnull(null, 'x'), ifnull('y', 'x'), ifnull(null, null)
--- !query 0 schema
+-- !query schema
 struct<ifnull(NULL, 'x'):string,ifnull('y', 'x'):string,ifnull(NULL, NULL):null>
--- !query 0 output
+-- !query output
 x	y	NULL
 
 
--- !query 1
+-- !query
 SELECT nullif('x', 'x'), nullif('x', 'y')
--- !query 1 schema
+-- !query schema
 struct<nullif('x', 'x'):string,nullif('x', 'y'):string>
--- !query 1 output
+-- !query output
 NULL	x
 
 
--- !query 2
+-- !query
 SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)
--- !query 2 schema
+-- !query schema
 struct<nvl(NULL, 'x'):string,nvl('y', 'x'):string,nvl(NULL, NULL):null>
--- !query 2 output
+-- !query output
 x	y	NULL
 
 
--- !query 3
+-- !query
 SELECT nvl2(null, 'x', 'y'), nvl2('n', 'x', 'y'), nvl2(null, null, null)
--- !query 3 schema
+-- !query schema
 struct<nvl2(NULL, 'x', 'y'):string,nvl2('n', 'x', 'y'):string,nvl2(NULL, NULL, NULL):null>
--- !query 3 output
+-- !query output
 y	x	NULL
 
 
--- !query 4
+-- !query
 SELECT ifnull(1, 2.1d), ifnull(null, 2.1d)
--- !query 4 schema
+-- !query schema
 struct<ifnull(1, 2.1D):double,ifnull(NULL, 2.1D):double>
--- !query 4 output
+-- !query output
 1.0	2.1
 
 
--- !query 5
+-- !query
 SELECT nullif(1, 2.1d), nullif(1, 1.0d)
--- !query 5 schema
+-- !query schema
 struct<nullif(1, 2.1D):int,nullif(1, 1.0D):int>
--- !query 5 output
+-- !query output
 1	NULL
 
 
--- !query 6
+-- !query
 SELECT nvl(1, 2.1d), nvl(null, 2.1d)
--- !query 6 schema
+-- !query schema
 struct<nvl(1, 2.1D):double,nvl(NULL, 2.1D):double>
--- !query 6 output
+-- !query output
 1.0	2.1
 
 
--- !query 7
+-- !query
 SELECT nvl2(null, 1, 2.1d), nvl2('n', 1, 2.1d)
--- !query 7 schema
+-- !query schema
 struct<nvl2(NULL, 1, 2.1D):double,nvl2('n', 1, 2.1D):double>
--- !query 7 output
+-- !query output
 2.1	1.0
 
 
--- !query 8
+-- !query
 SELECT boolean(1), tinyint(1), smallint(1), int(1), bigint(1)
--- !query 8 schema
+-- !query schema
 struct<CAST(1 AS BOOLEAN):boolean,CAST(1 AS TINYINT):tinyint,CAST(1 AS SMALLINT):smallint,CAST(1 AS INT):int,CAST(1 AS BIGINT):bigint>
--- !query 8 output
+-- !query output
 true	1	1	1	1
 
 
--- !query 9
+-- !query
 SELECT float(1), double(1), decimal(1)
--- !query 9 schema
+-- !query schema
 struct<CAST(1 AS FLOAT):float,CAST(1 AS DOUBLE):double,CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
--- !query 9 output
+-- !query output
 1.0	1.0	1
 
 
--- !query 10
+-- !query
 SELECT date("2014-04-04"), timestamp(date("2014-04-04"))
--- !query 10 schema
+-- !query schema
 struct<CAST(2014-04-04 AS DATE):date,CAST(CAST(2014-04-04 AS DATE) AS TIMESTAMP):timestamp>
--- !query 10 output
+-- !query output
 2014-04-04	2014-04-04 00:00:00
 
 
--- !query 11
+-- !query
 SELECT string(1, 2)
--- !query 11 schema
+-- !query schema
 struct<>
--- !query 11 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Function string accepts only one argument; line 1 pos 7
 
 
--- !query 12
+-- !query
 CREATE TEMPORARY VIEW tempView1 AS VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st)
--- !query 12 schema
+-- !query schema
 struct<>
--- !query 12 output
+-- !query output
 
 
 
--- !query 13
+-- !query
 SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1, "value")
--- !query 13 schema
+-- !query schema
 struct<nvl(tempview1.`st`.`col1` AS `col1`, 'value'):string,FROM:bigint>
--- !query 13 output
+-- !query output
 gamma	1

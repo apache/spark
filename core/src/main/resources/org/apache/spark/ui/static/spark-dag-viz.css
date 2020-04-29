@@ -22,6 +22,7 @@
 #dag-viz-graph .label {
   font-weight: normal;
   text-shadow: none;
+  color: #333;
 }
 
 #dag-viz-graph svg path {

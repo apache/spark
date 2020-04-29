@@ -326,7 +326,7 @@ object SizeEstimator extends Logging {
     val parent = getClassInfo(cls.getSuperclass)
     var shellSize = parent.shellSize
     var pointerFields = parent.pointerFields
-    val sizeCount = Array.fill(fieldSizes.max + 1)(0)
+    val sizeCount = Array.ofDim[Int](fieldSizes.max + 1)
 
     // iterate through the fields of this class and gather information.
     for (field <- cls.getDeclaredFields) {

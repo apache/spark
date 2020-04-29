@@ -71,7 +71,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
 
   // `ReusedExchangeExec` can have distinct set of output attribute ids from its child, we need
   // to update the attribute ids in `outputPartitioning` and `outputOrdering`.
-  private lazy val updateAttr: Expression => Expression = {
+  private[sql] lazy val updateAttr: Expression => Expression = {
     val originalAttrToNewAttr = AttributeMap(child.output.zip(output))
     e => e.transform {
       case attr: Attribute => originalAttrToNewAttr.getOrElse(attr, attr)
@@ -88,12 +88,11 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   }
 
   override def verboseStringWithOperatorId(): String = {
-    val cdgen = ExplainUtils.getCodegenId(this)
     val reuse_op_str = ExplainUtils.getOpId(child)
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${cdgen} [Reuses operator id: $reuse_op_str]
-       |Output : ${output}
-     """.stripMargin
+       |$formattedNodeName [Reuses operator id: $reuse_op_str]
+       |${ExplainUtils.generateFieldString("Output", output)}
+       |""".stripMargin
   }
 }
 

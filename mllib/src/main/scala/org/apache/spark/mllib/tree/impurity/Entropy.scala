@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 
 /**
  * Class for calculating entropy during multiclass classification.
@@ -25,17 +25,17 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 @Since("1.0.0")
 object Entropy extends Impurity {
 
-  private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+  private val _log2 = scala.math.log(2)
+
+  private[tree] def log2(x: Double) = scala.math.log(x) / _log2
 
   /**
-   * :: DeveloperApi ::
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
   @Since("1.1.0")
-  @DeveloperApi
   override def calculate(counts: Array[Double], totalCount: Double): Double = {
     if (totalCount == 0) {
       return 0
@@ -55,7 +55,6 @@ object Entropy extends Impurity {
   }
 
   /**
-   * :: DeveloperApi ::
    * variance calculation
    * @param count number of instances
    * @param sum sum of labels
@@ -63,7 +62,6 @@ object Entropy extends Impurity {
    * @return information value, or 0 if count = 0
    */
   @Since("1.0.0")
-  @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Entropy.calculate")
 

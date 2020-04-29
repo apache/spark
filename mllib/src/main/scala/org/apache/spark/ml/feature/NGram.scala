@@ -70,6 +70,11 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, false)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"NGram: uid=$uid, n=${$(n)}"
+  }
 }
 
 @Since("1.6.0")

@@ -27,7 +27,6 @@ import java.util.Map;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -50,13 +49,6 @@ public class JavaMetastoreDataSourcesSuite {
   Path hiveManagedPath;
   FileSystem fs;
   Dataset<Row> df;
-
-  private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
-    String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
-    if (errorMessage != null) {
-      Assert.fail(errorMessage);
-    }
-  }
 
   @Before
   public void setUp() throws IOException {
@@ -100,7 +92,7 @@ public class JavaMetastoreDataSourcesSuite {
       .options(options)
       .saveAsTable("javaSavedTable");
 
-    checkAnswer(
+    QueryTest$.MODULE$.checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
       df.collectAsList());
   }

@@ -26,6 +26,8 @@ from glob import glob
 from py4j.protocol import Py4JJavaError
 
 from pyspark import shuffle, RDD
+from pyspark.resource import ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder,\
+    TaskResourceRequests
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
@@ -703,8 +705,8 @@ class RDDTests(ReusedPySparkTestCase):
         data = ['1', '2', '3']
         rdd = self.sc.parallelize(data)
         with QuietTest(self.sc):
-            self.assertEqual([], rdd.pipe('cc').collect())
-            self.assertRaises(Py4JJavaError, rdd.pipe('cc', checkCode=True).collect)
+            self.assertEqual([], rdd.pipe('java').collect())
+            self.assertRaises(Py4JJavaError, rdd.pipe('java', checkCode=True).collect)
         result = rdd.pipe('cat').collect()
         result.sort()
         for x, y in zip(data, result):
@@ -783,6 +785,34 @@ class RDDTests(ReusedPySparkTestCase):
         for i in range(4):
             self.assertEqual(i, next(it))
 
+    def test_resourceprofile(self):
+        rp_builder = ResourceProfileBuilder()
+        ereqs = ExecutorResourceRequests().cores(2).memory("6g").memoryOverhead("1g")
+        ereqs.pysparkMemory("2g").resource("gpu", 2, "testGpus", "nvidia.com")
+        treqs = TaskResourceRequests().cpus(2).resource("gpu", 2)
+
+        def assert_request_contents(exec_reqs, task_reqs):
+            self.assertEqual(len(exec_reqs), 5)
+            self.assertEqual(exec_reqs["cores"].amount, 2)
+            self.assertEqual(exec_reqs["memory"].amount, 6144)
+            self.assertEqual(exec_reqs["memoryOverhead"].amount, 1024)
+            self.assertEqual(exec_reqs["pyspark.memory"].amount, 2048)
+            self.assertEqual(exec_reqs["gpu"].amount, 2)
+            self.assertEqual(exec_reqs["gpu"].discoveryScript, "testGpus")
+            self.assertEqual(exec_reqs["gpu"].resourceName, "gpu")
+            self.assertEqual(exec_reqs["gpu"].vendor, "nvidia.com")
+            self.assertEqual(len(task_reqs), 2)
+            self.assertEqual(task_reqs["cpus"].amount, 2.0)
+            self.assertEqual(task_reqs["gpu"].amount, 2.0)
+
+        assert_request_contents(ereqs.requests, treqs.requests)
+        rp = rp_builder.require(ereqs).require(treqs).build
+        assert_request_contents(rp.executorResources, rp.taskResources)
+        rdd = self.sc.parallelize(range(10)).withResources(rp)
+        return_rp = rdd.getResourceProfile()
+        assert_request_contents(return_rp.executorResources, return_rp.taskResources)
+        rddWithoutRp = self.sc.parallelize(range(10))
+        self.assertEqual(rddWithoutRp.getResourceProfile(), None)
 
 if __name__ == "__main__":
     import unittest

@@ -92,7 +92,7 @@ class MapStatusSuite extends SparkFunSuite {
     val status1 = compressAndDecompressMapStatus(status)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
-    assert(status1.mapTaskId == mapTaskAttemptId)
+    assert(status1.mapId == mapTaskAttemptId)
     for (i <- 0 until 3000) {
       val estimate = status1.getSizeForBlock(i)
       if (sizes(i) > 0) {
