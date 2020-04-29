@@ -395,7 +395,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   override def sql: String = {
     val valueSQL = child.sql
     val listSQL = hset.toSeq
-      .map(elem => Literal(convertToScala(elem, child.dataType)).sql)
+      .map(elem => Literal(elem, child.dataType).sql)
       .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
