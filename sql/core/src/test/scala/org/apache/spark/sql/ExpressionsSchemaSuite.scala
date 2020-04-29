@@ -84,11 +84,6 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
   private val resultFile = new File(baseResourcePath, "sql-expression-schema.md")
 
-  val ignoreSet = Set(
-    // Random output without a seed
-    "org.apache.spark.sql.catalyst.expressions.Rand",
-    "org.apache.spark.sql.catalyst.expressions.Randn")
-
   /** A single SQL query's SQL and schema. */
   protected case class QueryOutput(
     className: String,
@@ -113,32 +108,30 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
     classFunsMap.foreach { kv =>
       val className = kv._1
-      if (!ignoreSet.contains(className)) {
-        kv._2.foreach { funInfo =>
-          val example = funInfo.getExamples
-          val funcName = funInfo.getName.replaceAll("\\|", "&#124;")
-          if (example == "") {
-            val queryOutput = QueryOutput(className, funcName)
+      kv._2.foreach { funInfo =>
+        val example = funInfo.getExamples
+        val funcName = funInfo.getName.replaceAll("\\|", "&#124;")
+        if (example == "") {
+          val queryOutput = QueryOutput(className, funcName)
+          outputBuffer += queryOutput.toString
+          outputs += queryOutput
+          missingExamples += funcName
+        }
+
+        // If expression exists 'Examples' segment, the first element is 'Examples'. Because
+        // this test case is only used to print aliases of expressions for double checking.
+        // Therefore, we only need to output the first SQL and its corresponding schema.
+        // Note: We need to filter out the commands that set the parameters, such as:
+        // SET spark.sql.parser.escapedStringLiterals=true
+        example.split("  > ").tail.filterNot(_.trim.startsWith("SET")).take(1).foreach {
+          case exampleRe(sql, _) =>
+            val df = spark.sql(sql)
+            val escapedSql = sql.replaceAll("\\|", "&#124;")
+            val schema = df.schema.catalogString.replaceAll("\\|", "&#124;")
+            val queryOutput = QueryOutput(className, funcName, escapedSql, schema)
             outputBuffer += queryOutput.toString
             outputs += queryOutput
-            missingExamples += funcName
-          }
-
-          // If expression exists 'Examples' segment, the first element is 'Examples'. Because
-          // this test case is only used to print aliases of expressions for double checking.
-          // Therefore, we only need to output the first SQL and its corresponding schema.
-          // Note: We need to filter out the commands that set the parameters, such as:
-          // SET spark.sql.parser.escapedStringLiterals=true
-          example.split("  > ").tail.filterNot(_.trim.startsWith("SET")).take(1).foreach {
-            case exampleRe(sql, _) =>
-              val df = spark.sql(sql)
-              val escapedSql = sql.replaceAll("\\|", "&#124;")
-              val schema = df.schema.catalogString.replaceAll("\\|", "&#124;")
-              val queryOutput = QueryOutput(className, funcName, escapedSql, schema)
-              outputBuffer += queryOutput.toString
-              outputs += queryOutput
-            case _ =>
-          }
+          case _ =>
         }
       }
     }
