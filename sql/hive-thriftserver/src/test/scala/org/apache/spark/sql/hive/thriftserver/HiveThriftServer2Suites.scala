@@ -771,9 +771,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       client.closeSession(sessionHandle)
     }
   }
-    
-    
- test("SPARK-29492: use add jar in sync mode") {
+
+  test("SPARK-29492: use add jar in sync mode") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
       withJdbcStatement("smallKV", "addJar") { statement =>
         val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
         val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
@@ -804,10 +806,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
             FetchOrientation.FETCH_NEXT,
             1000,
             FetchType.QUERY_OUTPUT)
-
           rows_next.numRows()
         }
+      }
     }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
