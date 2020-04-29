@@ -153,7 +153,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
         s"  - Expressions missing examples: $missingExampleStr\n" +
         "## Schema of Built-in Functions\n" +
         "| Class name | Function name or alias | Query example | Output schema |\n" +
-        "| -- | ---------- | ---------------------- | ------------- | ------------- |\n" +
+        "| ---------- | ---------------------- | ------------- | ------------- |\n" +
         outputBuffer.mkString("\n")
       }
       val parent = resultFile.getParentFile
