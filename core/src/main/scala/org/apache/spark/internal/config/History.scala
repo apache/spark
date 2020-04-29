@@ -195,4 +195,9 @@ private[spark] object History {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val HYBRID_KVSTORE_ENABLED = ConfigBuilder("spark.history.store.hybridKVStore.enabled")
+    .version("3.0.1")
+    .booleanConf
+    .createWithDefault(false)
 }

@@ -127,6 +127,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val storePath = conf.get(LOCAL_STORE_DIR).map(new File(_))
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
+  private val hybridKVStoreEnabled = conf.get(HYBRID_KVSTORE_ENABLED)
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
@@ -1166,6 +1167,58 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
+
+    // TODO: Maybe need to do other check to see if there's enough memory to
+    // use inMemoryStore.
+    if (hybridKVStoreEnabled) {
+      logInfo("Using HybridKVStore as KVStore")
+      var retried = false
+      var store: HybridKVStore = null
+      while(store == null) {
+        val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
+          attempt.lastIndex)
+        val isCompressed = reader.compressionCodec.isDefined
+        logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
+        val lease = dm.lease(reader.totalSize, isCompressed)
+        try {
+          val s = new HybridKVStore()
+          val levelDB = KVUtils.open(lease.tmpPath, metadata)
+          s.setLevelDB(levelDB)
+
+          s.startBackgroundThreadToWriteToDB(new HybridKVStore.SwitchingToLevelDBListener {
+            override def onSwitchingToLevelDBSuccess: Unit = {
+              levelDB.close()
+              val newStorePath = lease.commit(appId, attempt.info.attemptId)
+              s.setLevelDB(KVUtils.open(newStorePath, metadata))
+              logInfo(s"Completely switched to use leveldb for app" +
+              s" $appId / ${attempt.info.attemptId}")
+            }
+
+            override def onSwitchingToLevelDBFail(e: Exception): Unit = {
+              logWarning(s"Failed to switch to use LevelDb for app" +
+              s" $appId / ${attempt.info.attemptId}")
+              levelDB.close()
+              throw e
+            }
+          })
+
+          rebuildAppStore(s, reader, attempt.info.lastUpdated.getTime())
+          s.stopBackgroundThreadAndSwitchToLevelDB()
+          store = s
+        } catch {
+          case _: IOException if !retried =>
+            // compaction may touch the file(s) which app rebuild wants to read
+            // compaction wouldn't run in short interval, so try again...
+            logWarning(s"Exception occurred while rebuilding app $appId - trying again...")
+            lease.rollback()
+            retried = true
+          case e: Exception =>
+            lease.rollback()
+            throw e
+        }
+      }
+      return store
+    }
 
     var retried = false
     var newStorePath: File = null
