@@ -267,23 +267,24 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("SPARK-31557: rebasing in legacy formatters/parsers") {
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> LegacyBehaviorPolicy.LEGACY.toString) {
       LegacyDateFormats.values.foreach { legacyFormat =>
-        DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-            withClue(s"$timeZone legacyFormat = $legacyFormat") {
-              val zoneId = getZoneId(timeZone)
-              val formatter = TimestampFormatter(
-                TimestampFormatter.defaultPattern,
-                zoneId,
-                TimestampFormatter.defaultLocale,
-                legacyFormat,
-                needVarLengthSecondFraction = false)
-              assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
-                .atZone(zoneId)
-                .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
+        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zoneId.getId) {
+            DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+              withClue(s"${zoneId.getId} legacyFormat = $legacyFormat") {
+                val formatter = TimestampFormatter(
+                  TimestampFormatter.defaultPattern,
+                  zoneId,
+                  TimestampFormatter.defaultLocale,
+                  legacyFormat,
+                  needVarLengthSecondFraction = false)
+                assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
+                  .atZone(zoneId)
+                  .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
 
-              assert(formatter.format(instantToMicros(
-                LocalDateTime.of(1000, 1, 1, 1, 2, 3)
-                  .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
+                assert(formatter.format(instantToMicros(
+                  LocalDateTime.of(1000, 1, 1, 1, 2, 3)
+                    .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
+              }
             }
           }
         }
