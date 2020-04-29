@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -55,11 +54,12 @@ object IntervalUtils {
   }
 
   def getDays(interval: CalendarInterval): Int = {
-    interval.days
+    val daysInMicroseconds = (interval.microseconds / MICROS_PER_DAY).toInt
+    Math.addExact(interval.days, daysInMicroseconds)
   }
 
   def getHours(interval: CalendarInterval): Long = {
-    interval.microseconds / MICROS_PER_HOUR
+    (interval.microseconds % MICROS_PER_DAY) / MICROS_PER_HOUR
   }
 
   def getMinutes(interval: CalendarInterval): Byte = {
