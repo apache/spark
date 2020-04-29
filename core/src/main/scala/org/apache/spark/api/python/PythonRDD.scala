@@ -172,8 +172,6 @@ private[spark] object PythonRDD extends Logging {
    * A helper function to collect an RDD as an iterator, then serve it via socket.
    * This method is similar with `PythonRDD.collectAndServe`, but user can specify job group id,
    * job description, and interruptOnCancel option.
-   *
-   * Note: This method are temporary, might be removed in future.
    */
   def collectAndServeWithJobGroup[T](
       rdd: RDD[T],

@@ -883,7 +883,6 @@ class RDD(object):
 
         When collect rdd, use this method to specify job group.
 
-        .. note:: This method are temporary, might be removed in future.
         .. versionadded:: 3.0.0
         """
         with SCCallSiteSync(self.context) as css:
