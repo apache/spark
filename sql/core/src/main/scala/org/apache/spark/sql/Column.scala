@@ -974,7 +974,7 @@ class Column(val expr: Expression) extends Logging {
    *
    * If the current column has metadata associated with it, this metadata will be propagated
    * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
-   * with explicitly metadata.
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -1014,7 +1014,7 @@ class Column(val expr: Expression) extends Logging {
    *
    * If the current column has metadata associated with it, this metadata will be propagated
    * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
-   * with explicitly metadata.
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -1044,7 +1044,7 @@ class Column(val expr: Expression) extends Logging {
    *
    * If the current column has metadata associated with it, this metadata will be propagated
    * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
-   * with explicitly metadata.
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 2.0.0

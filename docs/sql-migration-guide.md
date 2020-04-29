@@ -28,6 +28,8 @@ license: |
 
   - In Spark 3.1, SQL UI data adopts the `formatted` mode for the query plan explain results. To restore the behavior before Spark 3.0, you can set `spark.sql.ui.explainMode` to `extended`.
 
+  - In Spark 3.1, the column metadata will always be propagated in the API `name` and `as`. In Spark version 3.0 and earlier, the metadata of `NamedExpression` is set as the `explicitMetadata` for the new column. To restore the behavior before Spark 3.0, you can use the API `as(alias: String, metadata: Metadata)` with explicit metadata.
+
 ## Upgrading from Spark SQL 2.4 to 3.0
 
 ### Dataset/DataFrame APIs
