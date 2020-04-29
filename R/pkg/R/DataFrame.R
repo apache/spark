@@ -2607,7 +2607,7 @@ setMethod("join",
                     "outer", "full", "fullouter", "full_outer",
                     "left", "leftouter", "left_outer",
                     "right", "rightouter", "right_outer",
-                    "semi", "left_semi", "leftsemi", "anti", "left_anti", "leftanti")
+                    "semi", "leftsemi", "left_semi", "anti", "leftanti", "left_anti")
                 if (joinType %in% valid_join_types) {
                   joinType <- gsub("_", "", joinType, fixed = TRUE)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
