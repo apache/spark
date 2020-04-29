@@ -271,7 +271,7 @@ setMethod("show", "SparkDataFrame",
                 paste(l, collapse = ":")
               })
               s <- paste(cols, collapse = ", ")
-              cat(paste(class(object), "[", s, "]\n", sep = ""))
+              cat(paste0(class(object), "[", s, "]\n"))
             }
           })
 
@@ -2614,7 +2614,7 @@ setMethod("join",
                     "left", "leftouter", "left_outer",
                     "right", "rightouter", "right_outer",
                     "semi", "left_semi", "leftsemi", "anti", "left_anti", "leftanti")) {
-                  joinType <- gsub("_", "", joinType)
+                  joinType <- gsub("_", "", joinType, fixed = TRUE)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop(paste("joinType must be one of the following types:",
@@ -2755,10 +2755,10 @@ setMethod("merge",
               colY <- joinY[[i]]
 
               if (colX %in% by) {
-                colX <- paste(colX, suffixes[1], sep = "")
+                colX <- paste0(colX, suffixes[1])
               }
               if (colY %in% by) {
-                colY <- paste(colY, suffixes[2], sep = "")
+                colY <- paste0(colY, suffixes[2])
               }
 
               colX <- getColumn(xsel, colX)
@@ -2773,7 +2773,7 @@ setMethod("merge",
 
             # sorts the result by 'by' columns if sort = TRUE
             if (sort && length(by) > 0) {
-              colNameWithSuffix <- paste(by, suffixes[2], sep = "")
+              colNameWithSuffix <- paste0(by, suffixes[2])
               joinRes <- do.call("arrange", c(joinRes, colNameWithSuffix, decreasing = FALSE))
             }
 
@@ -2796,7 +2796,7 @@ genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
   cols <- lapply(allColNames, function(colName) {
     col <- getColumn(x, colName)
     if (colName %in% intersectedColNames) {
-      newJoin <- paste(colName, suffix, sep = "")
+      newJoin <- paste0(colName, suffix)
       if (newJoin %in% allColNames) {
         stop("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
           "Please use different suffixes for the intersected columns.")
