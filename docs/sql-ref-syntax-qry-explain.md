@@ -27,7 +27,7 @@ By default, this clause provides information about a physical plan only.
 ### Syntax
 
 {% highlight sql %}
-EXPLAIN [EXTENDED | CODEGEN | COST | FORMATTED] statement
+EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED ] statement
 {% endhighlight %}
 
 ### Parameters
