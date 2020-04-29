@@ -156,7 +156,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       "spark.app.id" -> conf.appId,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
-    conf.executorPodNamePrefix.foreach(additionalProps.put(KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key, _))
+    conf.executorPodNamePrefix.foreach(
+      additionalProps.put(KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key, _))
 
     // try upload local, resolvable files to a hadoop compatible file system
     Seq(JARS, FILES).foreach { key =>
