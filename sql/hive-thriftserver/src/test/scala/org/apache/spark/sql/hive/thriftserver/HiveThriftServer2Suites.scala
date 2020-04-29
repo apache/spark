@@ -771,6 +771,46 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       client.closeSession(sessionHandle)
     }
   }
+
+  test("SPARK-29492: use add jar in sync mode") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+      withJdbcStatement("smallKV", "addJar") { statement =>
+        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+        val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+
+        Seq(s"ADD JAR $jarFile",
+          "CREATE TABLE smallKV(key INT, val STRING) USING hive",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV")
+          .foreach(query => client.executeStatement(sessionHandle, query, confOverlay))
+
+        client.executeStatement(sessionHandle,
+          """CREATE TABLE addJar(key string)
+            |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
+          """.stripMargin, confOverlay)
+
+        client.executeStatement(sessionHandle,
+          "INSERT INTO TABLE addJar SELECT 'k1' as key FROM smallKV limit 1", confOverlay)
+
+        val operationHandle = client.executeStatement(
+          sessionHandle,
+          "SELECT key FROM addJar",
+          confOverlay)
+
+        // Fetch result first time
+        assertResult(1, "Fetching result first time from next row") {
+
+          val rows_next = client.fetchResults(
+            operationHandle,
+            FetchOrientation.FETCH_NEXT,
+            1000,
+            FetchType.QUERY_OUTPUT)
+          rows_next.numRows()
+        }
+      }
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
