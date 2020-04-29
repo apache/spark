@@ -35,6 +35,8 @@
 # jobj -> Object, where jobj is an object created in the backend
 # nolint end
 
+# TODO: this can be replaced by a single has_unique_serde_type function
+#       that simply returns TRUE/FALSE
 getSerdeType <- function(object) {
   type <- class(object)[[1L]]
   if (is.atomic(object) && !is.raw(object) && length(object) > 1L) {
@@ -116,7 +118,7 @@ writeObject.raw <- function(object, con, writeType = TRUE) {
 writeObject.struct <-
 writeObject.list <- function(object, con, writeType = TRUE) {
   if (has_unique_serde_type(object)) {
-    class(object) = 'ArrayList'
+    class(object) <- "ArrayList"
     return(writeObject(object, con, writeType))
   }
   if (writeType) {
