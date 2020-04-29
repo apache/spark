@@ -515,13 +515,6 @@ class DataFrameAggregateSuite extends QueryTest
     checkDataset(
       df.select(collect_set($"a"), collect_set($"b")).as[(Set[Int], Set[Int])],
       Seq(Set(1, 2, 3) -> Set(2, 4)): _*)
-
-    val bytesTest1 = "test1".getBytes
-    val bytesTest2 = "test2".getBytes
-    val df1 = Seq(bytesTest1, bytesTest1, bytesTest2).toDF("a")
-    val ret = df1.select(collect_set($"a")).collect()
-      .map(r => r.getAs[mutable.WrappedArray[_]](0)).head
-    assert(ret.length == 2)
   }
 
   test("collect functions structs") {
@@ -536,6 +529,15 @@ class DataFrameAggregateSuite extends QueryTest
       df.select(collect_set($"a"), sort_array(collect_set($"b"))),
       Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(4, 1))))
     )
+  }
+
+  test("SPARK-31500: collect_set() of BinaryType returns duplicate elements") {
+    val bytesTest1 = "test1".getBytes
+    val bytesTest2 = "test2".getBytes
+    val df = Seq(bytesTest1, bytesTest1, bytesTest2).toDF("a")
+    val ret = df.select(collect_set($"a")).collect()
+      .map(r => r.getAs[Seq[_]](0)).head
+    assert(ret.length == 2)
 
     val a = "aa".getBytes
     val b = "bb".getBytes
@@ -544,9 +546,9 @@ class DataFrameAggregateSuite extends QueryTest
     val df1 = Seq((a, b), (a, b), (c, d))
       .toDF("x", "y")
       .select(struct($"x", $"y").as("a"))
-    val ret = df1.select(collect_set($"a")).collect()
-      .map(r => r.getAs[mutable.WrappedArray[_]](0)).head
-    assert(ret.length == 2)
+    val ret1 = df1.select(collect_set($"a")).collect()
+      .map(r => r.getAs[Seq[_]](0)).head
+    assert(ret1.length == 2)
   }
 
   test("collect_set functions cannot have maps") {
