@@ -24,9 +24,11 @@ import org.scalatest.Matchers
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CET, PST, UTC}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.unsafe.types.UTF8String
 
 class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers {
@@ -260,6 +262,32 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       LocalDateTime.of(-1233, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
     assert(formatter2.parse("AD 1234-02-22 02:22:22") === instantToMicros(
       LocalDateTime.of(1234, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
+  }
 
+  test("SPARK-31557: rebasing in legacy formatters/parsers") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> LegacyBehaviorPolicy.LEGACY.toString) {
+      LegacyDateFormats.values.foreach { legacyFormat =>
+        DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+            withClue(s"$timeZone legacyFormat = $legacyFormat") {
+              val zoneId = getZoneId(timeZone)
+              val formatter = TimestampFormatter(
+                TimestampFormatter.defaultPattern,
+                zoneId,
+                TimestampFormatter.defaultLocale,
+                legacyFormat,
+                needVarLengthSecondFraction = false)
+              assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
+                .atZone(zoneId)
+                .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
+
+              assert(formatter.format(instantToMicros(
+                LocalDateTime.of(1000, 1, 1, 1, 2, 3)
+                  .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
+            }
+          }
+        }
+      }
+    }
   }
 }
