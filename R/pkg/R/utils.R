@@ -369,7 +369,7 @@ varargsToStrEnv <- function(...) {
   }
 
   if (length(ignoredNames) != 0) {
-    warning("Unnamed arguments ignored: ", toString(ignoredNames))
+    warning("Unnamed arguments ignored: ", toString(ignoredNames), ".")
   }
   env
 }
