@@ -834,9 +834,8 @@ class RDDTests(ReusedPySparkTestCase):
             and then exits.
             """
             try:
-                self.sc.setJobGroup(job_group, "test rdd collect with setting job group")
-                self.sc.parallelize([15]).map(lambda x: time.sleep(x)).collect(
-                    job_group, "test rdd collect with setting job group")
+                self.sc.parallelize([15]).map(lambda x: time.sleep(x)) \
+                    .collectWithJobGroup(job_group, "test rdd collect with setting job group")
                 is_job_cancelled[index] = False
             except Exception:
                 # Assume that exception means job cancellation.
