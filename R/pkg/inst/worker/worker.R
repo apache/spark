@@ -27,7 +27,7 @@ elapsedSecs <- function() {
   proc.time()[3]
 }
 
-writeObject = SparkR:::writeObject
+writeObject <- SparkR:::writeObject
 
 compute <- function(mode, partition, serializer, deserializer, key,
              colNames, computeFunc, inputData) {
