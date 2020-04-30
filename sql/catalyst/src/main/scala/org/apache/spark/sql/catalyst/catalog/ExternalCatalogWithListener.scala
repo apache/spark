@@ -199,9 +199,10 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
     postToAll(LoadDynamicPartitionsEvent(db, table, loadPath, partitions, replace, numDP))
   }
 
-  def calculateDynamicPartitions(loadPath: Path,
-                                 partitionSpec: TablePartitionSpec,
-                                 numDP: Int): Array[TablePartitionSpec] = {
+  def calculateDynamicPartitions(
+      loadPath: Path,
+      partitionSpec: TablePartitionSpec,
+      numDP: Int): Array[TablePartitionSpec] = {
     assert(numDP > 0)
     try {
       val fs = loadPath.getFileSystem(new Configuration())
