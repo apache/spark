@@ -76,9 +76,9 @@ outputResult <- function(serializer, output, outputCon) {
     serializer,
     byte = SparkR:::writeRawSerialize(output, outputCon),
     row = SparkR:::writeRowSerialize(output, outputCon),
-    arrow = SparkR:::writeSerializeInArrow(output, outputCon),
+    arrow = SparkR:::writeArrow(output, outputCon),
     { # else write lines one-by-one with flag
-      for (obj in output) SparkR:::writeObject(obj, outputCon, writeType = FALSE)
+      for (elem in output) SparkR:::writeObject(elem, outputCon, writeType = FALSE)
     }
   )
 }
@@ -213,7 +213,7 @@ if (isEmpty != 0) {
           # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
           # rbind.fill might be an anternative to make it faster if plyr is installed.
           combined <- do.call("rbind", outputs)
-          SparkR:::writeSerializeInArrow(combined, outputCon)
+          SparkR:::writeArrowSerialize(combined, outputCon)
         }
       }
     } else {

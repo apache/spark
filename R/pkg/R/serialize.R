@@ -187,27 +187,6 @@ writeObject.POSIXt <- function(object, con, writeType = TRUE, ...) {
   writeObject(as.double(object), con, writeType = FALSE)
 }
 
-# these are called from inst/worker/worker.R to send data back to the driver
-writeRawSerialize <- function(batch, outputCon) {
-  outputSer <- serialize(batch, ascii = FALSE, connection = NULL)
-  writeObject(outputSer, outputCon, writeType = FALSE)
-}
-
-writeRowSerialize <- function(rows, outputCon) {
-  invisible(lapply(rows, function(r) {
-    bytes <- serializeRow(r)
-    writeObject(bytes, outputCon, writeType = FALSE)
-  }))
-}
-
-serializeRow <- function(row) {
-  rawObj <- rawConnection(raw(0L), "wb")
-  on.exit(close(rawObj))
-  # should already be a list
-  writeObject(as.list(row), rawObj, writeType = FALSE, check_array = FALSE)
-  rawConnectionValue(rawObj)
-}
-
 # markers are written into con to signal incoming object
 #   type according to the following mapping:
 #        type marker  raw
@@ -293,12 +272,32 @@ writeType.POSIXt <- function(object, con) {
   writeBin(as.raw(0x74), con)
 }
 
-writeSerializeInArrow <- function(conn, df) {
+# these are called from inst/worker/worker.R to send data back to the driver
+
+writeRawSerialize <- function(batch, outputCon) {
+  outputSer <- serialize(batch, ascii = FALSE, connection = NULL)
+  writeObject(outputSer, outputCon, writeType = FALSE)
+}
+
+writeRowSerialize <- function(rows, outputCon) {
+  for (row in rows) writeObject(serializeRow(row), outputCon, writeType = FALSE)
+  return(invisible())
+}
+
+serializeRow <- function(row) {
+  rawObj <- rawConnection(raw(0L), "wb")
+  on.exit(close(rawObj))
+  # should already be a list
+  writeObject(as.list(row), rawObj, writeType = FALSE, check_array = FALSE)
+  rawConnectionValue(rawObj)
+}
+
+writeArrowSerialize <- function(DF, outputCon) {
   if (requireNamespace("arrow", quietly = TRUE)) {
     # There looks no way to send each batch in streaming format via socket
     # connection. See ARROW-4512.
     # So, it writes the whole Arrow streaming-formatted binary at once for now.
-    writeObject(arrow::write_arrow(df, raw()), conn, writeType = FALSE)
+    writeObject(arrow::write_arrow(DF, raw(0L)), outputCon, writeType = FALSE)
   } else {
     stop("'arrow' package should be installed.")
   }
