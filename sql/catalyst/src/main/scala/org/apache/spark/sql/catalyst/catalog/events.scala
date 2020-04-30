@@ -188,7 +188,7 @@ case class LoadDynamicPartitionsPreEvent(
     database: String,
     table: String,
     loadPath: String,
-    partition: TablePartitionSpec,
+    partitions: Seq[TablePartitionSpec],
     replace: Boolean,
     numDP: Int) extends PartitionEvent
 
@@ -199,7 +199,7 @@ case class LoadDynamicPartitionsEvent(
    database: String,
    table: String,
    loadPath: String,
-   partition: TablePartitionSpec,
+   partitions: Seq[TablePartitionSpec],
    replace: Boolean,
    numDP: Int) extends PartitionEvent
 

@@ -190,11 +190,34 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       partition: TablePartitionSpec,
       replace: Boolean,
       numDP: Int): Unit = {
+    val partitions = calculateDynamicPartitions(new Path(loadPath), partition, numDP)
     postToAll(LoadDynamicPartitionsPreEvent(
-      db, table, loadPath, partition, replace, numDP))
+      db, table, loadPath, partitions, replace, numDP))
     delegate.loadDynamicPartitions(db, table, loadPath, partition, replace, numDP)
     postToAll(LoadDynamicPartitionsEvent(
-      db, table, loadPath, partition, replace, numDP))
+      db, table, loadPath, partitions, replace, numDP))
+  }
+
+  def calculateDynamicPartitions(loadPath: Path,
+                                 partitionSpec: TablePartitionSpec,
+                                 numDP: Int): Seq[TablePartitionSpec] = {
+    assert(numDP > 0)
+
+    val fs = loadPath.getFileSystem(new Configuration())
+    fs.listStatus(loadPath).flatMap { fileStatus =>
+      val dirName = fileStatus.getPath.getName
+      if (dirName.contains("=")) {
+        val Array(partitionColumn: String, partitionValue: String) = dirName.split("=")
+        val newPartitionSpec = partitionSpec + (partitionColumn -> partitionValue)
+        if (numDP == 1) {
+          Seq(newPartitionSpec)
+        } else {
+          calculateDynamicPartitions(fileStatus.getPath, newPartitionSpec, numDP - 1)
+        }
+      } else {
+        Seq()
+      }
+    }
   }
 
   // --------------------------------------------------------------------------
