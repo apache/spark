@@ -333,6 +333,7 @@ object CreateStruct extends FunctionBuilder {
       "",
       "",
       "",
+      "",
       "")
     ("struct", (info, this))
   }

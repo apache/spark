@@ -20,17 +20,20 @@ license: |
 ---
 
 ### Description
+
 Views are based on the result-set of an `SQL` query. `CREATE VIEW` constructs
 a virtual table that has no physical data therefore other operations like
 `ALTER VIEW` and `DROP VIEW` only change metadata. 
 
 ### Syntax
+
 {% highlight sql %}
 CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_identifier
     create_view_clauses AS query
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>OR REPLACE</em></code></dt>
   <dd>If a view of same name already exists, it will be replaced.</dd>
@@ -71,6 +74,7 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- Create or replace view for `experienced_employee` with comments.
 CREATE OR REPLACE VIEW experienced_employee
@@ -87,5 +91,7 @@ CREATE GLOBAL TEMPORARY VIEW IF NOT EXISTS subscribed_movies
 {% endhighlight %}
 
 ### Related Statements
-- [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
-- [DROP VIEW](sql-ref-syntax-ddl-drop-view.html)
+
+ * [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
+ * [DROP VIEW](sql-ref-syntax-ddl-drop-view.html)
+ * [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
