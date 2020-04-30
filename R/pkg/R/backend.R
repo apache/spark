@@ -97,6 +97,9 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   bytesToSend <- rawConnectionValue(rc)
   close(rc)
   rc <- rawConnection(raw(0L), "r+")
+  # TODO: should this just be writeObject(bytesToSend, rc, writeType = FALSE)?
+  #       only difference is writeBin here doesn't specify endian='big',
+  #       is that intentional?
   writeObject(length(bytesToSend), rc, writeType = FALSE)
   writeBin(bytesToSend, rc)
   requestMessage <- rawConnectionValue(rc)
