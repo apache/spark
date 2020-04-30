@@ -35,8 +35,8 @@
 # jobj -> Object, where jobj is an object created in the backend
 # nolint end
 
-# TODO: this can be replaced by a single has_unique_serde_type function
-#       that simply returns TRUE/FALSE
+# TODO: in the current code this can be replaced by a single
+#       has_unique_serde_type function that simply returns TRUE/FALSE
 getSerdeType <- function(object) {
   type <- class(object)[[1L]]
   if (is.atomic(object) && !is.raw(object) && length(object) > 1L) {
@@ -70,9 +70,7 @@ writeObject.NULL <- function(object, con, writeType = TRUE, ...) {
   }
 }
 
-# integer same as logical; will cast TRUE -> 1, FALSE -> 0
-writeObject.integer <-
-writeObject.logical <- function(object, con, writeType = TRUE, ...) {
+atomic_write_object <- function(object, con, writeType) {
   # for length > 1, this will write array bit
   if (writeType) {
     writeType(object, con)
@@ -83,37 +81,31 @@ writeObject.logical <- function(object, con, writeType = TRUE, ...) {
     writeType(object[[1L]], con)
     writeObject(length(object), con, writeType = FALSE)
   } else if (is.na(object)) return() # no value for NULL
+}
 
+# integer same as logical; will cast TRUE -> 1, FALSE -> 0
+writeObject.integer <-
+writeObject.logical <- function(object, con, writeType = TRUE, ...) {
+  atomic_write_object(object, con, writeType)
   for (elem in object) writeBin(as.integer(elem), con, endian = "big")
 }
 
 writeObject.numeric <- function(object, con, writeType = TRUE, ...) {
-  if (writeType) {
-    writeType(object, con)
-  }
-  # non-scalar value written as array
-  if (length(object) > 1L) {
-    writeType(object[[1L]], con)
-    writeObject(length(object), con, writeType = FALSE)
-  } else if (is.na(object)) return() # no value for NULL
-
+  atomic_write_object(object, con, writeType)
   for (elem in object) writeBin(elem, con, endian = "big")
 }
 
 writeObject.character <- function(object, con, writeType = TRUE, ...) {
-  if (writeType) {
-    writeType(object, con)
-  }
-  # non-scalar value written as array
-  if (length(object) > 1L) {
-    writeType(object[[1L]], con)
-    writeObject(length(object), con, writeType = FALSE)
-  } else if (is.na(object)) return() # no value for NULL
+  atomic_write_object(object, con, writeType)
 
   utfVal <- enc2utf8(object)
-  for (elem in object) {
-    writeObject(as.integer(nchar(elem, type = "bytes") + 1L), con, writeType = FALSE)
-    writeBin(elem, con, endian = "big", useBytes = TRUE)
+  # could also try strsplit(utfVal, NULL) and then use writeObject.list,
+  #   but the type='bytes' part would probably impact this (does
+  #   strsplit(useBytes=TRUE) accomplish the same thing?
+  width <- as.integer(nchar(utfVal), type = "bytes")
+  for (ii in seq_along(utfVal)) {
+    writeObject(width[ii], con, writeType = FALSE)
+    writeBin(utfVal[ii], con, endian = "big", useBytes = TRUE)
   }
 }
 
