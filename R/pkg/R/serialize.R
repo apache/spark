@@ -87,6 +87,19 @@ writeObject.logical <- function(object, con, writeType = TRUE, ...) {
   for (elem in object) writeBin(as.integer(elem), con, endian = "big")
 }
 
+writeObject.numeric <- function(object, con, writeType = TRUE, ...) {
+  if (writeType) {
+    writeType(object, con)
+  }
+  # non-scalar value written as array
+  if (length(object) > 1L) {
+    writeType(object[[1L]], con)
+    writeObject(length(object), con, writeType = FALSE)
+  } else if (is.na(object)) return() # no value for NULL
+
+  for (elem in object) writeBin(elem, con, endian = "big")
+}
+
 writeObject.character <- function(object, con, writeType = TRUE, ...) {
   if (writeType) {
     writeType(object, con)
@@ -102,19 +115,6 @@ writeObject.character <- function(object, con, writeType = TRUE, ...) {
     writeObject(as.integer(nchar(elem, type = "bytes") + 1L), con, writeType = FALSE)
     writeBin(elem, con, endian = "big", useBytes = TRUE)
   }
-}
-
-writeObject.numeric <- function(object, con, writeType = TRUE, ...) {
-  if (writeType) {
-    writeType(object, con)
-  }
-  # non-scalar value written as array
-  if (length(object) > 1L) {
-    writeType(object[[1L]], con)
-    writeObject(length(object), con, writeType = FALSE)
-  } else if (is.na(object)) return() # no value for NULL
-
-  for (elem in object) writeBin(elem, con, endian = "big")
 }
 
 writeObject.raw <- function(object, con, writeType = TRUE, ...) {
