@@ -128,6 +128,7 @@ writeObject.raw <- function(object, con, writeType = TRUE, ...) {
 writeObject.struct <-
 writeObject.list <- function(object, con, writeType = TRUE, check_array = TRUE, ...) {
   if (check_array && has_unique_serde_type(object)) {
+    # TODO: this may create a copy. should benchmark.
     class(object) <- "ArrayList"
     return(writeObject(object, con, writeType))
   }
@@ -296,13 +297,6 @@ writeType.Date <- function(object, con) {
 # covers POSIXct and POSIXt
 writeType.POSIXt <- function(object, con) {
   writeBin(as.raw(0x74), con)
-}
-
-# Used to serialize in a list of objects where each
-# object can be of a different type. Serialization format is
-# <object type> <object> for each object
-writeArgs <- function(args, con) {
-  for (arg in args) writeObject(arg, con)
 }
 
 writeSerializeInArrow <- function(conn, df) {

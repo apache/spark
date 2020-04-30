@@ -90,9 +90,7 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   writeObject(objId, rc, writeType = FALSE)
   writeObject(methodName, rc, writeType = FALSE)
 
-  args <- list(...)
-  writeObject(length(args), rc, writeType = FALSE)
-  writeArgs(args, rc)
+  writeObject(list(...), rc, writeType = FALSE, check_array = FALSE)
 
   # Construct the whole request message to send it once,
   # avoiding write-write-read pattern in case of Nagle's algorithm.
