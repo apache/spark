@@ -1198,6 +1198,18 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
+ * Subtract an interval from timestamp or date, which is only used to give a pretty sql string
+ * for `datetime - interval` operations
+ */
+case class DatetimeSub(
+    start: Expression,
+    interval: Expression,
+    child: Expression) extends RuntimeReplaceable {
+  override def toString: String = s"$start - $interval"
+  override def sql: String = s"${start.sql} - ${interval.sql}"
+}
+
+/**
  * Adds date and an interval.
  *
  * When ansi mode is on, the microseconds part of interval needs to be 0, otherwise a runtime
