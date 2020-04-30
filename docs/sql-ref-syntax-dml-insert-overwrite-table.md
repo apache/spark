@@ -27,7 +27,7 @@ The `INSERT OVERWRITE` statement overwrites the existing data in the table using
 
 {% highlight sql %}
 INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ]
-    { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
+    { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 {% endhighlight %}
 
 ### Parameters

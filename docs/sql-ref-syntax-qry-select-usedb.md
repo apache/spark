@@ -41,7 +41,7 @@ USE database_name
   </dd>
 </dl>
 
-### Example
+### Examples
 
 {% highlight sql %}
 -- Use the 'userdb' which exists.
