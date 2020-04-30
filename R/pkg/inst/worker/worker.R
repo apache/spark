@@ -72,16 +72,15 @@ compute <- function(mode, partition, serializer, deserializer, key,
 }
 
 outputResult <- function(serializer, output, outputCon) {
-  if (serializer == "byte") {
-    SparkR:::writeRawSerialize(output, outputCon)
-  } else if (serializer == "row") {
-    SparkR:::writeRowSerialize(output, outputCon)
-  } else if (serializer == "arrow") {
-    SparkR:::writeSerializeInArrow(output, outputCon)
-  } else {
-    # write lines one-by-one with flag
-    for (obj in output) writeObject(obj, outputCon, writeType = FALSE)
-  }
+  switch(
+    serializer,
+    byte = SparkR:::writeRawSerialize(output, outputCon),
+    row = SparkR:::writeRowSerialize(output, outputCon),
+    arrow = SparkR:::writeSerializeInArrow(output, outputCon),
+    { # else write lines one-by-one with flag
+      for (obj in output) SparkR:::writeObject(obj, outputCon, writeType = FALSE)
+    }
+  )
 }
 
 # Constants

@@ -179,7 +179,7 @@ writeObject.Date <- function(object, con, writeType = TRUE, ...) {
   writeObject(as.character(object), con, writeType = FALSE)
 }
 
-# covers POSIXct and POSIXt
+# covers POSIXct and POSIXlt
 writeObject.POSIXt <- function(object, con, writeType = TRUE, ...) {
   if (writeType) {
     writeType(object, con)
@@ -187,6 +187,7 @@ writeObject.POSIXt <- function(object, con, writeType = TRUE, ...) {
   writeObject(as.double(object), con, writeType = FALSE)
 }
 
+# these are called from inst/worker/worker.R to send data back to the driver
 writeRawSerialize <- function(batch, outputCon) {
   outputSer <- serialize(batch, ascii = FALSE, connection = NULL)
   writeObject(outputSer, outputCon, writeType = FALSE)
@@ -202,7 +203,8 @@ writeRowSerialize <- function(rows, outputCon) {
 serializeRow <- function(row) {
   rawObj <- rawConnection(raw(0L), "wb")
   on.exit(close(rawObj))
-  writeObject(as.list(row), rawObj, writeType = FALSE)
+  # should already be a list
+  writeObject(as.list(row), rawObj, writeType = FALSE, check_array = FALSE)
   rawConnectionValue(rawObj)
 }
 

@@ -89,7 +89,6 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   writeObject(isStatic, rc, writeType = FALSE)
   writeObject(objId, rc, writeType = FALSE)
   writeObject(methodName, rc, writeType = FALSE)
-
   writeObject(list(...), rc, writeType = FALSE, check_array = FALSE)
 
   # Construct the whole request message to send it once,
