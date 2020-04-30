@@ -466,54 +466,54 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       sdf.setTimeZone(TimeZone.getTimeZone(zid))
 
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
-          Literal(new CalendarInterval(1, 0, 0)),
+          UnaryMinus(Literal(new CalendarInterval(1, 0, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-29 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
-          Literal(new CalendarInterval(1, 1, 0)),
+          UnaryMinus(Literal(new CalendarInterval(1, 1, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
-          Literal(new CalendarInterval(1, 0, 2000000.toLong)),
+          UnaryMinus(Literal(new CalendarInterval(1, 0, 2000000.toLong))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 23:59:59.000").getTime)))
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
-          Literal(new CalendarInterval(1, 1, 2000000.toLong)),
+          UnaryMinus(Literal(new CalendarInterval(1, 1, 2000000.toLong))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-27 23:59:59.000").getTime)))
 
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal.create(null, TimestampType),
-          Literal(new CalendarInterval(1, 2, 123000L)),
+          UnaryMinus(Literal(new CalendarInterval(1, 2, 123000L))),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal.create(null, CalendarIntervalType),
+          UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal.create(null, TimestampType),
-          Literal.create(null, CalendarIntervalType),
+          UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (start: Expression, interval: Expression) => TimeSub(start, interval, timeZoneId),
+      checkConsistencyBetweenInterpretedAndCodegen((start: Expression, interval: Expression) =>
+        TimeAdd(start, UnaryMinus(interval), timeZoneId),
         TimestampType, CalendarIntervalType)
     }
   }

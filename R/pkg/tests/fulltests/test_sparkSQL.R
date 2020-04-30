@@ -2593,8 +2593,8 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   writeLines(mockLines3, jsonPath3)
   df3 <- read.json(jsonPath3)
   expect_error(merge(df, df3),
-               paste("The following column name: name_y occurs more than once in the 'DataFrame'.",
-                     "Please use different suffixes for the intersected columns.", sep = ""))
+               paste0("The following column name: name_y occurs more than once in the 'DataFrame'.",
+                      "Please use different suffixes for the intersected columns."))
 
   unlink(jsonPath2)
   unlink(jsonPath3)
@@ -2637,20 +2637,20 @@ test_that("toJSON() on DataFrame", {
 
 test_that("showDF()", {
   df <- read.json(jsonPath)
-  expected <- paste("+----+-------+\n",
-                    "| age|   name|\n",
-                    "+----+-------+\n",
-                    "|null|Michael|\n",
-                    "|  30|   Andy|\n",
-                    "|  19| Justin|\n",
-                    "+----+-------+\n", sep = "")
-  expected2 <- paste("+---+----+\n",
-                     "|age|name|\n",
-                     "+---+----+\n",
-                     "|nul| Mic|\n",
-                     "| 30| And|\n",
-                     "| 19| Jus|\n",
-                     "+---+----+\n", sep = "")
+  expected <- paste("+----+-------+",
+                    "| age|   name|",
+                    "+----+-------+",
+                    "|null|Michael|",
+                    "|  30|   Andy|",
+                    "|  19| Justin|",
+                    "+----+-------+\n", sep = "\n")
+  expected2 <- paste("+---+----+",
+                     "|age|name|",
+                     "+---+----+",
+                     "|nul| Mic|",
+                     "| 30| And|",
+                     "| 19| Jus|",
+                     "+---+----+\n", sep = "\n")
   expect_output(showDF(df), expected)
   expect_output(showDF(df, truncate = 3), expected2)
 })

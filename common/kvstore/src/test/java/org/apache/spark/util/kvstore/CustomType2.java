@@ -15,40 +15,36 @@
  * limitations under the License.
  */
 
-#plan-viz-graph .label {
-  font-size: 0.85rem;
-  font-weight: normal;
-  text-shadow: none;
-  color: #333;
-}
+package org.apache.spark.util.kvstore;
 
-#plan-viz-graph svg g.cluster rect {
-  fill: #A0DFFF;
-  stroke: #3EC0FF;
-  stroke-width: 1px;
-}
+public class CustomType2 {
 
-#plan-viz-graph svg g.node rect {
-  fill: #C3EBFF;
-  stroke: #3EC0FF;
-  stroke-width: 1px;
-}
+  @KVIndex(parent = "parentId")
+  public String key;
 
-/* Highlight the SparkPlan node name */
-#plan-viz-graph svg text :first-child:not(.stageId-and-taskId-metrics) {
-  font-weight: bold;
-}
+  @KVIndex("id")
+  public String id;
 
-#plan-viz-graph svg text {
-  fill: #333;
-}
+  @KVIndex("parentId")
+  public String parentId;
 
-#plan-viz-graph svg path {
-  stroke: #444;
-  stroke-width: 1.5px;
-}
+  @Override
+  public boolean equals(Object o) {
+    if (o instanceof CustomType2) {
+      CustomType2 other = (CustomType2) o;
+      return id.equals(other.id) && parentId.equals(other.parentId);
+    }
+    return false;
+  }
 
-/* Breaks the long string like file path when showing tooltips */
-.tooltip-inner {
-  word-wrap:break-word;
+  @Override
+  public int hashCode() {
+    return id.hashCode() ^ parentId.hashCode();
+  }
+
+  @Override
+  public String toString() {
+    return "CustomType2[key=" + key + ",id=" + id + ",parentId=" + parentId;
+  }
+
 }
