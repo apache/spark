@@ -25,41 +25,34 @@ Return the list of columns in a table. If the table does not exist, an exception
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 SHOW COLUMNS table_identifier [ database ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
+* **table_identifier**
+
     Specifies the table name of an existing table. The table may be optionally qualified
-    with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        { IN | FROM } [ database_name . ] table_name
-      </code><br><br>
-    <b>Note:</b>
-    Keywords <code>IN</code> and <code>FROM</code> are interchangeable.
-  </dd>
-  <dt><code><em>database</em></code></dt>
-  <dd>
+    with a database name.
+
+    **Syntax:** `{ IN | FROM } [ database_name . ] table_name`
+
+    **Note:** Keywords `IN` and `FROM` are interchangeable.
+
+* **database**
+
     Specifies an optional database name. The table is resolved from this database when it
     is specified. Please note that when this parameter is specified then table
-    name should not be qualified with a different database name. <br><br>
-    <b>Syntax:</b>
-      <code>
-        { IN | FROM } database_name
-      </code><br><br>
-    <b>Note:</b>
-    Keywords <code>IN</code> and <code>FROM</code> are interchangeable.
-  </dd>
-</dl>
+    name should not be qualified with a different database name. 
+
+    **Syntax:** `{ IN | FROM } database_name`
+
+    **Note:** Keywords `IN` and `FROM` are interchangeable.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Create `customer` table in `salesdb` database;
 USE salesdb;
 CREATE TABLE customer(
@@ -96,9 +89,9 @@ SHOW COLUMNS IN customer IN salesdb;
   |     name|
   |cust_addr|
   +---------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
- * [SHOW TABLE](sql-ref-syntax-aux-show-table.html)
+* [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+* [SHOW TABLE](sql-ref-syntax-aux-show-table.html)
