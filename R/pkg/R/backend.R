@@ -84,7 +84,7 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   }
 
 
-  rc <- rawConnection(raw(0), "r+")
+  rc <- rawConnection(raw(0L), "r+")
 
   writeObject(isStatic, rc, writeType = FALSE)
   writeObject(objId, rc, writeType = FALSE)
