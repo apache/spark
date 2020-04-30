@@ -26,7 +26,6 @@ import org.junit.Test;
 import java.io.File;
 import java.util.NoSuchElementException;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.*;
 
@@ -74,13 +73,13 @@ public class HybridKVStoreSuite {
 
     // Switch from in memory to leveldb
     store.stopBackgroundThreadAndSwitchToLevelDB();
+    assert(myListener.waitUntilDone());
+    store.getWritingToLevelDBThread().join();
+    assert(!store.getShouldUseMemoryStore());
 
     // Try to read from db
     assertEquals(t, store.read(t.getClass(), t.key));
     assertEquals(1L, store.count(t.getClass()));
-
-    assert(myListener.waitUntilDone());
-    assert(!store.getShouldUseMemoryStore());
 
     store.delete(t.getClass(), t.key);
     try {
@@ -110,6 +109,7 @@ public class HybridKVStoreSuite {
 
     store.stopBackgroundThreadAndSwitchToLevelDB();
     assert(myListener.waitUntilDone());
+    store.getWritingToLevelDBThread().join();
     assert(!store.getShouldUseMemoryStore());
 
     assertEquals(t1, db.read(t1.getClass(), t1.key));
@@ -142,6 +142,7 @@ public class HybridKVStoreSuite {
 
     store.stopBackgroundThreadAndSwitchToLevelDB();
     assert(myListener.waitUntilDone());
+    store.getWritingToLevelDBThread().join();
     assert(!store.getShouldUseMemoryStore());
 
     assertEquals(t, store.getMetadata(CustomType1.class));
@@ -167,6 +168,7 @@ public class HybridKVStoreSuite {
 
     store.stopBackgroundThreadAndSwitchToLevelDB();
     assert(myListener.waitUntilDone());
+    store.getWritingToLevelDBThread().join();
     assert(!store.getShouldUseMemoryStore());
 
     assertEquals(1, store.count(t.getClass()));
@@ -191,6 +193,7 @@ public class HybridKVStoreSuite {
 
     store.stopBackgroundThreadAndSwitchToLevelDB();
     assert(myListener.waitUntilDone());
+    store.getWritingToLevelDBThread().join();
     assert(!store.getShouldUseMemoryStore());
 
     assertEquals(o, store.read(ArrayKeyIndexType.class, o.key));
@@ -240,6 +243,7 @@ public class HybridKVStoreSuite {
 
     store.stopBackgroundThreadAndSwitchToLevelDB();
     assert(myListener.waitUntilDone());
+    store.getWritingToLevelDBThread().join();
     assert(!store.getShouldUseMemoryStore());
 
     assert(store.removeAllByIndexValues(
@@ -270,6 +274,7 @@ public class HybridKVStoreSuite {
 
     store.stopBackgroundThreadAndSwitchToLevelDB();
     assert(myListener.waitUntilDone());
+    store.getWritingToLevelDBThread().join();
     assert(!store.getShouldUseMemoryStore());
 
     assertEquals(t1.id, store.view(t1.getClass()).iterator().next().id);
@@ -293,6 +298,7 @@ public class HybridKVStoreSuite {
     }
     store.stopBackgroundThreadAndSwitchToLevelDB();
     assert(myListener.waitUntilDone());
+    store.getWritingToLevelDBThread().join();
     assert(!store.getShouldUseMemoryStore());
 
     KVStoreIterator<CustomType1> it = store.view(CustomType1.class).closeableIterator();

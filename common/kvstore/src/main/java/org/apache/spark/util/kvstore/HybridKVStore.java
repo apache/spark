@@ -27,8 +27,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.Collection;
 
 /**
- * Implementation of KVStore that keeps data deserialized in memory at first and having a background thread
- * that writes to the levelDB.
+ * Implementation of KVStore that keeps data deserialized in memory at first and having
+ * a background thread that writes to the levelDB.
  */
 @Private
 public class HybridKVStore implements KVStore {
@@ -39,10 +39,11 @@ public class HybridKVStore implements KVStore {
   private LevelDB levelDB = null;
 
   /** Flag to indicate if we should use InMemoryStore Or LevelDB */
-  private Boolean shouldUseInMemoryStore = true;
+  private AtomicBoolean shouldUseInMemoryStore = new AtomicBoolean(true);
 
   /** Queue of pending operations that need to perform to levelDB */
-  private LinkedBlockingQueue<LevelDBOperation> pendingLevelDBOperationsQueue = new LinkedBlockingQueue<>();
+  private LinkedBlockingQueue<LevelDBOperation> pendingLevelDBOperationsQueue =
+    new LinkedBlockingQueue<>();
 
   /** Number of threads that is currently using inMemoryStore. This is to prevent
    * the case closing inMemoryStore while some threads is using it. */
@@ -108,7 +109,8 @@ public class HybridKVStore implements KVStore {
       if (store instanceof InMemoryStore) {
         if (writingToLevelDBThread != null && writingToLevelDBThread.isAlive()) {
           // Puting this write operation to the queue for the background thread to processes
-          pendingLevelDBOperationsQueue.put(new LevelDBOperation(LevelDBOperationType.WRITE, value));
+          pendingLevelDBOperationsQueue.put(
+            new LevelDBOperation(LevelDBOperationType.WRITE, value));
         }
 
         // Close memory store if we completely switched to use levelDB
@@ -129,7 +131,8 @@ public class HybridKVStore implements KVStore {
       if (store instanceof InMemoryStore && levelDB != null) {
         if (writingToLevelDBThread != null && writingToLevelDBThread.isAlive()) {
           // Puting this delete operation to the queue for the background thread to processes
-          pendingLevelDBOperationsQueue.put(new LevelDBOperation(LevelDBOperationType.DELETE, type, naturalKey));
+          pendingLevelDBOperationsQueue.put(
+            new LevelDBOperation(LevelDBOperationType.DELETE, type, naturalKey));
         }
 
         // Close memory store if we completely switched to use levelDB
@@ -189,7 +192,8 @@ public class HybridKVStore implements KVStore {
       if (writingToLevelDBThread != null &&
               writingToLevelDBThread.isAlive()) {
         // If background thread is still running, wait for it to finish
-        pendingLevelDBOperationsQueue.put(new LevelDBOperation(LevelDBOperationType.STOP_BACKGROUND_THREAD));
+        pendingLevelDBOperationsQueue.put(
+          new LevelDBOperation(LevelDBOperationType.STOP_BACKGROUND_THREAD));
         writingToLevelDBThread.join();
         levelDB.close();
       } else if(levelDB != null) {
@@ -214,9 +218,11 @@ public class HybridKVStore implements KVStore {
       boolean removed = store.removeAllByIndexValues(klass, index, indexValues);
       if (store instanceof InMemoryStore && levelDB != null) {
         if (writingToLevelDBThread != null && writingToLevelDBThread.isAlive()) {
-          // Puting this removeAllByIndexValues operation to the queue for the background thread to processes
+          // Puting this removeAllByIndexValues operation to the queue
+          // for the background thread to processes.
           pendingLevelDBOperationsQueue.put(
-            new LevelDBOperation(LevelDBOperationType.REMOVE_ALL_BY_INDEX_VALUES, klass, index, indexValues));
+            new LevelDBOperation(LevelDBOperationType.REMOVE_ALL_BY_INDEX_VALUES,
+              klass, index, indexValues));
         }
 
         // Close memory store if we completely switched to use levelDB
@@ -230,13 +236,17 @@ public class HybridKVStore implements KVStore {
     }
   }
 
-  /** This method will send signal to stop the writingToLevelDBThread. And we will
-   * use levelDB when all the pending operations finished. Note that this method is return immediately
-   * and we will keep using inMemoryStore until the writingToLevelDBThread is stopped. */
+  /**
+   * This method will send signal to stop the writingToLevelDBThread. And we will
+   * use levelDB when all the pending operations finished. Note that this method
+   * is return immediately, and we will keep using inMemoryStore until the
+   * writingToLevelDBThread is stopped.
+   */
   public void stopBackgroundThreadAndSwitchToLevelDB() throws Exception {
     assert (this.levelDB != null);
     if (writingToLevelDBThread != null && writingToLevelDBThread.isAlive()) {
-      pendingLevelDBOperationsQueue.put(new LevelDBOperation(LevelDBOperationType.STOP_BACKGROUND_THREAD));
+      pendingLevelDBOperationsQueue.put(
+        new LevelDBOperation(LevelDBOperationType.STOP_BACKGROUND_THREAD));
     }
   }
 
@@ -262,21 +272,24 @@ public class HybridKVStore implements KVStore {
                 levelDB.write(operation.value);
               } else if (operation.operationType == LevelDBOperationType.DELETE) {
                 levelDB.delete(operation.type, operation.naturalKey);
-              } else if (operation.operationType == LevelDBOperationType.REMOVE_ALL_BY_INDEX_VALUES) {
-                levelDB.removeAllByIndexValues(operation.klass, operation.index, operation.indexValues);
+              } else if (operation.operationType ==
+                  LevelDBOperationType.REMOVE_ALL_BY_INDEX_VALUES) {
+                levelDB.removeAllByIndexValues(operation.klass, operation.index,
+                  operation.indexValues);
               } else {
                 shouldStop = true;
               }
             }
             if (isEncounteredException.get()) {
               // Notify the caller to commit the lease when success
-              myListener.onSwitchingToLevelDBFail(new Exception("Encountered exception while using inMemoryStore"));
+              myListener.onSwitchingToLevelDBFail(
+                new Exception("Encountered exception while using inMemoryStore"));
             } else {
               // Notify the caller to commit the lease when success
               myListener.onSwitchingToLevelDBSuccess();
 
               // Set flag for starting use leveldb
-              shouldUseInMemoryStore = false;
+              shouldUseInMemoryStore.set(false);
               // Clear the queue in case there is any operations left
               pendingLevelDBOperationsQueue.clear();
               // Close the inMemoryStore if no one is using it
@@ -293,12 +306,12 @@ public class HybridKVStore implements KVStore {
     }
   }
 
-  /** This method return the store that we should use. If we need to write to levelDB,
+  /**
+   * This method return the store that we should use. If we need to write to levelDB,
    * need to make sure that the background thread is stopped.
-   *
    */
   private KVStore getStore(boolean isWriting) throws Exception {
-    if (shouldUseInMemoryStore) {
+    if (shouldUseInMemoryStore.get()) {
       inMemoryStoreUseCount.incrementAndGet();
       return inMemoryStore;
     } else {
@@ -313,9 +326,12 @@ public class HybridKVStore implements KVStore {
     }
   }
 
-  /** This method close the InMemoryStore if there's no thread is using it and the shouldUseInMemoryStore==false */
+  /**
+   * This method close the InMemoryStore if there's no thread is using it and
+   * the shouldUseInMemoryStore==false.
+   */
   private void maybeCloseInMemoryStore() {
-    if (!shouldUseInMemoryStore && inMemoryStoreUseCount.get() <= 0) {
+    if (!shouldUseInMemoryStore.get() && inMemoryStoreUseCount.get() <= 0) {
       inMemoryStore.close();
     }
   }
@@ -325,7 +341,8 @@ public class HybridKVStore implements KVStore {
     void onSwitchingToLevelDBFail(Exception e);
   }
 
-  private enum LevelDBOperationType {WRITE, DELETE, STOP_BACKGROUND_THREAD, REMOVE_ALL_BY_INDEX_VALUES}
+  private enum LevelDBOperationType {WRITE, DELETE, STOP_BACKGROUND_THREAD,
+    REMOVE_ALL_BY_INDEX_VALUES}
 
   private class LevelDBOperation<T> {
     LevelDBOperationType operationType;
@@ -336,25 +353,25 @@ public class HybridKVStore implements KVStore {
     String index;
     Collection<?> indexValues;
 
-    public LevelDBOperation(LevelDBOperationType operationType) {
+    LevelDBOperation(LevelDBOperationType operationType) {
       this.operationType = operationType;
     }
 
     // This is for delete operation
-    public LevelDBOperation(LevelDBOperationType operationType, Class<?> type, Object naturalKey) {
+    LevelDBOperation(LevelDBOperationType operationType, Class<?> type, Object naturalKey) {
       this.operationType = operationType;
       this.type = type;
       this.naturalKey = naturalKey;
     }
 
     // This is for write operation
-    public LevelDBOperation(LevelDBOperationType operationType, Object value) {
+    LevelDBOperation(LevelDBOperationType operationType, Object value) {
       this.operationType = operationType;
       this.value = value;
     }
 
     // This is for removeAllByIndexValues operation
-    public LevelDBOperation(
+    LevelDBOperation(
       LevelDBOperationType operationType,
       Class<T> klass, String index,
       Collection<?> indexValues) {
@@ -365,11 +382,11 @@ public class HybridKVStore implements KVStore {
     }
   }
 
-  @VisibleForTesting Integer getPendingQueueSize() {
-    return this.pendingLevelDBOperationsQueue.size();
+  @VisibleForTesting boolean getShouldUseMemoryStore() {
+    return this.shouldUseInMemoryStore.get();
   }
 
-  @VisibleForTesting boolean getShouldUseMemoryStore() {
-    return this.shouldUseInMemoryStore;
+  @VisibleForTesting Thread getWritingToLevelDBThread() {
+    return this.writingToLevelDBThread;
   }
 }
