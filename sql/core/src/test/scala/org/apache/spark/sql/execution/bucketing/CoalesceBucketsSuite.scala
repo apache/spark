@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions.EqualTo
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, LogicalRelation}
@@ -35,15 +36,20 @@ class CoalesceBucketsSuite extends SQLTestUtils with SharedSparkSession {
     fileFormat = new ParquetFileFormat(),
     options = Map.empty)(spark)
 
-  private def run(numBuckets1: Int, numBuckets2: Int, expectCoalescing: Boolean): Unit = {
+  private def run(
+      numBuckets1: Int,
+      numBuckets2: Int,
+      expectCoalescing: Boolean,
+      equiJoin: Boolean): Unit = {
     Seq((numBuckets1, numBuckets2), (numBuckets2, numBuckets1)).foreach { buckets =>
-      val plan = CoalesceBucketsInJoin(
-        Join(
-          LogicalRelation(newRelation(buckets._1)),
-          LogicalRelation(newRelation(buckets._2)),
-          Inner,
-          None,
-          JoinHint.NONE))
+      val left = LogicalRelation(newRelation(buckets._1))
+      val right = LogicalRelation(newRelation(buckets._2))
+      val condition = if (equiJoin) {
+        Some(EqualTo(left.output(0), right.output(0)))
+      } else {
+        None
+      }
+      val plan = CoalesceBucketsInJoin(Join(left, right, Inner, condition, JoinHint.NONE))
       val coalesced = plan.collect { case c: CoalesceBuckets => c }
       if (expectCoalescing) {
         assert(coalesced.size == 1)
@@ -56,20 +62,28 @@ class CoalesceBucketsSuite extends SQLTestUtils with SharedSparkSession {
   test("bucket coalescing - basic") {
     Seq(true, false).foreach { enabled =>
       withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> enabled.toString) {
-        run(numBuckets1 = 4, numBuckets2 = 8, expectCoalescing = enabled)
+        run(numBuckets1 = 4, numBuckets2 = 8, expectCoalescing = enabled, equiJoin = true)
+      }
+    }
+  }
+
+  test("bucket coalescing should work only for equi-join") {
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> enabled.toString) {
+        run(numBuckets1 = 4, numBuckets2 = 8, expectCoalescing = false, equiJoin = false)
       }
     }
   }
 
   test("bucket coalescing shouldn't be applied when the number of buckets are the same") {
     withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
-      run(numBuckets1 = 8, numBuckets2 = 8, expectCoalescing = false)
+      run(numBuckets1 = 8, numBuckets2 = 8, expectCoalescing = false, equiJoin = true)
     }
   }
 
   test("number of bucket is not divisible by other number of bucket") {
     withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
-      run(numBuckets1 = 8, numBuckets2 = 3, expectCoalescing = false)
+      run(numBuckets1 = 8, numBuckets2 = 3, expectCoalescing = false, equiJoin = true)
     }
   }
 
@@ -77,7 +91,7 @@ class CoalesceBucketsSuite extends SQLTestUtils with SharedSparkSession {
     withSQLConf(
       SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
       SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_NUM_BUCKETS_DIFF.key -> "2") {
-      run(numBuckets1 = 8, numBuckets2 = 4, expectCoalescing = false)
+      run(numBuckets1 = 8, numBuckets2 = 4, expectCoalescing = false, equiJoin = true)
     }
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -72,9 +73,9 @@ object CoalesceBucketsInJoin extends Rule[LogicalPlan]  {
   object ExtractJoinWithBuckets {
     def unapply(plan: LogicalPlan): Option[(Join, Int, Int)] = {
       plan match {
-        case join: Join =>
-          val leftBucket = getBucketSpec(join.left)
-          val rightBucket = getBucketSpec(join.right)
+        case join @ ExtractEquiJoinKeys(_, _, _, _, left, right, _) =>
+          val leftBucket = getBucketSpec(left)
+          val rightBucket = getBucketSpec(right)
           if (leftBucket.isDefined && rightBucket.isDefined) {
             Some(join, leftBucket.get.numBuckets, rightBucket.get.numBuckets)
           } else {
