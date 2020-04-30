@@ -27,6 +27,8 @@ elapsedSecs <- function() {
   proc.time()[3]
 }
 
+writeObject = SparkR:::writeObject
+
 compute <- function(mode, partition, serializer, deserializer, key,
              colNames, computeFunc, inputData) {
   if (mode > 0) {
@@ -78,7 +80,7 @@ outputResult <- function(serializer, output, outputCon) {
     row = SparkR:::writeRowSerialize(output, outputCon),
     arrow = SparkR:::writeArrowSerialize(output, outputCon),
     { # else write lines one-by-one with flag
-      for (elem in output) SparkR:::writeObject(elem, outputCon, writeType = FALSE)
+      for (elem in output) writeObject(elem, outputCon, writeType = FALSE)
     }
   )
 }
@@ -261,8 +263,8 @@ if (isEmpty != 0) {
 
     # Step 2: write out all of the environment as key-value pairs.
     for (name in ls(res)) {
-      SparkR:::writeObject(2L, outputCon, writeType = FALSE)
-      SparkR:::writeObject(as.integer(name), outputCon, writeType = FALSE)
+      writeObject(2L, outputCon, writeType = FALSE)
+      writeObject(as.integer(name), outputCon, writeType = FALSE)
       # Truncate the accumulator list to the number of elements we have
       length(res[[name]]$data) <- res[[name]]$counter
       SparkR:::writeRawSerialize(res[[name]]$data, outputCon)
@@ -275,16 +277,16 @@ if (isEmpty != 0) {
 }
 
 # Report timing
-SparkR:::writeObject(specialLengths$TIMING_DATA, outputCon, writeType = FALSE)
-SparkR:::writeObject(bootTime, outputCon, writeType = FALSE)
-SparkR:::writeObject(initElap - bootElap, outputCon, writeType = FALSE)        # init
-SparkR:::writeObject(broadcastElap - initElap, outputCon, writeType = FALSE)   # broadcast
-SparkR:::writeObject(inputElap - broadcastElap, outputCon, writeType = FALSE)  # input
-SparkR:::writeObject(computeInputElapsDiff, outputCon, writeType = FALSE)      # compute
-SparkR:::writeObject(outputComputeElapsDiff, outputCon, writeType = FALSE)     # output
+writeObject(specialLengths$TIMING_DATA, outputCon, writeType = FALSE)
+writeObject(bootTime, outputCon, writeType = FALSE)
+writeObject(initElap - bootElap, outputCon, writeType = FALSE)        # init
+writeObject(broadcastElap - initElap, outputCon, writeType = FALSE)   # broadcast
+writeObject(inputElap - broadcastElap, outputCon, writeType = FALSE)  # input
+writeObject(computeInputElapsDiff, outputCon, writeType = FALSE)      # compute
+writeObject(outputComputeElapsDiff, outputCon, writeType = FALSE)     # output
 
 # End of output
-SparkR:::writeObject(specialLengths$END_OF_STERAM, outputCon, writeType = FALSE)
+writeObject(specialLengths$END_OF_STERAM, outputCon, writeType = FALSE)
 
 close(outputCon)
 close(inputCon)
