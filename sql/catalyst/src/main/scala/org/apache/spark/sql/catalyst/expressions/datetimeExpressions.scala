@@ -1207,8 +1207,7 @@ case class DatetimeSub(
     interval: Expression,
     child: Expression) extends RuntimeReplaceable {
   override def toString: String = s"$start - $interval"
-  override def sql: String =
-    s"${toPrettySQL(start)} - ${toPrettySQL(interval)}"
+  override def sql: String = s"${toPrettySQL(start)} - ${toPrettySQL(interval)}"
 }
 
 /**
