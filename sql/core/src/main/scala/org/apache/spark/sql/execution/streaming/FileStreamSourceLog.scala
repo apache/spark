@@ -28,11 +28,14 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.FileStreamSource.FileEntry
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Clock
 
 class FileStreamSourceLog(
     metadataLogVersion: Int,
     sparkSession: SparkSession,
-    path: String)
+    path: String,
+    clock: Clock,
+    inputRetentionMs: Long)
   extends CompactibleFileStreamLog[FileEntry](metadataLogVersion, sparkSession, path) {
 
   import CompactibleFileStreamLog._
@@ -59,6 +62,11 @@ class FileStreamSourceLog(
     override def removeEldestEntry(eldest: Entry[Long, Array[FileEntry]]): Boolean = {
       size() > cacheSize
     }
+  }
+
+  override def shouldRetain(log: FileEntry): Boolean = {
+    val curTime = clock.getTimeMillis()
+    curTime - log.timestamp <= inputRetentionMs
   }
 
   override def add(batchId: Long, logs: Array[FileEntry]): Boolean = {

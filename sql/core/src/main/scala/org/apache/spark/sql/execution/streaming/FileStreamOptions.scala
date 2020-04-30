@@ -77,6 +77,21 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
   val fileNameOnly: Boolean = withBooleanParameter("fileNameOnly", false)
 
   /**
+   * Maximum age of a file that can be found in this directory, before it is ignored.
+   *
+   * This is the "hard" limit of input data retention - input files older than the max age will be
+   * ignored regardless of source options (while `maxFileAgeMs` depends on the condition), as well
+   * as entries in checkpoint metadata will be purged based on this.
+   *
+   * Unlike `maxFileAgeMs`, the max age is specified with respect to the timestamp of the current
+   * system, to provide consistent behavior regardless of metadata entries.
+   *
+   * NOTE 1: Please be careful to set the value if the query replays from the old input files.
+   * NOTE 2: Please make sure the timestamp is in sync between nodes which run the query.
+   */
+  val inputRetentionMs = parameters.get("inputRetention").map(Utils.timeStringAsMs)
+
+  /**
    * The archive directory to move completed files. The option will be only effective when
    * "cleanSource" is set to "archive".
    *

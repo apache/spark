@@ -42,7 +42,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.{StructType, _}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ManualClock, SystemClock, Utils}
 
 abstract class FileStreamSourceTest
   extends StreamTest with SharedSparkSession with PrivateMethodTester {
@@ -1461,7 +1461,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   private def readLogFromResource(dir: String): Seq[FileEntry] = {
     val input = getClass.getResource(s"/structured-streaming/$dir")
-    val log = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, input.toString)
+    val log = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, input.toString,
+      new SystemClock, Long.MaxValue)
     log.allFiles()
   }
 
@@ -1614,7 +1615,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       // add the metadata entries as a pre-req
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
     val metadataLog =
-      new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
+      new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath,
+        new SystemClock, Long.MaxValue)
       assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
       assert(metadataLog.add(1, Array(FileEntry(s"$scheme:///file2", 200L, 0))))
 
@@ -1622,6 +1624,87 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         dir.getAbsolutePath, Map.empty)
       // this method should throw an exception if `fs.exists` is called during resolveRelation
       newSource.getBatch(None, FileStreamSourceOffset(1))
+    }
+  }
+
+  test("old files should not be included as input files if input retention is specified") {
+    withTempDir { dir =>
+      /** Create a text file with a single data item */
+      def createFile(data: Int, timestamp: Long): File = {
+        val file = stringToFile(new File(dir, s"$data.txt"), data.toString)
+        file.setLastModified(timestamp)
+        file
+      }
+
+      def validate(
+          files: Seq[File],
+          inputRetention: Long,
+          timeToAdvance: Long,
+          limit: ReadLimit,
+          expectedFiles: Seq[File]): Unit = {
+        val df = createFileStream("text", dir.getAbsolutePath,
+          options = Map("inputRetention" -> inputRetention.toString, "maxFileAge" -> "7d"))
+        val fileSource = getSourceFromFileStream(df)
+        val _metadataLog = PrivateMethod[FileStreamSourceLog](Symbol("metadataLog"))
+        val metadataLog = fileSource invokePrivate _metadataLog()
+
+        val clock = new ManualClock
+        fileSource.clockForRetention = clock
+        clock.advance(timeToAdvance)
+
+        val offset = fileSource.latestOffset(FileStreamSourceOffset(-1L), limit)
+          .asInstanceOf[FileStreamSourceOffset]
+
+        val inputFiles = metadataLog.get(offset.logOffset)
+        assert(inputFiles.nonEmpty)
+
+        val inputFileNames = inputFiles.get.map { f => new File(f.path).getName }.toSet
+        val expectedFileNames = expectedFiles.map(_.getName).toSet
+        assert(inputFileNames === expectedFileNames)
+      }
+
+      // files will have various modified times between 1000 to 10000
+      val files = (1 to 10).map { idx =>
+        createFile(idx, 1000 * idx)
+      }
+
+      // we initialize FileStreamSource per case as the test will be affected by SeenFilesMap
+      validate(files, 5000, 10000, ReadLimit.allAvailable(),
+        files.filter(_.lastModified() >= 5000))
+      validate(files, 5000, 10000, ReadLimit.maxFiles(2),
+        files.filter(_.lastModified() >= 5000).take(2))
+    }
+  }
+
+  test("filter out outdated entries in file stream source log when compacting") {
+    withTempDir { dir =>
+      val clock = new ManualClock
+      val metadataLog =
+        new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath,
+          clock, 10000)
+
+      val files1 = (1 to 3).map { idx =>
+        FileEntry(s"1_$idx", idx * 1000, 1)
+      }
+
+      clock.advance(4000) // clock time = 4000
+
+      files1.foreach { f => assert(metadataLog.shouldRetain(f)) }
+
+      val files2 = (1 to 3).map { idx =>
+        FileEntry(s"2_$idx", 10000 + idx * 1000, 2)
+      }
+
+      val allFiles = files1 ++ files2
+
+      allFiles.foreach { f => assert(metadataLog.shouldRetain(f)) }
+
+      clock.advance(10000) // clock time = 14000
+
+      // only files in batch 1 will be evicted
+
+      files1.foreach { f => assert(!metadataLog.shouldRetain(f)) }
+      files2.foreach { f => assert(metadataLog.shouldRetain(f)) }
     }
   }
 

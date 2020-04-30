@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimi
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
  * A very simple source that reads files from the given directory as they appear.
@@ -71,8 +71,13 @@ class FileStreamSource(
       Map()
     }}
 
+  /** exposed for testing */
+  var clockForRetention: Clock = new SystemClock
+  private val inputRetentionMs = sourceOptions.inputRetentionMs.getOrElse(Long.MaxValue)
+
   private val metadataLog =
-    new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession, metadataPath)
+    new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession, metadataPath,
+      clockForRetention, inputRetentionMs)
   private var metadataLogCurrentOffset = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   /** Maximum number of new files to be considered in each batch */
@@ -295,9 +300,15 @@ class FileStreamSource(
       case Some(false) => allFiles = allFilesUsingInMemoryFileIndex()
     }
 
-    val files = allFiles.sortBy(_.getModificationTime)(fileSortOrder).map { status =>
-      (status.getPath.toUri.toString, status.getModificationTime)
-    }
+    val curTime = clockForRetention.getTimeMillis()
+    val files = allFiles
+      .filter { file =>
+        curTime - file.getModificationTime <= inputRetentionMs
+      }
+      .sortBy(_.getModificationTime)(fileSortOrder)
+      .map { status =>
+        (status.getPath.toUri.toString, status.getModificationTime)
+      }
     val endTime = System.nanoTime
     val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
     if (listingTimeMs > 2000) {
