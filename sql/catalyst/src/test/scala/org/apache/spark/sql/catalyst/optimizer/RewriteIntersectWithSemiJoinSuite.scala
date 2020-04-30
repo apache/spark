@@ -22,7 +22,7 @@ import scala.language.existentials
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, EqualNullSafe}
 import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ColumnStat, Distinct, Join, JoinHint, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Distinct, Join, JoinHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
 import org.apache.spark.sql.internal.SQLConf
@@ -82,8 +82,7 @@ class RewriteIntersectWithSemiJoinSuite extends PlanTest with StatsEstimationTes
         tbl2.select(nameToAttr("t2.col1")),
         LeftSemi,
         Some(EqualNullSafe(nameToAttr("t1.col1"), nameToAttr("t2.col1"))),
-        JoinHint.NONE
-      ))
+        JoinHint.NONE))
       comparePlans(optimizedPlan, expectedPlan)
 
       // After setting OPTIMIZE_INTERSECT_DISTINCT_REDUCTION_THRESHOLD to 99,
@@ -97,8 +96,7 @@ class RewriteIntersectWithSemiJoinSuite extends PlanTest with StatsEstimationTes
           Distinct(tbl2.select(nameToAttr("t2.col1"))),
           LeftSemi,
           Some(EqualNullSafe(nameToAttr("t1.col1"), nameToAttr("t2.col1"))),
-          JoinHint.NONE
-        )
+          JoinHint.NONE)
         comparePlans(optimizedPlanNew, expectedPlanNew)
       }
     }
@@ -120,8 +118,7 @@ class RewriteIntersectWithSemiJoinSuite extends PlanTest with StatsEstimationTes
         Distinct(tbl2.select(nameToAttr("t2.col1"))),
         LeftSemi,
         Some(EqualNullSafe(nameToAttr("t1.col2"), nameToAttr("t2.col1"))),
-        JoinHint.NONE
-      ))
+        JoinHint.NONE))
       comparePlans(optimizedPlan, expectedPlan)
     }
   }
@@ -185,8 +182,7 @@ class RewriteIntersectWithSemiJoinSuite extends PlanTest with StatsEstimationTes
         tbl2.select(nameToAttr("t2.col2")),
         LeftSemi,
         Some(EqualNullSafe(nameToAttr("t1.col1"), nameToAttr("t2.col2"))),
-        JoinHint.NONE
-      )
+        JoinHint.NONE)
       comparePlans(optimizedPlan, expectedPlan)
     }
   }
