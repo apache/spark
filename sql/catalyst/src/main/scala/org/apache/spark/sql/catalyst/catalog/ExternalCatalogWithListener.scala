@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ListenerBus
@@ -191,32 +194,33 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       replace: Boolean,
       numDP: Int): Unit = {
     val partitions = calculateDynamicPartitions(new Path(loadPath), partition, numDP)
-    postToAll(LoadDynamicPartitionsPreEvent(
-      db, table, loadPath, partitions, replace, numDP))
+    postToAll(LoadDynamicPartitionsPreEvent(db, table, loadPath, partitions, replace, numDP))
     delegate.loadDynamicPartitions(db, table, loadPath, partition, replace, numDP)
-    postToAll(LoadDynamicPartitionsEvent(
-      db, table, loadPath, partitions, replace, numDP))
+    postToAll(LoadDynamicPartitionsEvent(db, table, loadPath, partitions, replace, numDP))
   }
 
   def calculateDynamicPartitions(loadPath: Path,
                                  partitionSpec: TablePartitionSpec,
-                                 numDP: Int): Seq[TablePartitionSpec] = {
+                                 numDP: Int): Array[TablePartitionSpec] = {
     assert(numDP > 0)
-
-    val fs = loadPath.getFileSystem(new Configuration())
-    fs.listStatus(loadPath).flatMap { fileStatus =>
-      val dirName = fileStatus.getPath.getName
-      if (dirName.contains("=")) {
-        val Array(partitionColumn: String, partitionValue: String) = dirName.split("=")
-        val newPartitionSpec = partitionSpec + (partitionColumn -> partitionValue)
-        if (numDP == 1) {
-          Seq(newPartitionSpec)
+    try {
+      val fs = loadPath.getFileSystem(new Configuration())
+      fs.listStatus(loadPath).flatMap { fileStatus =>
+        val dirName = fileStatus.getPath.getName
+        if (dirName.contains("=")) {
+          val Array(partitionColumn, partitionValue) = dirName.split("=")
+          val newPartitionSpec = partitionSpec + (partitionColumn -> partitionValue)
+          if (numDP == 1) {
+            Array[TablePartitionSpec](newPartitionSpec)
+          } else {
+            calculateDynamicPartitions(fileStatus.getPath, newPartitionSpec, numDP - 1)
+          }
         } else {
-          calculateDynamicPartitions(fileStatus.getPath, newPartitionSpec, numDP - 1)
+          Array[TablePartitionSpec]()
         }
-      } else {
-        Seq()
       }
+    } catch {
+      case ex: Exception => Array[TablePartitionSpec]()
     }
   }
 
