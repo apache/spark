@@ -23,6 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
@@ -159,18 +160,15 @@ case class CollectSet(
     case other => other
   }
 
-  override def convertToBufferElement(value: Any): Any = {
-    val v = InternalRow.copyValue(value)
-    child.dataType match {
-      case BinaryType => UnsafeArrayData.fromPrimitiveArray(v.asInstanceOf[Array[Byte]])
-      case _ => v
-    }
+  override def convertToBufferElement(value: Any): Any = child.dataType match {
+    case BinaryType => UnsafeArrayData.fromPrimitiveArray(value.asInstanceOf[Array[Byte]])
+    case _ => InternalRow.copyValue(value)
   }
 
   override def eval(buffer: mutable.HashSet[Any]): Any = {
     val array = child.dataType match {
       case BinaryType =>
-        buffer.iterator.map(_.asInstanceOf[UnsafeArrayData].toByteArray).toArray
+        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray).toArray
       case _ => buffer.toArray
     }
     new GenericArrayData(array)

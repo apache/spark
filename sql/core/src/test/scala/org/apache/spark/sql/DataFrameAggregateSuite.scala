@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.collection.mutable
 import scala.util.Random
 
 import org.scalatest.Matchers.the
