@@ -17,13 +17,15 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.StringWriter
+import java.net.HttpURLConnection.HTTP_GONE
 import java.util.{Collections, UUID}
 import java.util.Properties
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watch}
 import scala.collection.mutable
 import scala.util.control.NonFatal
+import util.control.Breaks._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
@@ -127,25 +129,33 @@ private[spark] class Client(
         .endSpec()
       .build()
     val driverPodName = resolvedDriverPod.getMetadata.getName
-    Utils.tryWithResource(
-      kubernetesClient
-        .pods()
-        .withName(driverPodName)
-        .watch(watcher)) { _ =>
-      val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
-      try {
-        val otherKubernetesResources =
-          resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
-        addDriverOwnerReference(createdDriverPod, otherKubernetesResources)
-        kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
-      } catch {
-        case NonFatal(e) =>
-          kubernetesClient.pods().delete(createdDriverPod)
-          throw e
-      }
 
-      val sId = Seq(conf.namespace, driverPodName).mkString(":")
-      watcher.watchOrStop(sId)
+    var watch: Watch = null
+    val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+    try {
+      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
+      addDriverOwnerReference(createdDriverPod, otherKubernetesResources)
+      kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
+    } catch {
+      case NonFatal(e) =>
+        kubernetesClient.pods().delete(createdDriverPod)
+        throw e
+    }
+    val sId = Seq(conf.namespace, driverPodName).mkString(":")
+    breakable {
+      while (true) {
+        try {
+            watch = kubernetesClient
+              .pods()
+              .withName(driverPodName)
+              .watch(watcher)
+            watcher.watchOrStop(sId)
+            break
+        } catch {
+          case e: KubernetesClientException if e.getCode == HTTP_GONE =>
+            logInfo("Resource version changed rerunning the watcher")
+        }
+      }
     }
   }
 
