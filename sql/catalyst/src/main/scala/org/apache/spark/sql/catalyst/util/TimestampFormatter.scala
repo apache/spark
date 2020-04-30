@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.sql.Timestamp
 import java.text.{ParseException, ParsePosition, SimpleDateFormat}
 import java.time._
 import java.time.format.{DateTimeFormatter, DateTimeParseException}
@@ -30,6 +31,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.types.Decimal
@@ -154,12 +156,14 @@ class LegacyFastTimestampFormatter(
     }
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
-    Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
+    val julianMicros = Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
+    rebaseJulianToGregorianMicros(julianMicros)
   }
 
   def format(timestamp: SQLTimestamp): String = {
-    cal.setTimeInMillis(Math.floorDiv(timestamp, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
-    cal.setMicros(Math.floorMod(timestamp, MICROS_PER_SECOND))
+    val julianMicros = rebaseGregorianToJulianMicros(timestamp)
+    cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
+    cal.setMicros(Math.floorMod(julianMicros, MICROS_PER_SECOND))
     fastDateFormat.format(cal)
   }
 }
@@ -177,12 +181,11 @@ class LegacySimpleTimestampFormatter(
   }
 
   override def parse(s: String): Long = {
-    millisToMicros(sdf.parse(s).getTime)
+    fromJavaTimestamp(new Timestamp(sdf.parse(s).getTime))
   }
 
   override def format(us: Long): String = {
-    val timestamp = DateTimeUtils.toJavaTimestamp(us)
-    sdf.format(timestamp)
+    sdf.format(toJavaTimestamp(us))
   }
 }
 
