@@ -152,7 +152,7 @@ struct<CAST(TIMESTAMP '2011-11-11 11:11:11' + INTERVAL '2 days' AS TIMESTAMP):ti
 -- !query
 select timestamp'2011-11-11 11:11:11' - interval '2' day
 -- !query schema
-struct<CAST(TIMESTAMP '2011-11-11 11:11:11' + (- INTERVAL '2 days') AS TIMESTAMP):timestamp>
+struct<CAST(TIMESTAMP '2011-11-11 11:11:11' - INTERVAL '2 days' AS TIMESTAMP):timestamp>
 -- !query output
 2011-11-09 11:11:11
 
@@ -178,7 +178,7 @@ requirement failed: Cannot add hours, minutes or seconds, milliseconds, microsec
 -- !query
 select '2011-11-11' - interval '2' day
 -- !query schema
-struct<CAST(CAST(2011-11-11 AS TIMESTAMP) + (- INTERVAL '2 days') AS STRING):string>
+struct<CAST('2011-11-11' - INTERVAL '2 days' AS STRING):string>
 -- !query output
 2011-11-09 00:00:00
 
@@ -186,7 +186,7 @@ struct<CAST(CAST(2011-11-11 AS TIMESTAMP) + (- INTERVAL '2 days') AS STRING):str
 -- !query
 select '2011-11-11 11:11:11' - interval '2' second
 -- !query schema
-struct<CAST(CAST(2011-11-11 11:11:11 AS TIMESTAMP) + (- INTERVAL '2 seconds') AS STRING):string>
+struct<CAST('2011-11-11 11:11:11' - INTERVAL '2 seconds' AS STRING):string>
 -- !query output
 2011-11-11 11:11:09
 
@@ -194,7 +194,7 @@ struct<CAST(CAST(2011-11-11 11:11:11 AS TIMESTAMP) + (- INTERVAL '2 seconds') AS
 -- !query
 select '1' - interval '2' second
 -- !query schema
-struct<CAST(CAST(1 AS TIMESTAMP) + (- INTERVAL '2 seconds') AS STRING):string>
+struct<CAST('1' - INTERVAL '2 seconds' AS STRING):string>
 -- !query output
 NULL
 
