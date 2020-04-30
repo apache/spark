@@ -27,7 +27,7 @@ The `INSERT INTO` statement inserts new rows into a table. The inserted rows can
 
 {% highlight sql %}
 INSERT INTO [ TABLE ] table_identifier [ partition_spec ]
-    { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
+    { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 {% endhighlight %}
 
 ### Parameters
@@ -50,7 +50,7 @@ INSERT INTO [ TABLE ] table_identifier [ partition_spec ]
     for partitions.<br><br>
     <b>Syntax:</b>
       <code>
-        PARTITION (partition_col_name  = partition_col_val [ , ... ])
+        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
       </code>
   </dd>
 </dl>
