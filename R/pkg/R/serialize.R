@@ -102,7 +102,7 @@ writeObject.character <- function(object, con, writeType = TRUE, ...) {
   # could also try strsplit(utfVal, NULL) and then use writeObject.list,
   #   but the type='bytes' part would probably impact this (does
   #   strsplit(useBytes=TRUE) accomplish the same thing?
-  width <- as.integer(nchar(utfVal), type = "bytes")
+  width <- as.integer(nchar(utfVal, type = "bytes"))
   for (ii in seq_along(utfVal)) {
     writeObject(width[ii], con, writeType = FALSE)
     writeBin(utfVal[ii], con, endian = "big", useBytes = TRUE)
