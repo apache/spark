@@ -70,7 +70,7 @@ writeObject.NULL <- function(object, con, writeType = TRUE, ...) {
   }
 }
 
-atomic_write_object <- function(object, con, writeType) {
+atomic_write_object_header <- function(object, con, writeType) {
   # for length > 1, this will write array bit
   if (writeType) {
     writeType(object, con)
@@ -86,17 +86,17 @@ atomic_write_object <- function(object, con, writeType) {
 # integer same as logical; will cast TRUE -> 1, FALSE -> 0
 writeObject.integer <-
 writeObject.logical <- function(object, con, writeType = TRUE, ...) {
-  atomic_write_object(object, con, writeType)
+  atomic_write_object_header(object, con, writeType)
   for (elem in object) writeBin(as.integer(elem), con, endian = "big")
 }
 
 writeObject.numeric <- function(object, con, writeType = TRUE, ...) {
-  atomic_write_object(object, con, writeType)
+  atomic_write_object_header(object, con, writeType)
   for (elem in object) writeBin(elem, con, endian = "big")
 }
 
 writeObject.character <- function(object, con, writeType = TRUE, ...) {
-  atomic_write_object(object, con, writeType)
+  atomic_write_object_header(object, con, writeType)
 
   utfVal <- enc2utf8(object)
   # could also try strsplit(utfVal, NULL) and then use writeObject.list,
