@@ -43,8 +43,6 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 
   override def toString: String = s"-$child"
 
-  override def prettyName: String = "-"
-
   private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
@@ -86,6 +84,13 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
       IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
     case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
     case _ => numeric.negate(input)
+  }
+
+  override def sql: String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("-") match {
+      case "-" => s"(- ${child.sql})"
+      case funcName => s"$funcName(${child.sql})"
+    }
   }
 }
 

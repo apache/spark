@@ -78,10 +78,12 @@
   subitems:
     - text: Data Types
       url: sql-ref-datatypes.html
+    - text: Identifiers
+      url: sql-ref-identifier.html
+    - text: Literals
+      url: sql-ref-literals.html
     - text: Null Semantics
       url: sql-ref-null-semantics.html
-    - text: NaN Semantics
-      url: sql-ref-nan-semantics.html
     - text: ANSI Compliance
       url: sql-ref-ansi-compliance.html
       subitems:
@@ -154,6 +156,24 @@
                   url: sql-ref-syntax-qry-select-distribute-by.html
                 - text: LIMIT Clause 
                   url: sql-ref-syntax-qry-select-limit.html
+                - text: JOIN
+                  url: sql-ref-syntax-qry-select-join.html
+                - text: Join Hints
+                  url: sql-ref-syntax-qry-select-hints.html
+                - text: Set Operators
+                  url: sql-ref-syntax-qry-select-setops.html
+                - text: TABLESAMPLE
+                  url: sql-ref-syntax-qry-sampling.html
+                - text: Table-valued Function
+                  url: sql-ref-syntax-qry-select-tvf.html
+                - text: Inline Table
+                  url: sql-ref-syntax-qry-select-inline-table.html
+                - text: Common Table Expression
+                  url: sql-ref-syntax-qry-select-cte.html
+                - text: LIKE Predicate
+                  url: sql-ref-syntax-qry-select-like.html
+                - text: Window Function
+                  url: sql-ref-syntax-qry-window.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements
@@ -207,6 +227,8 @@
                   url: sql-ref-syntax-aux-show-partitions.html
                 - text: SHOW CREATE TABLE
                   url: sql-ref-syntax-aux-show-create-table.html
+                - text: SHOW VIEWS
+                  url: sql-ref-syntax-aux-show-views.html
             - text: CONFIGURATION MANAGEMENT
               url: sql-ref-syntax-aux-conf-mgmt.html
               subitems:
@@ -225,5 +247,16 @@
                   url: sql-ref-syntax-aux-resource-mgmt-list-file.html
                 - text: LIST JAR
                   url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
+    - text: Functions
+      url: sql-ref-functions.html
+      subitems:
+      - text: Built-in Functions
+        url: sql-ref-functions-builtin.html
+      - text: Scalar UDFs (User-Defined Functions)
+        url: sql-ref-functions-udf-scalar.html
+      - text: UDAFs (User-Defined Aggregate Functions)
+        url: sql-ref-functions-udf-aggregate.html
+      - text: Integration with Hive UDFs/UDAFs/UDTFs
+        url: sql-ref-functions-udf-hive.html
     - text: Datetime Pattern
       url: sql-ref-datetime-pattern.html

@@ -37,8 +37,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:sqlserver://$ip:$port;user=sa;password=Sapass123;"
-
-    override def getStartupProcessName: Option[String] = None
   }
 
   override def dataPreparation(conn: Connection): Unit = {

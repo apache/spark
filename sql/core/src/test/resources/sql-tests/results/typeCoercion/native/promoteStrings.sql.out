@@ -2532,7 +2532,7 @@ NaN
 -- !query
 SELECT - '1' FROM t
 -- !query schema
-struct<-(CAST(1 AS DOUBLE)):double>
+struct<(- CAST(1 AS DOUBLE)):double>
 -- !query output
 -1.0
 

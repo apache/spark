@@ -18,7 +18,8 @@
 package org.apache.spark.sql.jdbc
 
 import java.net.ServerSocket
-import java.sql.Connection
+import java.sql.{Connection, DriverManager}
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -54,14 +55,33 @@ abstract class DatabaseOnDocker {
   val jdbcPort: Int
 
   /**
+   * Parameter whether the container should run privileged.
+   */
+  val privileged: Boolean = false
+
+  /**
    * Return a JDBC URL that connects to the database running at the given IP address and port.
    */
   def getJdbcUrl(ip: String, port: Int): String
 
   /**
+   * Return the JDBC properties needed for the connection.
+   */
+  def getJdbcProperties(): Properties = new Properties()
+
+  /**
+   * Optional entry point when container starts
+   *
+   * Startup process is a parameter of entry point. This may or may not be considered during
+   * startup. Prefer entry point to startup process when you need a command always to be executed or
+   * you want to change the initialization order.
+   */
+  def getEntryPoint: Option[String] = None
+
+  /**
    * Optional process to run when container starts
    */
-  def getStartupProcessName: Option[String]
+  def getStartupProcessName: Option[String] = None
 
   /**
    * Optional step before container starts
@@ -77,6 +97,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
   val db: DatabaseOnDocker
 
   private var docker: DockerClient = _
+  protected var externalPort: Int = _
   private var containerId: String = _
   protected var jdbcUrl: String = _
 
@@ -101,13 +122,14 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
           docker.pull(db.imageName)
       }
       // Configure networking (necessary for boot2docker / Docker Machine)
-      val externalPort: Int = {
+      externalPort = {
         val sock = new ServerSocket(0)
         val port = sock.getLocalPort
         sock.close()
         port
       }
       val hostConfigBuilder = HostConfig.builder()
+        .privileged(db.privileged)
         .networkMode("bridge")
         .ipcMode(if (db.usesIpc) "host" else "")
         .portBindings(
@@ -118,9 +140,11 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
         .networkDisabled(false)
         .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
         .exposedPorts(s"${db.jdbcPort}/tcp")
-      if(db.getStartupProcessName.isDefined) {
-        containerConfigBuilder
-        .cmd(db.getStartupProcessName.get)
+      if (db.getEntryPoint.isDefined) {
+        containerConfigBuilder.entrypoint(db.getEntryPoint.get)
+      }
+      if (db.getStartupProcessName.isDefined) {
+        containerConfigBuilder.cmd(db.getStartupProcessName.get)
       }
       db.beforeContainerStart(hostConfigBuilder, containerConfigBuilder)
       containerConfigBuilder.hostConfig(hostConfigBuilder.build())
@@ -130,12 +154,11 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
       // Start the container and wait until the database can accept JDBC connections:
       docker.startContainer(containerId)
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
-      eventually(timeout(1.minute), interval(1.second)) {
-        val conn = java.sql.DriverManager.getConnection(jdbcUrl)
-        conn.close()
+      var conn: Connection = null
+      eventually(timeout(2.minutes), interval(1.second)) {
+        conn = getConnection()
       }
       // Run any setup queries:
-      val conn: Connection = java.sql.DriverManager.getConnection(jdbcUrl)
       try {
         dataPreparation(conn)
       } finally {
@@ -169,6 +192,13 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
     } finally {
       super.afterAll()
     }
+  }
+
+  /**
+   * Return the JDBC connection.
+   */
+  def getConnection(): Connection = {
+    DriverManager.getConnection(jdbcUrl, db.getJdbcProperties())
   }
 
   /**

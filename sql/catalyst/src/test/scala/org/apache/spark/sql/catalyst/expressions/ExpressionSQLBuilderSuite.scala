@@ -131,8 +131,8 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     checkSQL('a.int / 'b.int, "(`a` / `b`)")
     checkSQL('a.int % 'b.int, "(`a` % `b`)")
 
-    checkSQL(-'a.int, "-(`a`)")
-    checkSQL(-('a.int + 'b.int), "-((`a` + `b`))")
+    checkSQL(-'a.int, "(- `a`)")
+    checkSQL(-('a.int + 'b.int), "(- (`a` + `b`))")
   }
 
   test("window specification") {
@@ -173,8 +173,13 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     )
 
     checkSQL(
-      TimeSub('a, interval),
+      DatetimeSub('a, interval, Literal.default(TimestampType)),
       "`a` - INTERVAL '1 hours'"
+    )
+
+    checkSQL(
+      DateAddInterval('a, interval),
+      "`a` + INTERVAL '1 hours'"
     )
   }
 }

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Functio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{FunctionsCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
@@ -67,7 +68,7 @@ case class Order(
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
 
@@ -2492,4 +2493,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-31522: hive metastore related configurations should be static") {
+    Seq("spark.sql.hive.metastore.version",
+      "spark.sql.hive.metastore.jars",
+      "spark.sql.hive.metastore.sharedPrefixes",
+      "spark.sql.hive.metastore.barrierPrefixes").foreach { key =>
+      val e = intercept[AnalysisException](sql(s"set $key=abc"))
+      assert(e.getMessage.contains("Cannot modify the value of a static config"))
+    }
+  }
 }
+
+class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
+class SQLQuerySuiteAE extends SQLQuerySuiteBase with EnableAdaptiveExecutionSuite
+
