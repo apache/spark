@@ -152,10 +152,12 @@ object CTESubstitution extends Rule[LogicalPlan] {
     val resolvedCTERelations = new mutable.ArrayBuffer[(String, LogicalPlan)](relations.size)
     for ((name, relation) <- relations) {
       val innerCTEResolved = if (isLegacy) {
-        // In legacy mode, outer CTE relations take precedence, so substitute relations later.
+        // In legacy mode, outer CTE relations take precedence. Here we don't resolve the inner
+        // `With` nodes, later we will substitute `UnresolvedRelation`s with outer CTE relations.
+        // Analyzer will run this rule multiple times until all `With` nodes are resolved.
         relation
       } else {
-        // A CTE definition might contain an inner CTE that has priority, so traverse and
+        // A CTE definition might contain an inner CTE that has a higher priority, so traverse and
         // substitute CTE defined in `relation` first.
         traverseAndSubstituteCTE(relation)
       }
