@@ -80,29 +80,32 @@ atomic_write_object_header <- function(object, con, writeType) {
     # now we write the elemental type bit
     writeType(object[[1L]], con)
     writeObject(length(object), con, writeType = FALSE)
-  } else if (is.na(object)) return() # no value for NULL
+  }
 }
 
 # integer same as logical; will cast TRUE -> 1, FALSE -> 0
 writeObject.integer <-
 writeObject.logical <- function(object, con, writeType = TRUE, ...) {
   atomic_write_object_header(object, con, writeType)
+  if (length(object) == 1L && is.na(object)) return() # no value for NULL
   for (elem in object) writeBin(as.integer(elem), con, endian = "big")
 }
 
 writeObject.numeric <- function(object, con, writeType = TRUE, ...) {
   atomic_write_object_header(object, con, writeType)
+  if (length(object) == 1L && is.na(object)) return() # no value for NULL
   for (elem in object) writeBin(elem, con, endian = "big")
 }
 
 writeObject.character <- function(object, con, writeType = TRUE, ...) {
   atomic_write_object_header(object, con, writeType)
+  if (length(object) == 1L && is.na(object)) return() # no value for NULL
 
   utfVal <- enc2utf8(object)
   # could also try strsplit(utfVal, NULL) and then use writeObject.list,
   #   but the type='bytes' part would probably impact this (does
   #   strsplit(useBytes=TRUE) accomplish the same thing?
-  width <- as.integer(nchar(utfVal, type = "bytes"))
+  width <- as.integer(nchar(utfVal, type = "bytes") + 1L)
   for (ii in seq_along(utfVal)) {
     writeObject(width[ii], con, writeType = FALSE)
     writeBin(utfVal[ii], con, endian = "big", useBytes = TRUE)
