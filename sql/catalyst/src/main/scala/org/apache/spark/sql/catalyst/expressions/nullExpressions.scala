@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, TypeUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 
@@ -138,8 +138,7 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String =
-    prettyName + Seq(left, right).map(toPrettySQL).mkString("(", ", ", ")")
+  override def innerChildren: Seq[Expression] = Seq(left, right)
 }
 
 
@@ -159,8 +158,7 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String =
-    prettyName + Seq(left, right).map(toPrettySQL).mkString("(", ", ", ")")
+  override def innerChildren: Seq[Expression] = Seq(left, right)
 }
 
 
@@ -179,8 +177,7 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String =
-    prettyName + Seq(left, right).map(toPrettySQL).mkString("(", ", ", ")")
+  override def innerChildren: Seq[Expression] = Seq(left, right)
 }
 
 
@@ -202,8 +199,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
   }
 
   override def flatArguments: Iterator[Any] = Iterator(expr1, expr2, expr3)
-  override def sql: String =
-    prettyName + Seq(expr1, expr2, expr3).map(toPrettySQL).mkString("(", ", ", ")")
+  override def innerChildren: Seq[Expression] = Seq(expr1, expr2, expr3)
 }
 
 

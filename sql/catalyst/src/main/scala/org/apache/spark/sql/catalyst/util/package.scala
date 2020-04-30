@@ -142,7 +142,12 @@ package object util extends Logging {
     "`" + name.replace("`", "``") + "`"
   }
 
-  def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
+  def toPrettySQL(e: Expression): String = e match {
+    case r: RuntimeReplaceable =>
+      r.withPrettyChildren(r.innerChildren.map(usePrettyExpression))
+      r.sql
+    case _ => usePrettyExpression(e).sql
+  }
 
   def escapeSingleQuotedString(str: String): String = {
     val builder = StringBuilder.newBuilder

@@ -323,6 +323,20 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
   override lazy val canonicalized: Expression = child.canonicalized
+
+  override def innerChildren: Seq[Expression] = sys.error("RuntimeReplaceable must implement" +
+    " innerChildren with the original parameters")
+
+  protected val sqlStrSeparator: String = ", "
+
+  override def sql: String = RuntimeReplaceable.this.prettyName +
+    prettyChildren.map(_.sql).mkString("(", sqlStrSeparator, ")")
+
+  protected var prettyChildren: Seq[Expression] = innerChildren
+
+  def withPrettyChildren(children: Seq[Expression]): Unit = {
+    prettyChildren = children
+  }
 }
 
 /**

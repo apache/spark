@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -1695,7 +1695,7 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = prettyName + Seq(str, len).map(toPrettySQL).mkString("(", ", ", ")")
+  override def innerChildren: Seq[Expression] = Seq(str, len)
 }
 
 /**
@@ -1717,7 +1717,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = prettyName + Seq(str, len).map(toPrettySQL).mkString("(", ", ", ")")
+  override def innerChildren: Seq[Expression] = Seq(str, len)
 }
 
 /**
