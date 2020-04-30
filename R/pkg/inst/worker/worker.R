@@ -84,14 +84,14 @@ outputResult <- function(serializer, output, outputCon) {
     # nolint start
     {
       # else write lines one-by-one with flag
-      for (elem in output) writeObject(elem, outputCon, writeType = FALSE)
+      for (elem in output) writeObject(as.character(elem), outputCon, writeType = FALSE)
     }
     # nolint end
   )
 }
 
 # Constants
-specialLengths <- list(END_OF_STERAM = 0L, TIMING_DATA = -1L)
+specialLengths <- list(END_OF_STREAM = 0L, TIMING_DATA = -1L)
 
 # Timing R process boot
 bootTime <- currentTimeSecs()
@@ -291,7 +291,7 @@ writeObject(computeInputElapsDiff, outputCon, writeType = FALSE)      # compute
 writeObject(outputComputeElapsDiff, outputCon, writeType = FALSE)     # output
 
 # End of output
-writeObject(specialLengths$END_OF_STERAM, outputCon, writeType = FALSE)
+writeObject(specialLengths$END_OF_STREAM, outputCon, writeType = FALSE)
 
 close(outputCon)
 close(inputCon)
