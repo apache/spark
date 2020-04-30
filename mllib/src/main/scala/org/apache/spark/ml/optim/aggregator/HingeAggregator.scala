@@ -123,13 +123,13 @@ private[ml] class BlockHingeAggregator(
     blockSize: Int)(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[InstanceBlock, BlockHingeAggregator] {
 
-  private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
-  protected override val dim: Int = numFeaturesPlusIntercept
+  private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   @transient private lazy val coefficientsArray = bcCoefficients.value match {
     case DenseVector(values) => values
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
       s" but got type ${bcCoefficients.value.getClass}.")
   }
+  protected override val dim: Int = numFeaturesPlusIntercept
 
   @transient private lazy val linear = if (fitIntercept) {
     Vectors.dense(coefficientsArray.take(numFeatures)).toDense

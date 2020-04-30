@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.{Instance, InstanceBlock}
+import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -158,6 +158,15 @@ class LinearSVC @Since("2.2.0") (
 
   /**
    * Set block size for stacking input data in matrices.
+   * If blockSize == 1, then stacking will be skipped, and each vector is treated individually;
+   * If blockSize > 1, then points will be stacked to blocks, and high-level BLAS routines will
+   * be used if possible (for example, GEMV instead of DOT, GEMM instead of GEMV).
+   * An appropriate choice of the block size depends on the dim and sparsity of input datasets,
+   * the underlying BLAS implementation (for example, f2jBLAS, OpenBLAS, intel MKL) and its
+   * configuration (for example, number of threads).
+   * Note that existing BLAS implementations are mainly optimized for dense matrices, if the
+   * input dataset is sparse, there maybe no performance gain, the worse is that performance
+   * regression may occur.
    * Default is 1.
    *
    * @group expertSetParam
@@ -234,7 +243,7 @@ class LinearSVC @Since("2.2.0") (
         if ($(standardization)) None else Some(getFeaturesStd)))
     } else None
 
-    def regParamL1Fun = (index: Int) => 0D
+    def regParamL1Fun = (index: Int) => 0.0
     val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
 
     /*
@@ -287,7 +296,7 @@ class LinearSVC @Since("2.2.0") (
     }
     bcFeaturesStd.destroy()
 
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
+    (if (state != null) state.x.toArray else null, arrayBuilder.result)
   }
 
   private def trainOnBlocks(
@@ -300,15 +309,10 @@ class LinearSVC @Since("2.2.0") (
 
     val bcFeaturesStd = instances.context.broadcast(featuresStd)
 
-    val standardized = instances.map {
-      case Instance(label, weight, features) =>
-        val featuresStd = bcFeaturesStd.value
-        val array = Array.ofDim[Double](numFeatures)
-        features.foreachNonZero { (i, v) =>
-          val std = featuresStd(i)
-          if (std != 0) array(i) = v / std
-        }
-        Instance(label, weight, Vectors.dense(array))
+    val standardized = instances.mapPartitions { iter =>
+      val inverseStd = bcFeaturesStd.value.map { std => if (std != 0) 1.0 / std else 0.0 }
+      val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
+      iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
     }
     val blocks = InstanceBlock.blokify(standardized, $(blockSize))
       .persist(StorageLevel.MEMORY_AND_DISK)
@@ -331,7 +335,7 @@ class LinearSVC @Since("2.2.0") (
     blocks.unpersist()
     bcFeaturesStd.destroy()
 
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
+    (if (state != null) state.x.toArray else null, arrayBuilder.result)
   }
 }
 
