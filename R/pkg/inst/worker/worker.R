@@ -78,10 +78,15 @@ outputResult <- function(serializer, output, outputCon) {
     serializer,
     byte = SparkR:::writeRawSerialize(output, outputCon),
     row = SparkR:::writeRowSerialize(output, outputCon),
-    arrow = SparkR:::writeArrowSerialize(output, outputCon), { # brace here for linter...
+    arrow = SparkR:::writeArrowSerialize(output, outputCon),
+    # lintr doesn't like lonely { in this case, but
+    #   adding it after the previous line seems confusing
+    # nolint start
+    {
       # else write lines one-by-one with flag
       for (elem in output) writeObject(elem, outputCon, writeType = FALSE)
     }
+    # nolint end
   )
 }
 
