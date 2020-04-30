@@ -373,7 +373,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
              |Format: $format
              |Location: InMemoryFileIndex\\[.*\\]
              |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
-             |PushedFilers: \\[IsNotNull\\(id\\), IsNotNull\\(value\\), GreaterThan\\(id,1\\), GreaterThan\\(value,2\\)\\]
+             |PushedFilers: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]
              |ReadSchema: struct\\<value:int\\>
              |""".stripMargin.trim
 
