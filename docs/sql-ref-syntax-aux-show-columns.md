@@ -43,7 +43,7 @@ SHOW COLUMNS table_identifier [ database ]
 * **database**
 
     Specifies an optional database name. The table is resolved from this database when it
-    is specified. Please note that when this parameter is specified then table
+    is specified. When this parameter is specified then table
     name should not be qualified with a different database name. 
 
     **Syntax:** `{ IN | FROM } database_name`
