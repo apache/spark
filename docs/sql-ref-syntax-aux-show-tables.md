@@ -52,7 +52,7 @@ SHOW TABLES [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
   </dd>
 </dl>
 
-### Example
+### Examples
 
 {% highlight sql %}
 -- List all tables in default database

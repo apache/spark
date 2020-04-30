@@ -105,7 +105,7 @@ ALTER VIEW view_identifier UNSET TBLPROPERTIES [ IF EXISTS ]  ( property_key [ ,
 </dl>
 
 #### ALTER View AS SELECT
-`ALTER VIEW view_identifier AS SELECT` statement changes the definition of a view, the `SELECT` statement must be valid,
+`ALTER VIEW view_identifier AS SELECT` statement changes the definition of a view. The `SELECT` statement must be valid,
 and the `view_identifier` must exist.
 
 #### Syntax
@@ -127,7 +127,7 @@ Note that `ALTER VIEW` statement does not support `SET SERDE` or `SET SERDEPROPE
   </dd>
   <dt><code><em>select_statement</em></code></dt>
   <dd>
-    Specifies the definition of the view, detail check <a href="sql-ref-syntax-qry-select.html">select_statement</a>
+    Specifies the definition of the view. Check <a href="sql-ref-syntax-qry-select.html">select_statement</a> for details.
   </dd>
 </dl>
 
@@ -136,7 +136,7 @@ Note that `ALTER VIEW` statement does not support `SET SERDE` or `SET SERDEPROPE
 {% highlight sql %}
 -- Rename only changes the view name.
 -- The source and target databases of the view have to be the same.
--- Use qualified or unqualified name for the source and target view  
+-- Use qualified or unqualified name for the source and target view.
 ALTER VIEW tempdb1.v1 RENAME TO tempdb1.v2;
 
 -- Verify that the new view is created.

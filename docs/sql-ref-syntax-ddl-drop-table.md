@@ -49,7 +49,7 @@ DROP TABLE [ IF EXISTS ] table_identifier
   </dd>
 </dl>
 
-### Example
+### Examples
 
 {% highlight sql %}
 -- Assumes a table named `employeetable` exists.

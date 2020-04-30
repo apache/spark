@@ -42,7 +42,7 @@ interchangeable.
   </dd>
 </dl>
 
-### Example
+### Examples
 
 {% highlight sql %}
 -- Create employees DATABASE
