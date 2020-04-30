@@ -78,7 +78,7 @@ outputResult <- function(serializer, output, outputCon) {
     serializer,
     byte = SparkR:::writeRawSerialize(output, outputCon),
     row = SparkR:::writeRowSerialize(output, outputCon),
-    arrow = SparkR:::writeArrowSerialize(output, outputCon), {
+    arrow = SparkR:::writeArrowSerialize(output, outputCon), { # brace here for linter...
       # else write lines one-by-one with flag
       for (elem in output) writeObject(elem, outputCon, writeType = FALSE)
     }
