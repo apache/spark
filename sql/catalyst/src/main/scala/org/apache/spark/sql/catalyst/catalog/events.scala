@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.scheduler.SparkListenerEvent
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 
 /**
  * Event emitted by the external catalog when it is modified. Events are either fired before or
@@ -144,6 +145,137 @@ case class AlterTableEvent(
     database: String,
     name: String,
     kind: String) extends TableEvent
+
+/**
+ * Event fired when a partition is created, dropped or renamed.
+ */
+trait PartitionEvent extends DatabaseEvent {
+
+  /**
+   * table name
+   */
+  val table: String
+}
+
+/**
+ * Event fired before a partition is loaded.
+ */
+case class LoadPartitionPreEvent(
+    database: String,
+    table: String,
+    loadPath: String,
+    partition: TablePartitionSpec,
+    isOverwrite: Boolean,
+    inheritTableSpecs: Boolean,
+    isSrcLocal: Boolean) extends PartitionEvent
+
+/**
+ * Event fired after a partition is loaded.
+ */
+case class LoadPartitionEvent(
+    database: String,
+    table: String,
+    loadPath: String,
+    partition: TablePartitionSpec,
+    isOverwrite: Boolean,
+    inheritTableSpecs: Boolean,
+    isSrcLocal: Boolean) extends PartitionEvent
+
+/**
+ * Event fired before load dynamic partitions.
+ */
+case class LoadDynamicPartitionsPreEvent(
+    database: String,
+    table: String,
+    loadPath: String,
+    partition: TablePartitionSpec,
+    replace: Boolean,
+    numDP: Int) extends PartitionEvent
+
+/**
+ * Event fired after load dynamic partitions.
+ */
+case class LoadDynamicPartitionsEvent(
+   database: String,
+   table: String,
+   loadPath: String,
+   partition: TablePartitionSpec,
+   replace: Boolean,
+   numDP: Int) extends PartitionEvent
+
+/**
+ * Event fired before a partition is created.
+ */
+case class CreatePartitionsPreEvent(
+    database: String,
+    table: String,
+    parts: Seq[CatalogTablePartition],
+    ignoreIfExists: Boolean) extends PartitionEvent
+
+/**
+ * Event fired after a partition is created.
+ */
+case class CreatePartitionsEvent(
+    database: String,
+    table: String,
+    parts: Seq[CatalogTablePartition],
+    ignoreIfExists: Boolean) extends PartitionEvent
+
+/**
+ * Event fired before a partition is dropped.
+ */
+case class DropPartitionsPreEvent(
+    database: String,
+    table: String,
+    partSpecs: Seq[TablePartitionSpec],
+    ignoreIfNotExists: Boolean,
+    purge: Boolean,
+    retainData: Boolean) extends PartitionEvent
+
+/**
+ * Event fired after a partition is dropped.
+ */
+case class DropPartitionsEvent(
+    database: String,
+    table: String,
+    partSpecs: Seq[TablePartitionSpec],
+    ignoreIfNotExists: Boolean,
+    purge: Boolean,
+    retainData: Boolean) extends PartitionEvent
+
+/**
+ * Event fired before a partition is renamed.
+ */
+case class RenamePartitionsPreEvent(
+    database: String,
+    table: String,
+    specs: Seq[TablePartitionSpec],
+    newSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+
+/**
+ * Event fired after a partition is renamed.
+ */
+case class RenamePartitionsEvent(
+    database: String,
+    table: String,
+    specs: Seq[TablePartitionSpec],
+    newSpecs: Seq[TablePartitionSpec]) extends PartitionEvent
+
+/**
+ * Event fired before a partition is altered.
+ */
+case class AlterPartitionsPreEvent(
+    database: String,
+    table: String,
+    parts: Seq[CatalogTablePartition]) extends PartitionEvent
+
+/**
+ * Event fired after a partition is altered.
+ */
+case class AlterPartitionsEvent(
+    database: String,
+    table: String,
+    parts: Seq[CatalogTablePartition]) extends PartitionEvent
 
 /**
  * Event fired when a function is created, dropped, altered or renamed.
