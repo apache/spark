@@ -1940,7 +1940,7 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
-    decommissionManager.foreach(_.stop())
+    // decommissionManager.foreach(_.stop())
     blockTransferService.close()
     if (blockStoreClient ne blockTransferService) {
       // Closing should be idempotent, but maybe not for the NioBlockTransferService.
