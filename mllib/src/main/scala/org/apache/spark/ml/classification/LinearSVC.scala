@@ -159,14 +159,14 @@ class LinearSVC @Since("2.2.0") (
   /**
    * Set block size for stacking input data in matrices.
    * If blockSize == 1, then stacking will be skipped, and each vector is treated individually;
-   * If blockSize > 1, then points will be stacked to blocks, and high-level BLAS routines will
-   * be used if possible (for example, GEMV instead of DOT, GEMM instead of GEMV).
-   * An appropriate choice of the block size depends on the dim and sparsity of input datasets,
-   * the underlying BLAS implementation (for example, f2jBLAS, OpenBLAS, intel MKL) and its
-   * configuration (for example, number of threads).
+   * If blockSize &gt; 1, then vectors will be stacked to blocks, and high-level BLAS routines
+   * will be used if possible (for example, GEMV instead of DOT, GEMM instead of GEMV).
+   * Recommended size is between 10 and 1000. An appropriate choice of the block size depends
+   * on the sparsity and dim of input datasets, the underlying BLAS implementation (for example,
+   * f2jBLAS, OpenBLAS, intel MKL) and its configuration (for example, number of threads).
    * Note that existing BLAS implementations are mainly optimized for dense matrices, if the
-   * input dataset is sparse, there maybe no performance gain, the worse is that performance
-   * regression may occur.
+   * input dataset is sparse, stacking may bring no performance gain, the worse is possible
+   * performance regression.
    * Default is 1.
    *
    * @group expertSetParam
