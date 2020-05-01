@@ -42,5 +42,6 @@ ability to generate logical and physical plan for a given query using
  * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
  * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
  * [Common Table Expression](sql-ref-syntax-qry-select-cte.html)
+ * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
  * [Window Function](sql-ref-syntax-qry-window.html)
  * [EXPLAIN Statement](sql-ref-syntax-qry-explain.html)
