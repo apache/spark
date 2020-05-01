@@ -84,6 +84,11 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
   private val resultFile = new File(baseResourcePath, "sql-expression-schema.md")
 
+  private val ignoreSet = Set(
+    // Output name with a random seed
+    "org.apache.spark.sql.catalyst.expressions.Rand",
+    "org.apache.spark.sql.catalyst.expressions.Randn")
+
   /** A single SQL query's SQL and schema. */
   protected case class QueryOutput(
       className: String,
@@ -106,7 +111,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     val outputs = new ArrayBuffer[QueryOutput]
     val missingExamples = new ArrayBuffer[String]
 
-    classFunsMap.foreach { kv =>
+    classFunsMap.filterNot(v => ignoreSet.contains(v._1)).foreach { kv =>
       val className = kv._1
       kv._2.foreach { funInfo =>
         val example = funInfo.getExamples
