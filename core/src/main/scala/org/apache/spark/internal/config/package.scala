@@ -520,14 +520,14 @@ package object config {
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(60)
 
-  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING =
+  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val DYN_ALLOCATION_SHUFFLE_TIMEOUT =
-    ConfigBuilder("spark.dynamicAllocation.shuffleTimeout")
+  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.shuffleTracking.timeout")
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
