@@ -45,8 +45,8 @@ import org.apache.spark.sql.hive.client.HiveVersion
 private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
   var createdTempDir: Option[Path] = None
-  // This may be not sage in multi threads, use synchronized to keep thread safe.
-  private val cleanedTempDirs: HashSet[Path] = HashSet.empty[Path]
+  // A signal to confirm whether tempDir can be deleted after job cleaned.
+  var tempDirCleanedEnabled: Boolean = false
 
   protected def saveAsHiveFile(
       sparkSession: SparkSession,
@@ -140,32 +140,22 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     }
   }
 
-  /**
-   * This is a job cleaned hook function and will be called twice for a job to make sure
-   * the valid outputs have been moved and none tasks are active.
-   */
   protected def deleteExternalTmpPath(hadoopConf: Configuration) : Unit =
-    synchronized {
+    // Use tempDirCleanedEnabled to make sure tempDir is Cleaned after whole query finished.
+    if (tempDirCleanedEnabled) {
       // Attempt to delete the staging directory and the inclusive files. If failed, the files are
       // expected to be dropped at the normal termination of VM since deleteOnExit is used.
       createdTempDir.foreach { path =>
-        if (cleanedTempDirs.contains(path)) {
-          try {
-            val fs = path.getFileSystem(hadoopConf)
-            if (fs.delete(path, true)) {
-              // Remove the tempDir from memory
-              cleanedTempDirs.remove(path)
-              createdTempDir = None
-              // If we successfully delete the staging directory, remove it from FileSystem's cache.
-              fs.cancelDeleteOnExit(path)
-            }
-          } catch {
-            case NonFatal(e) =>
-              val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
-              logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
+        try {
+          val fs = path.getFileSystem(hadoopConf)
+          if (fs.delete(path, true)) {
+            // If we successfully delete the staging directory, remove it from FileSystem's cache.
+            fs.cancelDeleteOnExit(path)
           }
-        } else {
-          cleanedTempDirs.add(path)
+        } catch {
+          case NonFatal(e) =>
+            val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
+            logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
         }
       }
     }
