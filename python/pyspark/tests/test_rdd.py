@@ -783,7 +783,6 @@ class RDDTests(ReusedPySparkTestCase):
         for i in range(4):
             self.assertEqual(i, next(it))
 
-
     def test_multiple_group_jobs(self):
         import threading
         group_a = "job_ids_to_cancel"
