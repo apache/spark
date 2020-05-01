@@ -799,6 +799,30 @@ private[spark] class DAGScheduler(
    * @param callSite where in the user program this job was called
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
+   *
+   * @note Throws `Exception` when the job fails
+   */
+  def runJob[T, U](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      callSite: CallSite,
+      resultHandler: (Int, U) => Unit,
+      properties: Properties): Unit = {
+    runJob(rdd, func, partitions, callSite, resultHandler, properties, None)
+  }
+
+  /**
+   * Run an action job on the given RDD and pass all the results to the resultHandler function as
+   * they arrive.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param func a function to run on each partition of the RDD
+   * @param partitions set of partitions to run on; some jobs may not want to compute on all
+   *   partitions of the target RDD, e.g. for operations like first()
+   * @param callSite where in the user program this job was called
+   * @param resultHandler callback to pass each result to
+   * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
    * @param jobCleanedHook job cleaned hook to do some cleaning after job cleaned
    *
    * @note Throws `Exception` when the job fails
@@ -810,10 +834,11 @@ private[spark] class DAGScheduler(
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
       properties: Properties,
-      jobCleanedHook: Int => Unit = Int => Unit): Unit = {
+      jobCleanedHook: Option[ Int => Unit] = None): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
-    sc.jobCleanedHookListener.addCleanedHook(waiter.jobId, jobCleanedHook)
+    jobCleanedHook.foreach( func =>
+      sc.jobCleanedHookListener.addCleanedHook(waiter.jobId, func))
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>

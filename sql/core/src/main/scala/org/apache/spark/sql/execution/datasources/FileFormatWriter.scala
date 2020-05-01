@@ -51,7 +51,7 @@ object FileFormatWriter extends Logging {
       outputPath: String,
       customPartitionLocations: Map[TablePartitionSpec, String],
       outputColumns: Seq[Attribute],
-      cleanedHook: Int => Unit = Int => Unit)
+      cleanedHook: Option[Int => Unit] = None)
 
   /** A function that converts the empty string to null for partition values. */
   case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {

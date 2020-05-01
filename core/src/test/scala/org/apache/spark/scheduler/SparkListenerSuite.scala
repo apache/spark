@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -209,6 +210,14 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Allow the remaining events to be processed so we can stop the listener bus:
     listenerWait.release(2)
     bus.stop()
+  }
+
+  test("onJobCleaned() called after JobCleaned") {
+    sc = new SparkContext("local", "SparkListenerSuite")
+    val jobCleandListener = new JobCleandListener
+    sc.addSparkListener(jobCleandListener)
+    sc.parallelize(1 to 100).count()
+    assert(jobCleandListener.cleanedCounter.get() == 1)
   }
 
   test("basic creation of StageInfo") {
@@ -603,6 +612,17 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
    */
   private def checkNonZeroAvg(m: Iterable[Long], msg: String): Unit = {
     assert(m.sum / m.size.toDouble > 0.0, msg)
+  }
+
+  /**
+   * A simple listener that count job cleans.
+   */
+  private class JobCleandListener extends SparkListener {
+    val cleanedCounter = new AtomicInteger(0)
+
+    override def onJobCleaned(jobCleaned: SparkListenerJobCleaned): Unit = {
+      cleanedCounter.getAndIncrement()
+    }
   }
 
   /**

@@ -104,7 +104,7 @@ case class InsertIntoHiveTable(
         // Make sure tmp path deleted while getting Exception before sc.runJob
         deleteExternalTmpPath(hadoopConf)
         throw new SparkException(
-          s"Failed inserting ubti table ${table.identifier.quotedString}", e)
+          s"Failed inserting into table ${table.identifier.quotedString}", e)
     } finally {
       // Attempt to delete the staging directory and the inclusive files. If failed, the files are
       // expected to be dropped at the normal termination of VM since deleteOnExit is used.

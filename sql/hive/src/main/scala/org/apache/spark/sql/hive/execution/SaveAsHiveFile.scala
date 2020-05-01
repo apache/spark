@@ -95,7 +95,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         outputLocation,
         customPartitionLocations,
         outputColumns,
-        cleanedHook = Int => deleteExternalTmpPath(hadoopConf)),
+        cleanedHook = Some(Int => deleteExternalTmpPath(hadoopConf))),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,

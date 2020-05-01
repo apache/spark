@@ -2101,7 +2101,7 @@ class SparkContext(config: SparkConf) extends Logging {
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       resultHandler: (Int, U) => Unit,
-      jobCleanedHook: Int => Unit): Unit = {
+      jobCleanedHook: Option[Int => Unit]): Unit = {
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
@@ -2112,7 +2112,8 @@ class SparkContext(config: SparkConf) extends Logging {
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
     }
     dagScheduler.runJob(
-      rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get, jobCleanedHook)
+      rdd, cleanedFunc, partitions, callSite,
+      resultHandler, localProperties.get, jobCleanedHook)
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
   }
@@ -2132,7 +2133,7 @@ class SparkContext(config: SparkConf) extends Logging {
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       resultHandler: (Int, U) => Unit): Unit = {
-    runJob(rdd, func, partitions, resultHandler, jobCleanedHook = Int => Unit)
+    runJob(rdd, func, partitions, resultHandler, None)
   }
 
   /**
