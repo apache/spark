@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, Tim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -1209,7 +1209,7 @@ case class DatetimeSub(
   override def exprsReplaced: Seq[Expression] = Seq(start, interval)
   override def toString: String = s"$start - $interval"
   override def sql: String = exprsReplaced.map(_.sql).mkString(" - ")
-  override def prettySQL: String = exprsReplaced.map(usePrettyExpression).map(_.sql).mkString(" - ")
+  override def prettySQL: String = exprsReplaced.map(toPrettySQL).mkString(" - ")
 }
 
 /**
@@ -2215,9 +2215,10 @@ case class Extract(field: Expression, source: Expression, child: Expression)
   override def flatArguments: Iterator[Any] = Iterator(field, source)
   override def exprsReplaced: Seq[Expression] = Seq(field, source)
 
-  override def sql: String = super.sql.replace(", ", " FROM ")
+  override def sql: String = prettyName + exprsReplaced.map(_.sql).mkString("(", " FROM ", ")")
 
-  override def prettySQL: String = super.prettySQL.replace(", ", " FROM ")
+  override def prettySQL: String = prettyName +
+    exprsReplaced.map(toPrettySQL).mkString("(", " FROM ", ")")
 }
 
 /**

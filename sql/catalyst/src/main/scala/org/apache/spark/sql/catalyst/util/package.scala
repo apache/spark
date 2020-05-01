@@ -134,6 +134,7 @@ package object util extends Logging {
       PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
     case e: GetArrayStructFields =>
       PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
+    case r: RuntimeReplaceable => r.asPrettyAttribute()
   }
 
   def quoteIdentifier(name: String): String = {
@@ -142,10 +143,7 @@ package object util extends Logging {
     "`" + name.replace("`", "``") + "`"
   }
 
-  def toPrettySQL(e: Expression): String = e match {
-    case r: RuntimeReplaceable => r.prettySQL
-    case _ => usePrettyExpression(e).sql
-  }
+  def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {
     val builder = StringBuilder.newBuilder

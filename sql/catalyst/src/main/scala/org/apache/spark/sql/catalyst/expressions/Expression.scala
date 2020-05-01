@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -330,13 +330,14 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
    *
    * Implementations should override this with original parameters
    */
-  def exprsReplaced: Seq[Expression]
+  protected def exprsReplaced: Seq[Expression]
 
-  override def sql: String = RuntimeReplaceable.this.prettyName +
-    exprsReplaced.map(_.sql).mkString("(", ", ", ")")
+  override def sql: String = prettyName + exprsReplaced.map(_.sql).mkString("(", ", ", ")")
 
-  def prettySQL: String = RuntimeReplaceable.this.prettyName +
-    exprsReplaced.map(usePrettyExpression).map(_.sql).mkString("(", ", ", ")")
+  protected def prettySQL: String =
+    prettyName + exprsReplaced.map(toPrettySQL).mkString("(", ", ", ")")
+
+  def asPrettyAttribute(): PrettyAttribute = PrettyAttribute(prettySQL, dataType)
 }
 
 /**
