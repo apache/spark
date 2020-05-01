@@ -78,9 +78,8 @@ object DataSourceUtils {
     relation match {
       case hs: HadoopFsRelation =>
         val supportedDatasources =
-          SQLConf.get.getConf(SQLConf.NESTED_PREDICATE_PUSHDOWN_V1_SOURCE_LIST)
-            .toLowerCase(Locale.ROOT)
-            .split(",").map(_.trim)
+          Utils.stringToSeq(SQLConf.get.getConf(SQLConf.NESTED_PREDICATE_PUSHDOWN_V1_SOURCE_LIST)
+            .toLowerCase(Locale.ROOT))
         supportedDatasources.contains(hs.toString)
       case _ => false
     }

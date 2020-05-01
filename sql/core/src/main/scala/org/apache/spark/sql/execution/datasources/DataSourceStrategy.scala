@@ -532,8 +532,7 @@ object DataSourceStrategy {
    * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
    *                               translated [[Filter]]. The map is used for rebuilding
    *                               [[Expression]] from [[Filter]].
-   * @param nestedPredicatePushdownEnabled Whether nested predicate pushdown is enabled. Default is
-   *                                       disabled.
+   * @param nestedPredicatePushdownEnabled Whether nested predicate pushdown is enabled.
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
@@ -572,12 +571,7 @@ object DataSourceStrategy {
           .map(sources.Not)
 
       case other =>
-        val pushableColumn = if (nestedPredicatePushdownEnabled) {
-          PushableColumnAndNestedColumn
-        } else {
-          PushableColumnWithoutNestedColumn
-        }
-        val filter = translateLeafNodeFilter(other, pushableColumn)
+        val filter = translateLeafNodeFilter(other, PushableColumn(nestedPredicatePushdownEnabled))
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
           translatedFilterToExpr.get(filter.get) = predicate
         }
@@ -684,6 +678,16 @@ abstract class PushableColumnBase {
       case _ => None
     }
     helper(e).map(_.quoted)
+  }
+}
+
+object PushableColumn {
+  def apply(nestedPredicatePushdownEnabled: Boolean): PushableColumnBase = {
+    if (nestedPredicatePushdownEnabled) {
+      PushableColumnAndNestedColumn
+    } else {
+      PushableColumnWithoutNestedColumn
+    }
   }
 }
 
