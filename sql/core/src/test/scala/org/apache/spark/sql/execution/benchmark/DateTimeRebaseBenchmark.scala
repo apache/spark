@@ -25,6 +25,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.SECONDS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 
 /**
  * Synthetic benchmark for rebasing of date and timestamp in read/write.
@@ -126,6 +127,12 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
     basePath.getAbsolutePath + s"/${dateTime}_${period}_1582$rebaseFlag"
   }
 
+  private def getOutputType(dateTime: String): String = dateTime match {
+    case "TIMESTAMP_INT96" => ParquetOutputTimestampType.INT96.toString
+    case "TIMESTAMP_MILLIS" => ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString
+    case _ => ParquetOutputTimestampType.TIMESTAMP_MICROS.toString
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val rowsNum = 100000000
 
@@ -133,7 +140,9 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId) {
         withTempPath { path =>
           runBenchmark("Rebasing dates/timestamps in Parquet datasource") {
-            Seq("date", "timestamp").foreach { dateTime =>
+            Seq(
+              "DATE", "TIMESTAMP_INT96", "TIMESTAMP_MICROS", "TIMESTAMP_MILLIS"
+            ).foreach { dateTime =>
               val benchmark = new Benchmark(
                 s"Save ${dateTime}s to parquet",
                 rowsNum,
@@ -143,6 +152,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
                 Seq(false, true).foreach { rebase =>
                   benchmark.addCase(caseName(after1582, Some(rebase)), 1) { _ =>
                     withSQLConf(
+                      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> getOutputType(dateTime),
                       SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> rebase.toString) {
                       genDF(rowsNum, dateTime, after1582)
                         .write
