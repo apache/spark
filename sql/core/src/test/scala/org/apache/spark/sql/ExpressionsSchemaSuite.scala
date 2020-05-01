@@ -165,7 +165,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       // The header of golden file has one line, plus four lines of the summary and three
       // lines of the header of schema table.
       assert(expectedSize == outputSize + 8,
-        s"Expected $outputSize blocks in result file but got $outputSize. " +
+        s"Expected $expectedSize blocks in result file but got $outputSize. " +
           s"Try regenerate the result files.")
 
       Seq.tabulate(outputs.size) { i =>
