@@ -152,27 +152,27 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-31590 The filter used by Metadata-only queries should not have Unevaluable") {
-    withTable("test_tbl") {
-      withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true") {
-        sql("CREATE TABLE test_tbl (a INT,d STRING,h STRING) USING PARQUET PARTITIONED BY (d ,h)")
-        sql("""
-            |INSERT OVERWRITE TABLE test_tbl PARTITION(d,h)
-            |SELECT 1,'2020-01-01','23'
-            |UNION ALL
-            |SELECT 2,'2020-01-02','01'
-            |UNION ALL
-            |SELECT 3,'2020-01-02','02'
-            """.stripMargin)
-        sql(
-          s"""
-             |SELECT d, MAX(h) AS h
-             |FROM test_tbl
-             |WHERE d= (
-             |  SELECT MAX(d) AS d
-             |  FROM test_tbl
-             |)
-             |GROUP BY d
-        """.stripMargin).collect()
+    Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
+      withSQLConf(OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
+        val df = sql(
+          """
+            |SELECT partcol1, MAX(partcol2) AS partcol2
+            |FROM srcpart
+            |WHERE partcol1 = (
+            |  SELECT MAX(partcol1)
+            |  FROM srcpart
+            |)
+            |GROUP BY partcol1
+          """.stripMargin)
+        val localRelations = df.queryExecution.optimizedPlan.collect {
+          case l@LocalRelation(_, _, _) => l
+        }
+        if (enableOptimizeMetadataOnlyQuery) {
+          assert(localRelations.size == 1)
+        } else {
+          assert(localRelations.size == 0)
+        }
+        df.collect()
       }
     }
   }
