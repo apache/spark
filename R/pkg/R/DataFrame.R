@@ -2603,17 +2603,17 @@ setMethod("join",
               if (is.null(joinType)) {
                 sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc)
               } else {
-                valid_join_types <- c("inner", "cross",
+                validJoinTypes <- c("inner", "cross",
                     "outer", "full", "fullouter", "full_outer",
                     "left", "leftouter", "left_outer",
                     "right", "rightouter", "right_outer",
                     "semi", "leftsemi", "left_semi", "anti", "leftanti", "left_anti")
-                if (joinType %in% valid_join_types) {
+                if (joinType %in% validJoinTypes) {
                   joinType <- gsub("_", "", joinType, fixed = TRUE)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
                   stop("joinType must be one of the following types: ",
-                       "'", paste(valid_join_types, collapse = "', '"), "'")
+                       "'", paste(validJoinTypes, collapse = "', '"), "'")
                 }
               }
             }
