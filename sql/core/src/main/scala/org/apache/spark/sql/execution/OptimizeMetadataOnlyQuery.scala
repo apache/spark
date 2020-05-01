@@ -117,11 +117,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
         case a: AttributeReference =>
           a.withName(relation.output.find(_.semanticEquals(a)).get.name)
       }
-    }
-
-    if (normalizedFilters.exists(_.find(_.isInstanceOf[Unevaluable]).isDefined)) {
-      return child
-    }
+    }.filterNot(SubqueryExpression.hasSubquery)
 
     child transform {
       case plan if plan eq relation =>
