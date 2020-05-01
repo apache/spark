@@ -155,10 +155,9 @@ case class CollectSet(
 
   override def convertToBufferElement(value: Any): Any = child.dataType match {
     /*
-     * SPARK-31500
      * collect_set() of BinaryType should not return duplicate elements,
      * Java byte arrays use referential equality and identity hash codes
-     * so we need to use a different Scala object
+     * so we need to use a different catalyst value for arrays
      */
     case BinaryType => UnsafeArrayData.fromPrimitiveArray(value.asInstanceOf[Array[Byte]])
     case _ => InternalRow.copyValue(value)
