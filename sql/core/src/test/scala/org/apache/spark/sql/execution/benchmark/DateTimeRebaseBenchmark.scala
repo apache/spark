@@ -27,6 +27,11 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 
+object DateTime extends Enumeration {
+  type DateTime = Value
+  val DATE, TIMESTAMP, TIMESTAMP_INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
+}
+
 /**
  * Synthetic benchmark for rebasing of date and timestamp in read/write.
  * To run this benchmark:
@@ -41,6 +46,7 @@ import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
  */
 object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
+  import DateTime._
 
   private def genTs(cardinality: Int, start: LocalDateTime, end: LocalDateTime): DataFrame = {
     val startSec = start.toEpochSecond(ZoneOffset.UTC)
@@ -83,18 +89,18 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
     genDate(cardinality, start, end)
   }
 
-  private def genDF(cardinality: Int, dateTime: String, after1582: Boolean): DataFrame = {
-    (dateTime, after1582) match {
-      case ("date", true) => genDateAfter1582(cardinality)
-      case ("date", false) => genDateBefore1582(cardinality)
-      case ("timestamp", true) => genTsAfter1582(cardinality)
-      case ("timestamp", false) => genTsBefore1582(cardinality)
+  private def genDF(cardinality: Int, dateTime: DateTime, after1582: Boolean): DataFrame = {
+    dateTime match {
+      case DATE =>
+        if (after1582) genDateAfter1582(cardinality) else genDateBefore1582(cardinality)
+      case TIMESTAMP | TIMESTAMP_INT96 | TIMESTAMP_MICROS | TIMESTAMP_MILLIS =>
+        if (after1582) genTsAfter1582(cardinality) else genTsBefore1582(cardinality)
       case _ => throw new IllegalArgumentException(
         s"cardinality = $cardinality dateTime = $dateTime after1582 = $after1582")
     }
   }
 
-  private def benchmarkInputs(benchmark: Benchmark, rowsNum: Int, dateTime: String): Unit = {
+  private def benchmarkInputs(benchmark: Benchmark, rowsNum: Int, dateTime: DateTime): Unit = {
     benchmark.addCase("after 1582, noop", 1) { _ =>
       genDF(rowsNum, dateTime, after1582 = true).noop()
     }
@@ -119,7 +125,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
 
   private def getPath(
       basePath: File,
-      dateTime: String,
+      dateTime: DateTime,
       after1582: Boolean,
       rebase: Option[Boolean] = None): String = {
     val period = if (after1582) "after" else "before"
@@ -127,9 +133,9 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
     basePath.getAbsolutePath + s"/${dateTime}_${period}_1582$rebaseFlag"
   }
 
-  private def getOutputType(dateTime: String): String = dateTime match {
-    case "TIMESTAMP_INT96" => ParquetOutputTimestampType.INT96.toString
-    case "TIMESTAMP_MILLIS" => ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString
+  private def getOutputType(dateTime: DateTime): String = dateTime match {
+    case TIMESTAMP_INT96 => ParquetOutputTimestampType.INT96.toString
+    case TIMESTAMP_MILLIS => ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString
     case _ => ParquetOutputTimestampType.TIMESTAMP_MICROS.toString
   }
 
@@ -141,10 +147,10 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
         withTempPath { path =>
           runBenchmark("Rebasing dates/timestamps in Parquet datasource") {
             Seq(
-              "DATE", "TIMESTAMP_INT96", "TIMESTAMP_MICROS", "TIMESTAMP_MILLIS"
+              DATE, TIMESTAMP_INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS
             ).foreach { dateTime =>
               val benchmark = new Benchmark(
-                s"Save ${dateTime}s to parquet",
+                s"Save $dateTime to parquet",
                 rowsNum,
                 output = output)
               benchmarkInputs(benchmark, rowsNum, dateTime)
@@ -166,7 +172,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
               benchmark.run()
 
               val benchmark2 = new Benchmark(
-                s"Load ${dateTime}s from parquet", rowsNum, output = output)
+                s"Load $dateTime from parquet", rowsNum, output = output)
               Seq(true, false).foreach { after1582 =>
                 Seq(false, true).foreach { vec =>
                   Seq(false, true).foreach { rebase =>
@@ -190,8 +196,8 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
 
         withTempPath { path =>
           runBenchmark("Rebasing dates/timestamps in ORC datasource") {
-            Seq("date", "timestamp").foreach { dateTime =>
-              val benchmark = new Benchmark(s"Save ${dateTime}s to ORC", rowsNum, output = output)
+            Seq(DATE, TIMESTAMP).foreach { dateTime =>
+              val benchmark = new Benchmark(s"Save $dateTime to ORC", rowsNum, output = output)
               benchmarkInputs(benchmark, rowsNum, dateTime)
               Seq(true, false).foreach { after1582 =>
                 benchmark.addCase(caseName(after1582), 1) { _ =>
@@ -205,7 +211,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
               benchmark.run()
 
               val benchmark2 = new Benchmark(
-                s"Load ${dateTime}s from ORC",
+                s"Load $dateTime from ORC",
                 rowsNum,
                 output = output)
               Seq(true, false).foreach { after1582 =>
