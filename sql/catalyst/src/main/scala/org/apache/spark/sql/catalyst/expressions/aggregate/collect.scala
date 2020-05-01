@@ -148,19 +148,18 @@ case class CollectSet(
 
   def this(child: Expression) = this(child, 0, 0)
 
-  /*
-   * SPARK-31500
-   * Array[Byte](BinaryType) Scala equality don't works as expected
-   * so HashSet return duplicates, we have to change types to drop
-   * this duplicates and make collect_set work as expected for this
-   * data type
-   */
   override lazy val bufferElementType = child.dataType match {
     case BinaryType => ArrayType(BinaryType)
     case other => other
   }
 
   override def convertToBufferElement(value: Any): Any = child.dataType match {
+    /*
+     * SPARK-31500
+     * collect_set() of BinaryType should not return duplicate elements,
+     * Java byte arrays use referential equality and identity hash codes
+     * so we need to use a different Scala object
+     */
     case BinaryType => UnsafeArrayData.fromPrimitiveArray(value.asInstanceOf[Array[Byte]])
     case _ => InternalRow.copyValue(value)
   }
