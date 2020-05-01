@@ -36,7 +36,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 100L)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
 
-    sc = new SparkContext("local-cluster[3, 1, 1024]", "test", conf)
+    sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
   }
 
   test(s"verify that an already running task which is going to cache data succeeds " +
