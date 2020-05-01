@@ -2050,8 +2050,9 @@ private[spark] class BlockManager(
             logInfo(s"Waiting for ${sleepInterval} before refreshing migrations.")
             Thread.sleep(sleepInterval)
           } catch {
-            case _: InterruptedException =>
+            case e: InterruptedException =>
               logInfo("Interrupted during migration, will not refresh migrations.")
+              stopped = true
               // no-op
             case NonFatal(e) =>
               logError("Error occurred while trying to " +
@@ -2073,7 +2074,6 @@ private[spark] class BlockManager(
         stopped = true
         logInfo("Stopping block replication thread")
         blockMigrationThread.interrupt()
-        blockMigrationThread.join()
       }
     }
   }
