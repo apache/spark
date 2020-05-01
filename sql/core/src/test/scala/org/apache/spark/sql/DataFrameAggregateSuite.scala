@@ -534,9 +534,7 @@ class DataFrameAggregateSuite extends QueryTest
     val bytesTest1 = "test1".getBytes
     val bytesTest2 = "test2".getBytes
     val df = Seq(bytesTest1, bytesTest1, bytesTest2).toDF("a")
-    val ret = df.select(collect_set($"a")).collect()
-      .map(r => r.getAs[Seq[_]](0)).head
-    assert(ret.length == 2)
+    checkAnswer(df.select(size(collect_set($"a"))), Row(2) :: Nil)
 
     val a = "aa".getBytes
     val b = "bb".getBytes
@@ -545,9 +543,7 @@ class DataFrameAggregateSuite extends QueryTest
     val df1 = Seq((a, b), (a, b), (c, d))
       .toDF("x", "y")
       .select(struct($"x", $"y").as("a"))
-    val ret1 = df1.select(collect_set($"a")).collect()
-      .map(r => r.getAs[Seq[_]](0)).head
-    assert(ret1.length == 2)
+    checkAnswer(df1.select(size(collect_set($"a"))), Row(2) :: Nil)
   }
 
   test("collect_set functions cannot have maps") {
