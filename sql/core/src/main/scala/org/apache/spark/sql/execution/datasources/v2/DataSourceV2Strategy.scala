@@ -191,7 +191,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
           OverwriteByExpressionExecV1(
-            v1, transferFilters(filters, false), writeOptions.asOptions, query) :: Nil
+            v1, transferFilters(filters, true), writeOptions.asOptions, query) :: Nil
         case v2 =>
           OverwriteByExpressionExec(
             v2, transferFilters(filters, true), writeOptions.asOptions, planLater(query)) :: Nil
