@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 trait FileScan extends Scan
-  with Batch with SupportsReportStatistics with Logging with SupportsMetadata {
+  with Batch with SupportsReportStatistics with SupportsMetadata with Logging {
   /**
    * Returns whether a file with `path` could be split or not.
    */
@@ -98,7 +98,7 @@ trait FileScan extends Scan
   override def description(): String = {
     val locationDesc =
       fileIndex.getClass.getSimpleName + fileIndex.rootPaths.mkString("[", ", ", "]")
-    val metadata: Map[String, String] = Map(
+   Map(
       "ReadSchema" -> readDataSchema.catalogString,
       "PartitionFilters" -> seqToString(partitionFilters),
       "DataFilters" -> seqToString(dataFilters),
@@ -115,7 +115,7 @@ trait FileScan extends Scan
     s"${this.getClass.getSimpleName} $metadataStr"
   }
 
-  def getMetadata(): Map[String, String] = {
+  protected def getMetadata(): Map[String, String] = {
     metaData
   }
 

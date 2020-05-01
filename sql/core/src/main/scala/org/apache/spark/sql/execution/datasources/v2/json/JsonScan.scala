@@ -99,9 +99,7 @@ case class JsonScan(
     case _ => false
   }
 
-  override def getMetaData(): Map[String, String] = {
-    super.metaData ++ Map("Format" -> "json")
-  }
+  override def getMetaData(): Map[String, String] = super.metaData
 
   override def hashCode(): Int = super.hashCode()
 }

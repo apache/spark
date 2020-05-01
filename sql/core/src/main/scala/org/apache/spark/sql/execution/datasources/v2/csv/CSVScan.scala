@@ -109,8 +109,6 @@ case class CSVScan(
   }
 
   override def getMetaData(): Map[String, String] = {
-    super.metaData ++ Map(
-      "PushedFilers" -> seqToString(pushedFilters),
-      "Format" -> "csv")
+    super.metaData ++ Map("PushedFilers" -> seqToString(pushedFilters))
   }
 }

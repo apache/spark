@@ -363,48 +363,35 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 
   test("Explain formatted output for scan operator for datasource V2") {
     withTempDir { dir =>
-      Seq("parquet", "orc", "csv", "json").foreach { format =>
-        val basePath = dir.getCanonicalPath + "/" + format
-        val expected_plan_fragment =
+      Seq("parquet", "orc", "csv", "json").foreach { fmt =>
+        val basePath = dir.getCanonicalPath + "/" + fmt
+        val pushFilterMaps = Map (
+          "parquet" ->
+            "|PushedFilers: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+          "orc" ->
+            "|PushedFilers: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+          "csv" ->
+            "|PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
+          "json" ->
+            "|remove_marker"
+        )
+        val expected_plan_fragment1 =
           s"""
              |\\(1\\) BatchScan
              |Output \\[2\\]: \\[value#x, id#x\\]
              |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
-             |Format: $format
+             |Format: $fmt
              |Location: InMemoryFileIndex\\[.*\\]
              |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
-             |PushedFilers: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]
+             ${pushFilterMaps.get(fmt).get}
              |ReadSchema: struct\\<value:int\\>
-             |""".stripMargin.trim
-
-        val expected_plan_fragment_csv =
-          s"""
-             |\\(1\\) BatchScan
-             |Output \\[2\\]: \\[value#x, id#x\\]
-             |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
-             |Format: $format
-             |Location: InMemoryFileIndex\\[.*\\]
-             |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
-             |PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
-             |ReadSchema: struct\\<value:int\\>
-             |""".stripMargin.trim
-
-        val expected_plan_fragment_json =
-          s"""
-             |\\(1\\) BatchScan
-             |Output \\[2\\]: \\[value#x, id#x\\]
-             |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
-             |Format: $format
-             |Location: InMemoryFileIndex\\[.*\\]
-             |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
-             |ReadSchema: struct\\<value:int\\>
-             |""".stripMargin.trim
+             |""".stripMargin.replaceAll("\nremove_marker", "").trim
 
         spark.range(10)
           .select(col("id"), col("id").as("value"))
           .write.option("header", true)
           .partitionBy("id")
-          .format(format)
+          .format(fmt)
           .save(basePath)
         val readSchema =
           StructType(Seq(StructField("id", IntegerType), StructField("value", IntegerType)))
@@ -413,17 +400,10 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
             .read
             .schema(readSchema)
             .option("header", true)
-            .format(format)
+            .format(fmt)
             .load(basePath).where($"id" > 1 && $"value" > 2)
           val normalizedOutput = getNormalizedExplain(df, FormattedMode)
-          format match {
-            case "csv" =>
-              assert(expected_plan_fragment_csv.r.findAllMatchIn(normalizedOutput).length == 1)
-            case "json" =>
-              assert(expected_plan_fragment_json.r.findAllMatchIn(normalizedOutput).length == 1)
-            case _ =>
-              assert(expected_plan_fragment.r.findAllMatchIn(normalizedOutput).length == 1)
-          }
+          assert(expected_plan_fragment1.r.findAllMatchIn(normalizedOutput).length == 1)
         }
       }
     }

@@ -54,21 +54,17 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
   }
 
-
   override def verboseStringWithOperatorId(): String = {
-    val metaDataStr = if (scan.isInstanceOf[SupportsMetadata]) {
-      val scanWithExplainSupport: SupportsMetadata = scan.asInstanceOf[SupportsMetadata]
-      val metadataStr = scanWithExplainSupport.getMetaData.toSeq.sorted.filterNot {
-        case (_, value) if (value.isEmpty || value.equals("[]")) => true
-        case (_, _) => false
-      }.map {
-        case (key, value) => s"$key: ${redact(value)}"
-      }
-      metadataStr
-    } else {
-      Seq(scan.description())
+    val metaDataStr = scan match {
+      case s: SupportsMetadata =>
+        s.getMetaData().toSeq.sorted.flatMap {
+          case (_, value) if value.isEmpty || value.equals("[]") => None
+          case (key, value) => Some(s"$key: ${redact(value)}")
+          case _ => None
+        }
+      case _ =>
+        Seq(scan.description())
     }
-
     s"""
        |$formattedNodeName
        |${ExplainUtils.generateFieldString("Output", output)}
