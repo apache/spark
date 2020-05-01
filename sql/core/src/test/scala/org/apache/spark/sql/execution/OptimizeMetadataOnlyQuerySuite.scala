@@ -103,6 +103,20 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
     "select partcol2, min(partcol1) from srcpart where partcol1 = 0 group by partcol2",
     "select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t")
 
+  testMetadataOnly(
+    "SPARK-31590 The filter used by Metadata-only queries should not have Unevaluable",
+    """
+      |SELECT partcol1, MAX(partcol2) AS partcol2
+      |FROM srcpart
+      |WHERE partcol1 = (
+      |  SELECT MAX(partcol1)
+      |  FROM srcpart
+      |)
+      |AND partcol2= 'event'
+      |GROUP BY partcol1
+      |""".stripMargin
+  )
+
   testNotMetadataOnly(
     "Don't optimize metadata only query for non-partition columns",
     "select col1 from srcpart group by col1",
@@ -147,32 +161,6 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
         }
         assert(localRelation.nonEmpty, "expect to see a LocalRelation")
         assert(localRelation.get.output.map(_.name) == Seq("cOl3", "cOl1", "cOl5"))
-      }
-    }
-  }
-
-  test("SPARK-31590 The filter used by Metadata-only queries should not have Unevaluable") {
-    Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
-      withSQLConf(OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
-        val df = sql(
-          """
-            |SELECT partcol1, MAX(partcol2) AS partcol2
-            |FROM srcpart
-            |WHERE partcol1 = (
-            |  SELECT MAX(partcol1)
-            |  FROM srcpart
-            |)
-            |GROUP BY partcol1
-          """.stripMargin)
-        val localRelations = df.queryExecution.optimizedPlan.collect {
-          case l@LocalRelation(_, _, _) => l
-        }
-        if (enableOptimizeMetadataOnlyQuery) {
-          assert(localRelations.size == 1)
-        } else {
-          assert(localRelations.size == 0)
-        }
-        df.collect()
       }
     }
   }
