@@ -149,7 +149,7 @@ case class CollectSet(
   def this(child: Expression) = this(child, 0, 0)
 
   override lazy val bufferElementType = child.dataType match {
-    case BinaryType => ArrayType(BinaryType)
+    case BinaryType => ArrayType(ByteType)
     case other => other
   }
 
