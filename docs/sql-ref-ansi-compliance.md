@@ -73,11 +73,11 @@ SELECT 2147483647 + 1;
 
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
-  +----------------+
-  |(2147483647 + 1)|
-  +----------------+
-  |     -2147483648|
-  +----------------+
++----------------+
+|(2147483647 + 1)|
++----------------+
+|     -2147483648|
++----------------+
 {% endhighlight %}
 
 ### Type Conversion
@@ -101,18 +101,18 @@ SELECT CAST(2147483648L AS INT);
 
 -- `spark.sql.ansi.enabled=false` (This is a default behaviour)
 SELECT CAST('a' AS INT);
-  +--------------+
-  |CAST(a AS INT)|
-  +--------------+
-  |          null|
-  +--------------+
++--------------+
+|CAST(a AS INT)|
++--------------+
+|          null|
++--------------+
 
 SELECT CAST(2147483648L AS INT);
-  +-----------------------+
-  |CAST(2147483648 AS INT)|
-  +-----------------------+
-  |            -2147483648|
-  +-----------------------+
++-----------------------+
+|CAST(2147483648 AS INT)|
++-----------------------+
+|            -2147483648|
++-----------------------+
 
 -- Examples of store assignment rules
 CREATE TABLE t (v INT);
@@ -125,11 +125,11 @@ INSERT INTO t VALUES ('1');
 -- `spark.sql.storeAssignmentPolicy=LEGACY` (This is a legacy behaviour until Spark 2.x)
 INSERT INTO t VALUES ('1');
 SELECT * FROM t;
-  +---+
-  |  v|
-  +---+
-  |  1|
-  +---+
++---+
+|  v|
++---+
+|  1|
++---+
 {% endhighlight %}
 
 ### SQL Functions

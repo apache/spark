@@ -67,56 +67,56 @@ INSERT INTO dealer VALUES
 
 -- `HAVING` clause referring to column in `GROUP BY`.
 SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING city = 'Fremont';
-  +-------+---+
-  |   city|sum|
-  +-------+---+
-  |Fremont| 32|
-  +-------+---+
++-------+---+
+|   city|sum|
++-------+---+
+|Fremont| 32|
++-------+---+
 
 -- `HAVING` clause referring to aggregate function.
 SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING sum(quantity) > 15;
-  +-------+---+
-  |   city|sum|
-  +-------+---+
-  | Dublin| 33|
-  |Fremont| 32|
-  +-------+---+
++-------+---+
+|   city|sum|
++-------+---+
+| Dublin| 33|
+|Fremont| 32|
++-------+---+
 
 -- `HAVING` clause referring to aggregate function by its alias.
 SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING sum > 15;
-  +-------+---+
-  |   city|sum|
-  +-------+---+
-  | Dublin| 33|
-  |Fremont| 32|
-  +-------+---+
++-------+---+
+|   city|sum|
++-------+---+
+| Dublin| 33|
+|Fremont| 32|
++-------+---+
 
 -- `HAVING` clause referring to a different aggregate function than what is present in
 -- `SELECT` list.
 SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING max(quantity) > 15;
-  +------+---+
-  |  city|sum|
-  +------+---+
-  |Dublin| 33|
-  +------+---+
++------+---+
+|  city|sum|
++------+---+
+|Dublin| 33|
++------+---+
 
 -- `HAVING` clause referring to constant expression.
 SELECT city, sum(quantity) AS sum FROM dealer GROUP BY city HAVING 1 > 0 ORDER BY city;
-  +--------+---+
-  |    city|sum|
-  +--------+---+
-  |  Dublin| 33|
-  | Fremont| 32|
-  |San Jose| 13|
-  +--------+---+
++--------+---+
+|    city|sum|
++--------+---+
+|  Dublin| 33|
+| Fremont| 32|
+|San Jose| 13|
++--------+---+
 
 -- `HAVING` clause without a `GROUP BY` clause.
 SELECT sum(quantity) AS sum FROM dealer HAVING sum(quantity) > 10;
-  +---+
-  |sum|
-  +---+
-  | 78|
-  +---+
++---+
+|sum|
++---+
+| 78|
++---+
 {% endhighlight %}
 
 ### Related Statements

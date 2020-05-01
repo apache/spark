@@ -67,48 +67,48 @@ INSERT INTO customer PARTITION (state = 'AZ', city = 'Peoria') VALUES (300, 'Dan
 
 -- Lists all partitions for table `customer`
 SHOW PARTITIONS customer;
-  +----------------------+
-  |             partition|
-  +----------------------+
-  |  state=AZ/city=Peoria|
-  | state=CA/city=Fremont|
-  |state=CA/city=San Jose|
-  +----------------------+
++----------------------+
+|             partition|
++----------------------+
+|  state=AZ/city=Peoria|
+| state=CA/city=Fremont|
+|state=CA/city=San Jose|
++----------------------+
 
 -- Lists all partitions for the qualified table `customer`
 SHOW PARTITIONS salesdb.customer;
-  +----------------------+
-  |             partition|
-  +----------------------+
-  |  state=AZ/city=Peoria|
-  | state=CA/city=Fremont|
-  |state=CA/city=San Jose|
-  +----------------------+
++----------------------+
+|             partition|
++----------------------+
+|  state=AZ/city=Peoria|
+| state=CA/city=Fremont|
+|state=CA/city=San Jose|
++----------------------+
 
 -- Specify a full partition spec to list specific partition
 SHOW PARTITIONS customer PARTITION (state = 'CA', city = 'Fremont');
-  +---------------------+
-  |            partition|
-  +---------------------+
-  |state=CA/city=Fremont|
-  +---------------------+
++---------------------+
+|            partition|
++---------------------+
+|state=CA/city=Fremont|
++---------------------+
 
 -- Specify a partial partition spec to list the specific partitions
 SHOW PARTITIONS customer PARTITION (state = 'CA');
-  +----------------------+
-  |             partition|
-  +----------------------+
-  | state=CA/city=Fremont|
-  |state=CA/city=San Jose|
-  +----------------------+
++----------------------+
+|             partition|
++----------------------+
+| state=CA/city=Fremont|
+|state=CA/city=San Jose|
++----------------------+
 
 -- Specify a partial spec to list specific partition
 SHOW PARTITIONS customer PARTITION (city =  'San Jose');
-  +----------------------+
-  |             partition|
-  +----------------------+
-  |state=CA/city=San Jose|
-  +----------------------+
++----------------------+
+|             partition|
++----------------------+
+|state=CA/city=San Jose|
++----------------------+
 {% endhighlight %}
 
 ### Related Statements

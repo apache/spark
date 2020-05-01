@@ -50,16 +50,16 @@ CREATE TABLE test (c INT) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
     TBLPROPERTIES ('prop1' = 'value1', 'prop2' = 'value2');
 
 SHOW CREATE TABLE test;
-  +----------------------------------------------------+
-  |                                      createtab_stmt|
-  +----------------------------------------------------+
-  |CREATE TABLE `default`.`test` (`c` INT)
-   USING text
-   TBLPROPERTIES (
-     'transient_lastDdlTime' = '1586269021',
-     'prop1' = 'value1',
-     'prop2' = 'value2')
-  +----------------------------------------------------+
++----------------------------------------------------+
+|                                      createtab_stmt|
++----------------------------------------------------+
+|CREATE TABLE `default`.`test` (`c` INT)
+ USING text
+ TBLPROPERTIES (
+   'transient_lastDdlTime' = '1586269021',
+   'prop1' = 'value1',
+   'prop2' = 'value2')
++----------------------------------------------------+
 {% endhighlight %}
 
 ### Related Statements
