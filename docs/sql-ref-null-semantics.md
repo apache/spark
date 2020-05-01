@@ -119,35 +119,35 @@ one or both operands are `NULL`:
 {% highlight sql %}
 -- Normal comparison operators return `NULL` when one of the operand is `NULL`.
 SELECT 5 > null AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             null|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             null|
++-----------------+
 
 -- Normal comparison operators return `NULL` when both the operands are `NULL`.
 SELECT null = null AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             null|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             null|
++-----------------+
 
 -- Null-safe equal operator return `False` when one of the operand is `NULL`
 SELECT 5 <=> null AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |            false|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|            false|
++-----------------+
 
 -- Null-safe equal operator return `True` when one of the operand is `NULL`
 SELECT NULL <=> NULL;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             true|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             true|
++-----------------+
 {% endhighlight %}
 
 ### Logical Operators <a name="logical-operators"></a>
@@ -212,27 +212,27 @@ The following tables illustrate the behavior of logical operators when one or bo
 {% highlight sql %}
 -- Normal comparison operators return `NULL` when one of the operands is `NULL`.
 SELECT (true OR null) AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             true|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             true|
++-----------------+
 
 -- Normal comparison operators return `NULL` when both the operands are `NULL`.
 SELECT (null OR false) AS expression_output
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             null|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             null|
++-----------------+
 
 -- Null-safe equal operator returns `False` when one of the operands is `NULL`
 SELECT NOT(null) AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             null|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             null|
++-----------------+
 {% endhighlight %}
 
 ### Expressions <a name="expressions"></a>
@@ -254,25 +254,25 @@ expression are `NULL` and most of the expressions fall in this category.
 
 {% highlight sql %}
 SELECT concat('John', null) AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             null|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             null|
++-----------------+
 
 SELECT positive(null) AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             null|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             null|
++-----------------+
 
 SELECT to_date(null) AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             null|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             null|
++-----------------+
 {% endhighlight %}
 
 #### Expressions That Can Process Null Value Operands <a name="can-process-null"></a>
@@ -298,34 +298,34 @@ returns the first non `NULL` value in its list of operands. However, `coalesce` 
 
 {% highlight sql %}
 SELECT isnull(null) AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             true|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             true|
++-----------------+
 
 -- Returns the first occurrence of non `NULL` value.
 SELECT coalesce(null, null, 3, null) AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |                3|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|                3|
++-----------------+
 
 -- Returns `NULL` as all its operands are `NULL`. 
 SELECT coalesce(null, null, null, null) AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |             null|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|             null|
++-----------------+
 
 SELECT isnan(null) AS expression_output;
-  +-----------------+
-  |expression_output|
-  +-----------------+
-  |            false|
-  +-----------------+
++-----------------+
+|expression_output|
++-----------------+
+|            false|
++-----------------+
 {% endhighlight %}
 
 #### Builtin Aggregate Expressions <a name="built-in-aggregate"></a>
@@ -349,44 +349,44 @@ the rules of how `NULL` values are handled by aggregate functions.
 {% highlight sql %}
 -- `count(*)` does not skip `NULL` values.
 SELECT count(*) FROM person;
-  +--------+
-  |count(1)|
-  +--------+
-  |       7|
-  +--------+
++--------+
+|count(1)|
++--------+
+|       7|
++--------+
 
 -- `NULL` values in column `age` are skipped from processing.
 SELECT count(age) FROM person;
-  +----------+
-  |count(age)|
-  +----------+
-  |         5|
-  +----------+
++----------+
+|count(age)|
++----------+
+|         5|
++----------+
 
 -- `count(*)` on an empty input set returns 0. This is unlike the other
 -- aggregate functions, such as `max`, which return `NULL`.
 SELECT count(*) FROM person where 1 = 0;
-  +--------+
-  |count(1)|
-  +--------+
-  |       0|
-  +--------+
++--------+
+|count(1)|
++--------+
+|       0|
++--------+
 
 -- `NULL` values are excluded from computation of maximum value.
 SELECT max(age) FROM person;
-  +--------+
-  |max(age)|
-  +--------+
-  |      50|
-  +--------+
++--------+
+|max(age)|
++--------+
+|      50|
++--------+
 
 -- `max` returns `NULL` on an empty input set.
 SELECT max(age) FROM person where 1 = 0;
-  +--------+
-  |max(age)|
-  +--------+
-  |    null|
-  +--------+
++--------+
+|max(age)|
++--------+
+|    null|
++--------+
 {% endhighlight %}
 
 ### Condition Expressions in WHERE, HAVING and JOIN Clauses <a name="condition-expressions"></a>
@@ -401,71 +401,71 @@ For all the three operators, a condition expression is a boolean expression and 
 {% highlight sql %}
 -- Persons whose age is unknown (`NULL`) are filtered out from the result set.
 SELECT * FROM person WHERE age > 0;
-  +--------+---+
-  |    name|age|
-  +--------+---+
-  |Michelle| 30|
-  |    Fred| 50|
-  |    Mike| 18|
-  |     Dan| 50|
-  |     Joe| 30|
-  +--------+---+
++--------+---+
+|    name|age|
++--------+---+
+|Michelle| 30|
+|    Fred| 50|
+|    Mike| 18|
+|     Dan| 50|
+|     Joe| 30|
++--------+---+
 
 -- `IS NULL` expression is used in disjunction to select the persons
 -- with unknown (`NULL`) records.
 SELECT * FROM person WHERE age > 0 OR age IS NULL;
-  +--------+----+
-  |    name| age|
-  +--------+----+
-  |  Albert|null|
-  |Michelle|  30|
-  |    Fred|  50|
-  |    Mike|  18|
-  |     Dan|  50|
-  |   Marry|null|
-  |     Joe|  30|
-  +--------+----+
++--------+----+
+|    name| age|
++--------+----+
+|  Albert|null|
+|Michelle|  30|
+|    Fred|  50|
+|    Mike|  18|
+|     Dan|  50|
+|   Marry|null|
+|     Joe|  30|
++--------+----+
 
 -- Person with unknown(`NULL`) ages are skipped from processing.
 SELECT * FROM person GROUP BY age HAVING max(age) > 18;
-  +---+--------+                                                                  
-  |age|count(1)|
-  +---+--------+
-  | 50|       2|
-  | 30|       2|
-  +---+--------+
++---+--------+
+|age|count(1)|
++---+--------+
+| 50|       2|
+| 30|       2|
++---+--------+
 
 -- A self join case with a join condition `p1.age = p2.age AND p1.name = p2.name`.
 -- The persons with unknown age (`NULL`) are filtered out by the join operator.
 SELECT * FROM person p1, person p2
     WHERE p1.age = p2.age
     AND p1.name = p2.name;
-  +--------+---+--------+---+
-  |    name|age|    name|age|
-  +--------+---+--------+---+
-  |Michelle| 30|Michelle| 30|
-  |    Fred| 50|    Fred| 50|
-  |    Mike| 18|    Mike| 18|
-  |     Dan| 50|     Dan| 50|
-  |     Joe| 30|     Joe| 30|
-  +--------+---+--------+---+
++--------+---+--------+---+
+|    name|age|    name|age|
++--------+---+--------+---+
+|Michelle| 30|Michelle| 30|
+|    Fred| 50|    Fred| 50|
+|    Mike| 18|    Mike| 18|
+|     Dan| 50|     Dan| 50|
+|     Joe| 30|     Joe| 30|
++--------+---+--------+---+
 
 -- The age column from both legs of join are compared using null-safe equal which
 -- is why the persons with unknown age (`NULL`) are qualified by the join.
 SELECT * FROM person p1, person p2
     WHERE p1.age <=> p2.age
     AND p1.name = p2.name;
-  +--------+----+--------+----+
-  |    name| age|    name| age|
-  +--------+----+--------+----+
-  |  Albert|null|  Albert|null|
-  |Michelle|  30|Michelle|  30|
-  |    Fred|  50|    Fred|  50|
-  |    Mike|  18|    Mike|  18|
-  |     Dan|  50|     Dan|  50|
-  |   Marry|null|   Marry|null|
-  |     Joe|  30|     Joe|  30|
-  +--------+----+--------+----+
++--------+----+--------+----+
+|    name| age|    name| age|
++--------+----+--------+----+
+|  Albert|null|  Albert|null|
+|Michelle|  30|Michelle|  30|
+|    Fred|  50|    Fred|  50|
+|    Mike|  18|    Mike|  18|
+|     Dan|  50|     Dan|  50|
+|   Marry|null|   Marry|null|
+|     Joe|  30|     Joe|  30|
++--------+----+--------+----+
 {% endhighlight %}
 
 ### Aggregate Operator (GROUP BY, DISTINCT) <a name="aggregate-operator"></a>
@@ -480,25 +480,25 @@ standard and with other enterprise database management systems.
 {% highlight sql %}
 -- `NULL` values are put in one bucket in `GROUP BY` processing.
 SELECT age, count(*) FROM person GROUP BY age;
-  +----+--------+                                                                 
-  | age|count(1)|
-  +----+--------+
-  |null|       2|
-  |  50|       2|
-  |  30|       2|
-  |  18|       1|
-  +----+--------+
++----+--------+
+| age|count(1)|
++----+--------+
+|null|       2|
+|  50|       2|
+|  30|       2|
+|  18|       1|
++----+--------+
 
 -- All `NULL` ages are considered one distinct value in `DISTINCT` processing.
 SELECT DISTINCT age FROM person;
-  +----+
-  | age|
-  +----+
-  |null|
-  |  50|
-  |  30|
-  |  18|
-  +----+
++----+
+| age|
++----+
+|null|
+|  50|
+|  30|
+|  18|
++----+
 {% endhighlight %}
 
 ### Sort Operator (ORDER BY Clause) <a name="order-by"></a>
@@ -513,47 +513,47 @@ the `NULL` values are placed at first.
 -- `NULL` values are shown at first and other values
 -- are sorted in ascending way.
 SELECT age, name FROM person ORDER BY age;
-  +----+--------+
-  | age|    name|
-  +----+--------+
-  |null|   Marry|
-  |null|  Albert|
-  |  18|    Mike|
-  |  30|Michelle|
-  |  30|     Joe|
-  |  50|    Fred|
-  |  50|     Dan|
-  +----+--------+
++----+--------+
+| age|    name|
++----+--------+
+|null|   Marry|
+|null|  Albert|
+|  18|    Mike|
+|  30|Michelle|
+|  30|     Joe|
+|  50|    Fred|
+|  50|     Dan|
++----+--------+
 
 -- Column values other than `NULL` are sorted in ascending
 -- way and `NULL` values are shown at the last.
 SELECT age, name FROM person ORDER BY age NULLS LAST;
-  +----+--------+
-  | age|    name|
-  +----+--------+
-  |  18|    Mike|
-  |  30|Michelle|
-  |  30|     Joe|
-  |  50|     Dan|
-  |  50|    Fred|
-  |null|   Marry|
-  |null|  Albert|
-  +----+--------+
++----+--------+
+| age|    name|
++----+--------+
+|  18|    Mike|
+|  30|Michelle|
+|  30|     Joe|
+|  50|     Dan|
+|  50|    Fred|
+|null|   Marry|
+|null|  Albert|
++----+--------+
 
 -- Columns other than `NULL` values are sorted in descending
 -- and `NULL` values are shown at the last.
 SELECT age, name FROM person ORDER BY age DESC NULLS LAST;
-  +----+--------+
-  | age|    name|
-  +----+--------+
-  |  50|    Fred|
-  |  50|     Dan|
-  |  30|Michelle|
-  |  30|     Joe|
-  |  18|    Mike|
-  |null|   Marry|
-  |null|  Albert|
-  +----+--------+
++----+--------+
+| age|    name|
++----+--------+
+|  50|    Fred|
+|  50|     Dan|
+|  30|Michelle|
+|  30|     Joe|
+|  18|    Mike|
+|null|   Marry|
+|null|  Albert|
++----+--------+
 {% endhighlight %}
 
 ### Set Operators (UNION, INTERSECT, EXCEPT) <a name="set-operators"></a>
@@ -573,27 +573,27 @@ CREATE VIEW unknown_age SELECT * FROM person WHERE age IS NULL;
 SELECT name, age FROM person
     INTERSECT
     SELECT name, age from unknown_age;
-  +------+----+                                                                   
-  |  name| age|
-  +------+----+
-  |Albert|null|
-  | Marry|null|
-  +------+----+
++------+----+
+|  name| age|
++------+----+
+|Albert|null|
+| Marry|null|
++------+----+
 
 -- `NULL` values from two legs of the `EXCEPT` are not in output. 
 -- This basically shows that the comparison happens in a null-safe manner.
 SELECT age, name FROM person
     EXCEPT
     SELECT age FROM unknown_age;
-  +---+--------+                                                                  
-  |age|    name|
-  +---+--------+
-  | 30|     Joe|
-  | 50|    Fred|
-  | 30|Michelle|
-  | 18|    Mike|
-  | 50|     Dan|
-  +---+--------+
++---+--------+
+|age|    name|
++---+--------+
+| 30|     Joe|
+| 50|    Fred|
+| 30|Michelle|
+| 18|    Mike|
+| 50|     Dan|
++---+--------+
 
 -- Performs `UNION` operation between two sets of data. 
 -- The comparison between columns of the row ae done in
@@ -601,17 +601,17 @@ SELECT age, name FROM person
 SELECT name, age FROM person
     UNION 
     SELECT name, age FROM unknown_age;
-  +--------+----+                                                                 
-  |    name| age|
-  +--------+----+
-  |  Albert|null|
-  |     Joe|  30|
-  |Michelle|  30|
-  |   Marry|null|
-  |    Fred|  50|
-  |    Mike|  18|
-  |     Dan|  50|
-  +--------+----+
++--------+----+
+|    name| age|
++--------+----+
+|  Albert|null|
+|     Joe|  30|
+|Michelle|  30|
+|   Marry|null|
+|    Fred|  50|
+|    Mike|  18|
+|     Dan|  50|
++--------+----+
 {% endhighlight %}
 
 ### EXISTS/NOT EXISTS Subquery <a name="exists-not-exists"></a>
@@ -633,39 +633,39 @@ semijoins / anti-semijoins without special provisions for null awareness.
 -- Even if subquery produces rows with `NULL` values, the `EXISTS` expression
 -- evaluates to `TRUE` as the subquery produces 1 row.
 SELECT * FROM person WHERE EXISTS (SELECT null);
-  +--------+----+                                                                 
-  |    name| age|
-  +--------+----+
-  |  Albert|null|
-  |Michelle|  30|
-  |    Fred|  50|
-  |    Mike|  18|
-  |     Dan|  50|
-  |   Marry|null|
-  |     Joe|  30|
-  +--------+----+
++--------+----+
+|    name| age|
++--------+----+
+|  Albert|null|
+|Michelle|  30|
+|    Fred|  50|
+|    Mike|  18|
+|     Dan|  50|
+|   Marry|null|
+|     Joe|  30|
++--------+----+
 
 -- `NOT EXISTS` expression returns `FALSE`. It returns `TRUE` only when
 -- subquery produces no rows. In this case, it returns 1 row.
 SELECT * FROM person WHERE NOT EXISTS (SELECT null);
-  +----+---+
-  |name|age|
-  +----+---+
-  +----+---+
++----+---+
+|name|age|
++----+---+
++----+---+
 
 -- `NOT EXISTS` expression returns `TRUE`.
 SELECT * FROM person WHERE NOT EXISTS (SELECT 1 WHERE 1 = 0);
-  +--------+----+
-  |    name| age|
-  +--------+----+
-  |  Albert|null|
-  |Michelle|  30|
-  |    Fred|  50|
-  |    Mike|  18|
-  |     Dan|  50|
-  |   Marry|null|
-  |     Joe|  30|
-  +--------+----+
++--------+----+
+|    name| age|
++--------+----+
+|  Albert|null|
+|Michelle|  30|
+|    Fred|  50|
+|    Mike|  18|
+|     Dan|  50|
+|   Marry|null|
+|     Joe|  30|
++--------+----+
 {% endhighlight %}
 
 ### IN/NOT IN Subquery <a name="in-not-in"></a>
@@ -696,29 +696,29 @@ and because NOT UNKNOWN is again UNKNOWN.
 -- The subquery has only `NULL` value in its result set. Therefore,
 -- the result of `IN` predicate is UNKNOWN.
 SELECT * FROM person WHERE age IN (SELECT null);
-  +----+---+
-  |name|age|
-  +----+---+
-  +----+---+
++----+---+
+|name|age|
++----+---+
++----+---+
 
 -- The subquery has `NULL` value in the result set as well as a valid 
 -- value `50`. Rows with age = 50 are returned. 
 SELECT * FROM person
     WHERE age IN (SELECT age FROM VALUES (50), (null) sub(age));
-  +----+---+
-  |name|age|
-  +----+---+
-  |Fred| 50|
-  | Dan| 50|
-  +----+---+
++----+---+
+|name|age|
++----+---+
+|Fred| 50|
+| Dan| 50|
++----+---+
 
 -- Since subquery has `NULL` value in the result set, the `NOT IN`
 -- predicate would return UNKNOWN. Hence, no rows are
 -- qualified for this query.
 SELECT * FROM person
     WHERE age NOT IN (SELECT age FROM VALUES (50), (null) sub(age));
-  +----+---+
-  |name|age|
-  +----+---+
-  +----+---+
++----+---+
+|name|age|
++----+---+
++----+---+
 {% endhighlight %}

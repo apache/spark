@@ -282,186 +282,186 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 {% highlight sql %}
 -- RENAME table 
 DESC student;
-  +-----------------------+---------+-------+
-  |               col_name|data_type|comment|
-  +-----------------------+---------+-------+
-  |                   name|   string|   NULL|
-  |                 rollno|      int|   NULL|
-  |                    age|      int|   NULL|
-  |# Partition Information|         |       |
-  |             # col_name|data_type|comment|
-  |                    age|      int|   NULL|
-  +-----------------------+---------+-------+
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
 
 ALTER TABLE Student RENAME TO StudentInfo;
 
 -- After Renaming the table
 DESC StudentInfo;
-  +-----------------------+---------+-------+
-  |               col_name|data_type|comment|
-  +-----------------------+---------+-------+
-  |                   name|   string|   NULL|
-  |                 rollno|      int|   NULL|
-  |                    age|      int|   NULL|
-  |# Partition Information|         |       |
-  |             # col_name|data_type|comment|
-  |                    age|      int|   NULL|
-  +-----------------------+---------+-------+
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
 
 -- RENAME partition
 
 SHOW PARTITIONS StudentInfo;
-  +---------+
-  |partition|
-  +---------+
-  |   age=10|
-  |   age=11|
-  |   age=12|
-  +---------+
++---------+
+|partition|
++---------+
+|   age=10|
+|   age=11|
+|   age=12|
++---------+
 
 ALTER TABLE default.StudentInfo PARTITION (age='10') RENAME TO PARTITION (age='15');
 
 -- After renaming Partition
 SHOW PARTITIONS StudentInfo;
-  +---------+
-  |partition|
-  +---------+
-  |   age=11|
-  |   age=12|
-  |   age=15|
-  +---------+
++---------+
+|partition|
++---------+
+|   age=11|
+|   age=12|
+|   age=15|
++---------+
 
 -- Add new columns to a table
 DESC StudentInfo;
-  +-----------------------+---------+-------+
-  |               col_name|data_type|comment|
-  +-----------------------+---------+-------+
-  |                   name|   string|   NULL|
-  |                 rollno|      int|   NULL|
-  |                    age|      int|   NULL|
-  |# Partition Information|         |       |
-  |             # col_name|data_type|comment|
-  |                    age|      int|   NULL|
-  +-----------------------+---------+-------+
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
 
 ALTER TABLE StudentInfo ADD columns (LastName string, DOB timestamp);
 
 -- After Adding New columns to the table
 DESC StudentInfo;
-  +-----------------------+---------+-------+
-  |               col_name|data_type|comment|
-  +-----------------------+---------+-------+
-  |                   name|   string|   NULL|
-  |                 rollno|      int|   NULL|
-  |               LastName|   string|   NULL|
-  |                    DOB|timestamp|   NULL|
-  |                    age|      int|   NULL|
-  |# Partition Information|         |       |
-  |             # col_name|data_type|comment|
-  |                    age|      int|   NULL|
-  +-----------------------+---------+-------+
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|               LastName|   string|   NULL|
+|                    DOB|timestamp|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
 
 -- Add a new partition to a table 
 SHOW PARTITIONS StudentInfo;
-  +---------+
-  |partition|
-  +---------+
-  |   age=11|
-  |   age=12|
-  |   age=15|
-  +---------+
++---------+
+|partition|
++---------+
+|   age=11|
+|   age=12|
+|   age=15|
++---------+
 
 ALTER TABLE StudentInfo ADD IF NOT EXISTS PARTITION (age=18);
 
 -- After adding a new partition to the table
 SHOW PARTITIONS StudentInfo;
-  +---------+
-  |partition|
-  +---------+
-  |   age=11|
-  |   age=12|
-  |   age=15|
-  |   age=18|
-  +---------+
++---------+
+|partition|
++---------+
+|   age=11|
+|   age=12|
+|   age=15|
+|   age=18|
++---------+
 
 -- Drop a partition from the table 
 SHOW PARTITIONS StudentInfo;
-  +---------+
-  |partition|
-  +---------+
-  |   age=11|
-  |   age=12|
-  |   age=15|
-  |   age=18|
-  +---------+
++---------+
+|partition|
++---------+
+|   age=11|
+|   age=12|
+|   age=15|
+|   age=18|
++---------+
 
 ALTER TABLE StudentInfo DROP IF EXISTS PARTITION (age=18);
 
 -- After dropping the partition of the table
 SHOW PARTITIONS StudentInfo;
-  +---------+
-  |partition|
-  +---------+
-  |   age=11|
-  |   age=12|
-  |   age=15|
-  +---------+
++---------+
+|partition|
++---------+
+|   age=11|
+|   age=12|
+|   age=15|
++---------+
 
 -- Adding multiple partitions to the table
 SHOW PARTITIONS StudentInfo;
-  +---------+
-  |partition|
-  +---------+
-  |   age=11|
-  |   age=12|
-  |   age=15|
-  +---------+
++---------+
+|partition|
++---------+
+|   age=11|
+|   age=12|
+|   age=15|
++---------+
 
 ALTER TABLE StudentInfo ADD IF NOT EXISTS PARTITION (age=18) PARTITION (age=20);
 
 -- After adding multiple partitions to the table
 SHOW PARTITIONS StudentInfo;
-  +---------+
-  |partition|
-  +---------+
-  |   age=11|
-  |   age=12|
-  |   age=15|
-  |   age=18|
-  |   age=20|
-  +---------+
++---------+
+|partition|
++---------+
+|   age=11|
+|   age=12|
+|   age=15|
+|   age=18|
+|   age=20|
++---------+
 
 -- ALTER OR CHANGE COLUMNS
 DESC StudentInfo;
-  +-----------------------+---------+-------+
-  |               col_name|data_type|comment|
-  +-----------------------+---------+-------+
-  |                   name|   string|   NULL|
-  |                 rollno|      int|   NULL|
-  |               LastName|   string|   NULL|
-  |                    DOB|timestamp|   NULL|
-  |                    age|      int|   NULL|
-  |# Partition Information|         |       |
-  |             # col_name|data_type|comment|
-  |                    age|      int|   NULL|
-  +-----------------------+---------+-------+
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|               LastName|   string|   NULL|
+|                    DOB|timestamp|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
 
 ALTER TABLE StudentInfo ALTER COLUMN name COMMENT "new comment";
 
 --After ALTER or CHANGE COLUMNS
 DESC StudentInfo;
-  +-----------------------+---------+-----------+
-  |               col_name|data_type|    comment|
-  +-----------------------+---------+-----------+
-  |                   name|   string|new comment|
-  |                 rollno|      int|       NULL|
-  |               LastName|   string|       NULL|
-  |                    DOB|timestamp|       NULL|
-  |                    age|      int|       NULL|
-  |# Partition Information|         |           |
-  |             # col_name|data_type|    comment|
-  |                    age|      int|       NULL|
-  +-----------------------+---------+-----------+
++-----------------------+---------+-----------+
+|               col_name|data_type|    comment|
++-----------------------+---------+-----------+
+|                   name|   string|new comment|
+|                 rollno|      int|       NULL|
+|               LastName|   string|       NULL|
+|                    DOB|timestamp|       NULL|
+|                    age|      int|       NULL|
+|# Partition Information|         |           |
+|             # col_name|data_type|    comment|
+|                    age|      int|       NULL|
++-----------------------+---------+-----------+
 
 -- Change the fileformat
 ALTER TABLE loc_orc SET fileformat orc;

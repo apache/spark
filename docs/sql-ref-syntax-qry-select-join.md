@@ -139,121 +139,120 @@ An anti join returns values from the left relation that has no match with the ri
 {% highlight sql %}
 -- Use employee and department tables to demonstrate different type of joins.
 SELECT * FROM employee;
-
-  +---+-----+------+
-  | id| name|deptno|
-  +---+-----+------+
-  |105|Chloe|     5|
-  |103| Paul|     3|
-  |101| John|     1|
-  |102| Lisa|     2|
-  |104| Evan|     4|
-  |106|  Amy|     6|
-  +---+-----+------+
++---+-----+------+
+| id| name|deptno|
++---+-----+------+
+|105|Chloe|     5|
+|103| Paul|     3|
+|101| John|     1|
+|102| Lisa|     2|
+|104| Evan|     4|
+|106|  Amy|     6|
++---+-----+------+
 
 SELECT * FROM department;
-  +------+-----------+
-  |deptno|   deptname|
-  +------+-----------+
-  |     3|Engineering|
-  |     2|      Sales|
-  |     1|  Marketing|
-  +------+-----------+
++------+-----------+
+|deptno|   deptname|
++------+-----------+
+|     3|Engineering|
+|     2|      Sales|
+|     1|  Marketing|
++------+-----------+
 
 -- Use employee and department tables to demonstrate inner join.
 SELECT id, name, employee.deptno, deptname
     FROM employee INNER JOIN department ON employee.deptno = department.deptno;
-  +---+-----+------+-----------|
-  | id| name|deptno|   deptname|
-  +---+-----+------+-----------|
-  |103| Paul|     3|Engineering|
-  |101| John|     1|  Marketing|
-  |102| Lisa|     2|      Sales|
-  +---+-----+------+-----------|
++---+-----+------+-----------|
+| id| name|deptno|   deptname|
++---+-----+------+-----------|
+|103| Paul|     3|Engineering|
+|101| John|     1|  Marketing|
+|102| Lisa|     2|      Sales|
++---+-----+------+-----------|
 
 -- Use employee and department tables to demonstrate left join.
 SELECT id, name, employee.deptno, deptname
     FROM employee LEFT JOIN department ON employee.deptno = department.deptno;
-  +---+-----+------+-----------|
-  | id| name|deptno|   deptname|
-  +---+-----+------+-----------|
-  |105|Chloe|     5|       NULL|
-  |103| Paul|     3|Engineering|
-  |101| John|     1|  Marketing|
-  |102| Lisa|     2|      Sales|
-  |104| Evan|     4|       NULL|
-  |106|  Amy|     6|       NULL|
-  +---+-----+------+-----------|
++---+-----+------+-----------|
+| id| name|deptno|   deptname|
++---+-----+------+-----------|
+|105|Chloe|     5|       NULL|
+|103| Paul|     3|Engineering|
+|101| John|     1|  Marketing|
+|102| Lisa|     2|      Sales|
+|104| Evan|     4|       NULL|
+|106|  Amy|     6|       NULL|
++---+-----+------+-----------|
 
 -- Use employee and department tables to demonstrate right join.
 SELECT id, name, employee.deptno, deptname
     FROM employee RIGHT JOIN department ON employee.deptno = department.deptno;
-  +---+-----+------+-----------|
-  | id| name|deptno|   deptname|
-  +---+-----+------+-----------|
-  |103| Paul|     3|Engineering|
-  |101| John|     1|  Marketing|
-  |102| Lisa|     2|      Sales|
-  +---+-----+------+-----------|
++---+-----+------+-----------|
+| id| name|deptno|   deptname|
++---+-----+------+-----------|
+|103| Paul|     3|Engineering|
+|101| John|     1|  Marketing|
+|102| Lisa|     2|      Sales|
++---+-----+------+-----------|
 
 -- Use employee and department tables to demonstrate full join.
 SELECT id, name, employee.deptno, deptname
     FROM employee FULL JOIN department ON employee.deptno = department.deptno;
-  +---+-----+------+-----------|
-  | id| name|deptno|   deptname|
-  +---+-----+------+-----------|
-  |101| John|     1|  Marketing|
-  |106|  Amy|     6|       NULL|
-  |103| Paul|     3|Engineering|
-  |105|Chloe|     5|       NULL|
-  |104| Evan|     4|       NULL|
-  |102| Lisa|     2|      Sales|
-  +---+-----+------+-----------|
++---+-----+------+-----------|
+| id| name|deptno|   deptname|
++---+-----+------+-----------|
+|101| John|     1|  Marketing|
+|106|  Amy|     6|       NULL|
+|103| Paul|     3|Engineering|
+|105|Chloe|     5|       NULL|
+|104| Evan|     4|       NULL|
+|102| Lisa|     2|      Sales|
++---+-----+------+-----------|
 
 -- Use employee and department tables to demonstrate cross join.
 SELECT id, name, employee.deptno, deptname FROM employee CROSS JOIN department;
-  +---+-----+------+-----------|
-  | id| name|deptno|   deptname|
-  +---+-----+------+-----------|
-  |105|Chloe|     5|Engineering|
-  |105|Chloe|     5|  Marketing|
-  |105|Chloe|     5|      Sales|
-  |103| Paul|     3|Engineering|
-  |103| Paul|     3|  Marketing|
-  |103| Paul|     3|      Sales|
-  |101| John|     1|Engineering|
-  |101| John|     1|  Marketing|
-  |101| John|     1|      Sales|
-  |102| Lisa|     2|Engineering|
-  |102| Lisa|     2|  Marketing|
-  |102| Lisa|     2|      Sales|
-  |104| Evan|     4|Engineering|
-  |104| Evan|     4|  Marketing|
-  |104| Evan|     4|      Sales|
-  |106|  Amy|     4|Engineering|
-  |106|  Amy|     4|  Marketing|
-  |106|  Amy|     4|      Sales|
-  +---+-----+------+-----------|
++---+-----+------+-----------|
+| id| name|deptno|   deptname|
++---+-----+------+-----------|
+|105|Chloe|     5|Engineering|
+|105|Chloe|     5|  Marketing|
+|105|Chloe|     5|      Sales|
+|103| Paul|     3|Engineering|
+|103| Paul|     3|  Marketing|
+|103| Paul|     3|      Sales|
+|101| John|     1|Engineering|
+|101| John|     1|  Marketing|
+|101| John|     1|      Sales|
+|102| Lisa|     2|Engineering|
+|102| Lisa|     2|  Marketing|
+|102| Lisa|     2|      Sales|
+|104| Evan|     4|Engineering|
+|104| Evan|     4|  Marketing|
+|104| Evan|     4|      Sales|
+|106|  Amy|     4|Engineering|
+|106|  Amy|     4|  Marketing|
+|106|  Amy|     4|      Sales|
++---+-----+------+-----------|
 
 -- Use employee and department tables to demonstrate semi join.
 SELECT * FROM employee SEMI JOIN department ON employee.deptno = department.deptno;
-  +---+-----+------+
-  | id| name|deptno|
-  +---+-----+------+
-  |103| Paul|     3|
-  |101| John|     1|
-  |102| Lisa|     2|
-  +---+-----+------+
++---+-----+------+
+| id| name|deptno|
++---+-----+------+
+|103| Paul|     3|
+|101| John|     1|
+|102| Lisa|     2|
++---+-----+------+
 
 -- Use employee and department tables to demonstrate anti join.
 SELECT * FROM employee ANTI JOIN department ON employee.deptno = department.deptno;
-  +---+-----+------+
-  | id| name|deptno|
-  +---+-----+------+
-  |105|Chloe|     5|
-  |104| Evan|     4|
-  |106|  Amy|     6|
-  +---+-----+------+
++---+-----+------+
+| id| name|deptno|
++---+-----+------+
+|105|Chloe|     5|
+|104| Evan|     4|
+|106|  Amy|     6|
++---+-----+------+
 {% endhighlight %}
 
 ### Related Statements

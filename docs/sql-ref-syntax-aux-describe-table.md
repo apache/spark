@@ -88,101 +88,101 @@ INSERT INTO customer PARTITION (state = 'AR') VALUES (100, 'Mike');
     
 -- Returns basic metadata information for unqualified table `customer`
 DESCRIBE TABLE customer;
-  +-----------------------+---------+----------+
-  |               col_name|data_type|   comment|
-  +-----------------------+---------+----------+
-  |                cust_id|      int|      null|
-  |                   name|   string|Short name|
-  |                  state|   string|      null|
-  |# Partition Information|         |          |
-  |             # col_name|data_type|   comment|
-  |                  state|   string|      null|
-  +-----------------------+---------+----------+
++-----------------------+---------+----------+
+|               col_name|data_type|   comment|
++-----------------------+---------+----------+
+|                cust_id|      int|      null|
+|                   name|   string|Short name|
+|                  state|   string|      null|
+|# Partition Information|         |          |
+|             # col_name|data_type|   comment|
+|                  state|   string|      null|
++-----------------------+---------+----------+
 
 -- Returns basic metadata information for qualified table `customer`
 DESCRIBE TABLE salesdb.customer;
-  +-----------------------+---------+----------+
-  |               col_name|data_type|   comment|
-  +-----------------------+---------+----------+
-  |                cust_id|      int|      null|
-  |                   name|   string|Short name|
-  |                  state|   string|      null|
-  |# Partition Information|         |          |
-  |             # col_name|data_type|   comment|
-  |                  state|   string|      null|
-  +-----------------------+---------+----------+
++-----------------------+---------+----------+
+|               col_name|data_type|   comment|
++-----------------------+---------+----------+
+|                cust_id|      int|      null|
+|                   name|   string|Short name|
+|                  state|   string|      null|
+|# Partition Information|         |          |
+|             # col_name|data_type|   comment|
+|                  state|   string|      null|
++-----------------------+---------+----------+
 
 -- Returns additional metadata such as parent database, owner, access time etc.
 DESCRIBE TABLE EXTENDED customer;
-  +----------------------------+------------------------------+----------+
-  |                    col_name|                     data_type|   comment|
-  +----------------------------+------------------------------+----------+
-  |                     cust_id|                           int|      null|
-  |                        name|                        string|Short name|
-  |                       state|                        string|      null|
-  |     # Partition Information|                              |          |
-  |                  # col_name|                     data_type|   comment|
-  |                       state|                        string|      null|
-  |                            |                              |          |
-  |# Detailed Table Information|                              |          |
-  |                    Database|                       default|          |
-  |                       Table|                      customer|          |
-  |                       Owner|                 <TABLE OWNER>|          |
-  |                Created Time|  Tue Apr 07 22:56:34 JST 2020|          |
-  |                 Last Access|                       UNKNOWN|          |
-  |                  Created By|               <SPARK VERSION>|          |
-  |                        Type|                       MANAGED|          |
-  |                    Provider|                       parquet|          |
-  |                    Location|file:/tmp/salesdb.db/custom...|          |
-  |               Serde Library|org.apache.hadoop.hive.ql.i...|          |
-  |                 InputFormat|org.apache.hadoop.hive.ql.i...|          |
-  |                OutputFormat|org.apache.hadoop.hive.ql.i...|          |
-  |          Partition Provider|                       Catalog|          |
-  +----------------------------+------------------------------+----------+
++----------------------------+------------------------------+----------+
+|                    col_name|                     data_type|   comment|
++----------------------------+------------------------------+----------+
+|                     cust_id|                           int|      null|
+|                        name|                        string|Short name|
+|                       state|                        string|      null|
+|     # Partition Information|                              |          |
+|                  # col_name|                     data_type|   comment|
+|                       state|                        string|      null|
+|                            |                              |          |
+|# Detailed Table Information|                              |          |
+|                    Database|                       default|          |
+|                       Table|                      customer|          |
+|                       Owner|                 <TABLE OWNER>|          |
+|                Created Time|  Tue Apr 07 22:56:34 JST 2020|          |
+|                 Last Access|                       UNKNOWN|          |
+|                  Created By|               <SPARK VERSION>|          |
+|                        Type|                       MANAGED|          |
+|                    Provider|                       parquet|          |
+|                    Location|file:/tmp/salesdb.db/custom...|          |
+|               Serde Library|org.apache.hadoop.hive.ql.i...|          |
+|                 InputFormat|org.apache.hadoop.hive.ql.i...|          |
+|                OutputFormat|org.apache.hadoop.hive.ql.i...|          |
+|          Partition Provider|                       Catalog|          |
++----------------------------+------------------------------+----------+
 
 -- Returns partition metadata such as partitioning column name, column type and comment.
 DESCRIBE TABLE EXTENDED customer PARTITION (state = 'AR');
-  +------------------------------+------------------------------+----------+
-  |                      col_name|                     data_type|   comment|
-  +------------------------------+------------------------------+----------+
-  |                       cust_id|                           int|      null|
-  |                          name|                        string|Short name|
-  |                         state|                        string|      null|
-  |       # Partition Information|                              |          |
-  |                    # col_name|                     data_type|   comment|
-  |                         state|                        string|      null|
-  |                              |                              |          |
-  |# Detailed Partition Inform...|                              |          |
-  |                      Database|                       default|          |
-  |                         Table|                      customer|          |
-  |              Partition Values|                    [state=AR]|          |
-  |                      Location|file:/tmp/salesdb.db/custom...|          |
-  |                 Serde Library|org.apache.hadoop.hive.ql.i...|          |
-  |                   InputFormat|org.apache.hadoop.hive.ql.i...|          |
-  |                  OutputFormat|org.apache.hadoop.hive.ql.i...|          |
-  |            Storage Properties|[serialization.format=1, pa...|          |
-  |          Partition Parameters|{transient_lastDdlTime=1586...|          |
-  |                  Created Time|  Tue Apr 07 23:05:43 JST 2020|          |
-  |                   Last Access|                       UNKNOWN|          |
-  |          Partition Statistics|                     659 bytes|          |
-  |                              |                              |          |
-  |         # Storage Information|                              |          |
-  |                      Location|file:/tmp/salesdb.db/custom...|          |
-  |                 Serde Library|org.apache.hadoop.hive.ql.i...|          |
-  |                   InputFormat|org.apache.hadoop.hive.ql.i...|          |
-  |                  OutputFormat|org.apache.hadoop.hive.ql.i...|          |
-  +------------------------------+------------------------------+----------+
++------------------------------+------------------------------+----------+
+|                      col_name|                     data_type|   comment|
++------------------------------+------------------------------+----------+
+|                       cust_id|                           int|      null|
+|                          name|                        string|Short name|
+|                         state|                        string|      null|
+|       # Partition Information|                              |          |
+|                    # col_name|                     data_type|   comment|
+|                         state|                        string|      null|
+|                              |                              |          |
+|# Detailed Partition Inform...|                              |          |
+|                      Database|                       default|          |
+|                         Table|                      customer|          |
+|              Partition Values|                    [state=AR]|          |
+|                      Location|file:/tmp/salesdb.db/custom...|          |
+|                 Serde Library|org.apache.hadoop.hive.ql.i...|          |
+|                   InputFormat|org.apache.hadoop.hive.ql.i...|          |
+|                  OutputFormat|org.apache.hadoop.hive.ql.i...|          |
+|            Storage Properties|[serialization.format=1, pa...|          |
+|          Partition Parameters|{transient_lastDdlTime=1586...|          |
+|                  Created Time|  Tue Apr 07 23:05:43 JST 2020|          |
+|                   Last Access|                       UNKNOWN|          |
+|          Partition Statistics|                     659 bytes|          |
+|                              |                              |          |
+|         # Storage Information|                              |          |
+|                      Location|file:/tmp/salesdb.db/custom...|          |
+|                 Serde Library|org.apache.hadoop.hive.ql.i...|          |
+|                   InputFormat|org.apache.hadoop.hive.ql.i...|          |
+|                  OutputFormat|org.apache.hadoop.hive.ql.i...|          |
++------------------------------+------------------------------+----------+
 
 -- Returns the metadata for `name` column.
 -- Optional `TABLE` clause is omitted and column is fully qualified.
 DESCRIBE customer salesdb.customer.name;
-  +---------+----------+
-  |info_name|info_value|
-  +---------+----------+
-  | col_name|      name|
-  |data_type|    string|
-  |  comment|Short name|
-  +---------+----------+
++---------+----------+
+|info_name|info_value|
++---------+----------+
+| col_name|      name|
+|data_type|    string|
+|  comment|Short name|
++---------+----------+
 {% endhighlight %}
 
 ### Related Statements

@@ -62,33 +62,33 @@ TRUNCATE TABLE table_identifier [ partition_spec ]
 CREATE TABLE Student (name STRING, rollno INT) PARTITIONED BY (age INT);
 
 SELECT * FROM Student;
-  +----+------+---+
-  |name|rollno|age|
-  +----+------+---+
-  | ABC|     1| 10|
-  | DEF|     2| 10|
-  | XYZ|     3| 12|
-  +----+------+---+
++----+------+---+
+|name|rollno|age|
++----+------+---+
+| ABC|     1| 10|
+| DEF|     2| 10|
+| XYZ|     3| 12|
++----+------+---+
 
 -- Removes all rows from the table in the partition specified
 TRUNCATE TABLE Student partition(age=10);
 
 -- After truncate execution, records belonging to partition age=10 are removed
 SELECT * FROM Student;
-  +----+------+---+
-  |name|rollno|age|
-  +----+------+---+
-  | XYZ|     3| 12|
-  +----+------+---+
++----+------+---+
+|name|rollno|age|
++----+------+---+
+| XYZ|     3| 12|
++----+------+---+
 
 -- Removes all rows from the table from all partitions
 TRUNCATE TABLE Student;
 
 SELECT * FROM Student;
-  +----+------+---+
-  |name|rollno|age|
-  +----+------+---+
-  +----+------+---+
++----+------+---+
+|name|rollno|age|
++----+------+---+
++----+------+---+
 {% endhighlight %}
 
 ### Related Statements

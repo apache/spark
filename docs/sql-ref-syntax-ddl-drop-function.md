@@ -62,11 +62,11 @@ CREATE FUNCTION test_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAv
 
 -- List user functions
 SHOW USER FUNCTIONS;
-  +----------------+
-  |        function|
-  +----------------+
-  |default.test_avg|
-  +----------------+
++----------------+
+|        function|
++----------------+
+|default.test_avg|
++----------------+
 
 -- Create Temporary function `test_avg`
 CREATE TEMPORARY FUNCTION test_avg AS
@@ -74,12 +74,12 @@ CREATE TEMPORARY FUNCTION test_avg AS
 
 -- List user functions
 SHOW USER FUNCTIONS;
-  +----------------+
-  |        function|
-  +----------------+
-  |default.test_avg|
-  |        test_avg|
-  +----------------+
++----------------+
+|        function|
++----------------+
+|default.test_avg|
+|        test_avg|
++----------------+
 
 -- Drop Permanent function
 DROP FUNCTION test_avg;
@@ -92,11 +92,11 @@ DROP FUNCTION test_avg;
 
 -- List the functions after dropping, it should list only temporary function
 SHOW USER FUNCTIONS;
-  +--------+
-  |function|
-  +--------+
-  |test_avg|
-  +--------+
++--------+
+|function|
++--------+
+|test_avg|
++--------+
   
 -- Drop Temporary function
 DROP TEMPORARY FUNCTION IF EXISTS test_avg;

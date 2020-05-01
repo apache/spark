@@ -76,40 +76,40 @@ CREATE TABLE customer(cust_code INT, name VARCHAR(100), cust_addr STRING)
 
 -- show all the user specified properties for table `customer`
 SHOW TBLPROPERTIES customer;
-  +---------------------+----------+
-  |                  key|     value|
-  +---------------------+----------+
-  |      created.by.user|      John|
-  |         created.date|01-01-2001|
-  |transient_lastDdlTime|1567554931|
-  +---------------------+----------+
++---------------------+----------+
+|                  key|     value|
++---------------------+----------+
+|      created.by.user|      John|
+|         created.date|01-01-2001|
+|transient_lastDdlTime|1567554931|
++---------------------+----------+
 
 -- show all the user specified properties for a qualified table `customer`
 -- in database `salesdb`
 SHOW TBLPROPERTIES salesdb.customer;
-  +---------------------+----------+
-  |                  key|     value|
-  +---------------------+----------+
-  |      created.by.user|      John|
-  |         created.date|01-01-2001|
-  |transient_lastDdlTime|1567554931|
-  +---------------------+----------+
++---------------------+----------+
+|                  key|     value|
++---------------------+----------+
+|      created.by.user|      John|
+|         created.date|01-01-2001|
+|transient_lastDdlTime|1567554931|
++---------------------+----------+
 
 -- show value for unquoted property key `created.by.user`
 SHOW TBLPROPERTIES customer (created.by.user);
-  +-----+
-  |value|
-  +-----+
-  | John|
-  +-----+
++-----+
+|value|
++-----+
+| John|
++-----+
 
 -- show value for property `created.date`` specified as string literal
 SHOW TBLPROPERTIES customer ('created.date');
-  +----------+
-  |     value|
-  +----------+
-  |01-01-2001|
-  +----------+
++----------+
+|     value|
++----------+
+|01-01-2001|
++----------+
 {% endhighlight %}
 
 ### Related Statements

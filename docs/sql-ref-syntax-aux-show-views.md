@@ -66,52 +66,52 @@ CREATE TEMP VIEW temp2 AS SELECT 1 as col1;
 
 -- List all views in default database
 SHOW VIEWS;
-  +-------------+------------+--------------+--+
-  | namespace   | viewName   | isTemporary  |
-  +-------------+------------+--------------+--+
-  | default     | sam        | false        |
-  | default     | sam1       | false        |
-  | default     | suj        | false        |
-  |             | temp2      | true         |
-  +-------------+------------+--------------+--+
++-------------+------------+--------------+
+| namespace   | viewName   | isTemporary  |
++-------------+------------+--------------+
+| default     | sam        | false        |
+| default     | sam1       | false        |
+| default     | suj        | false        |
+|             | temp2      | true         |
++-------------+------------+--------------+
 
 -- List all views from userdb database 
 SHOW VIEWS FROM userdb;
-  +-------------+------------+--------------+--+
-  | namespace   | viewName   | isTemporary  |
-  +-------------+------------+--------------+--+
-  | userdb      | user1      | false        |
-  | userdb      | user2      | false        |
-  |             | temp2      | true         |
-  +-------------+------------+--------------+--+
++-------------+------------+--------------+
+| namespace   | viewName   | isTemporary  |
++-------------+------------+--------------+
+| userdb      | user1      | false        |
+| userdb      | user2      | false        |
+|             | temp2      | true         |
++-------------+------------+--------------+
   
 -- List all views in global temp view database 
 SHOW VIEWS IN global_temp;
-  +-------------+------------+--------------+--+
-  | namespace   | viewName   | isTemporary  |
-  +-------------+------------+--------------+--+
-  | global_temp | temp1      | true         |
-  |             | temp2      | true         |
-  +-------------+------------+--------------+--+
++-------------+------------+--------------+
+| namespace   | viewName   | isTemporary  |
++-------------+------------+--------------+
+| global_temp | temp1      | true         |
+|             | temp2      | true         |
++-------------+------------+--------------+
 
 -- List all views from default database matching the pattern `sam*`
 SHOW VIEWS FROM default LIKE 'sam*';
-  +-----------+------------+--------------+--+
-  | namespace | viewName   | isTemporary  |
-  +-----------+------------+--------------+--+
-  | default   | sam        | false        |
-  | default   | sam1       | false        |
-  +-----------+------------+--------------+--+
++-----------+------------+--------------+
+| namespace | viewName   | isTemporary  |
++-----------+------------+--------------+
+| default   | sam        | false        |
+| default   | sam1       | false        |
++-----------+------------+--------------+
 
 -- List all views from the current database matching the pattern `sam|suj｜temp*`
 SHOW VIEWS LIKE 'sam|suj|temp*';
-  +-------------+------------+--------------+--+
-  | namespace   | viewName   | isTemporary  |
-  +-------------+------------+--------------+--+
-  | default     | sam        | false        |
-  | default     | suj        | false        |
-  |             | temp2      | true         |
-  +-------------+------------+--------------+--+
++-------------+------------+--------------+
+| namespace   | viewName   | isTemporary  |
++-------------+------------+--------------+
+| default     | sam        | false        |
+| default     | suj        | false        |
+|             | temp2      | true         |
++-------------+------------+--------------+
 
 {% endhighlight %}
 
