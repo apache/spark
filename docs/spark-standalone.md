@@ -241,16 +241,6 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.6.3</td>
 </tr>
 <tr>
-  <td><code>spark.submit.waitAppCompletion</code></td>
-  <td><code>true</code></td>
-  <td>
-  In Standalone cluster mode, controls whether the client waits to exit until the application completes.
-  If set to <code>true</code>, the client process will stay alive reporting the application's status.
-  Otherwise, the client process will exit after submission.
-  </td>
-  <td>3.1.0</td>
-</tr>
-<tr>
   <td><code>spark.worker.timeout</code></td>
   <td>60</td>
   <td>
@@ -383,6 +373,24 @@ To run an interactive Spark shell against the cluster, run the following command
     ./bin/spark-shell --master spark://IP:PORT
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
+
+#Spark Properties
+
+Spark applications supports the following configuration properties specific to standalone Mode: 
+<table class="table">
+  <tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr>
+  <tr>
+  <td><code>spark.standalone.submit.waitAppCompletion</code></td>
+  <td><code>false</code></td>
+  <td>
+  In Standalone cluster mode, controls whether the client waits to exit until the application completes.
+  If set to <code>true</code>, the client process will stay alive reporting the application's status.
+  Otherwise, the client process will exit after submission.
+  </td>
+  <td>3.1.0</td>
+  </tr>
+</table>
+
 
 # Launching Spark Applications
 

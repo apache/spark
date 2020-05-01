@@ -61,7 +61,8 @@ private class ClientEndpoint(
 
    private val lostMasters = new HashSet[RpcAddress]
    private var activeMasterEndpoint: RpcEndpointRef = null
-   private val waitAppCompletion = conf.getBoolean("spark.submit.waitAppCompletion", false)
+   private val waitAppCompletion = conf.getBoolean("spark.standalone.submit.waitAppCompletion",
+     false)
    private val REPORT_DRIVER_STATUS_INTERVAL = 1000
 
 
@@ -156,19 +157,20 @@ private class ClientEndpoint(
             System.exit(-1)
           case _ =>
             if (!waitAppCompletion) {
-              logInfo(s"No exception found and waitAppCompletion is false, " +
-                s"exiting spark-submit JVM.")
-              System.exit(0)
-            } else if (statusResponse.state.get == DriverState.FINISHED ||
-              statusResponse.state.get == DriverState.FAILED ||
-              statusResponse.state.get == DriverState.ERROR ||
-              statusResponse.state.get == DriverState.KILLED) {
-              logInfo(s"waitAppCompletion is true, state is ${statusResponse.state.get}, " +
+              logInfo(s"spark-submit not configured to wait for completion, " +
                 s"exiting spark-submit JVM.")
               System.exit(0)
             } else {
-              logTrace(s"waitAppCompletion is true, state is ${statusResponse.state.get}," +
-                s"continue monitoring driver status.")
+              statusResponse.state.get match {
+                case DriverState.FINISHED | DriverState.FAILED |
+                     DriverState.ERROR | DriverState.KILLED =>
+                  logInfo(s"State of $driverId is  ${statusResponse.state.get}, " +
+                  s"exiting spark-submit JVM.")
+                  System.exit(0)
+                case _ =>
+                  logTrace(s"State of $driverId is  ${statusResponse.state.get}," +
+                    s"continue monitoring driver status.")
+              }
             }
         }
       } else {
