@@ -33,7 +33,7 @@ cannot be used with a partition specification.
 ### Syntax
 
 {% highlight sql %}
-SHOW TABLE EXTENDED [ IN | FROM database_name ] LIKE regex_pattern
+SHOW TABLE EXTENDED [ { IN | FROM } database_name ] LIKE regex_pattern
     [ partition_spec ]
 {% endhighlight %}
 
@@ -60,7 +60,7 @@ SHOW TABLE EXTENDED [ IN | FROM database_name ] LIKE regex_pattern
     for partitions. Note that a table regex cannot be used with a partition specification.<br><br>
     <b>Syntax:</b>
       <code>
-        PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )
+        PARTITION ( partition_col_name = partition_col_val [ , ... ] )
       </code>
   </dd>
 </dl>
@@ -152,7 +152,7 @@ SHOW TABLE EXTENDED  LIKE `employe*`;
   +--------+---------+----------+---------------------------------------------------------------+
   
 -- show partition file system details
-SHOW TABLE EXTENDED  IN `default` LIKE `employee` PARTITION (`grade=1`);
+SHOW TABLE EXTENDED  IN default LIKE `employee` PARTITION (`grade=1`);
   +--------+---------+-----------+--------------------------------------------------------------+
   |database|tableName|isTemporary|                         information                          | 
   +--------+---------+-----------+--------------------------------------------------------------+
@@ -175,7 +175,7 @@ SHOW TABLE EXTENDED  IN `default` LIKE `employee` PARTITION (`grade=1`);
   +--------+---------+-----------+--------------------------------------------------------------+
 
 -- show partition file system details with regex fails as shown below
-SHOW TABLE EXTENDED  IN `default` LIKE `empl*` PARTITION (`grade=1`);
+SHOW TABLE EXTENDED  IN default LIKE `empl*` PARTITION (`grade=1`);
   Error: Error running query: org.apache.spark.sql.catalyst.analysis.NoSuchTableException:
    Table or view 'emplo*' not found in database 'default'; (state=,code=0)
 {% endhighlight %}

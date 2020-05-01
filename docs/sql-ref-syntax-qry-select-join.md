@@ -55,7 +55,7 @@ relation { [ join_type ] JOIN relation [ join_criteria ] | NATURAL join_type JOI
     Specifies how the rows from one relation will be combined with the rows of another relation.<br><br>
     <b>Syntax:</b>
       <code>
-        ON boolean_expression | USING ( column_name [ , column_name ... ] )
+        ON boolean_expression | USING ( column_name [ , ... ] )
       </code> <br><br>
       <code>boolean_expression</code><br>
       Specifies an expression with a return type of boolean.
@@ -139,7 +139,6 @@ An anti join returns values from the left relation that has no match with the ri
 {% highlight sql %}
 -- Use employee and department tables to demonstrate different type of joins.
 SELECT * FROM employee;
-
   +---+-----+------+
   | id| name|deptno|
   +---+-----+------+

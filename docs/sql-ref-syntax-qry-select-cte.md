@@ -31,7 +31,7 @@ WITH common_table_expression [ , ... ]
 
 While `common_table_expression` is defined as
 {% highlight sql %}
-expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( [ common_table_expression ] query )
+expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( query )
 {% endhighlight %}
 
 ### Parameters
@@ -62,7 +62,7 @@ SELECT * FROM t WHERE x = 1 AND y = 2;
   +---+---+
 
 -- CTE in CTE definition
-WITH t as (
+WITH t AS (
     WITH t2 AS (SELECT 1)
     SELECT * FROM t2
 )

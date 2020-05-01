@@ -42,7 +42,6 @@ REFRESH resource_path
 
 {% highlight sql %}
 -- The Path is resolved using the datasource's File Index.
- 
 CREATE TABLE test(ID INT) using parquet;
 INSERT INTO test SELECT 1000;
 CACHE TABLE test;

@@ -58,7 +58,7 @@ describe the query output.
 CREATE TABLE person (name STRING , age INT COMMENT 'Age column', address STRING);
 
 -- Returns column metadata information for a simple select query
-DESCRIBE QUERY select age, sum(age) FROM person GROUP BY age;
+DESCRIBE QUERY SELECT age, sum(age) FROM person GROUP BY age;
   +--------+---------+----------+
   |col_name|data_type|   comment|
   +--------+---------+----------+

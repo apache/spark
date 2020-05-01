@@ -90,12 +90,11 @@ SELECT * FROM person WHERE name NOT LIKE 'M_ry';
 |400|   Dan| 50|
 +---+------+---+
 
-SELECT * FROM person WHERE name RLIKE '[MD]';
+SELECT * FROM person WHERE name RLIKE 'M+';
 +---+----+----+
 | id|name| age|
 +---+----+----+
 |300|Mike|  80|
-|400| Dan|  50|
 |200|Mary|null|
 +---+----+----+
 

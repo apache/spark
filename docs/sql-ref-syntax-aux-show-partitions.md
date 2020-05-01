@@ -50,7 +50,7 @@ SHOW PARTITIONS table_identifier [ partition_spec ]
     for partitions. When specified, the partitions that match the partition spec are returned.<br><br>
     <b>Syntax:</b>
       <code>
-        PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )
+        PARTITION ( partition_col_name = partition_col_val [ , ... ] )
       </code>
   </dd>
 </dl>

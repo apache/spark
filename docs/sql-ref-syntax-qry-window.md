@@ -61,7 +61,7 @@ window_function OVER
           MAX | MIN | COUNT | SUM | AVG | ...
         </code>
         <br>
-        Please refer to the <a href="api/sql/">Built-in Functions</a> document for a complete list of Spark aggregate functions.
+        Please refer to the <a href="sql-ref-functions-builtin.html#aggregate-functions">Built-in Aggregation Functions</a> document for a complete list of Spark aggregate functions.
     </ul>
   </dd>
 </dl>

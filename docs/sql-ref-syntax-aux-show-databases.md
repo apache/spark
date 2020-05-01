@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-Lists the databases that match an optionally supplied string pattern. If no
+Lists the databases that match an optionally supplied regular expression pattern. If no
 pattern is supplied then the command lists all the databases in the system.
 Please note that the usage of `SCHEMAS` and `DATABASES` are interchangeable
 and mean the same thing.
@@ -39,11 +39,12 @@ SHOW { DATABASES | SCHEMAS } [ LIKE regex_pattern ]
   <dd>
     Specifies a regular expression pattern that is used to filter the results of the
     statement.
-    <ul>
-      <li>Only <code>*</code> and <code>|</code> are allowed as wildcard pattern.</li>
-      <li>Excluding <code>*</code> and <code>|</code>, the remaining pattern follows the regular expression semantics.</li>
-      <li>The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
-    </ul>
+     <ul>
+       <li>Except for <code>*</code> and <code>|</code> character, the pattern works like a regular expression.</li>
+       <li><code>*</code> alone matches 0 or more characters and <code>|</code> is used to separate multiple different regular expressions,
+       any of which can match. </li>
+       <li>The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
+     </ul>
   </dd>
 </dl>
 

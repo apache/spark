@@ -126,6 +126,6 @@ SELECT * FROM range(5, 8) AS test;
   +---+
 {% endhighlight %}
 
-### Related Statement
+### Related Statements
 
  * [SELECT](sql-ref-syntax-qry-select.html)

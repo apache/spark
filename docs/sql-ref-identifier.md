@@ -64,6 +64,7 @@ Note: If `spark.sql.ansi.enabled` is set to true, ANSI SQL reserved keywords can
 {% highlight sql %}
 -- This CREATE TABLE fails with ParseException because of the illegal identifier name a.b
 CREATE TABLE test (a.b int);
+-- output
 org.apache.spark.sql.catalyst.parser.ParseException:
 no viable alternative at input 'CREATE TABLE test (a.'(line 1, pos 20)
 
@@ -72,6 +73,7 @@ CREATE TABLE test (`a.b` int);
 
 -- This CREATE TABLE fails with ParseException because special character ` is not escaped
 CREATE TABLE test1 (`a`b` int);
+-- output
 org.apache.spark.sql.catalyst.parser.ParseException:
 no viable alternative at input 'CREATE TABLE test (`a`b`'(line 1, pos 23)
 

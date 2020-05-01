@@ -61,8 +61,8 @@ USE userdb;
 CREATE VIEW user1 AS SELECT id, salary FROM default.employee WHERE name = 'user1';
 CREATE VIEW user2 AS SELECT id, salary FROM default.employee WHERE name = 'user2';
 USE default;
-CREATE GLOBAL TEMP VIEW temp1 AS SELECT 1 as col1;
-CREATE TEMP VIEW temp2 AS SELECT 1 as col1;
+CREATE GLOBAL TEMP VIEW temp1 AS SELECT 1 AS col1;
+CREATE TEMP VIEW temp2 AS SELECT 1 AS col1;
 
 -- List all views in default database
 SHOW VIEWS;

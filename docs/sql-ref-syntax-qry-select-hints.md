@@ -23,6 +23,12 @@ license: |
 
 Join Hints allow users to suggest the join strategy that Spark should use. Prior to Spark 3.0, only the `BROADCAST` Join Hint was supported. `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL` Joint Hints support was added in 3.0. When different join strategy hints are specified on both sides of a join, Spark prioritizes hints in the following order: `BROADCAST` over `MERGE` over `SHUFFLE_HASH` over `SHUFFLE_REPLICATE_NL`. When both sides are specified with the `BROADCAST` hint or the `SHUFFLE_HASH` hint, Spark will pick the build side based on the join type and the sizes of the relations. Since a given strategy may not support all join types, Spark is not guaranteed to use the join strategy suggested by the hint.
 
+### Syntax
+
+{% highlight sql %}
+/*+ join_hint [ , ... ] */
+{% endhighlight %}
+
 ### Join Hints Types
 
 <dl>
@@ -78,7 +84,7 @@ SELECT /*+ SHUFFLE_REPLICATE_NL(t1) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.ke
 -- Spark will issue Warning in the following example
 -- org.apache.spark.sql.catalyst.analysis.HintErrorLogger: Hint (strategy=merge)
 -- is overridden by another hint and will not take effect.
-SELECT /*+ BROADCAST(t1) */ /*+ MERGE(t1, t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
+SELECT /*+ BROADCAST(t1), MERGE(t1, t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
 {% endhighlight %}
 
 ### Related Statements
