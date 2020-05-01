@@ -1695,7 +1695,7 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def innerChildren: Seq[Expression] = Seq(str, len)
+  override def exprsReplaced: Seq[Expression] = Seq(str, len)
 }
 
 /**
@@ -1717,7 +1717,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def innerChildren: Seq[Expression] = Seq(str, len)
+  override def exprsReplaced: Seq[Expression] = Seq(str, len)
 }
 
 /**

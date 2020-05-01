@@ -143,9 +143,7 @@ package object util extends Logging {
   }
 
   def toPrettySQL(e: Expression): String = e match {
-    case r: RuntimeReplaceable =>
-      r.withPrettyChildren(r.innerChildren.map(usePrettyExpression))
-      r.sql
+    case r: RuntimeReplaceable => r.prettySQL
     case _ => usePrettyExpression(e).sql
   }
 
