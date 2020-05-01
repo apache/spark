@@ -127,4 +127,4 @@ select extract('second', c) from t;
 select c - i from t;
 select year(c - i) from t;
 select extract(year from c - i) from t;
-select extract(month from to_timestamp(cast(c as string)) - i) from t;
+select extract(month from to_timestamp(c) - i) from t;

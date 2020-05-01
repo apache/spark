@@ -800,8 +800,8 @@ struct<extract(year FROM CAST(c - i AS STRING)):int>
 
 
 -- !query
-select extract(month from to_timestamp(cast(c as string)) - i) from t
+select extract(month from to_timestamp(c) - i) from t
 -- !query schema
-struct<extract(month FROM CAST(to_timestamp(CAST(c AS STRING)) - i AS TIMESTAMP)):int>
+struct<extract(month FROM CAST(to_timestamp(c) - i AS TIMESTAMP)):int>
 -- !query output
 8
