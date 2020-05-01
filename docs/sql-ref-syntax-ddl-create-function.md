@@ -28,8 +28,8 @@ all sessions. The resources specified in the `USING` clause are made available
 to all executors when they are executed for the first time. In addition to the
 SQL interface, spark allows users to create custom user defined scalar and
 aggregate functions using Scala, Python and Java APIs. Please refer to 
-[scalar_functions](sql-getting-started.html#scalar-functions) and 
-[aggregate functions](sql-getting-started#aggregations) for more information.
+[Scalar UDFs](sql-ref-functions-udf-scalar.html) and
+[UDAFs](sql-ref-functions-udf-aggregate.html) for more information.
 
 ### Syntax
 

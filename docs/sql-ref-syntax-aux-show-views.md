@@ -51,7 +51,7 @@ SHOW VIEWS [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
   </dd>
 </dl>
 
-### Example
+### Examples
 {% highlight sql %}
 -- Create views in different databases, also create global/local temp views.
 CREATE VIEW sam AS SELECT id, salary FROM employee WHERE name = 'sam';

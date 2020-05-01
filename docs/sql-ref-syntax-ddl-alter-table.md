@@ -66,7 +66,7 @@ ALTER TABLE table_identifier partition_spec RENAME TO partition_spec
 #### Syntax
 
 {% highlight sql %}
-ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , col_spec ... ] )
+ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
 {% endhighlight %}
 
 #### Parameters
@@ -84,7 +84,7 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , col_spec ... ] )
 
 <dl>
   <dt><code><em>COLUMNS ( col_spec )</em></code></dt>
-  <dd>Specifies the columns to be added to be renamed.</dd>
+  <dd>Specifies the columns to be added.</dd>
 </dl>
 
 ### ALTER OR CHANGE COLUMN
