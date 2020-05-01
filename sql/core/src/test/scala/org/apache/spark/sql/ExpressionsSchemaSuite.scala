@@ -156,14 +156,16 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       stringToFile(resultFile, goldenOutput)
     }
 
+    val outputSize = outputs.size
     val expectedOutputs: Seq[QueryOutput] = {
-      val goldenOutput = fileToString(resultFile)
-      val lines = goldenOutput.split("\n")
+      val expectedGoldenOutput = fileToString(resultFile)
+      val lines = expectedGoldenOutput.split("\n")
+      val expectedSize = lines.size
 
       // The header of golden file has one line, plus four lines of the summary and three
       // lines of the header of schema table.
-      assert(lines.size == outputs.size + 8,
-        s"Expected ${outputs.size + 8} blocks in result file but got ${lines.size}. " +
+      assert(expectedSize == outputSize + 8,
+        s"Expected $outputSize blocks in result file but got $outputSize. " +
           s"Try regenerate the result files.")
 
       Seq.tabulate(outputs.size) { i =>
@@ -177,7 +179,8 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     }
 
     // Compare results.
-    assert(expectedOutputs.size == outputs.size, s"Number of queries not equals")
+    assert(expectedOutputs.size == outputSize,
+      "The number of queries not equals the number of expected queries.")
 
     outputs.zip(expectedOutputs).foreach { case (output, expected) =>
       assert(expected.sql == output.sql, "SQL query did not match")
