@@ -104,7 +104,8 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
     "select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t")
 
   testMetadataOnly(
-    "SPARK-31590 The filter used by Metadata-only queries should not have Unevaluable",
+    "SPARK-31590 " +
+      "The filter used by Metadata-only queries should filter out all the unevaluable expr",
     """
       |SELECT partcol1, MAX(partcol2) AS partcol2
       |FROM srcpart
@@ -112,7 +113,7 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
       |  SELECT MAX(partcol1)
       |  FROM srcpart
       |)
-      |AND partcol2= 'event'
+      |AND partcol2 = 'event'
       |GROUP BY partcol1
       |""".stripMargin
   )
