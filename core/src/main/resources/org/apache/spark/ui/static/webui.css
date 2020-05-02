@@ -353,6 +353,22 @@ a.expandbutton {
   width: 180px;
 }
 
+.executor-jvm-om-off-heap-memory-checkbox-div {
+  width: 480px;
+}
+
+.executor-on-off-heap-execution-memory-checkbox-div {
+  width: 480px;
+}
+
+.executor-on-off-heap-storage-memory-checkbox-div {
+  width: 480px;
+}
+
+.executor-direct-mapped-pool-memory-checkbox-div {
+  width: 480px;
+}
+
 #active-tasks-table th {
   border-top: 1px solid #dddddd;
   border-bottom: 1px solid #dddddd;

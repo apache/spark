@@ -255,6 +255,13 @@ function reselectCheckboxesBasedOnTaskTableState() {
                 allChecked = false;
             }
         }
+        for (var k = 0; k < executorOptionalColumns.length; k++) {
+            if (executorSummaryTableSelector.column(executorOptionalColumns[k]).visible()) {
+                $("#executor-box-"+optionalColumns[k]).prop('checked', true);
+            } else {
+                allChecked = false;
+            }
+        }
         if (allChecked) {
             $("#box-0").prop('checked', true);
         }
@@ -278,6 +285,9 @@ var taskSummaryMetricsDataTable;
 var optionalColumns = [11, 12, 13, 14, 15, 16, 17, 21];
 var taskTableSelector;
 
+var executorOptionalColumns = [15, 16, 17, 18];
+var executorSummaryTableSelector;
+
 $(document).ready(function () {
     setDataTableDefaults();
 
@@ -288,14 +298,18 @@ $(document).ready(function () {
         "</a></div>" +
         "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
         "<div id='select_all' class='select-all-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
-        "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11'> Scheduler Delay</div>" +
-        "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Task Deserialization Time</div>" +
-        "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13'> Shuffle Read Blocked Time</div>" +
-        "<div id='shuffle_remote_reads' class='shuffle-remote-reads-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-14' data-column='14'> Shuffle Remote Reads</div>" +
-        "<div id='shuffle_write_time' class='shuffle-write-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-21' data-column='21'> Shuffle Write Time</div>" +
-        "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15'> Result Serialization Time</div>" +
-        "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16'> Getting Result Time</div>" +
-        "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17'> Peak Execution Memory</div>" +
+        "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11' column-type='task'> Scheduler Delay</div>" +
+        "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12' column-type='task'> Task Deserialization Time</div>" +
+        "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13' column-type='task'> Shuffle Read Blocked Time</div>" +
+        "<div id='shuffle_remote_reads' class='shuffle-remote-reads-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-14' data-column='14' column-type='task'> Shuffle Remote Reads</div>" +
+        "<div id='shuffle_write_time' class='shuffle-write-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-21' data-column='21' column-type='task'> Shuffle Write Time</div>" +
+        "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15' column-type='task'> Result Serialization Time</div>" +
+        "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16' column-type='task'> Getting Result Time</div>" +
+        "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17' column-type='task'> Peak Execution Memory</div>" +
+        "<div id='executor_jvm_on_off_heap_memory' class='executor-jvm-om-off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-15'  data-column='15' column-type='executor'> Executor  JVMOnHeapMemory / JVMOffHeapMemory</div>" +
+        "<div id='executor_on_off_heap_execution_memory' class='executor-on-off-heap-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-16' data-column='16' column-type='executor'> Executor  OnHeapExecutionMemory / OffHeapExecutionMemory</div>" +
+        "<div id='executor_on_off_heap_storage_memory' class='executor-on-off-heap-storage-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-17' data-column='17' column-type='executor'> Executor OnHeapStorageMemory / OffHeapStorageMemory</div>" +
+        "<div id='executor_direct_mapped_pool_memory' class='executor-direct-mapped-pool-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-18' data-column='18' column-type='executor'> Executor DirectPoolMemory / MappedPoolMemory</div>" +
         "</div>");
 
     $('#scheduler_delay').attr("data-toggle", "tooltip")
@@ -472,13 +486,20 @@ $(document).ready(function () {
                              }
                          }
                     ],
+                    "columnDefs": [
+                        { "visible": false, "targets": 15 },
+                        { "visible": false, "targets": 16 },
+                        { "visible": false, "targets": 17 },
+                        { "visible": false, "targets": 18 }
+                    ],
+                    "deferRender": true,
                     "order": [[0, "asc"]],
                     "bAutoWidth": false,
                     "oLanguage": {
                         "sEmptyTable": "No data to show yet"
                     }
                 };
-                var executorSummaryTableSelector =
+                executorSummaryTableSelector =
                     $("#summary-executor-table").DataTable(executorSummaryConf);
                 $('#parent-container [data-toggle="tooltip"]').tooltip();
 
@@ -930,30 +951,39 @@ $(document).ready(function () {
                     var para = $(this).attr('data-column');
                     if (para == "0") {
                         var allColumns = taskTableSelector.columns(optionalColumns);
+                        var executorAllColumns = executorSummaryTableSelector.columns(executorOptionalColumns);
                         if ($(this).is(":checked")) {
                             $(".toggle-vis").prop('checked', true);
                             allColumns.visible(true);
+                            executorAllColumns.visible(true);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableArray);
                         } else {
                             $(".toggle-vis").prop('checked', false);
                             allColumns.visible(false);
+                            executorAllColumns.visible(false);
                             var taskSummaryMetricsTableFilteredArray =
                                 taskSummaryMetricsTableArray.filter(row => row.checkboxId < 11);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
                         }
                     } else {
-                        var column = taskTableSelector.column(para);
-                        // Toggle the visibility
-                        column.visible(!column.visible());
-                        var taskSummaryMetricsTableFilteredArray = [];
-                        if ($(this).is(":checked")) {
-                            taskSummaryMetricsTableCurrentStateArray.push(taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == para)[0]);
-                            taskSummaryMetricsTableFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
+                        var columnType = $(this).attr("column-type");
+                        if(columnType == 'task') {
+                            var column = taskTableSelector.column(para);
+                            // Toggle the visibility
+                            column.visible(!column.visible());
+                            var taskSummaryMetricsTableFilteredArray = [];
+                            if ($(this).is(":checked")) {
+                                taskSummaryMetricsTableCurrentStateArray.push(taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == para)[0]);
+                                taskSummaryMetricsTableFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
+                            } else {
+                                taskSummaryMetricsTableFilteredArray =
+                                    taskSummaryMetricsTableCurrentStateArray.filter(row => (row.checkboxId).toString() != para);
+                            }
+                            createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
                         } else {
-                            taskSummaryMetricsTableFilteredArray =
-                                taskSummaryMetricsTableCurrentStateArray.filter(row => (row.checkboxId).toString() != para);
+                            var column = executorSummaryTableSelector.column(para);
+                            column.visible(!column.visible());
                         }
-                        createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
                     }
                 });
 
