@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.script
 
 import java.io.OutputStream
+import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
@@ -27,7 +28,7 @@ import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Projection, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, SerializableConfiguration, Utils}
@@ -63,6 +64,7 @@ private[sql] trait ScriptTransformBase extends UnaryExecNode {
     }
 
     if (!proc.isAlive) {
+      proc.waitFor(3000, TimeUnit.MILLISECONDS)
       val exitCode = proc.exitValue()
       if (exitCode != 0) {
         logError(stderrBuffer.toString) // log the stderr circular buffer
