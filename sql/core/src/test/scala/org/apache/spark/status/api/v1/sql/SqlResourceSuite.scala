@@ -34,7 +34,7 @@ object SqlResourceSuite {
   val METADATA_TIME = "metadata time"
   val NUMBER_OF_FILES_READ = "number of files read"
   val SIZE_OF_FILES_READ = "size of files read"
-  val PLAN_DESCRIPTION = "== Physical Plan ==\nCollectLimit (3)\n+- * Filter (2)\n +- Scan text ..."
+  val PLAN_DESCRIPTION = "== Physical Plan ==\nCollectLimit (3)\n+- * Filter (2)\n +- Scan text..."
   val DESCRIPTION = "csv at MyDataFrames.scala:57"
 
   val edges: Seq[SparkPlanGraphEdge] =
@@ -139,7 +139,8 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
         sqlExecutionUIData, Seq.empty, nodeIdAndWSCGIdMap, false, false)
-    verifyExpectedExecutionData(executionData, edges = Seq.empty, nodes = Seq.empty, planDescription = "")
+    verifyExpectedExecutionData(executionData, edges = Seq.empty,
+      nodes = Seq.empty, planDescription = "")
   }
 
   test("Prepare ExecutionData when details = true and planDescription = false") {
@@ -166,7 +167,8 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Prepare ExecutionData when details = true and planDescription = false and WSCG = off") {
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, edges, Map.empty, true, false)
+      sqlResource invokePrivate prepareExecutionData(
+        sqlExecutionUIData, edges, Map.empty, true, false)
     verifyExpectedExecutionData(
       executionData,
       nodes = getExpectedNodesWhenWholeStageCodegenIsOff(),
