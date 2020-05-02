@@ -44,15 +44,21 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
 @Since("1.2.0")
 class HashingTF @Since("3.0.0") (
     @Since("1.4.0") override val uid: String,
-    private[ml] val hashFunc: Any => Int)
+    private[ml] val hashFuncVersion: Int)
   extends Transformer with HasInputCol with HasOutputCol with HasNumFeatures
     with DefaultParamsWritable {
 
+  @transient lazy val hashFunc = hashFuncVersion match {
+    case HashingTF.HASH_FUNC_VERSION_1 => OldHashingTF.murmur3Hash _
+    case HashingTF.HASH_FUNC_VERSION_2 => FeatureHasher.murmur3Hash _
+    case _ => throw new IllegalArgumentException("Illegal hash function version setting.")
+  }
+
   @Since("1.2.0")
-  def this() = this(Identifiable.randomUID("hashingTF"), hashFunc = FeatureHasher.murmur3Hash)
+  def this() = this(Identifiable.randomUID("hashingTF"), HashingTF.HASH_FUNC_VERSION_2)
 
   @Since("1.4.0")
-  def this(uid: String) = this(uid, hashFunc = FeatureHasher.murmur3Hash)
+  def this(uid: String) = this(uid, hashFuncVersion = HashingTF.HASH_FUNC_VERSION_2)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -140,6 +146,9 @@ class HashingTF @Since("3.0.0") (
 @Since("1.6.0")
 object HashingTF extends DefaultParamsReadable[HashingTF] {
 
+  private[ml] val HASH_FUNC_VERSION_1 = 1
+  private[ml] val HASH_FUNC_VERSION_2 = 2
+
   private class HashingTFReader extends MLReader[HashingTF] {
 
     private val className = classOf[HashingTF].getName
@@ -151,12 +160,12 @@ object HashingTF extends DefaultParamsReadable[HashingTF] {
       // Previous `HashingTF` uses `mllib.feature.HashingTF.murmur3Hash`, but new `HashingTF` uses
       // `ml.Feature.FeatureHasher.murmur3Hash`.
       val (majorVersion, _) = majorMinorVersion(metadata.sparkVersion)
-      val hashFunc = if (majorVersion < 3) {
-        OldHashingTF.murmur3Hash _
+      val hashFuncVersion = if (majorVersion < 3) {
+        HASH_FUNC_VERSION_1
       } else {
-        FeatureHasher.murmur3Hash _
+        HASH_FUNC_VERSION_2
       }
-      val hashingTF = new HashingTF(metadata.uid, hashFunc = hashFunc)
+      val hashingTF = new HashingTF(metadata.uid, hashFuncVersion = hashFuncVersion)
       metadata.getAndSetParams(hashingTF)
       hashingTF
     }
