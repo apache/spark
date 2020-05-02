@@ -152,6 +152,8 @@ private[spark] class ApplicationMaster(
   // In cluster mode, used to tell the AM when the user's SparkContext has been initialized.
   private val sparkContextPromise = Promise[SparkContext]()
 
+  private val defaultStagingDir = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
+
   /**
    * Load the list of localized files set by the client, used when launching executors. This should
    * be called in a context where the needed credentials to access HDFS are available.
@@ -254,7 +256,7 @@ private[spark] class ApplicationMaster(
           // we only want to unregister if we don't want the RM to retry
           if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
             unregister(finalStatus, finalMsg)
-            cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+            cleanupStagingDir(defaultStagingDir)
           }
         }
       }
@@ -727,6 +729,10 @@ private[spark] class ApplicationMaster(
             mainMethod.invoke(null, userArgs.toArray)
             finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
             logDebug("Done running user class")
+            if (!unregistered) {
+              unregister(finalStatus, finalMsg)
+              cleanupStagingDir(defaultStagingDir)
+            }
           }
         } catch {
           case e: InvocationTargetException =>
