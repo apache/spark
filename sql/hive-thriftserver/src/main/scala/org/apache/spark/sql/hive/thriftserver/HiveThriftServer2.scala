@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.hadoop.hive.common.ServerUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
@@ -101,6 +102,8 @@ object HiveThriftServer2 extends Logging {
       SparkSQLEnv.sqlContext.sessionState.newHadoopConf())
 
     try {
+      // Cleanup the scratch dir before starting
+      ServerUtils.cleanUpScratchDir(executionHive.conf)
       val server = new HiveThriftServer2(SparkSQLEnv.sqlContext)
       server.init(executionHive.conf)
       server.start()
