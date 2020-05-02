@@ -499,6 +499,7 @@ private[spark] case class ServerInfo(
     val threadPool = server.getThreadPool
     threadPool match {
       case pool: QueuedThreadPool =>
+        // Workaround for SPARK-30385 to avoid Jetty's acceptor thread shrink.
         pool.setIdleTimeout(0)
       case _ =>
     }
