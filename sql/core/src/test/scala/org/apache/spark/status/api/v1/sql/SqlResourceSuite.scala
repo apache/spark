@@ -22,7 +22,7 @@ import java.util.Date
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
-import org.apache.spark.sql.execution.ui.{SQLExecutionUIData, SQLPlanMetric}
+import org.apache.spark.sql.execution.ui.{SparkPlanGraphEdge, SQLExecutionUIData, SQLPlanMetric}
 
 object SqlResourceSuite {
 
@@ -36,6 +36,9 @@ object SqlResourceSuite {
   val SIZE_OF_FILES_READ = "size of files read"
   val PLAN_DESCRIPTION = "== Physical Plan ==\nCollectLimit (3)\n+- * Filter (2)\n +- Scan text ..."
   val DESCRIPTION = "csv at MyDataFrames.scala:57"
+
+  val edges: Seq[SparkPlanGraphEdge] =
+    Seq(SparkPlanGraphEdge(3, 2), SparkPlanGraphEdge(2, 1), SparkPlanGraphEdge(1, 0))
 
   private def getSQLExecutionUIData(): SQLExecutionUIData = {
     def getMetrics(): Seq[SQLPlanMetric] = {
@@ -74,37 +77,37 @@ object SqlResourceSuite {
     )
   }
 
-  private def getExpectedMetricDetails(): Seq[MetricDetails] = {
-    val metricDetails = MetricDetails(1, WHOLE_STAGE_CODEGEN_1,
+  private def getNodes(): Seq[Node] = {
+    val node = Node(1, WHOLE_STAGE_CODEGEN_1,
       wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, "0 ms")))
-    val metricDetails2 = MetricDetails(2, FILTER,
+    val node2 = Node(2, FILTER,
       wholeStageCodegenId = Some(1), metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
-    val metricDetails3 = MetricDetails(3, SCAN_TEXT, wholeStageCodegenId = Some(1),
+    val node3 = Node(3, SCAN_TEXT, wholeStageCodegenId = Some(1),
       metrics = Seq(Metric(METADATA_TIME, "2 ms"),
         Metric(NUMBER_OF_FILES_READ, "1"),
         Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
         Metric(SIZE_OF_FILES_READ, "330.0 B")))
 
     // reverse order because of supporting execution order by aligning with Spark-UI
-    Seq(metricDetails3, metricDetails2, metricDetails)
+    Seq(node3, node2, node)
   }
 
-  private def getExpectedMetricDetailsWhenWholeStageCodegenIsOff(): Seq[MetricDetails] = {
-    val metricDetails =
-      MetricDetails(1, WHOLE_STAGE_CODEGEN_1, metrics = Seq(Metric(DURATION, "0 ms")))
-    val metricDetails2 = MetricDetails(2, FILTER, metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
-    val metricDetails3 = MetricDetails(3, SCAN_TEXT,
+  private def getExpectedNodesWhenWholeStageCodegenIsOff(): Seq[Node] = {
+    val node = Node(1, WHOLE_STAGE_CODEGEN_1, metrics = Seq(Metric(DURATION, "0 ms")))
+    val node2 = Node(2, FILTER, metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
+    val node3 = Node(3, SCAN_TEXT,
       metrics = Seq(Metric(METADATA_TIME, "2 ms"),
         Metric(NUMBER_OF_FILES_READ, "1"),
         Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
         Metric(SIZE_OF_FILES_READ, "330.0 B")))
 
     // reverse order because of supporting execution order by aligning with Spark-UI
-    Seq(metricDetails3, metricDetails2, metricDetails)
+    Seq(node3, node2, node)
   }
 
   private def verifyExpectedExecutionData(executionData: ExecutionData,
-                                          metricDetails: Seq[MetricDetails],
+                                          nodes: Seq[Node],
+                                          edges: Seq[SparkPlanGraphEdge],
                                           planDescription: String): Unit = {
     assert(executionData.id == 0)
     assert(executionData.status == "COMPLETED")
@@ -115,7 +118,8 @@ object SqlResourceSuite {
     assert(executionData.successJobIds == Seq[Int](0, 1))
     assert(executionData.runningJobIds == Seq[Int]())
     assert(executionData.failedJobIds == Seq.empty)
-    assert(executionData.metricDetails == metricDetails)
+    assert(executionData.nodes == nodes)
+    assert(executionData.edges == edges)
   }
 }
 
@@ -134,36 +138,39 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = false and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, nodeIdAndWSCGIdMap, false, false)
-    verifyExpectedExecutionData(executionData, metricDetails = Seq.empty, planDescription = "")
+        sqlExecutionUIData, nodeIdAndWSCGIdMap, Seq.empty, false, false)
+    verifyExpectedExecutionData(executionData, nodes = Seq.empty, edges = Seq.empty, planDescription = "")
   }
 
   test("Prepare ExecutionData when details = true and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, nodeIdAndWSCGIdMap, true, false)
+        sqlExecutionUIData, nodeIdAndWSCGIdMap, edges, true, false)
     verifyExpectedExecutionData(
       executionData,
-      metricDetails = getExpectedMetricDetails(),
+      nodes = getNodes(),
+      edges,
       planDescription = "")
   }
 
   test("Prepare ExecutionData when details = true and planDescription = true") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, nodeIdAndWSCGIdMap, true, true)
+        sqlExecutionUIData, nodeIdAndWSCGIdMap, edges, true, true)
     verifyExpectedExecutionData(
       executionData,
-      metricDetails = getExpectedMetricDetails(),
+      nodes = getNodes(),
+      edges = edges,
       planDescription = PLAN_DESCRIPTION)
   }
 
   test("Prepare ExecutionData when details = true and planDescription = false and WSCG = off") {
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, Map.empty, true, false)
+      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, Map.empty, edges, true, false)
     verifyExpectedExecutionData(
       executionData,
-      metricDetails = getExpectedMetricDetailsWhenWholeStageCodegenIsOff(),
+      nodes = getExpectedNodesWhenWholeStageCodegenIsOff(),
+      edges = edges,
       planDescription = "")
   }
 

@@ -231,7 +231,7 @@ class SparkPlanGraphCluster(
  * Represent an edge in the SparkPlan tree. `fromId` is the child node id, and `toId` is the parent
  * node id.
  */
-private[ui] case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
+case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
 
   def makeDotEdge: String = s"""  $fromId->$toId;\n"""
 }

@@ -24,7 +24,7 @@ import javax.ws.rs.core.MediaType
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SQLAppStatusStore, SQLExecutionUIData, SQLPlanMetric}
+import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SQLAppStatusStore, SQLExecutionUIData, SQLPlanMetric}
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -40,8 +40,11 @@ private[v1] class SqlResource extends BaseAppResource {
       @DefaultValue("20") @QueryParam("length") length: Int): Seq[ExecutionData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      sqlStore.executionsList(offset, length).map(prepareExecutionData(_,
-        details = details, planDescription = planDescription))
+      sqlStore.executionsList(offset, length).map { exec =>
+        val (edges, nodeIdAndWSCGIdMap) = computeDetailsIfTrue(sqlStore, exec.executionId, details)
+        prepareExecutionData(exec, nodeIdAndWSCGIdMap, edges,
+          details = details, planDescription = planDescription)
+      }
     }
   }
 
@@ -54,19 +57,31 @@ private[v1] class SqlResource extends BaseAppResource {
       planDescription: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      val graph = sqlStore.planGraph(execId)
-      val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = getNodeIdAndWSCGIdMap(graph)
+      val (edges, nodeIdAndWSCGIdMap) = computeDetailsIfTrue(sqlStore, execId, details)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData(_, nodeIdAndWSCGIdMap, details, planDescription))
+        .map(prepareExecutionData(_, nodeIdAndWSCGIdMap, edges, details, planDescription))
         .getOrElse(throw new NotFoundException("unknown execution id: " + execId))
+    }
+  }
+
+  private def computeDetailsIfTrue(sqlStore: SQLAppStatusStore,
+                               executionId: Long,
+                               details: Boolean):
+  (Seq[SparkPlanGraphEdge], Map[Long, Option[Long]]) = {
+    if (details) {
+      val graph = sqlStore.planGraph(executionId)
+      val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = getNodeIdAndWSCGIdMap(graph)
+      (graph.edges, nodeIdAndWSCGIdMap)
+    } else {
+      (Seq.empty, Map.empty)
     }
   }
 
   private def printableMetrics(
       sqlPlanMetrics: Seq[SQLPlanMetric],
       metricValues: Map[Long, String],
-      nodeIdAndWSCGIdMap: Map[Long, Option[Long]]): Seq[MetricDetails] = {
+      nodeIdAndWSCGIdMap: Map[Long, Option[Long]]): Seq[Node] = {
 
     def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
                   metricName: String): Option[Metric] = {
@@ -83,18 +98,19 @@ private[v1] class SqlResource extends BaseAppResource {
     val metrics = groupedMap.mapValues[Seq[Metric]](sqlPlanMetrics =>
       sqlPlanMetrics.flatMap(m => getMetric(metricValues, m.accumulatorId, m.name.trim)))
 
-    val metricDetails = metrics.map {
+    val nodes = metrics.map {
       case ((nodeId: Long, nodeName: String), metrics: Seq[Metric]) =>
         val wholeStageCodegenId = nodeIdAndWSCGIdMap.get(nodeId).flatten
-        MetricDetails(nodeId = nodeId, nodeName = nodeName.trim, wholeStageCodegenId, metrics)
+        Node(nodeId = nodeId, nodeName = nodeName.trim, wholeStageCodegenId, metrics)
     }.toSeq
 
-    metricDetails.sortBy(_.nodeId).reverse
+    nodes.sortBy(_.nodeId).reverse
   }
 
   private def prepareExecutionData(
     exec: SQLExecutionUIData,
     nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map.empty,
+    sparkPlanGraphEdges: Seq[SparkPlanGraphEdge] = Seq.empty,
     details: Boolean,
     planDescription: Boolean): ExecutionData = {
 
@@ -122,12 +138,13 @@ private[v1] class SqlResource extends BaseAppResource {
 
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val planDetails = if (details && planDescription) exec.physicalPlanDescription else ""
-    val metrics =
+    val nodes =
       if (details) {
         printableMetrics(exec.metrics, exec.metricValues, nodeIdAndWSCGIdMap)
       } else {
         Seq.empty
       }
+    val edges = if (details) sparkPlanGraphEdges else Seq.empty
 
     new ExecutionData(
       exec.executionId,
@@ -139,7 +156,8 @@ private[v1] class SqlResource extends BaseAppResource {
       running,
       completed,
       failed,
-      metrics)
+      nodes,
+      edges)
   }
 
   private def getNodeIdAndWSCGIdMap(graph: SparkPlanGraph): Map[Long, Option[Long]] = {

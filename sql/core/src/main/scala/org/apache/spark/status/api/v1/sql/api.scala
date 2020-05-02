@@ -18,6 +18,8 @@ package org.apache.spark.status.api.v1.sql
 
 import java.util.Date
 
+import org.apache.spark.sql.execution.ui.SparkPlanGraphEdge
+
 class ExecutionData private[spark] (
     val id: Long,
     val status: String,
@@ -28,9 +30,10 @@ class ExecutionData private[spark] (
     val runningJobIds: Seq[Int],
     val successJobIds: Seq[Int],
     val failedJobIds: Seq[Int],
-    val metricDetails: Seq[MetricDetails])
+    val nodes: Seq[Node],
+    val edges: Seq[SparkPlanGraphEdge])
 
-case class MetricDetails private[spark] (
+case class Node private[spark](
     nodeId: Long,
     nodeName: String,
     wholeStageCodegenId: Option[Long] = None,
