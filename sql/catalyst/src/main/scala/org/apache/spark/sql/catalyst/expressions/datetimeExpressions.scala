@@ -1198,6 +1198,18 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
+ * Subtract an interval from timestamp or date, which is only used to give a pretty sql string
+ * for `datetime - interval` operations
+ */
+case class DatetimeSub(
+    start: Expression,
+    interval: Expression,
+    child: Expression) extends RuntimeReplaceable {
+  override def toString: String = s"$start - $interval"
+  override def sql: String = s"${start.sql} - ${interval.sql}"
+}
+
+/**
  * Adds date and an interval.
  *
  * When ansi mode is on, the microseconds part of interval needs to be 0, otherwise a runtime
@@ -1327,41 +1339,6 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
         s"""$dtu.fromUTCTime($timestamp, $format.toString())"""
       })
     }
-  }
-}
-
-/**
- * Subtracts an interval from timestamp.
- */
-case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
-
-  def this(start: Expression, interval: Expression) = this(start, interval, None)
-
-  override def left: Expression = start
-  override def right: Expression = interval
-
-  override def toString: String = s"$left - $right"
-  override def sql: String = s"${left.sql} - ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
-
-  override def dataType: DataType = TimestampType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override def nullSafeEval(start: Any, interval: Any): Any = {
-    val itvl = interval.asInstanceOf[CalendarInterval]
-    DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.days, 0 - itvl.microseconds, zoneId)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.days, 0 - $i.microseconds, $zid)"""
-    })
   }
 }
 

@@ -278,7 +278,7 @@ class Analyzer(
    * 1. if both side are interval, stays the same;
    * 2. else if the left side is date and the right side is interval,
    *    turns it to [[DateAddInterval(l, -r)]];
-   * 3. else if the right side is an interval, turns it to [[TimeSub]];
+   * 3. else if the right side is an interval, turns it to [[TimeAdd(l, -r)]];
    * 4. else if one side is timestamp, turns it to [[SubtractTimestamps]];
    * 5. else if the right side is date, turns it to [[DateDiff]]/[[SubtractDates]];
    * 6. else if the left side is date, turns it to [[DateSub]];
@@ -307,8 +307,10 @@ class Analyzer(
         }
         case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, CalendarIntervalType) => s
-          case (DateType, CalendarIntervalType) => DateAddInterval(l, UnaryMinus(r))
-          case (_, CalendarIntervalType) => Cast(TimeSub(l, r), l.dataType)
+          case (DateType, CalendarIntervalType) =>
+            DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r)))
+          case (_, CalendarIntervalType) =>
+            Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r))), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
@@ -327,6 +329,7 @@ class Analyzer(
       }
     }
   }
+
   /**
    * Substitute child plan with WindowSpecDefinitions.
    */

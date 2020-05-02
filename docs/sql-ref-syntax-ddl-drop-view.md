@@ -46,7 +46,7 @@ DROP VIEW [ IF EXISTS ] view_identifier
   </dd>
 </dl>
 
-### Example
+### Examples
 
 {% highlight sql %}
 -- Assumes a view named `employeeView` exists.

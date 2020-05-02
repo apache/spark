@@ -81,64 +81,64 @@ INSERT INTO person VALUES
 
 -- Sort rows by age. By default rows are sorted in ascending manner with NULL FIRST.
 SELECT name, age FROM person ORDER BY age;
-  +-----+----+
-  | name| age|
-  +-----+----+
-  |Jerry|null|
-  | Mary|null|
-  | John|  30|
-  |  Dan|  50|
-  | Mike|  80|
-  +-----+----+
++-----+----+
+| name| age|
++-----+----+
+|Jerry|null|
+| Mary|null|
+| John|  30|
+|  Dan|  50|
+| Mike|  80|
++-----+----+
 
 -- Sort rows in ascending manner keeping null values to be last.
 SELECT name, age FROM person ORDER BY age NULLS LAST;
-  +-----+----+
-  | name| age|
-  +-----+----+
-  | John|  30|
-  |  Dan|  50|
-  | Mike|  80|
-  | Mary|null|
-  |Jerry|null|
-  +-----+----+
++-----+----+
+| name| age|
++-----+----+
+| John|  30|
+|  Dan|  50|
+| Mike|  80|
+| Mary|null|
+|Jerry|null|
++-----+----+
 
 -- Sort rows by age in descending manner, which defaults to NULL LAST.
 SELECT name, age FROM person ORDER BY age DESC;
-  +-----+----+
-  | name| age|
-  +-----+----+
-  | Mike|  80|
-  |  Dan|  50|
-  | John|  30|
-  |Jerry|null|
-  | Mary|null|
-  +-----+----+
++-----+----+
+| name| age|
++-----+----+
+| Mike|  80|
+|  Dan|  50|
+| John|  30|
+|Jerry|null|
+| Mary|null|
++-----+----+
 
 -- Sort rows in ascending manner keeping null values to be first.
 SELECT name, age FROM person ORDER BY age DESC NULLS FIRST;
-  +-----+----+
-  | name| age|
-  +-----+----+
-  |Jerry|null|
-  | Mary|null|
-  | Mike|  80|
-  |  Dan|  50|
-  | John|  30|
-  +-----+----+
++-----+----+
+| name| age|
++-----+----+
+|Jerry|null|
+| Mary|null|
+| Mike|  80|
+|  Dan|  50|
+| John|  30|
++-----+----+
 
 -- Sort rows based on more than one column with each column having different
 -- sort direction.
 SELECT * FROM person ORDER BY name ASC, age DESC;
-  +---+-----+----+
-  | id| name| age|
-  +---+-----+----+
-  |500|  Dan|  50|
-  |400|Jerry|null|
-  |100| John|  30|
-  |200| Mary|null|
-  |300| Mike|  80|
-  +---+-----+----+
++---+-----+----+
+| id| name| age|
++---+-----+----+
+|500|  Dan|  50|
+|400|Jerry|null|
+|100| John|  30|
+|200| Mary|null|
+|300| Mike|  80|
++---+-----+----+
 {% endhighlight %}
 
 ### Related Statements

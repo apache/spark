@@ -62,11 +62,11 @@ SET;
 
 -- List the value of specified property key.
 SET spark.sql.variable.substitute;
-  +-----------------------------+-----+
-  |                          key|value|
-  +-----------------------------+-----+
-  |spark.sql.variable.substitute|false|
-  +-----------------------------+-----+
++-----------------------------+-----+
+|                          key|value|
++-----------------------------+-----+
+|spark.sql.variable.substitute|false|
++-----------------------------+-----+
 {% endhighlight %}
 
 ### Related Statements

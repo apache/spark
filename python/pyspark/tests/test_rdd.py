@@ -814,6 +814,68 @@ class RDDTests(ReusedPySparkTestCase):
         rddWithoutRp = self.sc.parallelize(range(10))
         self.assertEqual(rddWithoutRp.getResourceProfile(), None)
 
+    def test_multiple_group_jobs(self):
+        import threading
+        group_a = "job_ids_to_cancel"
+        group_b = "job_ids_to_run"
+
+        threads = []
+        thread_ids = range(4)
+        thread_ids_to_cancel = [i for i in thread_ids if i % 2 == 0]
+        thread_ids_to_run = [i for i in thread_ids if i % 2 != 0]
+
+        # A list which records whether job is cancelled.
+        # The index of the array is the thread index which job run in.
+        is_job_cancelled = [False for _ in thread_ids]
+
+        def run_job(job_group, index):
+            """
+            Executes a job with the group ``job_group``. Each job waits for 3 seconds
+            and then exits.
+            """
+            try:
+                self.sc.parallelize([15]).map(lambda x: time.sleep(x)) \
+                    .collectWithJobGroup(job_group, "test rdd collect with setting job group")
+                is_job_cancelled[index] = False
+            except Exception:
+                # Assume that exception means job cancellation.
+                is_job_cancelled[index] = True
+
+        # Test if job succeeded when not cancelled.
+        run_job(group_a, 0)
+        self.assertFalse(is_job_cancelled[0])
+
+        # Run jobs
+        for i in thread_ids_to_cancel:
+            t = threading.Thread(target=run_job, args=(group_a, i))
+            t.start()
+            threads.append(t)
+
+        for i in thread_ids_to_run:
+            t = threading.Thread(target=run_job, args=(group_b, i))
+            t.start()
+            threads.append(t)
+
+        # Wait to make sure all jobs are executed.
+        time.sleep(3)
+        # And then, cancel one job group.
+        self.sc.cancelJobGroup(group_a)
+
+        # Wait until all threads launching jobs are finished.
+        for t in threads:
+            t.join()
+
+        for i in thread_ids_to_cancel:
+            self.assertTrue(
+                is_job_cancelled[i],
+                "Thread {i}: Job in group A was not cancelled.".format(i=i))
+
+        for i in thread_ids_to_run:
+            self.assertFalse(
+                is_job_cancelled[i],
+                "Thread {i}: Job in group B did not succeeded.".format(i=i))
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.tests.test_rdd import *
