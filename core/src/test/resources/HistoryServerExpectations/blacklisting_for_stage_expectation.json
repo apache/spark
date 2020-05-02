@@ -697,7 +697,15 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true
+      "isBlacklistedForStage" : true,
+      "jvmHeapMemory" : 0,
+      "jvmOffHeapMemory" : 0,
+      "onHeapExecutionMemory" : 0,
+      "offHeapExecutionMemory" : 0,
+      "onHeapStorageMemory" : 0,
+      "offHeapStorageMemory" : 0,
+      "directPoolMemory" : 0,
+      "mappedPoolMemory" : 0
     },
     "1" : {
       "taskTime" : 708,
@@ -714,7 +722,15 @@
       "shuffleWriteRecords" : 10,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false
+      "isBlacklistedForStage" : false,
+      "jvmHeapMemory" : 0,
+      "jvmOffHeapMemory" : 0,
+      "onHeapExecutionMemory" : 0,
+      "offHeapExecutionMemory" : 0,
+      "onHeapStorageMemory" : 0,
+      "offHeapStorageMemory" : 0,
+      "directPoolMemory" : 0,
+      "mappedPoolMemory" : 0
     }
   },
   "killedTasksSummary" : { }
