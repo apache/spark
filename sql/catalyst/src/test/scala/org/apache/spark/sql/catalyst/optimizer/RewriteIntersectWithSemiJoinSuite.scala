@@ -39,8 +39,7 @@ class RewriteIntersectWithSemiJoinSuite extends PlanTest with StatsEstimationTes
     attr("t1.col1") -> rangeColumnStat(10, 0),
     attr("t1.col2") -> rangeColumnStat(1000, 0),
     attr("t2.col1") -> rangeColumnStat(10, 0),
-    attr("t2.col2") -> rangeColumnStat(1000, 0),
-  ))
+    attr("t2.col2") -> rangeColumnStat(1000, 0)))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
   private val nameToColInfo: Map[String, (Attribute, ColumnStat)] =
