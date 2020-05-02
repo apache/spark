@@ -1804,8 +1804,7 @@ private[spark] class BlockManager(
 
     // TODO: We can sort these blocks based on some policy (LRU/blockSize etc)
     //   so that we end up prioritize them over each other
-    val blocksFailedReplication = ThreadUtils.parmap(
-      replicateBlocksInfo, "decommissionRddCacheBlocks", 4) {
+    val blocksFailedReplication = replicateBlocksInfo.map {
       case ReplicateBlock(blockId, existingReplicas, maxReplicas) =>
         val replicatedSuccessfully = replicateBlock(
           blockId,
@@ -1901,6 +1900,9 @@ private[spark] class BlockManager(
    */
   private class BlockManagerDecommissionManager(conf: SparkConf) {
     @volatile private var stopped = false
+    private val sleepInterval = conf.get(
+      config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
+
     private val blockReplicationThread = new Thread {
       override def run(): Unit = {
         while (blockManagerDecommissioning && !stopped) {
@@ -1908,8 +1910,6 @@ private[spark] class BlockManager(
             logDebug("Attempting to replicate all cached RDD blocks")
             decommissionRddCacheBlocks()
             logInfo("Attempt to replicate all cached blocks done")
-            val sleepInterval = conf.get(
-              config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
             Thread.sleep(sleepInterval)
           } catch {
             case _: InterruptedException =>
@@ -1940,7 +1940,7 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
-    // decommissionManager.foreach(_.stop())
+    decommissionManager.foreach(_.stop())
     blockTransferService.close()
     if (blockStoreClient ne blockTransferService) {
       // Closing should be idempotent, but maybe not for the NioBlockTransferService.
