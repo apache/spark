@@ -82,6 +82,4 @@ case class TextScan(
   }
 
   override def hashCode(): Int = super.hashCode()
-
-  override def getMetaData(): Map[String, String] = super.metaData
 }

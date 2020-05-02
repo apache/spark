@@ -66,7 +66,7 @@ case class OrcScan(
   }
 
   override def getMetaData(): Map[String, String] = {
-    super.metaData ++ Map("PushedFilers" -> seqToString(pushedFilters))
+    super.getMetaData() ++ Map("PushedFilers" -> seqToString(pushedFilters))
   }
 
   override def withFilters(

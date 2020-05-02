@@ -95,10 +95,11 @@ trait FileScan extends Scan
 
   override def hashCode(): Int = getClass.hashCode()
 
-  override def description(): String = {
+  def metaData: Map[String, String] = {
     val locationDesc =
       fileIndex.getClass.getSimpleName + fileIndex.rootPaths.mkString("[", ", ", "]")
    Map(
+      "Format" -> s"${this.getClass.getSimpleName.replace("Scan", "").toLowerCase(Locale.ROOT)}",
       "ReadSchema" -> readDataSchema.catalogString,
       "PartitionFilters" -> seqToString(partitionFilters),
       "DataFilters" -> seqToString(dataFilters),
@@ -110,7 +111,7 @@ trait FileScan extends Scan
       case (key, value) =>
         val redactedValue =
           Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
-        key + ": " + StringUtils.abbreviate(redactedValue, maxMetadataValueLength)
+        key + ": " + StringUtils.abbreviate(redactedValue, 100)
     }.mkString(", ")
     s"${this.getClass.getSimpleName} $metadataStr"
   }
