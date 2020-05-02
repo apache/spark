@@ -36,8 +36,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def defaultNumPreShufflePartitions: Int =
-    if (conf.adaptiveExecutionEnabled && conf.reducePostShufflePartitionsEnabled) {
-      conf.maxNumPostShufflePartitions
+    if (conf.adaptiveExecutionEnabled && conf.coalesceShufflePartitionsEnabled) {
+      conf.initialShufflePartitionNum
     } else {
       conf.numShufflePartitions
     }

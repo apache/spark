@@ -18,6 +18,7 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
 ### Description
 ​
 `DESCRIBE DATABASE` statement returns the metadata of an existing database. The metadata information includes database
@@ -26,11 +27,13 @@ returns the basic metadata information along with the database properties. The `
 interchangeable.
 
 ### Syntax
+
 {% highlight sql %}
 { DESC | DESCRIBE } DATABASE [ EXTENDED ] db_name
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>db_name</em></code></dt>
   <dd>
@@ -39,7 +42,8 @@ interchangeable.
   </dd>
 </dl>
 
-### Example
+### Examples
+
 {% highlight sql %}
 -- Create employees DATABASE
 CREATE DATABASE employees COMMENT 'For software companies';
@@ -48,13 +52,13 @@ CREATE DATABASE employees COMMENT 'For software companies';
 -- Returns Database Name, Description and Root location of the filesystem
 -- for the employees DATABASE.
 DESCRIBE DATABASE employees;
-  +-------------------------+-----------------------------+
-  |database_description_item|database_description_value   |
-  +-------------------------+-----------------------------+
-  |Database Name            |employees                    |
-  |Description              |For software companies       |
-  |Location                 |file:/Users/Temp/employees.db|
-  +-------------------------+-----------------------------+
++-------------------------+-----------------------------+
+|database_description_item|   database_description_value|
++-------------------------+-----------------------------+
+|            Database Name|                    employees|
+|              Description|       For software companies|
+|                 Location|file:/Users/Temp/employees.db|
++-------------------------+-----------------------------+
 
 -- Create employees DATABASE
 CREATE DATABASE employees COMMENT 'For software companies';
@@ -64,31 +68,31 @@ ALTER DATABASE employees SET DBPROPERTIES ('Create-by' = 'Kevin', 'Create-date' 
 
 -- Describe employees DATABASE with EXTENDED option to return additional database properties
 DESCRIBE DATABASE EXTENDED employees;
-  +-------------------------+---------------------------------------------+
-  |database_description_item|database_description_value                   |
-  +-------------------------+---------------------------------------------+
-  |Database Name            |employees                                    |
-  |Description              |For software companies                       |
-  |Location                 |file:/Users/Temp/employees.db                |
-  |Properties               |((Create-by,kevin), (Create-date,09/01/2019))|
-  +-------------------------+---------------------------------------------+
++-------------------------+---------------------------------------------+
+|database_description_item|                   database_description_value|
++-------------------------+---------------------------------------------+
+|            Database Name|                                    employees|
+|              Description|                       For software companies|
+|                 Location|                file:/Users/Temp/employees.db|
+|               Properties|((Create-by,kevin), (Create-date,09/01/2019))|
++-------------------------+---------------------------------------------+
 
 -- Create deployment SCHEMA
 CREATE SCHEMA deployment COMMENT 'Deployment environment';
 
 -- Describe deployment, the DATABASE and SCHEMA are interchangeable, their meaning are the same.
 DESC DATABASE deployment;
-  +-------------------------+------------------------------+
-  |database_description_item|database_description_value    |
-  +-------------------------+------------------------------+
-  |Database Name            |deployment                    |
-  |Description              |Deployment environment        |
-  |Location                 |file:/Users/Temp/deployment.db|
-  +-------------------------+------------------------------+
-
++-------------------------+------------------------------+
+|database_description_item|database_description_value    |
++-------------------------+------------------------------+
+|            Database Name|                    deployment|
+|              Description|        Deployment environment|
+|                 Location|file:/Users/Temp/deployment.db|
++-------------------------+------------------------------+
 {% endhighlight %}
 
 ### Related Statements
-- [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
-- [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
-- [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)
+
+ * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+ * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+ * [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)

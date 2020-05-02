@@ -981,8 +981,8 @@ class HiveDDLSuite
     val expectedSerdePropsString =
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
-    assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assume(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
+    assert(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
+    assert(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
@@ -1735,7 +1735,7 @@ class HiveDDLSuite
     Seq("json", "parquet").foreach { format =>
       withTable("rectangles") {
         data.write.format(format).saveAsTable("rectangles")
-        assume(spark.table("rectangles").collect().nonEmpty,
+        assert(spark.table("rectangles").collect().nonEmpty,
           "bad test; table was empty to begin with")
 
         sql("TRUNCATE TABLE rectangles")

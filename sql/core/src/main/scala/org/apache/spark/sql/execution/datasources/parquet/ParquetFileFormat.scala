@@ -300,6 +300,11 @@ class ParquetFileFormat
           None
         }
 
+      val rebaseDateTime = DataSourceUtils.needRebaseDateTime(
+        footerFileMetaData.getKeyValueMetaData.get).getOrElse {
+        SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ)
+      }
+
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
         new TaskAttemptContextImpl(broadcastedHadoopConf.value.value, attemptId)
@@ -312,7 +317,10 @@ class ParquetFileFormat
       val taskContext = Option(TaskContext.get())
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
-          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
+          convertTz.orNull,
+          rebaseDateTime,
+          enableOffHeapColumnVector && taskContext.isDefined,
+          capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
@@ -328,7 +336,8 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns InternalRow
-        val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
+        val readSupport = new ParquetReadSupport(
+          convertTz, enableVectorizedReader = false, rebaseDateTime)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
           new ParquetRecordReader[InternalRow](readSupport, parquetFilter)

@@ -22,8 +22,6 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.parallel.immutable.ParVector
-
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -31,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -122,80 +119,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
-      }
-    }
-  }
-
-  test("using _FUNC_ instead of function names in examples") {
-    val exampleRe = "(>.*;)".r
-    val setStmtRe = "(?i)^(>\\s+set\\s+).+".r
-    val ignoreSet = Set(
-      // Examples for CaseWhen show simpler syntax:
-      // `CASE WHEN ... THEN ... WHEN ... THEN ... END`
-      "org.apache.spark.sql.catalyst.expressions.CaseWhen",
-      // _FUNC_ is replaced by `locate` but `locate(... IN ...)` is not supported
-      "org.apache.spark.sql.catalyst.expressions.StringLocate",
-      // _FUNC_ is replaced by `%` which causes a parsing error on `SELECT %(2, 1.8)`
-      "org.apache.spark.sql.catalyst.expressions.Remainder",
-      // Examples demonstrate alternative names, see SPARK-20749
-      "org.apache.spark.sql.catalyst.expressions.Length")
-    spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
-      val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
-      val className = info.getClassName
-      withClue(s"Expression class '$className'") {
-        val exprExamples = info.getOriginalExamples
-        if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
-          assert(exampleRe.findAllIn(exprExamples).toIterable
-            .filter(setStmtRe.findFirstIn(_).isEmpty) // Ignore SET commands
-            .forall(_.contains("_FUNC_")))
-        }
-      }
-    }
-  }
-
-  test("check outputs of expression examples") {
-    def unindentAndTrim(s: String): String = {
-      s.replaceAll("\n\\s+", "\n").trim
-    }
-    val beginSqlStmtRe = "  > ".r
-    val endSqlStmtRe = ";\n".r
-    def checkExampleSyntax(example: String): Unit = {
-      val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
-      val endStmtNum = endSqlStmtRe.findAllIn(example).length
-      assert(beginStmtNum === endStmtNum,
-        "The number of ` > ` does not match to the number of `;`")
-    }
-    val exampleRe = """^(.+);\n(?s)(.+)$""".r
-    val ignoreSet = Set(
-      // One of examples shows getting the current timestamp
-      "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
-      // Random output without a seed
-      "org.apache.spark.sql.catalyst.expressions.Rand",
-      "org.apache.spark.sql.catalyst.expressions.Randn",
-      "org.apache.spark.sql.catalyst.expressions.Shuffle",
-      "org.apache.spark.sql.catalyst.expressions.Uuid",
-      // The example calls methods that return unstable results.
-      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
-
-    val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
-    parFuncs.foreach { funcId =>
-      // Examples can change settings. We clone the session to prevent tests clashing.
-      val clonedSpark = spark.cloneSession()
-      val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
-      val className = info.getClassName
-      if (!ignoreSet.contains(className)) {
-        withClue(s"Function '${info.getName}', Expression class '$className'") {
-          val example = info.getExamples
-          checkExampleSyntax(example)
-          example.split("  > ").toList.foreach(_ match {
-            case exampleRe(sql, output) =>
-              val df = clonedSpark.sql(sql)
-              val actual = unindentAndTrim(hiveResultString(df).mkString("\n"))
-              val expected = unindentAndTrim(output)
-              assert(actual === expected)
-            case _ =>
-          })
-        }
       }
     }
   }
@@ -2796,7 +2719,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           sql("SELECT * FROM t, S WHERE c = C")
         }.message
         assert(
-          m.contains("cannot resolve '(default.t.`c` = default.S.`C`)' due to data type mismatch"))
+          m.contains(
+            "cannot resolve '(spark_catalog.default.t.`c` = spark_catalog.default.S.`C`)' " +
+            "due to data type mismatch"))
       }
     }
   }
@@ -3452,6 +3377,76 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |LATERAL VIEW explode(value) AS explodedvalue
       """.stripMargin)
     checkAnswer(df2, Row(1) :: Nil)
+  }
+
+  test("SPARK-30279 Support 32 or more grouping attributes for GROUPING_ID()") {
+    withTempView("t") {
+      sql("CREATE TEMPORARY VIEW t AS SELECT * FROM " +
+        s"VALUES(${(0 until 65).map { _ => 1 }.mkString(", ")}, 3) AS " +
+        s"t(${(0 until 65).map { i => s"k$i" }.mkString(", ")}, v)")
+
+      def testGropingIDs(numGroupingSet: Int, expectedIds: Seq[Any] = Nil): Unit = {
+        val groupingCols = (0 until numGroupingSet).map { i => s"k$i" }
+        val df = sql("SELECT GROUPING_ID(), SUM(v) FROM t GROUP BY " +
+          s"GROUPING SETS ((${groupingCols.mkString(",")}), (${groupingCols.init.mkString(",")}))")
+        checkAnswer(df, expectedIds.map { id => Row(id, 3) })
+      }
+
+      withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
+        testGropingIDs(32, Seq(0, 1))
+        val errMsg = intercept[AnalysisException] {
+          testGropingIDs(33)
+        }.getMessage
+        assert(errMsg.contains("Grouping sets size cannot be greater than 32"))
+      }
+
+      withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
+        testGropingIDs(64, Seq(0L, 1L))
+        val errMsg = intercept[AnalysisException] {
+          testGropingIDs(65)
+        }.getMessage
+        assert(errMsg.contains("Grouping sets size cannot be greater than 64"))
+      }
+    }
+  }
+
+  test("SPARK-31166: UNION map<null, null> and other maps should not fail") {
+    checkAnswer(
+      sql("(SELECT map()) UNION ALL (SELECT map(1, 2))"),
+      Seq(Row(Map[Int, Int]()), Row(Map(1 -> 2))))
+  }
+
+  test("SPARK-31242: clone SparkSession should respect sessionInitWithConfigDefaults") {
+    // Note, only the conf explicitly set in SparkConf(e.g. in SharedSparkSessionBase) would cause
+    // problem before the fix.
+    withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
+      val cloned = spark.cloneSession()
+      SparkSession.setActiveSession(cloned)
+      assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
+    }
+  }
+
+  test("SPARK-31594: Do not display the seed of rand/randn with no argument in output schema") {
+    def checkIfSeedExistsInExplain(df: DataFrame): Unit = {
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        df.explain()
+      }
+      val projectExplainOutput = output.toString.split("\n").find(_.contains("Project")).get
+      assert(projectExplainOutput.matches(""".*randn?\(-?[0-9]+\).*"""))
+    }
+    val df1 = sql("SELECT rand()")
+    assert(df1.schema.head.name === "rand()")
+    checkIfSeedExistsInExplain(df1)
+    val df2 = sql("SELECT rand(1L)")
+    assert(df2.schema.head.name === "rand(1)")
+    checkIfSeedExistsInExplain(df2)
+    val df3 = sql("SELECT randn()")
+    assert(df3.schema.head.name === "randn()")
+    checkIfSeedExistsInExplain(df1)
+    val df4 = sql("SELECT randn(1L)")
+    assert(df4.schema.head.name === "randn(1)")
+    checkIfSeedExistsInExplain(df2)
   }
 }
 

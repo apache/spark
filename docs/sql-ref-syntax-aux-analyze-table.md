@@ -24,13 +24,14 @@ license: |
 The `ANALYZE TABLE` statement collects statistics about the table to be used by the query optimizer to find a better query execution plan.
 
 ### Syntax
+
 {% highlight sql %}
 ANALYZE TABLE table_identifier [ partition_spec ]
     COMPUTE STATISTICS [ NOSCAN | FOR COLUMNS col [ , ... ] | FOR ALL COLUMNS ]
-
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>table_identifier</em></code></dt>
   <dd>
@@ -69,41 +70,69 @@ ANALYZE TABLE table_identifier [ partition_spec ]
 </dl>
 
 ### Examples
+
 {% highlight sql %}
- ANALYZE TABLE students COMPUTE STATISTICS NOSCAN;
+CREATE TABLE students (name STRING, student_id INT) PARTITIONED BY (student_id);
+INSERT INTO students PARTITION (student_id = 111111) VALUES ('Mark');
+INSERT INTO students PARTITION (student_id = 222222) VALUES ('John');
 
- DESC EXTENDED students;
-     ......
-     Statistics	2820 bytes
-     ......
+ANALYZE TABLE students COMPUTE STATISTICS NOSCAN;
 
- ANALYZE TABLE students COMPUTE STATISTICS;
+DESC EXTENDED students;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|          Statistics|           864 bytes|       |
+|                 ...|                 ...|    ...|
+|  Partition Provider|             Catalog|       |
++--------------------+--------------------+-------+
 
- DESC EXTENDED students;
-     ......
-     Statistics	2820 bytes, 3 rows
-     ......
+ANALYZE TABLE students COMPUTE STATISTICS;
 
- ANALYZE TABLE students PARTITION (student_id = 111111) COMPUTE STATISTICS;
+DESC EXTENDED students;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|          Statistics|   864 bytes, 2 rows|       |
+|                 ...|                 ...|    ...|
+|  Partition Provider|             Catalog|       |
++--------------------+--------------------+-------+
 
- DESC EXTENDED students PARTITION (student_id = 111111);
-     ......
-     Partition Statistics	919 bytes, 1 rows
-     ......
+ANALYZE TABLE students PARTITION (student_id = 111111) COMPUTE STATISTICS;
 
- ANALYZE TABLE students COMPUTE STATISTICS FOR COLUMNS name;
+DESC EXTENDED students PARTITION (student_id = 111111);
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|Partition Statistics|   432 bytes, 1 rows|       |
+|                 ...|                 ...|    ...|
+|        OutputFormat|org.apache.hadoop...|       |
++--------------------+--------------------+-------+
 
- DESC EXTENDED students name;
-     =default tbl=students
-     col_name	name
-     data_type	string
-     comment	NULL
-     min	NULL
-     max	NULL
-     num_nulls	0
-     distinct_count	3
-     avg_col_len	11
-     max_col_len	13
-     histogram	NULL
+ANALYZE TABLE students COMPUTE STATISTICS FOR COLUMNS name;
 
+DESC EXTENDED students name;
++--------------+----------+
+|     info_name|info_value|
++--------------+----------+
+|      col_name|      name|
+|     data_type|    string|
+|       comment|      NULL|
+|           min|      NULL|
+|           max|      NULL|
+|     num_nulls|         0|
+|distinct_count|         2|
+|   avg_col_len|         4|
+|   max_col_len|         4|
+|     histogram|      NULL|
++--------------+----------+
 {% endhighlight %}

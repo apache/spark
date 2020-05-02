@@ -20,26 +20,35 @@ license: |
 ---
 
 ### Description
+
 Lists the databases that match an optionally supplied string pattern. If no
 pattern is supplied then the command lists all the databases in the system.
 Please note that the usage of `SCHEMAS` and `DATABASES` are interchangeable
 and mean the same thing.
 
 ### Syntax
+
 {% highlight sql %}
-SHOW { DATABASES | SCHEMAS } [ LIKE string_pattern ]
+SHOW { DATABASES | SCHEMAS } [ LIKE regex_pattern ]
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
-  <dt><code><em>LIKE string_pattern</em></code></dt>
+  <dt><code><em>regex_pattern</em></code></dt>
   <dd>
-    Specifies a string pattern that is used to match the databases in the system. In 
-    the specified string pattern <code>'*'</code> matches any number of characters.
+    Specifies a regular expression pattern that is used to filter the results of the
+    statement.
+    <ul>
+      <li>Only <code>*</code> and <code>|</code> are allowed as wildcard pattern.</li>
+      <li>Excluding <code>*</code> and <code>|</code>, the remaining pattern follows the regular expression semantics.</li>
+      <li>The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
+    </ul>
   </dd>
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- Create database. Assumes a database named `default` already exists in
 -- the system. 
@@ -48,32 +57,36 @@ CREATE DATABASE payments_db;
 
 -- Lists all the databases. 
 SHOW DATABASES;
-  +------------+
-  |databaseName|
-  +------------+
-  |     default|
-  | payments_db|
-  |  payroll_db|
-  +------------+
++------------+
+|databaseName|
++------------+
+|     default|
+| payments_db|
+|  payroll_db|
++------------+
+  
 -- Lists databases with name starting with string pattern `pay`
 SHOW DATABASES LIKE 'pay*';
-  +------------+
-  |databaseName|
-  +------------+
-  | payments_db|
-  |  payroll_db|
-  +------------+
++------------+
+|databaseName|
++------------+
+| payments_db|
+|  payroll_db|
++------------+
+  
 -- Lists all databases. Keywords SCHEMAS and DATABASES are interchangeable. 
 SHOW SCHEMAS;
-  +------------+
-  |databaseName|
-  +------------+
-  |     default|
-  | payments_db|
-  |  payroll_db|
-  +------------+
++------------+
+|databaseName|
++------------+
+|     default|
+| payments_db|
+|  payroll_db|
++------------+
 {% endhighlight %}
+
 ### Related Statements
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
-- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
-- [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)
+
+ * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+ * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+ * [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)

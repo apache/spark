@@ -40,7 +40,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
-  private lazy val parser = new SparkSqlParser(new SQLConf)
+  private lazy val parser = new SparkSqlParser(new SQLConf().copy(
+    SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED -> false))
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
     val e = intercept[ParseException] {

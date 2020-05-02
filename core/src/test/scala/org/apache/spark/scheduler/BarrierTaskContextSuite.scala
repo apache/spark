@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.io.File
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark._
@@ -27,11 +26,11 @@ import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 
 class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
-  def initLocalClusterSparkContext(): Unit = {
+  def initLocalClusterSparkContext(numWorker: Int = 4): Unit = {
     val conf = new SparkConf()
       // Init local cluster here so each barrier task runs in a separated process, thus `barrier()`
       // call is actually useful.
-      .setMaster("local-cluster[4, 1, 1024]")
+      .setMaster(s"local-cluster[$numWorker, 1, 1024]")
       .setAppName("test-cluster")
       .set(TEST_NO_STAGE_RETRY, true)
     sc = new SparkContext(conf)
@@ -65,7 +64,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       Thread.sleep(Random.nextInt(1000))
       // Pass partitionId message in
       val message: String = context.partitionId().toString
-      val messages: ArrayBuffer[String] = context.allGather(message)
+      val messages: Array[String] = context.allGather(message)
       messages.toList.iterator
     }
     // Take a sorted list of all the partitionId messages
@@ -276,5 +275,21 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
   test("barrier task killed, interrupt") {
     initLocalClusterSparkContext()
     testBarrierTaskKilled(interruptOnKill = true)
+  }
+
+  test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
+    initLocalClusterSparkContext(2)
+    val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
+    val dep = new OneToOneDependency[Int](rdd0)
+    // set up a barrier stage with 2 tasks and both tasks prefer executor 0 (only 1 core) for
+    // scheduling. So, one of tasks won't be scheduled in one round of resource offer.
+    val rdd = new MyRDD(sc, 2, List(dep), Seq(Seq("executor_h_0"), Seq("executor_h_0")))
+    val errorMsg = intercept[SparkException] {
+      rdd.barrier().mapPartitions { iter =>
+        BarrierTaskContext.get().barrier()
+        iter
+      }.collect()
+    }.getMessage
+    assert(errorMsg.contains("Fail resource offers for barrier stage"))
   }
 }

@@ -82,7 +82,8 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onStart(): Unit = {
     logInfo("Registering PWR handler.")
-    SignalUtils.register("PWR")(decommissionSelf)
+    SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
+      "disabling decommission feature.")(decommissionSelf)
 
     logInfo("Connecting to driver: " + driverUrl)
     try {

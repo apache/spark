@@ -449,60 +449,60 @@ object DataSourceStrategy {
   }
 
   private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = predicate match {
-    case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
-      Some(sources.EqualTo(a.name, convertToScala(v, t)))
-    case expressions.EqualTo(Literal(v, t), a: Attribute) =>
-      Some(sources.EqualTo(a.name, convertToScala(v, t)))
+    case expressions.EqualTo(PushableColumn(name), Literal(v, t)) =>
+      Some(sources.EqualTo(name, convertToScala(v, t)))
+    case expressions.EqualTo(Literal(v, t), PushableColumn(name)) =>
+      Some(sources.EqualTo(name, convertToScala(v, t)))
 
-    case expressions.EqualNullSafe(a: Attribute, Literal(v, t)) =>
-      Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
-    case expressions.EqualNullSafe(Literal(v, t), a: Attribute) =>
-      Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
+    case expressions.EqualNullSafe(PushableColumn(name), Literal(v, t)) =>
+      Some(sources.EqualNullSafe(name, convertToScala(v, t)))
+    case expressions.EqualNullSafe(Literal(v, t), PushableColumn(name)) =>
+      Some(sources.EqualNullSafe(name, convertToScala(v, t)))
 
-    case expressions.GreaterThan(a: Attribute, Literal(v, t)) =>
-      Some(sources.GreaterThan(a.name, convertToScala(v, t)))
-    case expressions.GreaterThan(Literal(v, t), a: Attribute) =>
-      Some(sources.LessThan(a.name, convertToScala(v, t)))
+    case expressions.GreaterThan(PushableColumn(name), Literal(v, t)) =>
+      Some(sources.GreaterThan(name, convertToScala(v, t)))
+    case expressions.GreaterThan(Literal(v, t), PushableColumn(name)) =>
+      Some(sources.LessThan(name, convertToScala(v, t)))
 
-    case expressions.LessThan(a: Attribute, Literal(v, t)) =>
-      Some(sources.LessThan(a.name, convertToScala(v, t)))
-    case expressions.LessThan(Literal(v, t), a: Attribute) =>
-      Some(sources.GreaterThan(a.name, convertToScala(v, t)))
+    case expressions.LessThan(PushableColumn(name), Literal(v, t)) =>
+      Some(sources.LessThan(name, convertToScala(v, t)))
+    case expressions.LessThan(Literal(v, t), PushableColumn(name)) =>
+      Some(sources.GreaterThan(name, convertToScala(v, t)))
 
-    case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, t)) =>
-      Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
-    case expressions.GreaterThanOrEqual(Literal(v, t), a: Attribute) =>
-      Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(PushableColumn(name), Literal(v, t)) =>
+      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(Literal(v, t), PushableColumn(name)) =>
+      Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
 
-    case expressions.LessThanOrEqual(a: Attribute, Literal(v, t)) =>
-      Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
-    case expressions.LessThanOrEqual(Literal(v, t), a: Attribute) =>
-      Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
+    case expressions.LessThanOrEqual(PushableColumn(name), Literal(v, t)) =>
+      Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
+    case expressions.LessThanOrEqual(Literal(v, t), PushableColumn(name)) =>
+      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
 
-    case expressions.InSet(a: Attribute, set) =>
-      val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-      Some(sources.In(a.name, set.toArray.map(toScala)))
+    case expressions.InSet(e @ PushableColumn(name), set) =>
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      Some(sources.In(name, set.toArray.map(toScala)))
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
     // down.
-    case expressions.In(a: Attribute, list) if list.forall(_.isInstanceOf[Literal]) =>
+    case expressions.In(e @ PushableColumn(name), list) if list.forall(_.isInstanceOf[Literal]) =>
       val hSet = list.map(_.eval(EmptyRow))
-      val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-      Some(sources.In(a.name, hSet.toArray.map(toScala)))
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      Some(sources.In(name, hSet.toArray.map(toScala)))
 
-    case expressions.IsNull(a: Attribute) =>
-      Some(sources.IsNull(a.name))
-    case expressions.IsNotNull(a: Attribute) =>
-      Some(sources.IsNotNull(a.name))
-    case expressions.StartsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringStartsWith(a.name, v.toString))
+    case expressions.IsNull(PushableColumn(name)) =>
+      Some(sources.IsNull(name))
+    case expressions.IsNotNull(PushableColumn(name)) =>
+      Some(sources.IsNotNull(name))
+    case expressions.StartsWith(PushableColumn(name), Literal(v: UTF8String, StringType)) =>
+      Some(sources.StringStartsWith(name, v.toString))
 
-    case expressions.EndsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringEndsWith(a.name, v.toString))
+    case expressions.EndsWith(PushableColumn(name), Literal(v: UTF8String, StringType)) =>
+      Some(sources.StringEndsWith(name, v.toString))
 
-    case expressions.Contains(a: Attribute, Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringContains(a.name, v.toString))
+    case expressions.Contains(PushableColumn(name), Literal(v: UTF8String, StringType)) =>
+      Some(sources.StringContains(name, v.toString))
 
     case expressions.Literal(true, BooleanType) =>
       Some(sources.AlwaysTrue)
@@ -637,12 +637,34 @@ object DataSourceStrategy {
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.needConversion) {
-      val converters = RowEncoder(StructType.fromAttributes(output))
+      val toRow = RowEncoder(StructType.fromAttributes(output)).createSerializer()
       rdd.mapPartitions { iterator =>
-        iterator.map(converters.toRow)
+        iterator.map(toRow)
       }
     } else {
       rdd.asInstanceOf[RDD[InternalRow]]
     }
+  }
+}
+
+/**
+ * Find the column name of an expression that can be pushed down.
+ */
+object PushableColumn {
+  def unapply(e: Expression): Option[String] = {
+    val nestedPredicatePushdownEnabled = SQLConf.get.nestedPredicatePushdownEnabled
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    def helper(e: Expression): Option[Seq[String]] = e match {
+      case a: Attribute =>
+        if (nestedPredicatePushdownEnabled || !a.name.contains(".")) {
+          Some(Seq(a.name))
+        } else {
+          None
+        }
+      case s: GetStructField if nestedPredicatePushdownEnabled =>
+        helper(s.child).map(_ :+ s.childSchema(s.ordinal).name)
+      case _ => None
+    }
+    helper(e).map(_.quoted)
   }
 }

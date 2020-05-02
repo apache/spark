@@ -80,7 +80,7 @@ grammar SqlBase;
 }
 
 singleStatement
-    : statement EOF
+    : statement ';'* EOF
     ;
 
 singleExpression
@@ -174,7 +174,7 @@ statement
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
     | ALTER (TABLE | VIEW) multipartIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
-    |ALTER TABLE table=multipartIdentifier
+    | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
         alterColumnAction?                                             #alterTableAlterColumn
     | ALTER TABLE table=multipartIdentifier partitionSpec?
@@ -223,6 +223,8 @@ statement
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
+    | SHOW VIEWS ((FROM | IN) multipartIdentifier)?
+        (LIKE? pattern=STRING)?                                        #showViews
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
@@ -764,6 +766,7 @@ predicate
     | NOT? kind=IN '(' expression (',' expression)* ')'
     | NOT? kind=IN '(' query ')'
     | NOT? kind=RLIKE pattern=valueExpression
+    | NOT? kind=LIKE quantifier=(ANY | SOME | ALL) ('('')' | '(' expression (',' expression)* ')')
     | NOT? kind=LIKE pattern=valueExpression (ESCAPE escapeChar=STRING)?
     | IS NOT? kind=NULL
     | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
@@ -1190,6 +1193,7 @@ ansiNonReserved
     | USE
     | VALUES
     | VIEW
+    | VIEWS
     | WINDOW
     ;
 
@@ -1453,6 +1457,7 @@ nonReserved
     | USER
     | VALUES
     | VIEW
+    | VIEWS
     | WHEN
     | WHERE
     | WINDOW
@@ -1713,6 +1718,7 @@ USER: 'USER';
 USING: 'USING';
 VALUES: 'VALUES';
 VIEW: 'VIEW';
+VIEWS: 'VIEWS';
 WHEN: 'WHEN';
 WHERE: 'WHERE';
 WINDOW: 'WINDOW';

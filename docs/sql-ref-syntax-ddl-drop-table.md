@@ -27,11 +27,13 @@ if the table is not `EXTERNAL` table. If the table is not present it throws an e
 In case of an external table, only the associated metadata information is removed from the metastore database.
 
 ### Syntax
+
 {% highlight sql %}
 DROP TABLE [ IF EXISTS ] table_identifier
 {% endhighlight %}
 
 ### Parameter
+
 <dl>
   <dt><code><em>IF EXISTS</em></code></dt>
   <dd>
@@ -47,41 +49,28 @@ DROP TABLE [ IF EXISTS ] table_identifier
   </dd>
 </dl>
 
-### Example
+### Examples
+
 {% highlight sql %}
 -- Assumes a table named `employeetable` exists.
 DROP TABLE employeetable;
-+---------+--+
-| Result  |
-+---------+--+
-+---------+--+
 
 -- Assumes a table named `employeetable` exists in the `userdb` database
 DROP TABLE userdb.employeetable;
-+---------+--+
-| Result  |
-+---------+--+
-+---------+--+
 
 -- Assumes a table named `employeetable` does not exists.
 -- Throws exception
 DROP TABLE employeetable;
-Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeetable;
-(state=,code=0)
+  Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeetable;
+  (state=,code=0)
 
 -- Assumes a table named `employeetable` does not exists,Try with IF EXISTS
 -- this time it will not throw exception
 DROP TABLE IF EXISTS employeetable;
-+---------+--+
-| Result  |
-+---------+--+
-+---------+--+
-
 {% endhighlight %}
 
 ### Related Statements
-- [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
-- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
-- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
 
-
+ * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+ * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+ * [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)

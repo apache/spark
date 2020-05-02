@@ -20,17 +20,20 @@ license: |
 ---
 
 ### Description
+
 Creates a database with the specified name. If database with the same name already exists, an exception will be thrown.
 
 ### Syntax
+
 {% highlight sql %}
 CREATE { DATABASE | SCHEMA } [ IF NOT EXISTS ] database_name
-  [ COMMENT database_comment ]
-  [ LOCATION database_directory ]
-  [ WITH DBPROPERTIES ( property_name = property_value [ , ... ] ) ]
+    [ COMMENT database_comment ]
+    [ LOCATION database_directory ]
+    [ WITH DBPROPERTIES ( property_name = property_value [ , ... ] ) ]
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
     <dt><code><em>database_name</em></code></dt>
     <dd>Specifies the name of the database to be created.</dd>
@@ -49,6 +52,7 @@ CREATE { DATABASE | SCHEMA } [ IF NOT EXISTS ] database_name
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 -- Create database `customer_db`. This throws exception if database with name customer_db
 -- already exists.
@@ -60,20 +64,21 @@ CREATE DATABASE IF NOT EXISTS customer_db;
 -- Create database `customer_db` only if database with same name doesn't exist with 
 -- `Comments`,`Specific Location` and `Database properties`.
 CREATE DATABASE IF NOT EXISTS customer_db COMMENT 'This is customer database' LOCATION '/user'
- WITH DBPROPERTIES (ID=001, Name='John');
+    WITH DBPROPERTIES (ID=001, Name='John');
 
 -- Verify that properties are set.
 DESCRIBE DATABASE EXTENDED customer_db;
-   +----------------------------+-----------------------------+
-   | database_description_item  | database_description_value  |
-   +----------------------------+-----------------------------+
-   | Database Name              | customer_db                 |
-   | Description                | This is customer database   |
-   | Location                   | hdfs://hacluster/user       |
-   | Properties                 | ((ID,001), (Name,John))     |
-   +----------------------------+-----------------------------+
++-------------------------+--------------------------+
+|database_description_item|database_description_value|
++-------------------------+--------------------------+
+|            Database Name|               customer_db|
+|              Description| This is customer database|
+|                 Location|     hdfs://hacluster/user|
+|               Properties|   ((ID,001), (Name,John))|
++-------------------------+--------------------------+
 {% endhighlight %}
 
 ### Related Statements
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
-- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+
+ * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+ * [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)

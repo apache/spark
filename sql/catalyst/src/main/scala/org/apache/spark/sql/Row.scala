@@ -165,8 +165,11 @@ trait Row extends Serializable {
    *   StringType -> String
    *   DecimalType -> java.math.BigDecimal
    *
-   *   DateType -> java.sql.Date
-   *   TimestampType -> java.sql.Timestamp
+   *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
+   *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
+   *
+   *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
+   *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
    *
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
@@ -190,8 +193,11 @@ trait Row extends Serializable {
    *   StringType -> String
    *   DecimalType -> java.math.BigDecimal
    *
-   *   DateType -> java.sql.Date
-   *   TimestampType -> java.sql.Timestamp
+   *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
+   *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
+   *
+   *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
+   *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
    *
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)

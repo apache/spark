@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
@@ -56,8 +57,14 @@ private[sql] trait LookupCatalog extends Logging {
    * Extract session catalog and identifier from a multi-part identifier.
    */
   object SessionCatalogAndIdentifier {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
     def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = parts match {
       case CatalogAndIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
+        if (ident.namespace.length != 1) {
+          throw new AnalysisException(
+            s"The namespace in session catalog must have exactly one name part: ${parts.quoted}")
+        }
         Some(catalog, ident)
       case _ => None
     }

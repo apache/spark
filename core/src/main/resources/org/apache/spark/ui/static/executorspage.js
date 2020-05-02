@@ -561,11 +561,11 @@ $(document).ready(function () {
                 $('#execSummary [data-toggle="tooltip"]').tooltip();
 
                 $("#showAdditionalMetrics").append(
-                    "<div><a id='additionalMetrics'>" +
+                    "<div><a id='additionalMetrics' class='collapse-table'>" +
                     "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle-optional-metrics'></span>" +
                     "Show Additional Metrics" +
                     "</a></div>" +
-                    "<div class='container-fluid container-fluid-div' id='toggle-metrics' hidden>" +
+                    "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
                     "<div><input type='checkbox' class='toggle-vis' id='select-all-box'>Select All</div>" +
                     "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'>On Heap Memory</div>" +
                     "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'>Off Heap Memory</div>" +
@@ -576,7 +576,7 @@ $(document).ready(function () {
 
                 $("#additionalMetrics").click(function() {
                     $("#arrowtoggle-optional-metrics").toggleClass("arrow-open arrow-closed");
-                    $("#toggle-metrics").toggle();
+                    $("#toggle-metrics").toggleClass("d-none");
                     if (window.localStorage) {
                         window.localStorage.setItem("arrowtoggle-optional-metrics-class", $("#arrowtoggle-optional-metrics").attr('class'));
                     }
@@ -612,7 +612,7 @@ $(document).ready(function () {
                     if (window.localStorage.getItem("arrowtoggle-optional-metrics-class") != null &&
                         window.localStorage.getItem("arrowtoggle-optional-metrics-class").includes("arrow-open")) {
                         $("#arrowtoggle-optional-metrics").toggleClass("arrow-open arrow-closed");
-                        $("#toggle-metrics").toggle();
+                        $("#toggle-metrics").toggleClass("d-none");
                     }
                 }
             });

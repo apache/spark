@@ -348,8 +348,9 @@ class DefaultValuesTests(PySparkTestCase):
     Test :py:class:`JavaParams` classes to see if their default Param values match
     those in their Scala counterparts.
     """
-
     def test_java_params(self):
+        import re
+
         import pyspark.ml.feature
         import pyspark.ml.classification
         import pyspark.ml.clustering
@@ -365,8 +366,9 @@ class DefaultValuesTests(PySparkTestCase):
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if not name.endswith('Model') and not name.endswith('Params') \
                         and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
-                        and not name.startswith('Java') and name != '_LSH':
+                        and not re.match("_?Java", name) and name != '_LSH':
                     # NOTE: disable check_params_exist until there is parity with Scala API
+
                     check_params(self, cls(), check_params_exist=False)
 
         # Additional classes that need explicit construction

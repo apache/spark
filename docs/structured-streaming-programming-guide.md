@@ -2105,7 +2105,7 @@ streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
 
 {% highlight java %}
 streamingDatasetOfString.writeStream().foreachBatch(
-  new VoidFunction2<Dataset<String>, Long> {
+  new VoidFunction2<Dataset<String>, Long>() {
     public void call(Dataset<String> dataset, Long batchId) {
       // Transform and write batchDF
     }    

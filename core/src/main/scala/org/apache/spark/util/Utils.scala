@@ -95,7 +95,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
@@ -2544,28 +2544,6 @@ private[spark] object Utils extends Logging {
    */
   def tempFileWith(path: File): File = {
     new File(path.getAbsolutePath + "." + UUID.randomUUID())
-  }
-
-  /**
-   * Given a process id, return true if the process is still running.
-   */
-  def isProcessRunning(pid: Int): Boolean = {
-    val process = executeCommand(Seq("kill", "-0", pid.toString))
-    process.waitFor(10, TimeUnit.SECONDS)
-    process.exitValue() == 0
-  }
-
-  /**
-   * Returns the pid of this JVM process.
-   */
-  def getProcessId: Int = {
-    val PROCESS = "(\\d+)@(.*)".r
-    val name = getProcessName()
-    name match {
-      case PROCESS(pid, _) => pid.toInt
-      case _ =>
-        throw new SparkException(s"Unexpected process name: $name, expected to be PID@hostname.")
-    }
   }
 
   /**

@@ -20,17 +20,20 @@ license: |
 ---
 
 ### Description
+
 The `INSERT OVERWRITE DIRECTORY` with Hive format overwrites the existing data in the directory with the new values using Hive `SerDe`.
 Hive support must be enabled to use this command. The inserted rows can be specified by value expressions or result from a query.
 
 ### Syntax
+
 {% highlight sql %}
 INSERT OVERWRITE [ LOCAL ] DIRECTORY directory_path
-   [ ROW FORMAT row_format ] [ STORED AS file_format ]
-   { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
+    [ ROW FORMAT row_format ] [ STORED AS file_format ]
+    { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>directory_path</em></code></dt>
   <dd>
@@ -71,17 +74,19 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY directory_path
 </dl>
 
 ### Examples
-{% highlight sql %}
- INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
-     STORED AS orc
-     SELECT * FROM test_table;
 
- INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
-     ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-     SELECT * FROM test_table;
+{% highlight sql %}
+INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
+    STORED AS orc
+    SELECT * FROM test_table;
+
+INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+    SELECT * FROM test_table;
 {% endhighlight %}
 
 ### Related Statements
-  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
-  * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
-  * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
+
+ * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
+ * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
+ * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)

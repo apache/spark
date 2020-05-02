@@ -627,7 +627,7 @@ struct<>
 -- !query
 SELECT substr(f1, 99995) from toasttest
 -- !query schema
-struct<substring(f1, 99995, 2147483647):string>
+struct<substr(f1, 99995, 2147483647):string>
 -- !query output
 567890
 567890
@@ -638,7 +638,7 @@ struct<substring(f1, 99995, 2147483647):string>
 -- !query
 SELECT substr(f1, 99995, 10) from toasttest
 -- !query schema
-struct<substring(f1, 99995, 10):string>
+struct<substr(f1, 99995, 10):string>
 -- !query output
 567890
 567890
@@ -977,7 +977,7 @@ struct<repeat(Pg, -4):string>
 -- !query
 SELECT trim(binary('\\000') from binary('\\000Tom\\000'))
 -- !query schema
-struct<trim(CAST(CAST(\000Tom\000 AS BINARY) AS STRING), CAST(CAST(\000 AS BINARY) AS STRING)):string>
+struct<TRIM(BOTH CAST(CAST(\000 AS BINARY) AS STRING) FROM CAST(CAST(\000Tom\000 AS BINARY) AS STRING)):string>
 -- !query output
 Tom
 

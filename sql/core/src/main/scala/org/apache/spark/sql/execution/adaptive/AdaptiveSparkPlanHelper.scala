@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This class provides utility methods related to tree traversal of an [[AdaptiveSparkPlanExec]]
@@ -109,7 +111,7 @@ trait AdaptiveSparkPlanHelper {
    * Returns a sequence containing the result of applying a partial function to all elements in this
    * plan, also considering all the plans in its (nested) subqueries
    */
-  def collectInPlanAndSubqueries[B](p: SparkPlan)(f: PartialFunction[SparkPlan, B]): Seq[B] = {
+  def collectWithSubqueries[B](p: SparkPlan)(f: PartialFunction[SparkPlan, B]): Seq[B] = {
     (p +: subqueriesAll(p)).flatMap(collect(_)(f))
   }
 
@@ -135,4 +137,18 @@ trait AdaptiveSparkPlanHelper {
     case a: AdaptiveSparkPlanExec => a.executedPlan
     case other => other
   }
- }
+
+  /**
+   * Returns a cloned [[SparkSession]] with adaptive execution disabled, or the original
+   * [[SparkSession]] if its adaptive execution is already disabled.
+   */
+  def getOrCloneSessionWithAqeOff[T](session: SparkSession): SparkSession = {
+    if (!session.sessionState.conf.adaptiveExecutionEnabled) {
+      session
+    } else {
+      val newSession = session.cloneSession()
+      newSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+      newSession
+    }
+  }
+}

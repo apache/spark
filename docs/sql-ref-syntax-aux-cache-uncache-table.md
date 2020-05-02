@@ -20,15 +20,18 @@ license: |
 ---
 
 ### Description
+
 `UNCACHE TABLE` removes the entries and associated data from the in-memory and/or on-disk cache for a given table or view. The
 underlying entries should already have been brought to cache by previous `CACHE TABLE` operation. `UNCACHE TABLE` on a non-existent table throws an exception if `IF EXISTS` is not specified.
 
 ### Syntax
+
 {% highlight sql %}
 UNCACHE TABLE [ IF EXISTS ] table_identifier
 {% endhighlight %}
 
 ### Parameters
+
 <dl>
   <dt><code><em>table_identifier</em></code></dt>
   <dd>
@@ -41,11 +44,14 @@ UNCACHE TABLE [ IF EXISTS ] table_identifier
 </dl>
 
 ### Examples
+
 {% highlight sql %}
 UNCACHE TABLE t1;
 {% endhighlight %}
 
 ### Related Statements
+
  * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
  * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
  * [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)
+ * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)

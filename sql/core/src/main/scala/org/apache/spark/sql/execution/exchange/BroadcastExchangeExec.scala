@@ -34,7 +34,8 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.util.{SparkFatalException, ThreadUtils, Utils}
+import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
 /**
  * A [[BroadcastExchangeExec]] collects, transforms and finally broadcasts the result of
@@ -43,6 +44,7 @@ import org.apache.spark.util.{SparkFatalException, ThreadUtils, Utils}
 case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
+  import BroadcastExchangeExec._
 
   private[sql] val runId: UUID = UUID.randomUUID
 
@@ -82,9 +84,9 @@ case class BroadcastExchangeExec(
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
-            if (numRows >= 512000000) {
+            if (numRows >= MAX_BROADCAST_TABLE_ROWS) {
               throw new SparkException(
-                s"Cannot broadcast the table with 512 million or more rows: $numRows rows")
+                s"Cannot broadcast the table over $MAX_BROADCAST_TABLE_ROWS rows: $numRows rows")
             }
 
             val beforeBuild = System.nanoTime()
@@ -104,7 +106,7 @@ case class BroadcastExchangeExec(
             }
 
             longMetric("dataSize") += dataSize
-            if (dataSize >= (8L << 30)) {
+            if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
               throw new SparkException(
                 s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
             }
@@ -118,7 +120,7 @@ case class BroadcastExchangeExec(
               System.nanoTime() - beforeBroadcast)
             val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
             SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
-            promise.success(broadcasted)
+            promise.trySuccess(broadcasted)
             broadcasted
           } catch {
             // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
@@ -131,14 +133,14 @@ case class BroadcastExchangeExec(
                   s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
                   s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
                   .initCause(oe.getCause))
-              promise.failure(ex)
+              promise.tryFailure(ex)
               throw ex
             case e if !NonFatal(e) =>
               val ex = new SparkFatalException(e)
-              promise.failure(ex)
+              promise.tryFailure(ex)
               throw ex
             case e: Throwable =>
-              promise.failure(e)
+              promise.tryFailure(e)
               throw e
           }
     }
@@ -173,6 +175,13 @@ case class BroadcastExchangeExec(
 }
 
 object BroadcastExchangeExec {
+  // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
+  // and only 70% of the slots can be used before growing in HashedRelation,
+  // here the limitation should not be over 341 million.
+  val MAX_BROADCAST_TABLE_ROWS = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
+
+  val MAX_BROADCAST_TABLE_BYTES = 8L << 30
+
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange",
         SQLConf.get.getConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)))

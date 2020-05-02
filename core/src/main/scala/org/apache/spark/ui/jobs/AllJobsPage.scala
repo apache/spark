@@ -88,7 +88,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
       // extra layers of escaping in order to embed this in a Javascript string literal.
       val escapedDesc = Utility.escape(jobDescription)
-      val jsEscapedDesc = StringEscapeUtils.escapeEcmaScript(escapedDesc)
+      val jsEscapedDescForTooltip = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedDesc))
+      val jsEscapedDescForLabel = StringEscapeUtils.escapeEcmaScript(escapedDesc)
       val jobEventJsonAsStr =
         s"""
            |{
@@ -98,7 +99,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'end': new Date(${completionTime}),
            |  'content': '<div class="application-timeline-content"' +
            |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
-           |     'data-title="${jsEscapedDesc} (Job ${jobId})<br>' +
+           |     'data-title="${jsEscapedDescForTooltip} (Job ${jobId})<br>' +
            |     'Status: ${status}<br>' +
            |     'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |     '${
@@ -108,7 +109,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
                        ""
                      }
                   }">' +
-           |    '${jsEscapedDesc} (Job ${jobId})</div>'
+           |    '${jsEscapedDescForLabel} (Job ${jobId})</div>'
            |}
          """.stripMargin
       jobEventJsonAsStr
@@ -306,7 +307,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
     val summary: NodeSeq =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           <li>
             <strong>User:</strong>
             {parent.getSparkUser}
@@ -399,7 +400,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +
       " Click on a job to see information about the stages of tasks inside it."
 
-    UIUtils.headerSparkPage(request, "Spark Jobs", content, parent, helpText = Some(helpText))
+    UIUtils.headerSparkPage(request, "Spark Jobs", content, parent,
+      helpText = Some(helpText))
   }
 
 }
@@ -441,15 +443,10 @@ private[ui] class JobDataSource(
   }
 
   private def jobRow(jobData: v1.JobData): JobTableRowData = {
-    val duration: Option[Long] = {
-      jobData.submissionTime.map { start =>
-        val end = jobData.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
-        end - start.getTime()
-      }
-    }
-    val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
+    val duration: Option[Long] = JobDataUtil.getDuration(jobData)
+    val formattedDuration = JobDataUtil.getFormattedDuration(jobData)
     val submissionTime = jobData.submissionTime
-    val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
+    val formattedSubmissionTime = JobDataUtil.getFormattedSubmissionTime(jobData)
     val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store, jobData)
 
     val jobDescription =
@@ -515,7 +512,7 @@ private[ui] class JobPagedTable(
   override def tableId: String = jobTag + "-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
+    "table table-bordered table-sm table-striped " +
       "table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = jobTag + ".pageSize"
@@ -630,7 +627,7 @@ private[ui] class JobPagedTable(
         }
       }
     }
-    <thead>{headerRow}</thead>
+    <thead><tr>{headerRow}</tr></thead>
   }
 
   override def row(jobTableRow: JobTableRowData): Seq[Node] = {

@@ -20,14 +20,17 @@ license: |
 ---
 
 ### Description
+
 `DROP VIEW` removes the metadata associated with a specified view from the catalog.
 
 ### Syntax
+
 {% highlight sql %}
 DROP VIEW [ IF EXISTS ] view_identifier
 {% endhighlight %}
 
 ### Parameter
+
 <dl>
   <dt><code><em>IF EXISTS</em></code></dt>
   <dd>
@@ -43,40 +46,30 @@ DROP VIEW [ IF EXISTS ] view_identifier
   </dd>
 </dl>
 
-### Example
+### Examples
+
 {% highlight sql %}
 -- Assumes a view named `employeeView` exists.
 DROP VIEW employeeView;
-+---------+--+
-| Result  |
-+---------+--+
-+---------+--+
 
 -- Assumes a view named `employeeView` exists in the `userdb` database
 DROP VIEW userdb.employeeView;
-+---------+--+
-| Result  |
-+---------+--+
-+---------+--+
 
 -- Assumes a view named `employeeView` does not exists.
 -- Throws exception
 DROP VIEW employeeView;
-Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeeView;
-(state=,code=0)
+  Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeeView;
+  (state=,code=0)
 
 -- Assumes a view named `employeeView` does not exists,Try with IF EXISTS
 -- this time it will not throw exception
 DROP VIEW IF EXISTS employeeView;
-+---------+--+
-| Result  |
-+---------+--+
-+---------+--+
-
 {% endhighlight %}
 
 ### Related Statements
-- [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
-- [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
-- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
-- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+
+ * [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
+ * [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
+ * [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
+ * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+ * [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)

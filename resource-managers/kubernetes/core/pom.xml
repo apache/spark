@@ -29,6 +29,7 @@
   <name>Spark Project Kubernetes</name>
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
+    <!-- Note: Please update the kubernetes client version in kubernetes/integration-tests/pom.xml -->
     <kubernetes.client.version>4.7.1</kubernetes.client.version>
   </properties>
 
