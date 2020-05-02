@@ -59,12 +59,12 @@ private[sql] trait ScriptTransformBase extends UnaryExecNode {
       cause: Throwable = null,
       proc: Process,
       stderrBuffer: CircularBuffer): Unit = {
+    proc.waitFor(3000, TimeUnit.MILLISECONDS)
     if (writerThread.exception.isDefined) {
       throw writerThread.exception.get
     }
 
     if (!proc.isAlive) {
-      proc.waitFor(3000, TimeUnit.MILLISECONDS)
       val exitCode = proc.exitValue()
       if (exitCode != 0) {
         logError(stderrBuffer.toString) // log the stderr circular buffer
