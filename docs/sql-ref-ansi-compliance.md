@@ -28,7 +28,7 @@ The casting behaviours are defined as store assignment rules in the standard.
 When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules. This is a separate configuration because its default value is `ANSI`, while the configuration `spark.sql.ansi.enabled` is disabled by default.
 
 |Property Name|Default|Meaning|Since Version|
-|--- |--- |--- |--- |
+|-------------|-------|-------|-------------|
 |`spark.sql.ansi.enabled`|false|(Experimental) When true, Spark tries to conform to the ANSI SQL specification: <br> 1. Spark will throw a runtime exception if an overflow occurs in any operation on integral/decimal field. <br> 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in the SQL parser.|3.0.0|
 |`spark.sql.storeAssignmentPolicy`|ANSI|(Experimental) When inserting a value into a column with different data type, Spark will perform type coercion.  Currently, we support 3 policies for the type coercion rules: ANSI, legacy and strict. With ANSI policy, Spark performs the type coercion as per ANSI SQL. In practice, the behavior is mostly the same as PostgreSQL.  It disallows certain unreasonable type conversions such as converting string to int or double to boolean.  With legacy policy, Spark allows the type coercion as long as it is a valid Cast, which is very loose.  e.g. converting string to int or double to boolean is allowed.  It is also the only behavior in Spark 2.x and it is compatible with Hive.  With strict policy, Spark doesn't allow any possible precision loss or data truncation in type coercion, e.g. converting double to int or decimal to double is not allowed.|3.0.0|
 
@@ -128,7 +128,7 @@ By default `spark.sql.ansi.enabled` is false.
 Below is a list of all the keywords in Spark SQL.
 
 |Keyword|Spark SQL<br>ANSI Mode|Spark SQL<br>Default Mode|SQL-2011|
-|--- |--- |--- |--- |
+|-------|----------------------|-------------------------|--------|
 |ADD|non-reserved|non-reserved|non-reserved|
 |AFTER|non-reserved|non-reserved|non-reserved|
 |ALL|reserved|non-reserved|reserved|

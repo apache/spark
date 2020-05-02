@@ -72,7 +72,7 @@ You can access them by doing
 {% include_example data_types scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 
 |Data type|Value type in Scala|API to access or create a data type|
-|--- |--- |--- |
+|---------|-------------------|-----------------------------------|
 |**ByteType**|Byte|ByteType|
 |**ShortType**|Short|ShortType|
 |**IntegerType**|Int|IntegerType|
@@ -100,7 +100,7 @@ please use factory methods provided in
 `org.apache.spark.sql.types.DataTypes`.
 
 |Data type|Value type in Java|API to access or create a data type|
-|--- |--- |--- |
+|---------|------------------|-----------------------------------|
 |**ByteType**|byte or Byte|DataTypes.ByteType|
 |**ShortType**|short or Short|DataTypes.ShortType|
 |**IntegerType**|int or Integer|DataTypes.IntegerType|
@@ -129,7 +129,7 @@ from pyspark.sql.types import *
 {% endhighlight %}
 
 |Data type|Value type in Python|API to access or create a data type|
-|--- |--- |--- |
+|---------|--------------------|-----------------------------------|
 |**ByteType**|int or long<br>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
 |**ShortType**|int or long<br>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
 |**IntegerType**|int or long|IntegerType()|
@@ -151,7 +151,7 @@ from pyspark.sql.types import *
 
 <div data-lang="r"  markdown="1">
 |Data type|Value type in R|API to access or create a data type|
-|--- |--- |--- |
+|---------|---------------|-----------------------------------|
 |**ByteType**|integer <br>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -128 to 127.|"byte"|
 |**ShortType**|integer <br>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -32768 to 32767.|"short"|
 |**IntegerType**|integer|"integer"|
@@ -176,7 +176,7 @@ from pyspark.sql.types import *
 The following table shows the type names as well as aliases used in Spark SQL parser for each data type.
 
 |Data type|SQL name|
-|--- |--- |
+|---------|--------|
 |**BooleanType**|BOOLEAN|
 |**ByteType**|BYTE, TINYINT|
 |**ShortType**|SHORT, SMALLINT|

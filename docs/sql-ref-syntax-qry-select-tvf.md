@@ -51,7 +51,7 @@ function_name ( expression [ , ... ] ) [ table_alias ]
 ### Supported Table-valued Functions
 
 |Function|Argument Type(s)|Description|
-|--- |--- |--- |
+|--------|----------------|-----------|
 |**range** ( end )|Long|Creates a table with a single *LongType* column named *id*, containing<br> rows in a range from 0 to *end* (exclusive) with step value 1.|
 |**range** (  start, end )|Long, Long|Creates a table with a single *LongType* column named *id*, containing<br> rows in a range from *start* to *end* (exclusive) with step value 1.|
 |**range** (  start, end, step )|Long, Long, Long|Creates a table with a single *LongType* column named *id*, containing<br> rows in a range from *start* to *end* (exclusive) with *step* value.|

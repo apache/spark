@@ -29,7 +29,7 @@ There are several common scenarios for datetime usage in Spark:
 Spark uses pattern letters in the following table for date and timestamp parsing and formatting:
 
 |Symbol|Meaning|Presentation|Examples|
-|--- |--- |--- |--- |
+|------|-------|------------|--------|
 |**G**|era|text|AD; Anno Domini; A|
 |**y**|year|year|2020; 20|
 |**D**|day-of-year|number|189|
@@ -58,8 +58,8 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 |**Z**|zone-offset|offset-Z|+0000; -0800; -08:00;|
 |**'**|escape for text|delimiter||
 |**''**|single quote|literal|'|
-|**[**|optional section start|||
-|**]**|optional section end|||
+|**[**|optional section start| | |
+|**]**|optional section end| | |
 
 The count of pattern letters determines the format.
 
