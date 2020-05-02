@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.internal.config.UI._
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
