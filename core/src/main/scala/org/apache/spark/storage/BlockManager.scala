@@ -1925,8 +1925,7 @@ private[spark] class BlockManager(
 
     // TODO: We can sort these blocks based on some policy (LRU/blockSize etc)
     //   so that we end up prioritize them over each other
-    val blocksFailedReplication = ThreadUtils.parmap(
-      replicateBlocksInfo, "decommissionRddCacheBlocks", 4) {
+    val blocksFailedReplication = replicateBlocksInfo.map{
       case ReplicateBlock(blockId, existingReplicas, maxReplicas) =>
         val replicatedSuccessfully = replicateBlock(
           blockId,
@@ -2053,7 +2052,6 @@ private[spark] class BlockManager(
             case e: InterruptedException =>
               logInfo("Interrupted during migration, will not refresh migrations.")
               stopped = true
-              // no-op
             case NonFatal(e) =>
               logError("Error occurred while trying to " +
                 "replicate cached RDD blocks for block manager decommissioning", e)

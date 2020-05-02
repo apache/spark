@@ -336,13 +336,14 @@ class BlockManagerMasterEndpoint(
     val info = blockManagerInfo(blockManagerId)
 
     val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
-    rddBlocks.map { blockId =>
+    val result = rddBlocks.map { blockId =>
       val currentBlockLocations = blockLocations.get(blockId)
       val maxReplicas = currentBlockLocations.size + 1
       val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
       val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
       replicateMsg
     }.toSeq
+    result
   }
 
   // Remove a block from the slaves that have it. This can only be used to remove
@@ -491,7 +492,7 @@ class BlockManagerMasterEndpoint(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
-    logDebug(s"Updating block info on master ${blockId}")
+    logDebug(s"Updating block info on master ${blockId} for ${blockManagerId}")
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {

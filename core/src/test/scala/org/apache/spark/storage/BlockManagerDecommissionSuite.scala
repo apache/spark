@@ -30,18 +30,11 @@ import org.apache.spark.util.ThreadUtils
 
 class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
 
-  override def beforeEach(): Unit = {
-    val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
-      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 100L)
-      .set(config.STORAGE_DECOMMISSION_ENABLED, true)
-
-    sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
-  }
+  val numExecs = 2
 
   test(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor") {
-    // runDecomTest(true, false)
+    runDecomTest(true, false)
   }
 
   test(s"verify that shuffle blocks are migrated.") {
@@ -49,6 +42,16 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
   }
 
   private def runDecomTest(persist: Boolean, shuffle: Boolean) = {
+    val master = s"local-cluster[${numExecs}, 1, 1024]"
+    val conf = new SparkConf().setAppName("test").setMaster(master)
+      .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
+      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 100L)
+      .set(config.STORAGE_DECOMMISSION_ENABLED, true)
+      .set(config.STORAGE_RDD_DECOMMISSION_ENABLED, persist)
+      .set(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED, shuffle)
+
+    sc = new SparkContext(master, "test", conf)
+
     // Create input RDD with 10 partitions
     val input = sc.parallelize(1 to 10, 10)
     val accum = sc.longAccumulator("mapperRunAccumulator")
@@ -91,15 +94,19 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // Wait for the job to have started
     sem.acquire(1)
 
+    // Give Spark a tiny bit to start the tasks after the listener says hello
+    Thread.sleep(100)
+
     // Decommission one of the executor
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
-    assert(execs.size == 3, s"Expected 3 executors but found ${execs.size}")
+    assert(execs.size == numExecs, s"Expected ${numExecs} executors but found ${execs.size}")
     val execToDecommission = execs.head
-    // sched.decommissionExecutor(execToDecommission)
+    logDebug(s"Decommissioning executor ${execToDecommission}")
+    sched.decommissionExecutor(execToDecommission)
 
     // Wait for job to finish
-    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 5.seconds)
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 6.seconds)
     assert(asyncCountResult === 10)
     // All 10 tasks finished, so accum should have been increased 10 times
     assert(accum.value === 10)
@@ -107,9 +114,13 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // All tasks should be successful, nothing should have failed
     sc.listenerBus.waitUntilEmpty()
     if (shuffle) {
-      assert(taskEndEvents.size === 20) // 10 mappers & 10 reducers
+      // 10 mappers & 10 reducers
+      assert(taskEndEvents.size === 20,
+        s"Expected 20 tasks got ${taskEndEvents.size} (${taskEndEvents})")
     } else {
-      assert(taskEndEvents.size === 10) // 10 mappers
+      // 10 mappers
+      assert(taskEndEvents.size === 10,
+        s"Expected 10 tasks got ${taskEndEvents.size} (${taskEndEvents})")
     }
     assert(taskEndEvents.map(_.reason).toSet === Set(Success))
 

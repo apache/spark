@@ -426,14 +426,14 @@ package object config {
         "an indexed shuffle resolver (like sort based shuffe)")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val STORAGE_RDD_DECOMMISSION_ENABLED =
     ConfigBuilder("spark.storage.decommission.rdd_blocks")
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
     ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
