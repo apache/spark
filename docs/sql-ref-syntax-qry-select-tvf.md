@@ -40,7 +40,7 @@ function_name ( expression [ , ... ] ) [ table_alias ]
 <dl>
   <dt><code><em>table_alias</em></code></dt>
   <dd>
-    Specifies a temporary name with an optional column name list. <br><br>
+    Specifies a temporary name with an optional column name list. <br/><br/>
     <b>Syntax:</b>
       <code>
         [ AS ] table_name [ ( column_name [ , ... ] ) ]
@@ -52,10 +52,10 @@ function_name ( expression [ , ... ] ) [ table_alias ]
 
 |Function|Argument Type(s)|Description|
 |--------|----------------|-----------|
-|**range** ( end )|Long|Creates a table with a single *LongType* column named *id*, containing<br> rows in a range from 0 to *end* (exclusive) with step value 1.|
-|**range** (  start, end )|Long, Long|Creates a table with a single *LongType* column named *id*, containing<br> rows in a range from *start* to *end* (exclusive) with step value 1.|
-|**range** (  start, end, step )|Long, Long, Long|Creates a table with a single *LongType* column named *id*, containing<br> rows in a range from *start* to *end* (exclusive) with *step* value.|
-|**range** (  start, end, step, numPartitions )|Long, Long, Long, Int|Creates a table with a single *LongType* column named *id*, containing<br> rows in a range from *start* to *end* (exclusive) with *step* value, with partition number *numPartitions* specified.|
+|**range** ( *end* )|Long|Creates a table with a single *LongType* column named *id*, <br/> containing rows in a range from 0 to *end* (exclusive) with step value 1.|
+|**range** ( *start, end* )|Long, Long|Creates a table with a single *LongType* column named *id*, <br/> containing rows in a range from *start* to *end* (exclusive) with step value 1.|
+|**range** ( *start, end, step* )|Long, Long, Long|Creates a table with a single *LongType* column named *id*, <br/> containing rows in a range from *start* to *end* (exclusive) with *step* value.|
+|**range** ( *start, end, step, numPartitions* )|Long, Long, Long, Int|Creates a table with a single *LongType* column named *id*, <br/> containing rows in a range from *start* to *end* (exclusive) with *step* value, with partition number *numPartitions* specified.|
 
 ### Examples
 

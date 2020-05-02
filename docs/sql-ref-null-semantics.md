@@ -49,7 +49,7 @@ other `SQL` constructs.
 </style>
 
 The following illustrates the schema layout and data of a table named `person`. The data contains `NULL` values in
-the `age` column and this table will be used in various examples in the sections below.<br>
+the `age` column and this table will be used in various examples in the sections below.<br/>
 **<u>TABLE: person</u>**
 
 |Id |Name|Age|
@@ -260,7 +260,7 @@ the rules of how `NULL` values are handled by aggregate functions.
 - `NULL` values are ignored from processing by all the aggregate functions.
   - Only exception to this rule is COUNT(*) function.
 - Some aggregate functions return `NULL` when all input values are `NULL` or the input data set
-  is empty.<br> The list of these functions is:
+  is empty.<br/> The list of these functions is:
   - MAX
   - MIN
   - SUM

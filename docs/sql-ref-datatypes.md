@@ -85,10 +85,10 @@ You can access them by doing
 |**BooleanType**|Boolean|BooleanType|
 |**TimestampType**|java.sql.Timestamp|TimestampType|
 |**DateType**|java.sql.Date|DateType|
-|**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br>**Note:** The default value of *containsNull* is true.|
-|**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br>**Note:** The default value of *valueContainsNull* is true.|
-|**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
-|**StructField**|The value type in Scala of the data type of this field(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br>**Note:** The default value of *nullable* is true.|
+|**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
+|**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
+|**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in Scala of the data type of this field(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is true.|
 
 </div>
 
@@ -107,15 +107,15 @@ please use factory methods provided in
 |**LongType**|long or Long|DataTypes.LongType|
 |**FloatType**|float or Float|DataTypes.FloatType|
 |**DoubleType**|double or Double|DataTypes.DoubleType|
-|**DecimalType**|java.math.BigDecimal|DataTypes.createDecimalType()<br>DataTypes.createDecimalType(*precision*, *scale*).|
+|**DecimalType**|java.math.BigDecimal|DataTypes.createDecimalType()<br/>DataTypes.createDecimalType(*precision*, *scale*).|
 |**StringType**|String|DataTypes.StringType|
 |**BinaryType**|byte[]|DataTypes.BinaryType|
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
 |**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
 |**DateType**|java.sql.Date|DataTypes.DateType|
-|**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br>**Note:** The value of *containsNull* will be true.<br>DataTypes.createArrayType(*elementType*, *containsNull*).|
-|**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br>**Note:** The value of *valueContainsNull* will be true.<br>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
-|**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
+|**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
+|**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
+|**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
 |**StructField**|The value type in Java of the data type of this field (For example, int for a StructField with the data type IntegerType)|DataTypes.createStructField(*name*, *dataType*, *nullable*)| 
 
 </div>
@@ -130,11 +130,11 @@ from pyspark.sql.types import *
 
 |Data type|Value type in Python|API to access or create a data type|
 |---------|--------------------|-----------------------------------|
-|**ByteType**|int or long<br>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
-|**ShortType**|int or long<br>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
+|**ByteType**|int or long<br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
+|**ShortType**|int or long<br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
 |**IntegerType**|int or long|IntegerType()|
-|**LongType**|long<br>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807.Otherwise, please convert data to decimal.Decimal and use DecimalType.|LongType()|
-|**FloatType**|float<br>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
+|**LongType**|long<br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807.Otherwise, please convert data to decimal.Decimal and use DecimalType.|LongType()|
+|**FloatType**|float<br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
 |**DoubleType**|float|DoubleType()|
 |**DecimalType**|decimal.Decimal|DecimalType()|
 |**StringType**|string|StringType()|
@@ -142,21 +142,22 @@ from pyspark.sql.types import *
 |**BooleanType**|bool|BooleanType()|
 |**TimestampType**|datetime.datetime|TimestampType()|
 |**DateType**|datetime.date|DateType()|
-|**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br>**Note:**The default value of *containsNull* is True.|
-|**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br>**Note:**The default value of *valueContainsNull* is True.|
-|**StructType**|list or tuple|StructType(*fields*)<br>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
-|**StructField**|The value type in Python of the data type of this field<br>(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br>**Note:** The default value of *nullable* is True.|
+|**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
+|**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
+|**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in Python of the data type of this field<br/>(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is True.|
 
 </div>
 
 <div data-lang="r"  markdown="1">
+
 |Data type|Value type in R|API to access or create a data type|
 |---------|---------------|-----------------------------------|
-|**ByteType**|integer <br>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -128 to 127.|"byte"|
-|**ShortType**|integer <br>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -32768 to 32767.|"short"|
+|**ByteType**|integer <br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -128 to 127.|"byte"|
+|**ShortType**|integer <br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -32768 to 32767.|"short"|
 |**IntegerType**|integer|"integer"|
-|**LongType**|integer <br>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807.  Otherwise, please convert data to decimal.Decimal and use DecimalType.|"long"|
-|**FloatType**|numeric <br>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|"float"|
+|**LongType**|integer <br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807.  Otherwise, please convert data to decimal.Decimal and use DecimalType.|"long"|
+|**FloatType**|numeric <br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|"float"|
 |**DoubleType**|numeric|"double"|
 |**DecimalType**|Not supported|Not supported|
 |**StringType**|character|"string"|
@@ -164,10 +165,10 @@ from pyspark.sql.types import *
 |**BooleanType**|logical|"bool"|
 |**TimestampType**|POSIXct|"timestamp"|
 |**DateType**|Date|"date"|
-|**ArrayType**|vector or list|list(type="array", elementType=*elementType*, containsNull=[*containsNull*])<br>**Note:** The default value of *containsNull* is TRUE.|
-|**MapType**|environment|list(type="map", keyType=*keyType*, valueType=*valueType*, valueContainsNull=[*valueContainsNull*])<br> **Note:** The default value of *valueContainsNull* is TRUE.|
-|**StructType**|named list|list(type="struct", fields=*fields*)<br> **Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
-|**StructField**|The value type in R of the data type of this field (For example, integer for a StructField with the data type IntegerType)|list(name=*name*, type=*dataType*, nullable=[*nullable*])<br> **Note:** The default value of *nullable* is TRUE.|
+|**ArrayType**|vector or list|list(type="array", elementType=*elementType*, containsNull=[*containsNull*])<br/>**Note:** The default value of *containsNull* is TRUE.|
+|**MapType**|environment|list(type="map", keyType=*keyType*, valueType=*valueType*, valueContainsNull=[*valueContainsNull*])<br/> **Note:** The default value of *valueContainsNull* is TRUE.|
+|**StructType**|named list|list(type="struct", fields=*fields*)<br/> **Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in R of the data type of this field (For example, integer for a StructField with the data type IntegerType)|list(name=*name*, type=*dataType*, nullable=[*nullable*])<br/> **Note:** The default value of *nullable* is TRUE.|
 
 </div>
 
