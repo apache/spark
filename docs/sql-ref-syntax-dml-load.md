@@ -75,11 +75,11 @@ LOAD DATA [ LOCAL ] INPATH path [ OVERWRITE ] INTO TABLE table_identifier [ part
 -- Example without partition specification.
 -- Assuming the students table has already been created and populated.
 SELECT * FROM students;
-  +---------+----------------------+----------+
-  |     name|               address|student_id|
-  +---------+----------------------+----------+
-  |Amy Smith|123 Park Ave, San Jose|    111111|
-  +---------+----------------------+----------+
++---------+----------------------+----------+
+|     name|               address|student_id|
++---------+----------------------+----------+
+|Amy Smith|123 Park Ave, San Jose|    111111|
++---------+----------------------+----------+
 
 CREATE TABLE test_load (name VARCHAR(64), address VARCHAR(64), student_id INT) USING HIVE;
 
@@ -87,11 +87,11 @@ CREATE TABLE test_load (name VARCHAR(64), address VARCHAR(64), student_id INT) U
 LOAD DATA LOCAL INPATH '/user/hive/warehouse/students' OVERWRITE INTO TABLE test_load;
 
 SELECT * FROM test_load;
-  +---------+----------------------+----------+
-  |     name|               address|student_id|
-  +---------+----------------------+----------+
-  |Amy Smith|123 Park Ave, San Jose|    111111|
-  +---------+----------------------+----------+
++---------+----------------------+----------+
+|     name|               address|student_id|
++---------+----------------------+----------+
+|Amy Smith|123 Park Ave, San Jose|    111111|
++---------+----------------------+----------+
 
 -- Example with partition specification.
 CREATE TABLE test_partition (c1 INT, c2 INT, c3 INT) PARTITIONED BY (c2, c3);
@@ -103,13 +103,13 @@ INSERT INTO test_partition PARTITION (c2 = 5, c3 = 6) VALUES (4);
 INSERT INTO test_partition PARTITION (c2 = 8, c3 = 9) VALUES (7);
 
 SELECT * FROM test_partition;
-  +---+---+---+
-  | c1| c2| c3|
-  +---+---+---+
-  |  1|  2|  3|
-  |  4|  5|  6|
-  |  7|  8|  9|
-  +---+---+---+
++---+---+---+
+| c1| c2| c3|
++---+---+---+
+|  1|  2|  3|
+|  4|  5|  6|
+|  7|  8|  9|
++---+---+---+
 
 CREATE TABLE test_load_partition (c1 INT, c2 INT, c3 INT) USING HIVE PARTITIONED BY (c2, c3);
 
@@ -118,9 +118,9 @@ LOAD DATA LOCAL INPATH '/user/hive/warehouse/test_partition/c2=2/c3=3'
     OVERWRITE INTO TABLE test_load_partition PARTITION (c2=2, c3=3);
 
 SELECT * FROM test_load_partition;
-  +---+---+---+
-  | c1| c2| c3|
-  +---+---+---+
-  |  1|  2|  3|
-  +---+---+---+
++---+---+---+
+| c1| c2| c3|
++---+---+---+
+|  1|  2|  3|
++---+---+---+
 {% endhighlight %}

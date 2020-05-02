@@ -28,194 +28,38 @@ There are several common scenarios for datetime usage in Spark:
 
 Spark uses pattern letters in the following table for date and timestamp parsing and formatting:
 
-<table class="table">
-<tr>
-  <th> <b>Symbol</b> </th>
-  <th> <b>Meaning</b> </th>
-  <th> <b>Presentation</b> </th>
-  <th> <b>Examples</b> </th>
-</tr>
-<tr>
-  <td> <b>G</b> </td>
-  <td> era </td>
-  <td> text </td>
-  <td> AD; Anno Domini; A </td>
-</tr>
-<tr>
-  <td> <b>y</b> </td>
-  <td> year </td>
-  <td> year </td>
-  <td> 2020; 20 </td>
-</tr>
-<tr>
-  <td> <b>D</b> </td>
-  <td> day-of-year </td>
-  <td> number </td>
-  <td> 189 </td>
-</tr>
-<tr>
-  <td> <b>M/L</b> </td>
-  <td> month-of-year </td>
-  <td> number/text </td>
-  <td> 7; 07; Jul; July; J </td>
-</tr>
-<tr>
-  <td> <b>d</b> </td>
-  <td> day-of-month </td>
-  <td> number </td>
-  <td> 28 </td>
-</tr>
-<tr>
-  <td> <b>Q/q</b> </td>
-  <td> quarter-of-year </td>
-  <td> number/text </td>
-  <td> 3; 03; Q3; 3rd quarter </td>
-</tr>
-<tr>
-  <td> <b>Y</b> </td>
-  <td> week-based-year </td>
-  <td> year </td>
-  <td> 1996; 96 </td>
-</tr>
-<tr>
-  <td> <b>w</b> </td>
-  <td> week-of-week-based-year </td>
-  <td> number </td>
-  <td> 27 </td>
-</tr>
-<tr>
-  <td> <b>W</b> </td>
-  <td> week-of-month </td>
-  <td> number </td>
-  <td> 4 </td>
-</tr>
-<tr>
-  <td> <b>E</b> </td>
-  <td> day-of-week </td>
-  <td> text </td>
-  <td> Tue; Tuesday; T </td>
-</tr>
-<tr>
-  <td> <b>u</b> </td>
-  <td> localized day-of-week </td>
-  <td> number/text </td>
-  <td> 2; 02; Tue; Tuesday; T </td>
-</tr>
-<tr>
-  <td> <b>F</b> </td>
-  <td> week-of-month </td>
-  <td> number </td>
-  <td> 3 </td>
-</tr>
-<tr>
-  <td> <b>a</b> </td>
-  <td> am-pm-of-day </td>
-  <td> text </td>
-  <td> PM </td>
-</tr>
-<tr>
-  <td> <b>h</b> </td>
-  <td> clock-hour-of-am-pm (1-12) </td>
-  <td> number </td>
-  <td> 12 </td>
-</tr>
-<tr>
-  <td> <b>K</b> </td>
-  <td> hour-of-am-pm (0-11) </td>
-  <td> number </td>
-  <td> 0 </td>
-</tr>
-<tr>
-  <td> <b>k</b> </td>
-  <td> clock-hour-of-day (1-24) </td>
-  <td> number </td>
-  <td> 0 </td>
-</tr>
-<tr>
-  <td> <b>H</b> </td>
-  <td> hour-of-day (0-23)  </td>
-  <td> number </td>
-  <td> 0 </td>
-</tr>
-<tr>
-  <td> <b>m</b> </td>
-  <td> minute-of-hour </td>
-  <td> number </td>
-  <td> 30 </td>
-</tr>
-<tr>
-  <td> <b>s</b> </td>
-  <td> second-of-minute </td>
-  <td> number </td>
-  <td> 55 </td>
-</tr>
-<tr>
-  <td> <b>S</b> </td>
-  <td> fraction-of-second </td>
-  <td> fraction </td>
-  <td> 978 </td>
-</tr>
-<tr>
-  <td> <b>V</b> </td>
-  <td> time-zone ID </td>
-  <td> zone-id </td>
-  <td> America/Los_Angeles; Z; -08:30 </td>
-</tr>
-<tr>
-  <td> <b>z</b> </td>
-  <td> time-zone name </td>
-  <td> zone-name </td>
-  <td> Pacific Standard Time; PST </td>
-</tr>
-<tr>
-  <td> <b>O</b> </td>
-  <td> localized zone-offset </td>
-  <td> offset-O </td>
-  <td> GMT+8; GMT+08:00; UTC-08:00; </td>
-</tr>
-<tr>
-  <td> <b>X</b> </td>
-  <td> zone-offset 'Z' for zero </td>
-  <td> offset-X </td>
-  <td> Z; -08; -0830; -08:30; -083015; -08:30:15; </td>
-</tr>
-<tr>
-  <td> <b>x</b> </td>
-  <td> zone-offset </td>
-  <td> offset-x </td>
-  <td> +0000; -08; -0830; -08:30; -083015; -08:30:15; </td>
-</tr>
-<tr>
-  <td> <b>Z</b> </td>
-  <td> zone-offset </td>
-  <td> offset-Z </td>
-  <td> +0000; -0800; -08:00; </td>
-</tr>
-<tr>
-  <td> <b>'</b> </td>
-  <td> escape for text </td>
-  <td> delimiter </td>
-  <td></td>
-</tr>
-<tr>
-  <td> <b>''</b> </td>
-  <td> single quote </td>
-  <td> literal </td>
-  <td> ' </td>
-</tr>
-<tr>
-  <td> <b>[</b> </td>
-  <td> optional section start </td>
-  <td>  </td>
-  <td>  </td>
-</tr>
-<tr>
-  <td> <b>]</b> </td>
-  <td> optional section end </td>
-  <td>  </td>
-  <td>  </td>
-</tr>
-</table>
+|Symbol|Meaning|Presentation|Examples|
+|--- |--- |--- |--- |
+|**G**|era|text|AD; Anno Domini; A|
+|**y**|year|year|2020; 20|
+|**D**|day-of-year|number|189|
+|**M/L**|month-of-year|number/text|7; 07; Jul; July; J|
+|**d**|day-of-month|number|28|
+|**Q/q**|quarter-of-year|number/text|3; 03; Q3; 3rd quarter|
+|**Y**|week-based-year|year|1996; 96|
+|**w**|week-of-week-based-year|number|27|
+|**W**|week-of-month|number|4|
+|**E**|day-of-week|text|Tue; Tuesday; T|
+|**u**|localized day-of-week|number/text|2; 02; Tue; Tuesday; T|
+|**F**|week-of-month|number|3|
+|**a**|am-pm-of-day|text|PM|
+|**h**|clock-hour-of-am-pm (1-12)|number|12|
+|**K**|hour-of-am-pm (0-11)|number|0|
+|**k**|clock-hour-of-day (1-24)|number|0|
+|**H**|hour-of-day (0-23)|number|0|
+|**m**|minute-of-hour|number|30|
+|**s**|second-of-minute|number|55|
+|**S**|fraction-of-second|fraction|978|
+|**V**|time-zone ID|zone-id|America/Los_Angeles; Z; -08:30|
+|**z**|time-zone name|zone-name|Pacific Standard Time; PST|
+|**O**|localized zone-offset|offset-O|GMT+8; GMT+08:00; UTC-08:00;|
+|**X**|zone-offset 'Z' for zero|offset-X|Z; -08; -0830; -08:30; -083015; -08:30:15;|
+|**x**|zone-offset|offset-x|+0000; -08; -0830; -08:30; -083015; -08:30:15;|
+|**Z**|zone-offset|offset-Z|+0000; -0800; -08:00;|
+|**'**|escape for text|delimiter||
+|**''**|single quote|literal|'|
+|**[**|optional section start|||
+|**]**|optional section end|||
 
 The count of pattern letters determines the format.
 

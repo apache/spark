@@ -31,7 +31,7 @@ for a database and may be used for auditing purposes.
 
 {% highlight sql %}
 ALTER { DATABASE | SCHEMA } database_name
-    SET DBPROPERTIES ( property_name = property_value, ... )
+    SET DBPROPERTIES ( property_name = property_value [ , ... ] )
 {% endhighlight %}
 
 ### Parameters
@@ -52,14 +52,14 @@ ALTER DATABASE inventory SET DBPROPERTIES ('Edited-by' = 'John', 'Edit-date' = '
 
 -- Verify that properties are set.
 DESCRIBE DATABASE EXTENDED inventory;
-   +-------------------------+------------------------------------------+
-   |database_description_item|                database_description_value|
-   +-------------------------+------------------------------------------+
-   |            Database Name|                                 inventory|
-   |              Description|                                          |
-   |                 Location|   file:/temp/spark-warehouse/inventory.db|
-   |               Properties|((Edit-date,01/01/2001), (Edited-by,John))|
-   +-------------------------+------------------------------------------+
++-------------------------+------------------------------------------+
+|database_description_item|                database_description_value|
++-------------------------+------------------------------------------+
+|            Database Name|                                 inventory|
+|              Description|                                          |
+|                 Location|   file:/temp/spark-warehouse/inventory.db|
+|               Properties|((Edit-date,01/01/2001), (Edited-by,John))|
++-------------------------+------------------------------------------+
 {% endhighlight %}
 
 ### Related Statements

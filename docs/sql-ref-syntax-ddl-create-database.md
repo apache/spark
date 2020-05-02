@@ -68,14 +68,14 @@ CREATE DATABASE IF NOT EXISTS customer_db COMMENT 'This is customer database' LO
 
 -- Verify that properties are set.
 DESCRIBE DATABASE EXTENDED customer_db;
-   +-------------------------+--------------------------+
-   |database_description_item|database_description_value|
-   +-------------------------+--------------------------+
-   |            Database Name|               customer_db|
-   |              Description| This is customer database|
-   |                 Location|     hdfs://hacluster/user|
-   |               Properties|   ((ID,001), (Name,John))|
-   +-------------------------+--------------------------+
++-------------------------+--------------------------+
+|database_description_item|database_description_value|
++-------------------------+--------------------------+
+|            Database Name|               customer_db|
+|              Description| This is customer database|
+|                 Location|     hdfs://hacluster/user|
+|               Properties|   ((ID,001), (Name,John))|
++-------------------------+--------------------------+
 {% endhighlight %}
 
 ### Related Statements

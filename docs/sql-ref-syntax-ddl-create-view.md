@@ -42,7 +42,7 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
   <dt><code><em>[ GLOBAL ] TEMPORARY</em></code></dt>
   <dd>TEMPORARY views are session-scoped and will be dropped when session ends 
       because it skips persisting the definition in the underlying metastore, if any.
-      GLOBAL TEMPORARY views are tied to a system preserved temporary database `global_temp`.</dd>
+      GLOBAL TEMPORARY views are tied to a system preserved temporary database <code>global_temp</code>.</dd>
 </dl>
 <dl>
   <dt><code><em>IF NOT EXISTS</em></code></dt>
@@ -64,7 +64,7 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
     <ul>
       <li><code>[ ( column_name [ COMMENT column_comment ], ... ) ]</code> to specify column-level comments.</li>
       <li><code>[ COMMENT view_comment ]</code> to specify view-level comments.</li>
-      <li><code>[ TBLPROPERTIES ( property_name = property_value, ... ) ]</code> to add metadata key-value pairs.</li>
+      <li><code>[ TBLPROPERTIES ( property_name = property_value [ , ... ] ) ]</code> to add metadata key-value pairs.</li>
     </ul>  
   </dd>
 </dl>
