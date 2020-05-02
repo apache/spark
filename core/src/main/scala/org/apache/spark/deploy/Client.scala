@@ -165,10 +165,10 @@ private class ClientEndpoint(
                 case DriverState.FINISHED | DriverState.FAILED |
                      DriverState.ERROR | DriverState.KILLED =>
                   logInfo(s"State of $driverId is  ${statusResponse.state.get}, " +
-                  s"exiting spark-submit JVM.")
+                    s"exiting spark-submit JVM.")
                   System.exit(0)
                 case _ =>
-                  logTrace(s"State of $driverId is  ${statusResponse.state.get}," +
+                  logTrace(s"State of $driverId is  ${statusResponse.state.get}, " +
                     s"continue monitoring driver status.")
               }
             }
