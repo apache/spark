@@ -138,14 +138,14 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = false and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, nodeIdAndWSCGIdMap, Seq.empty, false, false)
-    verifyExpectedExecutionData(executionData, nodes = Seq.empty, edges = Seq.empty, planDescription = "")
+        sqlExecutionUIData, Seq.empty, nodeIdAndWSCGIdMap, false, false)
+    verifyExpectedExecutionData(executionData, edges = Seq.empty, nodes = Seq.empty, planDescription = "")
   }
 
   test("Prepare ExecutionData when details = true and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, nodeIdAndWSCGIdMap, edges, true, false)
+        sqlExecutionUIData, edges, nodeIdAndWSCGIdMap, true, false)
     verifyExpectedExecutionData(
       executionData,
       nodes = getNodes(),
@@ -156,7 +156,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = true and planDescription = true") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, nodeIdAndWSCGIdMap, edges, true, true)
+        sqlExecutionUIData, edges, nodeIdAndWSCGIdMap, true, true)
     verifyExpectedExecutionData(
       executionData,
       nodes = getNodes(),
@@ -166,7 +166,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Prepare ExecutionData when details = true and planDescription = false and WSCG = off") {
     val executionData =
-      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, Map.empty, edges, true, false)
+      sqlResource invokePrivate prepareExecutionData(sqlExecutionUIData, edges, Map.empty, true, false)
     verifyExpectedExecutionData(
       executionData,
       nodes = getExpectedNodesWhenWholeStageCodegenIsOff(),

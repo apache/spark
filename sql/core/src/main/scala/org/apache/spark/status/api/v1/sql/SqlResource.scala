@@ -42,7 +42,7 @@ private[v1] class SqlResource extends BaseAppResource {
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       sqlStore.executionsList(offset, length).map { exec =>
         val (edges, nodeIdAndWSCGIdMap) = computeDetailsIfTrue(sqlStore, exec.executionId, details)
-        prepareExecutionData(exec, nodeIdAndWSCGIdMap, edges,
+        prepareExecutionData(exec, edges, nodeIdAndWSCGIdMap,
           details = details, planDescription = planDescription)
       }
     }
@@ -60,7 +60,7 @@ private[v1] class SqlResource extends BaseAppResource {
       val (edges, nodeIdAndWSCGIdMap) = computeDetailsIfTrue(sqlStore, execId, details)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData(_, nodeIdAndWSCGIdMap, edges, details, planDescription))
+        .map(prepareExecutionData(_, edges, nodeIdAndWSCGIdMap, details, planDescription))
         .getOrElse(throw new NotFoundException("unknown execution id: " + execId))
     }
   }
@@ -109,8 +109,8 @@ private[v1] class SqlResource extends BaseAppResource {
 
   private def prepareExecutionData(
     exec: SQLExecutionUIData,
-    nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map.empty,
     sparkPlanGraphEdges: Seq[SparkPlanGraphEdge] = Seq.empty,
+    nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map.empty,
     details: Boolean,
     planDescription: Boolean): ExecutionData = {
 
