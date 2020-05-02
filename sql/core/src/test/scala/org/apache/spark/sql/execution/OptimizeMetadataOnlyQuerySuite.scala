@@ -113,7 +113,7 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
       |  SELECT MAX(partcol1)
       |  FROM srcpart
       |)
-      |AND partcol2 = 'event'
+      |AND partcol2 = 'even'
       |GROUP BY partcol1
       |""".stripMargin
   )
