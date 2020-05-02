@@ -152,7 +152,7 @@ private[spark] class ApplicationMaster(
   // In cluster mode, used to tell the AM when the user's SparkContext has been initialized.
   private val sparkContextPromise = Promise[SparkContext]()
 
-  private val defaultStagingDir = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
+  private lazy val defaultStagingDir = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
 
   /**
    * Load the list of localized files set by the client, used when launching executors. This should
