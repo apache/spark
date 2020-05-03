@@ -259,15 +259,15 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     bcFeaturesStd.destroy()
     if (handlePersistence) instances.unpersist()
 
-    val rawCoefficients = parameters.slice(2, parameters.length)
+    val rawCoefficients = parameters.take(numFeatures)
     var i = 0
     while (i < numFeatures) {
       rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
       i += 1
     }
     val coefficients = Vectors.dense(rawCoefficients)
-    val intercept = parameters(1)
-    val scale = math.exp(parameters(0))
+    val intercept = parameters(numFeatures)
+    val scale = math.exp(parameters(numFeatures + 1))
     new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
   }
 

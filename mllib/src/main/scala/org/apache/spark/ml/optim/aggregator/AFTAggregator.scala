@@ -98,9 +98,10 @@ import org.apache.spark.ml.regression.AFTPoint
  *    $$
  * </blockquote>
  *
- * @param bcCoefficients The broadcasted value includes three part: The log of scale parameter,
- *                       the intercept and regression coefficients corresponding to the features.
- * @param fitIntercept Whether to fit an intercept term.
+ * @param bcCoefficients The broadcasted value includes three part: 1, regression coefficients
+ *                       corresponding to the features; 2, the intercept; 3, the log of scale
+ *                       parameter.
+ * @param fitIntercept   Whether to fit an intercept term.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
  */
 
@@ -110,13 +111,6 @@ private[ml] class AFTAggregator(
   extends DifferentiableLossAggregator[AFTPoint, AFTAggregator] {
 
   protected override val dim: Int = bcCoefficients.value.size
-  // make transient so we do not serialize between aggregation stages
-  @transient private lazy val parameters = bcCoefficients.value.toArray
-  // the regression coefficients to the covariates
-  @transient private lazy val coefficients = parameters.slice(2, dim)
-  @transient private lazy val intercept = parameters(1)
-  // sigma is the scale parameter of the AFT model
-  @transient private lazy val sigma = math.exp(parameters(0))
 
   /**
    * Add a new training data to this AFTAggregator, and update the loss and gradient
@@ -126,6 +120,11 @@ private[ml] class AFTAggregator(
    * @return This AFTAggregator object.
    */
   def add(data: AFTPoint): this.type = {
+    val coefficients = bcCoefficients.value.toArray
+    val intercept = coefficients(dim - 2)
+    // sigma is the scale parameter of the AFT model
+    val sigma = math.exp(coefficients(dim - 1))
+
     val xi = data.features
     val ti = data.label
     val delta = data.censor
@@ -149,13 +148,13 @@ private[ml] class AFTAggregator(
 
     val multiplier = (delta - math.exp(epsilon)) / sigma
 
-    gradientSumArray(0) += delta + multiplier * sigma * epsilon
-    gradientSumArray(1) += { if (fitIntercept) multiplier else 0.0 }
     xi.foreachNonZero { (index, value) =>
       if (localFeaturesStd(index) != 0.0) {
-        gradientSumArray(index + 2) += multiplier * (value / localFeaturesStd(index))
+        gradientSumArray(index) += multiplier * (value / localFeaturesStd(index))
       }
     }
+    gradientSumArray(dim - 2) += { if (fitIntercept) multiplier else 0.0 }
+    gradientSumArray(dim - 1) += delta + multiplier * sigma * epsilon
 
     weightSum += 1.0
     this
