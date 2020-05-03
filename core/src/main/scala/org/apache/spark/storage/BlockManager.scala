@@ -1913,7 +1913,8 @@ private[spark] class BlockManager(
             Thread.sleep(sleepInterval)
           } catch {
             case _: InterruptedException =>
-              // no-op
+              logInfo("Interrupted during migration, will not refresh migrations.")
+              stopped = true
             case NonFatal(e) =>
               logError("Error occurred while trying to " +
                 "replicate cached RDD blocks for block manager decommissioning", e)
@@ -1934,7 +1935,6 @@ private[spark] class BlockManager(
         stopped = true
         logInfo("Stopping block replication thread")
         blockReplicationThread.interrupt()
-        blockReplicationThread.join()
       }
     }
   }

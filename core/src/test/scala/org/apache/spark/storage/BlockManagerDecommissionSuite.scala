@@ -35,7 +35,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
 
-    sc = new SparkContext("local-cluster[3, 1, 1024]", "test", conf)
+    sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
   }
 
   test(s"verify that an already running task which is going to cache data succeeds " +
@@ -76,15 +76,17 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // Wait for the job to have started
     sem.acquire(1)
 
+    // Give Spark a tiny bit to start the tasks after the listener says hello
+    Thread.sleep(100)
     // Decommission one of the executor
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
-    assert(execs.size == 3, s"Expected 3 executors but found ${execs.size}")
+    assert(execs.size == 2, s"Expected 2 executors but found ${execs.size}")
     val execToDecommission = execs.head
     sched.decommissionExecutor(execToDecommission)
 
     // Wait for job to finish
-    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 3.seconds)
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 6.seconds)
     assert(asyncCountResult === 10)
     // All 10 tasks finished, so accum should have been increased 10 times
     assert(accum.value === 10)
