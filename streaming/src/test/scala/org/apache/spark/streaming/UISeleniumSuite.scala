@@ -125,20 +125,19 @@ class UISeleniumSuite
 
         // Check batch tables
         val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
-        h4Text.exists(_.matches("Active Batches \\(\\d+\\)")) should be (true)
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
-        findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
+        findAll(cssSelector("""#runningBatches-table th""")).map(_.text).toList should be {
+          List("Batch Time", "Records", "Scheduling Delay", "Processing Time",
             "Output Ops: Succeeded/Total", "Status")
         }
-        findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
-            "Total Delay (?)", "Output Ops: Succeeded/Total")
+        findAll(cssSelector("""#completedBatches-table th""")).map(_.text).toList should be {
+          List("Batch Time", "Records", "Scheduling Delay", "Processing Time",
+            "Total Delay", "Output Ops: Succeeded/Total")
         }
 
         val batchLinks =
-          findAll(cssSelector("""#completed-batches-table a""")).flatMap(_.attribute("href")).toSeq
+          findAll(cssSelector("""#completedBatches-table a""")).flatMap(_.attribute("href")).toSeq
         batchLinks.size should be >= 1
 
         // Check a normal batch page
