@@ -331,8 +331,8 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
 
               if (!is.null(lowerBoundsOnCoefficients) && (row != nrow(upperBoundsOnCoefficients)
                 || col != ncol(upperBoundsOnCoefficients))) {
-                stop(paste0("dimension of upperBoundsOnCoefficients ",
-                            "is not the same as lowerBoundsOnCoefficients"))
+                stop("dimension of upperBoundsOnCoefficients ",
+                     "is not the same as lowerBoundsOnCoefficients")
               }
 
               if (is.null(lowerBoundsOnCoefficients)) {
