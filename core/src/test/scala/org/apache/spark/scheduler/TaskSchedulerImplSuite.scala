@@ -19,27 +19,33 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.concurrent.duration._
 
-import org.mockito.Matchers.{anyInt, anyObject, anyString, eq => meq}
+import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.mockito.MockitoSugar
+import org.scalatest.concurrent.Eventually
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.ManualClock
 
 class FakeSchedulerBackend extends SchedulerBackend {
-  def start() {}
-  def stop() {}
-  def reviveOffers() {}
+  def start(): Unit = {}
+  def stop(): Unit = {}
+  def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
+  def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
-    with Logging with MockitoSugar {
+    with Logging with MockitoSugar with Eventually {
 
   var failedTaskSetException: Option[Throwable] = None
   var failedTaskSetReason: String = null
@@ -62,7 +68,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   override def afterEach(): Unit = {
-    super.afterEach()
     if (taskScheduler != null) {
       taskScheduler.stop()
       taskScheduler = null
@@ -71,23 +76,34 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       dagScheduler.stop()
       dagScheduler = null
     }
+    super.afterEach()
   }
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
-    val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
+    setupSchedulerWithMaster("local", confs: _*)
+  }
+
+  def setupScheduler(numCores: Int, confs: (String, String)*): TaskSchedulerImpl = {
+    setupSchedulerWithMaster(s"local[$numCores]", confs: _*)
+  }
+
+  def setupSchedulerWithMaster(master: String, confs: (String, String)*): TaskSchedulerImpl = {
+    val conf = new SparkConf().setMaster(master).setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
     taskScheduler = new TaskSchedulerImpl(sc)
     setupHelper()
   }
 
-  def setupSchedulerWithMockTaskSetBlacklist(): TaskSchedulerImpl = {
+  def setupSchedulerWithMockTaskSetBlacklist(confs: (String, String)*): TaskSchedulerImpl = {
     blacklist = mock[BlacklistTracker]
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     conf.set(config.BLACKLIST_ENABLED, true)
+    confs.foreach { case (k, v) => conf.set(k, v) }
+
     sc = new SparkContext(conf)
     taskScheduler =
-      new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4)) {
+      new TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES)) {
         override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
           val tsm = super.createTaskSetManager(taskSet, maxFailures)
           // we need to create a spied tsm just so we can set the TaskSetBlacklist
@@ -150,7 +166,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler correctly accounts for multiple CPUs per task") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
     // Give zero core offers. Should not generate any tasks
     val zeroCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 0),
       new WorkerOffer("executor1", "host1", 0))
@@ -178,12 +196,312 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
+  private def setupTaskSchedulerForLocalityTests(clock: ManualClock): TaskSchedulerImpl = {
+    val conf = new SparkConf()
+    sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
+    val taskScheduler = new TaskSchedulerImpl(sc,
+      sc.conf.get(config.TASK_MAX_FAILURES),
+      clock = clock) {
+      override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
+        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+      }
+      override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
+        // Don't shuffle the offers around for this test.  Instead, we'll just pass in all
+        // the permutations we care about directly.
+        offers
+      }
+    }
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+
+      override def executorAdded(execId: String, host: String): Unit = {}
+    }
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    val taskSet = FakeTask.createTaskSet(8, 1, 1,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1"))
+    )
+
+    // Offer resources first so that when the taskset is submitted it can initialize
+    // with proper locality level. Otherwise, ANY would be the only locality level.
+    // See TaskSetManager.computeValidLocalityLevels()
+    // This begins the task set as PROCESS_LOCAL locality level
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec1", "host1", 1)))
+    taskScheduler.submitTasks(taskSet)
+    taskScheduler
+  }
+
+  test("SPARK-18886 - partial offers (isAllFreeResources = false) reset timer before " +
+    "any resources have been rejected") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
+
+    // Advancing clock increases locality level to NODE_LOCAL.
+    clock.advance(advanceAmount)
+
+    // If there hasn't yet been any full resource offers,
+    // partial resource (isAllFreeResources = false) offers reset delay scheduling
+    // if this and previous offers were accepted.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // This NODE_LOCAL task should not be accepted.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.isEmpty)
+  }
+
+  test("SPARK-18886 - delay scheduling timer is reset when it accepts all resources offered when " +
+    "isAllFreeResources = true") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
+
+    // Advancing clock increases locality level to NODE_LOCAL.
+    clock.advance(advanceAmount)
+
+    // If there are no rejects on an all resource offer, delay scheduling is reset.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = true)
+      .flatten.length === 1)
+
+    // This NODE_LOCAL task should not be accepted.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.isEmpty)
+  }
+
+  test("SPARK-18886 - task set with no locality requirements should not starve one with them") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 2000
+
+    val taskSet2 = FakeTask.createTaskSet(8, 2, 0)
+    taskScheduler.submitTasks(taskSet2)
+
+    // Stage 2 takes resource since it has no locality requirements
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten
+      .headOption
+      .map(_.name)
+      .getOrElse("")
+      .contains("stage 2.0"))
+
+    // Clock advances to 2s. No locality changes yet.
+    clock.advance(advanceAmount)
+
+    // Stage 2 takes resource since it has no locality requirements
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten
+      .headOption
+      .map(_.name)
+      .getOrElse("")
+      .contains("stage 2.0"))
+
+    // Simulates:
+    // 1. stage 2 has taken all resource offers through single resource offers
+    // 2. stage 1 is offered 0 cpus on allResourceOffer.
+    // This should not reset timer.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 0)),
+        isAllFreeResources = true)
+      .flatten.length === 0)
+
+    // This should move stage 1 to NODE_LOCAL.
+    clock.advance(advanceAmount)
+
+    // Stage 1 should now accept NODE_LOCAL resource.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten
+      .headOption
+      .map(_.name)
+      .getOrElse("")
+      .contains("stage 1.1"))
+  }
+
+  test("SPARK-18886 - partial resource offers (isAllFreeResources = false) reset " +
+    "time if last full resource offer (isAllResources = true) was accepted as well as any " +
+    "following partial resource offers") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
+
+    // PROCESS_LOCAL full resource offer is not rejected due to locality.
+    // It has 0 available cores, so no task is launched.
+    // Timer is reset and locality level remains at PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 0)),
+        isAllFreeResources = true)
+      .flatten.length === 0)
+
+    // Advancing clock increases locality level to NODE_LOCAL.
+    clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted.
+    // Since all offers have been accepted since the last full resource offer
+    // (this one and the previous one), delay scheduling is reset.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // Advancing clock increases locality level to NODE_LOCAL
+    clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted
+    // Since all offers have been accepted since the last full resource offer
+    // (one previous full offer, one previous partial offer, and this partial offer),
+    // delay scheduling is reset.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // This NODE_LOCAL task should not be accepted.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.isEmpty)
+  }
+
+  // This tests two cases
+  // 1. partial resource offer doesn't reset timer after full resource offer had rejected resources
+  // 2. partial resource offer doesn't reset timer after partial resource offer
+  //    had rejected resources
+  test("SPARK-18886 - partial resource offers (isAllFreeResources = false) do not reset " +
+    "time if any offer was rejected since last full offer was fully accepted") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 3000
+
+    // case 1 from test description above.
+    // NODE_LOCAL full resource offer is rejected, so delay scheduling is not reset.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = true)
+      .flatten.isEmpty)
+
+    // Advancing clock increases locality level to NODE_LOCAL
+    clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted,
+    // but because preceding full resource offer was rejected, delay scheduling is not reset.
+    // Locality level remains at NODE_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // Even though we launched a local task above, we still utilize non-local exec2.
+    // This is the behavior change to fix SPARK-18886.
+    // Locality level remains NODE_LOCAL after this clock advance.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+
+    // case 2 from test description above.
+    // PROCESS_LOCAL full resource offer is accepted, resetting delay scheduling.
+    // This line resets the timer and locality level is reset to PROCESS_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = true)
+      .flatten.length === 1)
+
+    // Partial resource offer: NODE_LOCAL exec 2 is rejected, PROCESS_LOCAL exec1 is accepted.
+    // Since there were rejects, delay scheduling is not reset, and follow up partial offers
+    // will not reset delay scheduling, even if they are accepted.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1), WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.size === 1)
+
+    // Advancing clock increases locality level to NODE_LOCAL
+    clock.advance(advanceAmount)
+
+    // PROCESS_LOCAL partial resource is accepted, but does not reset delay scheduling
+    // as described above.
+    // Locality level remains at NODE_LOCAL.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+
+    // NODE_LOCAL partial resource offer is accepted,
+    // verifying locality level was not reset to PROCESS_LOCAL by above offer.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten.length === 1)
+  }
+
   test("Scheduler does not crash when tasks are not serializable") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
     val numFreeCores = 1
     val taskSet = new TaskSet(
-      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
+      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val multiCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", taskCpus),
       new WorkerOffer("executor1", "host1", numFreeCores))
     taskScheduler.submitTasks(taskSet)
@@ -196,28 +514,40 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Even if one of the task sets has not-serializable tasks, the other task set should
     // still be processed without error
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
-    taskScheduler.submitTasks(taskSet)
+    val taskSet2 = new TaskSet(
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
+      1, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    taskScheduler.submitTasks(taskSet2)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
   }
 
-  test("refuse to schedule concurrent attempts for the same stage (SPARK-8103)") {
+  test("concurrent attempts for the same stage only have one active taskset") {
     val taskScheduler = setupScheduler()
-    val attempt1 = FakeTask.createTaskSet(1, 0)
-    val attempt2 = FakeTask.createTaskSet(1, 1)
-    taskScheduler.submitTasks(attempt1)
-    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt2) }
+    def isTasksetZombie(taskset: TaskSet): Boolean = {
+      taskScheduler.taskSetManagerForAttempt(taskset.stageId, taskset.stageAttemptId).get.isZombie
+    }
 
-    // OK to submit multiple if previous attempts are all zombie
-    taskScheduler.taskSetManagerForAttempt(attempt1.stageId, attempt1.stageAttemptId)
-      .get.isZombie = true
+    val attempt1 = FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0)
+    taskScheduler.submitTasks(attempt1)
+    // The first submitted taskset is active
+    assert(!isTasksetZombie(attempt1))
+
+    val attempt2 = FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 1)
     taskScheduler.submitTasks(attempt2)
-    val attempt3 = FakeTask.createTaskSet(1, 2)
-    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt3) }
-    taskScheduler.taskSetManagerForAttempt(attempt2.stageId, attempt2.stageAttemptId)
-      .get.isZombie = true
+    // The first submitted taskset is zombie now
+    assert(isTasksetZombie(attempt1))
+    // The newly submitted taskset is active
+    assert(!isTasksetZombie(attempt2))
+
+    val attempt3 = FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 2)
     taskScheduler.submitTasks(attempt3)
-    assert(!failedTaskSet)
+    // The first submitted taskset remains zombie
+    assert(isTasksetZombie(attempt1))
+    // The second submitted taskset is zombie now
+    assert(isTasksetZombie(attempt2))
+    // The newly submitted taskset is active
+    assert(!isTasksetZombie(attempt3))
   }
 
   test("don't schedule more tasks after a taskset is zombie") {
@@ -225,7 +555,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val numFreeCores = 1
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores))
-    val attempt1 = FakeTask.createTaskSet(10)
+    val attempt1 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 0)
 
     // submit attempt 1, offer some resources, some tasks get scheduled
     taskScheduler.submitTasks(attempt1)
@@ -241,13 +571,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(0 === taskDescriptions2.length)
 
     // if we schedule another attempt for the same stage, it should get scheduled
-    val attempt2 = FakeTask.createTaskSet(10, 1)
+    val attempt2 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 1)
 
     // submit attempt 2, offer some resources, some tasks get scheduled
     taskScheduler.submitTasks(attempt2)
     val taskDescriptions3 = taskScheduler.resourceOffers(workerOffers).flatten
     assert(1 === taskDescriptions3.length)
-    val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescriptions3(0).taskId).get
+    val mgr = Option(taskScheduler.taskIdToTaskSetManager.get(taskDescriptions3(0).taskId)).get
     assert(mgr.taskSet.stageAttemptId === 1)
     assert(!failedTaskSet)
   }
@@ -257,7 +587,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val numFreeCores = 10
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores))
-    val attempt1 = FakeTask.createTaskSet(10)
+    val attempt1 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 0)
 
     // submit attempt 1, offer some resources, some tasks get scheduled
     taskScheduler.submitTasks(attempt1)
@@ -273,7 +603,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(0 === taskDescriptions2.length)
 
     // submit attempt 2
-    val attempt2 = FakeTask.createTaskSet(10, 1)
+    val attempt2 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 1)
     taskScheduler.submitTasks(attempt2)
 
     // attempt 1 finished (this can happen even if it was marked zombie earlier -- all tasks were
@@ -285,7 +615,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(10 === taskDescriptions3.length)
 
     taskDescriptions3.foreach { task =>
-      val mgr = taskScheduler.taskIdToTaskSetManager.get(task.taskId).get
+      val mgr = Option(taskScheduler.taskIdToTaskSetManager.get(task.taskId)).get
       assert(mgr.taskSet.stageAttemptId === 1)
     }
     assert(!failedTaskSet)
@@ -388,7 +718,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         val taskIndex = task.index
         (0 until 4).foreach { attempt =>
           assert(task.attemptNumber === attempt)
-          tsm.handleFailedTask(task.taskId, TaskState.FAILED, TaskResultLost)
+          failTask(task.taskId, TaskState.FAILED, TaskResultLost, tsm)
           val nextAttempts =
             taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("executor4", "host4", 1))).flatten
           if (attempt < 3) {
@@ -401,11 +731,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         }
         // End the other task of the taskset, doesn't matter whether it succeeds or fails.
         val otherTask = tasks(1)
-        val result = new DirectTaskResult[Int](valueSer.serialize(otherTask.taskId), Seq())
+        val result = new DirectTaskResult[Int](valueSer.serialize(otherTask.taskId), Seq(), Array())
         tsm.handleSuccessfulTask(otherTask.taskId, result)
       } else {
         tasks.foreach { task =>
-          val result = new DirectTaskResult[Int](valueSer.serialize(task.taskId), Seq())
+          val result = new DirectTaskResult[Int](valueSer.serialize(task.taskId), Seq(), Array())
           tsm.handleSuccessfulTask(task.taskId, result)
         }
       }
@@ -425,7 +755,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     verify(blacklist, never).updateBlacklistForSuccessfulTaskSet(
       stageId = meq(2),
       stageAttemptId = anyInt(),
-      failuresByExec = anyObject())
+      failuresByExec = any())
   }
 
   test("scheduled tasks obey node and executor blacklists") {
@@ -465,9 +795,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
-  test("abort stage when all executors are blacklisted") {
+  test("abort stage when all executors are blacklisted and we cannot acquire new executor") {
     taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
-    val taskSet = FakeTask.createTaskSet(numTasks = 10, stageAttemptId = 0)
+    val taskSet = FakeTask.createTaskSet(numTasks = 10)
     taskScheduler.submitTasks(taskSet)
     val tsm = stageToMockTaskSetManager(0)
 
@@ -499,7 +829,175 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       WorkerOffer("executor3", "host1", 2)
     )).flatten.size === 0)
     assert(tsm.isZombie)
-    verify(tsm).abort(anyString(), anyObject())
+    verify(tsm).abort(anyString(), any())
+  }
+
+  test("SPARK-22148 abort timer should kick in when task is completely blacklisted & no new " +
+      "executor can be acquired") {
+    // set the abort timer to fail immediately
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0")
+
+    // We have only 1 task remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 1)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
+    failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+      "executor0", failedTask.index)).thenReturn(true)
+
+    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
+    // timer to kick in immediately
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.size === 0)
+    // Wait for the abort timer to kick in. Even though we configure the timeout to be 0, there is a
+    // slight delay as the abort timer is launched in a separate thread.
+    eventually(timeout(500.milliseconds)) {
+      assert(tsm.isZombie)
+    }
+  }
+
+  test("SPARK-22148 try to acquire a new executor when task is unschedulable with 1 executor") {
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "10")
+
+    // We have only 1 task remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 1)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = firstTaskAttempts.head
+    failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+      "executor0", failedTask.index)).thenReturn(true)
+
+    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
+    // timer to expire if no new executors could be acquired. We kill the existing idle blacklisted
+    // executor and try to acquire a new one.
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.size === 0)
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
+    assert(!tsm.isZombie)
+
+    // Offer a new executor which should be accepted
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor1", "host0", 1)
+    )).flatten.size === 1)
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
+    assert(!tsm.isZombie)
+  }
+
+  // This is to test a scenario where we have two taskSets completely blacklisted and on acquiring
+  // a new executor we don't want the abort timer for the second taskSet to expire and abort the job
+  test("SPARK-22148 abort timer should clear unschedulableTaskSetToExpiryTime for all TaskSets") {
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
+
+    // We have 2 taskSets with 1 task remaining in each with 1 executor completely blacklisted
+    val taskSet1 = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
+    taskScheduler.submitTasks(taskSet1)
+    val taskSet2 = FakeTask.createTaskSet(numTasks = 1, stageId = 1, stageAttemptId = 0)
+    taskScheduler.submitTasks(taskSet2)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
+
+    // Fail the running task
+    val failedTask = firstTaskAttempts.head
+    failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+      "executor0", failedTask.index)).thenReturn(true)
+
+    // make an offer. We will schedule the task from the second taskSet. Since a task was scheduled
+    // we do not kick off the abort timer for taskSet1
+    val secondTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
+
+    val tsm2 = stageToMockTaskSetManager(1)
+    val failedTask2 = secondTaskAttempts.head
+    failTask(failedTask2.taskId, TaskState.FAILED, UnknownReason, tsm2)
+    when(tsm2.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+      "executor0", failedTask2.index)).thenReturn(true)
+
+    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
+    // timer for taskSet1 and taskSet2
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.size === 0)
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm2))
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.size == 2)
+
+    // Offer a new executor which should be accepted
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor1", "host1", 1)
+    )).flatten.size === 1)
+
+    // Check if all the taskSets are cleared
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
+
+    assert(!tsm.isZombie)
+  }
+
+  // this test is to check that we don't abort a taskSet which is not being scheduled on other
+  // executors as it is waiting on locality timeout and not being aborted because it is still not
+  // completely blacklisted.
+  test("SPARK-22148 Ensure we don't abort the taskSet if we haven't been completely blacklisted") {
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0",
+      // This is to avoid any potential flakiness in the test because of large pauses in jenkins
+      config.LOCALITY_WAIT.key -> "30s"
+    )
+
+    val preferredLocation = Seq(ExecutorCacheTaskLocation("host0", "executor0"))
+    val taskSet1 = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0,
+      preferredLocation)
+    taskScheduler.submitTasks(taskSet1)
+
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    var taskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = taskAttempts.head
+    failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+      "executor0", failedTask.index)).thenReturn(true)
+
+    // make an offer but we won't schedule anything yet as scheduler locality is still PROCESS_LOCAL
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor1", "host0", 1)
+    )).flatten.isEmpty)
+
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
+
+    assert(!tsm.isZombie)
   }
 
   /**
@@ -560,7 +1058,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         // that are explicitly blacklisted, plus those that have *any* executors blacklisted.
         val nodesForBlacklistedExecutors = offers.filter { offer =>
           execBlacklist.contains(offer.executorId)
-        }.map(_.host).toSet.toSeq
+        }.map(_.host).distinct
         val nodesWithAnyBlacklisting = (nodeBlacklist ++ nodesForBlacklistedExecutors).toSet
         // Similarly, figure out which executors have any blacklisting.  This means all executors
         // that are explicitly blacklisted, plus all executors on nodes that are blacklisted.
@@ -636,7 +1134,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // Fail one of the tasks, but leave the other running.
     val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
-    taskScheduler.handleFailedTask(tsm, failedTask.taskId, TaskState.FAILED, TaskResultLost)
+    failTask(failedTask.taskId, TaskState.FAILED, TaskResultLost, tsm)
     // At this point, our failed task could run on the other executor, so don't give up the task
     // set yet.
     assert(!failedTaskSet)
@@ -660,9 +1158,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(tsm.isZombie)
     assert(failedTaskSet)
     val idx = failedTask.index
-    assert(failedTaskSetReason === s"Aborting TaskSet 0.0 because task $idx (partition $idx) " +
-      s"cannot run anywhere due to node and executor blacklist.  Blacklisting behavior can be " +
-      s"configured via spark.blacklist.*.")
+    assert(failedTaskSetReason === s"""
+      |Aborting $taskSet because task $idx (partition $idx)
+      |cannot run anywhere due to node and executor blacklist.
+      |Most recent failure:
+      |${tsm.taskSetBlacklistHelperOpt.get.getLatestFailureReason}
+      |
+      |Blacklisting behavior can be configured via spark.blacklist.*.
+      |""".stripMargin)
   }
 
   test("don't abort if there is an executor available, though it hasn't had scheduled tasks yet") {
@@ -691,23 +1194,22 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // fail all the tasks on the bad executor
     firstTaskAttempts.foreach { taskAttempt =>
-      taskScheduler.handleFailedTask(tsm, taskAttempt.taskId, TaskState.FAILED, TaskResultLost)
+      failTask(taskAttempt.taskId, TaskState.FAILED, TaskResultLost, tsm)
     }
 
     // Here is the main check of this test -- we have the same offers again, and we schedule it
-    // successfully.  Because the scheduler first tries to schedule with locality in mind, at first
-    // it won't schedule anything on executor1.  But despite that, we don't abort the job.  Then the
-    // scheduler tries for ANY locality, and successfully schedules tasks on executor1.
+    // successfully.  Because the scheduler tries to schedule with locality in mind, at first
+    // it won't schedule anything on executor1.  But despite that, we don't abort the job.
     val secondTaskAttempts = taskScheduler.resourceOffers(offers).flatten
-    assert(secondTaskAttempts.size == 2)
-    secondTaskAttempts.foreach { taskAttempt => assert("executor1" === taskAttempt.executorId) }
+    assert(secondTaskAttempts.isEmpty)
     assert(!failedTaskSet)
   }
 
   test("SPARK-16106 locality levels updated if executor added to existing host") {
     val taskScheduler = setupScheduler()
 
-    taskScheduler.submitTasks(FakeTask.createTaskSet(2, 0,
+    taskScheduler.resourceOffers(IndexedSeq(new WorkerOffer("executor0", "host0", 1)))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0,
       (0 until 2).map { _ => Seq(TaskLocation("host0", "executor2")) }: _*
     ))
 
@@ -718,7 +1220,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // only schedule one task because of locality
     assert(taskDescs.size === 1)
 
-    val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescs(0).taskId).get
+    val mgr = Option(taskScheduler.taskIdToTaskSetManager.get(taskDescs(0).taskId)).get
     assert(mgr.myLocalityLevels.toSet === Set(TaskLocality.NODE_LOCAL, TaskLocality.ANY))
     // we should know about both executors, even though we only scheduled tasks on one of them
     assert(taskScheduler.getExecutorsAliveOnHost("host0") === Some(Set("executor0")))
@@ -745,7 +1247,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("scheduler checks for executors that can be expired from blacklist") {
     taskScheduler = setupScheduler()
 
-    taskScheduler.submitTasks(FakeTask.createTaskSet(1, 0))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
     taskScheduler.resourceOffers(IndexedSeq(
       new WorkerOffer("executor0", "host0", 1)
     )).flatten
@@ -759,8 +1261,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
     }
 
     val e0Offers = IndexedSeq(WorkerOffer("executor0", "host0", 1))
@@ -790,8 +1292,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
     }
 
     val e0Offers = IndexedSeq(WorkerOffer("executor0", "host0", 1))
@@ -822,7 +1324,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Locality should be used for bulk offers even with delay scheduling off") {
     val conf = new SparkConf()
-      .set("spark.locality.wait", "0")
+      .set(config.LOCALITY_WAIT.key, "0")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
     val clock = new ManualClock()
@@ -841,8 +1343,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
     }
     taskScheduler.initialize(new FakeSchedulerBackend)
 
@@ -869,7 +1371,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("With delay scheduling off, tasks can be run at any locality level immediately") {
     val conf = new SparkConf()
-      .set("spark.locality.wait", "0")
+      .set(config.LOCALITY_WAIT.key, "0")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
 
     // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
@@ -881,8 +1383,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
     }
     taskScheduler.initialize(new FakeSchedulerBackend)
     // make an offer on the preferred host so the scheduler knows its alive.  This is necessary
@@ -912,4 +1414,371 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       taskScheduler.initialize(new FakeSchedulerBackend)
     }
   }
+
+  test("don't schedule for a barrier taskSet if available slots are less than pending tasks") {
+    val taskCpus = 2
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    // submit attempt 1, offer some resources, since the available slots are less than pending
+    // tasks, don't schedule barrier tasks on the resource offer.
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+  }
+
+  test("don't schedule for a barrier taskSet if available slots are less than " +
+    "pending tasks gpus limiting") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString,
+      "spark.executor.resource.gpu.amount" -> "1", "spark.task.resource.gpu.amount" -> "1")
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0").toBuffer)),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0").toBuffer)))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+  }
+
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together gpus") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString,
+      "spark.executor.resource.gpu.amount" -> "1", "spark.task.resource.gpu.amount" -> "1")
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0").toBuffer)),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0").toBuffer)),
+      new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629"),
+        Map("gpu" -> Seq("0").toBuffer)))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(3 === taskDescriptions.length)
+  }
+
+  // barrier scheduling doesn't yet work with dynamic allocation but test it with another
+  // ResourceProfile anyway to make sure code path works when it is supported
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together " +
+    "diff ResourceProfile") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    val rp = new ResourceProfile(execReqs.requests, taskReqs.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+
+    val numFreeCores = 2
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0", "1").toBuffer), rp.id),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0", "1").toBuffer), rp.id))
+    val attempt1 = FakeTask.createBarrierTaskSet(3, rpId = rp.id)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(3 === taskDescriptions.length)
+  }
+
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together " +
+    "diff ResourceProfile, but not enough gpus") {
+    val taskCpus = 1
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]", config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    val rp = new ResourceProfile(execReqs.requests, taskReqs.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+
+    val numFreeCores = 2
+    // make each of the worker offers only have 1 GPU, thus making it not enough
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625"),
+        Map("gpu" -> Seq("0").toBuffer), rp.id),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627"),
+        Map("gpu" -> Seq("0").toBuffer), rp.id))
+    val attempt1 = FakeTask.createBarrierTaskSet(3, rpId = rp.id)
+
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+  }
+
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together") {
+    val taskCpus = 2
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
+      new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    // submit attempt 1, offer some resources, all tasks get launched together
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(3 === taskDescriptions.length)
+  }
+
+  test("SPARK-29263: barrier TaskSet can't schedule when higher prio taskset takes the slots") {
+    val taskCpus = 2
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
+      new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
+    val barrier = FakeTask.createBarrierTaskSet(3, stageId = 0, stageAttemptId = 0, priority = 1,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val highPrio = FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0, priority = 0,
+      rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+
+    // submit highPrio and barrier taskSet
+    taskScheduler.submitTasks(highPrio)
+    taskScheduler.submitTasks(barrier)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    // it schedules the highPrio task first, and then will not have enough slots to schedule
+    // the barrier taskset
+    assert(1 === taskDescriptions.length)
+  }
+
+  test("cancelTasks shall kill all the running tasks and fail the stage") {
+    val taskScheduler = setupScheduler()
+
+    taskScheduler.initialize(new FakeSchedulerBackend {
+      override def killTask(
+          taskId: Long,
+          executorId: String,
+          interruptThread: Boolean,
+          reason: String): Unit = {
+        // Since we only submit one stage attempt, the following call is sufficient to mark the
+        // task as killed.
+        taskScheduler.taskSetManagerForAttempt(0, 0).get.runningTasksSet.remove(taskId)
+      }
+    })
+
+    val attempt1 = FakeTask.createTaskSet(10)
+    taskScheduler.submitTasks(attempt1)
+
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(2 === taskDescriptions.length)
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    assert(2 === tsm.runningTasks)
+
+    taskScheduler.cancelTasks(0, false)
+    assert(0 === tsm.runningTasks)
+    assert(tsm.isZombie)
+    assert(taskScheduler.taskSetManagerForAttempt(0, 0).isEmpty)
+  }
+
+  test("killAllTaskAttempts shall kill all the running tasks and not fail the stage") {
+    val taskScheduler = setupScheduler()
+
+    taskScheduler.initialize(new FakeSchedulerBackend {
+      override def killTask(
+          taskId: Long,
+          executorId: String,
+          interruptThread: Boolean,
+          reason: String): Unit = {
+        // Since we only submit one stage attempt, the following call is sufficient to mark the
+        // task as killed.
+        taskScheduler.taskSetManagerForAttempt(0, 0).get.runningTasksSet.remove(taskId)
+      }
+    })
+
+    val attempt1 = FakeTask.createTaskSet(10)
+    taskScheduler.submitTasks(attempt1)
+
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(2 === taskDescriptions.length)
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    assert(2 === tsm.runningTasks)
+
+    taskScheduler.killAllTaskAttempts(0, false, "test")
+    assert(0 === tsm.runningTasks)
+    assert(!tsm.isZombie)
+    assert(taskScheduler.taskSetManagerForAttempt(0, 0).isDefined)
+  }
+
+  test("mark taskset for a barrier stage as zombie in case a task fails") {
+    val taskScheduler = setupScheduler()
+
+    val attempt = FakeTask.createBarrierTaskSet(3)
+    taskScheduler.submitTasks(attempt)
+
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    val offers = (0 until 3).map{ idx =>
+      WorkerOffer(s"exec-$idx", s"host-$idx", 1, Some(s"192.168.0.101:4962$idx"))
+    }
+    taskScheduler.resourceOffers(offers)
+    assert(tsm.runningTasks === 3)
+
+    // Fail a task from the stage attempt.
+    tsm.handleFailedTask(tsm.taskAttempts.head.head.taskId, TaskState.FAILED, TaskKilled("test"))
+    assert(tsm.isZombie)
+  }
+
+  test("Scheduler correctly accounts for GPUs per task") {
+    val taskCpus = 1
+    val taskGpus = 1
+    val executorGpus = 4
+    val executorCpus = 4
+
+    val taskScheduler = setupScheduler(numCores = executorCpus,
+      config.CPUS_PER_TASK.key -> taskCpus.toString,
+      TASK_GPU_ID.amountConf -> taskGpus.toString,
+      EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
+      config.EXECUTOR_CORES.key -> executorCpus.toString)
+    val taskSet = FakeTask.createTaskSet(3)
+
+    val numFreeCores = 2
+    val resources = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
+    val singleCoreWorkerOffers =
+      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
+    val zeroGpuWorkerOffers =
+      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, Map.empty))
+    taskScheduler.submitTasks(taskSet)
+    // WorkerOffer doesn't contain GPU resource, don't launch any task.
+    var taskDescriptions = taskScheduler.resourceOffers(zeroGpuWorkerOffers).flatten
+    assert(0 === taskDescriptions.length)
+    assert(!failedTaskSet)
+    // Launch tasks on executor that satisfies resource requirements.
+    taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
+    assert(2 === taskDescriptions.length)
+    assert(!failedTaskSet)
+    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
+    assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.addresses)
+  }
+
+  test("Scheduler correctly accounts for GPUs per task with fractional amount") {
+    val taskCpus = 1
+    val taskGpus = 0.33
+    val executorGpus = 1
+    val executorCpus = 4
+
+    val taskScheduler = setupScheduler(numCores = executorCpus,
+      config.CPUS_PER_TASK.key -> taskCpus.toString,
+      TASK_GPU_ID.amountConf -> taskGpus.toString,
+      EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
+      config.EXECUTOR_CORES.key -> executorCpus.toString)
+    val taskSet = FakeTask.createTaskSet(5)
+
+    val numFreeCores = 4
+    val resources = Map(GPU -> ArrayBuffer("0", "0", "0"))
+    val singleCoreWorkerOffers =
+      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
+
+    taskScheduler.submitTasks(taskSet)
+    // Launch tasks on executor that satisfies resource requirements.
+    var taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
+    assert(3 === taskDescriptions.length)
+    assert(!failedTaskSet)
+    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
+    assert(ArrayBuffer("0") === taskDescriptions(1).resources.get(GPU).get.addresses)
+    assert(ArrayBuffer("0") === taskDescriptions(2).resources.get(GPU).get.addresses)
+  }
+
+  test("Scheduler works with multiple ResourceProfiles and gpus") {
+    val taskCpus = 1
+    val taskGpus = 1
+    val executorGpus = 4
+    val executorCpus = 4
+
+    val taskScheduler = setupScheduler(numCores = executorCpus,
+      config.CPUS_PER_TASK.key -> taskCpus.toString,
+      TASK_GPU_ID.amountConf -> taskGpus.toString,
+      EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
+      config.EXECUTOR_CORES.key -> executorCpus.toString)
+
+    val ereqs = new ExecutorResourceRequests().cores(6).resource(GPU, 6)
+    val treqs = new TaskResourceRequests().cpus(2).resource(GPU, 2)
+    val rp = new ResourceProfile(ereqs.requests, treqs.requests)
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+    val taskSet = FakeTask.createTaskSet(3)
+    val rpTaskSet = FakeTask.createTaskSet(5, stageId = 1, stageAttemptId = 0,
+      priority = 0, rpId = rp.id)
+
+    val resourcesDefaultProf = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
+    val resources = Map(GPU -> ArrayBuffer("4", "5", "6", "7", "8", "9"))
+
+    val workerOffers =
+      IndexedSeq(new WorkerOffer("executor0", "host0", 2, None, resourcesDefaultProf),
+      new WorkerOffer("executor1", "host1", 6, None, resources, rp.id))
+    taskScheduler.submitTasks(taskSet)
+    taskScheduler.submitTasks(rpTaskSet)
+    // should have 2 for default profile and 2 for additional resource profile
+    var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(5 === taskDescriptions.length)
+    var has2Gpus = 0
+    var has1Gpu = 0
+    for (tDesc <- taskDescriptions) {
+      assert(tDesc.resources.contains(GPU))
+      if (tDesc.resources(GPU).addresses.size == 2) {
+        has2Gpus += 1
+      }
+      if (tDesc.resources(GPU).addresses.size == 1) {
+        has1Gpu += 1
+      }
+    }
+    assert(has2Gpus == 3)
+    assert(has1Gpu == 2)
+
+    val resources3 = Map(GPU -> ArrayBuffer("14", "15", "16", "17", "18", "19"))
+
+    // clear the first 2 worker offers so they don't have any room and add a third
+    // for the resource profile
+    val workerOffers3 = IndexedSeq(
+      new WorkerOffer("executor0", "host0", 0, None, Map.empty),
+      new WorkerOffer("executor1", "host1", 0, None, Map.empty, rp.id),
+      new WorkerOffer("executor2", "host2", 6, None, resources3, rp.id))
+    taskDescriptions = taskScheduler.resourceOffers(workerOffers3).flatten
+    assert(2 === taskDescriptions.length)
+    assert(taskDescriptions.head.resources.contains(GPU))
+    assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
+  }
+
+  /**
+   * Used by tests to simulate a task failure. This calls the failure handler explicitly, to ensure
+   * that all the state is updated when this method returns. Otherwise, there's no way to know when
+   * that happens, since the operation is performed asynchronously by the TaskResultGetter.
+   */
+  private def failTask(
+      tid: Long,
+      state: TaskState.TaskState,
+      reason: TaskFailedReason,
+      tsm: TaskSetManager): Unit = {
+    taskScheduler.statusUpdate(tid, state, ByteBuffer.allocate(0))
+    taskScheduler.handleFailedTask(tsm, tid, state, reason)
+  }
+
 }

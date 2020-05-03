@@ -58,6 +58,7 @@ $(document).ready(function() {
     });
   };
   script.src = ('https:' == document.location.protocol ? 'https://' : 'http://') +
-                'cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML';
+                'cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js' +
+                '?config=TeX-AMS-MML_HTMLorMML';
   document.getElementsByTagName('head')[0].appendChild(script);
 });

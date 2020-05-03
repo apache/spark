@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
  * Usage: BroadcastTest [partitions] [numElem] [blockSize]
  */
 object BroadcastTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val blockSize = if (args.length > 2) args(2) else "4096"
 
@@ -42,7 +42,7 @@ object BroadcastTest {
     val arr1 = (0 until num).toArray
 
     for (i <- 0 until 3) {
-      println("Iteration " + i)
+      println(s"Iteration $i")
       println("===========")
       val startTime = System.nanoTime
       val barr1 = sc.broadcast(arr1)

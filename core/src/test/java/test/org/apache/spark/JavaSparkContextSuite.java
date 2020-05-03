@@ -30,7 +30,7 @@ import org.apache.spark.api.java.*;
 import org.apache.spark.*;
 
 /**
- * Java apps can uses both Java-friendly JavaSparkContext and Scala SparkContext.
+ * Java apps can use both Java-friendly JavaSparkContext and Scala SparkContext.
  */
 public class JavaSparkContextSuite implements Serializable {
 

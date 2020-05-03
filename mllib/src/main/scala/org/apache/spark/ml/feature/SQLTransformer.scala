@@ -70,7 +70,8 @@ class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) 
     dataset.createOrReplaceTempView(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
     val result = dataset.sparkSession.sql(realStatement)
-    dataset.sparkSession.catalog.dropTempView(tableName)
+    // Call SessionCatalog.dropTempView to avoid unpersisting the possibly cached dataset.
+    dataset.sparkSession.sessionState.catalog.dropTempView(tableName)
     result
   }
 
@@ -89,6 +90,12 @@ class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) 
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): SQLTransformer = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"SQLTransformer: uid=$uid" +
+      get(statement).map(i => s", statement=$i").getOrElse("")
+  }
 }
 
 @Since("1.6.0")

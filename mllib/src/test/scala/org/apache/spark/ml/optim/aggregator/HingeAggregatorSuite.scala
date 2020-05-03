@@ -19,12 +19,11 @@ package org.apache.spark.ml.optim.aggregator
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
-
-  import DifferentiableLossAggregatorSuite.getClassificationSummarizers
 
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
@@ -55,8 +54,8 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       coefficients: Vector,
       fitIntercept: Boolean): HingeAggregator = {
     val (featuresSummarizer, ySummarizer) =
-      DifferentiableLossAggregatorSuite.getClassificationSummarizers(instances)
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
     val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcCoefficients = spark.sparkContext.broadcast(coefficients)
     new HingeAggregator(bcFeaturesStd, fitIntercept)(bcCoefficients)
@@ -105,8 +104,8 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val coefArray = Array(1.0, 2.0)
     val intercept = 1.0
     val numFeatures = instances.head.features.size
-    val (featuresSummarizer, _) = getClassificationSummarizers(instances)
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val (featuresSummarizer, _) = Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
     val weightSum = instances.map(_.weight).sum
 
     val agg = getNewAggregator(instances, Vectors.dense(coefArray ++ Array(intercept)),

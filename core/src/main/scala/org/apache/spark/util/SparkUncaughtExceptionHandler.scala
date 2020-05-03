@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: Boolean = true)
   extends Thread.UncaughtExceptionHandler with Logging {
 
-  override def uncaughtException(thread: Thread, exception: Throwable) {
+  override def uncaughtException(thread: Thread, exception: Throwable): Unit = {
     try {
       // Make it explicit that uncaught exceptions are thrown when container is shutting down.
       // It will help users when they analyze the executor logs
@@ -39,19 +39,39 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
       // We may have been called from a shutdown hook. If so, we must not call System.exit().
       // (If we do, we will deadlock.)
       if (!ShutdownHookManager.inShutdown()) {
-        if (exception.isInstanceOf[OutOfMemoryError]) {
-          System.exit(SparkExitCode.OOM)
-        } else if (exitOnUncaughtException) {
-          System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
+        exception match {
+          case _: OutOfMemoryError =>
+            System.exit(SparkExitCode.OOM)
+          case e: SparkFatalException if e.throwable.isInstanceOf[OutOfMemoryError] =>
+            // SPARK-24294: This is defensive code, in case that SparkFatalException is
+            // misused and uncaught.
+            System.exit(SparkExitCode.OOM)
+          case _ if exitOnUncaughtException =>
+            System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
+          case _ =>
+            // SPARK-30310: Don't System.exit() when exitOnUncaughtException is false
         }
       }
     } catch {
-      case oom: OutOfMemoryError => Runtime.getRuntime.halt(SparkExitCode.OOM)
-      case t: Throwable => Runtime.getRuntime.halt(SparkExitCode.UNCAUGHT_EXCEPTION_TWICE)
+      case oom: OutOfMemoryError =>
+        try {
+          logError(s"Uncaught OutOfMemoryError in thread $thread, process halted.", oom)
+        } catch {
+          // absorb any exception/error since we're halting the process
+          case _: Throwable =>
+        }
+        Runtime.getRuntime.halt(SparkExitCode.OOM)
+      case t: Throwable =>
+        try {
+          logError(s"Another uncaught exception in thread $thread, process halted.", t)
+        } catch {
+          case _: Throwable =>
+        }
+        Runtime.getRuntime.halt(SparkExitCode.UNCAUGHT_EXCEPTION_TWICE)
     }
   }
 
-  def uncaughtException(exception: Throwable) {
+  def uncaughtException(exception: Throwable): Unit = {
     uncaughtException(Thread.currentThread(), exception)
   }
 }

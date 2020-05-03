@@ -24,10 +24,14 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, SparkDataStream}
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -42,7 +46,7 @@ import org.apache.spark.util.Clock
 trait ProgressReporter extends Logging {
 
   case class ExecutionStats(
-    inputRows: Map[Source, Long],
+    inputRows: Map[SparkDataStream, Long],
     stateOperators: Seq[StateOperatorProgress],
     eventTimeStats: Map[String, String])
 
@@ -53,11 +57,10 @@ trait ProgressReporter extends Logging {
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
-  protected def newData: Map[Source, DataFrame]
-  protected def availableOffsets: StreamProgress
-  protected def committedOffsets: StreamProgress
-  protected def sources: Seq[Source]
-  protected def sink: Sink
+  protected def newData: Map[SparkDataStream, LogicalPlan]
+  protected def sinkCommitProgress: Option[StreamWriterCommitProgress]
+  protected def sources: Seq[SparkDataStream]
+  protected def sink: Table
   protected def offsetSeqMetadata: OffsetSeqMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
@@ -66,8 +69,11 @@ trait ProgressReporter extends Logging {
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
   private var currentTriggerEndTimestamp = -1L
+  private var currentTriggerStartOffsets: Map[SparkDataStream, String] = _
+  private var currentTriggerEndOffsets: Map[SparkDataStream, String] = _
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
+
   private val currentDurationsMs = new mutable.HashMap[String, Long]()
 
   /** Flag that signals whether any error with input metrics have already been logged */
@@ -79,8 +85,8 @@ trait ProgressReporter extends Logging {
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
 
-  // The timestamp we report an event that has no input data
-  private var lastNoDataProgressEventTime = Long.MinValue
+  // The timestamp we report an event that has not executed anything
+  private var lastNoExecutionProgressEventTime = Long.MinValue
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
   timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
@@ -111,8 +117,18 @@ trait ProgressReporter extends Logging {
     logDebug("Starting Trigger Calculation")
     lastTriggerStartTimestamp = currentTriggerStartTimestamp
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
-    currentStatus = currentStatus.copy(isTriggerActive = true)
+    currentTriggerStartOffsets = null
+    currentTriggerEndOffsets = null
     currentDurationsMs.clear()
+  }
+
+  /**
+   * Record the offsets range this trigger will process. Call this before updating
+   * `committedOffsets` in `StreamExecution` to make sure that the correct range is recorded.
+   */
+  protected def recordTriggerOffsets(from: StreamProgress, to: StreamProgress): Unit = {
+    currentTriggerStartOffsets = from.mapValues(_.json)
+    currentTriggerEndOffsets = to.mapValues(_.json)
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -126,33 +142,48 @@ trait ProgressReporter extends Logging {
     logInfo(s"Streaming query made progress: $newProgress")
   }
 
-  /** Finalizes the query progress and adds it to list of recent status updates. */
-  protected def finishTrigger(hasNewData: Boolean): Unit = {
+  /**
+   * Finalizes the query progress and adds it to list of recent status updates.
+   *
+   * @param hasNewData Whether the sources of this stream had new data for this trigger.
+   * @param hasExecuted Whether any batch was executed during this trigger. Streaming queries that
+   *                    perform stateful aggregations with timeouts can still run batches even
+   *                    though the sources don't have any new data.
+   */
+  protected def finishTrigger(hasNewData: Boolean, hasExecuted: Boolean): Unit = {
+    assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null)
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
-    val executionStats = extractExecutionStats(hasNewData)
-    val processingTimeSec =
-      (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / 1000
+    val executionStats = extractExecutionStats(hasNewData, hasExecuted)
+    val processingTimeMills = currentTriggerEndTimestamp - currentTriggerStartTimestamp
+    val processingTimeSec = Math.max(1L, processingTimeMills).toDouble / MILLIS_PER_SECOND
 
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
-      (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / 1000
+      (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
     } else {
       Double.NaN
     }
     logDebug(s"Execution stats: $executionStats")
 
-    val sourceProgress = sources.map { source =>
+    val sourceProgress = sources.distinct.map { source =>
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
       new SourceProgress(
         description = source.toString,
-        startOffset = committedOffsets.get(source).map(_.json).orNull,
-        endOffset = availableOffsets.get(source).map(_.json).orNull,
+        startOffset = currentTriggerStartOffsets.get(source).orNull,
+        endOffset = currentTriggerEndOffsets.get(source).orNull,
         numInputRows = numRecords,
         inputRowsPerSecond = numRecords / inputTimeSec,
         processedRowsPerSecond = numRecords / processingTimeSec
       )
     }
-    val sinkProgress = new SinkProgress(sink.toString)
+
+    val sinkOutput = if (hasExecuted) {
+      sinkCommitProgress.map(_.numOutputRows)
+    } else {
+      sinkCommitProgress.map(_ => 0L)
+    }
+    val sinkProgress = SinkProgress(sink.toString, sinkOutput)
+    val observedMetrics = extractObservedMetrics(hasNewData, lastExecution)
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -160,20 +191,22 @@ trait ProgressReporter extends Logging {
       name = name,
       timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
+      batchDuration = processingTimeMills,
       durationMs = new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
-      sink = sinkProgress)
+      sink = sinkProgress,
+      observedMetrics = new java.util.HashMap(observedMetrics.asJava))
 
-    if (hasNewData) {
+    if (hasExecuted) {
       // Reset noDataEventTimestamp if we processed any data
-      lastNoDataProgressEventTime = Long.MinValue
+      lastNoExecutionProgressEventTime = Long.MinValue
       updateProgress(newProgress)
     } else {
       val now = triggerClock.getTimeMillis()
-      if (now - noDataProgressEventInterval >= lastNoDataProgressEventTime) {
-        lastNoDataProgressEventTime = now
+      if (now - noDataProgressEventInterval >= lastNoExecutionProgressEventTime) {
+        lastNoExecutionProgressEventTime = now
         updateProgress(newProgress)
       }
     }
@@ -182,76 +215,32 @@ trait ProgressReporter extends Logging {
   }
 
   /** Extract statistics about stateful operators from the executed query plan. */
-  private def extractStateOperatorMetrics(hasNewData: Boolean): Seq[StateOperatorProgress] = {
+  private def extractStateOperatorMetrics(hasExecuted: Boolean): Seq[StateOperatorProgress] = {
     if (lastExecution == null) return Nil
-    // lastExecution could belong to one of the previous triggers if `!hasNewData`.
+    // lastExecution could belong to one of the previous triggers if `!hasExecuted`.
     // Walking the plan again should be inexpensive.
     lastExecution.executedPlan.collect {
       case p if p.isInstanceOf[StateStoreWriter] =>
         val progress = p.asInstanceOf[StateStoreWriter].getProgress()
-        if (hasNewData) progress else progress.copy(newNumRowsUpdated = 0)
+        if (hasExecuted) progress else progress.copy(newNumRowsUpdated = 0)
     }
   }
 
   /** Extracts statistics from the most recent query execution. */
-  private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
+  private def extractExecutionStats(hasNewData: Boolean, hasExecuted: Boolean): ExecutionStats = {
     val hasEventTime = logicalPlan.collect { case e: EventTimeWatermark => e }.nonEmpty
     val watermarkTimestamp =
       if (hasEventTime) Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
       else Map.empty[String, String]
 
     // SPARK-19378: Still report metrics even though no data was processed while reporting progress.
-    val stateOperators = extractStateOperatorMetrics(hasNewData)
+    val stateOperators = extractStateOperatorMetrics(hasExecuted)
 
     if (!hasNewData) {
       return ExecutionStats(Map.empty, stateOperators, watermarkTimestamp)
     }
 
-    // We want to associate execution plan leaves to sources that generate them, so that we match
-    // the their metrics (e.g. numOutputRows) to the sources. To do this we do the following.
-    // Consider the translation from the streaming logical plan to the final executed plan.
-    //
-    //  streaming logical plan (with sources) <==> trigger's logical plan <==> executed plan
-    //
-    // 1. We keep track of streaming sources associated with each leaf in the trigger's logical plan
-    //    - Each logical plan leaf will be associated with a single streaming source.
-    //    - There can be multiple logical plan leaves associated with a streaming source.
-    //    - There can be leaves not associated with any streaming source, because they were
-    //      generated from a batch source (e.g. stream-batch joins)
-    //
-    // 2. Assuming that the executed plan has same number of leaves in the same order as that of
-    //    the trigger logical plan, we associate executed plan leaves with corresponding
-    //    streaming sources.
-    //
-    // 3. For each source, we sum the metrics of the associated execution plan leaves.
-    //
-    val logicalPlanLeafToSource = newData.flatMap { case (source, df) =>
-      df.logicalPlan.collectLeaves().map { leaf => leaf -> source }
-    }
-    val allLogicalPlanLeaves = lastExecution.logical.collectLeaves() // includes non-streaming
-    val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()
-    val numInputRows: Map[Source, Long] =
-      if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
-        val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
-          case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
-        }
-        val sourceToNumInputRows = execLeafToSource.map { case (execLeaf, source) =>
-          val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          source -> numRows
-        }
-        sourceToNumInputRows.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
-      } else {
-        if (!metricWarningLogged) {
-          def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"
-          logWarning(
-            "Could not report metrics as number leaves in trigger logical plan did not match that" +
-                s" of the execution plan:\n" +
-                s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +
-                s"execution plan leaves: ${toString(allExecPlanLeaves)}\n")
-          metricWarningLogged = true
-        }
-        Map.empty
-      }
+    val numInputRows = extractSourceToNumInputRows()
 
     val eventTimeStats = lastExecution.executedPlan.collect {
       case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
@@ -263,6 +252,98 @@ trait ProgressReporter extends Logging {
     }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
     ExecutionStats(numInputRows, stateOperators, eventTimeStats)
+  }
+
+  /** Extract number of input sources for each streaming source in plan */
+  private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
+
+    def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
+      tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
+    }
+
+    val onlyDataSourceV2Sources = {
+      // Check whether the streaming query's logical plan has only V2 micro-batch data sources
+      val allStreamingLeaves = logicalPlan.collect {
+        case s: StreamingDataSourceV2Relation => s.stream.isInstanceOf[MicroBatchStream]
+        case _: StreamingExecutionRelation => false
+      }
+      allStreamingLeaves.forall(_ == true)
+    }
+
+    if (onlyDataSourceV2Sources) {
+      // It's possible that multiple DataSourceV2ScanExec instances may refer to the same source
+      // (can happen with self-unions or self-joins). This means the source is scanned multiple
+      // times in the query, we should count the numRows for each scan.
+      val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
+        case s: MicroBatchScanExec =>
+          val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+          val source = s.stream
+          source -> numRows
+      }
+      logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
+      sumRows(sourceToInputRowsTuples)
+    } else {
+
+      // Since V1 source do not generate execution plan leaves that directly link with source that
+      // generated it, we can only do a best-effort association between execution plan leaves to the
+      // sources. This is known to fail in a few cases, see SPARK-24050.
+      //
+      // We want to associate execution plan leaves to sources that generate them, so that we match
+      // the their metrics (e.g. numOutputRows) to the sources. To do this we do the following.
+      // Consider the translation from the streaming logical plan to the final executed plan.
+      //
+      // streaming logical plan (with sources) <==> trigger's logical plan <==> executed plan
+      //
+      // 1. We keep track of streaming sources associated with each leaf in trigger's logical plan
+      //  - Each logical plan leaf will be associated with a single streaming source.
+      //  - There can be multiple logical plan leaves associated with a streaming source.
+      //  - There can be leaves not associated with any streaming source, because they were
+      //      generated from a batch source (e.g. stream-batch joins)
+      //
+      // 2. Assuming that the executed plan has same number of leaves in the same order as that of
+      //    the trigger logical plan, we associate executed plan leaves with corresponding
+      //    streaming sources.
+      //
+      // 3. For each source, we sum the metrics of the associated execution plan leaves.
+      //
+      val logicalPlanLeafToSource = newData.flatMap { case (source, logicalPlan) =>
+        logicalPlan.collectLeaves().map { leaf => leaf -> source }
+      }
+      val allLogicalPlanLeaves = lastExecution.logical.collectLeaves() // includes non-streaming
+      val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()
+      if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
+        val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
+          case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
+        }
+        val sourceToInputRowsTuples = execLeafToSource.map { case (execLeaf, source) =>
+          val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+          source -> numRows
+        }
+        sumRows(sourceToInputRowsTuples)
+      } else {
+        if (!metricWarningLogged) {
+          def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"
+
+          logWarning(
+            "Could not report metrics as number leaves in trigger logical plan did not match that" +
+              s" of the execution plan:\n" +
+              s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +
+              s"execution plan leaves: ${toString(allExecPlanLeaves)}\n")
+          metricWarningLogged = true
+        }
+        Map.empty
+      }
+    }
+  }
+
+  /** Extracts observed metrics from the most recent query execution. */
+  private def extractObservedMetrics(
+      hasNewData: Boolean,
+      lastExecution: QueryExecution): Map[String, Row] = {
+    if (!hasNewData || lastExecution == null) {
+      return Map.empty
+    }
+    lastExecution.observedMetrics
   }
 
   /** Records the duration of running `body` for the next query progress update. */
@@ -278,7 +359,7 @@ trait ProgressReporter extends Logging {
     result
   }
 
-  private def formatTimestamp(millis: Long): String = {
+  protected def formatTimestamp(millis: Long): String = {
     timestampFormat.format(new Date(millis))
   }
 

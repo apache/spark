@@ -21,30 +21,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
- * Interface for generated predicate
- */
-abstract class Predicate {
-  def eval(r: InternalRow): Boolean
-
-  /**
-   * Initializes internal states given the current partition index.
-   * This is used by nondeterministic expressions to set initial states.
-   * The default implementation does nothing.
-   */
-  def initialize(partitionIndex: Int): Unit = {}
-}
-
-/**
  * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[InternalRow]].
  */
-object GeneratePredicate extends CodeGenerator[Expression, Predicate] {
+object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
 
   protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
   protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =
     BindReferences.bindReference(in, inputSchema)
 
-  protected def create(predicate: Expression): Predicate = {
+  protected def create(predicate: Expression): BasePredicate = {
     val ctx = newCodeGenContext()
     val eval = predicate.genCode(ctx)
 
@@ -53,7 +39,7 @@ object GeneratePredicate extends CodeGenerator[Expression, Predicate] {
         return new SpecificPredicate(references);
       }
 
-      class SpecificPredicate extends ${classOf[Predicate].getName} {
+      class SpecificPredicate extends ${classOf[BasePredicate].getName} {
         private final Object[] references;
         ${ctx.declareMutableStates()}
 
@@ -78,6 +64,7 @@ object GeneratePredicate extends CodeGenerator[Expression, Predicate] {
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
-    CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(ctx.references.toArray).asInstanceOf[BasePredicate]
   }
 }

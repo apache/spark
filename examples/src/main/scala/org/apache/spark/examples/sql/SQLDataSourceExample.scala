@@ -24,7 +24,7 @@ object SQLDataSourceExample {
 
   case class Person(name: String, age: Long)
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
       .appName("Spark SQL data sources example")
@@ -32,12 +32,55 @@ object SQLDataSourceExample {
       .getOrCreate()
 
     runBasicDataSourceExample(spark)
+    runGenericFileSourceOptionsExample(spark)
     runBasicParquetExample(spark)
     runParquetSchemaMergingExample(spark)
     runJsonDatasetExample(spark)
     runJdbcDatasetExample(spark)
 
     spark.stop()
+  }
+
+  private def runGenericFileSourceOptionsExample(spark: SparkSession): Unit = {
+    // $example on:ignore_corrupt_files$
+    // enable ignore corrupt files
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
+    // dir1/file3.json is corrupt from parquet's view
+    val testCorruptDF = spark.read.parquet(
+      "examples/src/main/resources/dir1/",
+      "examples/src/main/resources/dir1/dir2/")
+    testCorruptDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+    // $example off:ignore_corrupt_files$
+    // $example on:recursive_file_lookup$
+    val recursiveLoadedDF = spark.read.format("parquet")
+      .option("recursiveFileLookup", "true")
+      .load("examples/src/main/resources/dir1")
+    recursiveLoadedDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+    // $example off:recursive_file_lookup$
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
+    // $example on:load_with_path_glob_filter$
+    val testGlobFilterDF = spark.read.format("parquet")
+      .option("pathGlobFilter", "*.parquet") // json file should be filtered out
+      .load("examples/src/main/resources/dir1")
+    testGlobFilterDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // +-------------+
+    // $example off:load_with_path_glob_filter$
   }
 
   private def runBasicDataSourceExample(spark: SparkSession): Unit = {
@@ -49,6 +92,21 @@ object SQLDataSourceExample {
     val peopleDF = spark.read.format("json").load("examples/src/main/resources/people.json")
     peopleDF.select("name", "age").write.format("parquet").save("namesAndAges.parquet")
     // $example off:manual_load_options$
+    // $example on:manual_load_options_csv$
+    val peopleDFCsv = spark.read.format("csv")
+      .option("sep", ";")
+      .option("inferSchema", "true")
+      .option("header", "true")
+      .load("examples/src/main/resources/people.csv")
+    // $example off:manual_load_options_csv$
+    // $example on:manual_save_options_orc$
+    usersDF.write.format("orc")
+      .option("orc.bloom.filter.columns", "favorite_color")
+      .option("orc.dictionary.key.threshold", "1.0")
+      .option("orc.column.encoding.direct", "name")
+      .save("users_with_options.orc")
+    // $example off:manual_save_options_orc$
+
     // $example on:direct_sql$
     val sqlDF = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
     // $example off:direct_sql$
@@ -59,15 +117,15 @@ object SQLDataSourceExample {
     usersDF.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
     // $example off:write_partitioning$
     // $example on:write_partition_and_bucket$
-    peopleDF
+    usersDF
       .write
       .partitionBy("favorite_color")
       .bucketBy(42, "name")
-      .saveAsTable("people_partitioned_bucketed")
+      .saveAsTable("users_partitioned_bucketed")
     // $example off:write_partition_and_bucket$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed")
-    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
+    spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed")
   }
 
   private def runBasicParquetExample(spark: SparkSession): Unit = {

@@ -25,7 +25,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
 
   protected def columns: Seq[Node] = {
     <th>Batch Time</th>
-      <th>Input Size</th>
+      <th>Records</th>
       <th>Scheduling Delay
         {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "top")}
       </th>
@@ -51,7 +51,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
 
   protected def baseRow(batch: BatchUIData): Seq[Node] = {
     val batchTime = batch.batchTime.milliseconds
-    val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
+    val formattedBatchTime = SparkUIUtils.formatBatchTime(batchTime, batchInterval)
     val numRecords = batch.numRecords
     val schedulingDelay = batch.schedulingDelay
     val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
@@ -75,7 +75,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
   }
 
   private def batchTable: Seq[Node] = {
-    <table id={tableId} class="table table-bordered table-striped table-condensed sortable">
+    <table id={tableId} class="table table-bordered table-striped table-sm sortable">
       <thead>
         {columns}
       </thead>

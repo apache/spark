@@ -29,11 +29,15 @@ import org.apache.spark.sql.internal.SQLConf
  * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual
  * Hadoop output committer using an option specified in SQLConf.
  */
-class SQLHadoopMapReduceCommitProtocol(jobId: String, path: String)
-  extends HadoopMapReduceCommitProtocol(jobId, path) with Serializable with Logging {
+class SQLHadoopMapReduceCommitProtocol(
+    jobId: String,
+    path: String,
+    dynamicPartitionOverwrite: Boolean = false)
+  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
+    with Serializable with Logging {
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
-    var committer = context.getOutputFormatClass.newInstance().getOutputCommitter(context)
+    var committer = super.setupCommitter(context)
 
     val configuration = context.getConfiguration
     val clazz =

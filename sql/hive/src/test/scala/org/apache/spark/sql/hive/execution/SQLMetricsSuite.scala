@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton {
+// Disable AQE because metric info is different with AQE on/off
+class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
+  with DisableAdaptiveExecutionSuite {
 
   test("writing data out metrics: hive") {
     testMetricsNonDynamicPartition("hive", "t1")

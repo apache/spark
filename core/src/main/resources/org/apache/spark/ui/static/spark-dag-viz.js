@@ -172,6 +172,12 @@ function renderDagViz(forJob) {
     svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
+  metadataContainer().selectAll(".barrier-rdd").each(function() {
+    var rddId = d3.select(this).text().trim();
+    var clusterId = VizConstants.clusterPrefix + rddId;
+    svg.selectAll("g." + clusterId).classed("barrier", true)
+  });
+
   resizeSvg(svg);
   interpretLineBreak(svg);
 }
@@ -220,7 +226,7 @@ function renderDagVizForJob(svgContainer) {
     } else {
       // Link each graph to the corresponding stage page (TODO: handle stage attempts)
       // Use the link from the stage table so it also works for the history server
-      var attemptId = 0
+      var attemptId = 0;
       var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
         .select("a.name-link")
         .attr("href");
@@ -236,7 +242,7 @@ function renderDagVizForJob(svgContainer) {
     // existing ones, taking into account the position and width of the last stage's
     // container. We do not need to do this for the first stage of this job.
     if (i > 0) {
-      var existingStages = svgContainer.selectAll("g.cluster.stage")
+      var existingStages = svgContainer.selectAll("g.cluster.stage");
       if (!existingStages.empty()) {
         var lastStage = d3.select(existingStages[0].pop());
         var lastStageWidth = toFloat(lastStage.select("rect").attr("width"));
@@ -276,11 +282,7 @@ function renderDagVizForJob(svgContainer) {
 
 /* Render the dot file as an SVG in the given container. */
 function renderDot(dot, container, forJob) {
-  var escaped_dot = dot
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"");
-  var g = graphlibDot.read(escaped_dot);
+  var g = graphlibDot.read(dot);
   var renderer = new dagreD3.render();
   preprocessGraphLayout(g, forJob);
   renderer(container, g);
@@ -369,8 +371,8 @@ function resizeSvg(svg) {
  * here this function is to enable line break.
  */
 function interpretLineBreak(svg) {
-  var allTSpan = svg.selectAll("tspan").each(function() {
-    node = d3.select(this);
+  svg.selectAll("tspan").each(function() {
+    var node = d3.select(this);
     var original = node[0][0].innerHTML;
     if (original.indexOf("\\n") != -1) {
       var arr = original.split("\\n");
@@ -492,22 +494,15 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 
-/*
- * Replace `/n` with `<br/>`
- */
-function replaceLineBreak(str) {
-    return str.replace("\\n", "<br/>");
-}
-
 /* (Job page only) Helper function to add tooltips for RDDs. */
 function addTooltipsForRDDs(svgContainer) {
   svgContainer.selectAll("g.node").each(function() {
     var node = d3.select(this);
-    var tooltipText = replaceLineBreak(node.attr("name"));
+    var tooltipText = node.attr("name");
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
-        .attr("data-placement", "bottom")
+        .attr("data-placement", "top")
         .attr("data-html", "true") // to interpret line break, tooltipText is showing <circle> title
         .attr("title", tooltipText);
     }

@@ -18,7 +18,8 @@
 package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
-import java.util.concurrent.ConcurrentHashMap
+
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
@@ -26,7 +27,7 @@ import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
- * This class represent an unique identifier for a BlockManager.
+ * This class represent a unique identifier for a BlockManager.
  *
  * The first 2 constructors of this class are made private to ensure that BlockManagerId objects
  * can be created only using the apply method in the companion object. This allows de-duplication
@@ -64,8 +65,7 @@ class BlockManagerId private (
   def topologyInfo: Option[String] = topologyInfo_
 
   def isDriver: Boolean = {
-    executorId == SparkContext.DRIVER_IDENTIFIER ||
-      executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
+    executorId == SparkContext.DRIVER_IDENTIFIER
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
@@ -132,10 +132,17 @@ private[spark] object BlockManagerId {
     getCachedBlockManagerId(obj)
   }
 
-  val blockManagerIdCache = new ConcurrentHashMap[BlockManagerId, BlockManagerId]()
+  /**
+   * The max cache size is hardcoded to 10000, since the size of a BlockManagerId
+   * object is about 48B, the total memory cost should be below 1MB which is feasible.
+   */
+  val blockManagerIdCache = CacheBuilder.newBuilder()
+    .maximumSize(10000)
+    .build(new CacheLoader[BlockManagerId, BlockManagerId]() {
+      override def load(id: BlockManagerId) = id
+    })
 
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
-    blockManagerIdCache.putIfAbsent(id, id)
     blockManagerIdCache.get(id)
   }
 }

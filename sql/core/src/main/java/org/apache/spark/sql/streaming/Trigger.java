@@ -19,9 +19,11 @@ package org.apache.spark.sql.streaming;
 
 import java.util.concurrent.TimeUnit;
 
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
 import scala.concurrent.duration.Duration;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.execution.streaming.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 
 /**
@@ -29,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
  *
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 public class Trigger {
 
   /**
@@ -39,7 +41,7 @@ public class Trigger {
    * @since 2.2.0
    */
   public static Trigger ProcessingTime(long intervalMs) {
-      return ProcessingTime.create(intervalMs, TimeUnit.MILLISECONDS);
+      return ProcessingTimeTrigger.create(intervalMs, TimeUnit.MILLISECONDS);
   }
 
   /**
@@ -49,13 +51,13 @@ public class Trigger {
    *
    * {{{
    *    import java.util.concurrent.TimeUnit
-   *    df.writeStream.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   *    df.writeStream().trigger(Trigger.ProcessingTime(10, TimeUnit.SECONDS))
    * }}}
    *
    * @since 2.2.0
    */
   public static Trigger ProcessingTime(long interval, TimeUnit timeUnit) {
-      return ProcessingTime.create(interval, timeUnit);
+      return ProcessingTimeTrigger.create(interval, timeUnit);
   }
 
   /**
@@ -65,12 +67,12 @@ public class Trigger {
    *
    * {{{
    *    import scala.concurrent.duration._
-   *    df.writeStream.trigger(ProcessingTime(10.seconds))
+   *    df.writeStream.trigger(Trigger.ProcessingTime(10.seconds))
    * }}}
    * @since 2.2.0
    */
   public static Trigger ProcessingTime(Duration interval) {
-      return ProcessingTime.apply(interval);
+      return ProcessingTimeTrigger.apply(interval);
   }
 
   /**
@@ -83,7 +85,7 @@ public class Trigger {
    * @since 2.2.0
    */
   public static Trigger ProcessingTime(String interval) {
-      return ProcessingTime.apply(interval);
+      return ProcessingTimeTrigger.apply(interval);
   }
 
   /**
@@ -94,5 +96,58 @@ public class Trigger {
    */
   public static Trigger Once() {
     return OneTimeTrigger$.MODULE$;
+  }
+
+  /**
+   * A trigger that continuously processes streaming data, asynchronously checkpointing at
+   * the specified interval.
+   *
+   * @since 2.3.0
+   */
+  public static Trigger Continuous(long intervalMs) {
+    return ContinuousTrigger.apply(intervalMs);
+  }
+
+  /**
+   * A trigger that continuously processes streaming data, asynchronously checkpointing at
+   * the specified interval.
+   *
+   * {{{
+   *    import java.util.concurrent.TimeUnit
+   *    df.writeStream.trigger(Trigger.Continuous(10, TimeUnit.SECONDS))
+   * }}}
+   *
+   * @since 2.3.0
+   */
+  public static Trigger Continuous(long interval, TimeUnit timeUnit) {
+    return ContinuousTrigger.create(interval, timeUnit);
+  }
+
+  /**
+   * (Scala-friendly)
+   * A trigger that continuously processes streaming data, asynchronously checkpointing at
+   * the specified interval.
+   *
+   * {{{
+   *    import scala.concurrent.duration._
+   *    df.writeStream.trigger(Trigger.Continuous(10.seconds))
+   * }}}
+   * @since 2.3.0
+   */
+  public static Trigger Continuous(Duration interval) {
+    return ContinuousTrigger.apply(interval);
+  }
+
+  /**
+   * A trigger that continuously processes streaming data, asynchronously checkpointing at
+   * the specified interval.
+   *
+   * {{{
+   *    df.writeStream.trigger(Trigger.Continuous("10 seconds"))
+   * }}}
+   * @since 2.3.0
+   */
+  public static Trigger Continuous(String interval) {
+    return ContinuousTrigger.apply(interval);
   }
 }

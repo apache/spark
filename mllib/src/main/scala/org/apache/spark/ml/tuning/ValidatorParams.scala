@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, _}
+import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
@@ -80,7 +80,7 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
   /**
    * Instrumentation logging for tuning params including the inner estimator and evaluator info.
    */
-  protected def logTuningParams(instrumentation: Instrumentation[_]): Unit = {
+  protected def logTuningParams(instrumentation: Instrumentation): Unit = {
     instrumentation.logNamedValue("estimator", $(estimator).getClass.getCanonicalName)
     instrumentation.logNamedValue("evaluator", $(evaluator).getClass.getCanonicalName)
     instrumentation.logNamedValue("estimatorParamMapsLength", $(estimatorParamMaps).length)
@@ -140,8 +140,8 @@ private[ml] object ValidatorParams {
                 "value" -> compact(render(JString(relativePath))),
                 "isJson" -> compact(render(JBool(false))))
             case _: MLWritable =>
-              throw new NotImplementedError("ValidatorParams.saveImpl does not handle parameters " +
-                "of type: MLWritable that are not DefaultParamsWritable")
+              throw new UnsupportedOperationException("ValidatorParams.saveImpl does not handle" +
+                " parameters of type: MLWritable that are not DefaultParamsWritable")
             case _ =>
               Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v),
                 "isJson" -> compact(render(JBool(true))))
@@ -150,20 +150,14 @@ private[ml] object ValidatorParams {
       }.toSeq
     ))
 
-    val validatorSpecificParams = instance match {
-      case cv: CrossValidatorParams =>
-        List("numFolds" -> parse(cv.numFolds.jsonEncode(cv.getNumFolds)))
-      case tvs: TrainValidationSplitParams =>
-        List("trainRatio" -> parse(tvs.trainRatio.jsonEncode(tvs.getTrainRatio)))
-      case _ =>
-        // This should not happen.
-        throw new NotImplementedError("ValidatorParams.saveImpl does not handle type: " +
-          instance.getClass.getCanonicalName)
-    }
-
-    val jsonParams = validatorSpecificParams ++ List(
-      "estimatorParamMaps" -> parse(estimatorParamMapsJson),
-      "seed" -> parse(instance.seed.jsonEncode(instance.getSeed)))
+    val params = instance.extractParamMap().toSeq
+    val skipParams = List("estimator", "evaluator", "estimatorParamMaps")
+    val jsonParams = render(params
+      .filter { case ParamPair(p, v) => !skipParams.contains(p.name)}
+      .map { case ParamPair(p, v) =>
+        p.name -> parse(p.jsonEncode(v))
+      }.toList ++ List("estimatorParamMaps" -> parse(estimatorParamMapsJson))
+    )
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 

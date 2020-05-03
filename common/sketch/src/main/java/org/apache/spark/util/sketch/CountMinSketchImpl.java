@@ -60,7 +60,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     this.eps = eps;
     this.confidence = confidence;
     this.width = (int) Math.ceil(2 / eps);
-    this.depth = (int) Math.ceil(-Math.log(1 - confidence) / Math.log(2));
+    this.depth = (int) Math.ceil(-Math.log1p(-confidence) / Math.log(2));
     initTablesWith(depth, width, seed);
   }
 
@@ -322,10 +322,10 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
 
   @Override
   public byte[] toByteArray() throws IOException {
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    writeTo(out);
-    out.close();
-    return out.toByteArray();
+    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+      writeTo(out);
+      return out.toByteArray();
+    }
   }
 
   public static CountMinSketchImpl readFrom(InputStream in) throws IOException {

@@ -22,11 +22,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.clustering.{KMeans => NewKMeans}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
-import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.linalg.BLAS.axpy
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -46,14 +44,23 @@ class KMeans private (
     private var initializationMode: String,
     private var initializationSteps: Int,
     private var epsilon: Double,
-    private var seed: Long) extends Serializable with Logging {
+    private var seed: Long,
+    private var distanceMeasure: String) extends Serializable with Logging {
+
+  @Since("0.8.0")
+  private def this(k: Int, maxIterations: Int, initializationMode: String, initializationSteps: Int,
+      epsilon: Double, seed: Long) =
+    this(k, maxIterations, initializationMode, initializationSteps,
+      epsilon, seed, DistanceMeasure.EUCLIDEAN)
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20,
-   * initializationMode: "k-means||", initializationSteps: 2, epsilon: 1e-4, seed: random}.
+   * initializationMode: "k-means||", initializationSteps: 2, epsilon: 1e-4, seed: random,
+   * distanceMeasure: "euclidean"}.
    */
   @Since("0.8.0")
-  def this() = this(2, 20, KMeans.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong())
+  def this() = this(2, 20, KMeans.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong(),
+    DistanceMeasure.EUCLIDEAN)
 
   /**
    * Number of clusters to create (k).
@@ -114,26 +121,6 @@ class KMeans private (
   }
 
   /**
-   * This function has no effect since Spark 2.0.0.
-   */
-  @Since("1.4.0")
-  @deprecated("This has no effect and always returns 1", "2.1.0")
-  def getRuns: Int = {
-    logWarning("Getting number of runs has no effect since Spark 2.0.0.")
-    1
-  }
-
-  /**
-   * This function has no effect since Spark 2.0.0.
-   */
-  @Since("0.8.0")
-  @deprecated("This has no effect", "2.1.0")
-  def setRuns(runs: Int): this.type = {
-    logWarning("Setting number of runs has no effect since Spark 2.0.0.")
-    this
-  }
-
-  /**
    * Number of steps for the k-means|| initialization mode
    */
   @Since("1.4.0")
@@ -184,6 +171,22 @@ class KMeans private (
     this
   }
 
+  /**
+   * The distance suite used by the algorithm.
+   */
+  @Since("2.4.0")
+  def getDistanceMeasure: String = distanceMeasure
+
+  /**
+   * Set the distance suite used by the algorithm.
+   */
+  @Since("2.4.0")
+  def setDistanceMeasure(distanceMeasure: String): this.type = {
+    DistanceMeasure.validateDistanceMeasure(distanceMeasure)
+    this.distanceMeasure = distanceMeasure
+    this
+  }
+
   // Initial cluster centers can be provided as a KMeansModel object rather than using the
   // random or k-means|| initializationMode
   private var initialModel: Option[KMeansModel] = None
@@ -206,45 +209,44 @@ class KMeans private (
    */
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
-    run(data, None)
+    val instances = data.map(point => (point, 1.0))
+    runWithWeight(instances, None)
   }
 
-  private[spark] def run(
-      data: RDD[Vector],
-      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
-
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data is not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
+  private[spark] def runWithWeight(
+      data: RDD[(Vector, Double)],
+      instr: Option[Instrumentation]): KMeansModel = {
 
     // Compute squared norms and cache them.
-    val norms = data.map(Vectors.norm(_, 2.0))
-    norms.persist()
-    val zippedData = data.zip(norms).map { case (v, norm) =>
-      new VectorWithNorm(v, norm)
+    val norms = data.map { case (v, _) =>
+      Vectors.norm(v, 2.0)
     }
-    val model = runAlgorithm(zippedData, instr)
-    norms.unpersist()
 
-    // Warn at the end of the run as well, for increased visibility.
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data was not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
+    val zippedData = data.zip(norms).map { case ((v, w), norm) =>
+      new VectorWithNorm(v, norm, w)
     }
+
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      zippedData.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+    val model = runAlgorithmWithWeight(zippedData, instr)
+    zippedData.unpersist()
+
     model
   }
 
   /**
    * Implementation of K-Means algorithm.
    */
-  private def runAlgorithm(
+  private def runAlgorithmWithWeight(
       data: RDD[VectorWithNorm],
-      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
+      instr: Option[Instrumentation]): KMeansModel = {
 
     val sc = data.sparkContext
 
     val initStartTime = System.nanoTime()
+
+    val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
     val centers = initialModel match {
       case Some(kMeansCenters) =>
@@ -253,9 +255,10 @@ class KMeans private (
         if (initializationMode == KMeans.RANDOM) {
           initRandom(data)
         } else {
-          initKMeansParallel(data)
+          initKMeansParallel(data, distanceMeasureInstance)
         }
     }
+    val numFeatures = centers.head.vector.size
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(f"Initialization with $initializationMode took $initTimeInSeconds%.3f seconds.")
 
@@ -265,50 +268,70 @@ class KMeans private (
 
     val iterationStartTime = System.nanoTime()
 
-    instr.foreach(_.logNumFeatures(centers.head.vector.size))
+    instr.foreach(_.logNumFeatures(numFeatures))
+
+    val shouldDistributed = centers.length * centers.length * numFeatures.toLong > 1000000L
 
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < maxIterations && !converged) {
-      val costAccum = sc.doubleAccumulator
       val bcCenters = sc.broadcast(centers)
+      val stats = if (shouldDistributed) {
+        distanceMeasureInstance.computeStatisticsDistributedly(sc, bcCenters)
+      } else {
+        distanceMeasureInstance.computeStatistics(centers)
+      }
+      val bcStats = sc.broadcast(stats)
+
+      val costAccum = sc.doubleAccumulator
 
       // Find the new centers
-      val newCenters = data.mapPartitions { points =>
-        val thisCenters = bcCenters.value
-        val dims = thisCenters.head.vector.size
+      val collected = data.mapPartitions { points =>
+        val centers = bcCenters.value
+        val stats = bcStats.value
+        val dims = centers.head.vector.size
 
-        val sums = Array.fill(thisCenters.length)(Vectors.zeros(dims))
-        val counts = Array.fill(thisCenters.length)(0L)
+        val sums = Array.fill(centers.length)(Vectors.zeros(dims))
+
+        // clusterWeightSum is needed to calculate cluster center
+        // cluster center =
+        //     sample1 * weight1/clusterWeightSum + sample2 * weight2/clusterWeightSum + ...
+        val clusterWeightSum = Array.ofDim[Double](centers.length)
 
         points.foreach { point =>
-          val (bestCenter, cost) = KMeans.findClosest(thisCenters, point)
-          costAccum.add(cost)
-          val sum = sums(bestCenter)
-          axpy(1.0, point.vector, sum)
-          counts(bestCenter) += 1
+          val (bestCenter, cost) = distanceMeasureInstance.findClosest(centers, stats, point)
+          costAccum.add(cost * point.weight)
+          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter))
+          clusterWeightSum(bestCenter) += point.weight
         }
 
-        counts.indices.filter(counts(_) > 0).map(j => (j, (sums(j), counts(j)))).iterator
-      }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
-        axpy(1.0, sum2, sum1)
-        (sum1, count1 + count2)
-      }.mapValues { case (sum, count) =>
-        scal(1.0 / count, sum)
-        new VectorWithNorm(sum)
+        Iterator.tabulate(centers.length)(j => (j, (sums(j), clusterWeightSum(j))))
+          .filter(_._2._2 > 0)
+      }.reduceByKey { (sumweight1, sumweight2) =>
+        axpy(1.0, sumweight2._1, sumweight1._1)
+        (sumweight1._1, sumweight1._2 + sumweight2._2)
       }.collectAsMap()
 
-      bcCenters.destroy(blocking = false)
+      if (iteration == 0) {
+        instr.foreach(_.logNumExamples(costAccum.count))
+        instr.foreach(_.logSumOfWeights(collected.values.map(_._2).sum))
+      }
+
+      bcCenters.destroy()
+      bcStats.destroy()
 
       // Update the cluster centers and costs
       converged = true
-      newCenters.foreach { case (j, newCenter) =>
-        if (converged && KMeans.fastSquaredDistance(newCenter, centers(j)) > epsilon * epsilon) {
+      collected.foreach { case (j, (sum, weightSum)) =>
+        val newCenter = distanceMeasureInstance.centroid(sum, weightSum)
+        if (converged &&
+          !distanceMeasureInstance.isCenterConverged(centers(j), newCenter, epsilon)) {
           converged = false
         }
         centers(j) = newCenter
       }
 
       cost = costAccum.value
+      instr.foreach(_.logNamedValue(s"Cost@iter=$iteration", s"$cost"))
       iteration += 1
     }
 
@@ -323,7 +346,7 @@ class KMeans private (
 
     logInfo(s"The cost is $cost.")
 
-    new KMeansModel(centers.map(_.vector))
+    new KMeansModel(centers.map(_.vector), distanceMeasure, cost, iteration)
   }
 
   /**
@@ -345,7 +368,8 @@ class KMeans private (
    *
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
-  private[clustering] def initKMeansParallel(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
+  private[clustering] def initKMeansParallel(data: RDD[VectorWithNorm],
+      distanceMeasureInstance: DistanceMeasure): Array[VectorWithNorm] = {
     // Initialize empty centers and point costs.
     var costs = data.map(_ => Double.PositiveInfinity)
 
@@ -356,7 +380,7 @@ class KMeans private (
     require(sample.nonEmpty, s"No samples available from $data")
 
     val centers = ArrayBuffer[VectorWithNorm]()
-    var newCenters = Seq(sample.head.toDense)
+    var newCenters = Array(sample.head.toDense)
     centers ++= newCenters
 
     // On each step, sample 2 * k points on average with probability proportional
@@ -369,12 +393,12 @@ class KMeans private (
       bcNewCentersList += bcNewCenters
       val preCosts = costs
       costs = data.zip(preCosts).map { case (point, cost) =>
-        math.min(KMeans.pointCost(bcNewCenters.value, point), cost)
+        math.min(distanceMeasureInstance.pointCost(bcNewCenters.value, point), cost)
       }.persist(StorageLevel.MEMORY_AND_DISK)
       val sumCosts = costs.sum()
 
-      bcNewCenters.unpersist(blocking = false)
-      preCosts.unpersist(blocking = false)
+      bcNewCenters.unpersist()
+      preCosts.unpersist()
 
       val chosen = data.zip(costs).mapPartitionsWithIndex { (index, pointCosts) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
@@ -385,24 +409,26 @@ class KMeans private (
       step += 1
     }
 
-    costs.unpersist(blocking = false)
-    bcNewCentersList.foreach(_.destroy(false))
+    costs.unpersist()
+    bcNewCentersList.foreach(_.destroy())
 
-    val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_))
+    val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_)).toArray
 
-    if (distinctCenters.size <= k) {
-      distinctCenters.toArray
+    if (distinctCenters.length <= k) {
+      distinctCenters
     } else {
       // Finally, we might have a set of more than k distinct candidate centers; weight each
       // candidate by the number of points in the dataset mapping to it and run a local k-means++
       // on the weighted centers to pick k of them
       val bcCenters = data.context.broadcast(distinctCenters)
-      val countMap = data.map(KMeans.findClosest(bcCenters.value, _)._1).countByValue()
+      val countMap = data
+        .map(distanceMeasureInstance.findClosest(bcCenters.value, _)._1)
+        .countByValue()
 
-      bcCenters.destroy(blocking = false)
+      bcCenters.destroy()
 
       val myWeights = distinctCenters.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
-      LocalKMeans.kMeansPlusPlus(0, distinctCenters.toArray, myWeights, k, 30)
+      LocalKMeans.kMeansPlusPlus(0, distinctCenters, myWeights, k, 30)
     }
   }
 }
@@ -467,58 +493,6 @@ object KMeans {
   }
 
   /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data Training points as an `RDD` of `Vector` types.
-   * @param k Number of clusters to create.
-   * @param maxIterations Maximum number of iterations allowed.
-   * @param runs This param has no effect since Spark 2.0.0.
-   * @param initializationMode The initialization algorithm. This can either be "random" or
-   *                           "k-means||". (default: "k-means||")
-   * @param seed Random seed for cluster initialization. Default is to generate seed based
-   *             on system time.
-   */
-  @Since("1.3.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String,
-      seed: Long): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setInitializationMode(initializationMode)
-      .setSeed(seed)
-      .run(data)
-  }
-
-  /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data Training points as an `RDD` of `Vector` types.
-   * @param k Number of clusters to create.
-   * @param maxIterations Maximum number of iterations allowed.
-   * @param runs This param has no effect since Spark 2.0.0.
-   * @param initializationMode The initialization algorithm. This can either be "random" or
-   *                           "k-means||". (default: "k-means||")
-   */
-  @Since("0.8.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setInitializationMode(initializationMode)
-      .run(data)
-  }
-
-  /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
    */
   @Since("0.8.0")
@@ -529,65 +503,6 @@ object KMeans {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .run(data)
-  }
-
-  /**
-   * Trains a k-means model using specified parameters and the default values for unspecified.
-   */
-  @Since("0.8.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .run(data)
-  }
-
-  /**
-   * Returns the index of the closest center to the given point, as well as the squared distance.
-   */
-  private[mllib] def findClosest(
-      centers: TraversableOnce[VectorWithNorm],
-      point: VectorWithNorm): (Int, Double) = {
-    var bestDistance = Double.PositiveInfinity
-    var bestIndex = 0
-    var i = 0
-    centers.foreach { center =>
-      // Since `\|a - b\| \geq |\|a\| - \|b\||`, we can use this lower bound to avoid unnecessary
-      // distance computation.
-      var lowerBoundOfSqDist = center.norm - point.norm
-      lowerBoundOfSqDist = lowerBoundOfSqDist * lowerBoundOfSqDist
-      if (lowerBoundOfSqDist < bestDistance) {
-        val distance: Double = fastSquaredDistance(center, point)
-        if (distance < bestDistance) {
-          bestDistance = distance
-          bestIndex = i
-        }
-      }
-      i += 1
-    }
-    (bestIndex, bestDistance)
-  }
-
-  /**
-   * Returns the K-means cost of a given point against the given cluster centers.
-   */
-  private[mllib] def pointCost(
-      centers: TraversableOnce[VectorWithNorm],
-      point: VectorWithNorm): Double =
-    findClosest(centers, point)._2
-
-  /**
-   * Returns the squared Euclidean distance between two vectors computed by
-   * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
-   */
-  private[clustering] def fastSquaredDistance(
-      v1: VectorWithNorm,
-      v2: VectorWithNorm): Double = {
-    MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
   }
 
   private[spark] def validateInitMode(initMode: String): Boolean = {
@@ -601,16 +516,16 @@ object KMeans {
 
 /**
  * A vector with its norm for fast distance computation.
- *
- * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
  */
-private[clustering]
-class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable {
+private[clustering] class VectorWithNorm(
+    val vector: Vector,
+    val norm: Double,
+    val weight: Double = 1.0) extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
 
   def this(array: Array[Double]) = this(Vectors.dense(array))
 
   /** Converts the vector to a dense vector. */
-  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
+  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm, weight)
 }

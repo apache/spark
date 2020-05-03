@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Union}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -136,19 +137,19 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
 
   test("maximum decimals") {
     for (expr <- Seq(d1, d2, i, u)) {
-      checkType(Add(expr, u), DecimalType.SYSTEM_DEFAULT)
-      checkType(Subtract(expr, u), DecimalType.SYSTEM_DEFAULT)
+      checkType(Add(expr, u), DecimalType(38, 17))
+      checkType(Subtract(expr, u), DecimalType(38, 17))
     }
 
-    checkType(Multiply(d1, u), DecimalType(38, 19))
-    checkType(Multiply(d2, u), DecimalType(38, 20))
-    checkType(Multiply(i, u), DecimalType(38, 18))
-    checkType(Multiply(u, u), DecimalType(38, 36))
+    checkType(Multiply(d1, u), DecimalType(38, 16))
+    checkType(Multiply(d2, u), DecimalType(38, 14))
+    checkType(Multiply(i, u), DecimalType(38, 7))
+    checkType(Multiply(u, u), DecimalType(38, 6))
 
-    checkType(Divide(u, d1), DecimalType(38, 18))
-    checkType(Divide(u, d2), DecimalType(38, 19))
-    checkType(Divide(u, i), DecimalType(38, 23))
-    checkType(Divide(u, u), DecimalType(38, 18))
+    checkType(Divide(u, d1), DecimalType(38, 17))
+    checkType(Divide(u, d2), DecimalType(38, 16))
+    checkType(Divide(u, i), DecimalType(38, 18))
+    checkType(Divide(u, u), DecimalType(38, 6))
 
     checkType(Remainder(d1, u), DecimalType(19, 18))
     checkType(Remainder(d2, u), DecimalType(21, 18))
@@ -174,18 +175,18 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     assert(d0.isWiderThan(d1) === false)
     assert(d1.isWiderThan(d0) === false)
     assert(d1.isWiderThan(d2) === false)
-    assert(d2.isWiderThan(d1) === true)
+    assert(d2.isWiderThan(d1))
     assert(d2.isWiderThan(d3) === false)
-    assert(d3.isWiderThan(d2) === true)
-    assert(d4.isWiderThan(d3) === true)
+    assert(d3.isWiderThan(d2))
+    assert(d4.isWiderThan(d3))
 
     assert(d1.isWiderThan(ByteType) === false)
-    assert(d2.isWiderThan(ByteType) === true)
+    assert(d2.isWiderThan(ByteType))
     assert(d2.isWiderThan(ShortType) === false)
-    assert(d3.isWiderThan(ShortType) === true)
-    assert(d3.isWiderThan(IntegerType) === true)
+    assert(d3.isWiderThan(ShortType))
+    assert(d3.isWiderThan(IntegerType))
     assert(d3.isWiderThan(LongType) === false)
-    assert(d4.isWiderThan(LongType) === true)
+    assert(d4.isWiderThan(LongType))
     assert(d4.isWiderThan(FloatType) === false)
     assert(d4.isWiderThan(DoubleType) === false)
   }
@@ -269,6 +270,17 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
       ruleTest(overflow <= int, FalseLiteral)
       ruleTest(minValue <= int, Literal(Long.MinValue) <= int)
       ruleTest(underflow <= int, TrueLiteral)
+    }
+  }
+
+  test("SPARK-24468: operations on decimals with negative scale") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val a = AttributeReference("a", DecimalType(3, -10))()
+      val b = AttributeReference("b", DecimalType(1, -1))()
+      val c = AttributeReference("c", DecimalType(35, 1))()
+      checkType(Multiply(a, b), DecimalType(5, -11))
+      checkType(Multiply(a, c), DecimalType(38, -9))
+      checkType(Multiply(b, c), DecimalType(37, 0))
     }
   }
 

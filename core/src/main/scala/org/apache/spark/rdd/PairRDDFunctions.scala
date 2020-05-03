@@ -34,8 +34,8 @@ import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewO
 
 import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.internal.io._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
@@ -51,7 +51,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   extends Logging with Serializable {
 
   /**
-   * :: Experimental ::
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
    *
@@ -67,7 +66,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @note V and C can be different -- for example, one might group an RDD of type
    * (Int, Int) into an RDD of type (Int, Seq[Int]).
    */
-  @Experimental
   def combineByKeyWithClassTag[C](
       createCombiner: V => C,
       mergeValue: (C, V) => C,
@@ -135,10 +133,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * :: Experimental ::
    * Simplified version of combineByKeyWithClassTag that hash-partitions the output RDD.
    */
-  @Experimental
   def combineByKeyWithClassTag[C](
       createCombiner: V => C,
       mergeValue: (C, V) => C,
@@ -265,7 +261,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     } else {
       StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, false, seed)
     }
-    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
+    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true, isOrderSensitive = true)
   }
 
   /**
@@ -295,7 +291,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     } else {
       StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, true, seed)
     }
-    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
+    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true, isOrderSensitive = true)
   }
 
   /**
@@ -394,7 +390,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (`sp` is
    * greater than `p`) would trigger sparse representation of registers, which may reduce the
@@ -436,7 +432,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -456,7 +452,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -473,7 +469,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -615,11 +611,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * :: Experimental ::
    * Simplified version of combineByKeyWithClassTag that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
-  @Experimental
   def combineByKeyWithClassTag[C](
       createCombiner: V => C,
       mergeValue: (C, V) => C,
@@ -1011,7 +1005,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       codec: Class[_ <: CompressionCodec]): Unit = self.withScope {
     saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass,
-      new JobConf(self.context.hadoopConfiguration), Some(codec))
+      new JobConf(self.context.hadoopConfiguration), Option(codec))
   }
 
   /**
@@ -1051,7 +1045,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
-    val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
+    val speculationEnabled = self.conf.get(SPECULATION_ENABLED)
     val outputCommitterClass = hadoopConf.get("mapred.output.committer.class", "")
     if (speculationEnabled && outputCommitterClass.contains("Direct")) {
       val warningMessage =

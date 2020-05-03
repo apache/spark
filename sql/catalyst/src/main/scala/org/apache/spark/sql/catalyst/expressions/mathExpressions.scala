@@ -21,9 +21,10 @@ import java.{lang => jl}
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -61,8 +62,8 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
-  override def toString: String = s"$name($child)"
-  override def prettyName: String = name
+  override def toString: String = s"$prettyName($child)"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
 
   protected override def nullSafeEval(input: Any): Any = {
     f(input.asInstanceOf[Double])
@@ -95,7 +96,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = java.lang.Math.${funcName}($c);
+          ${ev.value} = java.lang.StrictMath.${funcName}($c);
         }
       """
     )
@@ -114,9 +115,9 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
-  override def toString: String = s"$name($left, $right)"
+  override def toString: String = s"$prettyName($left, $right)"
 
-  override def prettyName: String = name
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
 
   override def dataType: DataType = DoubleType
 
@@ -168,9 +169,11 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse cosine (a.k.a. arccosine) of `expr` if -1<=`expr`<=1 or NaN otherwise.",
+  usage = """
+    _FUNC_(expr) - Returns the inverse cosine (a.k.a. arc cosine) of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -178,12 +181,13 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
       > SELECT _FUNC_(2);
        NaN
   """)
-// scalastyle:on line.size.limit
 case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse sine (a.k.a. arcsine) the arc sin of `expr` if -1<=`expr`<=1 or NaN otherwise.",
+  usage = """
+    _FUNC_(expr) - Returns the inverse sine (a.k.a. arc sine) the arc sin of `expr`,
+      as if computed by `java.lang.Math._FUNC_`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -191,18 +195,18 @@ case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS"
       > SELECT _FUNC_(2);
        NaN
   """)
-// scalastyle:on line.size.limit
 case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse tangent (a.k.a. arctangent).",
+  usage = """
+    _FUNC_(expr) - Returns the inverse tangent (a.k.a. arc tangent) of `expr`, as if computed by
+      `java.lang.Math._FUNC_`
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
        0.0
   """)
-// scalastyle:on line.size.limit
 case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
 
 @ExpressionDescription(
@@ -252,7 +256,14 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the cosine of `expr`.",
+  usage = """
+    _FUNC_(expr) - Returns the cosine of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -261,13 +272,40 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic cosine of `expr`.",
+  usage = """
+      _FUNC_(expr) - Returns the hyperbolic cosine of `expr`, as if computed by
+        `java.lang.Math._FUNC_`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - hyperbolic angle
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
        1.0
   """)
 case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns inverse hyperbolic cosine of `expr`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1);
+       0.0
+      > SELECT _FUNC_(0);
+       NaN
+  """,
+  since = "3.0.0")
+case class Acosh(child: Expression)
+  extends UnaryMathExpression((x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev,
+      c => s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
+  }
+}
 
 /**
  * Convert a num from one base to another
@@ -320,7 +358,11 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
       > SELECT _FUNC_(0);
        1.0
   """)
-case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
+case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "EXP") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.exp($c)")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns exp(`expr`) - 1.",
@@ -329,7 +371,11 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
       > SELECT _FUNC_(0);
        0.0
   """)
-case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
+case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1, "EXPM1") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.expm1($c)")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
@@ -445,7 +491,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
       > SELECT _FUNC_(1);
        0.0
   """)
-case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
+case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG")
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 2.",
@@ -455,14 +501,14 @@ case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
        1.0
   """)
 case class Log2(child: Expression)
-  extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  extends UnaryLogExpression((x: Double) => StrictMath.log(x) / StrictMath.log(2), "LOG2") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = java.lang.Math.log($c) / java.lang.Math.log(2);
+          ${ev.value} = java.lang.StrictMath.log($c) / java.lang.StrictMath.log(2);
         }
       """
     )
@@ -476,7 +522,7 @@ case class Log2(child: Expression)
       > SELECT _FUNC_(10);
        1.0
   """)
-case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG10")
+case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10, "LOG10")
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns log(1 + `expr`).",
@@ -485,7 +531,7 @@ case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG1
       > SELECT _FUNC_(0);
        0.0
   """)
-case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1P") {
+case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p, "LOG1P") {
   protected override val yAsymptote: Double = -1.0
 }
 
@@ -512,7 +558,11 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
 case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the sine of `expr`.",
+  usage = "_FUNC_(expr) - Returns the sine of `expr`, as if computed by `java.lang.Math._FUNC_`.",
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -521,13 +571,40 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
 case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic sine of `expr`.",
+  usage = """
+    _FUNC_(expr) - Returns hyperbolic sine of `expr`, as if computed by `java.lang.Math._FUNC_`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - hyperbolic angle
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
        0.0
   """)
 case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns inverse hyperbolic sine of `expr`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       0.0
+  """,
+  since = "3.0.0")
+case class Asinh(child: Expression)
+  extends UnaryMathExpression((x: Double) => x match {
+    case Double.NegativeInfinity => Double.NegativeInfinity
+    case _ => StrictMath.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c =>
+      s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
+      s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the square root of `expr`.",
@@ -539,7 +616,13 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
 case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the tangent of `expr`.",
+  usage = """
+    _FUNC_(expr) - Returns the tangent of `expr`, as if computed by `java.lang.Math._FUNC_`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -548,7 +631,13 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the cotangent of `expr`.",
+  usage = """
+    _FUNC_(expr) - Returns the cotangent of `expr`, as if computed by `1/java.lang.Math._FUNC_`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -562,7 +651,14 @@ case class Cot(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic tangent of `expr`.",
+  usage = """
+    _FUNC_(expr) - Returns the hyperbolic tangent of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - hyperbolic angle
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -571,7 +667,33 @@ case class Cot(child: Expression)
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
 
 @ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns inverse hyperbolic tangent of `expr`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       0.0
+      > SELECT _FUNC_(2);
+       NaN
+  """,
+  since = "3.0.0")
+case class Atanh(child: Expression)
+  // SPARK-28519: more accurate express for 1/2 * ln((1 + x) / (1 - x))
+  extends UnaryMathExpression((x: Double) =>
+    0.5 * (StrictMath.log1p(x) - StrictMath.log1p(-x)), "ATANH") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev,
+      c => s"0.5 * (java.lang.StrictMath.log1p($c) - java.lang.StrictMath.log1p(- $c))")
+  }
+}
+
+@ExpressionDescription(
   usage = "_FUNC_(expr) - Converts radians to degrees.",
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(3.141592653589793);
@@ -583,6 +705,10 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Converts degrees to radians.",
+  arguments = """
+    Arguments:
+      * expr - angle in degrees
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(180);
@@ -768,15 +894,22 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the angle in radians between the positive x-axis of a plane and the point given by the coordinates (`expr1`, `expr2`).",
+  usage = """
+    _FUNC_(exprY, exprX) - Returns the angle in radians between the positive x-axis of a plane
+      and the point given by the coordinates (`exprX`, `exprY`), as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
+  arguments = """
+    Arguments:
+      * exprY - coordinate on y-axis
+      * exprX - coordinate on x-axis
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0, 0);
        0.0
   """)
-// scalastyle:on line.size.limit
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
@@ -798,9 +931,9 @@ case class Atan2(left: Expression, right: Expression)
        8.0
   """)
 case class Pow(left: Expression, right: Expression)
-  extends BinaryMathExpression(math.pow, "POWER") {
+  extends BinaryMathExpression(StrictMath.pow, "POWER") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.StrictMath.pow($c1, $c2)")
   }
 }
 
@@ -931,7 +1064,7 @@ case class Hypot(left: Expression, right: Expression)
        2.0
   """)
 case class Logarithm(left: Expression, right: Expression)
-  extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+  extends BinaryMathExpression((c1, c2) => StrictMath.log(c2) / StrictMath.log(c1), "LOG") {
 
   /**
    * Natural log, i.e. using e as the base.
@@ -946,7 +1079,7 @@ case class Logarithm(left: Expression, right: Expression)
     val dLeft = input1.asInstanceOf[Double]
     val dRight = input2.asInstanceOf[Double]
     // Unlike Hive, we support Log base in (0.0, 1.0]
-    if (dLeft <= 0.0 || dRight <= 0.0) null else math.log(dRight) / math.log(dLeft)
+    if (dLeft <= 0.0 || dRight <= 0.0) null else StrictMath.log(dRight) / StrictMath.log(dLeft)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -956,7 +1089,7 @@ case class Logarithm(left: Expression, right: Expression)
           if ($c2 <= 0.0) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = java.lang.Math.log($c2);
+            ${ev.value} = java.lang.StrictMath.log($c2);
           }
         """)
     } else {
@@ -965,7 +1098,7 @@ case class Logarithm(left: Expression, right: Expression)
           if ($c1 <= 0.0 || $c2 <= 0.0) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
+            ${ev.value} = java.lang.StrictMath.log($c2) / java.lang.StrictMath.log($c1);
           }
         """)
     }
@@ -1044,7 +1177,8 @@ abstract class RoundBase(child: Expression, scale: Expression,
     dataType match {
       case DecimalType.Fixed(_, s) =>
         val decimal = input1.asInstanceOf[Decimal]
-        decimal.toPrecision(decimal.precision, s, mode).orNull
+        // Overflow cannot happen, so no need to control nullOnOverflow
+        decimal.toPrecision(decimal.precision, s, mode)
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType =>
@@ -1076,12 +1210,10 @@ abstract class RoundBase(child: Expression, scale: Expression,
     val evaluationCode = dataType match {
       case DecimalType.Fixed(_, s) =>
         s"""
-        if (${ce.value}.changePrecision(${ce.value}.precision(), ${s},
-            java.math.BigDecimal.${modeStr})) {
-          ${ev.value} = ${ce.value};
-        } else {
-          ${ev.isNull} = true;
-        }"""
+           |${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
+           |  Decimal.$modeStr(), true);
+           |${ev.isNull} = ${ev.value} == null;
+         """.stripMargin
       case ByteType =>
         if (_scale < 0) {
           s"""
@@ -1132,15 +1264,16 @@ abstract class RoundBase(child: Expression, scale: Expression,
           }"""
     }
 
+    val javaType = CodeGenerator.javaType(dataType)
     if (scaleV == null) { // if scale is null, no need to eval its child at all
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};""")
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${ce.code}
         boolean ${ev.isNull} = ${ce.isNull};
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         if (!${ev.isNull}) {
           $evaluationCode
         }""")
@@ -1158,7 +1291,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
-       3.0
+       3
   """)
 // scalastyle:on line.size.limit
 case class Round(child: Expression, scale: Expression)
@@ -1178,7 +1311,7 @@ case class Round(child: Expression, scale: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
-       2.0
+       2
   """)
 // scalastyle:on line.size.limit
 case class BRound(child: Expression, scale: Expression)

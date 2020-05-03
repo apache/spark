@@ -51,6 +51,7 @@ private[spark] abstract class RestSubmissionServer(
     val host: String,
     val requestedPort: Int,
     val masterConf: SparkConf) extends Logging {
+
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
@@ -94,6 +95,7 @@ private[spark] abstract class RestSubmissionServer(
       new HttpConnectionFactory())
     connector.setHost(host)
     connector.setPort(startPort)
+    connector.setReuseAddress(!Utils.isWindows)
     server.addConnector(connector)
 
     val mainHandler = new ServletContextHandler
@@ -315,8 +317,7 @@ private class ErrorServlet extends RestServlet {
           versionMismatch = true
           s"Unknown protocol version '$unknownVersion'."
         case _ =>
-          // never reached
-          s"Malformed path $path."
+          "Malformed path."
       }
     msg += s" Please submit requests through http://[host]:[port]/$serverVersion/submissions/..."
     val error = handleError(msg)

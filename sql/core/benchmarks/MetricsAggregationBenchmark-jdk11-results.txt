@@ -1,0 +1,12 @@
+OpenJDK 64-Bit Server VM 11.0.4+11 on Linux 4.15.0-66-generic
+Intel(R) Core(TM) i7-6820HQ CPU @ 2.70GHz
+metrics aggregation (50 metrics, 100000 tasks per stage):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+1 stage(s)                                          672            841         179          0.0   671888474.0       1.0X
+2 stage(s)                                         1700           1842         201          0.0  1699591662.0       0.4X
+3 stage(s)                                         2601           2776         247          0.0  2601465786.0       0.3X
+
+Stage Count    Stage Proc. Time    Aggreg. Time
+     1              436                164
+     2              537                354
+     3              480                602

@@ -86,7 +86,7 @@ object BinaryClassificationMetricsExample {
 
     // AUPRC
     val auPRC = metrics.areaUnderPR
-    println("Area under precision-recall curve = " + auPRC)
+    println(s"Area under precision-recall curve = $auPRC")
 
     // Compute thresholds used in ROC and PR curves
     val thresholds = precision.map(_._1)
@@ -96,7 +96,7 @@ object BinaryClassificationMetricsExample {
 
     // AUROC
     val auROC = metrics.areaUnderROC
-    println("Area under ROC = " + auROC)
+    println(s"Area under ROC = $auROC")
     // $example off$
     sc.stop()
   }

@@ -46,7 +46,7 @@ public class JavaUDAFSuite {
   @SuppressWarnings("unchecked")
   @Test
   public void udf1Test() {
-    spark.range(1, 10).toDF("value").registerTempTable("df");
+    spark.range(1, 10).toDF("value").createOrReplaceTempView("df");
     spark.udf().registerJavaUDAF("myDoubleAvg", MyDoubleAvg.class.getName());
     Row result = spark.sql("SELECT myDoubleAvg(value) as my_avg from df").head();
     Assert.assertEquals(105.0, result.getDouble(0), 1.0e-6);

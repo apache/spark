@@ -476,6 +476,9 @@ class DenseMatrix @Since("2.0.0") (
 @Since("2.0.0")
 object DenseMatrix {
 
+  private[ml] def unapply(dm: DenseMatrix): Option[(Int, Int, Array[Double], Boolean)] =
+    Some((dm.numRows, dm.numCols, dm.values, dm.isTransposed))
+
   /**
    * Generate a `DenseMatrix` consisting of zeros.
    * @param numRows number of rows of the matrix
@@ -827,6 +830,10 @@ class SparseMatrix @Since("2.0.0") (
 @Since("2.0.0")
 object SparseMatrix {
 
+  private[ml] def unapply(
+       sm: SparseMatrix): Option[(Int, Int, Array[Int], Array[Int], Array[Double], Boolean)] =
+    Some((sm.numRows, sm.numCols, sm.colPtrs, sm.rowIndices, sm.values, sm.isTransposed))
+
   /**
    * Generate a `SparseMatrix` from Coordinate List (COO) format. Input must be an array of
    * (i, j, value) tuples. Entries that have duplicate values of i and j are
@@ -1096,7 +1103,7 @@ object Matrices {
     DenseMatrix.rand(numRows, numCols, rng)
 
   /**
-   * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
+   * Generate a `SparseMatrix` consisting of `i.i.d.` uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -1168,10 +1175,10 @@ object Matrices {
       numCols += mat.numCols
     }
     if (!hasSparse) {
-      new DenseMatrix(numRows, numCols, matrices.flatMap(_.toArray))
+      new DenseMatrix(numRows, numCols, matrices.flatMap { m: Matrix => m.toArray })
     } else {
       var startCol = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
         val nCols = mat.numCols
         mat match {
           case spMat: SparseMatrix =>
@@ -1182,7 +1189,7 @@ object Matrices {
               cnt += 1
             }
             startCol += nCols
-            data
+            data.toSeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1191,7 +1198,7 @@ object Matrices {
               }
             }
             startCol += nCols
-            data
+            data.toSeq
         }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
@@ -1230,7 +1237,6 @@ object Matrices {
       val allValues = new Array[Double](numRows * numCols)
       var startRow = 0
       matrices.foreach { mat =>
-        var j = 0
         val nRows = mat.numRows
         mat.foreachActive { (i, j, v) =>
           val indStart = j * numRows + startRow
@@ -1241,7 +1247,7 @@ object Matrices {
       new DenseMatrix(numRows, numCols, allValues)
     } else {
       var startRow = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
         val nRows = mat.numRows
         mat match {
           case spMat: SparseMatrix =>
@@ -1252,7 +1258,7 @@ object Matrices {
               cnt += 1
             }
             startRow += nRows
-            data
+            data.toSeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1261,7 +1267,7 @@ object Matrices {
               }
             }
             startRow += nRows
-            data
+            data.toSeq
         }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)

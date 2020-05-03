@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
@@ -96,7 +96,7 @@ private[sql] object TypeCollection {
 /**
  * An `AbstractDataType` that matches any concrete data types.
  */
-protected[sql] object AnyDataType extends AbstractDataType {
+protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
@@ -134,7 +134,7 @@ object AtomicType {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 abstract class NumericType extends AtomicType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
@@ -142,10 +142,12 @@ abstract class NumericType extends AtomicType {
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer a no argument constructor and thus the JVM cannot serialize the object anymore.
   private[sql] val numeric: Numeric[InternalType]
+
+  private[sql] def exactNumeric: Numeric[InternalType] = numeric
 }
 
 
-private[sql] object NumericType extends AbstractDataType {
+private[spark] object NumericType extends AbstractDataType {
   /**
    * Enables matching against NumericType for expressions:
    * {{{
@@ -155,11 +157,12 @@ private[sql] object NumericType extends AbstractDataType {
    */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 
-  override private[sql] def defaultConcreteType: DataType = DoubleType
+  override private[spark] def defaultConcreteType: DataType = DoubleType
 
-  override private[sql] def simpleString: String = "numeric"
+  override private[spark] def simpleString: String = "numeric"
 
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[NumericType]
+  override private[spark] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[NumericType]
 }
 
 

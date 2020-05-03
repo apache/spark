@@ -15,16 +15,55 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 import copy
+import threading
 
 from pyspark import since
-from pyspark.ml.param import Params
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.functions import udf
-from pyspark.sql.types import StructField, StructType, DoubleType
+from pyspark.sql.types import StructField, StructType
+
+
+class _FitMultipleIterator(object):
+    """
+    Used by default implementation of Estimator.fitMultiple to produce models in a thread safe
+    iterator. This class handles the simple case of fitMultiple where each param map should be
+    fit independently.
+
+    :param fitSingleModel: Function: (int => Model) which fits an estimator to a dataset.
+        `fitSingleModel` may be called up to `numModels` times, with a unique index each time.
+        Each call to `fitSingleModel` with an index should return the Model associated with
+        that index.
+    :param numModel: Number of models this iterator should produce.
+
+    See Estimator.fitMultiple for more info.
+    """
+    def __init__(self, fitSingleModel, numModels):
+        """
+
+        """
+        self.fitSingleModel = fitSingleModel
+        self.numModel = numModels
+        self.counter = 0
+        self.lock = threading.Lock()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        with self.lock:
+            index = self.counter
+            if index >= self.numModel:
+                raise StopIteration("No models remaining.")
+            self.counter += 1
+        return index, self.fitSingleModel(index)
+
+    def next(self):
+        """For python2 compatibility."""
+        return self.__next__()
 
 
 @inherit_doc
@@ -47,6 +86,24 @@ class Estimator(Params):
         """
         raise NotImplementedError()
 
+    @since("2.3.0")
+    def fitMultiple(self, dataset, paramMaps):
+        """
+        Fits a model to the input dataset for each param map in `paramMaps`.
+
+        :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`.
+        :param paramMaps: A Sequence of param maps.
+        :return: A thread safe iterable which contains one model for each param map. Each
+                 call to `next(modelIterator)` will return `(index, model)` where model was fit
+                 using `paramMaps[index]`. `index` values may not be sequential.
+        """
+        estimator = self.copy()
+
+        def fitSingleModel(index):
+            return estimator.fit(dataset, paramMaps[index])
+
+        return _FitMultipleIterator(fitSingleModel, len(paramMaps))
+
     @since("1.3.0")
     def fit(self, dataset, params=None):
         """
@@ -61,7 +118,10 @@ class Estimator(Params):
         if params is None:
             params = dict()
         if isinstance(params, (list, tuple)):
-            return [self.fit(dataset, paramMap) for paramMap in params]
+            models = [None] * len(params)
+            for index, model in self.fitMultiple(dataset, params):
+                models[index] = model
+            return models
         elif isinstance(params, dict):
             if params:
                 return self.copy(params)._fit(dataset)
@@ -132,6 +192,18 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
     .. versionadded:: 2.3.0
     """
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     @abstractmethod
     def createTransformFunc(self):
         """
@@ -172,3 +244,82 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
         transformedDataset = dataset.withColumn(self.getOutputCol(),
                                                 transformUDF(dataset[self.getInputCol()]))
         return transformedDataset
+
+
+@inherit_doc
+class _PredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
+    """
+    Params for :py:class:`Predictor` and :py:class:`PredictorModel`.
+
+    .. versionadded:: 3.0.0
+    """
+    pass
+
+
+@inherit_doc
+class Predictor(Estimator, _PredictorParams):
+    """
+    Estimator for prediction tasks (regression and classification).
+    """
+
+    __metaclass__ = ABCMeta
+
+    @since("3.0.0")
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+
+@inherit_doc
+class PredictionModel(Model, _PredictorParams):
+    """
+    Model for prediction tasks (regression and classification).
+    """
+
+    __metaclass__ = ABCMeta
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @abstractproperty
+    @since("2.1.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        raise NotImplementedError()

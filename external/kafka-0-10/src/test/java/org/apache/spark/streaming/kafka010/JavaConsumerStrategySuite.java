@@ -42,7 +42,7 @@ public class JavaConsumerStrategySuite implements Serializable {
     final Collection<TopicPartition> parts = Arrays.asList(tp1, tp2);
     final scala.collection.Iterable<TopicPartition> sParts =
       JavaConverters.collectionAsScalaIterableConverter(parts).asScala();
-    final Map<String, Object> kafkaParams = new HashMap<String, Object>();
+    final Map<String, Object> kafkaParams = new HashMap<>();
     kafkaParams.put("bootstrap.servers", "not used");
     final scala.collection.Map<String, Object> sKafkaParams =
       JavaConverters.mapAsScalaMapConverter(kafkaParams).asScala();

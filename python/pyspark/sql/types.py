@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import sys
 import decimal
 import time
@@ -25,6 +26,7 @@ import re
 import base64
 from array import array
 import ctypes
+import warnings
 
 if sys.version >= "3":
     long = int
@@ -74,7 +76,7 @@ class DataType(object):
 
     def needConversion(self):
         """
-        Does this type need to conversion between Python object and internal SQL object.
+        Does this type needs conversion between Python object and internal SQL object.
 
         This is used to avoid the unnecessary conversion for ArrayType/MapType/StructType.
         """
@@ -206,19 +208,19 @@ class DecimalType(FractionalType):
     and scale (the number of digits on the right of dot). For example, (5, 2) can
     support the value from [-999.99 to 999.99].
 
-    The precision can be up to 38, the scale must less or equal to precision.
+    The precision can be up to 38, the scale must be less or equal to precision.
 
-    When create a DecimalType, the default precision and scale is (10, 0). When infer
+    When creating a DecimalType, the default precision and scale is (10, 0). When inferring
     schema from decimal.Decimal objects, it will be DecimalType(38, 18).
 
-    :param precision: the maximum total number of digits (default: 10)
+    :param precision: the maximum (i.e. total) number of digits (default: 10)
     :param scale: the number of digits on right side of dot. (default: 0)
     """
 
     def __init__(self, precision=10, scale=0):
         self.precision = precision
         self.scale = scale
-        self.hasPrecisionInfo = True  # this is public API
+        self.hasPrecisionInfo = True  # this is a public API
 
     def simpleString(self):
         return "decimal(%d,%d)" % (self.precision, self.scale)
@@ -289,7 +291,8 @@ class ArrayType(DataType):
         >>> ArrayType(StringType(), False) == ArrayType(StringType())
         False
         """
-        assert isinstance(elementType, DataType), "elementType should be DataType"
+        assert isinstance(elementType, DataType),\
+            "elementType %s should be an instance of %s" % (elementType, DataType)
         self.elementType = elementType
         self.containsNull = containsNull
 
@@ -343,8 +346,10 @@ class MapType(DataType):
         ...        == MapType(StringType(), FloatType()))
         False
         """
-        assert isinstance(keyType, DataType), "keyType should be DataType"
-        assert isinstance(valueType, DataType), "valueType should be DataType"
+        assert isinstance(keyType, DataType),\
+            "keyType %s should be an instance of %s" % (keyType, DataType)
+        assert isinstance(valueType, DataType),\
+            "valueType %s should be an instance of %s" % (valueType, DataType)
         self.keyType = keyType
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
@@ -402,8 +407,9 @@ class StructField(DataType):
         ...      == StructField("f2", StringType(), True))
         False
         """
-        assert isinstance(dataType, DataType), "dataType should be DataType"
-        assert isinstance(name, basestring), "field name should be string"
+        assert isinstance(dataType, DataType),\
+            "dataType %s should be an instance of %s" % (dataType, DataType)
+        assert isinstance(name, basestring), "field name %s should be string" % (name)
         if not isinstance(name, str):
             name = name.encode('utf-8')
         self.name = name
@@ -451,11 +457,8 @@ class StructType(DataType):
 
     This is the data type representing a :class:`Row`.
 
-    Iterating a :class:`StructType` will iterate its :class:`StructField`\\s.
-    A contained :class:`StructField` can be accessed by name or position.
-
-    .. note:: `names` attribute is deprecated in 2.3. Use `fieldNames` method instead
-        to get a list of field names.
+    Iterating a :class:`StructType` will iterate over its :class:`StructField`\\s.
+    A contained :class:`StructField` can be accessed by its name or position.
 
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
@@ -483,12 +486,14 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
+        self._needConversion = [f.needConversion() for f in self]
+        self._needSerializeAnyField = any(self._needConversion)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
-        Construct a StructType by adding new elements to it to define the schema. The method accepts
-        either:
+        Construct a StructType by adding new elements to it, to define the schema.
+        The method accepts either:
 
             a) A single parameter which is a StructField object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
@@ -528,7 +533,9 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
+        self._needConversion = [f.needConversion() for f in self]
+        self._needSerializeAnyField = any(self._needConversion)
         return self
 
     def __iter__(self):
@@ -590,13 +597,17 @@ class StructType(DataType):
             return
 
         if self._needSerializeAnyField:
+            # Only calling toInternal function for fields that need conversion
             if isinstance(obj, dict):
-                return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(obj.get(n)) if c else obj.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             elif isinstance(obj, (tuple, list)):
-                return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
+                return tuple(f.toInternal(v) if c else v
+                             for f, v, c in zip(self.fields, obj, self._needConversion))
             elif hasattr(obj, "__dict__"):
                 d = obj.__dict__
-                return tuple(f.toInternal(d.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(d.get(n)) if c else d.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
@@ -619,7 +630,9 @@ class StructType(DataType):
             # it's already converted by pickler
             return obj
         if self._needSerializeAnyField:
-            values = [f.fromInternal(v) for f, v in zip(self.fields, obj)]
+            # Only calling fromInternal function for fields that need conversion
+            values = [f.fromInternal(v) if c else v
+                      for f, v, c in zip(self.fields, obj, self._needConversion)]
         else:
             values = obj
         return _create_row(self.names, values)
@@ -663,7 +676,7 @@ class UserDefinedType(DataType):
     @classmethod
     def _cachedSqlType(cls):
         """
-        Cache the sqlType() into class, because it's heavy used in `toInternal`.
+        Cache the sqlType() into class, because it's heavily used in `toInternal`.
         """
         if not hasattr(cls, "_cached_sql_type"):
             cls._cached_sql_type = cls.sqlType()
@@ -680,7 +693,7 @@ class UserDefinedType(DataType):
 
     def serialize(self, obj):
         """
-        Converts the a user-type object into a SQL datum.
+        Converts a user-type object into a SQL datum.
         """
         raise NotImplementedError("UDT must implement toInternal().")
 
@@ -741,48 +754,13 @@ _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
 
 
-_FIXED_DECIMAL = re.compile("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)")
-
-
-_BRACKETS = {'(': ')', '[': ']', '{': '}'}
-
-
-def _ignore_brackets_split(s, separator):
-    """
-    Splits the given string by given separator, but ignore separators inside brackets pairs, e.g.
-    given "a,b" and separator ",", it will return ["a", "b"], but given "a<b,c>, d", it will return
-    ["a<b,c>", "d"].
-    """
-    parts = []
-    buf = ""
-    level = 0
-    for c in s:
-        if c in _BRACKETS.keys():
-            level += 1
-            buf += c
-        elif c in _BRACKETS.values():
-            if level == 0:
-                raise ValueError("Brackets are not correctly paired: %s" % s)
-            level -= 1
-            buf += c
-        elif c == separator and level > 0:
-            buf += c
-        elif c == separator:
-            parts.append(buf)
-            buf = ""
-        else:
-            buf += c
-
-    if len(buf) == 0:
-        raise ValueError("The %s cannot be the last char: %s" % (separator, s))
-    parts.append(buf)
-    return parts
+_FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 
 
 def _parse_datatype_string(s):
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
-    to :class:`DataType.simpleString`, except that top level struct type can omit
+    :class:`DataType.simpleString`, except that the top level struct type can omit
     the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use ``byte`` instead
     of ``tinyint`` for :class:`ByteType`. We can also use ``int`` as a short name
     for :class:`IntegerType`. Since Spark 2.3, this also supports a schema in a DDL-formatted
@@ -934,11 +912,16 @@ if sys.version < "3":
         long: LongType,
     })
 
+if sys.version >= "3":
+    _type_mappings.update({
+        bytes: BinaryType,
+    })
+
 # Mapping Python array types to Spark SQL DataType
 # We should be careful here. The size of these types in python depends on C
 # implementation. We need to make sure that this conversion does not lose any
 # precision. Also, JVM only support signed types, when converting unsigned types,
-# keep in mind that it required 1 more bit when stored as singed types.
+# keep in mind that it require 1 more bit when stored as signed types.
 #
 # Reference for C integer size, see:
 # ISO/IEC 9899:201x specification, chapter 5.2.4.2.1 Sizes of integer types <limits.h>.
@@ -976,7 +959,7 @@ def _int_size_to_type(size):
     if size <= 64:
         return LongType
 
-# The list of all supported array typecodes is stored here
+# The list of all supported array typecodes, is stored here
 _array_type_mappings = {
     # Warning: Actual properties for float and double in C is not specified in C.
     # On almost every system supported by both python and JVM, they are IEEE 754
@@ -1012,9 +995,9 @@ if sys.version_info[0] < 3:
     _array_type_mappings['c'] = StringType
 
 # SPARK-21465:
-# In python2, array of 'L' happened to be mistakenly partially supported. To
+# In python2, array of 'L' happened to be mistakenly, just partially supported. To
 # avoid breaking user's code, we should keep this partial support. Below is a
-# dirty hacking to keep this partial support and make the unit test passes
+# dirty hacking to keep this partial support and pass the unit test.
 import platform
 if sys.version_info[0] < 3 and platform.python_implementation() != 'PyPy':
     if 'L' not in _array_type_mappings.keys():
@@ -1042,14 +1025,12 @@ def _infer_type(obj):
         for key, value in obj.items():
             if key is not None and value is not None:
                 return MapType(_infer_type(key), _infer_type(value), True)
-        else:
-            return MapType(NullType(), NullType(), True)
+        return MapType(NullType(), NullType(), True)
     elif isinstance(obj, list):
         for v in obj:
             if v is not None:
                 return ArrayType(_infer_type(obj[0]), True)
-        else:
-            return ArrayType(NullType(), True)
+        return ArrayType(NullType(), True)
     elif isinstance(obj, array):
         if obj.typecode in _array_type_mappings:
             return ArrayType(_array_type_mappings[obj.typecode](), False)
@@ -1062,7 +1043,7 @@ def _infer_type(obj):
             raise TypeError("not supported type: %s" % type(obj))
 
 
-def _infer_schema(row):
+def _infer_schema(row, names=None):
     """Infer the schema from dict/namedtuple/object"""
     if isinstance(row, dict):
         items = sorted(row.items())
@@ -1073,7 +1054,10 @@ def _infer_schema(row):
         elif hasattr(row, "_fields"):  # namedtuple
             items = zip(row._fields, tuple(row))
         else:
-            names = ['_%d' % i for i in range(1, len(row) + 1)]
+            if names is None:
+                names = ['_%d' % i for i in range(1, len(row) + 1)]
+            elif len(names) < len(row):
+                names.extend('_%d' % i for i in range(len(names) + 1, len(row) + 1))
             items = zip(names, row)
 
     elif hasattr(row, "__dict__"):  # object
@@ -1087,7 +1071,7 @@ def _infer_schema(row):
 
 
 def _has_nulltype(dt):
-    """ Return whether there is NullType in `dt` or not """
+    """ Return whether there is a NullType in `dt` or not """
     if isinstance(dt, StructType):
         return any(_has_nulltype(f.dataType) for f in dt.fields)
     elif isinstance(dt, ArrayType):
@@ -1098,19 +1082,27 @@ def _has_nulltype(dt):
         return isinstance(dt, NullType)
 
 
-def _merge_type(a, b):
+def _merge_type(a, b, name=None):
+    if name is None:
+        new_msg = lambda msg: msg
+        new_name = lambda n: "field %s" % n
+    else:
+        new_msg = lambda msg: "%s: %s" % (name, msg)
+        new_name = lambda n: "field %s in %s" % (n, name)
+
     if isinstance(a, NullType):
         return b
     elif isinstance(b, NullType):
         return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
-        raise TypeError("Can not merge type %s and %s" % (type(a), type(b)))
+        raise TypeError(new_msg("Can not merge type %s and %s" % (type(a), type(b))))
 
     # same type
     if isinstance(a, StructType):
         nfs = dict((f.name, f.dataType) for f in b.fields)
-        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType())))
+        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType()),
+                                                  name=new_name(f.name)))
                   for f in a.fields]
         names = set([f.name for f in fields])
         for n in nfs:
@@ -1119,11 +1111,12 @@ def _merge_type(a, b):
         return StructType(fields)
 
     elif isinstance(a, ArrayType):
-        return ArrayType(_merge_type(a.elementType, b.elementType), True)
+        return ArrayType(_merge_type(a.elementType, b.elementType,
+                                     name='element in array %s' % name), True)
 
     elif isinstance(a, MapType):
-        return MapType(_merge_type(a.keyType, b.keyType),
-                       _merge_type(a.valueType, b.valueType),
+        return MapType(_merge_type(a.keyType, b.keyType, name='key of map %s' % name),
+                       _merge_type(a.valueType, b.valueType, name='value of map %s' % name),
                        True)
     else:
         return a
@@ -1202,7 +1195,7 @@ _acceptable_types = {
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
-    BinaryType: (bytearray,),
+    BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
@@ -1218,11 +1211,15 @@ def _make_type_verifier(dataType, nullable=True, name=None):
 
     This verifier also checks the value of obj against datatype and raises a ValueError if it's not
     within the allowed range, e.g. using 128 as ByteType will overflow. Note that, Python float is
-    not checked, so it will become infinity when cast to Java float if it overflows.
+    not checked, so it will become infinity when cast to Java float, if it overflows.
 
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
     >>> _make_type_verifier(LongType())(0)
+    >>> _make_type_verifier(LongType())(1 << 64) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     >>> _make_type_verifier(ArrayType(ShortType()))(list(range(3)))
     >>> _make_type_verifier(ArrayType(StringType()))(set()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
@@ -1331,6 +1328,16 @@ def _make_type_verifier(dataType, nullable=True, name=None):
 
         verify_value = verify_integer
 
+    elif isinstance(dataType, LongType):
+        def verify_long(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -9223372036854775808 or obj > 9223372036854775807:
+                raise ValueError(
+                    new_msg("object of LongType out of range, got: %s" % obj))
+
+        verify_value = verify_long
+
     elif isinstance(dataType, ArrayType):
         element_verifier = _make_type_verifier(
             dataType.elementType, dataType.containsNull, name="element in array %s" % name)
@@ -1417,7 +1424,7 @@ def _create_row(fields, values):
 class Row(tuple):
 
     """
-    A row in L{DataFrame}.
+    A row in :class:`DataFrame`.
     The fields in it can be accessed:
 
     * like attributes (``row.key``)
@@ -1425,10 +1432,23 @@ class Row(tuple):
 
     ``key in row`` will search through row keys.
 
-    Row can be used to create a row object by using named arguments,
-    the fields will be sorted by names. It is not allowed to omit
-    a named argument to represent the value is None or missing. This should be
-    explicitly set to None in this case.
+    Row can be used to create a row object by using named arguments.
+    It is not allowed to omit a named argument to represent that the value is
+    None or missing. This should be explicitly set to None in this case.
+
+    NOTE: As of Spark 3.0.0, Rows created from named arguments no longer have
+    field names sorted alphabetically and will be ordered in the position as
+    entered. To enable sorting for Rows compatible with Spark 2.x, set the
+    environment variable "PYSPARK_ROW_FIELD_SORTING_ENABLED" to "true". This
+    option is deprecated and will be removed in future versions of Spark. For
+    Python versions < 3.6, the order of named arguments is not guaranteed to
+    be the same as entered, see https://www.python.org/dev/peps/pep-0468. In
+    this case, a warning will be issued and the Row will fallback to sort the
+    field names automatically.
+
+    NOTE: Examples with Row in pydocs are run with the environment variable
+    "PYSPARK_ROW_FIELD_SORTING_ENABLED" set to "true" which results in output
+    where fields are sorted.
 
     >>> row = Row(name="Alice", age=11)
     >>> row
@@ -1447,36 +1467,72 @@ class Row(tuple):
 
     >>> Person = Row("name", "age")
     >>> Person
-    <Row(name, age)>
+    <Row('name', 'age')>
     >>> 'name' in Person
     True
     >>> 'wrong_key' in Person
     False
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
+
+    This form can also be used to create rows as tuple values, i.e. with unnamed
+    fields. Beware that such Row objects have different equality semantics:
+
+    >>> row1 = Row("Alice", 11)
+    >>> row2 = Row(name="Alice", age=11)
+    >>> row1 == row2
+    False
+    >>> row3 = Row(a="Alice", b=11)
+    >>> row1 == row3
+    True
     """
 
-    def __new__(self, *args, **kwargs):
+    # Remove after Python < 3.6 dropped, see SPARK-29748
+    _row_field_sorting_enabled = \
+        os.environ.get('PYSPARK_ROW_FIELD_SORTING_ENABLED', 'false').lower() == 'true'
+
+    if _row_field_sorting_enabled:
+        warnings.warn("The environment variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' "
+                      "is deprecated and will be removed in future versions of Spark")
+
+    def __new__(cls, *args, **kwargs):
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
         if kwargs:
-            # create row objects
-            names = sorted(kwargs.keys())
-            row = tuple.__new__(self, [kwargs[n] for n in names])
-            row.__fields__ = names
-            row.__from_dict__ = True
-            return row
+            if not Row._row_field_sorting_enabled and sys.version_info[:2] < (3, 6):
+                warnings.warn("To use named arguments for Python version < 3.6, Row fields will be "
+                              "automatically sorted. This warning can be skipped by setting the "
+                              "environment variable 'PYSPARK_ROW_FIELD_SORTING_ENABLED' to 'true'.")
+                Row._row_field_sorting_enabled = True
 
+            # create row objects
+            if Row._row_field_sorting_enabled:
+                # Remove after Python < 3.6 dropped, see SPARK-29748
+                names = sorted(kwargs.keys())
+                row = tuple.__new__(cls, [kwargs[n] for n in names])
+                row.__fields__ = names
+                row.__from_dict__ = True
+            else:
+                row = tuple.__new__(cls, list(kwargs.values()))
+                row.__fields__ = list(kwargs.keys())
+
+            return row
         else:
             # create row class or objects
-            return tuple.__new__(self, args)
+            return tuple.__new__(cls, args)
 
     def asDict(self, recursive=False):
         """
-        Return as an dict
+        Return as a dict
 
-        :param recursive: turns the nested Row as dict (default: False).
+        :param recursive: turns the nested Rows to dict (default: False).
+
+        .. note:: If a row contains duplicate field names, e.g., the rows of a join
+            between two :class:`DataFrame` that both have the fields of same names,
+            one of the duplicate fields will be selected by ``asDict``. ``__getitem__``
+            will also return one of the duplicate fields, however returned value might
+            be different to ``asDict``.
 
         >>> Row(name="Alice", age=11).asDict() == {'name': 'Alice', 'age': 11}
         True
@@ -1512,6 +1568,9 @@ class Row(tuple):
     # let object acts like class
     def __call__(self, *args):
         """create new Row object"""
+        if len(args) > len(self):
+            raise ValueError("Can not create Row with fields %s, expected %d values "
+                             "but got %s" % (self, len(self), args))
         return _create_row(self, args)
 
     def __getitem__(self, item):
@@ -1558,7 +1617,7 @@ class Row(tuple):
             return "Row(%s)" % ", ".join("%s=%r" % (k, v)
                                          for k, v in zip(self.__fields__, tuple(self)))
         else:
-            return "<Row(%s)>" % ", ".join(self)
+            return "<Row(%s)>" % ", ".join("%r" % field for field in self)
 
 
 class DateConverter(object):
@@ -1598,7 +1657,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

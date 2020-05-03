@@ -19,16 +19,13 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterEach
-
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
@@ -36,10 +33,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Tests for the user-facing [[org.apache.spark.sql.catalog.Catalog]].
  */
-class CatalogSuite
-  extends SparkFunSuite
-  with BeforeAndAfterEach
-  with SharedSQLContext {
+class CatalogSuite extends SharedSparkSession {
   import testImplicits._
 
   private def sessionCatalog: SessionCatalog = spark.sessionState.catalog
@@ -95,9 +89,9 @@ class CatalogSuite
     val columns = dbName
       .map { db => spark.catalog.listColumns(db, tableName) }
       .getOrElse { spark.catalog.listColumns(tableName) }
-    assume(tableMetadata.schema.nonEmpty, "bad test")
-    assume(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
-    assume(tableMetadata.bucketSpec.isDefined, "bad test")
+    assert(tableMetadata.schema.nonEmpty, "bad test")
+    assert(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
+    assert(tableMetadata.bucketSpec.isDefined, "bad test")
     assert(columns.collect().map(_.name).toSet == tableMetadata.schema.map(_.name).toSet)
     val bucketColumnNames = tableMetadata.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil).toSet
     columns.collect().foreach { col =>

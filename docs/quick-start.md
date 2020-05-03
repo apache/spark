@@ -2,6 +2,21 @@
 layout: global
 title: Quick Start
 description: Quick start tutorial for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -11,11 +26,16 @@ This tutorial provides a quick introduction to using Spark. We will first introd
 interactive shell (in Python or Scala),
 then show how to write applications in Java, Scala, and Python.
 
-To follow along with this guide, first download a packaged release of Spark from the
-[Spark website](http://spark.apache.org/downloads.html). Since we won't be using HDFS,
+To follow along with this guide, first, download a packaged release of Spark from the
+[Spark website](https://spark.apache.org/downloads.html). Since we won't be using HDFS,
 you can download a package for any version of Hadoop.
 
-Note that, before Spark 2.0, the main programming interface of Spark was the Resilient Distributed Dataset (RDD). After Spark 2.0, RDDs are replaced by Dataset, which is strongly-typed like an RDD, but with richer optimizations under the hood. The RDD interface is still supported, and you can get a more complete reference at the [RDD programming guide](rdd-programming-guide.html). However, we highly recommend you to switch to use Dataset, which has better performance than RDD. See the [SQL programming guide](sql-programming-guide.html) to get more information about Dataset.
+Note that, before Spark 2.0, the main programming interface of Spark was the Resilient Distributed Dataset (RDD). After Spark 2.0, RDDs are replaced by Dataset, which is strongly-typed like an RDD, but with richer optimizations under the hood. The RDD interface is still supported, and you can get a more detailed reference at the [RDD programming guide](rdd-programming-guide.html). However, we highly recommend you to switch to use Dataset, which has better performance than RDD. See the [SQL programming guide](sql-programming-guide.html) to get more information about Dataset.
+
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) before running Spark.
 
 # Interactive Analysis with the Spark Shell
 
@@ -37,7 +57,7 @@ scala> val textFile = spark.read.textFile("README.md")
 textFile: org.apache.spark.sql.Dataset[String] = [value: string]
 {% endhighlight %}
 
-You can get values from Dataset directly, by calling some actions, or transform the Dataset to get a new one. For more details, please read the _[API doc](api/scala/index.html#org.apache.spark.sql.Dataset)_.
+You can get values from Dataset directly, by calling some actions, or transform the Dataset to get a new one. For more details, please read the _[API doc](api/scala/org/apache/spark/sql/Dataset.html)_.
 
 {% highlight scala %}
 scala> textFile.count() // Number of items in this Dataset
@@ -47,7 +67,7 @@ scala> textFile.first() // First item in this Dataset
 res1: String = # Apache Spark
 {% endhighlight %}
 
-Now let's transform this Dataset to a new one. We call `filter` to return a new Dataset with a subset of the items in the file.
+Now let's transform this Dataset into a new one. We call `filter` to return a new Dataset with a subset of the items in the file.
 
 {% highlight scala %}
 scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))
@@ -67,7 +87,7 @@ res3: Long = 15
     ./bin/pyspark
 
 
-Or if PySpark is installed with pip in your current enviroment:
+Or if PySpark is installed with pip in your current environment:
 
     pyspark
 
@@ -153,10 +173,10 @@ This first maps a line to an integer value and aliases it as "numWords", creatin
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight python %}
->>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).as("word")).groupBy("word").count()
+>>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
 {% endhighlight %}
 
-Here, we use the `explode` function in `select`, to transfrom a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
+Here, we use the `explode` function in `select`, to transform a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
 
 {% highlight python %}
 >>> wordCounts.collect()
@@ -244,7 +264,7 @@ Spark README. Note that you'll need to replace YOUR_SPARK_HOME with the location
 installed. Unlike the earlier examples with the Spark shell, which initializes its own SparkSession,
 we initialize a SparkSession as part of the program.
 
-We call `SparkSession.builder` to construct a [[SparkSession]], then set the application name, and finally call `getOrCreate` to get the [[SparkSession]] instance.
+We call `SparkSession.builder` to construct a `SparkSession`, then set the application name, and finally call `getOrCreate` to get the `SparkSession` instance.
 
 Our application depends on the Spark API, so we'll also include an sbt configuration file,
 `build.sbt`, which explains that Spark is a dependency. This file also adds a repository that
@@ -336,6 +356,7 @@ Note that Spark artifacts are tagged with a Scala version.
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_{{site.SCALA_BINARY_VERSION}}</artifactId>
       <version>{{site.SPARK_VERSION}}</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 </project>
@@ -422,7 +443,7 @@ $ YOUR_SPARK_HOME/bin/spark-submit \
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
-If you have PySpark pip installed into your enviroment (e.g., `pip install pyspark`), you can run your application with the regular Python interpreter or use the provided 'spark-submit' as you prefer.
+If you have PySpark pip installed into your environment (e.g., `pip install pyspark`), you can run your application with the regular Python interpreter or use the provided 'spark-submit' as you prefer.
 
 {% highlight bash %}
 # Use the Python interpreter to run your application

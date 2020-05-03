@@ -20,7 +20,6 @@ package org.apache.spark.sql.types;
 import java.lang.annotation.*;
 
 import org.apache.spark.annotation.DeveloperApi;
-import org.apache.spark.annotation.InterfaceStability;
 
 /**
  * ::DeveloperApi::
@@ -31,7 +30,6 @@ import org.apache.spark.annotation.InterfaceStability;
 @DeveloperApi
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-@InterfaceStability.Evolving
 public @interface SQLUserDefinedType {
 
   /**

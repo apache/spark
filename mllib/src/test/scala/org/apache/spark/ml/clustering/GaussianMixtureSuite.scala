@@ -21,25 +21,24 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.functions._
 
 
-class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
-  with DefaultReadWriteTest {
+class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
-  import testImplicits._
   import GaussianMixtureSuite._
+  import testImplicits._
 
   final val k = 5
   private val seed = 538009335
-  @transient var dataset: Dataset[_] = _
-  @transient var denseDataset: Dataset[_] = _
-  @transient var sparseDataset: Dataset[_] = _
-  @transient var decompositionDataset: Dataset[_] = _
-  @transient var rDataset: Dataset[_] = _
+  @transient var dataset: DataFrame = _
+  @transient var denseDataset: DataFrame = _
+  @transient var sparseDataset: DataFrame = _
+  @transient var decompositionDataset: DataFrame = _
+  @transient var rDataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -73,9 +72,14 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(gm.getK === 2)
     assert(gm.getFeaturesCol === "features")
     assert(gm.getPredictionCol === "prediction")
+    assert(gm.getProbabilityCol === "probability")
     assert(gm.getMaxIter === 100)
     assert(gm.getTol === 0.01)
     val model = gm.setMaxIter(1).fit(dataset)
+
+    val transformed = model.transform(dataset)
+    checkNominalOnDF(transformed, "prediction", model.weights.length)
+    checkVectorSizeOnDF(transformed, "probability", model.weights.length)
 
     MLTestingUtils.checkCopyAndUids(gm, model)
     assert(model.hasSummary)
@@ -118,15 +122,10 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(model.weights.length === k)
     assert(model.gaussians.length === k)
 
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", predictionColName, probabilityColName)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
-
     // Check prediction matches the highest probability, and probabilities sum to one.
-    transformed.select(predictionColName, probabilityColName).collect().foreach {
-      case Row(pred: Int, prob: Vector) =>
+    testTransformer[Tuple1[Vector]](dataset.toDF(), model,
+      "features", predictionColName, probabilityColName) {
+      case Row(_, pred: Int, prob: Vector) =>
         val probArray = prob.toArray
         val predFromProb = probArray.zipWithIndex.maxBy(_._1)._2
         assert(pred === predFromProb)
@@ -150,6 +149,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
+    assert(summary.numIter == 2)
 
     model.setSummary(None)
     assert(!model.hasSummary)
@@ -179,15 +179,6 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
       val actual = new GaussianMixture().setK(2).setSeed(seed).fit(dataset)
       modelEquals(expected, actual)
     }
-  }
-
-  test("check distributed decomposition") {
-    val k = 5
-    val d = decompositionData.head.size
-    assert(GaussianMixture.shouldDistributeGaussians(k, d))
-
-    val gmm = new GaussianMixture().setK(k).setSeed(seed).fit(decompositionDataset)
-    assert(gmm.getK === k)
   }
 
   test("multivariate data and check againt R mvnormalmixEM") {
@@ -256,6 +247,44 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val expectedMatrix = GaussianMixture.unpackUpperTriangularMatrix(4, triangularValues)
     assert(symmetricMatrix === expectedMatrix)
   }
+
+  test("GaussianMixture with Array input") {
+    def trainAndComputlogLikelihood(dataset: Dataset[_]): Double = {
+      val model = new GaussianMixture().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
+      model.summary.logLikelihood
+    }
+
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val trueLikelihood = trainAndComputlogLikelihood(newDataset)
+    val doubleLikelihood = trainAndComputlogLikelihood(newDatasetD)
+    val floatLikelihood = trainAndComputlogLikelihood(newDatasetF)
+
+    // checking the cost is fine enough as a sanity check
+    assert(trueLikelihood ~== doubleLikelihood absTol 1e-6)
+    assert(trueLikelihood ~== floatLikelihood absTol 1e-6)
+  }
+
+  test("GMM support instance weighting") {
+    val gm1 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed)
+    val gm2 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed).setWeightCol("weight")
+
+    Seq(1.0, 10.0, 100.0).foreach { w =>
+      val gmm1 = gm1.fit(dataset)
+      val ds2 = dataset.select(col("features"), lit(w).as("weight"))
+      val gmm2 = gm2.fit(ds2)
+      modelEquals(gmm1, gmm2)
+    }
+  }
+
+  test("prediction on single instance") {
+    val gmm = new GaussianMixture().setSeed(123L)
+    val model = gmm.fit(dataset)
+    testClusteringModelSinglePrediction(model, model.predict, dataset,
+      model.getFeaturesCol, model.getPredictionCol)
+
+    testClusteringModelSingleProbabilisticPrediction(model, model.predictProbability, dataset,
+      model.getFeaturesCol, model.getProbabilityCol)
+  }
 }
 
 object GaussianMixtureSuite extends SparkFunSuite {
@@ -299,10 +328,14 @@ object GaussianMixtureSuite extends SparkFunSuite {
 
   def modelEquals(m1: GaussianMixtureModel, m2: GaussianMixtureModel): Unit = {
     assert(m1.weights.length === m2.weights.length)
+    val s1 = m1.weights.zip(m1.gaussians).sortBy(_._1)
+    val s2 = m2.weights.zip(m2.gaussians).sortBy(_._1)
     for (i <- m1.weights.indices) {
-      assert(m1.weights(i) ~== m2.weights(i) absTol 1E-3)
-      assert(m1.gaussians(i).mean ~== m2.gaussians(i).mean absTol 1E-3)
-      assert(m1.gaussians(i).cov ~== m2.gaussians(i).cov absTol 1E-3)
+      val (w1, g1) = s1(i)
+      val (w2, g2) = s2(i)
+      assert(w1 ~== w2 absTol 1E-3)
+      assert(g1.mean ~== g2.mean absTol 1E-3)
+      assert(g1.cov ~== g2.cov absTol 1E-3)
     }
   }
 }

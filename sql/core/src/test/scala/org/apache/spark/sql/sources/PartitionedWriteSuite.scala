@@ -22,6 +22,7 @@ import java.sql.Timestamp
 
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
+import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String)
@@ -42,7 +43,7 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
   }
 }
 
-class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
+class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("write many partitions") {
@@ -86,15 +87,15 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
     withTempDir { f =>
       spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
         .write.option("maxRecordsPerFile", 1).mode("overwrite").parquet(f.getAbsolutePath)
-      assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
+      assert(TestUtils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
 
       spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
         .write.option("maxRecordsPerFile", 2).mode("overwrite").parquet(f.getAbsolutePath)
-      assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 2)
+      assert(TestUtils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 2)
 
       spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
         .write.option("maxRecordsPerFile", -1).mode("overwrite").parquet(f.getAbsolutePath)
-      assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 1)
+      assert(TestUtils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 1)
     }
   }
 
@@ -106,7 +107,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
         .option("maxRecordsPerFile", 1)
         .mode("overwrite")
         .parquet(f.getAbsolutePath)
-      assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
+      assert(TestUtils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
     }
   }
 
@@ -133,22 +134,22 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, ts)).toDF("i", "ts")
     withTempPath { f =>
       df.write.partitionBy("ts").parquet(f.getAbsolutePath)
-      val files = Utils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+      val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
       assert(files.length == 1)
       checkPartitionValues(files.head, "2016-12-01 00:00:00")
     }
     withTempPath { f =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .partitionBy("ts").parquet(f.getAbsolutePath)
-      val files = Utils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+      val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
       assert(files.length == 1)
-      // use timeZone option "GMT" to format partition value.
+      // use timeZone option utcTz.getId to format partition value.
       checkPartitionValues(files.head, "2016-12-01 08:00:00")
     }
     withTempPath { f =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         df.write.partitionBy("ts").parquet(f.getAbsolutePath)
-        val files = Utils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+        val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
         assert(files.length == 1)
         // if there isn't timeZone option, then use session local timezone.
         checkPartitionValues(files.head, "2016-12-01 08:00:00")

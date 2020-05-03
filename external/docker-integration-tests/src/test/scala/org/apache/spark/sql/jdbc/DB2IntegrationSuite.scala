@@ -21,27 +21,26 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import org.scalatest.Ignore
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
 import org.apache.spark.tags.DockerTest
 
-
 @DockerTest
-@Ignore // AMPLab Jenkins needs to be updated before shared memory works on docker
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "lresende/db2express-c:10.5.0.5-3.10.0"
+    override val imageName = "ibmcom/db2:11.5.0.0a"
     override val env = Map(
       "DB2INST1_PASSWORD" -> "rootpass",
-      "LICENSE" -> "accept"
+      "LICENSE" -> "accept",
+      "DBNAME" -> "foo",
+      "ARCHIVE_LOGS" -> "false",
+      "AUTOCONFIG" -> "false"
     )
     override val usesIpc = false
     override val jdbcPort: Int = 50000
+    override val privileged = true
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
-    override def getStartupProcessName: Option[String] = Some("db2start")
   }
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -157,5 +156,31 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getInt(0) == 1)
     assert(rows(0).getInt(1) == 20)
     assert(rows(0).getString(2) == "1")
+  }
+
+  test("query JDBC option") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val query = "SELECT x, y FROM tbl WHERE x > 10"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .load()
+    assert(df.collect.toSet === expectedResult)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl', query '$query')
+       """.stripMargin.replaceAll("\n", " "))
+    assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
   }
 }

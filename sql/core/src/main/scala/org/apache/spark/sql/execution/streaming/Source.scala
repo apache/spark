@@ -18,14 +18,18 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.types.StructType
 
 /**
  * A source of continually arriving data for a streaming query. A [[Source]] must have a
  * monotonically increasing notion of progress that can be represented as an [[Offset]]. Spark
  * will regularly query each [[Source]] to see if any more data is available.
+ *
+ * Note that, we extends `SparkDataStream` here, to make the v1 streaming source API be compatible
+ * with data source v2.
  */
-trait Source {
+trait Source extends SparkDataStream {
 
   /** Returns the schema of the data from this source */
   def schema: StructType
@@ -62,6 +66,15 @@ trait Source {
    */
   def commit(end: Offset) : Unit = {}
 
-  /** Stop this source and free any resources it has allocated. */
-  def stop(): Unit
+  override def initialOffset(): OffsetV2 = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def deserializeOffset(json: String): OffsetV2 = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def commit(end: OffsetV2): Unit = {
+    throw new IllegalStateException("should not be called.")
+  }
 }

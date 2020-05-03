@@ -24,8 +24,7 @@ __all__ = ['SparkFiles']
 class SparkFiles(object):
 
     """
-    Resolves paths to files added through
-    L{SparkContext.addFile()<pyspark.context.SparkContext.addFile>}.
+    Resolves paths to files added through :meth:`SparkContext.addFile`.
 
     SparkFiles contains only classmethods; users should not create SparkFiles
     instances.
@@ -41,7 +40,7 @@ class SparkFiles(object):
     @classmethod
     def get(cls, filename):
         """
-        Get the absolute path of a file added through C{SparkContext.addFile()}.
+        Get the absolute path of a file added through :meth:`SparkContext.addFile`.
         """
         path = os.path.join(SparkFiles.getRootDirectory(), filename)
         return os.path.abspath(path)
@@ -50,7 +49,7 @@ class SparkFiles(object):
     def getRootDirectory(cls):
         """
         Get the root directory that contains files added through
-        C{SparkContext.addFile()}.
+        :meth:`SparkContext.addFile`.
         """
         if cls._is_running_on_worker:
             return cls._root_directory

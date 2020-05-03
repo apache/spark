@@ -19,8 +19,6 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.language.existentials
-
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{AccumulatorV2, CallSite}
@@ -78,6 +76,7 @@ private[scheduler] case class CompletionEvent(
     reason: TaskEndReason,
     result: Any,
     accumUpdates: Seq[AccumulatorV2[_, _]],
+    metricPeaks: Array[Long],
     taskInfo: TaskInfo)
   extends DAGSchedulerEvent
 

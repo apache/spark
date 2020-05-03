@@ -17,76 +17,275 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.expressions._
+import scala.collection.JavaConverters._
+
+import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
+import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.sources.{BaseRelation, TableScan}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-object DataSourceV2Strategy extends Strategy {
-  // TODO: write path
+class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
+
+  import DataSourceV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  private def withProjectAndFilter(
+      project: Seq[NamedExpression],
+      filters: Seq[Expression],
+      scan: LeafExecNode,
+      needsUnsafeConversion: Boolean): SparkPlan = {
+    val filterCondition = filters.reduceLeftOption(And)
+    val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
+
+    if (withFilter.output != project || needsUnsafeConversion) {
+      ProjectExec(project, withFilter)
+    } else {
+      withFilter
+    }
+  }
+
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, DataSourceV2Relation(output, reader)) =>
-      val stayUpFilters: Seq[Expression] = reader match {
-        case r: SupportsPushDownCatalystFilters =>
-          r.pushCatalystFilters(filters.toArray)
-
-        case r: SupportsPushDownFilters =>
-          // A map from original Catalyst expressions to corresponding translated data source
-          // filters. If a predicate is not in this map, it means it cannot be pushed down.
-          val translatedMap: Map[Expression, Filter] = filters.flatMap { p =>
-            DataSourceStrategy.translateFilter(p).map(f => p -> f)
-          }.toMap
-
-          // Catalyst predicate expressions that cannot be converted to data source filters.
-          val nonConvertiblePredicates = filters.filterNot(translatedMap.contains)
-
-          // Data source filters that cannot be pushed down. An unhandled filter means
-          // the data source cannot guarantee the rows returned can pass the filter.
-          // As a result we must return it so Spark can plan an extra filter operator.
-          val unhandledFilters = r.pushFilters(translatedMap.values.toArray).toSet
-          val unhandledPredicates = translatedMap.filter { case (_, f) =>
-            unhandledFilters.contains(f)
-          }.keys
-
-          nonConvertiblePredicates ++ unhandledPredicates
-
-        case _ => filters
+    case PhysicalOperation(project, filters,
+        relation @ DataSourceV2ScanRelation(_, V1ScanWrapper(scan, translated, pushed), output)) =>
+      val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
+      if (v1Relation.schema != scan.readSchema()) {
+        throw new IllegalArgumentException(
+          "The fallback v1 relation reports inconsistent schema:\n" +
+            "Schema of v2 scan:     " + scan.readSchema() + "\n" +
+            "Schema of v1 relation: " + v1Relation.schema)
       }
+      val rdd = v1Relation.buildScan()
+      val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+      val originalOutputNames = relation.table.schema().map(_.name)
+      val requiredColumnsIndex = output.map(_.name).map(originalOutputNames.indexOf)
+      val dsScan = RowDataSourceScanExec(
+        output,
+        requiredColumnsIndex,
+        translated.toSet,
+        pushed.toSet,
+        unsafeRowRDD,
+        v1Relation,
+        tableIdentifier = None)
+      withProjectAndFilter(project, filters, dsScan, needsUnsafeConversion = false) :: Nil
 
-      val attrMap = AttributeMap(output.zip(output))
-      val projectSet = AttributeSet(projects.flatMap(_.references))
-      val filterSet = AttributeSet(stayUpFilters.flatMap(_.references))
+    case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
+      // projection and filters were already pushed down in the optimizer.
+      // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
+      // not support columnar, a projection is added to convert the rows to UnsafeRow.
+      val batchExec = BatchScanExec(relation.output, relation.scan)
+      withProjectAndFilter(project, filters, batchExec, !batchExec.supportsColumnar) :: Nil
 
-      // Match original case of attributes.
-      // TODO: nested fields pruning
-      val requiredColumns = (projectSet ++ filterSet).toSeq.map(attrMap)
-      reader match {
-        case r: SupportsPushDownRequiredColumns =>
-          r.pruneColumns(requiredColumns.toStructType)
-        case _ =>
-      }
+    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isDefined =>
+      val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
+      val scanExec = MicroBatchScanExec(
+        r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
 
-      val scan = DataSourceV2ScanExec(
-        output.toArray,
-        reader,
-        reader.readSchema(),
-        ExpressionSet(filters),
-        Nil)
-
-      val filterCondition = stayUpFilters.reduceLeftOption(And)
-      val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
-
-      val withProject = if (projects == withFilter.output) {
-        withFilter
+      val withProjection = if (scanExec.supportsColumnar) {
+        scanExec
       } else {
-        ProjectExec(projects, withFilter)
+        // Add a Project here to make sure we produce unsafe rows.
+        ProjectExec(r.output, scanExec)
       }
 
-      withProject :: Nil
+      withProjection :: Nil
+
+    case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isEmpty =>
+      val continuousStream = r.stream.asInstanceOf[ContinuousStream]
+      val scanExec = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
+
+      val withProjection = if (scanExec.supportsColumnar) {
+        scanExec
+      } else {
+        // Add a Project here to make sure we produce unsafe rows.
+        ProjectExec(r.output, scanExec)
+      }
+
+      withProjection :: Nil
+
+    case WriteToDataSourceV2(writer, query) =>
+      WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
+
+    case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+      CreateTableExec(catalog, ident, schema, parts, propsWithOwner, ifNotExists) :: Nil
+
+    case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+      val writeOptions = new CaseInsensitiveStringMap(options.asJava)
+      catalog match {
+        case staging: StagingTableCatalog =>
+          AtomicCreateTableAsSelectExec(staging, ident, parts, query, planLater(query),
+            propsWithOwner, writeOptions, ifNotExists) :: Nil
+        case _ =>
+          CreateTableAsSelectExec(catalog, ident, parts, query, planLater(query),
+            propsWithOwner, writeOptions, ifNotExists) :: Nil
+      }
+
+    case RefreshTable(catalog, ident) =>
+      RefreshTableExec(catalog, ident) :: Nil
+
+    case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+      catalog match {
+        case staging: StagingTableCatalog =>
+          AtomicReplaceTableExec(
+            staging, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
+        case _ =>
+          ReplaceTableExec(
+            catalog, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
+      }
+
+    case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+      val writeOptions = new CaseInsensitiveStringMap(options.asJava)
+      catalog match {
+        case staging: StagingTableCatalog =>
+          AtomicReplaceTableAsSelectExec(
+            staging,
+            ident,
+            parts,
+            query,
+            planLater(query),
+            propsWithOwner,
+            writeOptions,
+            orCreate = orCreate) :: Nil
+        case _ =>
+          ReplaceTableAsSelectExec(
+            catalog,
+            ident,
+            parts,
+            query,
+            planLater(query),
+            propsWithOwner,
+            writeOptions,
+            orCreate = orCreate) :: Nil
+      }
+
+    case AppendData(r: DataSourceV2Relation, query, writeOptions, _) =>
+      r.table.asWritable match {
+        case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+          AppendDataExecV1(v1, writeOptions.asOptions, query) :: Nil
+        case v2 =>
+          AppendDataExec(v2, writeOptions.asOptions, planLater(query)) :: Nil
+      }
+
+    case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, writeOptions, _) =>
+      // fail if any filter cannot be converted. correctness depends on removing all matching data.
+      val filters = splitConjunctivePredicates(deleteExpr).map {
+        filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
+          throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
+      }.toArray
+      r.table.asWritable match {
+        case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions, query) :: Nil
+        case v2 =>
+          OverwriteByExpressionExec(v2, filters, writeOptions.asOptions, planLater(query)) :: Nil
+      }
+
+    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _) =>
+      OverwritePartitionsDynamicExec(
+        r.table.asWritable, writeOptions.asOptions, planLater(query)) :: Nil
+
+    case DeleteFromTable(relation, condition) =>
+      relation match {
+        case DataSourceV2ScanRelation(table, _, output) =>
+          if (condition.exists(SubqueryExpression.hasSubquery)) {
+            throw new AnalysisException(
+              s"Delete by condition with subquery is not supported: $condition")
+          }
+          // fail if any filter cannot be converted.
+          // correctness depends on removing all matching data.
+          val filters = DataSourceStrategy.normalizeExprs(condition.toSeq, output)
+              .flatMap(splitConjunctivePredicates(_).map {
+                f => DataSourceStrategy.translateFilter(f).getOrElse(
+                  throw new AnalysisException(s"Exec update failed:" +
+                      s" cannot translate expression to source filter: $f"))
+              }).toArray
+          DeleteFromTableExec(table.asDeletable, filters) :: Nil
+        case _ =>
+          throw new AnalysisException("DELETE is only supported with v2 tables.")
+      }
+
+    case WriteToContinuousDataSource(writer, query) =>
+      WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
+
+    case Repartition(1, false, child) =>
+      val isContinuous = child.find {
+        case r: StreamingDataSourceV2Relation => r.stream.isInstanceOf[ContinuousStream]
+        case _ => false
+      }.isDefined
+
+      if (isContinuous) {
+        ContinuousCoalesceExec(1, planLater(child)) :: Nil
+      } else {
+        Nil
+      }
+
+    case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
+      DescribeNamespaceExec(desc.output, catalog.asNamespaceCatalog, ns, extended) :: Nil
+
+    case desc @ DescribeRelation(r: ResolvedTable, partitionSpec, isExtended) =>
+      if (partitionSpec.nonEmpty) {
+        throw new AnalysisException("DESCRIBE does not support partition for v2 tables.")
+      }
+      DescribeTableExec(desc.output, r.table, isExtended) :: Nil
+
+    case DropTable(catalog, ident, ifExists) =>
+      DropTableExec(catalog, ident, ifExists) :: Nil
+
+    case AlterTable(catalog, ident, _, changes) =>
+      AlterTableExec(catalog, ident, changes) :: Nil
+
+    case RenameTable(catalog, oldIdent, newIdent) =>
+      RenameTableExec(catalog, oldIdent, newIdent) :: Nil
+
+    case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
+      AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
+
+    case AlterNamespaceSetLocation(ResolvedNamespace(catalog, ns), location) =>
+      AlterNamespaceSetPropertiesExec(
+        catalog.asNamespaceCatalog,
+        ns,
+        Map(SupportsNamespaces.PROP_LOCATION -> location)) :: Nil
+
+    case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
+      AlterNamespaceSetPropertiesExec(
+        catalog.asNamespaceCatalog,
+        ns,
+        Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
+
+    case CommentOnTable(ResolvedTable(catalog, identifier, _), comment) =>
+      val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
+      AlterTableExec(catalog, identifier, Seq(changes)) :: Nil
+
+    case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
+      CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil
+
+    case DropNamespace(ResolvedNamespace(catalog, ns), ifExists, cascade) =>
+      DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
+
+    case r @ ShowNamespaces(ResolvedNamespace(catalog, ns), pattern) =>
+      ShowNamespacesExec(r.output, catalog.asNamespaceCatalog, ns, pattern) :: Nil
+
+    case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern) =>
+      ShowTablesExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
+
+    case SetCatalogAndNamespace(catalogManager, catalogName, ns) =>
+      SetCatalogAndNamespaceExec(catalogManager, catalogName, ns) :: Nil
+
+    case r: ShowCurrentNamespace =>
+      ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
+
+    case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
+      ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
 
     case _ => Nil
   }

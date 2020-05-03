@@ -21,16 +21,16 @@ import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.language.existentials
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.types._
 
 
@@ -87,7 +87,7 @@ trait FunctionRegistry {
   override def clone(): FunctionRegistry = throw new CloneNotSupportedException()
 }
 
-class SimpleFunctionRegistry extends FunctionRegistry {
+class SimpleFunctionRegistry extends FunctionRegistry with Logging {
 
   @GuardedBy("this")
   private val functionBuilders =
@@ -103,7 +103,13 @@ class SimpleFunctionRegistry extends FunctionRegistry {
       name: FunctionIdentifier,
       info: ExpressionInfo,
       builder: FunctionBuilder): Unit = synchronized {
-    functionBuilders.put(normalizeFuncName(name), (info, builder))
+    val normalizedName = normalizeFuncName(name)
+    val newFunction = (info, builder)
+    functionBuilders.put(normalizedName, newFunction) match {
+      case Some(previousFunction) if previousFunction != newFunction =>
+        logWarning(s"The function $normalizedName replaced a previously registered function.")
+      case _ =>
+    }
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
@@ -187,6 +193,8 @@ object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
 
+  val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
+
   // Note: Whenever we add a new entry here, make sure we also update ExpressionToSQLSuite
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
@@ -210,20 +218,24 @@ object FunctionRegistry {
     expression[PosExplode]("posexplode"),
     expressionGeneratorOuter[PosExplode]("posexplode_outer"),
     expression[Rand]("rand"),
+    expression[Rand]("random", true),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
     expression[CaseWhen]("when"),
 
     // math functions
     expression[Acos]("acos"),
+    expression[Acosh]("acosh"),
     expression[Asin]("asin"),
+    expression[Asinh]("asinh"),
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
+    expression[Atanh]("atanh"),
     expression[Bin]("bin"),
     expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
-    expression[Ceil]("ceiling"),
+    expression[Ceil]("ceiling", true),
     expression[Cos]("cos"),
     expression[Cosh]("cosh"),
     expression[Conv]("conv"),
@@ -240,12 +252,12 @@ object FunctionRegistry {
     expression[Log1p]("log1p"),
     expression[Log2]("log2"),
     expression[Log]("ln"),
-    expression[Remainder]("mod"),
+    expression[Remainder]("mod", true),
     expression[UnaryMinus]("negative"),
     expression[Pi]("pi"),
     expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
-    expression[Pow]("pow"),
+    expression[Pow]("pow", true),
     expression[Pow]("power"),
     expression[ToRadians]("radians"),
     expression[Rint]("rint"),
@@ -253,7 +265,7 @@ object FunctionRegistry {
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),
-    expression[Signum]("sign"),
+    expression[Signum]("sign", true),
     expression[Signum]("signum"),
     expression[Sin]("sin"),
     expression[Sinh]("sinh"),
@@ -268,6 +280,7 @@ object FunctionRegistry {
     expression[Subtract]("-"),
     expression[Multiply]("*"),
     expression[Divide]("/"),
+    expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
 
     // aggregate functions
@@ -275,41 +288,48 @@ object FunctionRegistry {
     expression[Average]("avg"),
     expression[Corr]("corr"),
     expression[Count]("count"),
+    expression[CountIf]("count_if"),
     expression[CovPopulation]("covar_pop"),
     expression[CovSample]("covar_samp"),
     expression[First]("first"),
-    expression[First]("first_value"),
+    expression[First]("first_value", true),
     expression[Kurtosis]("kurtosis"),
     expression[Last]("last"),
-    expression[Last]("last_value"),
+    expression[Last]("last_value", true),
     expression[Max]("max"),
-    expression[Average]("mean"),
+    expression[MaxBy]("max_by"),
+    expression[Average]("mean", true),
     expression[Min]("min"),
+    expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
-    expression[ApproximatePercentile]("approx_percentile"),
-    expression[StddevSamp]("std"),
-    expression[StddevSamp]("stddev"),
+    expression[ApproximatePercentile]("approx_percentile", true),
+    expression[StddevSamp]("std", true),
+    expression[StddevSamp]("stddev", true),
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
-    expression[VarianceSamp]("variance"),
+    expression[VarianceSamp]("variance", true),
     expression[VariancePop]("var_pop"),
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
+    expression[BoolAnd]("every", true),
+    expression[BoolAnd]("bool_and"),
+    expression[BoolOr]("any", true),
+    expression[BoolOr]("some", true),
+    expression[BoolOr]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
-    expression[Chr]("char"),
+    expression[Chr]("char", true),
     expression[Chr]("chr"),
     expression[Base64]("base64"),
     expression[BitLength]("bit_length"),
-    expression[Length]("char_length"),
-    expression[Length]("character_length"),
-    expression[Concat]("concat"),
+    expression[Length]("char_length", true),
+    expression[Length]("character_length", true),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
     expression[Elt]("elt"),
@@ -332,12 +352,12 @@ object FunctionRegistry {
     expression[JsonTuple]("json_tuple"),
     expression[ParseUrl]("parse_url"),
     expression[StringLocate]("position"),
-    expression[FormatString]("printf"),
+    expression[FormatString]("printf", true),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
-    expression[StringReverse]("reverse"),
+    expression[Overlay]("overlay"),
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
@@ -345,21 +365,21 @@ object FunctionRegistry {
     expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
-    expression[Substring]("substr"),
+    expression[Substring]("substr", true),
     expression[Substring]("substring"),
     expression[Left]("left"),
     expression[Right]("right"),
     expression[SubstringIndex]("substring_index"),
     expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
-    expression[Upper]("ucase"),
+    expression[Upper]("ucase", true),
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
     expression[XPathList]("xpath"),
     expression[XPathBoolean]("xpath_boolean"),
     expression[XPathDouble]("xpath_double"),
-    expression[XPathDouble]("xpath_number"),
+    expression[XPathDouble]("xpath_number", true),
     expression[XPathFloat]("xpath_float"),
     expression[XPathInt]("xpath_int"),
     expression[XPathLong]("xpath_long"),
@@ -374,7 +394,7 @@ object FunctionRegistry {
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
     expression[DateSub]("date_sub"),
-    expression[DayOfMonth]("day"),
+    expression[DayOfMonth]("day", true),
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
     expression[FromUnixTime]("from_unixtime"),
@@ -385,7 +405,7 @@ object FunctionRegistry {
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
-    expression[CurrentTimestamp]("now"),
+    expression[Now]("now"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ParseToTimestamp]("to_timestamp"),
@@ -393,21 +413,64 @@ object FunctionRegistry {
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
+    expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[DayOfWeek]("dayofweek"),
+    expression[WeekDay]("weekday"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
+    expression[MakeDate]("make_date"),
+    expression[MakeTimestamp]("make_timestamp"),
+    expression[MakeInterval]("make_interval"),
+    expression[DatePart]("date_part"),
+    expression[Extract]("extract"),
 
     // collection functions
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
+    expression[ArraysOverlap]("arrays_overlap"),
+    expression[ArrayIntersect]("array_intersect"),
+    expression[ArrayJoin]("array_join"),
+    expression[ArrayPosition]("array_position"),
+    expression[ArraySort]("array_sort"),
+    expression[ArrayExcept]("array_except"),
+    expression[ArrayUnion]("array_union"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
+    expression[ElementAt]("element_at"),
+    expression[MapFromArrays]("map_from_arrays"),
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
+    expression[MapEntries]("map_entries"),
+    expression[MapFromEntries]("map_from_entries"),
+    expression[MapConcat]("map_concat"),
     expression[Size]("size"),
+    expression[Slice]("slice"),
+    expression[Size]("cardinality", true),
+    expression[ArraysZip]("arrays_zip"),
     expression[SortArray]("sort_array"),
+    expression[Shuffle]("shuffle"),
+    expression[ArrayMin]("array_min"),
+    expression[ArrayMax]("array_max"),
+    expression[Reverse]("reverse"),
+    expression[Concat]("concat"),
+    expression[Flatten]("flatten"),
+    expression[Sequence]("sequence"),
+    expression[ArrayRepeat]("array_repeat"),
+    expression[ArrayRemove]("array_remove"),
+    expression[ArrayDistinct]("array_distinct"),
+    expression[ArrayTransform]("transform"),
+    expression[MapFilter]("map_filter"),
+    expression[ArrayFilter]("filter"),
+    expression[ArrayExists]("exists"),
+    expression[ArrayForAll]("forall"),
+    expression[ArrayAggregate]("aggregate"),
+    expression[TransformValues]("transform_values"),
+    expression[TransformKeys]("transform_keys"),
+    expression[MapZipWith]("map_zip_with"),
+    expression[ZipWith]("zip_with"),
+
     CreateStruct.registryEntry,
 
     // misc functions
@@ -416,7 +479,8 @@ object FunctionRegistry {
     expression[Md5]("md5"),
     expression[Uuid]("uuid"),
     expression[Murmur3Hash]("hash"),
-    expression[Sha1]("sha"),
+    expression[XxHash64]("xxhash64"),
+    expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
@@ -426,7 +490,9 @@ object FunctionRegistry {
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
-    expression[CallMethodViaReflection]("java_method"),
+    expression[CallMethodViaReflection]("java_method", true),
+    expression[SparkVersion]("version"),
+    expression[TypeOf]("typeof"),
 
     // grouping sets
     expression[Cube]("cube"),
@@ -465,10 +531,17 @@ object FunctionRegistry {
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
+    expression[BitwiseCount]("bit_count"),
+    expression[BitAndAgg]("bit_and"),
+    expression[BitOrAgg]("bit_or"),
+    expression[BitXorAgg]("bit_xor"),
 
     // json
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
+    expression[SchemaOfJson]("schema_of_json"),
+    expression[LengthOfJsonArray]("json_array_length"),
+    expression[JsonObjectKeys]("json_object_keys"),
 
     // cast
     expression[Cast]("cast"),
@@ -484,7 +557,12 @@ object FunctionRegistry {
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
     castAlias("binary", BinaryType),
-    castAlias("string", StringType)
+    castAlias("string", StringType),
+
+    // csv
+    expression[CsvToStructs]("from_csv"),
+    expression[SchemaOfCsv]("schema_of_csv"),
+    expression[StructsToCsv]("to_csv")
   )
 
   val builtin: SimpleFunctionRegistry = {
@@ -498,7 +576,7 @@ object FunctionRegistry {
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
   /** See usage above. */
-  private def expression[T <: Expression](name: String)
+  private def expression[T <: Expression](name: String, setAlias: Boolean = false)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
@@ -515,25 +593,44 @@ object FunctionRegistry {
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
-          case Success(e) => e
-          case Failure(e) =>
-            // the exception is an invocation exception. To get a meaningful message, we need the
-            // cause.
-            throw new AnalysisException(e.getCause.getMessage)
+        try {
+          val exp = varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+          if (setAlias) exp.setTagValue(FUNC_ALIAS, name)
+          exp
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-          throw new AnalysisException(s"Invalid number of arguments for function $name")
+          val validParametersCount = constructors
+            .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
+            .map(_.getParameterCount).distinct.sorted
+          val invalidArgumentsMsg = if (validParametersCount.length == 0) {
+            s"Invalid arguments for function $name"
+          } else {
+            val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+              validParametersCount.head.toString
+            } else {
+              validParametersCount.init.mkString("one of ", ", ", " and ") +
+                validParametersCount.last
+            }
+            s"Invalid number of arguments for function $name. " +
+              s"Expected: $expectedNumberOfParameters; Found: ${params.length}"
+          }
+          throw new AnalysisException(invalidArgumentsMsg)
         }
-        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
-          case Success(e) => e
-          case Failure(e) =>
-            // the exception is an invocation exception. To get a meaningful message, we need the
-            // cause.
-            throw new AnalysisException(e.getCause.getMessage)
+        try {
+          val exp = f.newInstance(expressions : _*).asInstanceOf[Expression]
+          if (setAlias) exp.setTagValue(FUNC_ALIAS, name)
+          exp
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       }
     }
@@ -559,7 +656,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
-      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "")
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "", "")
     (name, (expressionInfo, builder))
   }
 
@@ -579,7 +676,9 @@ object FunctionRegistry {
           df.arguments(),
           df.examples(),
           df.note(),
-          df.since())
+          df.group(),
+          df.since(),
+          df.deprecated())
       } else {
         // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.

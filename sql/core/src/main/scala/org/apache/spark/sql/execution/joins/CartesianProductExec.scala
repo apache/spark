@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark._
 import org.apache.spark.rdd.{CartesianPartition, CartesianRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, Predicate, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.execution.{BinaryExecNode, ExternalAppendOnlyUnsafeRowArray, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.CompletionIterator
 
@@ -60,7 +61,12 @@ class UnsafeCartesianRDD(
 case class CartesianProductExec(
     left: SparkPlan,
     right: SparkPlan,
-    condition: Option[Expression]) extends BinaryExecNode {
+    condition: Option[Expression]) extends BaseJoinExec {
+
+  override def joinType: JoinType = Inner
+  override def leftKeys: Seq[Expression] = Nil
+  override def rightKeys: Seq[Expression] = Nil
+
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override lazy val metrics = Map(
@@ -81,7 +87,7 @@ case class CartesianProductExec(
     pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {
-        val boundCondition = newPredicate(condition.get, left.output ++ right.output)
+        val boundCondition = Predicate.create(condition.get, left.output ++ right.output)
         boundCondition.initialize(index)
         val joined = new JoinedRow
 

@@ -17,24 +17,24 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.sql.{DataFrame, Row}
 
 /**
- * :: Experimental ::
  * Summary of clustering algorithms.
  *
  * @param predictions  `DataFrame` produced by model.transform().
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param numIter  Number of iterations.
  */
-@Experimental
 class ClusteringSummary private[clustering] (
     @transient val predictions: DataFrame,
     val predictionCol: String,
     val featuresCol: String,
-    val k: Int) extends Serializable {
+    val k: Int,
+    @Since("2.4.0") val numIter: Int) extends Serializable {
 
   /**
    * Cluster centers of the transformed data.
@@ -45,7 +45,7 @@ class ClusteringSummary private[clustering] (
    * Size of (number of data points in) each cluster.
    */
   lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
+    val sizes = Array.ofDim[Long](k)
     cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
       case Row(cluster: Int, count: Long) => sizes(cluster) = count
     }

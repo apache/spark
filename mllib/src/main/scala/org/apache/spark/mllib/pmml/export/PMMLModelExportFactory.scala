@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.pmml.export
 
-import org.dmg.pmml.RegressionNormalizationMethodType
+import org.dmg.pmml.regression.RegressionModel
 
 import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.apache.spark.mllib.classification.SVMModel
@@ -44,12 +44,12 @@ private[mllib] object PMMLModelExportFactory {
         new GeneralizedLinearPMMLModelExport(lasso, "lasso regression")
       case svm: SVMModel =>
         new BinaryClassificationPMMLModelExport(
-          svm, "linear SVM", RegressionNormalizationMethodType.NONE,
+          svm, "linear SVM", RegressionModel.NormalizationMethod.NONE,
           svm.getThreshold.getOrElse(0.0))
       case logistic: LogisticRegressionModel =>
         if (logistic.numClasses == 2) {
           new BinaryClassificationPMMLModelExport(
-            logistic, "logistic regression", RegressionNormalizationMethodType.LOGIT,
+            logistic, "logistic regression", RegressionModel.NormalizationMethod.LOGIT,
             logistic.getThreshold.getOrElse(0.5))
         } else {
           throw new IllegalArgumentException(

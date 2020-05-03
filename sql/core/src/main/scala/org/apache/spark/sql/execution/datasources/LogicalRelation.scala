@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.util.Utils
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
@@ -34,25 +34,14 @@ case class LogicalRelation(
     override val isStreaming: Boolean)
   extends LeafNode with MultiInstanceRelation {
 
-  // Logical Relations are distinct if they have different output for the sake of transformations.
-  override def equals(other: Any): Boolean = other match {
-    case l @ LogicalRelation(otherRelation, _, _, isStreaming) =>
-      relation == otherRelation && output == l.output && isStreaming == l.isStreaming
-    case _ => false
-  }
-
-  override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(relation, output)
-  }
-
   // Only care about relation when canonicalizing.
-  override lazy val canonicalized: LogicalPlan = copy(
-    output = output.map(QueryPlan.normalizeExprId(_, output)),
+  override def doCanonicalize(): LogicalPlan = copy(
+    output = output.map(QueryPlan.normalizeExpressions(_, output)),
     catalogTable = None)
 
   override def computeStats(): Statistics = {
     catalogTable
-      .flatMap(_.stats.map(_.toPlanStats(output)))
+      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)))
       .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
   }
 
@@ -74,7 +63,9 @@ case class LogicalRelation(
     case _ =>  // Do nothing.
   }
 
-  override def simpleString: String = s"Relation[${Utils.truncatedString(output, ",")}] $relation"
+  override def simpleString(maxFields: Int): String = {
+    s"Relation[${truncatedString(output, ",", maxFields)}] $relation"
+  }
 }
 
 object LogicalRelation {

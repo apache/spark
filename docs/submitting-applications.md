@@ -1,11 +1,26 @@
 ---
 layout: global
 title: Submitting Applications
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 The `spark-submit` script in Spark's `bin` directory is used to launch applications on a cluster.
 It can use all of Spark's supported [cluster managers](cluster-overview.html#cluster-manager-types)
-through a uniform interface so you don't have to configure your application specially for each one.
+through a uniform interface so you don't have to configure your application especially for each one.
 
 # Bundling Your Application's Dependencies
 If your code depends on other projects, you will need to package them alongside
@@ -44,7 +59,7 @@ Some of the commonly used options are:
 * `--class`: The entry point for your application (e.g. `org.apache.spark.examples.SparkPi`)
 * `--master`: The [master URL](#master-urls) for the cluster (e.g. `spark://23.195.26.187:7077`)
 * `--deploy-mode`: Whether to deploy your driver on the worker nodes (`cluster`) or locally as an external client (`client`) (default: `client`) <b> &#8224; </b>
-* `--conf`: Arbitrary Spark configuration property in key=value format. For values that contain spaces wrap "key=value" in quotes (as shown).
+* `--conf`: Arbitrary Spark configuration property in key=value format. For values that contain spaces wrap "key=value" in quotes (as shown). Multiple configurations should be passed as separate arguments. (e.g. `--conf <key>=<value> --conf <key2>=<value2>`)
 * `application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
 * `application-arguments`: Arguments passed to the main method of your main class, if any
 
@@ -58,7 +73,7 @@ for applications that involve the REPL (e.g. Spark shell).
 
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
-the drivers and the executors. Currently, standalone mode does not support cluster mode for Python
+the drivers and the executors. Currently, the standalone mode does not support cluster mode for Python
 applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
@@ -68,7 +83,7 @@ There are a few options available that are specific to the
 [cluster manager](cluster-overview.html#cluster-manager-types) that is being used.
 For example, with a [Spark standalone cluster](spark-standalone.html) with `cluster` deploy mode,
 you can also specify `--supervise` to make sure that the driver is automatically restarted if it
-fails with non-zero exit code. To enumerate all such options available to `spark-submit`,
+fails with a non-zero exit code. To enumerate all such options available to `spark-submit`,
 run it with `--help`. Here are a few examples of common options:
 
 {% highlight bash %}
@@ -127,6 +142,16 @@ export HADOOP_CONF_DIR=XXX
   http://path/to/examples.jar \
   1000
 
+# Run on a Kubernetes cluster in cluster deploy mode
+./bin/spark-submit \
+  --class org.apache.spark.examples.SparkPi \
+  --master k8s://xx.yy.zz.ww:443 \
+  --deploy-mode cluster \
+  --executor-memory 20G \
+  --num-executors 50 \
+  http://path/to/examples.jar \
+  1000
+
 {% endhighlight %}
 
 # Master URLs
@@ -155,13 +180,19 @@ The master URL passed to Spark can be in one of the following formats:
         <code>client</code> or <code>cluster</code> mode depending on the value of <code>--deploy-mode</code>.
         The cluster location will be found based on the <code>HADOOP_CONF_DIR</code> or <code>YARN_CONF_DIR</code> variable.
 </td></tr>
+<tr><td> <code>k8s://HOST:PORT</code> </td><td> Connect to a <a href="running-on-kubernetes.html">Kubernetes</a> cluster in
+        <code>cluster</code> mode. Client mode is currently unsupported and will be supported in future releases.
+        The <code>HOST</code> and <code>PORT</code> refer to the <a href="https://kubernetes.io/docs/reference/generated/kube-apiserver/">Kubernetes API Server</a>.
+        It connects using TLS by default. In order to force it to use an unsecured connection, you can use
+        <code>k8s://http://HOST:PORT</code>.
+</td></tr>
 </table>
 
 
 # Loading Configuration from a File
 
 The `spark-submit` script can load default [Spark configuration values](configuration.html) from a
-properties file and pass them on to your application. By default it will read options
+properties file and pass them on to your application. By default, it will read options
 from `conf/spark-defaults.conf` in the Spark directory. For more detail, see the section on
 [loading default configurations](configuration.html#loading-default-configurations).
 
@@ -176,7 +207,7 @@ debugging information by running `spark-submit` with the `--verbose` option.
 
 # Advanced Dependency Management
 When using `spark-submit`, the application jar along with any jars included with the `--jars` option
-will be automatically transferred to the cluster. URLs supplied after `--jars` must be separated by commas. That list is included on the driver and executor classpaths. Directory expansion does not work with `--jars`.
+will be automatically transferred to the cluster. URLs supplied after `--jars` must be separated by commas. That list is included in the driver and executor classpaths. Directory expansion does not work with `--jars`.
 
 Spark uses the following URL scheme to allow different strategies for disseminating jars:
 

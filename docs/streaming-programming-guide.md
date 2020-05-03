@@ -3,6 +3,21 @@ layout: global
 displayTitle: Spark Streaming Programming Guide
 title: Spark Streaming
 description: Spark Streaming programming guide and tutorial for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -11,7 +26,7 @@ description: Spark Streaming programming guide and tutorial for Spark SPARK_VERS
 # Overview
 Spark Streaming is an extension of the core Spark API that enables scalable, high-throughput,
 fault-tolerant stream processing of live data streams. Data can be ingested from many sources
-like Kafka, Flume, Kinesis, or TCP sockets, and can be processed using complex
+like Kafka, Kinesis, or TCP sockets, and can be processed using complex
 algorithms expressed with high-level functions like `map`, `reduce`, `join` and `window`.
 Finally, processed data can be pushed out to filesystems, databases,
 and live dashboards. In fact, you can apply Spark's
@@ -40,9 +55,9 @@ stream of results in batches.
 
 Spark Streaming provides a high-level abstraction called *discretized stream* or *DStream*,
 which represents a continuous stream of data. DStreams can be created either from input data
-streams from sources such as Kafka, Flume, and Kinesis, or by applying high-level
+streams from sources such as Kafka, and Kinesis, or by applying high-level
 operations on other DStreams. Internally, a DStream is represented as a sequence of
-[RDDs](api/scala/index.html#org.apache.spark.rdd.RDD).
+[RDDs](api/scala/org/apache/spark/rdd/RDD.html).
 
 This guide shows you how to start writing Spark Streaming programs with DStreams. You can
 write Spark Streaming programs in Scala, Java or Python (introduced in Spark 1.2),
@@ -65,7 +80,7 @@ do is as follows.
 <div data-lang="scala"  markdown="1" >
 First, we import the names of the Spark Streaming classes and some implicit
 conversions from StreamingContext into our environment in order to add useful methods to
-other classes we need (like DStream). [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) is the
+other classes we need (like DStream). [StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) is the
 main entry point for all streaming functionality. We create a local StreamingContext with two execution threads,  and a batch interval of 1 second.
 
 {% highlight scala %}
@@ -74,7 +89,7 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._ // not necessary since Spark 1.3
 
 // Create a local StreamingContext with two working thread and batch interval of 1 second.
-// The master requires 2 cores to prevent from a starvation scenario.
+// The master requires 2 cores to prevent a starvation scenario.
 
 val conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
 val ssc = new StreamingContext(conf, Seconds(1))
@@ -170,9 +185,9 @@ JavaDStream<String> words = lines.flatMap(x -> Arrays.asList(x.split(" ")).itera
 generating multiple new records from each record in the source DStream. In this case,
 each line will be split into multiple words and the stream of words is represented as the
 `words` DStream. Note that we defined the transformation using a
-[FlatMapFunction](api/scala/index.html#org.apache.spark.api.java.function.FlatMapFunction) object.
+[FlatMapFunction](api/scala/org/apache/spark/api/java/function/FlatMapFunction.html) object.
 As we will discover along the way, there are a number of such convenience classes in the Java API
-that help define DStream transformations.
+that help defines DStream transformations.
 
 Next, we want to count these words.
 
@@ -186,9 +201,9 @@ wordCounts.print();
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
-1)` pairs, using a [PairFunction](api/scala/index.html#org.apache.spark.api.java.function.PairFunction)
+1)` pairs, using a [PairFunction](api/scala/org/apache/spark/api/java/function/PairFunction.html)
 object. Then, it is reduced to get the frequency of words in each batch of data,
-using a [Function2](api/scala/index.html#org.apache.spark.api.java.function.Function2) object.
+using a [Function2](api/scala/org/apache/spark/api/java/function/Function2.html) object.
 Finally, `wordCounts.print()` will print a few of the counts generated every second.
 
 Note that when these lines are executed, Spark Streaming only sets up the computation it
@@ -385,15 +400,16 @@ Similar to Spark, Spark Streaming is available through Maven Central. To write y
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-streaming_{{site.SCALA_BINARY_VERSION}}</artifactId>
         <version>{{site.SPARK_VERSION}}</version>
+        <scope>provided</scope>
     </dependency>
 </div>
 <div data-lang="SBT" markdown="1">
 
-	libraryDependencies += "org.apache.spark" % "spark-streaming_{{site.SCALA_BINARY_VERSION}}" % "{{site.SPARK_VERSION}}"
+	libraryDependencies += "org.apache.spark" % "spark-streaming_{{site.SCALA_BINARY_VERSION}}" % "{{site.SPARK_VERSION}}" % "provided"
 </div>
 </div>
 
-For ingesting data from sources like Kafka, Flume, and Kinesis that are not present in the Spark
+For ingesting data from sources like Kafka and Kinesis that are not present in the Spark
 Streaming core
  API, you will have to add the corresponding
 artifact `spark-streaming-xyz_{{site.SCALA_BINARY_VERSION}}` to the dependencies. For example,
@@ -402,7 +418,6 @@ some of the common ones are as follows.
 <table class="table">
 <tr><th>Source</th><th>Artifact</th></tr>
 <tr><td> Kafka </td><td> spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}} </td></tr>
-<tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Kinesis<br/></td><td>spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}} [Amazon Software License] </td></tr>
 <tr><td></td><td></td></tr>
 </table>
@@ -420,7 +435,7 @@ To initialize a Spark Streaming program, a **StreamingContext** object has to be
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-A [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) object can be created from a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object.
+A [StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) object can be created from a [SparkConf](api/scala/org/apache/spark/SparkConf.html) object.
 
 {% highlight scala %}
 import org.apache.spark._
@@ -431,12 +446,12 @@ val ssc = new StreamingContext(conf, Seconds(1))
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark, Mesos, Kubernetes or YARN cluster URL](submitting-applications.html#master-urls),
 or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
 receive it there. However, for local testing and unit tests, you can pass "local[\*]" to run Spark Streaming
-in-process (detects the number of cores in the local system). Note that this internally creates a [SparkContext](api/scala/index.html#org.apache.spark.SparkContext) (starting point of all Spark functionality) which can be accessed as `ssc.sparkContext`.
+in-process (detects the number of cores in the local system). Note that this internally creates a [SparkContext](api/scala/org/apache/spark/SparkContext.html) (starting point of all Spark functionality) which can be accessed as `ssc.sparkContext`.
 
 The batch interval must be set based on the latency requirements of your application
 and available cluster resources. See the [Performance Tuning](#setting-the-right-batch-interval)
@@ -569,7 +584,7 @@ Input DStreams are DStreams representing the stream of input data received from 
 sources. In the [quick example](#a-quick-example), `lines` was an input DStream as it represented
 the stream of data received from the netcat server. Every input DStream
 (except file stream, discussed later in this section) is associated with a **Receiver**
-([Scala doc](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver),
+([Scala doc](api/scala/org/apache/spark/streaming/receiver/Receiver.html),
 [Java doc](api/java/org/apache/spark/streaming/receiver/Receiver.html)) object which receives the
 data from a source and stores it in Spark's memory for processing.
 
@@ -577,7 +592,7 @@ Spark Streaming provides two categories of built-in streaming sources.
 
 - *Basic sources*: Sources directly available in the StreamingContext API.
   Examples: file systems, and socket connections.
-- *Advanced sources*: Sources like Kafka, Flume, Kinesis, etc. are available through
+- *Advanced sources*: Sources like Kafka, Kinesis, etc. are available through
   extra utility classes. These require linking against extra dependencies as discussed in the
   [linking](#linking) section.
 
@@ -597,7 +612,7 @@ as well as to run the receiver(s).
 
 - When running a Spark Streaming program locally, do not use "local" or "local[1]" as the master URL.
   Either of these means that only one thread will be used for running tasks locally. If you are using
-  an input DStream based on a receiver (e.g. sockets, Kafka, Flume, etc.), then the single thread will
+  an input DStream based on a receiver (e.g. sockets, Kafka, etc.), then the single thread will
   be used to run the receiver, leaving no thread for processing the received data. Hence, when
   running locally, always use "local[*n*]" as the master URL, where *n* > number of receivers to run
   (see [Spark Properties](configuration.html#spark-properties) for information on how to set
@@ -615,38 +630,116 @@ which creates a DStream from text
 data received over a TCP socket connection. Besides sockets, the StreamingContext API provides
 methods for creating DStreams from files as input sources.
 
-- **File Streams:** For reading data from files on any file system compatible with the HDFS API (that is, HDFS, S3, NFS, etc.), a DStream can be created as:
+#### File Streams
+{:.no_toc}
 
-    <div class="codetabs">
-    <div data-lang="scala" markdown="1">
-        streamingContext.fileStream[KeyClass, ValueClass, InputFormatClass](dataDirectory)
-    </div>
-    <div data-lang="java" markdown="1">
-		streamingContext.fileStream<KeyClass, ValueClass, InputFormatClass>(dataDirectory);
-    </div>
-    <div data-lang="python" markdown="1">
-		streamingContext.textFileStream(dataDirectory)
-    </div>
-    </div>
+For reading data from files on any file system compatible with the HDFS API (that is, HDFS, S3, NFS, etc.), a DStream can be created as
+via `StreamingContext.fileStream[KeyClass, ValueClass, InputFormatClass]`.
 
-	Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory (files written in nested directories not supported). Note that
+File streams do not require running a receiver so there is no need to allocate any cores for receiving file data.
 
-     + The files must have the same data format.
-     + The files must be created in the `dataDirectory` by atomically *moving* or *renaming* them into
-     the data directory.
-     + Once moved, the files must not be changed. So if the files are being continuously appended, the new data will not be read.
+For simple text files, the easiest method is `StreamingContext.textFileStream(dataDirectory)`.
 
-	For simple text files, there is an easier method `streamingContext.textFileStream(dataDirectory)`. And file streams do not require running a receiver, hence does not require allocating cores.
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
 
-	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
+{% highlight scala %}
+streamingContext.fileStream[KeyClass, ValueClass, InputFormatClass](dataDirectory)
+{% endhighlight %}
+For text files
 
-- **Streams based on Custom Receivers:** DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
+{% highlight scala %}
+streamingContext.textFileStream(dataDirectory)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+streamingContext.fileStream<KeyClass, ValueClass, InputFormatClass>(dataDirectory);
+{% endhighlight %}
+For text files
+
+{% highlight java %}
+streamingContext.textFileStream(dataDirectory);
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+`fileStream` is not available in the Python API; only `textFileStream` is available.
+{% highlight python %}
+streamingContext.textFileStream(dataDirectory)
+{% endhighlight %}
+</div>
+
+</div>
+
+##### How Directories are Monitored
+{:.no_toc}
+
+Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory.
+
+   * A simple directory can be monitored, such as `"hdfs://namenode:8040/logs/"`.
+     All files directly under such a path will be processed as they are discovered.
+   + A [POSIX glob pattern](http://pubs.opengroup.org/onlinepubs/009695399/utilities/xcu_chap02.html#tag_02_13_02) can be supplied, such as
+     `"hdfs://namenode:8040/logs/2017/*"`.
+     Here, the DStream will consist of all files in the directories
+     matching the pattern.
+     That is: it is a pattern of directories, not of files in directories.
+   + All files must be in the same data format.
+   * A file is considered part of a time period based on its modification time,
+     not its creation time.
+   + Once processed, changes to a file within the current window will not cause the file to be reread.
+     That is: *updates are ignored*.
+   + The more files under a directory, the longer it will take to
+     scan for changes — even if no files have been modified.
+   * If a wildcard is used to identify directories, such as `"hdfs://namenode:8040/logs/2016-*"`,
+     renaming an entire directory to match the path will add the directory to the list of
+     monitored directories. Only the files in the directory whose modification time is
+     within the current window will be included in the stream.
+   + Calling [`FileSystem.setTimes()`](https://hadoop.apache.org/docs/current/api/org/apache/hadoop/fs/FileSystem.html#setTimes-org.apache.hadoop.fs.Path-long-long-)
+     to fix the timestamp is a way to have the file picked up in a later window, even if its contents have not changed.
+
+
+##### Using Object Stores as a source of data
+{:.no_toc}
+
+"Full" Filesystems such as HDFS tend to set the modification time on their files as soon
+as the output stream is created.
+When a file is opened, even before data has been completely written,
+it may be included in the `DStream` - after which updates to the file within the same window
+will be ignored. That is: changes may be missed, and data omitted from the stream.
+
+To guarantee that changes are picked up in a window, write the file
+to an unmonitored directory, then, immediately after the output stream is closed,
+rename it into the destination directory.
+Provided the renamed file appears in the scanned destination directory during the window
+of its creation, the new data will be picked up.
+
+In contrast, Object Stores such as Amazon S3 and Azure Storage usually have slow rename operations, as the
+data is actually copied.
+Furthermore, renamed object may have the time of the `rename()` operation as its modification time, so
+may not be considered part of the window which the original create time implied they were.
+
+Careful testing is needed against the target object store to verify that the timestamp behavior
+of the store is consistent with that expected by Spark Streaming. It may be
+that writing directly into a destination directory is the appropriate strategy for
+streaming data via the chosen object store.
+
+For more details on this topic, consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable2/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
+
+#### Streams based on Custom Receivers
+{:.no_toc}
+
+DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
   Guide](streaming-custom-receivers.html) for more details.
 
-- **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
+#### Queue of RDDs as a Stream
+{:.no_toc}
+
+For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
 For more details on streams from sockets and files, see the API documentations of the relevant functions in
-[StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) for
+[StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) for
 Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
 for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) for Python.
 
@@ -654,10 +747,10 @@ for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.strea
 {:.no_toc}
 
 <span class="badge" style="background-color: grey">Python API</span> As of Spark {{site.SPARK_VERSION_SHORT}},
-out of these sources, Kafka, Kinesis and Flume are available in the Python API.
+out of these sources, Kafka and Kinesis are available in the Python API.
 
-This category of sources require interfacing with external non-Spark libraries, some of them with
-complex dependencies (e.g., Kafka and Flume). Hence, to minimize issues related to version conflicts
+This category of sources requires interfacing with external non-Spark libraries, some of them with
+complex dependencies (e.g., Kafka). Hence, to minimize issues related to version conflicts
 of dependencies, the functionality to create DStreams from these sources has been moved to separate
 libraries that can be [linked](#linking) to explicitly when necessary.
 
@@ -668,9 +761,7 @@ and add it to the classpath.
 
 Some of these advanced sources are as follows.
 
-- **Kafka:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kafka broker versions 0.8.2.1 or higher. See the [Kafka Integration Guide](streaming-kafka-integration.html) for more details.
-
-- **Flume:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Flume 1.6.0. See the [Flume Integration Guide](streaming-flume-integration.html) for more details.
+- **Kafka:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kafka broker versions 0.10 or higher. See the [Kafka Integration Guide](streaming-kafka-0-10-integration.html) for more details.
 
 - **Kinesis:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kinesis Client Library 1.2.1. See the [Kinesis Integration Guide](streaming-kinesis-integration.html) for more details.
 
@@ -688,7 +779,7 @@ Guide](streaming-custom-receivers.html) for details.
 {:.no_toc}
 
 There can be two kinds of data sources based on their *reliability*. Sources
-(like Kafka and Flume) allow the transferred data to be acknowledged. If the system receiving
+(like Kafka) allow the transferred data to be acknowledged. If the system receiving
 data from these *reliable* sources acknowledges the received data correctly, it can be ensured
 that no data will be lost due to any kind of failure. This leads to two kinds of receivers:
 
@@ -837,8 +928,7 @@ JavaPairDStream<String, Integer> runningCounts = pairs.updateStateByKey(updateFu
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Java code, take a look at the example
-[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming
-/JavaStatefulNetworkWordCount.java).
+[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaStatefulNetworkWordCount.java).
 
 </div>
 <div data-lang="python" markdown="1">
@@ -1129,8 +1219,8 @@ joinedStream = windowedStream.transform(lambda rdd: rdd.join(dataset))
 In fact, you can also dynamically change the dataset you want to join against. The function provided to `transform` is evaluated every batch interval and therefore will use the current dataset that `dataset` reference points to.
 
 The complete list of DStream transformations is available in the API documentation. For the Scala API,
-see [DStream](api/scala/index.html#org.apache.spark.streaming.dstream.DStream)
-and [PairDStreamFunctions](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions).
+see [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
+and [PairDStreamFunctions](api/scala/org/apache/spark/streaming/dstream/PairDStreamFunctions.html).
 For the Java API, see [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html)
 and [JavaPairDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairDStream.html).
 For the Python API, see [DStream](api/python/pyspark.streaming.html#pyspark.streaming.DStream).
@@ -1383,7 +1473,7 @@ Note that the connections in the pool should be lazily created on demand and tim
 ***
 
 ## DataFrame and SQL Operations
-You can easily use [DataFrames and SQL](sql-programming-guide.html) operations on streaming data. You have to create a SparkSession using the SparkContext that the StreamingContext is using. Furthermore this has to done such that it can be restarted on driver failures. This is done by creating a lazily instantiated singleton instance of SparkSession. This is shown in the following example. It modifies the earlier [word count example](#a-quick-example) to generate word counts using DataFrames and SQL. Each RDD is converted to a DataFrame, registered as a temporary table and then queried using SQL.
+You can easily use [DataFrames and SQL](sql-programming-guide.html) operations on streaming data. You have to create a SparkSession using the SparkContext that the StreamingContext is using. Furthermore, this has to done such that it can be restarted on driver failures. This is done by creating a lazily instantiated singleton instance of SparkSession. This is shown in the following example. It modifies the earlier [word count example](#a-quick-example) to generate word counts using DataFrames and SQL. Each RDD is converted to a DataFrame, registered as a temporary table and then queried using SQL.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1526,7 +1616,7 @@ operations on the same data). For window-based operations like `reduceByWindow` 
 Hence, DStreams generated by window-based operations are automatically persisted in memory, without
 the developer calling `persist()`.
 
-For input streams that receive data over the network (such as, Kafka, Flume, sockets, etc.), the
+For input streams that receive data over the network (such as, Kafka, sockets, etc.), the
 default persistence level is set to replicate the data to two nodes for fault-tolerance.
 
 Note that, unlike RDDs, the default persistence level of DStreams keeps the data serialized in
@@ -1896,7 +1986,7 @@ To run a Spark Streaming applications, you need to have the following.
 - *Package the application JAR* - You have to compile your streaming application into a JAR.
   If you are using [`spark-submit`](submitting-applications.html) to start the
   application, then you will not need to provide Spark and Spark Streaming in the JAR. However,
-  if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume),
+  if your application uses [advanced sources](#advanced-sources) (e.g. Kafka),
   then you will have to package the extra artifact they link to, along with their dependencies,
   in the JAR that is used to deploy the application. For example, an application using `KafkaUtils`
   will have to include `spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}` and all its
@@ -1932,10 +2022,10 @@ To run a Spark Streaming applications, you need to have the following.
     + *Mesos* - [Marathon](https://github.com/mesosphere/marathon) has been used to achieve this
       with Mesos.
 
-- *Configuring write ahead logs* - Since Spark 1.2,
-  we have introduced _write ahead logs_ for achieving strong
+- *Configuring write-ahead logs* - Since Spark 1.2,
+  we have introduced _write-ahead logs_ for achieving strong
   fault-tolerance guarantees. If enabled,  all the data received from a receiver gets written into
-  a write ahead log in the configuration checkpoint directory. This prevents data loss on driver
+  a write-ahead log in the configuration checkpoint directory. This prevents data loss on driver
   recovery, thus ensuring zero data loss (discussed in detail in the
   [Fault-tolerance Semantics](#fault-tolerance-semantics) section). This can be enabled by setting
   the [configuration parameter](configuration.html#spark-streaming)
@@ -1943,15 +2033,15 @@ To run a Spark Streaming applications, you need to have the following.
   come at the cost of the receiving throughput of individual receivers. This can be corrected by
   running [more receivers in parallel](#level-of-parallelism-in-data-receiving)
   to increase aggregate throughput. Additionally, it is recommended that the replication of the
-  received data within Spark be disabled when the write ahead log is enabled as the log is already
+  received data within Spark be disabled when the write-ahead log is enabled as the log is already
   stored in a replicated storage system. This can be done by setting the storage level for the
   input stream to `StorageLevel.MEMORY_AND_DISK_SER`. While using S3 (or any file system that
-  does not support flushing) for _write ahead logs_, please remember to enable
+  does not support flushing) for _write-ahead logs_, please remember to enable
   `spark.streaming.driver.writeAheadLog.closeFileAfterWrite` and
   `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. See
   [Spark Streaming Configuration](configuration.html#spark-streaming) for more details.
-  Note that Spark will not encrypt data written to the write ahead log when I/O encryption is
-  enabled. If encryption of the write ahead log data is desired, it should be stored in a file
+  Note that Spark will not encrypt data written to the write-ahead log when I/O encryption is
+  enabled. If encryption of the write-ahead log data is desired, it should be stored in a file
   system that supports encryption natively.
 
 - *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
@@ -1977,13 +2067,13 @@ for prime time, the old one be can be brought down. Note that this can be done f
 sending the data to two destinations (i.e., the earlier and upgraded applications).
 
 - The existing application is shutdown gracefully (see
-[`StreamingContext.stop(...)`](api/scala/index.html#org.apache.spark.streaming.StreamingContext)
+[`StreamingContext.stop(...)`](api/scala/org/apache/spark/streaming/StreamingContext.html)
 or [`JavaStreamingContext.stop(...)`](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
 for graceful shutdown options) which ensure data that has been received is completely
 processed before shutdown. Then the
 upgraded application can be started, which will start processing from the same point where the earlier
 application left off. Note that this can be done only with input sources that support source-side buffering
-(like Kafka, and Flume) as data needs to be buffered while the previous application was down and
+(like Kafka) as data needs to be buffered while the previous application was down and
 the upgraded application is not yet up. And restarting from earlier checkpoint
 information of pre-upgrade code cannot be done. The checkpoint information essentially
 contains serialized Scala/Java/Python objects and trying to deserialize objects with new,
@@ -2014,7 +2104,7 @@ In that case, consider
 [reducing](#reducing-the-batch-processing-times) the batch processing time.
 
 The progress of a Spark Streaming program can also be monitored using the
-[StreamingListener](api/scala/index.html#org.apache.spark.streaming.scheduler.StreamingListener) interface,
+[StreamingListener](api/scala/org/apache/spark/streaming/scheduler/StreamingListener.html) interface,
 which allows you to get receiver status and processing times. Note that this is a developer API
 and it is likely to be improved upon (i.e., more information reported) in the future.
 
@@ -2038,7 +2128,7 @@ highlights some of the most important ones.
 
 ### Level of Parallelism in Data Receiving
 {:.no_toc}
-Receiving data over the network (like Kafka, Flume, socket, etc.) requires the data to be deserialized
+Receiving data over the network (like Kafka, socket, etc.) requires the data to be deserialized
 and stored in Spark. If the data receiving becomes a bottleneck in the system, then consider
 parallelizing the data receiving. Note that each input DStream
 creates a single receiver (running on a worker machine) that receives a single stream of data.
@@ -2098,6 +2188,8 @@ the input data stream (using `inputStream.repartition(<number of partitions>)`).
 This distributes the received batches of data across the specified number of machines in the cluster
 before further processing.
 
+For direct stream, please refer to [Spark Streaming + Kafka Integration Guide](streaming-kafka-0-10-integration.html)
+
 ### Level of Parallelism in Data Processing
 {:.no_toc}
 Cluster resources can be under-utilized if the number of parallel tasks used in any stage of the
@@ -2105,7 +2197,7 @@ computation is not high enough. For example, for distributed reduce operations l
 and `reduceByKeyAndWindow`, the default number of parallel tasks is controlled by
 the `spark.default.parallelism` [configuration property](configuration.html#spark-properties). You
 can pass the level of parallelism as an argument (see
-[`PairDStreamFunctions`](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
+[`PairDStreamFunctions`](api/scala/org/apache/spark/streaming/dstream/PairDStreamFunctions.html)
 documentation), or set the `spark.default.parallelism`
 [configuration property](configuration.html#spark-properties) to change the default.
 
@@ -2113,9 +2205,9 @@ documentation), or set the `spark.default.parallelism`
 {:.no_toc}
 The overheads of data serialization can be reduced by tuning the serialization formats. In the case of streaming, there are two types of data that are being serialized.
 
-* **Input data**: By default, the input data received through Receivers is stored in the executors' memory with [StorageLevel.MEMORY_AND_DISK_SER_2](api/scala/index.html#org.apache.spark.storage.StorageLevel$). That is, the data is serialized into bytes to reduce GC overheads, and replicated for tolerating executor failures. Also, the data is kept first in memory, and spilled over to disk only if the memory is insufficient to hold all of the input data necessary for the streaming computation. This serialization obviously has overheads -- the receiver must deserialize the received data and re-serialize it using Spark's serialization format. 
+* **Input data**: By default, the input data received through Receivers is stored in the executors' memory with [StorageLevel.MEMORY_AND_DISK_SER_2](api/scala/org/apache/spark/storage/StorageLevel$.html). That is, the data is serialized into bytes to reduce GC overheads, and replicated for tolerating executor failures. Also, the data is kept first in memory, and spilled over to disk only if the memory is insufficient to hold all of the input data necessary for the streaming computation. This serialization obviously has overheads -- the receiver must deserialize the received data and re-serialize it using Spark's serialization format.
 
-* **Persisted RDDs generated by Streaming Operations**: RDDs generated by streaming computations may be persisted in memory. For example, window operations persist data in memory as they would be processed multiple times. However, unlike the Spark Core default of [StorageLevel.MEMORY_ONLY](api/scala/index.html#org.apache.spark.storage.StorageLevel$), persisted RDDs generated by streaming computations are persisted with [StorageLevel.MEMORY_ONLY_SER](api/scala/index.html#org.apache.spark.storage.StorageLevel$) (i.e. serialized) by default to minimize GC overheads.
+* **Persisted RDDs generated by Streaming Operations**: RDDs generated by streaming computations may be persisted in memory. For example, window operations persist data in memory as they would be processed multiple times. However, unlike the Spark Core default of [StorageLevel.MEMORY_ONLY](api/scala/org/apache/spark/storage/StorageLevel$.html), persisted RDDs generated by streaming computations are persisted with [StorageLevel.MEMORY_ONLY_SER](api/scala/org/apache/spark/storage/StorageLevel.html$) (i.e. serialized) by default to minimize GC overheads.
 
 In both cases, using Kryo serialization can reduce both CPU and memory overheads. See the [Spark Tuning Guide](tuning.html#data-serialization) for more details. For Kryo, consider registering custom classes, and disabling object reference tracking (see Kryo-related configurations in the [Configuration Guide](configuration.html#compression-and-serialization)).
 
@@ -2155,7 +2247,7 @@ A good approach to figure out the right batch size for your application is to te
 conservative batch interval (say, 5-10 seconds) and a low data rate. To verify whether the system
 is able to keep up with the data rate, you can check the value of the end-to-end delay experienced
 by each processed batch (either look for "Total delay" in Spark driver log4j logs, or use the
-[StreamingListener](api/scala/index.html#org.apache.spark.streaming.scheduler.StreamingListener)
+[StreamingListener](api/scala/org/apache/spark/streaming/scheduler/StreamingListener.html)
 interface).
 If the delay is maintained to be comparable to the batch size, then system is stable. Otherwise,
 if the delay is continuously increasing, it means that the system is unable to keep up and it
@@ -2206,9 +2298,9 @@ Having bigger blockinterval means bigger blocks. A high value of `spark.locality
 
 - Instead of relying on batchInterval and blockInterval, you can define the number of partitions by calling `inputDstream.repartition(n)`. This reshuffles the data in RDD randomly to create n number of partitions. Yes, for greater parallelism. Though comes at the cost of a shuffle. An RDD's processing is scheduled by driver's jobscheduler as a job. At a given point of time only one job is active. So, if one job is executing the other jobs are queued.
 
-- If you have two dstreams there will be two RDDs formed and there will be two jobs created which will be scheduled one after the another. To avoid this, you can union two dstreams. This will ensure that a single unionRDD is formed for the two RDDs of the dstreams. This unionRDD is then considered as a single job. However the partitioning of the RDDs is not impacted.
+- If you have two dstreams there will be two RDDs formed and there will be two jobs created which will be scheduled one after the another. To avoid this, you can union two dstreams. This will ensure that a single unionRDD is formed for the two RDDs of the dstreams. This unionRDD is then considered as a single job. However, the partitioning of the RDDs is not impacted.
 
-- If the batch processing time is more than batchinterval then obviously the receiver's memory will start filling up and will end up in throwing exceptions (most probably BlockNotFoundException). Currently there is  no way to pause the receiver. Using SparkConf configuration `spark.streaming.receiver.maxRate`, rate of receiver can be limited.
+- If the batch processing time is more than batchinterval then obviously the receiver's memory will start filling up and will end up in throwing exceptions (most probably BlockNotFoundException). Currently, there is  no way to pause the receiver. Using SparkConf configuration `spark.streaming.receiver.maxRate`, rate of receiver can be limited.
 
 
 ***************************************************************************************************
@@ -2310,7 +2402,7 @@ then besides these losses, all of the past data that was received and replicated
 lost. This will affect the results of the stateful transformations.
 
 To avoid this loss of past received data, Spark 1.2 introduced _write
-ahead logs_ which save the received data to fault-tolerant storage. With the [write ahead logs
+ahead logs_ which save the received data to fault-tolerant storage. With the [write-ahead logs
 enabled](#deploying-applications) and reliable receivers, there is zero data loss. In terms of semantics, it provides an at-least once guarantee. 
 
 The following table summarizes the semantics under failures:
@@ -2324,7 +2416,7 @@ The following table summarizes the semantics under failures:
   <tr>
     <td>
       <i>Spark 1.1 or earlier,</i> OR<br/>
-      <i>Spark 1.2 or later without write ahead logs</i>
+      <i>Spark 1.2 or later without write-ahead logs</i>
     </td>
     <td>
       Buffered data lost with unreliable receivers<br/>
@@ -2338,7 +2430,7 @@ The following table summarizes the semantics under failures:
     </td>
   </tr>
   <tr>
-    <td><i>Spark 1.2 or later with write ahead logs</i></td>
+    <td><i>Spark 1.2 or later with write-ahead logs</i></td>
     <td>
         Zero data loss with reliable receivers<br/>
         At-least once semantics
@@ -2357,7 +2449,7 @@ The following table summarizes the semantics under failures:
 
 ### With Kafka Direct API
 {:.no_toc}
-In Spark 1.3, we have introduced a new Kafka Direct API, which can ensure that all the Kafka data is received by Spark Streaming exactly once. Along with this, if you implement exactly-once output operation, you can achieve end-to-end exactly-once guarantees. This approach is further discussed in the [Kafka Integration Guide](streaming-kafka-integration.html).
+In Spark 1.3, we have introduced a new Kafka Direct API, which can ensure that all the Kafka data is received by Spark Streaming exactly once. Along with this, if you implement exactly-once output operation, you can achieve end-to-end exactly-once guarantees. This approach is further discussed in the [Kafka Integration Guide](streaming-kafka-0-10-integration.html).
 
 ## Semantics of output operations
 {:.no_toc}
@@ -2387,24 +2479,22 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
 
 # Where to Go from Here
 * Additional guides
-    - [Kafka Integration Guide](streaming-kafka-integration.html)
+    - [Kafka Integration Guide](streaming-kafka-0-10-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* Third-party DStream data sources can be found in [Third Party Projects](http://spark.apache.org/third-party-projects.html)
+* Third-party DStream data sources can be found in [Third Party Projects](https://spark.apache.org/third-party-projects.html)
 * API documentation
   - Scala docs
-    * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and
-  [DStream](api/scala/index.html#org.apache.spark.streaming.dstream.DStream)
-    * [KafkaUtils](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$),
-    [FlumeUtils](api/scala/index.html#org.apache.spark.streaming.flume.FlumeUtils$),
-    [KinesisUtils](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisUtils$),
+    * [StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) and
+  [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
+    * [KafkaUtils](api/scala/org/apache/spark/streaming/kafka/KafkaUtils$.html),
+    [KinesisUtils](api/scala/org/apache/spark/streaming/kinesis/KinesisInputDStream.html),
   - Java docs
     * [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html),
     [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html) and
     [JavaPairDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairDStream.html)
     * [KafkaUtils](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html),
-    [FlumeUtils](api/java/index.html?org/apache/spark/streaming/flume/FlumeUtils.html),
-    [KinesisUtils](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
+    [KinesisUtils](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
   - Python docs
     * [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) and [DStream](api/python/pyspark.streaming.html#pyspark.streaming.DStream)
     * [KafkaUtils](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)

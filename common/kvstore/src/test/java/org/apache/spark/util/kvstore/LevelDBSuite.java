@@ -21,7 +21,10 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
+import com.google.common.collect.ImmutableSet;
 import org.apache.commons.io.FileUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.After;
@@ -74,15 +77,11 @@ public class LevelDBSuite {
 
   @Test
   public void testObjectWriteReadDelete() throws Exception {
-    CustomType1 t = new CustomType1();
-    t.key = "key";
-    t.id = "id";
-    t.name = "name";
-    t.child = "child";
+    CustomType1 t = createCustomType1(1);
 
     try {
       db.read(CustomType1.class, t.key);
-      fail("Expected exception for non-existant object.");
+      fail("Expected exception for non-existent object.");
     } catch (NoSuchElementException nsee) {
       // Expected.
     }
@@ -106,17 +105,9 @@ public class LevelDBSuite {
 
   @Test
   public void testMultipleObjectWriteReadDelete() throws Exception {
-    CustomType1 t1 = new CustomType1();
-    t1.key = "key1";
-    t1.id = "id";
-    t1.name = "name1";
-    t1.child = "child1";
-
-    CustomType1 t2 = new CustomType1();
-    t2.key = "key2";
-    t2.id = "id";
-    t2.name = "name2";
-    t2.child = "child2";
+    CustomType1 t1 = createCustomType1(1);
+    CustomType1 t2 = createCustomType1(2);
+    t2.id = t1.id;
 
     db.write(t1);
     db.write(t2);
@@ -142,11 +133,7 @@ public class LevelDBSuite {
 
   @Test
   public void testMultipleTypesWriteReadDelete() throws Exception {
-    CustomType1 t1 = new CustomType1();
-    t1.key = "1";
-    t1.id = "id";
-    t1.name = "name1";
-    t1.child = "child1";
+    CustomType1 t1 = createCustomType1(1);
 
     IntKeyType t2 = new IntKeyType();
     t2.key = 2;
@@ -188,10 +175,7 @@ public class LevelDBSuite {
   public void testMetadata() throws Exception {
     assertNull(db.getMetadata(CustomType1.class));
 
-    CustomType1 t = new CustomType1();
-    t.id = "id";
-    t.name = "name";
-    t.child = "child";
+    CustomType1 t = createCustomType1(1);
 
     db.setMetadata(t);
     assertEquals(t, db.getMetadata(CustomType1.class));
@@ -202,11 +186,7 @@ public class LevelDBSuite {
 
   @Test
   public void testUpdate() throws Exception {
-    CustomType1 t = new CustomType1();
-    t.key = "key";
-    t.id = "id";
-    t.name = "name";
-    t.child = "child";
+    CustomType1 t = createCustomType1(1);
 
     db.write(t);
 
@@ -220,15 +200,51 @@ public class LevelDBSuite {
   }
 
   @Test
+  public void testRemoveAll() throws Exception {
+    for (int i = 0; i < 2; i++) {
+      for (int j = 0; j < 2; j++) {
+        ArrayKeyIndexType o = new ArrayKeyIndexType();
+        o.key = new int[] { i, j, 0 };
+        o.id = new String[] { "things" };
+        db.write(o);
+
+        o = new ArrayKeyIndexType();
+        o.key = new int[] { i, j, 1 };
+        o.id = new String[] { "more things" };
+        db.write(o);
+      }
+    }
+
+    ArrayKeyIndexType o = new ArrayKeyIndexType();
+    o.key = new int[] { 2, 2, 2 };
+    o.id = new String[] { "things" };
+    db.write(o);
+
+    assertEquals(9, db.count(ArrayKeyIndexType.class));
+
+    db.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      KVIndex.NATURAL_INDEX_NAME,
+      ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 }));
+    assertEquals(7, db.count(ArrayKeyIndexType.class));
+
+    db.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      "id",
+      ImmutableSet.of(new String[] { "things" }));
+    assertEquals(4, db.count(ArrayKeyIndexType.class));
+
+    db.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      "id",
+      ImmutableSet.of(new String[] { "more things" }));
+    assertEquals(0, db.count(ArrayKeyIndexType.class));
+  }
+
+  @Test
   public void testSkip() throws Exception {
     for (int i = 0; i < 10; i++) {
-      CustomType1 t = new CustomType1();
-      t.key = "key" + i;
-      t.id = "id" + i;
-      t.name = "name" + i;
-      t.child = "child" + i;
-
-      db.write(t);
+      db.write(createCustomType1(i));
     }
 
     KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator();
@@ -238,6 +254,36 @@ public class LevelDBSuite {
     assertTrue(it.skip(3));
     assertEquals("key9", it.next().key);
     assertFalse(it.hasNext());
+  }
+
+  @Test
+  public void testNegativeIndexValues() throws Exception {
+    List<Integer> expected = Arrays.asList(-100, -50, 0, 50, 100);
+
+    expected.forEach(i -> {
+      try {
+        db.write(createCustomType1(i));
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
+
+    List<Integer> results = StreamSupport
+      .stream(db.view(CustomType1.class).index("int").spliterator(), false)
+      .map(e -> e.num)
+      .collect(Collectors.toList());
+
+    assertEquals(expected, results);
+  }
+
+  private CustomType1 createCustomType1(int i) {
+    CustomType1 t = new CustomType1();
+    t.key = "key" + i;
+    t.id = "id" + i;
+    t.name = "name" + i;
+    t.num = i;
+    t.child = "child" + i;
+    return t;
   }
 
   private int countKeys(Class<?> type) throws Exception {

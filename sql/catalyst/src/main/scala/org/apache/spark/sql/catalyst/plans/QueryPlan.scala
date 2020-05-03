@@ -17,14 +17,29 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTag}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
+/**
+ * An abstraction of the Spark SQL query plan tree, which can be logical or physical. This class
+ * defines some basic properties of a query plan node, as well as some new transform APIs to
+ * transform the expressions of the plan node.
+ *
+ * Note that, the query plan is a mutually recursive structure:
+ *   QueryPlan -> Expression (subquery) -> QueryPlan
+ * The tree traverse APIs like `transform`, `foreach`, `collect`, etc. that are
+ * inherited from `TreeNode`, do not traverse into query plans inside subqueries.
+ */
 abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
+  /**
+   * The active config object within the current scope.
+   * See [[SQLConf.get]] for more information.
+   */
   def conf: SQLConf = SQLConf.get
 
   def output: Seq[Attribute]
@@ -32,13 +47,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /**
    * Returns the set of attributes that are output by this node.
    */
-  def outputSet: AttributeSet = AttributeSet(output)
-
-  /**
-   * All Attributes that appear in expressions from this operator.  Note that this set does not
-   * include attributes that are implicitly referenced by being passed through to the output tuple.
-   */
-  def references: AttributeSet = AttributeSet(expressions.flatMap(_.references))
+  @transient
+  lazy val outputSet: AttributeSet = AttributeSet(output)
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -52,11 +62,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   def producedAttributes: AttributeSet = AttributeSet.empty
 
   /**
-   * Attributes that are referenced by expressions but not provided by this node's children.
-   * Subclasses should override this method if they produce attributes internally as it is used by
-   * assertions designed to prevent the construction of invalid plans.
+   * All Attributes that appear in expressions from this operator.  Note that this set does not
+   * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def missingInput: AttributeSet = references -- inputSet -- producedAttributes
+  @transient
+  lazy val references: AttributeSet = {
+    AttributeSet.fromAttributeSets(expressions.map(_.references)) -- producedAttributes
+  }
+
+  /**
+   * Attributes that are referenced by expressions but not provided by this node's children.
+   */
+  final def missingInput: AttributeSet = references -- inputSet
 
   /**
    * Runs [[transformExpressionsDown]] with `rule` on all expressions present
@@ -97,7 +114,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     var changed = false
 
     @inline def transformExpression(e: Expression): Expression = {
-      val newE = f(e)
+      val newE = CurrentOrigin.withOrigin(e.origin) {
+        f(e)
+      }
       if (newE.fastEquals(e)) {
         e
       } else {
@@ -111,7 +130,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
-      case seq: Traversable[_] => seq.map(recursiveTransform)
+      case stream: Stream[_] => stream.map(recursiveTransform).force
+      case seq: Iterable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
       case null => null
     }
@@ -123,7 +143,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   /**
    * Returns the result of running [[transformExpressions]] on this node
-   * and all its children.
+   * and all its children. Note that this method skips expressions inside subqueries.
    */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transform {
@@ -134,16 +154,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /** Returns all of the expressions present in this query plan operator. */
   final def expressions: Seq[Expression] = {
     // Recursively find all expressions from a traversable.
-    def seqToExpressions(seq: Traversable[Any]): Traversable[Expression] = seq.flatMap {
+    def seqToExpressions(seq: Iterable[Any]): Iterable[Expression] = seq.flatMap {
       case e: Expression => e :: Nil
-      case s: Traversable[_] => seqToExpressions(s)
+      case s: Iterable[_] => seqToExpressions(s)
       case other => Nil
     }
 
     productIterator.flatMap {
       case e: Expression => e :: Nil
       case s: Some[_] => seqToExpressions(s.toSeq)
-      case seq: Traversable[_] => seqToExpressions(seq)
+      case seq: Iterable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
   }
@@ -165,12 +185,39 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
-  override def simpleString: String = statePrefix + super.simpleString
+  override def simpleString(maxFields: Int): String = statePrefix + super.simpleString(maxFields)
 
-  override def verboseString: String = simpleString
+  override def verboseString(maxFields: Int): String = simpleString(maxFields)
+
+  override def simpleStringWithNodeId(): String = {
+    val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    s"$nodeName ($operatorId)".trim
+  }
+
+  def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(SQLConf.get.maxToStringFields)
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$formattedNodeName
+         |Arguments: $argumentString
+         |""".stripMargin
+    } else {
+      s"""
+         |$formattedNodeName
+         |""".stripMargin
+    }
+  }
+
+  protected def formattedNodeName: String = {
+    val opId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    val codegenId =
+      getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s" [codegen id : $id]").getOrElse("")
+    s"($opId) $nodeName$codegenId"
+  }
 
   /**
-   * All the subqueries of current plan.
+   * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
   def subqueries: Seq[PlanType] = {
     expressions.flatMap(_.collect {
@@ -178,7 +225,32 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     })
   }
 
+  /**
+   * All the subqueries of the current plan node and all its children. Nested subqueries are also
+   * included.
+   */
+  def subqueriesAll: Seq[PlanType] = {
+    val subqueries = this.flatMap(_.subqueries)
+    subqueries ++ subqueries.flatMap(_.subqueriesAll)
+  }
+
+  /**
+   * A variant of `collect`. This method not only apply the given function to all elements in this
+   * plan, also considering all the plans in its (nested) subqueries
+   */
+  def collectWithSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
+    (this +: subqueriesAll).flatMap(_.collect(f))
+
   override def innerChildren: Seq[QueryPlan[_]] = subqueries
+
+  /**
+   * A private mutable variable to indicate whether this plan is the result of canonicalization.
+   * This is used solely for making sure we wouldn't execute a canonicalized plan.
+   * See [[canonicalized]] on how this is set.
+   */
+  @transient private var _isCanonicalizedPlan: Boolean = false
+
+  protected def isCanonicalizedPlan: Boolean = _isCanonicalizedPlan
 
   /**
    * Returns a plan where a best effort attempt has been made to transform `this` in a way
@@ -188,10 +260,24 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * Plans where `this.canonicalized == other.canonicalized` will always evaluate to the same
    * result.
    *
-   * Some nodes should overwrite this to provide proper canonicalize logic, but they should remove
-   * expressions cosmetic variations themselves.
+   * Plan nodes that require special canonicalization should override [[doCanonicalize()]].
+   * They should remove expressions cosmetic variations themselves.
    */
-  lazy val canonicalized: PlanType = {
+  @transient final lazy val canonicalized: PlanType = {
+    var plan = doCanonicalize()
+    // If the plan has not been changed due to canonicalization, make a copy of it so we don't
+    // mutate the original plan's _isCanonicalizedPlan flag.
+    if (plan eq this) {
+      plan = plan.makeCopy(plan.mapProductIterator(x => x.asInstanceOf[AnyRef]))
+    }
+    plan._isCanonicalizedPlan = true
+    plan
+  }
+
+  /**
+   * Defines how the canonicalization should work for the current plan.
+   */
+  protected def doCanonicalize(): PlanType = {
     val canonicalizedChildren = children.map(_.canonicalized)
     var id = -1
     mapExpressions {
@@ -200,7 +286,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         // As the root of the expression, Alias will always take an arbitrary exprId, we need to
         // normalize that for equality testing, by assigning expr id from 0 incrementally. The
         // alias name doesn't matter and should be erased.
-        val normalizedChild = QueryPlan.normalizeExprId(a.child, allAttributes)
+        val normalizedChild = QueryPlan.normalizeExpressions(a.child, allAttributes)
         Alias(normalizedChild, "")(ExprId(id), a.qualifier)
 
       case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
@@ -209,10 +295,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         id += 1
         ar.withExprId(ExprId(id)).canonicalized
 
-      case other => QueryPlan.normalizeExprId(other, allAttributes)
+      case other => QueryPlan.normalizeExpressions(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
   }
-
 
   /**
    * Returns true when the given query plan will return the same results as this query plan.
@@ -241,15 +326,24 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 }
 
 object QueryPlan extends PredicateHelper {
+  val OP_ID_TAG = TreeNodeTag[Int]("operatorId")
+  val CODEGEN_ID_TAG = new TreeNodeTag[Int]("wholeStageCodegenId")
+
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
    * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
    * do not use `BindReferences` here as the plan may take the expression as a parameter with type
    * `Attribute`, and replace it with `BoundReference` will cause error.
    */
-  def normalizeExprId[T <: Expression](e: T, input: AttributeSeq): T = {
+  def normalizeExpressions[T <: Expression](e: T, input: AttributeSeq): T = {
     e.transformUp {
-      case s: SubqueryExpression => s.canonicalize(input)
+      case s: PlanExpression[QueryPlan[_] @unchecked] =>
+        // Normalize the outer references in the subquery plan.
+        val normalizedPlan = s.plan.transformAllExpressions {
+          case OuterReference(r) => OuterReference(QueryPlan.normalizeExpressions(r, input))
+        }
+        s.withNewPlan(normalizedPlan)
+
       case ar: AttributeReference =>
         val ordinal = input.indexOf(ar.exprId)
         if (ordinal == -1) {
@@ -266,10 +360,27 @@ object QueryPlan extends PredicateHelper {
    */
   def normalizePredicates(predicates: Seq[Expression], output: AttributeSeq): Seq[Expression] = {
     if (predicates.nonEmpty) {
-      val normalized = normalizeExprId(predicates.reduce(And), output)
+      val normalized = normalizeExpressions(predicates.reduce(And), output)
       splitConjunctivePredicates(normalized)
     } else {
       Nil
+    }
+  }
+
+  /**
+   * Converts the query plan to string and appends it via provided function.
+   */
+  def append[T <: QueryPlan[T]](
+      plan: => QueryPlan[T],
+      append: String => Unit,
+      verbose: Boolean,
+      addSuffix: Boolean,
+      maxFields: Int = SQLConf.get.maxToStringFields,
+      printOperatorId: Boolean = false): Unit = {
+    try {
+      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
+    } catch {
+      case e: AnalysisException => append(e.toString)
     }
   }
 }

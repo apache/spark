@@ -39,7 +39,7 @@ object LocalFileLR {
     DataPoint(new DenseVector(nums.slice(1, D + 1)), nums(0))
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use org.apache.spark.ml.classification.LogisticRegression
@@ -47,7 +47,7 @@ object LocalFileLR {
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     showWarning()
 
@@ -58,10 +58,10 @@ object LocalFileLR {
 
     // Initialize w to a random value
     val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
-    println("Initial w: " + w)
+    println(s"Initial w: $w")
 
     for (i <- 1 to ITERATIONS) {
-      println("On iteration " + i)
+      println(s"On iteration $i")
       val gradient = DenseVector.zeros[Double](D)
       for (p <- points) {
         val scale = (1 / (1 + math.exp(-p.y * (w.dot(p.x)))) - 1) * p.y
@@ -71,7 +71,7 @@ object LocalFileLR {
     }
 
     fileSrc.close()
-    println("Final w: " + w)
+    println(s"Final w: $w")
   }
 }
 // scalastyle:on println

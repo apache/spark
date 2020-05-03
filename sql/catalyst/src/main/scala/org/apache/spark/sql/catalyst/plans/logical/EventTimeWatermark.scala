@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -26,9 +29,7 @@ object EventTimeWatermark {
   val delayKey = "spark.watermarkDelayMs"
 
   def getDelayMs(delay: CalendarInterval): Long = {
-    // We define month as `31 days` to simplify calculation.
-    val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
-    delay.milliseconds + delay.months * millisPerMonth
+    IntervalUtils.getDuration(delay, TimeUnit.MILLISECONDS)
   }
 }
 
@@ -38,7 +39,7 @@ object EventTimeWatermark {
 case class EventTimeWatermark(
     eventTime: Attribute,
     delay: CalendarInterval,
-    child: LogicalPlan) extends LogicalPlan {
+    child: LogicalPlan) extends UnaryNode {
 
   // Update the metadata on the eventTime column to include the desired delay.
   override val output: Seq[Attribute] = child.output.map { a =>
@@ -60,6 +61,4 @@ case class EventTimeWatermark(
       a
     }
   }
-
-  override val children: Seq[LogicalPlan] = child :: Nil
 }

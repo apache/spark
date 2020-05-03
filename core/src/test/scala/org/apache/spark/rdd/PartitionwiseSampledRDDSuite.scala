@@ -25,7 +25,7 @@ class MockSampler extends RandomSampler[Long, Long] {
 
   private var s: Long = _
 
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     s = seed
   }
 

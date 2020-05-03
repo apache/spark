@@ -19,8 +19,7 @@ package org.apache.spark.ml.tree
 
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
-import org.apache.spark.mllib.tree.model.{ImpurityStats,
-  InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict}
+import org.apache.spark.mllib.tree.model.{ImpurityStats, InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict}
 
 /**
  * Decision tree node interface.
@@ -45,6 +44,9 @@ sealed abstract class Node extends Serializable {
 
   /** Recursive prediction helper method */
   private[ml] def predictImpl(features: Vector): LeafNode
+
+  /** Recursive prediction helper method */
+  private[ml] def predictBinned(binned: Array[Int], splits: Array[Array[Split]]): LeafNode
 
   /**
    * Get the number of nodes in tree below this node, including leaf nodes.
@@ -120,6 +122,10 @@ class LeafNode private[ml] (
 
   override private[ml] def predictImpl(features: Vector): LeafNode = this
 
+  override private[ml] def predictBinned(
+      binned: Array[Int],
+      splits: Array[Array[Split]]): LeafNode = this
+
   override private[tree] def numDescendants: Int = 0
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
@@ -172,6 +178,17 @@ class InternalNode private[ml] (
       leftChild.predictImpl(features)
     } else {
       rightChild.predictImpl(features)
+    }
+  }
+
+  override private[ml] def predictBinned(
+      binned: Array[Int],
+      splits: Array[Array[Split]]): LeafNode = {
+    val i = split.featureIndex
+    if (split.shouldGoLeft(binned(i), splits(i))) {
+      leftChild.predictBinned(binned, splits)
+    } else {
+      rightChild.predictBinned(binned, splits)
     }
   }
 
@@ -266,15 +283,23 @@ private[tree] class LearningNode(
     var isLeaf: Boolean,
     var stats: ImpurityStats) extends Serializable {
 
+  def toNode: Node = toNode(prune = true)
+
   /**
    * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
    */
-  def toNode: Node = {
-    if (leftChild.nonEmpty) {
-      assert(rightChild.nonEmpty && split.nonEmpty && stats != null,
+  def toNode(prune: Boolean = true): Node = {
+
+    if (!leftChild.isEmpty || !rightChild.isEmpty) {
+      assert(leftChild.nonEmpty && rightChild.nonEmpty && split.nonEmpty && stats != null,
         "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
-      new InternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
-        leftChild.get.toNode, rightChild.get.toNode, split.get, stats.impurityCalculator)
+      (leftChild.get.toNode(prune), rightChild.get.toNode(prune)) match {
+        case (l: LeafNode, r: LeafNode) if prune && l.prediction == r.prediction =>
+          new LeafNode(l.prediction, stats.impurity, stats.impurityCalculator)
+        case (l, r) =>
+          new InternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
+            l, r, split.get, stats.impurityCalculator)
+      }
     } else {
       if (stats.valid) {
         new LeafNode(stats.impurityCalculator.predict, stats.impurity,
@@ -283,7 +308,6 @@ private[tree] class LearningNode(
         // Here we want to keep same behavior with the old mllib.DecisionTreeModel
         new LeafNode(stats.impurityCalculator.predict, -1.0, stats.impurityCalculator)
       }
-
     }
   }
 

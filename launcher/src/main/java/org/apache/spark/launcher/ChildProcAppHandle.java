@@ -17,97 +17,65 @@
 
 package org.apache.spark.launcher;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Handle implementation for monitoring apps started as a child process.
  */
-class ChildProcAppHandle implements SparkAppHandle {
+class ChildProcAppHandle extends AbstractAppHandle {
 
   private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
 
-  private final String secret;
-  private final LauncherServer server;
-
   private volatile Process childProc;
-  private boolean disposed;
-  private LauncherConnection connection;
-  private List<Listener> listeners;
-  private State state;
-  private String appId;
-  private OutputRedirector redirector;
+  private volatile OutputRedirector redirector;
 
-  ChildProcAppHandle(String secret, LauncherServer server) {
-    this.secret = secret;
-    this.server = server;
-    this.state = State.UNKNOWN;
-  }
-
-  @Override
-  public synchronized void addListener(Listener l) {
-    if (listeners == null) {
-      listeners = new ArrayList<>();
-    }
-    listeners.add(l);
-  }
-
-  @Override
-  public State getState() {
-    return state;
-  }
-
-  @Override
-  public String getAppId() {
-    return appId;
-  }
-
-  @Override
-  public void stop() {
-    CommandBuilderUtils.checkState(connection != null, "Application is still not connected.");
-    try {
-      connection.send(new LauncherProtocol.Stop());
-    } catch (IOException ioe) {
-      throw new RuntimeException(ioe);
-    }
+  ChildProcAppHandle(LauncherServer server) {
+    super(server);
   }
 
   @Override
   public synchronized void disconnect() {
-    if (!disposed) {
-      disposed = true;
-      if (connection != null) {
-        try {
-          connection.close();
-        } catch (IOException ioe) {
-          // no-op.
-        }
-      }
-      server.unregister(this);
+    try {
+      super.disconnect();
+    } finally {
       if (redirector != null) {
         redirector.stop();
       }
     }
   }
 
+  /**
+   * Parses the logs of {@code spark-submit} and returns the last exception thrown.
+   * <p>
+   * Since {@link SparkLauncher} runs {@code spark-submit} in a sub-process, it's difficult to
+   * accurately retrieve the full {@link Throwable} from the {@code spark-submit} process.
+   * This method parses the logs of the sub-process and provides a best-effort attempt at
+   * returning the last exception thrown by the {@code spark-submit} process. Only the exception
+   * message is parsed, the associated stacktrace is meaningless.
+   *
+   * @return an {@link Optional} containing a {@link RuntimeException} with the parsed
+   * exception, otherwise returns a {@link Optional#EMPTY}
+   */
   @Override
-  public synchronized void kill() {
-    disconnect();
-    if (childProc != null) {
-      if (childProc.isAlive()) {
-        childProc.destroyForcibly();
-      }
-      childProc = null;
-    }
-    setState(State.KILLED);
+  public Optional<Throwable> getError() {
+    return redirector != null ? Optional.ofNullable(redirector.getError()) : Optional.empty();
   }
 
-  String getSecret() {
-    return secret;
+  @Override
+  public synchronized void kill() {
+    if (!isDisposed()) {
+      setState(State.KILLED);
+      disconnect();
+      if (childProc != null) {
+        if (childProc.isAlive()) {
+          childProc.destroyForcibly();
+        }
+        childProc = null;
+      }
+    }
   }
 
   void setChildProc(Process childProc, String loggerName, InputStream logStream) {
@@ -118,41 +86,12 @@ class ChildProcAppHandle implements SparkAppHandle {
     } else {
       // If there is no log redirection, spawn a thread that will wait for the child process
       // to finish.
-      Thread waiter = SparkLauncher.REDIRECTOR_FACTORY.newThread(this::monitorChild);
-      waiter.setDaemon(true);
-      waiter.start();
+      SparkLauncher.REDIRECTOR_FACTORY.newThread(this::monitorChild).start();
     }
-  }
-
-  void setConnection(LauncherConnection connection) {
-    this.connection = connection;
-  }
-
-  LauncherServer getServer() {
-    return server;
-  }
-
-  LauncherConnection getConnection() {
-    return connection;
-  }
-
-  synchronized void setState(State s) {
-    if (!state.isFinal()) {
-      state = s;
-      fireEvent(false);
-    } else {
-      LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
-        new Object[] { state, s });
-    }
-  }
-
-  synchronized void setAppId(String appId) {
-    this.appId = appId;
-    fireEvent(true);
   }
 
   /**
-   * Wait for the child process to exit and update the handle's state if necessary, accoding to
+   * Wait for the child process to exit and update the handle's state if necessary, according to
    * the exit code.
    */
   void monitorChild() {
@@ -171,11 +110,9 @@ class ChildProcAppHandle implements SparkAppHandle {
     }
 
     synchronized (this) {
-      if (disposed) {
+      if (isDisposed()) {
         return;
       }
-
-      disconnect();
 
       int ec;
       try {
@@ -185,32 +122,15 @@ class ChildProcAppHandle implements SparkAppHandle {
         ec = 1;
       }
 
-      State newState = null;
       if (ec != 0) {
+        State currState = getState();
         // Override state with failure if the current state is not final, or is success.
-        if (!state.isFinal() || state == State.FINISHED) {
-          newState = State.FAILED;
-        }
-      } else if (!state.isFinal()) {
-        newState = State.LOST;
-      }
-
-      if (newState != null) {
-        state = newState;
-        fireEvent(false);
-      }
-    }
-  }
-
-  private void fireEvent(boolean isInfoChanged) {
-    if (listeners != null) {
-      for (Listener l : listeners) {
-        if (isInfoChanged) {
-          l.infoChanged(this);
-        } else {
-          l.stateChanged(this);
+        if (!currState.isFinal() || currState == State.FINISHED) {
+          setState(State.FAILED, true);
         }
       }
+
+      dispose();
     }
   }
 

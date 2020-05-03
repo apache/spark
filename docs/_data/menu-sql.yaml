@@ -1,0 +1,262 @@
+- text: Getting Started
+  url: sql-getting-started.html
+  subitems:
+    - text: "Starting Point: SparkSession"
+      url: sql-getting-started.html#starting-point-sparksession
+    - text: Creating DataFrames
+      url: sql-getting-started.html#creating-dataframes
+    - text: Untyped Dataset Operations (DataFrame operations)
+      url: sql-getting-started.html#untyped-dataset-operations-aka-dataframe-operations
+    - text: Running SQL Queries Programmatically
+      url: sql-getting-started.html#running-sql-queries-programmatically
+    - text: Global Temporary View
+      url: sql-getting-started.html#global-temporary-view
+    - text: Creating Datasets
+      url: sql-getting-started.html#creating-datasets
+    - text: Interoperating with RDDs
+      url: sql-getting-started.html#interoperating-with-rdds
+    - text: Scalar Functions
+      url: sql-getting-started.html#scalar-functions
+    - text: Aggregations
+      url: sql-getting-started.html#aggregations
+- text: Data Sources
+  url: sql-data-sources.html
+  subitems:
+    - text: "Generic Load/Save Functions"
+      url: sql-data-sources-load-save-functions.html
+    - text: "Generic File Source Options"
+      url: sql-data-sources-generic-options.html
+    - text: Parquet Files
+      url: sql-data-sources-parquet.html
+    - text: ORC Files
+      url: sql-data-sources-orc.html
+    - text: JSON Files
+      url: sql-data-sources-json.html
+    - text: Hive Tables
+      url: sql-data-sources-hive-tables.html
+    - text: JDBC To Other Databases
+      url: sql-data-sources-jdbc.html
+    - text: Avro Files
+      url: sql-data-sources-avro.html
+    - text: Whole Binary Files
+      url: sql-data-sources-binaryFile.html
+    - text: Troubleshooting
+      url: sql-data-sources-troubleshooting.html
+- text: Performance Tuning
+  url: sql-performance-tuning.html
+  subitems:
+    - text: Caching Data In Memory
+      url: sql-performance-tuning.html#caching-data-in-memory
+    - text: Other Configuration Options
+      url: sql-performance-tuning.html#other-configuration-options
+    - text: Join Strategy Hints for SQL Queries
+      url: sql-performance-tuning.html#join-strategy-hints-for-sql-queries
+- text: Distributed SQL Engine
+  url: sql-distributed-sql-engine.html
+  subitems:
+    - text: "Running the Thrift JDBC/ODBC server"
+      url: sql-distributed-sql-engine.html#running-the-thrift-jdbcodbc-server
+    - text: Running the Spark SQL CLI
+      url: sql-distributed-sql-engine.html#running-the-spark-sql-cli
+- text: PySpark Usage Guide for Pandas with Apache Arrow
+  url: sql-pyspark-pandas-with-arrow.html
+  subitems:
+    - text: Apache Arrow in Spark
+      url: sql-pyspark-pandas-with-arrow.html#apache-arrow-in-spark
+    - text: "Enabling for Conversion to/from Pandas"
+      url: sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
+    - text: "Pandas UDFs (a.k.a. Vectorized UDFs)"
+      url: sql-pyspark-pandas-with-arrow.html#pandas-udfs-aka-vectorized-udfs
+    - text: "Pandas Function APIs"
+      url: sql-pyspark-pandas-with-arrow.html#pandas-function-apis
+    - text: Usage Notes
+      url: sql-pyspark-pandas-with-arrow.html#usage-notes
+- text: Migration Guide
+  url: sql-migration-old.html
+- text: SQL Reference
+  url: sql-ref.html
+  subitems:
+    - text: Data Types
+      url: sql-ref-datatypes.html
+    - text: Identifiers
+      url: sql-ref-identifier.html
+    - text: Literals
+      url: sql-ref-literals.html
+    - text: Null Semantics
+      url: sql-ref-null-semantics.html
+    - text: ANSI Compliance
+      url: sql-ref-ansi-compliance.html
+      subitems:
+        - text: Arithmetic Operations
+          url: sql-ref-ansi-compliance.html#arithmetic-operations
+        - text: Type Conversion
+          url: sql-ref-ansi-compliance.html#type-conversion
+        - text: SQL Keywords
+          url: sql-ref-ansi-compliance.html#sql-keywords
+    - text: SQL Syntax
+      url: sql-ref-syntax.html
+      subitems:
+        - text: Data Definition Statements
+          url: sql-ref-syntax-ddl.html
+          subitems:
+            - text: ALTER DATABASE
+              url: sql-ref-syntax-ddl-alter-database.html
+            - text: ALTER TABLE
+              url: sql-ref-syntax-ddl-alter-table.html
+            - text: ALTER VIEW
+              url: sql-ref-syntax-ddl-alter-view.html
+            - text: CREATE DATABASE
+              url: sql-ref-syntax-ddl-create-database.html
+            - text: CREATE FUNCTION
+              url: sql-ref-syntax-ddl-create-function.html
+            - text: CREATE TABLE
+              url: sql-ref-syntax-ddl-create-table.html
+            - text: CREATE VIEW
+              url: sql-ref-syntax-ddl-create-view.html
+            - text: DROP DATABASE
+              url: sql-ref-syntax-ddl-drop-database.html
+            - text: DROP FUNCTION
+              url: sql-ref-syntax-ddl-drop-function.html
+            - text: DROP TABLE
+              url: sql-ref-syntax-ddl-drop-table.html
+            - text: DROP VIEW
+              url: sql-ref-syntax-ddl-drop-view.html
+            - text: TRUNCATE TABLE
+              url: sql-ref-syntax-ddl-truncate-table.html
+            - text: REPAIR TABLE
+              url: sql-ref-syntax-ddl-repair-table.html
+            - text: USE DATABASE
+              url: sql-ref-syntax-qry-select-usedb.html
+        - text: Data Manipulation Statements
+          url: sql-ref-syntax-dml.html
+          subitems:
+            - text: INSERT
+              url: sql-ref-syntax-dml-insert.html
+            - text: LOAD
+              url: sql-ref-syntax-dml-load.html
+        - text: Data Retrieval(Queries)
+          url: sql-ref-syntax-qry.html
+          subitems:
+            - text: SELECT 
+              url: sql-ref-syntax-qry-select.html 
+              subitems:
+                - text: WHERE Clause 
+                  url: sql-ref-syntax-qry-select-where.html
+                - text: GROUP BY Clause 
+                  url: sql-ref-syntax-qry-select-groupby.html
+                - text: HAVING Clause 
+                  url: sql-ref-syntax-qry-select-having.html
+                - text: ORDER BY Clause 
+                  url: sql-ref-syntax-qry-select-orderby.html
+                - text: SORT BY Clause 
+                  url: sql-ref-syntax-qry-select-sortby.html
+                - text: CLUSTER BY Clause 
+                  url: sql-ref-syntax-qry-select-clusterby.html
+                - text: DISTRIBUTE BY Clause 
+                  url: sql-ref-syntax-qry-select-distribute-by.html
+                - text: LIMIT Clause 
+                  url: sql-ref-syntax-qry-select-limit.html
+                - text: JOIN
+                  url: sql-ref-syntax-qry-select-join.html
+                - text: Join Hints
+                  url: sql-ref-syntax-qry-select-hints.html
+                - text: Set Operators
+                  url: sql-ref-syntax-qry-select-setops.html
+                - text: TABLESAMPLE
+                  url: sql-ref-syntax-qry-sampling.html
+                - text: Table-valued Function
+                  url: sql-ref-syntax-qry-select-tvf.html
+                - text: Inline Table
+                  url: sql-ref-syntax-qry-select-inline-table.html
+                - text: Common Table Expression
+                  url: sql-ref-syntax-qry-select-cte.html
+                - text: LIKE Predicate
+                  url: sql-ref-syntax-qry-select-like.html
+                - text: Window Function
+                  url: sql-ref-syntax-qry-window.html
+            - text: EXPLAIN
+              url: sql-ref-syntax-qry-explain.html
+        - text: Auxiliary Statements
+          url: sql-ref-syntax-aux.html
+          subitems:
+            - text: ANALYZE
+              url: sql-ref-syntax-aux-analyze.html
+              subitems: 
+                - text: ANALYZE TABLE
+                  url: sql-ref-syntax-aux-analyze-table.html
+            - text: CACHE
+              url: sql-ref-syntax-aux-cache.html
+              subitems:
+                - text: CACHE TABLE
+                  url: sql-ref-syntax-aux-cache-cache-table.html
+                - text: UNCACHE TABLE
+                  url: sql-ref-syntax-aux-cache-uncache-table.html
+                - text: CLEAR CACHE
+                  url: sql-ref-syntax-aux-cache-clear-cache.html
+                - text: REFRESH TABLE
+                  url: sql-ref-syntax-aux-refresh-table.html
+                - text: REFRESH
+                  url: sql-ref-syntax-aux-cache-refresh.html
+            - text: DESCRIBE
+              url: sql-ref-syntax-aux-describe.html
+              subitems:
+                - text: DESCRIBE DATABASE
+                  url: sql-ref-syntax-aux-describe-database.html
+                - text: DESCRIBE TABLE
+                  url: sql-ref-syntax-aux-describe-table.html
+                - text: DESCRIBE FUNCTION
+                  url: sql-ref-syntax-aux-describe-function.html
+                - text: DESCRIBE QUERY
+                  url: sql-ref-syntax-aux-describe-query.html
+            - text: SHOW
+              url: sql-ref-syntax-aux-show.html
+              subitems:
+                - text: SHOW COLUMNS 
+                  url: sql-ref-syntax-aux-show-columns.html
+                - text: SHOW DATABASES
+                  url: sql-ref-syntax-aux-show-databases.html
+                - text: SHOW FUNCTIONS
+                  url: sql-ref-syntax-aux-show-functions.html
+                - text: SHOW TABLE
+                  url: sql-ref-syntax-aux-show-table.html
+                - text: SHOW TABLES
+                  url: sql-ref-syntax-aux-show-tables.html
+                - text: SHOW TBLPROPERTIES
+                  url: sql-ref-syntax-aux-show-tblproperties.html
+                - text: SHOW PARTITIONS 
+                  url: sql-ref-syntax-aux-show-partitions.html
+                - text: SHOW CREATE TABLE
+                  url: sql-ref-syntax-aux-show-create-table.html
+                - text: SHOW VIEWS
+                  url: sql-ref-syntax-aux-show-views.html
+            - text: CONFIGURATION MANAGEMENT
+              url: sql-ref-syntax-aux-conf-mgmt.html
+              subitems:
+                - text: SET 
+                  url: sql-ref-syntax-aux-conf-mgmt-set.html
+                - text: RESET
+                  url: sql-ref-syntax-aux-conf-mgmt-reset.html
+            - text: RESOURCE MANAGEMENT
+              url: sql-ref-syntax-aux-resource-mgmt.html
+              subitems:
+                - text: ADD FILE
+                  url: sql-ref-syntax-aux-resource-mgmt-add-file.html
+                - text: ADD JAR
+                  url: sql-ref-syntax-aux-resource-mgmt-add-jar.html
+                - text: LIST FILE
+                  url: sql-ref-syntax-aux-resource-mgmt-list-file.html
+                - text: LIST JAR
+                  url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
+    - text: Functions
+      url: sql-ref-functions.html
+      subitems:
+      - text: Built-in Functions
+        url: sql-ref-functions-builtin.html
+      - text: Scalar UDFs (User-Defined Functions)
+        url: sql-ref-functions-udf-scalar.html
+      - text: UDAFs (User-Defined Aggregate Functions)
+        url: sql-ref-functions-udf-aggregate.html
+      - text: Integration with Hive UDFs/UDAFs/UDTFs
+        url: sql-ref-functions-udf-hive.html
+    - text: Datetime Pattern
+      url: sql-ref-datetime-pattern.html

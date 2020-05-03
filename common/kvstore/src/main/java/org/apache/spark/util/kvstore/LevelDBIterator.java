@@ -45,11 +45,11 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   private boolean closed;
   private long count;
 
-  LevelDBIterator(LevelDB db, KVStoreView<T> params) throws Exception {
+  LevelDBIterator(Class<T> type, LevelDB db, KVStoreView<T> params) throws Exception {
     this.db = db;
     this.ascending = params.ascending;
     this.it = db.db().iterator();
-    this.type = params.type;
+    this.type = type;
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
@@ -86,7 +86,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
         end = index.start(parent, params.last);
       }
       if (it.hasNext()) {
-        // When descending, the caller may have set up the start of iteration at a non-existant
+        // When descending, the caller may have set up the start of iteration at a non-existent
         // entry that is guaranteed to be after the desired entry. For example, if you have a
         // compound key (a, b) where b is a, integer, you may seek to the end of the elements that
         // have the same "a" value by specifying Integer.MAX_VALUE for "b", and that value may not
@@ -191,52 +191,59 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     }
   }
 
+  /**
+   * Because it's tricky to expose closeable iterators through many internal APIs, especially
+   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
+   * the iterator will eventually be released.
+   */
+  @SuppressWarnings("deprecation")
+  @Override
+  protected void finalize() throws Throwable {
+    db.closeIterator(this);
+  }
+
   private byte[] loadNext() {
     if (count >= max) {
       return null;
     }
 
-    try {
-      while (true) {
-        boolean hasNext = ascending ? it.hasNext() : it.hasPrev();
-        if (!hasNext) {
-          return null;
-        }
-
-        Map.Entry<byte[], byte[]> nextEntry;
-        try {
-          // Avoid races if another thread is updating the DB.
-          nextEntry = ascending ? it.next() : it.prev();
-        } catch (NoSuchElementException e) {
-          return null;
-        }
-
-        byte[] nextKey = nextEntry.getKey();
-        // Next key is not part of the index, stop.
-        if (!startsWith(nextKey, indexKeyPrefix)) {
-          return null;
-        }
-
-        // If the next key is an end marker, then skip it.
-        if (isEndMarker(nextKey)) {
-          continue;
-        }
-
-        // If there's a known end key and iteration has gone past it, stop.
-        if (end != null) {
-          int comp = compare(nextKey, end) * (ascending ? 1 : -1);
-          if (comp > 0) {
-            return null;
-          }
-        }
-
-        count++;
-
-        // Next element is part of the iteration, return it.
-        return nextEntry.getValue();
+    while (true) {
+      boolean hasNext = ascending ? it.hasNext() : it.hasPrev();
+      if (!hasNext) {
+        return null;
       }
-    } catch (Exception e) {
-      throw Throwables.propagate(e);
+
+      Map.Entry<byte[], byte[]> nextEntry;
+      try {
+        // Avoid races if another thread is updating the DB.
+        nextEntry = ascending ? it.next() : it.prev();
+      } catch (NoSuchElementException e) {
+        return null;
+      }
+
+      byte[] nextKey = nextEntry.getKey();
+      // Next key is not part of the index, stop.
+      if (!startsWith(nextKey, indexKeyPrefix)) {
+        return null;
+      }
+
+      // If the next key is an end marker, then skip it.
+      if (isEndMarker(nextKey)) {
+        continue;
+      }
+
+      // If there's a known end key and iteration has gone past it, stop.
+      if (end != null) {
+        int comp = compare(nextKey, end) * (ascending ? 1 : -1);
+        if (comp > 0) {
+          return null;
+        }
+      }
+
+      count++;
+
+      // Next element is part of the iteration, return it.
+      return nextEntry.getValue();
     }
   }
 

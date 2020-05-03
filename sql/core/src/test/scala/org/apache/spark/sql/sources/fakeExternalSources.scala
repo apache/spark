@@ -22,7 +22,7 @@ import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, RelationP
 import org.apache.spark.sql.types._
 
 
-// Note that the package name is intendedly mismatched in order to resemble external data sources
+// Note that the package name is intentionally mismatched in order to resemble external data sources
 // and test the detection for them.
 class FakeExternalSourceOne extends RelationProvider with DataSourceRegister {
 

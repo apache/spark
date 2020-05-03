@@ -21,11 +21,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.ParserUtils
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 
 /**
@@ -38,13 +39,43 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
- * @param tableIdentifier table name
+ * @param multipartIdentifier table name
  */
-case class UnresolvedRelation(tableIdentifier: TableIdentifier)
-  extends LeafNode {
+case class UnresolvedRelation(
+    multipartIdentifier: Seq[String]) extends LeafNode with NamedRelation {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /** Returns a `.` separated name for this relation. */
-  def tableName: String = tableIdentifier.unquotedString
+  def tableName: String = multipartIdentifier.quoted
+
+  override def name: String = tableName
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+}
+
+object UnresolvedRelation {
+  def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =
+    UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table)
+}
+
+/**
+ * A variant of [[UnresolvedRelation]] which can only be resolved to a v2 relation
+ * (`DataSourceV2Relation`), not v1 relation or temp view.
+ *
+ * @param originalNameParts the original table identifier name parts before catalog is resolved.
+ * @param catalog The catalog which the table should be looked up from.
+ * @param tableName The name of the table to look up.
+ */
+case class UnresolvedV2Relation(
+    originalNameParts: Seq[String],
+    catalog: TableCatalog,
+    tableName: Identifier)
+  extends LeafNode with NamedRelation {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  override def name: String = originalNameParts.quoted
 
   override def output: Seq[Attribute] = Nil
 
@@ -104,14 +135,15 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
-  override def qualifier: Option[String] = throw new UnresolvedException(this, "qualifier")
+  override def qualifier: Seq[String] = throw new UnresolvedException(this, "qualifier")
   override lazy val resolved = false
 
   override def newInstance(): UnresolvedAttribute = this
   override def withNullability(newNullability: Boolean): UnresolvedAttribute = this
-  override def withQualifier(newQualifier: Option[String]): UnresolvedAttribute = this
+  override def withQualifier(newQualifier: Seq[String]): UnresolvedAttribute = this
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
   override def withMetadata(newMetadata: Metadata): Attribute = this
+  override def withExprId(newExprId: ExprId): UnresolvedAttribute = this
 
   override def toString: String = s"'$name"
 
@@ -203,17 +235,20 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
 
   override def terminate(): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot terminate expression: $this")
 }
 
 case class UnresolvedFunction(
     name: FunctionIdentifier,
-    children: Seq[Expression],
-    isDistinct: Boolean)
+    arguments: Seq[Expression],
+    isDistinct: Boolean,
+    filter: Option[Expression] = None)
   extends Expression with Unevaluable {
+
+  override def children: Seq[Expression] = arguments ++ filter.toSeq
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
@@ -225,8 +260,8 @@ case class UnresolvedFunction(
 }
 
 object UnresolvedFunction {
-  def apply(name: String, children: Seq[Expression], isDistinct: Boolean): UnresolvedFunction = {
-    UnresolvedFunction(FunctionIdentifier(name, None), children, isDistinct)
+  def apply(name: String, arguments: Seq[Expression], isDistinct: Boolean): UnresolvedFunction = {
+    UnresolvedFunction(FunctionIdentifier(name, None), arguments, isDistinct)
   }
 }
 
@@ -240,7 +275,7 @@ abstract class Star extends LeafExpression with NamedExpression {
   override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
-  override def qualifier: Option[String] = throw new UnresolvedException(this, "qualifier")
+  override def qualifier: Seq[String] = throw new UnresolvedException(this, "qualifier")
   override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
   override def newInstance(): NamedExpression = throw new UnresolvedException(this, "newInstance")
   override lazy val resolved = false
@@ -262,17 +297,37 @@ abstract class Star extends LeafExpression with NamedExpression {
  */
 case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevaluable {
 
-  override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
+  /**
+   * Returns true if the nameParts is a subset of the last elements of qualifier of the attribute.
+   *
+   * For example, the following should all return true:
+   *   - `SELECT ns1.ns2.t.* FROM ns1.n2.t` where nameParts is Seq("ns1", "ns2", "t") and
+   *     qualifier is Seq("ns1", "ns2", "t").
+   *   - `SELECT ns2.t.* FROM ns1.n2.t` where nameParts is Seq("ns2", "t") and
+   *     qualifier is Seq("ns1", "ns2", "t").
+   *   - `SELECT t.* FROM ns1.n2.t` where nameParts is Seq("t") and
+   *     qualifier is Seq("ns1", "ns2", "t").
+   */
+  private def matchedQualifier(
+      attribute: Attribute,
+      nameParts: Seq[String],
+      resolver: Resolver): Boolean = {
+    val qualifierList = if (nameParts.length == attribute.qualifier.length) {
+      attribute.qualifier
+    } else {
+      attribute.qualifier.takeRight(nameParts.length)
+    }
+    nameParts.corresponds(qualifierList)(resolver)
+  }
+
+  override def expand(
+      input: LogicalPlan,
+      resolver: Resolver): Seq[NamedExpression] = {
     // If there is no table specified, use all input attributes.
     if (target.isEmpty) return input.output
 
-    val expandedAttributes =
-      if (target.get.size == 1) {
-        // If there is a table, pick out attributes that are part of this table.
-        input.output.filter(_.qualifier.exists(resolver(_, target.get.head)))
-      } else {
-        List()
-      }
+    val expandedAttributes = input.output.filter(matchedQualifier(_, target.get, resolver))
+
     if (expandedAttributes.nonEmpty) return expandedAttributes
 
     // Try to resolve it as a struct expansion. If there is a conflict and both are possible,
@@ -294,7 +349,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
     } else {
       val from = input.inputSet.map(_.name).mkString(", ")
       val targetString = target.get.mkString(".")
-      throw new AnalysisException(s"cannot resolve '$targetString.*' give input columns '$from'")
+      throw new AnalysisException(s"cannot resolve '$targetString.*' given input columns '$from'")
     }
   }
 
@@ -316,8 +371,8 @@ case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSens
       // If there is no table specified, use all input attributes that match expr
       case None => input.output.filter(_.name.matches(pattern))
       // If there is a table, pick out attributes that are part of this table that match expr
-      case Some(t) => input.output.filter(_.qualifier.exists(resolver(_, t)))
-        .filter(_.name.matches(pattern))
+      case Some(t) => input.output.filter(a => a.qualifier.nonEmpty &&
+        resolver(a.qualifier.last, t)).filter(_.name.matches(pattern))
     }
   }
 
@@ -335,7 +390,7 @@ case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSens
  * @param names the names to be associated with each output of computing [[child]].
  */
 case class MultiAlias(child: Expression, names: Seq[String])
-  extends UnaryExpression with NamedExpression with CodegenFallback {
+  extends UnaryExpression with NamedExpression with Unevaluable {
 
   override def name: String = throw new UnresolvedException(this, "name")
 
@@ -345,7 +400,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
 
-  override def qualifier: Option[String] = throw new UnresolvedException(this, "qualifier")
+  override def qualifier: Seq[String] = throw new UnresolvedException(this, "qualifier")
 
   override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
 
@@ -378,7 +433,10 @@ case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Une
  *                   can be key of Map, index of Array, field name of Struct.
  */
 case class UnresolvedExtractValue(child: Expression, extraction: Expression)
-  extends UnaryExpression with Unevaluable {
+  extends BinaryExpression with Unevaluable {
+
+  override def left: Expression = child
+  override def right: Expression = extraction
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
@@ -403,7 +461,7 @@ case class UnresolvedAlias(
   extends UnaryExpression with NamedExpression with Unevaluable {
 
   override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
-  override def qualifier: Option[String] = throw new UnresolvedException(this, "qualifier")
+  override def qualifier: Seq[String] = throw new UnresolvedException(this, "qualifier")
   override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
@@ -479,4 +537,15 @@ case class UnresolvedOrdinal(ordinal: Int)
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
+}
+
+/**
+ * Represents unresolved aggregate with having clause, it is turned by the analyzer into a Filter.
+ */
+case class AggregateWithHaving(
+    havingCondition: Expression,
+    child: Aggregate)
+  extends UnaryNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = child.output
 }

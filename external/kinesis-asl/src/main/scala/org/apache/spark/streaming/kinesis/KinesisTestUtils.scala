@@ -183,9 +183,8 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
   }
 
   private def waitForStreamToBeActive(streamNameToWaitFor: String): Unit = {
-    val startTime = System.currentTimeMillis()
-    val endTime = startTime + TimeUnit.SECONDS.toMillis(createStreamTimeoutSeconds)
-    while (System.currentTimeMillis() < endTime) {
+    val startTimeNs = System.nanoTime()
+    while (System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(createStreamTimeoutSeconds)) {
       Thread.sleep(TimeUnit.SECONDS.toMillis(describeStreamPollTimeSeconds))
       describeStream(streamNameToWaitFor).foreach { description =>
         val streamStatus = description.getStreamStatus()

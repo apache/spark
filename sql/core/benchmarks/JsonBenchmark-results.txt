@@ -1,0 +1,112 @@
+================================================================================================
+Benchmark for performance of JSON parsing
+================================================================================================
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+JSON schema inferring:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+No encoding                                       38998          41002         NaN          2.6         390.0       1.0X
+UTF-8 is set                                      61231          63282        1854          1.6         612.3       0.6X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+count a short column:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+No encoding                                       28272          28338          70          3.5         282.7       1.0X
+UTF-8 is set                                      58681          62243        1517          1.7         586.8       0.5X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+count a wide column:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+No encoding                                       44026          51829        1329          0.2        4402.6       1.0X
+UTF-8 is set                                      65839          68596         500          0.2        6583.9       0.7X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+select wide row:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+No encoding                                       72144          74820         NaN          0.0      144287.6       1.0X
+UTF-8 is set                                      69571          77888         NaN          0.0      139142.3       1.0X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Select a subset of 10 columns:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Select 10 columns                                  9502           9604         106          1.1         950.2       1.0X
+Select 1 column                                   11861          11948         109          0.8        1186.1       0.8X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+creation of JSON parser per line:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Short column without encoding                      3830           3846          15          2.6         383.0       1.0X
+Short column with UTF-8                            5538           5543           7          1.8         553.8       0.7X
+Wide column without encoding                      66899          69158         NaN          0.1        6689.9       0.1X
+Wide column with UTF-8                            90052          93235         NaN          0.1        9005.2       0.0X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+JSON functions:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Text read                                           659            674          13         15.2          65.9       1.0X
+from_json                                          7676           7943         405          1.3         767.6       0.1X
+json_tuple                                         9881          10172         273          1.0         988.1       0.1X
+get_json_object                                    7949           8055         119          1.3         794.9       0.1X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Dataset of json strings:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Text read                                          3314           3326          17         15.1          66.3       1.0X
+schema inferring                                  16549          17037         484          3.0         331.0       0.2X
+parsing                                           15138          15283         172          3.3         302.8       0.2X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Json files in the per-line mode:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Text read                                          5136           5446         268          9.7         102.7       1.0X
+Schema inferring                                  19864          20568        1191          2.5         397.3       0.3X
+Parsing without charset                           17535          17888         329          2.9         350.7       0.3X
+Parsing with UTF-8                                25609          25758         218          2.0         512.2       0.2X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Write dates and timestamps:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Create a dataset of timestamps                      784            790           7         12.8          78.4       1.0X
+to_json(timestamp)                                 8005           8055          50          1.2         800.5       0.1X
+write timestamps to files                          6515           6559          45          1.5         651.5       0.1X
+Create a dataset of dates                           854            881          24         11.7          85.4       0.9X
+to_json(date)                                      5187           5194           7          1.9         518.7       0.2X
+write dates to files                               3663           3684          22          2.7         366.3       0.2X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_231-b11 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Read dates and timestamps:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+read timestamp text from files                     1297           1316          26          7.7         129.7       1.0X
+read timestamps from files                        16915          17723         963          0.6        1691.5       0.1X
+infer timestamps from files                       33967          34304         360          0.3        3396.7       0.0X
+read date text from files                          1095           1100           7          9.1         109.5       1.2X
+read date from files                               8376           8513         209          1.2         837.6       0.2X
+timestamp strings                                  1807           1816           8          5.5         180.7       0.7X
+parse timestamps from Dataset[String]             18189          18242          74          0.5        1818.9       0.1X
+infer timestamps from Dataset[String]             37906          38547         571          0.3        3790.6       0.0X
+date strings                                       2191           2194           4          4.6         219.1       0.6X
+parse dates from Dataset[String]                  11593          11625          33          0.9        1159.3       0.1X
+from_json(timestamp)                              22589          22650         101          0.4        2258.9       0.1X
+from_json(date)                                   16479          16619         159          0.6        1647.9       0.1X
+
+

@@ -30,17 +30,18 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, ExternalCatalog, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
+import org.apache.spark.util.Utils
 
 
 private[sql] class HiveSessionCatalog(
-    externalCatalog: HiveExternalCatalog,
-    globalTempViewManager: GlobalTempViewManager,
+    externalCatalogBuilder: () => ExternalCatalog,
+    globalTempViewManagerBuilder: () => GlobalTempViewManager,
     val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
@@ -48,8 +49,8 @@ private[sql] class HiveSessionCatalog(
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader)
   extends SessionCatalog(
-      externalCatalog,
-      globalTempViewManager,
+      externalCatalogBuilder,
+      globalTempViewManagerBuilder,
       functionRegistry,
       conf,
       hadoopConf,
@@ -65,42 +66,52 @@ private[sql] class HiveSessionCatalog(
       name: String,
       clazz: Class[_],
       input: Seq[Expression]): Expression = {
-
-    Try(super.makeFunctionExpression(name, clazz, input)).getOrElse {
-      var udfExpr: Option[Expression] = None
-      try {
-        // When we instantiate hive UDF wrapper class, we may throw exception if the input
-        // expressions don't satisfy the hive UDF, such as type mismatch, input number
-        // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
-        if (classOf[UDF].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), input))
-          udfExpr.get.dataType // Force it to check input data types.
-        } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), input))
-          udfExpr.get.dataType // Force it to check input data types.
-        } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), input))
-          udfExpr.get.dataType // Force it to check input data types.
-        } else if (classOf[UDAF].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveUDAFFunction(
-            name,
-            new HiveFunctionWrapper(clazz.getName),
-            input,
-            isUDAFBridgeRequired = true))
-          udfExpr.get.dataType // Force it to check input data types.
-        } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
-          udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema // Force it to check data types.
+    // Current thread context classloader may not be the one loaded the class. Need to switch
+    // context classloader to initialize instance properly.
+    Utils.withContextClassLoader(clazz.getClassLoader) {
+      Try(super.makeFunctionExpression(name, clazz, input)).getOrElse {
+        var udfExpr: Option[Expression] = None
+        try {
+          // When we instantiate hive UDF wrapper class, we may throw exception if the input
+          // expressions don't satisfy the hive UDF, such as type mismatch, input number
+          // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
+          if (classOf[UDF].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+            udfExpr.get.dataType // Force it to check input data types.
+          } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+            udfExpr.get.dataType // Force it to check input data types.
+          } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), input))
+            udfExpr.get.dataType // Force it to check input data types.
+          } else if (classOf[UDAF].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveUDAFFunction(
+              name,
+              new HiveFunctionWrapper(clazz.getName),
+              input,
+              isUDAFBridgeRequired = true))
+            udfExpr.get.dataType // Force it to check input data types.
+          } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
+            udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema // Force it to check data types.
+          }
+        } catch {
+          case NonFatal(e) =>
+            val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
+            val errorMsg =
+              if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+                s"$noHandlerMsg\nPlease make sure your function overrides " +
+                  "`public StructObjectInspector initialize(ObjectInspector[] args)`."
+              } else {
+                noHandlerMsg
+              }
+            val analysisException = new AnalysisException(errorMsg)
+            analysisException.setStackTrace(e.getStackTrace)
+            throw analysisException
         }
-      } catch {
-        case NonFatal(e) =>
-          val analysisException =
-            new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e")
-          analysisException.setStackTrace(e.getStackTrace)
-          throw analysisException
-      }
-      udfExpr.getOrElse {
-        throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+        udfExpr.getOrElse {
+          throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+        }
       }
     }
   }
@@ -109,7 +120,7 @@ private[sql] class HiveSessionCatalog(
     try {
       lookupFunction0(name, children)
     } catch {
-      case NonFatal(_) =>
+      case NonFatal(_) if children.exists(_.dataType.isInstanceOf[DecimalType]) =>
         // SPARK-16228 ExternalCatalog may recognize `double`-type only.
         val newChildren = children.map { child =>
           if (child.dataType.isInstanceOf[DecimalType]) Cast(child, DoubleType) else child
@@ -124,18 +135,18 @@ private[sql] class HiveSessionCatalog(
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(funcName)) {
-          // If the function actually exists in functionRegistry, it means that there is an
-          // error when we create the Expression using the given children.
+        if (super.functionExists(name)) {
+          // If the function exists (either in functionRegistry or externalCatalog),
+          // it means that there is an error when we create the Expression using the given children.
           // We need to throw the original exception.
           throw error
         } else {
-          // This function is not in functionRegistry, let's try to load it as a Hive's
-          // built-in function.
+          // This function does not exist (neither in functionRegistry or externalCatalog),
+          // let's try to load it as a Hive's built-in function.
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
           if (!hiveFunctions.contains(functionName)) {
-            failFunctionLookup(funcName)
+            failFunctionLookup(funcName, Some(error))
           }
 
           // TODO: Remove this fallback path once we implement the list of fallback functions
@@ -143,12 +154,12 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(funcName))
+                failFunctionLookup(funcName, Some(error)))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(funcName)
+              case NonFatal(e) => failFunctionLookup(funcName, Some(e))
             }
           }
           val className = functionInfo.getFunctionClass.getName
@@ -166,6 +177,10 @@ private[sql] class HiveSessionCatalog(
   // TODO Removes this method after implementing Spark native "histogram_numeric".
   override def functionExists(name: FunctionIdentifier): Boolean = {
     super.functionExists(name) || hiveFunctions.contains(name.funcName)
+  }
+
+  override def isPersistentFunction(name: FunctionIdentifier): Boolean = {
+    super.isPersistentFunction(name) || hiveFunctions.contains(name.funcName)
   }
 
   /** List of functions we pass over to Hive. Note that over time this list should go to 0. */

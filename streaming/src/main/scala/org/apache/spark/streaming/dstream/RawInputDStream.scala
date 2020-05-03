@@ -55,7 +55,7 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
 
   var blockPushingThread: Thread = null
 
-  def onStart() {
+  def onStart(): Unit = {
     // Open a socket to the target address and keep reading from it
     logInfo("Connecting to " + host + ":" + port)
     val channel = SocketChannel.open()
@@ -67,7 +67,7 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
 
     blockPushingThread = new Thread {
       setDaemon(true)
-      override def run() {
+      override def run(): Unit = {
         var nextBlockNumber = 0
         while (true) {
           val buffer = queue.take()
@@ -92,13 +92,13 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
     }
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     if (blockPushingThread != null) blockPushingThread.interrupt()
   }
 
   /** Read a buffer fully from a given Channel */
-  private def readFully(channel: ReadableByteChannel, dest: ByteBuffer) {
-    while (dest.position < dest.limit) {
+  private def readFully(channel: ReadableByteChannel, dest: ByteBuffer): Unit = {
+    while (dest.position() < dest.limit()) {
       if (channel.read(dest) == -1) {
         throw new EOFException("End of channel")
       }

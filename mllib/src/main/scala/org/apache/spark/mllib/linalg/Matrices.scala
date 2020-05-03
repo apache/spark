@@ -30,6 +30,7 @@ import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
  * Trait for a local matrix.
@@ -154,7 +155,7 @@ sealed trait Matrix extends Serializable {
    *          and column indices respectively with the type `Int`, and the final parameter is the
    *          corresponding value in the matrix with type `Double`.
    */
-  private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
+  private[spark] def foreachActive(f: (Int, Int, Double) => Unit): Unit
 
   /**
    * Find the number of non-zero active values.
@@ -456,7 +457,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def zeros(numRows: Int, numCols: Int): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, new Array[Double](numRows * numCols))
   }
@@ -469,7 +470,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def ones(numRows: Int, numCols: Int): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(1.0))
   }
@@ -499,7 +500,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
@@ -513,7 +514,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
   }
@@ -846,8 +847,8 @@ object SparseMatrix {
       s"density must be a double in the range 0.0 <= d <= 1.0. Currently, density: $density")
     val size = numRows.toLong * numCols
     val expected = size * density
-    assert(expected < Int.MaxValue,
-      "The expected number of nonzeros cannot be greater than Int.MaxValue.")
+    assert(expected < ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+      "The expected number of nonzeros cannot be greater than Int.MaxValue - 15.")
     val nnz = math.ceil(expected).toInt
     if (density == 0.0) {
       new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array.empty, Array.empty)
@@ -1054,7 +1055,7 @@ object Matrices {
     DenseMatrix.rand(numRows, numCols, rng)
 
   /**
-   * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
+   * Generate a `SparseMatrix` consisting of `i.i.d.` uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -1107,7 +1108,7 @@ object Matrices {
   @Since("1.3.0")
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array.empty)
+      return new DenseMatrix(0, 0, Array.emptyDoubleArray)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1129,7 +1130,7 @@ object Matrices {
       new DenseMatrix(numRows, numCols, matrices.flatMap(_.toArray))
     } else {
       var startCol = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
         val nCols = mat.numCols
         mat match {
           case spMat: SparseMatrix =>
@@ -1140,7 +1141,7 @@ object Matrices {
               cnt += 1
             }
             startCol += nCols
-            data
+            data.toSeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1149,7 +1150,7 @@ object Matrices {
               }
             }
             startCol += nCols
-            data
+            data.toSeq
         }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
@@ -1166,7 +1167,7 @@ object Matrices {
   @Since("1.3.0")
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array.empty[Double])
+      return new DenseMatrix(0, 0, Array.emptyDoubleArray)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1188,7 +1189,6 @@ object Matrices {
       val allValues = new Array[Double](numRows * numCols)
       var startRow = 0
       matrices.foreach { mat =>
-        var j = 0
         val nRows = mat.numRows
         mat.foreachActive { (i, j, v) =>
           val indStart = j * numRows + startRow
@@ -1199,7 +1199,7 @@ object Matrices {
       new DenseMatrix(numRows, numCols, allValues)
     } else {
       var startRow = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
         val nRows = mat.numRows
         mat match {
           case spMat: SparseMatrix =>
@@ -1210,7 +1210,7 @@ object Matrices {
               cnt += 1
             }
             startRow += nRows
-            data
+            data.toSeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1219,7 +1219,7 @@ object Matrices {
               }
             }
             startRow += nRows
-            data
+            data.toSeq
         }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)

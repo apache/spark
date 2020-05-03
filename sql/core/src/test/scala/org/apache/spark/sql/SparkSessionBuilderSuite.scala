@@ -20,7 +20,9 @@ package org.apache.spark.sql
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf._
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -38,7 +40,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("create with config options and propagate them to SparkContext and SparkSession") {
     val session = SparkSession.builder()
       .master("local")
-      .config("spark.ui.enabled", value = false)
+      .config(UI_ENABLED.key, value = false)
       .config("some-config", "v2")
       .getOrCreate()
     assert(session.sparkContext.conf.get("some-config") == "v2")
@@ -48,6 +50,24 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("use global default session") {
     val session = SparkSession.builder().master("local").getOrCreate()
     assert(SparkSession.builder().getOrCreate() == session)
+  }
+
+  test("sets default and active session") {
+    assert(SparkSession.getDefaultSession == None)
+    assert(SparkSession.getActiveSession == None)
+    val session = SparkSession.builder().master("local").getOrCreate()
+    assert(SparkSession.getDefaultSession == Some(session))
+    assert(SparkSession.getActiveSession == Some(session))
+  }
+
+  test("get active or default session") {
+    val session = SparkSession.builder().master("local").getOrCreate()
+    assert(SparkSession.active == session)
+    SparkSession.clearActiveSession()
+    assert(SparkSession.active == session)
+    SparkSession.clearDefaultSession()
+    intercept[IllegalStateException](SparkSession.active)
+    session.stop()
   }
 
   test("config options are propagated to existing SparkSession") {
@@ -132,5 +152,67 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     } finally {
       session.sparkContext.hadoopConfiguration.unset(mySpecialKey)
     }
+  }
+
+  test("SPARK-31234: RESET command will not change static sql configs and " +
+    "spark context conf values in SessionState") {
+    val session = SparkSession.builder()
+      .master("local")
+      .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31234")
+      .config("spark.app.name", "test-app-SPARK-31234")
+      .getOrCreate()
+
+    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+    session.sql("RESET")
+    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+  }
+
+  test("SPARK-31532: should not propagate static sql configs to the existing" +
+    " active/default SparkSession") {
+    val session = SparkSession.builder()
+      .master("local")
+      .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31532")
+      .config("spark.app.name", "test-app-SPARK-31532")
+      .getOrCreate()
+    // do not propagate static sql configs to the existing active session
+    val session1 = SparkSession
+      .builder()
+      .config(GLOBAL_TEMP_DATABASE.key, "globalTempDB-SPARK-31532-1")
+      .getOrCreate()
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
+    assert(session1.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
+
+    // do not propagate static sql configs to the existing default session
+    SparkSession.clearActiveSession()
+    val session2 = SparkSession
+      .builder()
+      .config(WAREHOUSE_PATH.key, "SPARK-31532-db")
+      .config(GLOBAL_TEMP_DATABASE.key, value = "globalTempDB-SPARK-31532-2")
+      .getOrCreate()
+
+    assert(!session.conf.get(WAREHOUSE_PATH).contains("SPARK-31532-db"))
+    assert(session.conf.get(WAREHOUSE_PATH) === session2.conf.get(WAREHOUSE_PATH))
+    assert(session2.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
+  }
+
+  test("SPARK-31532: propagate static sql configs if no existing SparkSession") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-app-SPARK-31532-2")
+      .set(GLOBAL_TEMP_DATABASE.key, "globaltempdb-spark-31532")
+      .set(WAREHOUSE_PATH.key, "SPARK-31532-db")
+    SparkContext.getOrCreate(conf)
+
+    // propagate static sql configs if no existing session
+    val session = SparkSession
+      .builder()
+      .config(GLOBAL_TEMP_DATABASE.key, "globalTempDB-SPARK-31532-2")
+      .config(WAREHOUSE_PATH.key, "SPARK-31532-db-2")
+      .getOrCreate()
+    assert(session.conf.get("spark.app.name") === "test-app-SPARK-31532-2")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532-2")
+    assert(session.conf.get(WAREHOUSE_PATH) === "SPARK-31532-db-2")
   }
 }
