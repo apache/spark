@@ -206,7 +206,7 @@ object DateTimeUtils {
   }
 
   /**
-   *Returns Gregorian days since epoch
+   * Returns Gregorian days since epoch in UTC timezone
    */
   def toGregorianDays(
       year: Int,
@@ -221,6 +221,9 @@ object DateTimeUtils {
     MILLISECONDS.toDays(calendar.getTimeInMillis).toInt
   }
 
+  /**
+   * Returns a GregorianCalendar set to the provided days since epoch in UTC timezone
+   */
   def fromGregorianDays(date: SQLDate): GregorianCalendar = {
     val calendar = new GregorianCalendar(TimeZoneUTC)
     calendar.setLenient(false)
