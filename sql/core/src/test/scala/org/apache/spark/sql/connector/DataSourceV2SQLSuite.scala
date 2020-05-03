@@ -2122,8 +2122,6 @@ class DataSourceV2SQLSuite
         .add("value", StringType, nullable = false)
 
       val expected = Seq(
-        Row(TableCatalog.PROP_OWNER, defaultUser),
-        Row("provider", provider),
         Row("status", status),
         Row("user", user))
 

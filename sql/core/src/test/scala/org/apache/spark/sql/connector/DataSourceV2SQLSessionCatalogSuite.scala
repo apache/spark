@@ -68,22 +68,15 @@ class DataSourceV2SQLSessionCatalogSuite
     val t1 = "tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format TBLPROPERTIES " +
-        s"(key='v', key2='v2')")
+        "(key='v', key2='v2')")
 
-      checkAnswer(
-        sql(s"SHOW TBLPROPERTIES $t1"),
-        Seq(Row("key", "v"), Row("key2", "v2"))
-      )
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $t1"), Seq(Row("key", "v"), Row("key2", "v2")))
 
-      checkAnswer(
-        sql(s"SHOW TBLPROPERTIES $t1('key')"),
-        Row("key", "v")
-      )
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $t1('key')"), Row("key", "v"))
 
       checkAnswer(
         sql(s"SHOW TBLPROPERTIES $t1('keyX')"),
-        Row("keyX", s"Table default.$t1 does not have property: keyX")
-      )
+        Row("keyX", s"Table default.$t1 does not have property: keyX"))
     }
   }
 }
