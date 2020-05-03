@@ -806,8 +806,8 @@ These integrations allow you to copy data from/to Google Cloud Platform.
 
    * - `Facebook Ads <http://business.facebook.com>`__
      - `Google Cloud Storage (GCS) <https://cloud.google.com/gcs/>`__
-     -
-     - :mod:`airflow.providers.google.facebook_ads_to_gcs.operators.ads`
+     - :doc:`How to use <howto/operator/gcp/facebook_ads_to_gcs>`
+     - :mod:`airflow.providers.google.cloud.operators.facebook_ads_to_gcs`
 
    * - `Google BigQuery <https://cloud.google.com/bigquery/>`__
      - `MySQL <https://www.mysql.com/>`__
