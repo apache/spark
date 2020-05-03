@@ -127,12 +127,9 @@ class UISeleniumSuite
         val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
-        findAll(cssSelector("""#runningBatches-table th""")).map(_.text).toList should be {
-          List("Batch Time", "Records", "Scheduling Delay", "Processing Time",
-            "Output Ops: Succeeded/Total", "Status")
-        }
+        val arrow = 0x25BE.toChar
         findAll(cssSelector("""#completedBatches-table th""")).map(_.text).toList should be {
-          List("Batch Time", "Records", "Scheduling Delay", "Processing Time",
+          List(s"Batch Time $arrow", "Records", "Scheduling Delay", "Processing Time",
             "Total Delay", "Output Ops: Succeeded/Total")
         }
 

@@ -505,7 +505,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <div class="col-12">
             <span id="runningBatches" class="collapse-aggregated-runningBatches collapse-table"
                   onClick="collapseTable('collapse-aggregated-runningBatches',
-                'aggregated-runningBatches')">
+                  'aggregated-runningBatches')">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Running Batches ({runningBatches.size})</a>
@@ -524,7 +524,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <div class="col-12">
             <span id="waitingBatches" class="collapse-aggregated-waitingBatches collapse-table"
                   onClick="collapseTable('collapse-aggregated-waitingBatches',
-                'aggregated-waitingBatches')">
+                  'aggregated-waitingBatches')">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Waiting Batches ({waitingBatches.size})</a>
@@ -543,7 +543,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <div class="col-12">
             <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
                   onClick="collapseTable('collapse-aggregated-completedBatches',
-                'aggregated-completedBatches')">
+                  'aggregated-completedBatches')">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Completed Batches (last {completedBatches.size}
