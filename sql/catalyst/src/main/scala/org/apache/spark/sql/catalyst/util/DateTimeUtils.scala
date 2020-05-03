@@ -501,7 +501,7 @@ object DateTimeUtils {
     try {
       Some(toGregorianDays(segments(0), segments(1).toByte, segments(2).toByte))
     } catch {
-      case NonFatal(e) => None
+      case NonFatal(_) => None
     }
   }
 
