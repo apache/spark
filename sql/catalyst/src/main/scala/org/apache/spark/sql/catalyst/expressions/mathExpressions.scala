@@ -1404,7 +1404,7 @@ case class WidthBucket(
     val mathUtils = MathUtils.getClass.getName.stripSuffix("$")
     if (foldable) {
       val exprV = expr.genCode(ctx)
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         if (${_minValue == null}) {
           throw new RuntimeException(String.format("$errMsg", 2));
         } else if (${_maxValue == null}) {
@@ -1414,7 +1414,7 @@ case class WidthBucket(
         }
         ${exprV.code}
         boolean ${ev.isNull} = ${exprV.isNull};
-        long ${ev.value} = ${ctx.defaultValue(dataType)};
+        long ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         if (!${ev.isNull}) {
           ${ev.value} = $mathUtils.widthBucket(${exprV.value}, $minValueV, $maxValueV, $numBucketV);
         }""")
@@ -1427,10 +1427,10 @@ case class WidthBucket(
           }
         """}
 
-      ev.copy(invalid.map(_.stripMargin).mkString("\n") +
-        s"""
+      ev.copy(code = code"""
+          ${invalid.map(_.stripMargin).mkString("\n")}
           boolean ${ev.isNull} = ${evals(0).isNull};
-          long ${ev.value} = ${ctx.defaultValue(dataType)};
+          long ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${evals(0).isNull}) {
             ${ev.value} = $mathUtils.widthBucket(
             ${evals(0).value}, ${evals(1).value}, ${evals(2).value}, ${evals(3).value});
