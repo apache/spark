@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
-import java.util.{GregorianCalendar, Locale, TimeZone}
+import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
@@ -216,7 +216,16 @@ object DateTimeUtils {
       minute: Byte = 0,
       sec: Byte = 0): SQLDate = {
     val calendar = new GregorianCalendar(year, month - 1, day, hour, minute, sec)
+    calendar.setTimeZone(TimeZoneUTC)
+    calendar.setLenient(false)
     MILLISECONDS.toDays(calendar.getTimeInMillis).toInt
+  }
+
+  def fromGregorianDays(date: SQLDate): GregorianCalendar = {
+    val calendar = new GregorianCalendar(TimeZoneUTC)
+    calendar.setLenient(false)
+    calendar.setTimeInMillis(DAYS.toMillis(date))
+    calendar
   }
 
   /*
@@ -553,7 +562,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getDayInYear(date: SQLDate): Int = {
-    LocalDate.ofEpochDay(date).getDayOfYear
+    fromGregorianDays(date).get(Calendar.DAY_OF_YEAR)
   }
 
   /**
@@ -561,7 +570,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getYear(date: SQLDate): Int = {
-    LocalDate.ofEpochDay(date).getYear
+    fromGregorianDays(date).get(Calendar.YEAR)
   }
 
   /**
@@ -594,7 +603,7 @@ object DateTimeUtils {
    * since 1.1.1970. January is month 1.
    */
   def getMonth(date: SQLDate): Int = {
-    LocalDate.ofEpochDay(date).getMonthValue
+    fromGregorianDays(date).get(Calendar.MONTH) + 1
   }
 
   /**
@@ -602,7 +611,8 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getDayOfMonth(date: SQLDate): Int = {
-    LocalDate.ofEpochDay(date).getDayOfMonth
+    val calendar = fromGregorianDays(date)
+    calendar.get(Calendar.DAY_OF_MONTH)
   }
 
   /**

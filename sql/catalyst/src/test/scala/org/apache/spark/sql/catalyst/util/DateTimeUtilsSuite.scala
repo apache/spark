@@ -125,7 +125,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     stringToDate(UTF8String.fromString(s), zoneId)
   }
 
-  test("SPARK-31212 string to date for leap year before and after 1582-10-15") {
+  test("SPARK-31212: string to date for leap year before and after 1582-10-15") {
     assert(toDate("1000-02-29").get === days(1000, 2, 29))
     assert(toDate("2000-02-29").get === days(2000, 2, 29))
   }
