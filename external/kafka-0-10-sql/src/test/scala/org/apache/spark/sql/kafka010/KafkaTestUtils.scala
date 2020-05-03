@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.io.{File, IOException}
-import java.net.{InetAddress, InetSocketAddress}
+import java.net.{BindException, InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
 import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
@@ -27,6 +27,7 @@ import javax.security.auth.login.Configuration
 import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.util.Random
+import scala.util.control.NonFatal
 
 import com.google.common.io.Files
 import kafka.api.Request
@@ -131,11 +132,33 @@ class KafkaTestUtils(
   }
 
   private def setUpMiniKdc(): Unit = {
-    val kdcDir = Utils.createTempDir()
     val kdcConf = MiniKdc.createConf()
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
-    kdc = new MiniKdc(kdcConf, kdcDir)
-    kdc.start()
+    var bindException = false
+    var kdcDir: File = null
+    var numRetries = 1
+    do {
+      try {
+        bindException = false
+        kdcDir = Utils.createTempDir()
+        kdc = new MiniKdc(kdcConf, kdcDir)
+        kdc.start()
+      } catch {
+        case be: BindException if numRetries == 3 =>
+          logError(s"Failed setting up MiniKDC. Tried $numRetries times.");
+          throw be
+        case be: BindException =>
+          try {
+            Utils.deleteRecursively(kdcDir)
+          } catch {
+            case NonFatal(_) =>
+              logWarning("Failed to clean the working directory of unsuccessful MiniKdc")
+          }
+          numRetries += 1
+          logWarning("Failed setting up MiniKdc, try again...", be)
+          bindException = true
+      }
+    } while (bindException)
     // TODO https://issues.apache.org/jira/browse/SPARK-30037
     // Need to build spark's own MiniKDC and customize krb5.conf like Kafka
     rewriteKrb5Conf()
