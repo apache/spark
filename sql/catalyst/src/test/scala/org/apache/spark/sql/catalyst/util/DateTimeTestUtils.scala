@@ -91,7 +91,8 @@ object DateTimeTestUtils {
       day: Byte = 1,
       hour: Byte = 0,
       minute: Byte = 0,
-      sec: Byte = 0): Int = toGregorianDays(year, month, day, hour, minute, sec)
+      sec: Byte = 0): Int =
+    toGregorianDays(year, month, day, hour, minute, sec)
 
   // Returns microseconds since epoch for current date and give time
   def time(
