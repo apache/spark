@@ -238,6 +238,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testExecutorEnv(false)
   }
 
+  test("spark context is not stopped by user application in cluster mode") {
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(false, mainClassName(SparkContextNotStoppedTestApp.getClass),
+      appArgs = Seq(result.getAbsolutePath()))
+    checkResult(finalState, result)
+  }
+
   private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
@@ -582,6 +589,18 @@ private object ExecutorEnvTestApp {
 
     Files.write(result.toString, new File(status), StandardCharsets.UTF_8)
     sc.stop()
+  }
+
+}
+
+private object SparkContextNotStoppedTestApp {
+
+  def main(args: Array[String]): Unit = {
+    val status = args(0)
+    val sparkConf = new SparkConf()
+    val sc = new SparkContext(sparkConf)
+    sc.parallelize(Seq(1)).collect
+    Files.write("success", new File(status), StandardCharsets.UTF_8)
   }
 
 }
