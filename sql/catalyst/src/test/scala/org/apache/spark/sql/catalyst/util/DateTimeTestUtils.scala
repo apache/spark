@@ -18,13 +18,13 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
-import java.util.TimeZone
+import java.util.{GregorianCalendar, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, toGregorianDays}
 
 /**
  * Helper functions for testing date and time functionality.
@@ -91,10 +91,7 @@ object DateTimeTestUtils {
       day: Byte = 1,
       hour: Byte = 0,
       minute: Byte = 0,
-      sec: Byte = 0): Int = {
-    val micros = date(year, month, day, hour, minute, sec)
-    TimeUnit.MICROSECONDS.toDays(micros).toInt
-  }
+      sec: Byte = 0): Int = toGregorianDays(year, month, day, hour, minute, sec)
 
   // Returns microseconds since epoch for current date and give time
   def time(

@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
-import java.util.{Locale, TimeZone}
+import java.util.{GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
@@ -203,6 +203,20 @@ object DateTimeUtils {
     val day = julian_us / MICROS_PER_DAY
     val micros = julian_us % MICROS_PER_DAY
     (day.toInt, MICROSECONDS.toNanos(micros))
+  }
+
+  /**
+   *Returns Gregorian days since epoch
+   */
+  def toGregorianDays(
+      year: Int,
+      month: Byte = 1,
+      day: Byte = 1,
+      hour: Byte = 0,
+      minute: Byte = 0,
+      sec: Byte = 0): SQLDate = {
+    val calendar = new GregorianCalendar(year, month - 1, day, hour, minute, sec)
+    MILLISECONDS.toDays(calendar.getTimeInMillis).toInt
   }
 
   /*
@@ -485,10 +499,9 @@ object DateTimeUtils {
     }
     segments(i) = currentSegmentValue
     try {
-      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-      Some(localDateToDays(localDate))
+      Some(toGregorianDays(segments(0), segments(1).toByte, segments(2).toByte))
     } catch {
-      case NonFatal(_) => None
+      case NonFatal(e) => None
     }
   }
 
