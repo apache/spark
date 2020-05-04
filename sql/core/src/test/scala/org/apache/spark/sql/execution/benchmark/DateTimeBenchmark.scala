@@ -61,7 +61,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId) {
         val N = 10000000
         runBenchmark("datetime +/- interval") {
-          val benchmark = new Benchmark("datetime +/- interval", N, output = output)
+          val benchmark = new Benchmark("datetime +/- interval", 3, output = output)
           val ts = "cast(id as timestamp)"
           val dt = s"cast($ts as date)"
           benchmark.addCase("date + interval(m)") { _ =>
