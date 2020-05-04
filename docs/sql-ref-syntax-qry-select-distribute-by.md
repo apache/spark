@@ -61,30 +61,30 @@ SET spark.sql.shuffle.partitions = 2;
 -- behavior of `DISTRIBUTE BY`. The query below produces rows where age columns are not
 -- clustered together.
 SELECT age, name FROM person;
-  +---+-------+
-  |age|   name|
-  +---+-------+
-  | 16|Shone S|
-  | 25|Zen Hui|
-  | 16| Jack N|
-  | 25| Mike A|
-  | 18| John A|
-  | 18| Anil B|
-  +---+-------+
++---+-------+
+|age|   name|
++---+-------+
+| 16|Shone S|
+| 25|Zen Hui|
+| 16| Jack N|
+| 25| Mike A|
+| 18| John A|
+| 18| Anil B|
++---+-------+
 
 -- Produces rows clustered by age. Persons with same age are clustered together.
 -- Unlike `CLUSTER BY` clause, the rows are not sorted within a partition.
 SELECT age, name FROM person DISTRIBUTE BY age;
-  +---+-------+
-  |age|   name|
-  +---+-------+
-  | 25|Zen Hui|
-  | 25| Mike A|
-  | 18| John A|
-  | 18| Anil B|
-  | 16|Shone S|
-  | 16| Jack N|
-  +---+-------+
++---+-------+
+|age|   name|
++---+-------+
+| 25|Zen Hui|
+| 25| Mike A|
+| 18| John A|
+| 18| Anil B|
+| 16|Shone S|
+| 16| Jack N|
++---+-------+
 {% endhighlight %}
 
 ### Related Statements

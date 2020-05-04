@@ -589,4 +589,10 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
   test("SPARK-11412 read and merge orc schemas in parallel") {
     testMergeSchemasInParallel(OrcUtils.readOrcSchemasInParallel)
   }
+
+  test("SPARK-31580: Read a file written before ORC-569") {
+    // Test ORC file came from ORC-621
+    val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
+    assert(df.where("str < 'row 001000'").count() === 1000)
+  }
 }

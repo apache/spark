@@ -25,7 +25,7 @@ license: |
 ## Upgrading from Core 2.4 to 3.0
 
 - The `org.apache.spark.ExecutorPlugin` interface and related configuration has been replaced with
-  `org.apache.spark.plugin.SparkPlugin`, which adds new functionality. Plugins using the old
+  `org.apache.spark.api.plugin.SparkPlugin`, which adds new functionality. Plugins using the old
   interface must be modified to extend the new interfaces. Check the
   [Monitoring](monitoring.html) guide for more details.
 
@@ -34,6 +34,8 @@ license: |
 - Deprecated method `shuffleBytesWritten`, `shuffleWriteTime` and `shuffleRecordsWritten` in `ShuffleWriteMetrics` have been removed. Instead, use `bytesWritten`, `writeTime ` and `recordsWritten` respectively.
 
 - Deprecated method `AccumulableInfo.apply` have been removed because creating `AccumulableInfo` is disallowed.
+
+- Deprecated accumulator v1 APIs have been removed and please use v2 APIs instead.
 
 - Event log file will be written as UTF-8 encoding, and Spark History Server will replay event log files as UTF-8 encoding. Previously Spark wrote the event log file as default charset of driver JVM process, so Spark History Server of Spark 2.x is needed to read the old event log files in case of incompatible encoding.
 

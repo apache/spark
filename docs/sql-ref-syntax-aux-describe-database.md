@@ -42,7 +42,7 @@ interchangeable.
   </dd>
 </dl>
 
-### Example
+### Examples
 
 {% highlight sql %}
 -- Create employees DATABASE
@@ -52,13 +52,13 @@ CREATE DATABASE employees COMMENT 'For software companies';
 -- Returns Database Name, Description and Root location of the filesystem
 -- for the employees DATABASE.
 DESCRIBE DATABASE employees;
-  +-------------------------+-----------------------------+
-  |database_description_item|   database_description_value|
-  +-------------------------+-----------------------------+
-  |            Database Name|                    employees|
-  |              Description|       For software companies|
-  |                 Location|file:/Users/Temp/employees.db|
-  +-------------------------+-----------------------------+
++-------------------------+-----------------------------+
+|database_description_item|   database_description_value|
++-------------------------+-----------------------------+
+|            Database Name|                    employees|
+|              Description|       For software companies|
+|                 Location|file:/Users/Temp/employees.db|
++-------------------------+-----------------------------+
 
 -- Create employees DATABASE
 CREATE DATABASE employees COMMENT 'For software companies';
@@ -68,27 +68,27 @@ ALTER DATABASE employees SET DBPROPERTIES ('Create-by' = 'Kevin', 'Create-date' 
 
 -- Describe employees DATABASE with EXTENDED option to return additional database properties
 DESCRIBE DATABASE EXTENDED employees;
-  +-------------------------+---------------------------------------------+
-  |database_description_item|                   database_description_value|
-  +-------------------------+---------------------------------------------+
-  |            Database Name|                                    employees|
-  |              Description|                       For software companies|
-  |                 Location|                file:/Users/Temp/employees.db|
-  |               Properties|((Create-by,kevin), (Create-date,09/01/2019))|
-  +-------------------------+---------------------------------------------+
++-------------------------+---------------------------------------------+
+|database_description_item|                   database_description_value|
++-------------------------+---------------------------------------------+
+|            Database Name|                                    employees|
+|              Description|                       For software companies|
+|                 Location|                file:/Users/Temp/employees.db|
+|               Properties|((Create-by,kevin), (Create-date,09/01/2019))|
++-------------------------+---------------------------------------------+
 
 -- Create deployment SCHEMA
 CREATE SCHEMA deployment COMMENT 'Deployment environment';
 
 -- Describe deployment, the DATABASE and SCHEMA are interchangeable, their meaning are the same.
 DESC DATABASE deployment;
-  +-------------------------+------------------------------+
-  |database_description_item|database_description_value    |
-  +-------------------------+------------------------------+
-  |            Database Name|                    deployment|
-  |              Description|        Deployment environment|
-  |                 Location|file:/Users/Temp/deployment.db|
-  +-------------------------+------------------------------+
++-------------------------+------------------------------+
+|database_description_item|database_description_value    |
++-------------------------+------------------------------+
+|            Database Name|                    deployment|
+|              Description|        Deployment environment|
+|                 Location|file:/Users/Temp/deployment.db|
++-------------------------+------------------------------+
 {% endhighlight %}
 
 ### Related Statements

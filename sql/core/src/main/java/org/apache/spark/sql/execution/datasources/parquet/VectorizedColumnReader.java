@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
-import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
@@ -109,7 +108,8 @@ public class VectorizedColumnReader {
       ColumnDescriptor descriptor,
       OriginalType originalType,
       PageReader pageReader,
-      ZoneId convertTz) throws IOException {
+      ZoneId convertTz,
+      boolean rebaseDateTime) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
@@ -132,7 +132,7 @@ public class VectorizedColumnReader {
     if (totalValueCount == 0) {
       throw new IOException("totalValueCount == 0");
     }
-    this.rebaseDateTime = SQLConf.get().parquetRebaseDateTimeInReadEnabled();
+    this.rebaseDateTime = rebaseDateTime;
   }
 
   /**
@@ -423,15 +423,8 @@ public class VectorizedColumnReader {
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.DateType ) {
       if (rebaseDateTime) {
-        for (int i = 0; i < num; i++) {
-          if (defColumn.readInteger() == maxDefLevel) {
-            column.putInt(
-              rowId + i,
-              RebaseDateTime.rebaseJulianToGregorianDays(dataColumn.readInteger()));
-          } else {
-            column.putNull(rowId + i);
-          }
-        }
+        defColumn.readIntegersWithRebase(
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else {
         defColumn.readIntegers(
            num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
@@ -449,15 +442,8 @@ public class VectorizedColumnReader {
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
       if (rebaseDateTime) {
-        for (int i = 0; i < num; i++) {
-          if (defColumn.readInteger() == maxDefLevel) {
-            column.putLong(
-              rowId + i,
-              RebaseDateTime.rebaseJulianToGregorianMicros(dataColumn.readLong()));
-          } else {
-            column.putNull(rowId + i);
-          }
-        }
+        defColumn.readLongsWithRebase(
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else {
         defColumn.readLongs(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
