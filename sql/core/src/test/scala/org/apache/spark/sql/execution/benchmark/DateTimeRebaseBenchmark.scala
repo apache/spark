@@ -101,7 +101,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
   }
 
   private def benchmarkInputs(benchmark: Benchmark, rowsNum: Int, dateTime: DateTime): Unit = {
-    val year = if (dateTime == "date") 1582 else 1900
+    val year = if (dateTime == DATE) 1582 else 1900
     benchmark.addCase(s"after $year, noop", 1) { _ =>
       genDF(rowsNum, dateTime, modernDates = true).noop()
     }
