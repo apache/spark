@@ -488,20 +488,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
   }
 
-  test("resourceProfileAddedToJson backward compatibility: handle missing") {
-    val rprofBuilder = new ResourceProfileBuilder()
-    val taskReq = new TaskResourceRequests().resource("gpu", 1)
-    val execReq =
-      new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprofBuilder.require(taskReq).require(execReq)
-    val rp = rprofBuilder.build
-    val resourceProfileJson =
-      JsonProtocol.resourceProfileAddedToJson(SparkListenerResourceProfileAdded(rp))
-    val exepectedResourceProfile = rp
-    assertEquals(exepectedResourceProfile,
-      JsonProtocol.resourceProfileAddedFromJson(resourceProfileJson).resourceProfile)
-  }
-
   test("AccumulableInfo value de/serialization") {
     import InternalAccumulator._
     val blocks = Seq[(BlockId, BlockStatus)](
