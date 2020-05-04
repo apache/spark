@@ -60,7 +60,7 @@ CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier
 
 * **LOCATION**
 
-    Path to the directory where table data is stored,Path to the directory where table data is stored, which could be a path on distributed storage like HDFS, etc. Location to create an external table.
+    Path to the directory where table data is stored, which could be a path on distributed storage like HDFS, etc. Location to create an external table.
 
 ### Examples
 

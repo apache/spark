@@ -67,7 +67,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **LOCATION**
 
-    Path to the directory where table data is stored, Path to the directory where table data is stored, which could be a path on distributed storage like HDFS, etc.
+    Path to the directory where table data is stored, which could be a path on distributed storage like HDFS, etc.
 
 * **COMMENT**
 
