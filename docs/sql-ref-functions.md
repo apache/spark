@@ -24,7 +24,7 @@ Built-in functions are commonly used routines that Spark SQL predefines and a co
 
 ### Built-in Functions
 
-Spark SQL has some categories of frequently-used built-in functions for aggregation, arrays/maps, date/timestamp, and JSON data.
+Spark SQL has some categories of frequently-used built-in functions for aggregtion, arrays/maps, date/timestamp, and JSON data.
 This subsection presents the usages and descriptions of these functions.
 
 #### Scalar Functions

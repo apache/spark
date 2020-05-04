@@ -567,7 +567,7 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 Refer to the [R API docs](api/R/spark.fmClassifier.html) for more details.
 
-Note: At the moment SparkR doesn't support feature scaling.
+Note: At the moment SparkR doesn't suport feature scaling.
 
 {% include_example r/ml/fmClassifier.R %}
 </div>
@@ -1105,7 +1105,7 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 
 Refer to the [R API documentation](api/R/spark.fmRegressor.html) for more details.
 
-Note: At the moment SparkR doesn't support feature scaling.
+Note: At the moment SparkR doesn't suport feature scaling.
 
 {% include_example r/ml/fmRegressor.R %}
 </div>
