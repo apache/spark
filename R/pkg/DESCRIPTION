@@ -25,6 +25,7 @@ Suggests:
     survival,
     arrow (>= 1.0.0)
 Collate:
+    'backports.R'
     'schema.R'
     'generics.R'
     'jobj.R'
@@ -35,7 +36,6 @@ Collate:
     'DataFrame.R'
     'SQLContext.R'
     'WindowSpec.R'
-    'backports.R'
     'backend.R'
     'broadcast.R'
     'catalog.R'
