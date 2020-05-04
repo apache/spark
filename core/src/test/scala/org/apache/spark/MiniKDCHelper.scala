@@ -35,6 +35,16 @@ trait MiniKDCHelper extends Logging {
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
     var bindException = false
     var kdcDir: File = null
+    // The port for MiniKdc service gets selected in the constructor, but will be bound
+    // to it later in MiniKdc.start() -> MiniKdc.initKDCServer() -> KdcServer.start().
+    // In meantime, when some other service might capture the port during this progress, and
+    // cause BindException.
+    // This makes our tests which have dedicated JVMs and rely on MiniKDC being flaky
+    //
+    // https://issues.apache.org/jira/browse/HADOOP-12656 get fixed in Hadoop 2.8.0.
+    // The workaround here is to capture the exception and retry, since we are using Hadoop 2.7.4
+    // as default.
+    // https://issues.apache.org/jira/browse/SPARK-31631
     var numRetries = 1
     do {
       try {
