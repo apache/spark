@@ -116,11 +116,11 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
 
   private def caseName(
       modernDates: Boolean,
-      dateTime: String,
+      dateTime: DateTime,
       rebase: Option[Boolean] = None,
       vec: Option[Boolean] = None): String = {
     val period = if (modernDates) "after" else "before"
-    val year = if (dateTime == "date") 1582 else 1900
+    val year = if (dateTime == DATE) 1582 else 1900
     val vecFlag = vec.map(flagToStr).map(flag => s", vec $flag").getOrElse("")
     val rebaseFlag = rebase.map(flagToStr).map(flag => s", rebase $flag").getOrElse("")
     s"$period $year$vecFlag$rebaseFlag"
@@ -132,7 +132,7 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
       modernDates: Boolean,
       rebase: Option[Boolean] = None): String = {
     val period = if (modernDates) "after" else "before"
-    val year = if (dateTime == "date") 1582 else 1900
+    val year = if (dateTime == DATE) 1582 else 1900
     val rebaseFlag = rebase.map(flagToStr).map(flag => s"_$flag").getOrElse("")
     basePath.getAbsolutePath + s"/${dateTime}_${period}_$year$rebaseFlag"
   }
