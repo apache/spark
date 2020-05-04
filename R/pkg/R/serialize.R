@@ -62,7 +62,7 @@ has_unique_serde_type <- function(object) {
 #         some minor idiosyncrasies, e.g. handling of writeObject(list(), con)
 writeObject <- function(object, con, writeType = TRUE, ...) UseMethod("writeObject")
 writeObject.default <- function(object, con, writeType = TRUE, ...) {
-  stop(paste("Unsupported type for serialization", class(object)))
+  stop("Unsupported type for serialization ", class(object))
 }
 writeObject.NULL <- function(object, con, writeType = TRUE, ...) {
   if (writeType) {
@@ -212,7 +212,7 @@ writeObject.POSIXt <- function(object, con, writeType = TRUE, ...) {
 
 writeType <- function(object, con) UseMethod("writeType")
 writeType.default <- function(object, con) {
-  stop("Unsupported type for serialization", class(object))
+  stop("Unsupported type for serialization ", class(object))
 }
 writeType.NULL <- function(object, con) {
   writeBin(as.raw(0x6e), con)
