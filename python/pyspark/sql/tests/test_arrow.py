@@ -428,7 +428,6 @@ class ArrowTests(ReusedSQLTestCase):
             result_spark = df.toPandas()
 
         assert_frame_equal(result_spark, result_arrow)
-        # assert result_arrow == result_spark
 
 
 @unittest.skipIf(
