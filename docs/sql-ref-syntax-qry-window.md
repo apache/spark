@@ -58,15 +58,15 @@ window_function OVER
 
     `{ RANGE | ROWS } { frame_start | BETWEEN frame_start AND frame_end }`
 
-    If frame_end is omitted it defaults to CURRENT ROW.
+    * `frame_start` and `frame_end` have the following syntax:
 
-    `frame_start` and `frame_end` have the following syntax
+      **Syntax:**
 
-     **Syntax:**
+      `UNBOUNDED PRECEDING | offset PRECEDING | CURRENT ROW | offset FOLLOWING | UNBOUNDED FOLLOWING`
 
-     `UNBOUNDED PRECEDING | offset PRECEDING | CURRENT ROW | offset FOLLOWING | UNBOUNDED FOLLOWING`
+      `offset:` specifies the `offset` from the position of the current row.
 
-     `offset:` specifies the <code>offset</code> from the position of the current row.
+    **Note:** If `frame_end` is omitted it defaults to `CURRENT ROW`.
 
 ### Examples
 
