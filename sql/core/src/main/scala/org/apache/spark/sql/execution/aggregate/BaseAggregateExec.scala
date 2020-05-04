@@ -32,12 +32,12 @@ trait BaseAggregateExec extends UnaryExecNode {
 
   override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Input", child.output)}
        |${ExplainUtils.generateFieldString("Keys", groupingExpressions)}
        |${ExplainUtils.generateFieldString("Functions", aggregateExpressions)}
        |${ExplainUtils.generateFieldString("Aggregate Attributes", aggregateAttributes)}
        |${ExplainUtils.generateFieldString("Results", resultExpressions)}
-     """.stripMargin
+       |""".stripMargin
   }
 }

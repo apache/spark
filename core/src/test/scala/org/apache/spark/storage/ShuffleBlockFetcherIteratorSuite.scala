@@ -36,6 +36,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExternalBlockStoreClient}
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.storage.ShuffleBlockFetcherIterator.FetchBlockInfo
 import org.apache.spark.util.Utils
 
 
@@ -1070,5 +1071,24 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // All blocks fetched return zero length and should trigger a receive-side error:
     val e = intercept[FetchFailedException] { iterator.next() }
     assert(e.getMessage.contains("Received a zero-size buffer"))
+  }
+
+  test("SPARK-31521: correct the fetch size when merging blocks into a merged block") {
+    val bId1 = ShuffleBlockBatchId(0, 0, 0, 5)
+    val bId2 = ShuffleBlockId(0, 0, 6)
+    val bId3 = ShuffleBlockId(0, 0, 7)
+    val block1 = FetchBlockInfo(bId1, 40, 0)
+    val block2 = FetchBlockInfo(bId2, 50, 0)
+    val block3 = FetchBlockInfo(bId3, 60, 0)
+    val inputBlocks = Seq(block1, block2, block3)
+
+    val mergedBlocks = ShuffleBlockFetcherIterator.
+      mergeContinuousShuffleBlockIdsIfNeeded(inputBlocks, true)
+    assert(mergedBlocks.size === 1)
+    val mergedBlock = mergedBlocks.head
+    val mergedBlockId = mergedBlock.blockId.asInstanceOf[ShuffleBlockBatchId]
+    assert(mergedBlockId.startReduceId === bId1.startReduceId)
+    assert(mergedBlockId.endReduceId === bId3.reduceId + 1)
+    assert(mergedBlock.size === inputBlocks.map(_.size).sum)
   }
 }

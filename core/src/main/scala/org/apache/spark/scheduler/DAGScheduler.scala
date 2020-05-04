@@ -39,6 +39,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -1175,6 +1176,27 @@ private[spark] class DAGScheduler(
     }
   }
 
+  /**
+   * `PythonRunner` needs to know what the pyspark memory and cores settings are for the profile
+   * being run. Pass them in the local properties of the task if it's set for the stage profile.
+   */
+  private def addPySparkConfigsToProperties(stage: Stage, properties: Properties): Unit = {
+    val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
+    val pysparkMem = rp.getPySparkMemory
+    // use the getOption on EXECUTOR_CORES.key instead of using the EXECUTOR_CORES config reader
+    // because the default for this config isn't correct for standalone mode. Here we want
+    // to know if it was explicitly set or not. The default profile always has it set to either
+    // what user specified or default so special case it here.
+    val execCores = if (rp.id == DEFAULT_RESOURCE_PROFILE_ID) {
+      sc.conf.getOption(config.EXECUTOR_CORES.key)
+    } else {
+      val profCores = rp.getExecutorCores.map(_.toString)
+      if (profCores.isEmpty) sc.conf.getOption(config.EXECUTOR_CORES.key) else profCores
+    }
+    pysparkMem.map(mem => properties.setProperty(PYSPARK_MEMORY_LOCAL_PROPERTY, mem.toString))
+    execCores.map(cores => properties.setProperty(EXECUTOR_CORES_LOCAL_PROPERTY, cores))
+  }
+
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     logDebug("submitMissingTasks(" + stage + ")")
@@ -1194,6 +1216,7 @@ private[spark] class DAGScheduler(
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
     val properties = jobIdToActiveJob(jobId).properties
+    addPySparkConfigsToProperties(stage, properties)
 
     runningStages += stage
     // SparkListenerStageSubmitted should be posted before testing whether tasks are

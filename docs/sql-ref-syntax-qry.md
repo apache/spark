@@ -22,7 +22,8 @@ license: |
 Spark supports <code>SELECT</code> statement that is used to retrieve rows
 from one or more tables according to the specified clauses. The full syntax
 and brief description of supported clauses are explained in
-[SELECT](sql-ref-syntax-qry-select.html) section. Spark also provides the
+[SELECT](sql-ref-syntax-qry-select.html) section. The SQL statements related
+to SELECT are also included in this section. Spark also provides the
 ability to generate logical and physical plan for a given query using
 [EXPLAIN](sql-ref-syntax-qry-explain.html) statement.
 
@@ -34,4 +35,12 @@ ability to generate logical and physical plan for a given query using
  * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
  * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
  * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+ * [JOIN](sql-ref-syntax-qry-select-join.html)
+ * [Join Hints](sql-ref-syntax-qry-select-hints.html)
+ * [Set Operators](sql-ref-syntax-qry-select-setops.html)
+ * [TABLESAMPLE](sql-ref-syntax-qry-sampling.html)
+ * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
+ * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
+ * [Common Table Expression](sql-ref-syntax-qry-select-cte.html)
+ * [Window Function](sql-ref-syntax-qry-window.html)
  * [EXPLAIN Statement](sql-ref-syntax-qry-explain.html)

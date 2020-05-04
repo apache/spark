@@ -386,6 +386,17 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.populateHadoopClasspath</code></td>
+  <td>true</td>
+  <td>
+    Whether to populate Hadoop classpath from <code>yarn.application.classpath</code> and
+    <code>mapreduce.application.classpath</code> Note that if this is set to <code>false</code>, 
+    it requires a <code>with-Hadoop</code> Spark distribution that bundles Hadoop runtime or
+    user has to provide a Hadoop installation separately.
+  </td>
+  <td>2.4.6</td>
+</tr>
+<tr>
   <td><code>spark.yarn.maxAppAttempts</code></td>
   <td><code>yarn.resourcemanager.am.max-attempts</code> in YARN</td>
   <td>

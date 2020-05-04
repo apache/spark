@@ -44,6 +44,7 @@ import org.apache.spark.util.sketch.CountMinSketch
       `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
       cardinality estimation using sub-linear space.
   """,
+  group = "agg_funcs",
   since = "2.2.0")
 case class CountMinSketchAgg(
     child: Expression,

@@ -404,7 +404,7 @@ object FunctionRegistry {
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
-    expression[CurrentTimestamp]("now", true),
+    expression[Now]("now"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ParseToTimestamp]("to_timestamp"),
@@ -423,6 +423,7 @@ object FunctionRegistry {
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
+    expression[Extract]("extract"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -654,7 +655,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
-      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "")
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "", "")
     (name, (expressionInfo, builder))
   }
 
@@ -674,6 +675,7 @@ object FunctionRegistry {
           df.arguments(),
           df.examples(),
           df.note(),
+          df.group(),
           df.since(),
           df.deprecated())
       } else {

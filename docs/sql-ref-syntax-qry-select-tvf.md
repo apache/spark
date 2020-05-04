@@ -81,49 +81,49 @@ function_name ( expression [ , ... ] ) [ table_alias ]
 {% highlight sql %}
 -- range call with end
 SELECT * FROM range(6 + cos(3));
-  +---+
-  | id|
-  +---+
-  |  0|
-  |  1|
-  |  2|
-  |  3|
-  |  4|
-  +---+
++---+
+| id|
++---+
+|  0|
+|  1|
+|  2|
+|  3|
+|  4|
++---+
 
 -- range call with start and end
 SELECT * FROM range(5, 10);
-  +---+
-  | id|
-  +---+
-  |  5|
-  |  6|
-  |  7|
-  |  8|
-  |  9|
-  +---+
++---+
+| id|
++---+
+|  5|
+|  6|
+|  7|
+|  8|
+|  9|
++---+
 
 -- range call with numPartitions
 SELECT * FROM range(0, 10, 2, 200);
-  +---+
-  | id|
-  +---+
-  |  0|
-  |  2|
-  |  4|
-  |  6|
-  |  8|
-  +---+
++---+
+| id|
++---+
+|  0|
+|  2|
+|  4|
+|  6|
+|  8|
++---+
 
 -- range call with a table alias
 SELECT * FROM range(5, 8) AS test;
-  +---+
-  | id|
-  +---+
-  |  5|
-  |  6|
-  |  7|
-  +---+
++---+
+| id|
++---+
+|  5|
+|  6|
+|  7|
++---+
 {% endhighlight %}
 
 ### Related Statement

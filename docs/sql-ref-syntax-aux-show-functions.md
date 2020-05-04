@@ -58,12 +58,12 @@ SHOW [ function_kind ] FUNCTIONS ( [ LIKE ] function_name | regex_pattern )
   </dd>
   <dt><code><em>regex_pattern</em></code></dt>
   <dd>
-    Specifies a regular expression pattern that is used to limit the results of the
+    Specifies a regular expression pattern that is used to filter the results of the
     statement.
     <ul>
-      <li>Only `*` and `|` are allowed as wildcard pattern.</li>
-      <li>Excluding `*` and `|` the remaining pattern follows the regex semantics.</li>
-      <li>The leading and trailing blanks are trimmed in the input pattern before processing.</li> 
+      <li>Only <code>*</code> and <code>|</code> are allowed as wildcard pattern.</li>
+      <li>Excluding <code>*</code> and <code>|</code>, the remaining pattern follows the regular expression semantics.</li>
+      <li>The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
     </ul>
   </dd>
 </dl>
@@ -74,70 +74,70 @@ SHOW [ function_kind ] FUNCTIONS ( [ LIKE ] function_name | regex_pattern )
 -- List a system function `trim` by searching both user defined and system
 -- defined functions.
 SHOW FUNCTIONS trim;
-  +--------+
-  |function|
-  +--------+
-  |    trim|
-  +--------+
++--------+
+|function|
++--------+
+|    trim|
++--------+
 
 -- List a system function `concat` by searching system defined functions.
 SHOW SYSTEM FUNCTIONS concat;
-  +--------+
-  |function|
-  +--------+
-  |  concat|
-  +--------+
++--------+
+|function|
++--------+
+|  concat|
++--------+
 
 -- List a qualified function `max` from database `salesdb`. 
 SHOW SYSTEM FUNCTIONS salesdb.max;
-  +--------+
-  |function|
-  +--------+
-  |     max|
-  +--------+
++--------+
+|function|
++--------+
+|     max|
++--------+
 
 -- List all functions starting with `t`
 SHOW FUNCTIONS LIKE 't*';
-  +-----------------+
-  |         function|
-  +-----------------+
-  |              tan|
-  |             tanh|
-  |        timestamp|
-  |          tinyint|
-  |           to_csv|
-  |          to_date|
-  |          to_json|
-  |     to_timestamp|
-  |to_unix_timestamp|
-  | to_utc_timestamp|
-  |        transform|
-  |   transform_keys|
-  | transform_values|
-  |        translate|
-  |             trim|
-  |            trunc|
-  |           typeof|
-  +-----------------+
++-----------------+
+|         function|
++-----------------+
+|              tan|
+|             tanh|
+|        timestamp|
+|          tinyint|
+|           to_csv|
+|          to_date|
+|          to_json|
+|     to_timestamp|
+|to_unix_timestamp|
+| to_utc_timestamp|
+|        transform|
+|   transform_keys|
+| transform_values|
+|        translate|
+|             trim|
+|            trunc|
+|           typeof|
++-----------------+
 
 -- List all functions starting with `yea` or `windo`
 SHOW FUNCTIONS LIKE 'yea*|windo*';
-  +--------+
-  |function|
-  +--------+
-  |  window|
-  |    year|
-  +--------+
++--------+
+|function|
++--------+
+|  window|
+|    year|
++--------+
 
 -- Use normal regex pattern to list function names that has 4 characters
 -- with `t` as the starting character.
 SHOW FUNCTIONS LIKE 't[a-z][a-z][a-z]';
-  +--------+
-  |function|
-  +--------+
-  |    tanh|
-  |    trim|
-  +--------+
++--------+
+|function|
++--------+
+|    tanh|
+|    trim|
++--------+
 {% endhighlight %}
 
 ### Related Statements

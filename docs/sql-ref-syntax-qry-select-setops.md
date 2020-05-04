@@ -44,60 +44,60 @@ Note that input relations must have the same number of columns and compatible da
 {% highlight sql %}
 -- Use number1 and number2 tables to demonstrate set operators in this page.
 SELECT * FROM number1;
-  +---+
-  |  c|
-  +---+
-  |  3|
-  |  1|
-  |  2|
-  |  2|
-  |  3|
-  |  4|
-  +---+
++---+
+|  c|
++---+
+|  3|
+|  1|
+|  2|
+|  2|
+|  3|
+|  4|
++---+
   
 SELECT * FROM number2;
-  +---+
-  |  c|
-  +---+
-  |  5|
-  |  1|
-  |  2|
-  |  2|
-  +---+
++---+
+|  c|
++---+
+|  5|
+|  1|
+|  2|
+|  2|
++---+
 
 SELECT c FROM number1 EXCEPT SELECT c FROM number2;
-  +---+
-  |  c|
-  +---+
-  |  3|
-  |  4|
-  +---+
++---+
+|  c|
++---+
+|  3|
+|  4|
++---+
 
 SELECT c FROM number1 MINUS SELECT c FROM number2;
-  +---+
-  |  c|
-  +---+
-  |  3|
-  |  4|
-  +---+
++---+
+|  c|
++---+
+|  3|
+|  4|
++---+
 
 SELECT c FROM number1 EXCEPT ALL (SELECT c FROM number2);
-  +---+
-  |  c|
-  +---+
-  |  3|
-  |  3|
-  |  4|
-  +---+
++---+
+|  c|
++---+
+|  3|
+|  3|
+|  4|
++---+
 
 SELECT c FROM number1 MINUS ALL (SELECT c FROM number2);
-  +---+
-  |  c|
-  +---+
-  |  3|
-  |  3|
-  |  4|
-  +---+
++---+
+|  c|
++---+
+|  3|
+|  3|
+|  4|
++---+
 {% endhighlight %}
 
 ### INTERSECT
@@ -114,29 +114,29 @@ SELECT c FROM number1 MINUS ALL (SELECT c FROM number2);
 
 {% highlight sql %}
 (SELECT c FROM number1) INTERSECT (SELECT c FROM number2);
-  +---+
-  |  c|
-  +---+
-  |  1|
-  |  2|
-  +---+
++---+
+|  c|
++---+
+|  1|
+|  2|
++---+
 
 (SELECT c FROM number1) INTERSECT DISTINCT (SELECT c FROM number2);
-  +---+
-  |  c|
-  +---+
-  |  1|
-  |  2|
-  +---+
++---+
+|  c|
++---+
+|  1|
+|  2|
++---+
 
 (SELECT c FROM number1) INTERSECT ALL (SELECT c FROM number2);
-  +---+
-  |  c|
-  +---+
-  |  1|
-  |  2|
-  |  2|
-  +---+
++---+
+|  c|
++---+
+|  1|
+|  2|
+|  2|
++---+
 {% endhighlight %}
 
 ### UNION
@@ -153,42 +153,42 @@ SELECT c FROM number1 MINUS ALL (SELECT c FROM number2);
 
 {% highlight sql %}
 (SELECT c FROM number1) UNION (SELECT c FROM number2);
-  +---+
-  |  c|
-  +---+
-  |  1|
-  |  3|
-  |  5|
-  |  4|
-  |  2|
-  +---+
++---+
+|  c|
++---+
+|  1|
+|  3|
+|  5|
+|  4|
+|  2|
++---+
 
 (SELECT c FROM number1) UNION DISTINCT (SELECT c FROM number2);
-  +---+
-  |  c|
-  +---+
-  |  1|
-  |  3|
-  |  5|
-  |  4|
-  |  2|
-  +---+
++---+
+|  c|
++---+
+|  1|
+|  3|
+|  5|
+|  4|
+|  2|
++---+
 
 SELECT c FROM number1 UNION ALL (SELECT c FROM number2);
-  +---+
-  |  c|
-  +---+
-  |  3|
-  |  1|
-  |  2|
-  |  2|
-  |  3|
-  |  4|
-  |  5|
-  |  1|
-  |  2|
-  |  2|
-  +---+
++---+
+|  c|
++---+
+|  3|
+|  1|
+|  2|
+|  2|
+|  3|
+|  4|
+|  5|
+|  1|
+|  2|
+|  2|
++---+
 {% endhighlight %}
 
 ### Related Statements
