@@ -154,8 +154,8 @@ sparkR.sparkContext <- function(
   connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
   if (existingPort != "") {
     if (length(packages) != 0) {
-      warning("sparkPackages has no effect when using spark-submit or sparkR shell, ",
-              "please use the --packages commandline instead")
+      warning(paste("sparkPackages has no effect when using spark-submit or sparkR shell",
+                    " please use the --packages commandline instead", sep = ","))
     }
     backendPort <- existingPort
     authSecret <- Sys.getenv("SPARKR_BACKEND_AUTH_SECRET")
@@ -439,9 +439,8 @@ sparkR.session <- function(
   rPackageVersion <- paste0(packageVersion("SparkR"))
 
   if (jvmVersionStrip != rPackageVersion) {
-    warning("Version mismatch between Spark JVM and SparkR package. ",
-            "JVM version was ", jvmVersion,
-            ", while R package version was ", rPackageVersion)
+    warning(paste("Version mismatch between Spark JVM and SparkR package. JVM version was",
+                  jvmVersion, ", while R package version was", rPackageVersion))
   }
 
   sparkSession

@@ -34,7 +34,7 @@ getInternalType <- function(x) {
          Date = "date",
          POSIXlt = "timestamp",
          POSIXct = "timestamp",
-         stop("Unsupported type for SparkDataFrame: ", class(x)))
+         stop(paste("Unsupported type for SparkDataFrame:", class(x))))
 }
 
 #' return the SparkSession
@@ -112,9 +112,9 @@ sparkR.conf <- function(key, defaultValue) {
               error = function(e) {
                 estr <- as.character(e)
                 if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
-                  stop("Config '", key, "' is not set")
+                  stop(paste0("Config '", key, "' is not set"))
                 } else {
-                  stop("Unknown error: ", estr)
+                  stop(paste0("Unknown error: ", estr))
                 }
               })
     } else {
@@ -208,7 +208,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     names <- lapply(names, function(n) {
       nn <- gsub(".", "_", n, fixed = TRUE)
       if (nn != n) {
-        warning("Use ", nn, " instead of ", n, " as column name")
+        warning(paste("Use", nn, "instead of", n, "as column name"))
       }
       nn
     })
@@ -290,9 +290,10 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
         TRUE
       },
       error = function(e) {
-        warning("createDataFrame attempted Arrow optimization because ",
-                "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
-                "failed, attempting non-optimization. Reason: ", e)
+        warning(paste0("createDataFrame attempted Arrow optimization because ",
+                       "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
+                       "failed, attempting non-optimization. Reason: ",
+                       e))
         FALSE
       })
     }
@@ -325,7 +326,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
   } else if (inherits(data, "RDD")) {
     rdd <- data
   } else {
-    stop("unexpected type: ", class(data))
+    stop(paste("unexpected type:", class(data)))
   }
 
   schema <- getSchema(schema, firstRow, rdd)

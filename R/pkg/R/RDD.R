@@ -947,7 +947,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
             MAXINT <- .Machine$integer.max
 
             if (num < 0)
-              stop("Negative number of elements requested")
+              stop(paste("Negative number of elements requested"))
 
             if (initialCount > MAXINT - 1) {
               maxSelected <- MAXINT - 1

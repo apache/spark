@@ -199,7 +199,7 @@ checkType <- function(type) {
             })
   }
 
-  stop("Unsupported type for SparkDataframe: ", type)
+  stop(paste("Unsupported type for SparkDataframe:", type))
 }
 
 #' @param type The data type of the field
