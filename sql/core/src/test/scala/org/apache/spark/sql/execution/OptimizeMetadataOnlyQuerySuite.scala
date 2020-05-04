@@ -104,8 +104,7 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
     "select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t")
 
   testMetadataOnly(
-    "SPARK-31590 " +
-      "The filter used by Metadata-only queries should filter out all the unevaluable expr",
+    "SPARK-31590 Metadata-only queries should not include subquery in partition filters",
     """
       |SELECT partcol1, MAX(partcol2) AS partcol2
       |FROM srcpart
