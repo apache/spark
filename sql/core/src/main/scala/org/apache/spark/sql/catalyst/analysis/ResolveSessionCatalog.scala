@@ -559,8 +559,7 @@ class ResolveSessionCatalog(
             "SHOW VIEWS, only SessionCatalog supports this command.")
       }
 
-    case ShowTableProperties(
-        r @ ResolvedTable(_, _, _: V1Table), propertyKey) if isSessionCatalog(r.catalog) =>
+    case ShowTableProperties(r: ResolvedTable, propertyKey) if isSessionCatalog(r.catalog) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
     case ShowTableProperties(r: ResolvedView, propertyKey) =>
