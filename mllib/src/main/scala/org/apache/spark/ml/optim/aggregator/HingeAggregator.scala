@@ -118,32 +118,22 @@ private[ml] class HingeAggregator(
  * @param fitIntercept Whether to fit an intercept term.
  */
 private[ml] class BlockHingeAggregator(
-    numFeatures: Int,
-    fitIntercept: Boolean,
-    blockSize: Int)(bcCoefficients: Broadcast[Vector])
+    fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[InstanceBlock, BlockHingeAggregator] {
 
-  private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
+  protected override val dim: Int = bcCoefficients.value.size
+  private val numFeatures = if (fitIntercept) dim - 1 else dim
+
   @transient private lazy val coefficientsArray = bcCoefficients.value match {
     case DenseVector(values) => values
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
       s" but got type ${bcCoefficients.value.getClass}.")
   }
-  protected override val dim: Int = numFeaturesPlusIntercept
 
-  @transient private lazy val linear = if (fitIntercept) {
-    Vectors.dense(coefficientsArray.take(numFeatures)).toDense
-  } else {
-    Vectors.dense(coefficientsArray).toDense
+  @transient private lazy val linear = {
+    val linear = if (fitIntercept) coefficientsArray.take(numFeatures) else coefficientsArray
+    Vectors.dense(linear).toDense
   }
-
-  @transient private lazy val intercept =
-    if (fitIntercept) coefficientsArray.last else 0.0
-
-  @transient private lazy val linearGradSumVec =
-    if (fitIntercept) Vectors.zeros(numFeatures).toDense else null
-
-  @transient private lazy val auxiliaryVec = Vectors.zeros(blockSize).toDense
 
   /**
    * Add a new training instance block to this HingeAggregator, and update the loss and gradient
@@ -162,20 +152,18 @@ private[ml] class BlockHingeAggregator(
     if (block.weightIter.forall(_ == 0)) return this
     val size = block.size
 
-    // vec/arr here represents dotProducts
-    val vec = if (size == blockSize) auxiliaryVec else Vectors.zeros(size).toDense
-    val arr = vec.values
-
-    if (fitIntercept && intercept != 0) {
-      java.util.Arrays.fill(arr, intercept)
-      BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
+    // vec here represents dotProducts
+    val vec = if (fitIntercept) {
+      Vectors.dense(Array.fill(size)(coefficientsArray.last)).toDense
     } else {
-      BLAS.gemv(1.0, block.matrix, linear, 0.0, vec)
+      Vectors.zeros(size).toDense
     }
+    BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
 
     // in-place convert dotProducts to gradient scales
-    // then, vec/arr represents gradient scales
+    // then, vec represents gradient scales
     var i = 0
+    var interceptGradSum = 0.0
     while (i < size) {
       val weight = block.getWeight(i)
       if (weight > 0) {
@@ -184,34 +172,32 @@ private[ml] class BlockHingeAggregator(
         // Therefore the gradient is -(2y - 1)*x
         val label = block.getLabel(i)
         val labelScaled = label + label - 1.0
-        val loss = (1.0 - labelScaled * arr(i)) * weight
+        val loss = (1.0 - labelScaled * vec.values(i)) * weight
         if (loss > 0) {
           lossSum += loss
           val gradScale = -labelScaled * weight
-          arr(i) = gradScale
-        } else {
-          arr(i) = 0.0
-        }
-      } else {
-        arr(i) = 0.0
-      }
+          vec.values(i) = gradScale
+          if (fitIntercept) interceptGradSum += gradScale
+        } else { vec.values(i) = 0.0 }
+      } else { vec.values(i) = 0.0 }
       i += 1
     }
 
     // predictions are all correct, no gradient signal
-    if (arr.forall(_ == 0)) return this
+    if (vec.values.forall(_ == 0)) return this
 
     block.matrix match {
       case dm: DenseMatrix =>
         BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
-          arr, 1, 1.0, gradientSumArray, 1)
-        if (fitIntercept) gradientSumArray(numFeatures) += arr.sum
+          vec.values, 1, 1.0, gradientSumArray, 1)
+        if (fitIntercept) gradientSumArray(numFeatures) += interceptGradSum
 
       case sm: SparseMatrix if fitIntercept =>
+        val linearGradSumVec = Vectors.zeros(numFeatures).toDense
         BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
         BLAS.getBLAS(numFeatures).daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
           gradientSumArray, 1)
-        gradientSumArray(numFeatures) += arr.sum
+        gradientSumArray(numFeatures) += interceptGradSum
 
       case sm: SparseMatrix if !fitIntercept =>
         val gradSumVec = new DenseVector(gradientSumArray)

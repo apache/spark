@@ -318,8 +318,7 @@ class LinearSVC @Since("2.2.0") (
       .persist(StorageLevel.MEMORY_AND_DISK)
       .setName(s"training dataset (blockSize=${$(blockSize)})")
 
-    val getAggregatorFunc = new BlockHingeAggregator(numFeatures,
-      $(fitIntercept), $(blockSize))(_)
+    val getAggregatorFunc = new BlockHingeAggregator($(fitIntercept))(_)
     val costFun = new RDDLossFunction(blocks, getAggregatorFunc,
       regularization, $(aggregationDepth))
 
