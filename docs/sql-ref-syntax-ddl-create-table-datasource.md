@@ -65,7 +65,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     **NOTE:** Bucketing is an optimization technique that uses buckets (and bucketing columns) to determine data partitioning and avoid data shuffle.
 
-* **SORTED BY**
+    **SORTED BY**
 
     Determines the order in which the data is stored in buckets. Default is Ascending order.
 
