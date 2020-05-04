@@ -26,24 +26,18 @@ User-Defined Functions (UDFs) are user-programmable routines that act on one row
 ### UserDefinedFunction
 
 To define the properties of a user-defined function, the user can use some of the methods defined in this class.
-<dl>
-  <dt><code><em>asNonNullable(): UserDefinedFunction</em></code></dt>
-  <dd>
+
+* **asNonNullable(): UserDefinedFunction**
+
     Updates UserDefinedFunction to non-nullable.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>asNondeterministic(): UserDefinedFunction</em></code></dt>
-  <dd>
+
+* **asNondeterministic(): UserDefinedFunction**
+
     Updates UserDefinedFunction to nondeterministic.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>withName(name: String): UserDefinedFunction</em></code></dt>
-  <dd>
+
+* **withName(name: String): UserDefinedFunction**
+
     Updates UserDefinedFunction with a given name.
-  </dd>
-</dl>
 
 ### Examples
 
@@ -57,5 +51,5 @@ To define the properties of a user-defined function, the user can use some of th
 </div>
 
 ### Related Statements
- * [User Defined Aggregate Functions (UDAFs)](sql-ref-functions-udf-aggregate.html)
- * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
+* [User Defined Aggregate Functions (UDAFs)](sql-ref-functions-udf-aggregate.html)
+* [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
