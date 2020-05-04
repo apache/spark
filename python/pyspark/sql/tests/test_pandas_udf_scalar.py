@@ -921,8 +921,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         assert isinstance(arrow_first_category_element, str)
         assert isinstance(spark_first_category_element, str)
 
-
-
     @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
     def test_type_annotation(self):
         # Regression test to check if type hints can be used. See SPARK-23569.
