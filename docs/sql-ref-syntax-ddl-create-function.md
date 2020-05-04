@@ -55,8 +55,10 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
 
 * **IF NOT EXISTS**
 
-    Specifies a name of function to be created. The function name may be
-    optionally qualified with a database name.
+    If specified, creates the function only when it does not exist. The creation
+    of function succeeds (no error is thrown) if the specified function already
+    exists in the system. This parameter is mutually exclusive to `OR REPLACE`
+    and can not be specified together.
 
 * **function_name**
 

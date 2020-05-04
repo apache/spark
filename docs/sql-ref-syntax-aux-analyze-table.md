@@ -47,7 +47,7 @@ ANALYZE TABLE table_identifier [ partition_spec ]
 
 * **[ NOSCAN `|` FOR COLUMNS col [ , ... ] `|` FOR ALL COLUMNS ]**
 
-     * If no analyze option is specified, `ANALYZE TABLE` collects the table's number of rows and size in bytes. </li>
+     * If no analyze option is specified, `ANALYZE TABLE` collects the table's number of rows and size in bytes.
      * **NOSCAN**
 
        Collects only the table's size in bytes ( which does not require scanning the entire table ).

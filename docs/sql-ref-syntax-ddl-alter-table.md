@@ -71,8 +71,6 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
 
     Specifies the columns to be added.
 
-    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
-
 ### ALTER OR CHANGE COLUMN
 
 `ALTER TABLE ALTER COLUMN` or `ALTER TABLE CHANGE COLUMN` statement changes column's comment.
@@ -94,8 +92,6 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 * **COLUMNS ( col_spec )**
 
     Specifies the columns to be added.
-
-    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
 * **alterColumnAction**
 

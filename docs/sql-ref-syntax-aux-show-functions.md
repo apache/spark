@@ -49,7 +49,7 @@ SHOW [ function_kind ] FUNCTIONS [ [ LIKE ] { function_name | regex_pattern } ]
     a database then the function is resolved from the user specified database, otherwise
     it is resolved from the current database.
 
-    **Syntax:** `[database_name.]function_name`
+    **Syntax:** `[ database_name. ] function_name`
 
 * **regex_pattern**
 
