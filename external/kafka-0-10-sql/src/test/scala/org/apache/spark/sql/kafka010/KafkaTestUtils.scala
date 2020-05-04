@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.io.{File, IOException}
-import java.net.{BindException, InetAddress, InetSocketAddress}
+import java.net.{InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
 import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
@@ -27,7 +27,6 @@ import javax.security.auth.login.Configuration
 import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.util.Random
-import scala.util.control.NonFatal
 
 import com.google.common.io.Files
 import kafka.api.Request
@@ -37,7 +36,7 @@ import kafka.zk.KafkaZkClient
 import org.apache.hadoop.minikdc.MiniKdc
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, ListConsumerGroupsResult, NewPartitions, NewTopic}
+import org.apache.kafka.clients.admin._
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
@@ -52,8 +51,7 @@ import org.scalatest.Assertions._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.{MiniKDCHelper, SparkConf, SparkException}
 import org.apache.spark.kafka010.KafkaTokenUtil
 import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
 
@@ -65,7 +63,7 @@ import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
  */
 class KafkaTestUtils(
     withBrokerProps: Map[String, Object] = Map.empty,
-    secure: Boolean = false) extends Logging {
+    secure: Boolean = false) extends MiniKDCHelper {
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
 
@@ -132,33 +130,7 @@ class KafkaTestUtils(
   }
 
   private def setUpMiniKdc(): Unit = {
-    val kdcConf = MiniKdc.createConf()
-    kdcConf.setProperty(MiniKdc.DEBUG, "true")
-    var bindException = false
-    var kdcDir: File = null
-    var numRetries = 1
-    do {
-      try {
-        bindException = false
-        kdcDir = Utils.createTempDir()
-        kdc = new MiniKdc(kdcConf, kdcDir)
-        kdc.start()
-      } catch {
-        case be: BindException if numRetries == 3 =>
-          logError(s"Failed setting up MiniKDC. Tried $numRetries times.");
-          throw be
-        case be: BindException =>
-          try {
-            Utils.deleteRecursively(kdcDir)
-          } catch {
-            case NonFatal(_) =>
-              logWarning("Failed to clean the working directory of unsuccessful MiniKdc")
-          }
-          numRetries += 1
-          logWarning("Failed setting up MiniKdc, try again...", be)
-          bindException = true
-      }
-    } while (bindException)
+    kdc = startMiniKdc()
     // TODO https://issues.apache.org/jira/browse/SPARK-30037
     // Need to build spark's own MiniKDC and customize krb5.conf like Kafka
     rewriteKrb5Conf()
