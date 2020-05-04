@@ -91,7 +91,7 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 
 * **COLUMNS ( col_spec )**
 
-    Specifies the columns to be added.
+    Specifies the column to be altered or be changed.
 
 * **alterColumnAction**
 
@@ -204,6 +204,7 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 * **table_identifier**
 
     Specifies a table name, which may be optionally qualified with a database name.
+
     **Syntax:** `[ database_name. ] table_name`
 
 * **partition_spec**

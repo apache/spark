@@ -145,13 +145,13 @@ A numeric literal is used to specify a fixed or floating-point number.
 
 #### Integral Literal
 
-#### Syntax
+##### Syntax
 
 ```sql
 [ + | - ] digit [ ... ] [ L | S | Y ]
 ```
 
-#### Parameters
+##### Parameters
 
 * **digit**
 
@@ -173,7 +173,7 @@ A numeric literal is used to specify a fixed or floating-point number.
 
     Indicates a 4-byte signed integer number.
 
-#### Examples
+##### Examples
 
 ```sql
 SELECT -2147483648 AS col;
@@ -207,7 +207,7 @@ SELECT 482S AS col;
 
 #### Fractional Literals
 
-#### Syntax
+##### Syntax
 
 decimal literals:
 ```sql
@@ -229,7 +229,7 @@ and exponent is defined as
 E [ + | - ] digit [ ... ]
 ```
 
-#### Parameters
+##### Parameters
 
 * **digit**
 
@@ -243,7 +243,7 @@ E [ + | - ] digit [ ... ]
 
     Case insensitive, indicates `DECIMAL`, with the total number of digits as precision and the number of digits to right of decimal point as scale.
 
-#### Examples
+##### Examples
 
 ```sql
 SELECT 12.578 AS col;
@@ -337,7 +337,7 @@ A Datetime literal is used to specify a datetime value.
 
 #### Date Literal
 
-#### Syntax
+##### Syntax
 
 ```sql
 DATE { 'yyyy' |
@@ -347,7 +347,7 @@ DATE { 'yyyy' |
 ```
 Note: defaults to `01` if month or day is not specified.
 
-#### Examples
+##### Examples
 
 ```sql
 SELECT DATE '1997' AS col;
@@ -374,7 +374,7 @@ SELECT DATE '2011-11-11' AS col;
 
 #### Timestamp Literal
 
-#### Syntax
+##### Syntax
 
 ```sql
 TIMESTAMP { 'yyyy' |
@@ -399,7 +399,7 @@ Note: defaults to `00` if hour, minute or second is not specified.
 
 Note: defaults to the session local timezone (set via `spark.sql.session.timeZone`) if `zone_id` is not specified.
 
-#### Examples
+##### Examples
 
 ```sql
 SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;

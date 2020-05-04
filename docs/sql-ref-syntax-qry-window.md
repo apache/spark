@@ -52,7 +52,7 @@ window_function OVER
 
 * **window_frame**
 
-    Specifies which row to start the window on and where to end it.<br>
+    Specifies which row to start the window on and where to end it.
 
     **Syntax:**
 
