@@ -81,6 +81,12 @@ object DateTimeUtils {
     }
   }
 
+  private val threadLocalUtcGregorianCalendar = new ThreadLocal[GregorianCalendar] {
+    override def initialValue(): GregorianCalendar = {
+      new GregorianCalendar(TimeZoneUTC)
+    }
+  }
+
   // `SimpleDateFormat` is not thread-safe.
   private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
@@ -599,7 +605,7 @@ object DateTimeUtils {
   }
 
   private[this] def isLeapYear(year: Int): Boolean = {
-    (year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0)
+    threadLocalUtcGregorianCalendar.get().isLeapYear(year)
   }
 
   /**

@@ -119,6 +119,17 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
+  test("SPARK-31212: string to date before and after 1582-10-15") {
+    val c = Calendar.getInstance()
+
+    c.set(1000, 1, 29, 0, 0, 0)
+    assert(stringToDate(UTF8String.fromString("1000-02-29")).get ===
+      millisToDays(c.getTimeInMillis))
+    c.set(2000, 1, 29, 0, 0, 0)
+    assert(stringToDate(UTF8String.fromString("2000-02-29")).get ===
+      millisToDays(c.getTimeInMillis))
+  }
+
   test("string to date") {
 
     var c = Calendar.getInstance()
