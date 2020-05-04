@@ -57,15 +57,15 @@ MSCK REPAIR TABLE t1;
 
 -- SELECT * FROM t1 returns results
 SELECT * FROM t1;
-  +-------+---+
-  |   name|age|
-  +-------+---+
-  |Michael| 20|
-  +-------+---+
-  | Justin| 19|
-  +-------+---+
-  |   Andy| 30|
-  +-------+---+
++-------+---+
+|   name|age|
++-------+---+
+|Michael| 20|
++-------+---+
+| Justin| 19|
++-------+---+
+|   Andy| 30|
++-------+---+
 {% endhighlight %}
 
 ### Related Statements

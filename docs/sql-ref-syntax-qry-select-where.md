@@ -53,57 +53,57 @@ INSERT INTO person VALUES
 
 -- Comparison operator in `WHERE` clause.
 SELECT * FROM person WHERE id > 200 ORDER BY id;
-  +---+----+---+
-  | id|name|age|
-  +---+----+---+
-  |300|Mike| 80|
-  |400| Dan| 50|
-  +---+----+---+
++---+----+---+
+| id|name|age|
++---+----+---+
+|300|Mike| 80|
+|400| Dan| 50|
++---+----+---+
 
 -- Comparison and logical operators in `WHERE` clause.
 SELECT * FROM person WHERE id = 200 OR id = 300 ORDER BY id;
-  +---+----+----+
-  | id|name| age|
-  +---+----+----+
-  |200|Mary|null|
-  |300|Mike|  80|
-  +---+----+----+
++---+----+----+
+| id|name| age|
++---+----+----+
+|200|Mary|null|
+|300|Mike|  80|
++---+----+----+
 
 -- IS NULL expression in `WHERE` clause.
 SELECT * FROM person WHERE id > 300 OR age IS NULL ORDER BY id;
-  +---+----+----+
-  | id|name| age|
-  +---+----+----+
-  |200|Mary|null|
-  |400| Dan|  50|
-  +---+----+----+
++---+----+----+
+| id|name| age|
++---+----+----+
+|200|Mary|null|
+|400| Dan|  50|
++---+----+----+
 
 -- Function expression in `WHERE` clause.
 SELECT * FROM person WHERE length(name) > 3 ORDER BY id;
-  +---+----+----+
-  | id|name| age|
-  +---+----+----+
-  |100|John|  30|
-  |200|Mary|null|
-  |300|Mike|  80|
-  +---+----+----+
++---+----+----+
+| id|name| age|
++---+----+----+
+|100|John|  30|
+|200|Mary|null|
+|300|Mike|  80|
++---+----+----+
 
 -- `BETWEEN` expression in `WHERE` clause.
 SELECT * FROM person WHERE id BETWEEN 200 AND 300 ORDER BY id;
-  +---+----+----+
-  | id|name| age|
-  +---+----+----+
-  |200|Mary|null|
-  |300|Mike|  80|
-  +---+----+----+
++---+----+----+
+| id|name| age|
++---+----+----+
+|200|Mary|null|
+|300|Mike|  80|
++---+----+----+
 
 -- Scalar Subquery in `WHERE` clause.
 SELECT * FROM person WHERE age > (SELECT avg(age) FROM person);
-  +---+----+---+
-  | id|name|age|
-  +---+----+---+
-  |300|Mike| 80|
-  +---+----+---+
++---+----+---+
+| id|name|age|
++---+----+---+
+|300|Mike| 80|
++---+----+---+
 
 -- Correlated Subquery in `WHERE` clause.
 SELECT * FROM person AS parent
@@ -111,11 +111,11 @@ SELECT * FROM person AS parent
         SELECT 1 FROM person AS child
         WHERE parent.id = child.id AND child.age IS NULL
     );
-  +---+----+----+
-  |id |name|age |
-  +---+----+----+
-  |200|Mary|null|
-  +---+----+----+
++---+----+----+
+|id |name|age |
++---+----+----+
+|200|Mary|null|
++---+----+----+
 {% endhighlight %}
 
 ### Related Statements
