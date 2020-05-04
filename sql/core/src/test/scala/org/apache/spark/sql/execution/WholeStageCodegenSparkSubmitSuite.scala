@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import org.scalatest.{Assertions, BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.TimeLimits
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.SparkSubmitSuite
@@ -51,7 +50,7 @@ class WholeStageCodegenSparkSubmitSuite extends SparkFunSuite
       "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedOops",
       "--conf", "spark.sql.adaptive.enabled=false",
       unusedJar.toString)
-    SparkSubmitSuite.runSparkSubmit(argsForSparkSubmit, "../..", 3.minutes)
+    SparkSubmitSuite.runSparkSubmit(argsForSparkSubmit, "../..")
   }
 }
 
