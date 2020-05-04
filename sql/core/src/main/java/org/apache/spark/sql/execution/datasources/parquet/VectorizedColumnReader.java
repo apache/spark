@@ -423,8 +423,15 @@ public class VectorizedColumnReader {
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.DateType ) {
       if (rebaseDateTime) {
-        defColumn.readIntegersWithRebase(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            column.putInt(
+              rowId + i,
+              RebaseDateTime.rebaseJulianToGregorianDays(dataColumn.readInteger()));
+          } else {
+            column.putNull(rowId + i);
+          }
+        }
       } else {
         defColumn.readIntegers(
            num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
@@ -442,8 +449,15 @@ public class VectorizedColumnReader {
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
       if (rebaseDateTime) {
-        defColumn.readLongsWithRebase(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            column.putLong(
+              rowId + i,
+              RebaseDateTime.rebaseJulianToGregorianMicros(dataColumn.readLong()));
+          } else {
+            column.putNull(rowId + i);
+          }
+        }
       } else {
         defColumn.readLongs(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
