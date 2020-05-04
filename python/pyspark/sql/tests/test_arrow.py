@@ -421,13 +421,14 @@ class ArrowTests(ReusedSQLTestCase):
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
             arrow_df = self.spark.createDataFrame(pdf)
-            result_arrow = arrow_df.collect()
+            result_arrow = arrow_df.toPandas()
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             df = self.spark.createDataFrame(pdf)
-            result_spark = df.collect()
+            result_spark = df.toPandas()
 
-        assert result_arrow == result_spark
+        assert_frame_equal(result_spark, result_arrow)
+        # assert result_arrow == result_spark
 
 
 @unittest.skipIf(

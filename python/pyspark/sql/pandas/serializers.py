@@ -142,7 +142,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         import pandas as pd
         import pyarrow as pa
-        from pandas.core.dtypes.dtypes import CategoricalDtype
+        # from pandas.core.dtypes.dtypes import CategoricalDtype
         from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal
         # Make input conform to [(series1, type1), (series2, type2), ...]
         if not isinstance(series, (list, tuple)) or \
@@ -155,12 +155,11 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
+            elif type(s.dtype) == pd.Categorical:
+                s = s.astype(s.dtypes.categories.dtype)
+
             try:
-                if type(s.dtype) == CategoricalDtype:
-                    s = s.astype(s.dtypes.categories.dtype)
-                    array = pa.array(s)
-                else:
-                    array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
+                array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
             except pa.ArrowException as e:
                 error_msg = "Exception thrown when converting pandas.Series (%s) to Arrow " + \
                             "Array (%s). It can be caused by overflows or other unsafe " + \
