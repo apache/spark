@@ -25,30 +25,25 @@ license: |
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 DROP VIEW [ IF EXISTS ] view_identifier
-{% endhighlight %}
+```
 
 ### Parameter
 
-<dl>
-  <dt><code><em>IF EXISTS</em></code></dt>
-  <dd>
-     If specified, no exception is thrown when the view does not exists.
-  </dd>
-  <dt><code><em>view_identifier</em></code></dt>
-  <dd>
-    Specifies the view name to be dropped. The view name may be optionally qualified with a database name.<br><br>
-    <b> Syntax:</b>
-      <code>
-        [ database_name. ] view_name
-      </code>
-  </dd>
-</dl>
+* **IF EXISTS**
+
+    If specified, no exception is thrown when the view does not exists.
+
+* **view_identifier**
+
+    Specifies the view name to be dropped. The view name may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Assumes a view named `employeeView` exists.
 DROP VIEW employeeView;
 
@@ -64,12 +59,12 @@ DROP VIEW employeeView;
 -- Assumes a view named `employeeView` does not exists,Try with IF EXISTS
 -- this time it will not throw exception
 DROP VIEW IF EXISTS employeeView;
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
- * [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
- * [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
- * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
- * [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+* [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
+* [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
+* [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
+* [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+* [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)

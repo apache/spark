@@ -21,29 +21,26 @@ license: |
 
 ### Description
 
-The <code>WHERE</code> clause is used to limit the results of the <code>FROM</code>
+The `WHERE` clause is used to limit the results of the `FROM`
 clause of a query or a subquery based on the specified condition.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 WHERE boolean_expression
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>boolean_expression</em></code></dt>
-  <dd>
-    Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
+* **boolean_expression**
+
+    Specifies any expression that evaluates to a result type `boolean`. Two or
     more expressions may be combined together using the logical
-    operators ( <code>AND</code>, <code>OR</code> ).
-  </dd>
-</dl>
+    operators ( `AND`, `OR` ).
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CREATE TABLE person (id INT, name STRING, age INT);
 INSERT INTO person VALUES
     (100, 'John', 30),
@@ -116,15 +113,15 @@ SELECT * FROM person AS parent
 +---+----+----+
 |200|Mary|null|
 +---+----+----+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [SELECT Main](sql-ref-syntax-qry-select.html)
- * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
- * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
- * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
- * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
- * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
- * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
- * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [SELECT Main](sql-ref-syntax-qry-select.html)
+* [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+* [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+* [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+* [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+* [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+* [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+* [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

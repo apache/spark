@@ -26,39 +26,32 @@ be thrown if the function does not exist.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 DROP [ TEMPORARY ] FUNCTION [ IF EXISTS ] function_name
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>function_name</em></code></dt>
-  <dd>
+* **function_name**
+
     Specifies the name of an existing function. The function name may be
-    optionally qualified with a database name. <br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] function_name
-      </code>
-  </dd>
-</dl>
+    optionally qualified with a database name.
 
-<dl>
-  <dt><code><em>TEMPORARY</em></code></dt>
-  <dd>Should be used to delete the <code>TEMPORARY</code> function.</dd>
-</dl>
+    **Syntax:** `[ database_name. ] function_name`
 
-<dl>
-  <dt><code><em>IF EXISTS</em></code></dt>
-  <dd>If specified, no exception is thrown when the function does not exist.</dd>
-</dl>
+* **TEMPORARY**
+
+    Should be used to delete the `TEMPORARY` function.
+
+* **IF EXISTS**
+
+    If specified, no exception is thrown when the function does not exist.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Create a permanent function `test_avg`
-CREATE FUNCTION test_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
+CREATE FUNCTION test_avg AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
 
 -- List user functions
 SHOW USER FUNCTIONS;
@@ -100,10 +93,10 @@ SHOW USER FUNCTIONS;
   
 -- Drop Temporary function
 DROP TEMPORARY FUNCTION IF EXISTS test_avg;
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [CREATE FUNCTION](sql-ref-syntax-ddl-create-function.html)
- * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
- * [SHOW FUNCTION](sql-ref-syntax-aux-show-functions.html)
+* [CREATE FUNCTION](sql-ref-syntax-ddl-create-function.html)
+* [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+* [SHOW FUNCTION](sql-ref-syntax-aux-show-functions.html)

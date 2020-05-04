@@ -25,28 +25,26 @@ license: |
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 ADD JAR file_name
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
- <dt><code><em>file_name</em></code></dt>
- <dd>The name of the JAR file to be added. It could be either on a local file system or a distributed file system.</dd>
-</dl>
+* **file_name**
+    The name of the JAR file to be added. It could be either on a local file system or a distributed file system.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 ADD JAR /tmp/test.jar;
 ADD JAR "/path/to/some.jar";
 ADD JAR '/some/other.jar';
 ADD JAR "/path with space/abc.jar";
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
- * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
- * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
+* [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
+* [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
+* [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)

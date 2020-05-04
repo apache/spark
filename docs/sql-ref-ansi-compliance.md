@@ -66,7 +66,7 @@ This means that in case an operation causes overflows, the result is the same wi
 On the other hand, Spark SQL returns null for decimal overflows.
 When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric and interval arithmetic operations, it throws an arithmetic exception at runtime.
 
-{% highlight sql %}
+```sql
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
   java.lang.ArithmeticException: integer overflow
@@ -78,7 +78,7 @@ SELECT 2147483647 + 1;
 +----------------+
 |     -2147483648|
 +----------------+
-{% endhighlight %}
+```
 
 ### Type Conversion
 
@@ -89,7 +89,7 @@ On the other hand, `INSERT INTO` syntax throws an analysis exception when the AN
 Currently, the ANSI mode affects explicit casting and assignment casting only.
 In future releases, the behaviour of type coercion might change along with the other two type conversion rules.
 
-{% highlight sql %}
+```sql
 -- Examples of explicit casting
 
 -- `spark.sql.ansi.enabled=true`
@@ -130,7 +130,7 @@ SELECT * FROM t;
 +---+
 |  1|
 +---+
-{% endhighlight %}
+```
 
 ### SQL Functions
 

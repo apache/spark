@@ -751,7 +751,7 @@ Specifically:
 
 #### Examples
 
-{% highlight sql %}
+```sql
 SELECT double('infinity') AS col;
 +--------+
 |     col|
@@ -824,4 +824,4 @@ SELECT COUNT(*), c2 FROM test GROUP BY c2;
 |        2|-Infinity|
 |        3| Infinity|
 +---------+---------+
-{% endhighlight %}
+```
