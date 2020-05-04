@@ -142,13 +142,9 @@ private[spark] object StandaloneResourceUtils extends Logging {
 
   // used for UI
   def formatResourcesAddresses(resources: Map[String, ResourceInformation]): String = {
-    if (resources != null) {
-      resources.map { case (rName, rInfo) =>
-        s"$rName: ${rInfo.addresses.mkString("[", ", ", "]")}"
-      }.mkString(", ")
-    } else {
-      "None"
-    }
+    resources.map { case (rName, rInfo) =>
+      s"$rName: ${rInfo.addresses.mkString("[", ", ", "]")}"
+    }.mkString(", ")
   }
 
   // used for UI
