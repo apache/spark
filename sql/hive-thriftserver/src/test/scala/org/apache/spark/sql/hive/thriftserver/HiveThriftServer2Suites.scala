@@ -924,39 +924,6 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
   }
 }
 
-class HiveThriftCleanUpScratchDirSuite extends HiveThriftJdbcTest{
-  var tempScratchDir: File = _
-
-  override protected def beforeAll(): Unit = {
-    tempScratchDir = Utils.createTempDir()
-    tempScratchDir.setWritable(true, false)
-    assert(tempScratchDir.list().isEmpty)
-    new File(tempScratchDir.getAbsolutePath + File.separator + "SPARK-31626").createNewFile()
-    assert(tempScratchDir.list().nonEmpty)
-    super.beforeAll()
-  }
-
-  override def mode: ServerMode.Value = ServerMode.binary
-
-  override protected def extraConf: Seq[String] =
-    s" --hiveconf ${ConfVars.HIVE_START_CLEANUP_SCRATCHDIR}=true " ::
-       s"--hiveconf ${ConfVars.SCRATCHDIR}=${tempScratchDir.getAbsolutePath}" :: Nil
-
-  test("Cleanup the Hive scratchdir when starting the Hive Server") {
-    assert(!tempScratchDir.exists())
-    withJdbcStatement() { statement =>
-      val rs = statement.executeQuery("SELECT id FROM range(1)")
-      assert(rs.next())
-      assert(rs.getLong(1) === 0L)
-    }
-  }
-
-  override protected def afterAll(): Unit = {
-    Utils.deleteRecursively(tempScratchDir)
-    super.afterAll()
-  }
-}
-
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.http
 
