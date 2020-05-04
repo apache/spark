@@ -71,6 +71,8 @@ object RebaseDateTime {
     -719164, -682945, -646420, -609895, -536845, -500320, -463795,
     -390745, -354220, -317695, -244645, -208120, -171595, -141427)
 
+  final val lastSwitchJulianDay: Int = julianGregDiffSwitchDay.last
+
   // The first days of Common Era (CE) which is mapped to the '0001-01-01' date in Julian calendar.
   private final val julianCommonEraStartDay = julianGregDiffSwitchDay(0)
 
@@ -415,6 +417,8 @@ object RebaseDateTime {
   // differences between 2 calendars. The diff at the index `i` is applicable for all timestamps
   // in the interval: [julianGregDiffSwitchMicros(i), julianGregDiffSwitchMicros(i+1))
   private val julianGregRebaseMap = loadRebaseRecords("julian-gregorian-rebase-micros.json")
+
+  final val lastSwitchJulianTs: Long = julianGregRebaseMap.values.map(_.switches.last).max
 
   /**
    * An optimized version of [[rebaseJulianToGregorianMicros(ZoneId, Long)]]. This method leverages
