@@ -373,6 +373,7 @@ private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
   def cached: Boolean = info.numCachedPartitions > 0
 
 }
+
 private[spark] class ResourceProfileWrapper(val rpInfo: ResourceProfileInfo) {
 
   @JsonIgnore @KVIndex

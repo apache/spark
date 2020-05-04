@@ -21,18 +21,16 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
-
 import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions
 import org.scalatest.exceptions.TestFailedException
-
 import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceUtils}
+import org.apache.spark.resource._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.shuffle.MetadataFetchFailedException
@@ -119,6 +117,12 @@ class JsonProtocolSuite extends SparkFunSuite {
       SparkListenerStageExecutorMetrics("1", 2, 3,
         new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
           321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L)))
+    val rprofBuilder = new ResourceProfileBuilder()
+    val taskReq = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    val execReq =
+      new ExecutorResourceRequests().cores(2).resource("gpu", 2, "myscript")
+    rprofBuilder.require(taskReq).require(execReq)
+    val resourceProfile = SparkListenerResourceProfileAdded(rprofBuilder.build)
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
     testEvent(taskStart, taskStartJsonString)
@@ -144,6 +148,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
     testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
+    testEvent(resourceProfile, resourceProfileJsonString)
   }
 
   test("Dependent Classes") {
@@ -479,6 +484,20 @@ class JsonProtocolSuite extends SparkFunSuite {
       78L, 89L, 90L, 123L, 456L, 0L, 40L, 20L, 20L, 10L, 20L, 10L))
     assertEquals(exepectedExecutorMetrics,
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
+  }
+
+  test("resourceProfileAddedToJson backward compatibility: handle missing") {
+    val rprofBuilder = new ResourceProfileBuilder()
+    val taskReq = new TaskResourceRequests().resource("gpu", 1)
+    val execReq =
+      new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
+    rprofBuilder.require(taskReq).require(execReq)
+    val rp = rprofBuilder.build
+    val resourceProfileJson =
+      JsonProtocol.resourceProfileAddedToJson(SparkListenerResourceProfileAdded(rp))
+    val exepectedResourceProfile = rp
+    assertEquals(exepectedResourceProfile,
+      JsonProtocol.resourceProfileAddedFromJson(resourceProfileJson).resourceProfile)
   }
 
   test("AccumulableInfo value de/serialization") {
@@ -877,6 +896,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(ste1.getMethodName === ste2.getMethodName)
     assert(ste1.getLineNumber === ste2.getLineNumber)
     assert(ste1.getFileName === ste2.getFileName)
+  }
+
+  private def assertEquals(rp1: ResourceProfile, rp2: ResourceProfile): Unit = {
+    assert(rp1 === rp2)
   }
 
   /** ----------------------------------- *
@@ -2361,6 +2384,38 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "hostId" : "node1"
       |}
     """.stripMargin
+  private val resourceProfileJsonString =
+    """
+      |{
+      |  "Event":"SparkListenerResourceProfileAdded",
+      |  "Resource Profile Id":0,
+      |  "Executor Resource Requests":{
+      |    "cores" : {
+      |      "Resource Name":"cores",
+      |      "Amount":2,
+      |      "Discovery Script":"",
+      |      "Vendor":""
+      |    },
+      |    "gpu":{
+      |      "Resource Name":"gpu",
+      |      "Amount":2,
+      |      "Discovery Script":"myscript",
+      |      "Vendor":""
+      |    }
+      |  },
+      |  "Task Resource Requests":{
+      |    "cpus":{
+      |      "Resource Name":"cpus",
+      |      "Amount":1.0
+      |    },
+      |    "gpu":{
+      |      "Resource Name":"gpu",
+      |      "Amount":1.0
+      |    }
+      |  }
+      |}
+    """.stripMargin
+
 }
 
 case class TestListenerEvent(foo: String, bar: Int) extends SparkListenerEvent

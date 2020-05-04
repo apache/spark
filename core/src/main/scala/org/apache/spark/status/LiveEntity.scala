@@ -245,11 +245,11 @@ private class LiveTask(
 
 }
 
-private class LiveResourceProfile(val resourceProfileId: Int) extends LiveEntity {
-
-  var executorResources = Map[String, ExecutorResourceRequest]()
-  var taskResources = Map[String, TaskResourceRequest]()
-  var maxTasksPerExecutor: Option[Int] = None
+private class LiveResourceProfile(
+    val resourceProfileId: Int,
+    val executorResources: Map[String, ExecutorResourceRequest],
+    val taskResources: Map[String, TaskResourceRequest],
+    val maxTasksPerExecutor: Option[Int]) extends LiveEntity {
 
   def toApi(): v1.ResourceProfileInfo = {
     new v1.ResourceProfileInfo(resourceProfileId, executorResources, taskResources)

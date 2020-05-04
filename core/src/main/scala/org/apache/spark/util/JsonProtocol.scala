@@ -21,7 +21,6 @@ import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
-import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
@@ -1195,7 +1194,7 @@ private[spark] object JsonProtocol {
     }
     val resourceProfileId = jsonOption(json \ "Resource Profile Id") match {
       case Some(id) => id.extract[Int]
-      case None => 0
+      case None => ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     }
     new ExecutorInfo(executorHost, totalCores, logUrls, attributes, resources, resourceProfileId)
   }

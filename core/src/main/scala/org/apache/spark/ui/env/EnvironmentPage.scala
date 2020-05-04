@@ -19,7 +19,7 @@ package org.apache.spark.ui.env
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable
+import scala.collection.mutable.StringBuilder
 import scala.xml.Node
 
 import org.apache.spark.SparkConf
@@ -40,21 +40,25 @@ private[ui] class EnvironmentPage(
       "Java Home" -> appEnv.runtime.javaHome,
       "Scala Version" -> appEnv.runtime.scalaVersion)
 
-    def constructExecutorRequestString(ereqs: Map[String, ExecutorResourceRequest]): String = {
-      ereqs.map {
-        case (_, ereq) =>
-          val execStr = new mutable.StringBuilder()
-          execStr ++= s"\t${ereq.resourceName}: [amount: ${ereq.amount}"
-          if (ereq.discoveryScript.nonEmpty) execStr ++= s", discovery: ${ereq.discoveryScript}"
-          if (ereq.vendor.nonEmpty) execStr ++= s", vendor: ${ereq.vendor}"
+    def constructExecutorRequestString(execReqs: Map[String, ExecutorResourceRequest]): String = {
+      execReqs.map {
+        case (_, execReq) =>
+          val execStr = new StringBuilder()
+          execStr ++= s"\t${execReq.resourceName}: [amount: ${execReq.amount}"
+          if (execReq.discoveryScript.nonEmpty) {
+            execStr ++= s", discovery: ${execReq.discoveryScript}"
+          }
+          if (execReq.vendor.nonEmpty) {
+            execStr ++= s", vendor: ${execReq.vendor}"
+          }
           execStr ++= "]"
           execStr.toString()
       }.mkString("\n")
     }
 
-    def constructTaskRequestString(treqs: Map[String, TaskResourceRequest]): String = {
-      treqs.map {
-        case (_, ereq) => s"\t${ereq.resourceName}: [amount: ${ereq.amount}]"
+    def constructTaskRequestString(taskReqs: Map[String, TaskResourceRequest]): String = {
+      taskReqs.map {
+        case (_, taskReq) => s"\t${taskReq.resourceName}: [amount: ${taskReq.amount}]"
       }.mkString("\n")
     }
 

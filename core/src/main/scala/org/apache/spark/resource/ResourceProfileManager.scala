@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils.isTesting
 /**
  * Manager of resource profiles. The manager allows one place to keep the actual ResourceProfiles
  * and everywhere else we can use the ResourceProfile Id to save on space.
- * Note we never remove a resource profile at this point. Its expected this number if small
+ * Note we never remove a resource profile at this point. Its expected this number is small
  * so this shouldn't be much overhead.
  */
 @Evolving

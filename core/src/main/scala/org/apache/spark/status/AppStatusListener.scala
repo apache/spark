@@ -52,7 +52,7 @@ private[spark] class AppStatusListener(
   private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
-  private var defaultCoresPerTask: Int = 1
+  private var defaultCpusPerTask: Int = 1
 
   // How often to update live entities. -1 means "never update" when replaying applications,
   // meaning only the last write will happen. For live applications, this avoids a few
@@ -148,19 +148,16 @@ private[spark] class AppStatusListener(
   }
 
   override def onResourceProfileAdded(event: SparkListenerResourceProfileAdded): Unit = {
-    val liveRP = new LiveResourceProfile(event.resourceProfile.id)
-    liveResourceProfiles(event.resourceProfile.id) = liveRP
-    liveRP.taskResources = event.resourceProfile.taskResources
-    liveRP.executorResources = event.resourceProfile.executorResources
-    val maxTasks = event.resourceProfile.maxTasksPerExecutor(conf)
-    liveRP.maxTasksPerExecutor = if (event.resourceProfile.isCoresLimitKnown) {
-      Some(maxTasks)
+    val maxTasks = if (event.resourceProfile.isCoresLimitKnown) {
+      Some(event.resourceProfile.maxTasksPerExecutor(conf))
     } else {
       None
     }
+    val liveRP = new LiveResourceProfile(event.resourceProfile.id,
+      event.resourceProfile.executorResources, event.resourceProfile.taskResources, maxTasks)
+    liveResourceProfiles(event.resourceProfile.id) = liveRP
     val rpInfo = new v1.ResourceProfileInfo(liveRP.resourceProfileId,
       liveRP.executorResources, liveRP.taskResources)
-    logWarning("Resource Profile added id " + liveRP.resourceProfileId)
     kvstore.write(new ResourceProfileWrapper(rpInfo))
   }
 
@@ -181,8 +178,8 @@ private[spark] class AppStatusListener(
       details.getOrElse("Classpath Entries", Nil),
       Nil)
 
-    defaultCoresPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toInt)
-      .getOrElse(defaultCoresPerTask)
+    defaultCpusPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toInt)
+      .getOrElse(defaultCpusPerTask)
 
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
   }
@@ -219,8 +216,8 @@ private[spark] class AppStatusListener(
     exec.totalCores = event.executorInfo.totalCores
     val rpId = event.executorInfo.resourceProfileId
     val liveRP = liveResourceProfiles.get(rpId)
-    val cpusPerTask = liveRP.map(_.taskResources.get(CPUS)
-      .map(_.amount.toInt).getOrElse(defaultCoresPerTask)).getOrElse(defaultCoresPerTask)
+    val cpusPerTask = liveRP.flatMap(_.taskResources.get(CPUS))
+      .map(_.amount.toInt).getOrElse(defaultCpusPerTask)
     val maxTasksPerExec = liveRP.flatMap(_.maxTasksPerExecutor)
     exec.maxTasks = maxTasksPerExec.getOrElse(event.executorInfo.totalCores / cpusPerTask)
     exec.executorLogs = event.executorInfo.logUrlMap

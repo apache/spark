@@ -46,9 +46,7 @@ private[spark] class AppStatusStore(
   }
 
   def resourceProfileInfo(): Seq[v1.ResourceProfileInfo] = {
-    val klass = classOf[ResourceProfileWrapper]
-    val it = store.view(classOf[ResourceProfileWrapper]).asScala.map(_.rpInfo)
-    it.toSeq
+    store.view(classOf[ResourceProfileWrapper]).asScala.map(_.rpInfo).toSeq
   }
 
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
