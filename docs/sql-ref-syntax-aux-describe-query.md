@@ -75,7 +75,7 @@ DESCRIBE QUERY WITH all_names_cte
 |    name|   string|   null|
 +--------+---------+-------+
 
--- Returns column metadata information for a inline table.
+-- Returns column metadata information for an inline table.
 DESC QUERY VALUES(100, 'John', 10000.20D) AS employee(id, name, salary);
 +--------+---------+-------+
 |col_name|data_type|comment|
