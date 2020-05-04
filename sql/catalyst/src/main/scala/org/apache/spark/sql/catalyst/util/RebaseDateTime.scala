@@ -435,7 +435,7 @@ object RebaseDateTime {
 
   // The switch time point after which all diffs between Julian and Gregorian calendars
   // across all time zones are zero
-  private final val lastSwitchJulianTs: Long = getLastSwitchTs(julianGregRebaseMap)
+  final val lastSwitchJulianTs: Long = getLastSwitchTs(julianGregRebaseMap)
 
   /**
    * An optimized version of [[rebaseJulianToGregorianMicros(ZoneId, Long)]]. This method leverages
