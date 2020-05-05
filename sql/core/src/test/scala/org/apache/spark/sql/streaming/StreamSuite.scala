@@ -193,13 +193,15 @@ class StreamSuite extends StreamTest {
   }
 
   test("sql queries") {
-    val inputData = MemoryStream[Int]
-    inputData.toDF().createOrReplaceTempView("stream")
-    val evens = sql("SELECT * FROM stream WHERE value % 2 = 0")
+    withTempView("stream") {
+      val inputData = MemoryStream[Int]
+      inputData.toDF().createOrReplaceTempView("stream")
+      val evens = sql("SELECT * FROM stream WHERE value % 2 = 0")
 
-    testStream(evens)(
-      AddData(inputData, 1, 2, 3, 4),
-      CheckAnswer(2, 4))
+      testStream(evens)(
+        AddData(inputData, 1, 2, 3, 4),
+        CheckAnswer(2, 4))
+    }
   }
 
   test("DataFrame reuse") {

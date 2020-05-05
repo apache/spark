@@ -153,29 +153,31 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("uncorrelated scalar subquery on a DataFrame generated query") {
-    val df = Seq((1, "one"), (2, "two"), (3, "three")).toDF("key", "value")
-    df.createOrReplaceTempView("subqueryData")
+    withTempView("subqueryData") {
+      val df = Seq((1, "one"), (2, "two"), (3, "three")).toDF("key", "value")
+      df.createOrReplaceTempView("subqueryData")
 
-    checkAnswer(
-      sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1"),
-      Array(Row(4))
-    )
+      checkAnswer(
+        sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1"),
+        Array(Row(4))
+      )
 
-    checkAnswer(
-      sql("select -(select max(key) from subqueryData)"),
-      Array(Row(-3))
-    )
+      checkAnswer(
+        sql("select -(select max(key) from subqueryData)"),
+        Array(Row(-3))
+      )
 
-    checkAnswer(
-      sql("select (select value from subqueryData limit 0)"),
-      Array(Row(null))
-    )
+      checkAnswer(
+        sql("select (select value from subqueryData limit 0)"),
+        Array(Row(null))
+      )
 
-    checkAnswer(
-      sql("select (select min(value) from subqueryData" +
-        " where key = (select max(key) from subqueryData) - 1)"),
-      Array(Row("two"))
-    )
+      checkAnswer(
+        sql("select (select min(value) from subqueryData" +
+          " where key = (select max(key) from subqueryData) - 1)"),
+        Array(Row("two"))
+      )
+    }
   }
 
   test("SPARK-15677: Queries against local relations with scalar subquery in Select list") {
