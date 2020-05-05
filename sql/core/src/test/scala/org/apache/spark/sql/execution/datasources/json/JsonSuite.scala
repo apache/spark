@@ -2653,13 +2653,17 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
     }
   }
 
-  test("SPARK-30960: parse date/timestamp string with legacy format") {
-    val ds = Seq("{'t': '2020-1-12 3:23:34.12', 'd': '2020-1-12 T', 'd2': '12345'}").toDS()
-    val json = spark.read.schema("t timestamp, d date, d2 date").json(ds)
+  test("SPARK-30960, SPARK-31641: parse date/timestamp string with legacy format") {
+    val julianDay = -141704 // 1582-01-01 in Julian calendar
+    val ds = Seq(
+      s"{'t': '2020-1-12 3:23:34.12', 'd': '2020-1-12 T', 'd2': '12345', 'd3': '$julianDay'}"
+    ).toDS()
+    val json = spark.read.schema("t timestamp, d date, d2 date, d3 date").json(ds)
     checkAnswer(json, Row(
       Timestamp.valueOf("2020-1-12 3:23:34.12"),
       Date.valueOf("2020-1-12"),
-      Date.valueOf(LocalDate.ofEpochDay(12345))))
+      Date.valueOf(LocalDate.ofEpochDay(12345)),
+      Date.valueOf("1582-01-01")))
   }
 
   test("exception mode for parsing date/timestamp string") {
