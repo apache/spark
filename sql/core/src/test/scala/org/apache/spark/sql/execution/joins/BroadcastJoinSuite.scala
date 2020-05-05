@@ -207,24 +207,25 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
 
   test("broadcast hint in SQL") {
     import org.apache.spark.sql.catalyst.plans.logical.Join
+    withTempView("t", "u") {
+      spark.range(10).createOrReplaceTempView("t")
+      spark.range(10).createOrReplaceTempView("u")
 
-    spark.range(10).createOrReplaceTempView("t")
-    spark.range(10).createOrReplaceTempView("u")
+      for (name <- Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN")) {
+        val plan1 = sql(s"SELECT /*+ $name(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+          .optimizedPlan
+        val plan2 = sql(s"SELECT /*+ $name(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+          .optimizedPlan
+        val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+          .optimizedPlan
 
-    for (name <- Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN")) {
-      val plan1 = sql(s"SELECT /*+ $name(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-        .optimizedPlan
-      val plan2 = sql(s"SELECT /*+ $name(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-        .optimizedPlan
-      val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-        .optimizedPlan
-
-      assert(plan1.asInstanceOf[Join].hint.leftHint.get.strategy.contains(BROADCAST))
-      assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
-      assert(plan2.asInstanceOf[Join].hint.leftHint.isEmpty)
-      assert(plan2.asInstanceOf[Join].hint.rightHint.get.strategy.contains(BROADCAST))
-      assert(plan3.asInstanceOf[Join].hint.leftHint.isEmpty)
-      assert(plan3.asInstanceOf[Join].hint.rightHint.isEmpty)
+        assert(plan1.asInstanceOf[Join].hint.leftHint.get.strategy.contains(BROADCAST))
+        assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
+        assert(plan2.asInstanceOf[Join].hint.leftHint.isEmpty)
+        assert(plan2.asInstanceOf[Join].hint.rightHint.get.strategy.contains(BROADCAST))
+        assert(plan3.asInstanceOf[Join].hint.leftHint.isEmpty)
+        assert(plan3.asInstanceOf[Join].hint.rightHint.isEmpty)
+      }
     }
   }
 
