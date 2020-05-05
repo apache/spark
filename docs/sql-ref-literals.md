@@ -159,7 +159,7 @@ A numeric literal is used to specify a fixed or floating-point number.
 
 * **L**
 
-    Case insensitive, indicates `BIGINT`, which is a 8-byte signed integer number.
+    Case insensitive, indicates `BIGINT`, which is an 8-byte signed integer number.
 
 * **S**
 
@@ -237,7 +237,7 @@ E [ + | - ] digit [ ... ]
 
 * **D**
 
-    Case insensitive, indicates `DOUBLE`, which is a 8-byte double-precision floating point number.
+    Case insensitive, indicates `DOUBLE`, which is an 8-byte double-precision floating point number.
 
 * **BD**
 
