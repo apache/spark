@@ -34,6 +34,7 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.slf4j.MDC
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -107,7 +108,7 @@ private[spark] class Executor(
       .setNameFormat("Executor task launch worker-%d")
       .setThreadFactory((r: Runnable) => new UninterruptibleThread(r, "unused"))
       .build()
-    Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
+    ThreadUtils.newCachedThreadPool(threadFactory)
   }
   private val executorSource = new ExecutorSource(threadPool, executorId)
   // Pool used for threads that supervise task killing / cancellation
@@ -395,6 +396,8 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
+      setMDCForTask(taskDescription)
+
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
@@ -690,6 +693,17 @@ private[spark] class Executor(
 
     private def hasFetchFailure: Boolean = {
       task != null && task.context != null && task.context.fetchFailed.isDefined
+    }
+  }
+
+  private def setMDCForTask(taskDescription: TaskDescription): Unit = {
+    val properties = taskDescription.properties
+
+    MDC.put("taskName", taskDescription.name)
+
+    properties.asScala.filter(_._1.startsWith("mdc.")).foreach { item =>
+      val key = item._1.substring(4)
+      MDC.put(key, item._2)
     }
   }
 
