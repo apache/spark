@@ -52,55 +52,55 @@ SHOW TABLES [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
   </dd>
 </dl>
 
-### Example
+### Examples
 
 {% highlight sql %}
 -- List all tables in default database
 SHOW TABLES;
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  | default|      sam|      false|
-  | default|     sam1|      false|
-  | default|      suj|      false|
-  +--------+---------+-----------+
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+| default|      sam|      false|
+| default|     sam1|      false|
+| default|      suj|      false|
++--------+---------+-----------+
 
 -- List all tables from userdb database 
 SHOW TABLES FROM userdb;
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  |  userdb|    user1|      false|
-  |  userdb|    user2|      false|
-  +--------+---------+-----------+
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+|  userdb|    user1|      false|
+|  userdb|    user2|      false|
++--------+---------+-----------+
 
 -- List all tables in userdb database
 SHOW TABLES IN userdb;
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  |  userdb|    user1|      false|
-  |  userdb|    user2|      false|
-  +--------+---------+-----------+
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+|  userdb|    user1|      false|
+|  userdb|    user2|      false|
++--------+---------+-----------+
 
 -- List all tables from default database matching the pattern `sam*`
 SHOW TABLES FROM default LIKE 'sam*';
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  | default|      sam|      false|
-  | default|     sam1|      false|
-  +--------+---------+-----------+
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+| default|      sam|      false|
+| default|     sam1|      false|
++--------+---------+-----------+
   
 -- List all tables matching the pattern `sam*|suj`
 SHOW TABLES LIKE 'sam*|suj';
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  | default|      sam|      false|
-  | default|     sam1|      false|
-  | default|      suj|      false|
-  +--------+---------+-----------+
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+| default|      sam|      false|
+| default|     sam1|      false|
+| default|      suj|      false|
++--------+---------+-----------+
 {% endhighlight %}
 
 ### Related Statements

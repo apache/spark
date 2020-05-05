@@ -29,7 +29,7 @@ Hive support must be enabled to use this command. The inserted rows can be speci
 {% highlight sql %}
 INSERT OVERWRITE [ LOCAL ] DIRECTORY directory_path
     [ ROW FORMAT row_format ] [ STORED AS file_format ]
-    { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
+    { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 {% endhighlight %}
 
 ### Parameters

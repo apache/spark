@@ -79,60 +79,60 @@ INSERT INTO students PARTITION (student_id = 222222) VALUES ('John');
 ANALYZE TABLE students COMPUTE STATISTICS NOSCAN;
 
 DESC EXTENDED students;
-  +--------------------+--------------------+-------+
-  |            col_name|           data_type|comment|
-  +--------------------+--------------------+-------+
-  |                name|              string|   null|
-  |          student_id|                 int|   null|
-  |                 ...|                 ...|    ...|
-  |          Statistics|           864 bytes|       |
-  |                 ...|                 ...|    ...|
-  |  Partition Provider|             Catalog|       |
-  +--------------------+--------------------+-------+
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|          Statistics|           864 bytes|       |
+|                 ...|                 ...|    ...|
+|  Partition Provider|             Catalog|       |
++--------------------+--------------------+-------+
 
 ANALYZE TABLE students COMPUTE STATISTICS;
 
 DESC EXTENDED students;
-  +--------------------+--------------------+-------+
-  |            col_name|           data_type|comment|
-  +--------------------+--------------------+-------+
-  |                name|              string|   null|
-  |          student_id|                 int|   null|
-  |                 ...|                 ...|    ...|
-  |          Statistics|   864 bytes, 2 rows|       |
-  |                 ...|                 ...|    ...|
-  |  Partition Provider|             Catalog|       |
-  +--------------------+--------------------+-------+
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|          Statistics|   864 bytes, 2 rows|       |
+|                 ...|                 ...|    ...|
+|  Partition Provider|             Catalog|       |
++--------------------+--------------------+-------+
 
 ANALYZE TABLE students PARTITION (student_id = 111111) COMPUTE STATISTICS;
 
 DESC EXTENDED students PARTITION (student_id = 111111);
-  +--------------------+--------------------+-------+
-  |            col_name|           data_type|comment|
-  +--------------------+--------------------+-------+
-  |                name|              string|   null|
-  |          student_id|                 int|   null|
-  |                 ...|                 ...|    ...|
-  |Partition Statistics|   432 bytes, 1 rows|       |
-  |                 ...|                 ...|    ...|
-  |        OutputFormat|org.apache.hadoop...|       |
-  +--------------------+--------------------+-------+
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|Partition Statistics|   432 bytes, 1 rows|       |
+|                 ...|                 ...|    ...|
+|        OutputFormat|org.apache.hadoop...|       |
++--------------------+--------------------+-------+
 
 ANALYZE TABLE students COMPUTE STATISTICS FOR COLUMNS name;
 
 DESC EXTENDED students name;
-  +--------------+----------+
-  |     info_name|info_value|
-  +--------------+----------+
-  |      col_name|      name|
-  |     data_type|    string|
-  |       comment|      NULL|
-  |           min|      NULL|
-  |           max|      NULL|
-  |     num_nulls|         0|
-  |distinct_count|         2|
-  |   avg_col_len|         4|
-  |   max_col_len|         4|
-  |     histogram|      NULL|
-  +--------------+----------+
++--------------+----------+
+|     info_name|info_value|
++--------------+----------+
+|      col_name|      name|
+|     data_type|    string|
+|       comment|      NULL|
+|           min|      NULL|
+|           max|      NULL|
+|     num_nulls|         0|
+|distinct_count|         2|
+|   avg_col_len|         4|
+|   max_col_len|         4|
+|     histogram|      NULL|
++--------------+----------+
 {% endhighlight %}

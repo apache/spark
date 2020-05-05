@@ -57,32 +57,32 @@ CREATE DATABASE payments_db;
 
 -- Lists all the databases. 
 SHOW DATABASES;
-  +------------+
-  |databaseName|
-  +------------+
-  |     default|
-  | payments_db|
-  |  payroll_db|
-  +------------+
++------------+
+|databaseName|
++------------+
+|     default|
+| payments_db|
+|  payroll_db|
++------------+
   
 -- Lists databases with name starting with string pattern `pay`
 SHOW DATABASES LIKE 'pay*';
-  +------------+
-  |databaseName|
-  +------------+
-  | payments_db|
-  |  payroll_db|
-  +------------+
++------------+
+|databaseName|
++------------+
+| payments_db|
+|  payroll_db|
++------------+
   
 -- Lists all databases. Keywords SCHEMAS and DATABASES are interchangeable. 
 SHOW SCHEMAS;
-  +------------+
-  |databaseName|
-  +------------+
-  |     default|
-  | payments_db|
-  |  payroll_db|
-  +------------+
++------------+
+|databaseName|
++------------+
+|     default|
+| payments_db|
+|  payroll_db|
++------------+
 {% endhighlight %}
 
 ### Related Statements

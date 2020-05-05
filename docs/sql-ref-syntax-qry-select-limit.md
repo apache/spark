@@ -60,37 +60,37 @@ INSERT INTO person VALUES
 
 -- Select the first two rows.
 SELECT name, age FROM person ORDER BY name LIMIT 2;
-  +------+---+
-  |  name|age|
-  +------+---+
-  |Anil B| 18|
-  |Jack N| 16|
-  +------+---+
++------+---+
+|  name|age|
++------+---+
+|Anil B| 18|
+|Jack N| 16|
++------+---+
 
 -- Specifying ALL option on LIMIT returns all the rows.
 SELECT name, age FROM person ORDER BY name LIMIT ALL;
-  +-------+---+
-  |   name|age|
-  +-------+---+
-  | Anil B| 18|
-  | Jack N| 16|
-  | John A| 18|
-  | Mike A| 25|
-  |Shone S| 16|
-  |Zen Hui| 25|
-  +-------+---+
++-------+---+
+|   name|age|
++-------+---+
+| Anil B| 18|
+| Jack N| 16|
+| John A| 18|
+| Mike A| 25|
+|Shone S| 16|
+|Zen Hui| 25|
++-------+---+
 
 -- A function expression as an input to LIMIT.
 SELECT name, age FROM person ORDER BY name LIMIT length('SPARK');
-  +-------+---+
-  |   name|age|
-  +-------+---+
-  | Anil B| 18|
-  | Jack N| 16|
-  | John A| 18|
-  | Mike A| 25|
-  |Shone S| 16|
-  +-------+---+
++-------+---+
+|   name|age|
++-------+---+
+| Anil B| 18|
+| Jack N| 16|
+| John A| 18|
+| Mike A| 25|
+|Shone S| 16|
++-------+---+
 
 -- A non-foldable expression as an input to LIMIT is not allowed.
 SELECT name, age FROM person ORDER BY name LIMIT length(name);
