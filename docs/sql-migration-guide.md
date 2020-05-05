@@ -186,8 +186,6 @@ license: |
 
   - In Spark version 2.4 and below, CSV datasource converts a malformed CSV string to a row with all `null`s in the PERMISSIVE mode. In Spark 3.0, the returned row can contain non-`null` fields if some of CSV column values were parsed and converted to desired types successfully.
 
-  - In Spark 3.0, parquet logical type `TIMESTAMP_MICROS` is used by default while saving `TIMESTAMP` columns. In Spark version 2.4 and below, `TIMESTAMP` columns are saved as `INT96` in parquet files. Note that, some SQL systems such as Hive 1.x and Impala 2.x can only read `INT96` timestamps, you can set `spark.sql.parquet.outputTimestampType` as `INT96` to restore the previous behavior and keep interoperability.
-
   - In Spark 3.0, when Avro files are written with user provided schema, the fields are matched by field names between catalyst schema and Avro schema instead of positions.
 
   - In Spark 3.0, when Avro files are written with user provided non-nullable schema, even the catalyst schema is nullable, Spark is still able to write the files. However, Spark throws runtime NullPointerException if any of the records contains null.
