@@ -42,7 +42,7 @@ SHOW PARTITIONS table_identifier [ partition_spec ]
 * **partition_spec**
 
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. When specified, the partitions that match the partition spec are returned.
+    for partitions. When specified, the partitions that match the partition specification are returned.
 
     **Syntax:** `PARTITION ( partition_col_name = partition_col_val [ , ... ] )`
 
