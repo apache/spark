@@ -2063,8 +2063,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val NESTED_PREDICATE_PUSHDOWN_V1_SOURCE_LIST =
-    buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedV1Sources")
+  val NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST =
+    buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources")
       .internal()
       .doc("A comma-separated list of data source short names or fully qualified data source " +
         "implementation class names for which Spark tries to push down predicates for nested " +

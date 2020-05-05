@@ -1601,7 +1601,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         // filter is expected or not (this had to be fixed with SPARK-13495).
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-        SQLConf.NESTED_PREDICATE_PUSHDOWN_V1_SOURCE_LIST.key -> pushdownDsList) {
+        SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST.key -> pushdownDsList) {
         val query = df
           .select(output.map(e => Column(e)): _*)
           .where(Column(predicate))

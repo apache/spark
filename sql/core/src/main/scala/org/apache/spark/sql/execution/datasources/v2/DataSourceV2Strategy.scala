@@ -181,9 +181,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val filters = splitConjunctivePredicates(deleteExpr)
       def transferFilters =
-        (filters: Seq[Expression], supportNestedPredicatePushdown: Boolean) => {
+        (filters: Seq[Expression]) => {
           filters.map { filter =>
-            DataSourceStrategy.translateFilter(deleteExpr, supportNestedPredicatePushdown)
+            DataSourceStrategy.translateFilter(deleteExpr, supportNestedPredicatePushdown = true)
               .getOrElse(throw new AnalysisException(
                 s"Cannot translate expression to source filter: $filter"))
           }.toArray
@@ -191,10 +191,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
           OverwriteByExpressionExecV1(
-            v1, transferFilters(filters, true), writeOptions.asOptions, query) :: Nil
+            v1, transferFilters(filters), writeOptions.asOptions, query) :: Nil
         case v2 =>
           OverwriteByExpressionExec(
-            v2, transferFilters(filters, true), writeOptions.asOptions, planLater(query)) :: Nil
+            v2, transferFilters(filters), writeOptions.asOptions, planLater(query)) :: Nil
       }
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _) =>

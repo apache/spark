@@ -53,7 +53,7 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
       withFilter: DataFrame => DataFrame): Unit = {
     val loadDF = spark.read.parquet(inputPath)
     benchmark.addCase(name) { _ =>
-      withSQLConf((SQLConf.NESTED_PREDICATE_PUSHDOWN_V1_SOURCE_LIST.key, enableNestedPD)) {
+      withSQLConf((SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST.key, enableNestedPD)) {
         withFilter(loadDF).noop()
       }
     }
