@@ -40,7 +40,7 @@ function_name ( expression [ , ... ] ) [ table_alias ]
 <dl>
   <dt><code><em>table_alias</em></code></dt>
   <dd>
-    Specifies a temporary name with an optional column name list. <br><br>
+    Specifies a temporary name with an optional column name list. <br/><br/>
     <b>Syntax:</b>
       <code>
         [ AS ] table_name [ ( column_name [ , ... ] ) ]
@@ -50,31 +50,12 @@ function_name ( expression [ , ... ] ) [ table_alias ]
 
 ### Supported Table-valued Functions
 
-<table class="table">
-  <thead>
-    <tr><th style="width:25%">Function</th><th>Argument Type(s)</th><th>Description</th></tr>
-  </thead>
-    <tr>
-      <td><b> range </b>( <i>end</i> )</td>
-      <td> Long </td>
-      <td>Creates a table with a single <code>LongType</code> column named <code>id</code>, containing rows in a range from 0 to <code>end</code> (exclusive) with step value 1.</td>
-    </tr>
-    <tr>
-      <td><b> range </b>( <i> start, end</i> )</td>
-      <td> Long, Long </td>
-      <td width="60%">Creates a table with a single <code>LongType</code> column named <code>id</code>, containing rows in a range from <code>start</code> to <code>end</code> (exclusive) with step value 1.</td>
-    </tr>
-    <tr>
-      <td><b> range </b>( <i> start, end, step</i> )</td>
-      <td> Long, Long, Long </td>
-      <td width="60%">Creates a table with a single <code>LongType</code> column named <code>id</code>, containing rows in a range from <code>start</code> to <code>end</code> (exclusive) with <code>step</code> value.</td>
-     </tr>
-    <tr>
-      <td><b> range </b>( <i> start, end, step, numPartitions</i> )</td>
-      <td> Long, Long, Long, Int </td>
-      <td width="60%">Creates a table with a single <code>LongType</code> column named <code>id</code>, containing rows in a range from <code>start</code> to <code>end</code> (exclusive) with <code>step</code> value, with partition number <code>numPartitions</code> specified. </td>
-    </tr>
-</table>
+|Function|Argument Type(s)|Description|
+|--------|----------------|-----------|
+|**range** ( *end* )|Long|Creates a table with a single *LongType* column named *id*, <br/> containing rows in a range from 0 to *end* (exclusive) with step value 1.|
+|**range** ( *start, end* )|Long, Long|Creates a table with a single *LongType* column named *id*, <br/> containing rows in a range from *start* to *end* (exclusive) with step value 1.|
+|**range** ( *start, end, step* )|Long, Long, Long|Creates a table with a single *LongType* column named *id*, <br/> containing rows in a range from *start* to *end* (exclusive) with *step* value.|
+|**range** ( *start, end, step, numPartitions* )|Long, Long, Long, Int|Creates a table with a single *LongType* column named *id*, <br/> containing rows in a range from *start* to *end* (exclusive) with *step* value, with partition number *numPartitions* specified.|
 
 ### Examples
 
