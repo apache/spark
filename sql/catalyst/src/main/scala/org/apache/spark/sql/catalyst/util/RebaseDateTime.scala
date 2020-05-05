@@ -289,8 +289,8 @@ object RebaseDateTime {
   private def getLastSwitchTs(rebaseMap: AnyRefMap[String, RebaseInfo]): Long = {
     val latestTs = rebaseMap.values.map(_.switches.last).max
     require(rebaseMap.values.forall(_.diffs.last == 0),
-      s"Differences between Julian and Gregorian calendar after $latestTs are expected " +
-      "to be zero for available time zones.")
+      s"Differences between Julian and Gregorian calendar after ${microsToInstant(latestTs)} " +
+      "are expected to be zero for all available time zones.")
     latestTs
   }
   // The switch time point after which all diffs between Gregorian and Julian calendars
