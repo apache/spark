@@ -2562,7 +2562,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.dynamicAllocation.shuffleTimeout</code></td>
+  <td><code>spark.dynamicAllocation.shuffleTracking.timeout</code></td>
   <td><code>infinity</code></td>
   <td>
     When shuffle tracking is enabled, controls the timeout for executors that are holding shuffle

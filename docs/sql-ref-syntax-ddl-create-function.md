@@ -28,8 +28,8 @@ all sessions. The resources specified in the `USING` clause are made available
 to all executors when they are executed for the first time. In addition to the
 SQL interface, spark allows users to create custom user defined scalar and
 aggregate functions using Scala, Python and Java APIs. Please refer to 
-[scalar_functions](sql-getting-started.html#scalar-functions) and 
-[aggregate functions](sql-getting-started#aggregations) for more information.
+[Scalar UDFs](sql-ref-functions-udf-scalar.html) and
+[UDAFs](sql-ref-functions-udf-aggregate.html) for more information.
 
 ### Syntax
 
@@ -114,20 +114,20 @@ CREATE FUNCTION simple_udf AS 'SimpleUdf'
 
 -- Verify that the function is in the registry.
 SHOW USER FUNCTIONS;
-  +------------------+
-  |          function|
-  +------------------+
-  |default.simple_udf|
-  +------------------+
++------------------+
+|          function|
++------------------+
+|default.simple_udf|
++------------------+
 
 -- Invoke the function. Every selected value should be incremented by 10.
 SELECT simple_udf(c1) AS function_return_value FROM t1;
-  +---------------------+                                                         
-  |function_return_value|
-  +---------------------+
-  |                   11|
-  |                   12|
-  +---------------------+
++---------------------+
+|function_return_value|
++---------------------+
+|                   11|
+|                   12|
++---------------------+
 
 -- Created a temporary function.
 CREATE TEMPORARY FUNCTION simple_temp_udf AS 'SimpleUdf' 
@@ -137,12 +137,12 @@ CREATE TEMPORARY FUNCTION simple_temp_udf AS 'SimpleUdf'
 -- Please note that the temporary function does not have a qualified
 -- database associated with it.
 SHOW USER FUNCTIONS;
-  +------------------+
-  |          function|
-  +------------------+
-  |default.simple_udf|
-  |   simple_temp_udf|
-  +------------------+
++------------------+
+|          function|
++------------------+
+|default.simple_udf|
+|   simple_temp_udf|
++------------------+
 
 -- 1. Modify `SimpleUdf`'s implementation to add supplied integral value by 20.
 --    import org.apache.hadoop.hive.ql.exec.UDF;
@@ -160,12 +160,12 @@ CREATE OR REPLACE FUNCTION simple_udf AS 'SimpleUdfR'
 
 -- Invoke the function. Every selected value should be incremented by 20.
 SELECT simple_udf(c1) AS function_return_value FROM t1;
-  +---------------------+                                                         
-  |function_return_value|
-  +---------------------+
-  |                   21|
-  |                   22|
-  +---------------------+
++---------------------+
+|function_return_value|
++---------------------+
+|                   21|
+|                   22|
++---------------------+
 {% endhighlight %}
 
 ### Related Statements

@@ -28,7 +28,7 @@ The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the d
 {% highlight sql %}
 INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
     USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
-    { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
+    { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 {% endhighlight %}
 
 ### Parameters

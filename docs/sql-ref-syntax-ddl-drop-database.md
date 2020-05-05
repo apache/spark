@@ -27,14 +27,14 @@ exception will be thrown if the database does not exist in the system.
 ### Syntax
 
 {% highlight sql %}
-DROP ( DATABASE | SCHEMA ) [ IF EXISTS ] dbname [ RESTRICT | CASCADE ]
+DROP { DATABASE | SCHEMA } [ IF EXISTS ] dbname [ RESTRICT | CASCADE ]
 {% endhighlight %}
 
 ### Parameters
 
 <dl>
   <dt><code><em>DATABASE | SCHEMA</em></code></dt>
-  <dd>`DATABASE` and `SCHEMA` mean the same thing, either of them can be used.</dd>
+  <dd><code>DATABASE</code> and <code>SCHEMA</code> mean the same thing, either of them can be used.</dd>
 </dl>
 
 <dl>
@@ -52,7 +52,7 @@ DROP ( DATABASE | SCHEMA ) [ IF EXISTS ] dbname [ RESTRICT | CASCADE ]
   <dd>If specified, will drop all the associated tables and functions.</dd>
 </dl>
 
-### Example
+### Examples
 
 {% highlight sql %}
 -- Create `inventory_db` Database
