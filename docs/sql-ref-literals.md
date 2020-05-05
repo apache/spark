@@ -345,7 +345,7 @@ DATE { 'yyyy' |
        'yyyy-[m]m-[d]d' |
        'yyyy-[m]m-[d]d[T]' }
 ```
-Note: defaults to `01` if month or day is not specified.
+**Note:** defaults to `01` if month or day is not specified.
 
 ##### Examples
 
@@ -386,7 +386,7 @@ TIMESTAMP { 'yyyy' |
             'yyyy-[m]m-[d]d[T][h]h:[m]m:[s]s[.]' |
             'yyyy-[m]m-[d]d[T][h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]'}
 ```
-Note: defaults to `00` if hour, minute or second is not specified.
+**Note:** defaults to `00` if hour, minute or second is not specified.
 `zone_id` should have one of the forms:
 * Z - Zulu time zone UTC+0
 * `+|-[h]h:[m]m`
@@ -397,7 +397,7 @@ Note: defaults to `00` if hour, minute or second is not specified.
   * `+|-hhmmss`
 * Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
 
-Note: defaults to the session local timezone (set via `spark.sql.session.timeZone`) if `zone_id` is not specified.
+**Note:** defaults to the session local timezone (set via `spark.sql.session.timeZone`) if `zone_id` is not specified.
 
 ##### Examples
 

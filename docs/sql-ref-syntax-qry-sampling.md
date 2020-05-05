@@ -26,7 +26,7 @@ The `TABLESAMPLE` statement is used to sample the table. It supports the followi
   * `TABLESAMPLE`(x `PERCENT`): Sample the table down to the given percentage. Note that percentages are defined as a number between 0 and 100.
   * `TABLESAMPLE`(`BUCKET` x `OUT OF` y): Sample the table down to a `x` out of `y` fraction.
 
-Note: `TABLESAMPLE` returns the approximate number of rows or fraction requested.
+**Note:** `TABLESAMPLE` returns the approximate number of rows or fraction requested.
 
 ### Syntax
 
