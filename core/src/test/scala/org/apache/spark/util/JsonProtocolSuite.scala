@@ -124,7 +124,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val execReq =
       new ExecutorResourceRequests().cores(2).resource("gpu", 2, "myscript")
     rprofBuilder.require(taskReq).require(execReq)
-    val resourceProfile = SparkListenerResourceProfileAdded(rprofBuilder.build)
+    val resourceProfile = rprofBuilder.build
+    resourceProfile.setResourceProfileId(21)
+    val resourceProfileAdded = SparkListenerResourceProfileAdded(resourceProfile)
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
     testEvent(taskStart, taskStartJsonString)
@@ -150,7 +152,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
     testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
-    testEvent(resourceProfile, resourceProfileJsonString)
+    testEvent(resourceProfileAdded, resourceProfileJsonString)
   }
 
   test("Dependent Classes") {
@@ -2376,7 +2378,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     """
       |{
       |  "Event":"SparkListenerResourceProfileAdded",
-      |  "Resource Profile Id":0,
+      |  "Resource Profile Id":21,
       |  "Executor Resource Requests":{
       |    "cores" : {
       |      "Resource Name":"cores",
