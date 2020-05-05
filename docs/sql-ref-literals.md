@@ -36,12 +36,12 @@ A string literal is used to specify a character string value.
 #### Syntax
 
 ```sql
-'c [ ... ]' | "c [ ... ]"
+'char [ ... ]' | "char [ ... ]"
 ```
 
 #### Parameters
 
-* **c**
+* **char**
 
     One character from the character set. Use `\` to escape special characters (e.g., `'` or `\`).
 
@@ -77,14 +77,14 @@ A binary literal is used to specify a byte sequence value.
 #### Syntax
 
 ```sql
-X { 'c [ ... ]' | "c [ ... ]" }
+X { 'num [ ... ]' | "num [ ... ]" }
 ```
 
 #### Parameters
 
-* **c**
+* **num**
 
-    One character from the character set.
+    Any hexadecimal number from 0 to F.
 
 #### Examples
 

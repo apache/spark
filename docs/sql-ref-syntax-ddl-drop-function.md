@@ -79,9 +79,9 @@ DROP FUNCTION test_avg;
 
 -- Try to drop Permanent function which is not present
 DROP FUNCTION test_avg;
-  Error: Error running query:
-  org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException:
-  Function 'default.test_avg' not found in database 'default'; (state=,code=0)
+Error: Error running query:
+org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException:
+Function 'default.test_avg' not found in database 'default'; (state=,code=0)
 
 -- List the functions after dropping, it should list only temporary function
 SHOW USER FUNCTIONS;

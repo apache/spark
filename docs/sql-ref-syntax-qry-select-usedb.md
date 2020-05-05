@@ -46,7 +46,8 @@ USE userdb;
 
 -- Use the 'userdb1' which doesn't exist
 USE userdb1;
-  Error: org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: Database 'userdb1' not found;(state=,code=0)
+Error: org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: Database 'userdb1' not found;
+(state=,code=0)
 ```
 
 ### Related Statements

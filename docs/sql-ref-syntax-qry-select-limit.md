@@ -91,7 +91,7 @@ SELECT name, age FROM person ORDER BY name LIMIT length('SPARK');
 
 -- A non-foldable expression as an input to LIMIT is not allowed.
 SELECT name, age FROM person ORDER BY name LIMIT length(name);
-  org.apache.spark.sql.AnalysisException: The limit expression must evaluate to a constant value ...
+org.apache.spark.sql.AnalysisException: The limit expression must evaluate to a constant value ...
 ```
 
 ### Related Statements
