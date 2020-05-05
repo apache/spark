@@ -33,7 +33,7 @@ DROP VIEW [ IF EXISTS ] view_identifier
 
 * **IF EXISTS**
 
-    If specified, no exception is thrown when the view does not exists.
+    If specified, no exception is thrown when the view does not exist.
 
 * **view_identifier**
 
@@ -50,13 +50,13 @@ DROP VIEW employeeView;
 -- Assumes a view named `employeeView` exists in the `userdb` database
 DROP VIEW userdb.employeeView;
 
--- Assumes a view named `employeeView` does not exists.
+-- Assumes a view named `employeeView` does not exist.
 -- Throws exception
 DROP VIEW employeeView;
 Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeeView;
 (state=,code=0)
 
--- Assumes a view named `employeeView` does not exists,Try with IF EXISTS
+-- Assumes a view named `employeeView` does not exist,Try with IF EXISTS
 -- this time it will not throw exception
 DROP VIEW IF EXISTS employeeView;
 ```

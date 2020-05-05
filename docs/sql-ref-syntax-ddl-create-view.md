@@ -46,7 +46,7 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
 
 * **IF NOT EXISTS**
 
-    Creates a view if it does not exists.
+    Creates a view if it does not exist.
 
 * **view_identifier**
 

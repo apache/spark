@@ -63,7 +63,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **STORED AS**
 
-    File format for table storage, could be TEXTFILE, ORC, PARQUET,etc.
+    File format for table storage, could be TEXTFILE, ORC, PARQUET, etc.
 
 * **LOCATION**
 

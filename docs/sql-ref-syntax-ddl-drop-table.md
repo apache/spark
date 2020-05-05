@@ -36,7 +36,7 @@ DROP TABLE [ IF EXISTS ] table_identifier
 
 * **IF EXISTS**
 
-    If specified, no exception is thrown when the table does not exists.
+    If specified, no exception is thrown when the table does not exist.
 
 * **table_identifier**
 
@@ -53,13 +53,13 @@ DROP TABLE employeetable;
 -- Assumes a table named `employeetable` exists in the `userdb` database
 DROP TABLE userdb.employeetable;
 
--- Assumes a table named `employeetable` does not exists.
+-- Assumes a table named `employeetable` does not exist.
 -- Throws exception
 DROP TABLE employeetable;
 Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeetable;
 (state=,code=0)
 
--- Assumes a table named `employeetable` does not exists,Try with IF EXISTS
+-- Assumes a table named `employeetable` does not exist,Try with IF EXISTS
 -- this time it will not throw exception
 DROP TABLE IF EXISTS employeetable;
 ```

@@ -52,7 +52,7 @@ CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier
 
 * **STORED AS**
 
-    File format for table storage, could be TEXTFILE, ORC, PARQUET,etc.
+    File format for table storage, could be TEXTFILE, ORC, PARQUET, etc.
 
 * **TBLPROPERTIES**
 

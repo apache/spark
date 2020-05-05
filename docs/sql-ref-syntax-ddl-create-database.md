@@ -40,7 +40,7 @@ CREATE { DATABASE | SCHEMA } [ IF NOT EXISTS ] database_name
 
 * **IF NOT EXISTS**
 
-    Creates a database with the given name if it doesn't exists. If a database with the same name already exists, nothing will happen.
+    Creates a database with the given name if it does not exist. If a database with the same name already exists, nothing will happen.
 
 * **database_directory**
 
