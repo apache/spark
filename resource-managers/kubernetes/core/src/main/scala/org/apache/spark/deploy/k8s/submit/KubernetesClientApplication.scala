@@ -17,12 +17,11 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.StringWriter
-import java.net.HttpURLConnection.HTTP_GONE
 import java.util.{Collections, UUID}
 import java.util.Properties
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watch}
+import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.Watcher.Action
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -145,15 +144,20 @@ private[spark] class Client(
     val sId = Seq(conf.namespace, driverPodName).mkString(":")
     breakable {
       while (true) {
-        try {
-            val podWithName = kubernetesClient.pods().withName(driverPodName)
-            watch = podWithName.watch(watcher)
-            watcher.eventReceived(Action.MODIFIED, podWithName.get())
-            watcher.watchOrStop(sId)
-            break
-        } catch {
-          case e: KubernetesClientException if e.getCode == HTTP_GONE =>
-            logInfo("Resource version changed rerunning the watcher")
+        val podWithName = kubernetesClient
+          .pods()
+          .withName(driverPodName)
+        // Reset resource to old before we start the watch, this is important for race conditions
+        watcher.reset()
+        watch = podWithName.watch(watcher)
+
+        // Send the latest pod state we know to the watcher to make sure we didn't miss anything
+        watcher.eventReceived(Action.MODIFIED, podWithName.get())
+
+        // Break the while loop if the pod is completed or we don't want to wait
+        if(watcher.watchOrStop(sId)) {
+          watch.close()
+          break
         }
       }
     }
