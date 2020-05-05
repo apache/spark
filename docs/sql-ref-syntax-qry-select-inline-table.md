@@ -38,6 +38,7 @@ VALUES ( expression [ , ... ] ) [ table_alias ]
 * **table_alias**
 
     Specifies a temporary name with an optional column name list.
+
     **Syntax:** `[ AS ] table_name [ ( column_name [ , ... ] ) ]`
 
 ### Examples

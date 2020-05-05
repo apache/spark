@@ -32,6 +32,7 @@ ADD JAR file_name
 ### Parameters
 
 * **file_name**
+
     The name of the JAR file to be added. It could be either on a local file system or a distributed file system.
 
 ### Examples

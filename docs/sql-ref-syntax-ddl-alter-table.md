@@ -73,7 +73,7 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
 
 ### ALTER OR CHANGE COLUMN
 
-`ALTER TABLE ALTER COLUMN` or `ALTER TABLE CHANGE COLUMN` statement changes column's comment.
+`ALTER TABLE ALTER COLUMN` or `ALTER TABLE CHANGE COLUMN` statement changes column's definition.
 
 #### Syntax
 
@@ -95,9 +95,7 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 
 * **alterColumnAction**
 
-    Change the comment string.
-
-    **Syntax:** `COMMENT STRING`
+    Change column's definition.
 
 ### ADD AND DROP PARTITION
 
@@ -122,7 +120,7 @@ ALTER TABLE table_identifier ADD [IF NOT EXISTS]
 
 * **partition_spec**
 
-    Partition to be added..
+    Partition to be added.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
@@ -417,10 +415,16 @@ ALTER TABLE test_tab SET SERDE 'org.apache.hadoop.hive.serde2.columnar.LazyBinar
 ALTER TABLE dbx.tab1 SET SERDE 'org.apache.hadoop' WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')
 
 -- SET TABLE PROPERTIES
-ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('winner' = 'loser')
+ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('winner' = 'loser');
+
+-- SET TABLE COMMENT Using SET PROPERTIES
+ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('comment' = 'A table comment.');
+
+-- Alter TABLE COMMENT Using SET PROPERTIES
+ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('comment' = 'This is a new comment.');
 
 -- DROP TABLE PROPERTIES
-ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner')
+ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner');
 ```
 
 ### Related Statements
