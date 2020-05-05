@@ -215,7 +215,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("specify a more specific type for the application") {
-    // Limit to 20 characters
+    // When the type exceeds 20 characters will be truncated by yarn
     val appTypes = Map(
       1 -> ("", ""),
       2 -> (" ", " "),
@@ -260,7 +260,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
         val publisher = mock(classOf[SystemMetricsPublisher])
         when(rmContext.getSystemMetricsPublisher).thenReturn(publisher)
         when(appContext.getUnmanagedAM).thenReturn(true)
-
 
         val rmAppManager = new RMAppManager(rmContext,
           null,

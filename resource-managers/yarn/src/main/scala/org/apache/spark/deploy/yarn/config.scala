@@ -115,6 +115,7 @@ package object config {
     .doc("Type of this application," +
       "it allows user to specify a more specific type for the application, such as SPARK," +
       "SPARK-SQL, SPARK-STREAMING, SPARK-MLLIB and SPARK-GRAPH")
+    .version("3.1.0")
     .stringConf
     .createWithDefault("SPARK")
 
