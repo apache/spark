@@ -334,10 +334,8 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
 
   override def sql: String = prettyName + exprsReplaced.map(_.sql).mkString("(", ", ", ")")
 
-  protected def prettySQL: String =
+  def prettySQL: String =
     prettyName + exprsReplaced.map(toPrettySQL).mkString("(", ", ", ")")
-
-  def asPrettyAttribute(): PrettyAttribute = PrettyAttribute(prettySQL, dataType)
 }
 
 /**

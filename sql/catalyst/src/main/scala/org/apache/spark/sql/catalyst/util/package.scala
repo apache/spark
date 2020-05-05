@@ -134,7 +134,7 @@ package object util extends Logging {
       PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
     case e: GetArrayStructFields =>
       PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
-    case r: RuntimeReplaceable => r.asPrettyAttribute()
+    case r: RuntimeReplaceable => PrettyAttribute(r.prettySQL, r.dataType)
   }
 
   def quoteIdentifier(name: String): String = {
