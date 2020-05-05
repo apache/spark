@@ -18,17 +18,35 @@
 package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Project, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This rule adds a `CoalesceBuckets` logical plan if one side of two bucketed tables can be
- * coalesced when the two bucketed tables are joined and they differ in the number of buckets.
+ * Wraps `LogicalRelation` to provide the number of buckets for coalescing.
  */
-object CoalesceBucketsInJoin extends Rule[LogicalPlan]  {
+case class CoalesceBuckets(
+    numCoalescedBuckets: Int,
+    child: LogicalRelation) extends UnaryNode {
+  require(numCoalescedBuckets > 0,
+    s"Number of coalesced buckets ($numCoalescedBuckets) must be positive.")
+
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * This rule adds a `CoalesceBuckets` logical plan if the following conditions are met:
+ *   - Two bucketed tables are joined.
+ *   - Join is the equi-join.
+ *   - The larger bucket number is divisible by the smaller bucket number.
+ *   - "spark.sql.bucketing.coalesceBucketsInJoin.enabled" is set to true.
+ *   - The difference in the number of buckets is less than the value set in
+ *     "spark.sql.bucketing.coalesceBucketsInJoin.maxNumBucketsDiff".
+ */
+object CoalesceBucketsInEquiJoin extends Rule[LogicalPlan]  {
   private def isPlanEligible(plan: LogicalPlan): Boolean = {
     def forall(plan: LogicalPlan)(p: LogicalPlan => Boolean): Boolean = {
       p(plan) && plan.children.forall(forall(_)(p))

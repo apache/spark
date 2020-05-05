@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution.bucketing
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.EqualTo
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, LogicalRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LocalRelation, Project}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, LogicalRelation, ScanOperationWithCoalescedBuckets}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-class CoalesceBucketsSuite extends SQLTestUtils with SharedSparkSession {
+class CoalesceBucketsInEquiJoinSuite extends SQLTestUtils with SharedSparkSession {
   private def newRelation(numBuckets: Int): HadoopFsRelation = HadoopFsRelation(
     location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
     partitionSchema = StructType(Seq(StructField("a", IntegerType))),
@@ -49,7 +49,7 @@ class CoalesceBucketsSuite extends SQLTestUtils with SharedSparkSession {
       } else {
         None
       }
-      val plan = CoalesceBucketsInJoin(Join(left, right, Inner, condition, JoinHint.NONE))
+      val plan = CoalesceBucketsInEquiJoin(Join(left, right, Inner, condition, JoinHint.NONE))
       val coalesced = plan.collect { case c: CoalesceBuckets => c }
       if (expectCoalescing) {
         assert(coalesced.size == 1)
@@ -92,6 +92,29 @@ class CoalesceBucketsSuite extends SQLTestUtils with SharedSparkSession {
       SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
       SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_NUM_BUCKETS_DIFF.key -> "2") {
       run(numBuckets1 = 8, numBuckets2 = 4, expectCoalescing = false, equiJoin = true)
+    }
+  }
+
+  test("test ScanOperationWithCoalescedBuckets extractor") {
+    val relation = LogicalRelation(newRelation(numBuckets = 4))
+    val project = Project(Seq(relation.output(0)), relation)
+    project match {
+      case ScanOperationWithCoalescedBuckets(projects, filters, _: LogicalRelation, bucketSpec) =>
+        assert(projects.size == 1)
+        assert(projects(0) == relation.output(0))
+        assert(filters.isEmpty)
+        assert(bucketSpec.isEmpty)
+    }
+
+    val projectWithCoalescedBuckets = Project(
+      Seq(relation.output(0)),
+      CoalesceBuckets(numCoalescedBuckets = 2, relation))
+    projectWithCoalescedBuckets match {
+      case ScanOperationWithCoalescedBuckets(projects, filters, _: LogicalRelation, bucketSpec) =>
+        assert(projects.size == 1)
+        assert(projects(0) == relation.output(0))
+        assert(filters.isEmpty)
+        assert(bucketSpec.get == 2)
     }
   }
 }

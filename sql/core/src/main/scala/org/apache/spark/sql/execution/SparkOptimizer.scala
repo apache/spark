@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.bucketing.CoalesceBucketsInJoin
+import org.apache.spark.sql.execution.bucketing.CoalesceBucketsInEquiJoin
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.datasources.SchemaPruning
 import org.apache.spark.sql.execution.datasources.v2.V2ScanRelationPushDown
@@ -45,7 +45,7 @@ class SparkOptimizer(
     Batch("PartitionPruning", Once,
       PartitionPruning,
       OptimizeSubqueries) :+
-    Batch("Bucketing", Once, CoalesceBucketsInJoin) :+
+    Batch("Bucketing", Once, CoalesceBucketsInEquiJoin) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates) :+
     Batch("Cleanup filters that cannot be pushed down", Once,
