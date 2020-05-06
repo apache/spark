@@ -380,6 +380,32 @@ class SingletonReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
+  test("SPARK-31399: should clone+clean line object w/ non-serializable state in ClosureCleaner") {
+    // Can't use :paste mode because PipedOutputStream/PipedInputStream doesn't work well with the
+    // EOT control character (i.e. Ctrl+D).
+    // Just write things on a single line to emulate :paste mode.
+
+    // NOTE: in order for this test case to trigger the intended scenario, the following three
+    //       variables need to be in the same "input", which will make the REPL pack them into the
+    //       same REPL line object:
+    //         - ns: a non-serializable state, not accessed by the closure;
+    //         - topLevelValue: a serializable state, accessed by the closure;
+    //         - closure: the starting closure, captures the enclosing REPL line object.
+    val output = runInterpreter(
+      """
+        |class NotSerializableClass(val x: Int)
+        |val ns = new NotSerializableClass(42); val topLevelValue = "someValue"; val closure =
+        |(j: Int) => {
+        |  (1 to j).flatMap { x =>
+        |    (1 to x).map { y => y + topLevelValue }
+        |  }
+        |}
+        |val r = sc.parallelize(0 to 2).map(closure).collect
+      """.stripMargin)
+    assertContains("r: Array[scala.collection.immutable.IndexedSeq[String]] = Array(Vector", output)
+    assertDoesNotContain("Exception", output)
+  }
+
   test("newProductSeqEncoder with REPL defined class") {
     val output = runInterpreter(
       """
