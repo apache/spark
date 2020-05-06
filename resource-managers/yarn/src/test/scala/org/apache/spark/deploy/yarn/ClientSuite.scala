@@ -224,10 +224,10 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     // Mock yarn submit application
     val yarnClient = mock(classOf[YarnClient])
-    val map = new ConcurrentHashMap[ApplicationId, RMApp]()
+    val rmApps = new ConcurrentHashMap[ApplicationId, RMApp]()
     val rmContext = mock(classOf[RMContext])
     val conf = mock(classOf[Configuration])
-    when(rmContext.getRMApps).thenReturn(map)
+    when(rmContext.getRMApps).thenReturn(rmApps)
     val dispatcher = mock(classOf[Dispatcher])
     when(rmContext.getDispatcher).thenReturn(dispatcher)
     when[EventHandler[_]](dispatcher.getEventHandler).thenReturn(
@@ -276,7 +276,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
         containerLaunchContext)
 
       yarnClient.submitApplication(context)
-      assert(map.get(appId).getApplicationType === targetType)
+      assert(rmApps.get(appId).getApplicationType === targetType)
     }
   }
 
