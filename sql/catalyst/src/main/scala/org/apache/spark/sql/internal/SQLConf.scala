@@ -2068,7 +2068,8 @@ object SQLConf {
       .internal()
       .doc("A comma-separated list of data source short names or fully qualified data source " +
         "implementation class names for which Spark tries to push down predicates for nested " +
-        "columns and/or names containing `dots` to data sources. Currently, Parquet implements " +
+        "columns and/or names containing `dots` to data sources. This configuration is only " +
+        "effective with file-based data source in DSv1. Currently, Parquet implements " +
         "both optimizations while ORC only supports predicates for names containing `dots`. The " +
         "other data sources don't support this feature yet. So the default value is 'parquet,orc'.")
       .version("3.0.0")
