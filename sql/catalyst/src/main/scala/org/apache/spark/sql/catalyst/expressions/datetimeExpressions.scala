@@ -1208,8 +1208,7 @@ case class DatetimeSub(
     child: Expression) extends RuntimeReplaceable {
   override def exprsReplaced: Seq[Expression] = Seq(start, interval)
   override def toString: String = s"$start - $interval"
-  override def sql: String = exprsReplaced.map(_.sql).mkString(" - ")
-  override def prettySQL: String = exprsReplaced.map(toPrettySQL).mkString(" - ")
+  override def mkString(childrenString: Seq[String]): String = childrenString.mkString(" - ")
 }
 
 /**
@@ -2213,12 +2212,12 @@ case class Extract(field: Expression, source: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
+
   override def exprsReplaced: Seq[Expression] = Seq(field, source)
 
-  override def sql: String = prettyName + exprsReplaced.map(_.sql).mkString("(", " FROM ", ")")
-
-  override def prettySQL: String = prettyName +
-    exprsReplaced.map(toPrettySQL).mkString("(", " FROM ", ")")
+  override def mkString(childrenString: Seq[String]): String = {
+    prettyName + childrenString.mkString("(", " FROM ", ")")
+  }
 }
 
 /**

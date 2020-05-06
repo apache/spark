@@ -330,12 +330,13 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
    *
    * Implementations should override this with original parameters
    */
-  protected def exprsReplaced: Seq[Expression]
+  def exprsReplaced: Seq[Expression]
 
-  override def sql: String = prettyName + exprsReplaced.map(_.sql).mkString("(", ", ", ")")
+  override def sql: String = mkString(exprsReplaced.map(_.sql))
 
-  def prettySQL: String =
-    prettyName + exprsReplaced.map(toPrettySQL).mkString("(", ", ", ")")
+  def mkString(childrenString: Seq[String]): String = {
+    prettyName + childrenString.mkString("(", ", ", ")")
+  }
 }
 
 /**
