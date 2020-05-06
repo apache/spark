@@ -143,7 +143,7 @@ private[spark] class BarrierCoordinator(
       val curReqMethod = request.requestMethod
       requestMethods.add(curReqMethod)
       if (requestMethods.size > 1) {
-        val error = new SparkException(s"Multiple barrier sync types found for the " +
+        val error = new SparkException(s"Different barrier sync types found for the " +
           s"sync $barrierId: ${requestMethods.mkString(", ")}. Please use the " +
           s"same barrier sync type within a single sync.")
         (requesters :+ requester).foreach(_.sendFailure(error))
