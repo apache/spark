@@ -251,17 +251,20 @@ case class AdaptiveSparkPlanExec(
   override def executeCollect(): Array[InternalRow] = {
     val rdd = getFinalPhysicalPlan().executeCollect()
     finalPlanUpdate
-    rdd  }
+    rdd
+  }
 
   override def executeTake(n: Int): Array[InternalRow] = {
     val rdd = getFinalPhysicalPlan().executeTake(n)
     finalPlanUpdate
-    rdd  }
+    rdd
+  }
 
   override def executeTail(n: Int): Array[InternalRow] = {
     val rdd = getFinalPhysicalPlan().executeTail(n)
     finalPlanUpdate
-    rdd  }
+    rdd
+  }
 
   override def doExecute(): RDD[InternalRow] = {
     val rdd = getFinalPhysicalPlan().execute()
