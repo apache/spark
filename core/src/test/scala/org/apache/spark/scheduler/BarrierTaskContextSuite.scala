@@ -95,10 +95,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     val error = intercept[SparkException] {
       rdd2.collect()
     }.getMessage
-    assert(
-      error.contains("does not match the current synchronized requestMethod") ||
-      error.contains("not properly killed")
-    )
+    assert(error.contains("Multiple barrier sync types found"))
   }
 
   test("successively sync with allGather and barrier") {
