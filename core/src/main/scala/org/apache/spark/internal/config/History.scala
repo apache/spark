@@ -197,7 +197,11 @@ private[spark] object History {
       .createWithDefault(true)
 
   val HYBRID_KVSTORE_ENABLED = ConfigBuilder("spark.history.store.hybridKVStore.enabled")
-    .version("3.0.1")
+    .doc("Whether to use HybridKVStore as the store when parsing event logs. " +
+      "HybridKVStore will first write data to an in-memory store and having a background thread " +
+      "that keeps pushing the change to a disk store. Use it with caution, as in-memory store " +
+      "requires higher memory usage.")
+    .version("3.1.0")
     .booleanConf
     .createWithDefault(false)
 }
