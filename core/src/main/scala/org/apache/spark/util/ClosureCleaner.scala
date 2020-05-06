@@ -18,12 +18,15 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
-import java.lang.invoke.SerializedLambda
+import java.lang.invoke.{MethodHandleInfo, SerializedLambda}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map, Set, Stack}
 
-import org.apache.xbean.asm7.{ClassReader, ClassVisitor, MethodVisitor, Type}
+import org.apache.commons.lang3.ClassUtils
+import org.apache.xbean.asm7.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
 import org.apache.xbean.asm7.Opcodes._
+import org.apache.xbean.asm7.tree.{ClassNode, MethodNode}
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
@@ -160,39 +163,6 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   /**
-   * Try to get a serialized Lambda from the closure.
-   *
-   * @param closure the closure to check.
-   */
-  private def getSerializedLambda(closure: AnyRef): Option[SerializedLambda] = {
-    val isClosureCandidate =
-      closure.getClass.isSynthetic &&
-        closure
-          .getClass
-          .getInterfaces.exists(_.getName == "scala.Serializable")
-
-    if (isClosureCandidate) {
-      try {
-        Option(inspect(closure))
-      } catch {
-        case e: Exception =>
-          // no need to check if debug is enabled here the Spark
-          // logging api covers this.
-          logDebug("Closure is not a serialized lambda.", e)
-          None
-      }
-    } else {
-      None
-    }
-  }
-
-  private def inspect(closure: AnyRef): SerializedLambda = {
-    val writeReplace = closure.getClass.getDeclaredMethod("writeReplace")
-    writeReplace.setAccessible(true)
-    writeReplace.invoke(closure).asInstanceOf[java.lang.invoke.SerializedLambda]
-  }
-
-  /**
    * Helper method to clean the given closure in place.
    *
    * The mechanism is to traverse the hierarchy of enclosing closures and null out any
@@ -239,12 +209,12 @@ private[spark] object ClosureCleaner extends Logging {
       cleanTransitively: Boolean,
       accessedFields: Map[Class[_], Set[String]]): Unit = {
 
-    // most likely to be the case with 2.12, 2.13
+    // indylambda check. Most likely to be the case with 2.12, 2.13
     // so we check first
     // non LMF-closures should be less frequent from now on
-    val lambdaFunc = getSerializedLambda(func)
+    val maybeIndylambdaProxy = IndylambdaScalaClosures.getSerializationProxy(func)
 
-    if (!isClosure(func.getClass) && lambdaFunc.isEmpty) {
+    if (!isClosure(func.getClass) && maybeIndylambdaProxy.isEmpty) {
       logDebug(s"Expected a closure; got ${func.getClass.getName}")
       return
     }
@@ -256,7 +226,7 @@ private[spark] object ClosureCleaner extends Logging {
       return
     }
 
-    if (lambdaFunc.isEmpty) {
+    if (maybeIndylambdaProxy.isEmpty) {
       logDebug(s"+++ Cleaning closure $func (${func.getClass.getName}) +++")
 
       // A list of classes that represents closures enclosed in the given one
@@ -372,14 +342,60 @@ private[spark] object ClosureCleaner extends Logging {
 
       logDebug(s" +++ closure $func (${func.getClass.getName}) is now cleaned +++")
     } else {
-      logDebug(s"Cleaning lambda: ${lambdaFunc.get.getImplMethodName}")
+      val lambdaProxy = maybeIndylambdaProxy.get
+      val implMethodName = lambdaProxy.getImplMethodName
 
-      val captClass = Utils.classForName(lambdaFunc.get.getCapturingClass.replace('/', '.'),
-        initialize = false, noSparkClassLoader = true)
+      logDebug(s"Cleaning indylambda closure: $implMethodName")
+
+      // capturing class is the class that declared this lambda
+      val capturingClassName = lambdaProxy.getCapturingClass.replace('/', '.')
+      val classLoader = func.getClass.getClassLoader // this is the safest option
+      // scalastyle:off classforname
+      val capturingClass = Class.forName(capturingClassName, false, classLoader)
+      // scalastyle:on classforname
+
       // Fail fast if we detect return statements in closures
-      getClassReader(captClass)
-        .accept(new ReturnStatementFinder(Some(lambdaFunc.get.getImplMethodName)), 0)
-      logDebug(s" +++ Lambda closure (${lambdaFunc.get.getImplMethodName}) is now cleaned +++")
+      val capturingClassReader = getClassReader(capturingClass)
+      capturingClassReader.accept(new ReturnStatementFinder(Option(implMethodName)), 0)
+
+      val isClosureDeclaredInScalaRepl = capturingClassName.startsWith("$line") &&
+        capturingClassName.endsWith("$iw")
+      val outerThisOpt = if (lambdaProxy.getCapturedArgCount > 0) {
+        Option(lambdaProxy.getCapturedArg(0))
+      } else {
+        None
+      }
+
+      // only need to clean when there is an enclosing "this" captured by the closure, and it
+      // should be something cleanable, i.e. a Scala REPL line object
+      val needsCleaning = isClosureDeclaredInScalaRepl &&
+        outerThisOpt.isDefined && outerThisOpt.get.getClass.getName == capturingClassName
+
+      if (needsCleaning) {
+        assert(accessedFields.isEmpty)
+
+        initAccessedFields(accessedFields, Seq(capturingClass))
+        IndylambdaScalaClosures.findAccessedFields(lambdaProxy, classLoader, accessedFields)
+
+        logDebug(s" + fields accessed by starting closure: " + accessedFields.size)
+        accessedFields.foreach { f => logDebug("     " + f) }
+
+        if (accessedFields(capturingClass).size < capturingClass.getDeclaredFields.length) {
+          // clone and clean the enclosing `this` only when there are fields to null out
+
+          val outerThis = outerThisOpt.get
+
+          logDebug(s" + cloning instance of REPL class $capturingClassName")
+          val clonedOuterThis = cloneAndSetFields(
+            parent = null, outerThis, capturingClass, accessedFields)
+
+          val outerField = func.getClass.getDeclaredField("arg$1")
+          outerField.setAccessible(true)
+          outerField.set(func, clonedOuterThis)
+        }
+      }
+
+      logDebug(s" +++ indylambda closure ($implMethodName) is now cleaned +++")
     }
 
     if (checkSerializable) {
@@ -411,6 +427,139 @@ private[spark] object ClosureCleaner extends Logging {
       field.set(obj, enclosingObject)
     }
     obj
+  }
+}
+
+private[spark] object IndylambdaScalaClosures extends Logging {
+  // internal name of java.lang.invoke.LambdaMetafactory
+  val LambdaMetafactoryClassName = "java/lang/invoke/LambdaMetafactory"
+  // the method that Scala indylambda use for bootstrap method
+  val LambdaMetafactoryMethodName = "altMetafactory"
+  val LambdaMetafactoryMethodDesc = "(Ljava/lang/invoke/MethodHandles$Lookup;" +
+    "Ljava/lang/String;Ljava/lang/invoke/MethodType;[Ljava/lang/Object;)" +
+    "Ljava/lang/invoke/CallSite;"
+
+  /**
+   * Check if the given reference is a indylambda style Scala closure.
+   * If so, return a non-empty serialization proxy (SerializedLambda) of the closure;
+   * otherwise return None.
+   *
+   * @param maybeClosure the closure to check.
+   */
+  def getSerializationProxy(maybeClosure: AnyRef): Option[SerializedLambda] = {
+    val maybeClosureClass = maybeClosure.getClass
+
+    // shortcut the fast check:
+    // indylambda closure classes are generated by Java's LambdaMetafactory, and they're always
+    // synthetic.
+    if (!maybeClosureClass.isSynthetic) return None
+
+    val implementedInterfaces = ClassUtils.getAllInterfaces(maybeClosureClass).asScala
+    val isClosureCandidate = implementedInterfaces.exists(_.getName == "scala.Serializable") &&
+      implementedInterfaces.exists(_.getName.startsWith("scala.Function"))
+
+    if (isClosureCandidate) {
+      try {
+        val lambdaProxy = inspect(maybeClosure)
+        if (isIndylambdaScalaClosure(lambdaProxy)) Option(lambdaProxy)
+        else None
+      } catch {
+        case e: Exception =>
+          // no need to check if debug is enabled here the Spark logging api covers this.
+          logDebug("The given reference is not an indylambda Scala closure.", e)
+          None
+      }
+    } else {
+      None
+    }
+  }
+
+  def isIndylambdaScalaClosure(lambdaProxy: SerializedLambda): Boolean = {
+    lambdaProxy.getImplMethodKind == MethodHandleInfo.REF_invokeStatic &&
+      lambdaProxy.getImplMethodName.contains("$anonfun$")
+      // && implements a scala.runtime.java8 functional interface
+  }
+
+  def inspect(closure: AnyRef): SerializedLambda = {
+    val writeReplace = closure.getClass.getDeclaredMethod("writeReplace")
+    writeReplace.setAccessible(true)
+    writeReplace.invoke(closure).asInstanceOf[SerializedLambda]
+  }
+
+  def findAccessedFields(
+      lambdaProxy: SerializedLambda,
+      lambdaClassLoader: ClassLoader,
+      accessedFields: Map[Class[_], Set[String]]): Unit = {
+    val implClassInternalName = lambdaProxy.getImplClass
+    // scalastyle:off classforname
+    val implClass = Class.forName(
+      implClassInternalName.replace('/', '.'), false, lambdaClassLoader)
+    // scalastyle:on classforname
+    val implClassNode = new ClassNode()
+    val implClassReader = ClosureCleaner.getClassReader(implClass)
+    implClassReader.accept(implClassNode, 0)
+
+    val methodsByName = Map.empty[MethodIdentifier[_], MethodNode]
+    for (m <- implClassNode.methods.asScala) {
+      methodsByName(MethodIdentifier(implClass, m.name, m.desc)) = m
+    }
+
+    val implMethodId = MethodIdentifier(
+      implClass, lambdaProxy.getImplMethodName, lambdaProxy.getImplMethodSignature)
+    val implMethodNode = methodsByName(implMethodId)
+
+    val visited = Set[MethodIdentifier[_]](implMethodId)
+    val stack = Stack[MethodIdentifier[_]](implMethodId)
+        while (!stack.isEmpty) {
+      val currentId = stack.pop
+      val currentMethodNode = methodsByName(currentId)
+      logTrace(s"  scanning $currentId")
+      currentMethodNode.accept(new MethodVisitor(ASM7) {
+        override def visitFieldInsn(op: Int, owner: String, name: String, desc: String): Unit = {
+          if (op == GETFIELD || op == PUTFIELD) {
+            val ownerExternalName = owner.replace('/', '.')
+            for (cl <- accessedFields.keys if cl.getName == ownerExternalName) {
+              logTrace(s"    found field access $name on $owner")
+              accessedFields(cl) += name
+            }
+          }
+        }
+
+        override def visitMethodInsn(
+            op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
+          if (owner == implClassInternalName) {
+            logTrace(s"    found intra class call to $owner.$name$desc")
+            stack.push(MethodIdentifier(implClass, name, desc))
+          } else {
+            // keep the same behavior as the original ClosureCleaner
+            logTrace(s"    ignoring call to $owner.$name$desc")
+          }
+        }
+
+        // find the lexically nested closures
+        override def visitInvokeDynamicInsn(
+            name: String, desc: String, bsmHandle: Handle, bsmArgs: Object*): Unit = {
+          logTrace(s"    invokedynamic: $name$desc, bsmHandle=$bsmHandle, bsmArgs=$bsmArgs")
+
+          // fast check: we only care about Scala lambda creation
+          if (!name.startsWith("apply")) return
+          if (!Type.getReturnType(desc).getDescriptor.startsWith("Lscala/Function")) return
+
+          if (bsmHandle.getOwner == LambdaMetafactoryClassName &&
+              bsmHandle.getName == LambdaMetafactoryMethodName &&
+              bsmHandle.getDesc == LambdaMetafactoryMethodDesc) {
+            // OK we're in the right bootstrap method for serializable Java 8 style lambda creation
+            val targetHandle = bsmArgs(1).asInstanceOf[Handle]
+            if (targetHandle.getOwner == implClassInternalName &&
+                targetHandle.getDesc.startsWith(s"(L$implClassInternalName;")) {
+              // this is a lexically nested closure that also captures the enclosing `this`
+              logDebug(s"    found inner closure $targetHandle")
+              stack.push(MethodIdentifier(implClass, targetHandle.getName, targetHandle.getDesc))
+            }
+          }
+        }
+      })
+    }
   }
 }
 
