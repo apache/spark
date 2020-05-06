@@ -198,12 +198,13 @@ public class HybridKVStore implements KVStore {
         // HybridKVStore has switched to levelDB mode
         levelDB.close();
       }
-      inMemoryStore.close();
     } catch (Exception e) {
       // Only throw the exception if it's IOException, which is thrown by levelDB.close()
       if (e instanceof IOException) {
         throw (IOException) e;
       }
+    } finally {
+      inMemoryStore.close();
     }
   }
 
