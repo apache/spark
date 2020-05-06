@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
@@ -24,6 +26,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -67,6 +70,19 @@ object DataSourceUtils {
 
   private[sql] def isDataFile(fileName: String) =
     !(fileName.startsWith("_") || fileName.startsWith("."))
+
+  /**
+   * Returns if the given relation's V1 datasource provider supports nested predicate pushdown.
+   */
+  private[sql] def supportNestedPredicatePushdown(relation: BaseRelation): Boolean =
+    relation match {
+      case hs: HadoopFsRelation =>
+        val supportedDatasources =
+          Utils.stringToSeq(SQLConf.get.getConf(SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST)
+            .toLowerCase(Locale.ROOT))
+        supportedDatasources.contains(hs.toString)
+      case _ => false
+    }
 
   def needRebaseDateTime(lookupFileMeta: String => String): Option[Boolean] = {
     if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
