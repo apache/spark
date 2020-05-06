@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.{JobExecutionStatus, SparkConf, SparkException}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils
@@ -46,10 +46,13 @@ private[spark] class AppStatusStore(
     while (!iterator.hasNext &&
       System.nanoTime() - startTime < AppStatusStore.FETCH_APP_INFO_TIMEOUT) {
       // Wait a while to see if the ApplicationInfo has been written to the store.
-      Thread.sleep(200)
+      Thread.sleep(100)
       iterator = store.view(classOf[ApplicationInfoWrapper]).max(1).iterator()
     }
-    // The next() call may still throw a NoSuchElement exception.
+    if (!iterator.hasNext) {
+      throw new SparkException(s"No available ApplicationInfo after waiting for " +
+        s"${TimeUnit.NANOSECONDS.toSeconds(AppStatusStore.FETCH_APP_INFO_TIMEOUT)} seconds.")
+    }
     iterator.next().info
   }
 
