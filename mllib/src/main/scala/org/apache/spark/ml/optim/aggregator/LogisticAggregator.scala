@@ -472,7 +472,7 @@ private[ml] class BlockLogisticAggregator(
       if (weight > 0) {
         weightSum += weight
         val label = block.getLabel(i)
-        val margin = vec.values(i)
+        val margin = vec(i)
         if (label > 0) {
           // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
           lossSum += weight * Utils.log1pExp(margin)
