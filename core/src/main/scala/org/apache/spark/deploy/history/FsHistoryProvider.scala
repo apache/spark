@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
 import java.nio.file.Files
 import java.util.{Date, NoSuchElementException, ServiceLoader}
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
 import java.util.zip.ZipOutputStream
 
@@ -1180,8 +1181,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         val isCompressed = reader.compressionCodec.isDefined
         logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
         val lease = dm.lease(reader.totalSize, isCompressed)
+        val isRolledBackLeaseOnFailure = new AtomicBoolean(false)
+        var s: HybridKVStore = null
         try {
-          val s = new HybridKVStore()
+          s = new HybridKVStore()
           val levelDB = KVUtils.open(lease.tmpPath, metadata)
           s.setLevelDB(levelDB)
 
@@ -1198,6 +1201,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               logWarning(s"Failed to switch to use LevelDb for app" +
               s" $appId / ${attempt.info.attemptId}")
               levelDB.close()
+              if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
+                lease.rollback()
+              }
               throw e
             }
           })
@@ -1210,10 +1216,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // compaction may touch the file(s) which app rebuild wants to read
             // compaction wouldn't run in short interval, so try again...
             logWarning(s"Exception occurred while rebuilding app $appId - trying again...")
-            lease.rollback()
+            // Closes kvstore and rollback lease
+            s.close()
+            if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
+              lease.rollback()
+            }
             retried = true
           case e: Exception =>
-            lease.rollback()
+            // Closes kvstore and rollback lease
+            s.close()
+            if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
+              lease.rollback()
+            }
             throw e
         }
       }

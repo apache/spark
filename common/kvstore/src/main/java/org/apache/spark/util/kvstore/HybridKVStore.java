@@ -187,8 +187,6 @@ public class HybridKVStore implements KVStore {
   @Override
   public void close() throws IOException {
     try {
-      // Calling close on inMemoryStore multiple is ok
-      maybeCloseInMemoryStore();
       if (writingToLevelDBThread != null &&
               writingToLevelDBThread.isAlive()) {
         // If background thread is still running, wait for it to finish
@@ -197,10 +195,11 @@ public class HybridKVStore implements KVStore {
         writingToLevelDBThread.join();
         levelDB.close();
       } else if(levelDB != null) {
+        // HybridKVStore has switched to levelDB mode
         levelDB.close();
       }
+      inMemoryStore.close();
     } catch (Exception e) {
-      isEncounteredException.set(true);
       // Only throw the exception if it's IOException, which is thrown by levelDB.close()
       if (e instanceof IOException) {
         throw (IOException) e;
@@ -296,9 +295,9 @@ public class HybridKVStore implements KVStore {
               maybeCloseInMemoryStore();
             }
           } catch (Exception e) {
-            myListener.onSwitchingToLevelDBFail(e);
             // Clear the operations queue
             pendingLevelDBOperationsQueue.clear();
+            myListener.onSwitchingToLevelDBFail(e);
           }
         }
       });
