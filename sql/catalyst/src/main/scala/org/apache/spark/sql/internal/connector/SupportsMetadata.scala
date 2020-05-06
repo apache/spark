@@ -23,7 +23,6 @@ import org.apache.spark.annotation.Evolving
  * for a file based scan operator. This is currently used for supporting formatted
  * explain.
  */
-@Evolving
 trait SupportsMetadata {
   def getMetaData(): Map[String, String]
 }
