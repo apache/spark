@@ -257,7 +257,7 @@ function reselectCheckboxesBasedOnTaskTableState() {
         }
         for (var k = 0; k < executorOptionalColumns.length; k++) {
             if (executorSummaryTableSelector.column(executorOptionalColumns[k]).visible()) {
-                $("#executor-box-"+optionalColumns[k]).prop('checked', true);
+                $("#executor-box-"+executorOptionalColumns[k]).prop('checked', true);
             } else {
                 allChecked = false;
             }
@@ -306,10 +306,10 @@ $(document).ready(function () {
         "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15' column-type='task'> Result Serialization Time</div>" +
         "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16' column-type='task'> Getting Result Time</div>" +
         "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17' column-type='task'> Peak Execution Memory</div>" +
-        "<div id='executor_jvm_on_off_heap_memory' class='executor-jvm-om-off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-15'  data-column='15' column-type='executor'> Executor  JVMOnHeapMemory / JVMOffHeapMemory</div>" +
-        "<div id='executor_on_off_heap_execution_memory' class='executor-on-off-heap-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-16' data-column='16' column-type='executor'> Executor  OnHeapExecutionMemory / OffHeapExecutionMemory</div>" +
-        "<div id='executor_on_off_heap_storage_memory' class='executor-on-off-heap-storage-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-17' data-column='17' column-type='executor'> Executor OnHeapStorageMemory / OffHeapStorageMemory</div>" +
-        "<div id='executor_direct_mapped_pool_memory' class='executor-direct-mapped-pool-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-18' data-column='18' column-type='executor'> Executor DirectPoolMemory / MappedPoolMemory</div>" +
+        "<div id='executor_jvm_on_off_heap_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-15'  data-column='15' column-type='executor'> Executor  JVMOnHeapMemory / JVMOffHeapMemory</div>" +
+        "<div id='executor_on_off_heap_execution_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-16' data-column='16' column-type='executor'> Executor  OnHeapExecutionMemory / OffHeapExecutionMemory</div>" +
+        "<div id='executor_on_off_heap_storage_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-17' data-column='17' column-type='executor'> Executor OnHeapStorageMemory / OffHeapStorageMemory</div>" +
+        "<div id='executor_direct_mapped_pool_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-18' data-column='18' column-type='executor'> Executor DirectPoolMemory / MappedPoolMemory</div>" +
         "</div>");
 
     $('#scheduler_delay').attr("data-toggle", "tooltip")
