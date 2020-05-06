@@ -847,7 +847,8 @@ object SQLConf {
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
       "distinct semantics. By default the optimization is disabled, and deprecated as of Spark " +
       "3.0 since it may return incorrect results when the files are empty, see also SPARK-26709." +
-      "It will be removed in the future releases.")
+      "It will be removed in the future releases. If you must use, use 'SparkSessionExtensions' " +
+      "instead to inject it as a custom rule.")
     .version("2.1.1")
     .booleanConf
     .createWithDefault(false)
