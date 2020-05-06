@@ -864,22 +864,18 @@ object ApplicationMaster extends Logging {
     val ugi = sparkConf.get(PRINCIPAL) match {
       // We only need to log in with the keytab in cluster mode. In client mode, the driver
       // handles the user keytab.
-      case Some(principal) if amArgs.userClass != null =>
+      case Some(principal) if master.isClusterMode =>
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()
 
-        if (master.isClusterMode) {
-          // Set the context class loader so that the token manager has access to jars
-          // distributed by the user.
-          Utils.withContextClassLoader(master.userClassLoader) {
-            // Re-obtain delegation tokens, as they might be outdated as of now. Add the fresh
-            // tokens on top of the original user's credentials (overwrite).
-            // This is only needed in cluster mode, because in client mode, AM will soon retrieve
-            // the latest tokens from the driver.
-            val credentialManager = new HadoopDelegationTokenManager(sparkConf, yarnConf, null)
-            credentialManager.obtainDelegationTokens(originalCreds)
-          }
+        // Set the context class loader so that the token manager has access to jars
+        // distributed by the user.
+        Utils.withContextClassLoader(master.userClassLoader) {
+          // Re-obtain delegation tokens, as they might be outdated as of now. Add the fresh
+          // tokens on top of the original user's credentials (overwrite).
+          val credentialManager = new HadoopDelegationTokenManager(sparkConf, yarnConf, null)
+          credentialManager.obtainDelegationTokens(originalCreds)
         }
 
         // Transfer the original user's tokens to the new user, since it may contain needed tokens
