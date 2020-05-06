@@ -767,7 +767,7 @@ class SparkSession private(
     }
     else {
       throw new IllegalStateException(
-        s"""Cannot call methods on a terminated SparkSession. Call
+        """Cannot call methods on a terminated SparkSession. Call
            |getOrCreate() to create a new session.
            |""".stripMargin)
     }
