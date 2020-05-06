@@ -955,7 +955,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             // The file metadata indicates if it needs rebase or not, so we can always get the
             // correct result regardless of the "rebaseInRead" config.
             Seq(true, false).foreach { rebase =>
-              withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
                 checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(tsStr)))
               }
             }
@@ -984,7 +984,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       // The file metadata indicates if it needs rebase or not, so we can always get the correct
       // result regardless of the "rebaseInRead" config.
       Seq(true, false).foreach { rebase =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
           checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-01")))
         }
       }
