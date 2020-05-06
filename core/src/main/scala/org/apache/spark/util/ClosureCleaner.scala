@@ -270,7 +270,7 @@ private[spark] object ClosureCleaner extends Logging {
         }
       }
 
-      logDebug(s" + fields accessed by starting closure: " + accessedFields.size)
+      logDebug(s" + fields accessed by starting closure: ${accessedFields.size} classes")
       accessedFields.foreach { f => logDebug("     " + f) }
 
       // List of outer (class, object) pairs, ordered from outermost to innermost
@@ -380,7 +380,7 @@ private[spark] object ClosureCleaner extends Logging {
         initAccessedFields(accessedFields, Seq(capturingClass))
         IndylambdaScalaClosures.findAccessedFields(lambdaProxy, classLoader, accessedFields)
 
-        logDebug(s" + fields accessed by starting closure: " + accessedFields.size)
+        logDebug(s" + fields accessed by starting closure: ${accessedFields.size} classes")
         accessedFields.foreach { f => logDebug("     " + f) }
 
         if (accessedFields(capturingClass).size < capturingClass.getDeclaredFields.length) {
@@ -516,7 +516,7 @@ private[spark] object IndylambdaScalaClosures extends Logging {
 
     val visited = Set[MethodIdentifier[_]](implMethodId)
     val stack = Stack[MethodIdentifier[_]](implMethodId)
-        while (!stack.isEmpty) {
+    while (!stack.isEmpty) {
       val currentId = stack.pop
       val currentMethodNode = methodsByName(currentId)
       logTrace(s"  scanning $currentId")
