@@ -88,6 +88,8 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
 
     var kdc: MiniKdc = null
     try {
+      // UserGroupInformation.setConfiguration needs default kerberos realm which can be set in
+      // krb5.conf. MiniKdc sets "java.security.krb5.conf" in start and removes it when stop called.
       val kdcDir = Utils.createTempDir()
       val kdcConf = MiniKdc.createConf()
       // The port for MiniKdc service gets selected in the constructor, but will be bound
@@ -115,8 +117,6 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
         }
       }
 
-      // UserGroupInformation.setConfiguration needs default kerberos realm which can be set in
-      // krb5.conf. MiniKdc sets "java.security.krb5.conf" in start and removes it when stop called.
       val krbConf = new Configuration()
       krbConf.set(HADOOP_SECURITY_AUTHENTICATION, "kerberos")
 
