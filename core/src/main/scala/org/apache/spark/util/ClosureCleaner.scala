@@ -372,6 +372,9 @@ private[spark] object ClosureCleaner extends Logging {
         outerThisOpt.isDefined && outerThisOpt.get.getClass.getName == capturingClassName
 
       if (needsCleaning) {
+        // indylambda closures do not reference enclosing closures via an `$outer` chain, so no
+        // transitive cleaning is needed. Thus clean() shouldn't be recursively called with a
+        // non-empty accessedFields.
         assert(accessedFields.isEmpty)
 
         initAccessedFields(accessedFields, Seq(capturingClass))
@@ -486,6 +489,10 @@ private[spark] object IndylambdaScalaClosures extends Logging {
     writeReplace.invoke(closure).asInstanceOf[SerializedLambda]
   }
 
+  /**
+   * Scans an indylambda Scala closure, along with its lexically nested closures, and populate
+   * the accessed fields info on which fields on the outer object are accessed.
+   */
   def findAccessedFields(
       lambdaProxy: SerializedLambda,
       lambdaClassLoader: ClassLoader,
@@ -506,7 +513,6 @@ private[spark] object IndylambdaScalaClosures extends Logging {
 
     val implMethodId = MethodIdentifier(
       implClass, lambdaProxy.getImplMethodName, lambdaProxy.getImplMethodSignature)
-    val implMethodNode = methodsByName(implMethodId)
 
     val visited = Set[MethodIdentifier[_]](implMethodId)
     val stack = Stack[MethodIdentifier[_]](implMethodId)
