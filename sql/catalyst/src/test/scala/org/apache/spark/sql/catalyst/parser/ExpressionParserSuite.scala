@@ -188,7 +188,7 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like escape expressions") {
-    val message = "Escape string must contains only one character."
+    val message = "Escape string must contain only one character."
     assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", '#'))
     assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", '\"'))
     intercept("a like 'pattern%' escape '##'", message)
@@ -206,6 +206,21 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
     assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
     assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
+  }
+
+  test("(NOT) LIKE (ANY | SOME | ALL) expressions") {
+    Seq("any", "some").foreach { quantifier =>
+      assertEqual(s"a like $quantifier ('foo%', 'b%')", ('a like "foo%") || ('a like "b%"))
+      assertEqual(s"a not like $quantifier ('foo%', 'b%')", !('a like "foo%") || !('a like "b%"))
+      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !(('a like "foo%") || ('a like "b%")))
+    }
+    assertEqual("a like all ('foo%', 'b%')", ('a like "foo%") && ('a like "b%"))
+    assertEqual("a not like all ('foo%', 'b%')", !('a like "foo%") && !('a like "b%"))
+    assertEqual("not (a like all ('foo%', 'b%'))", !(('a like "foo%") && ('a like "b%")))
+
+    Seq("any", "some", "all").foreach { quantifier =>
+      intercept(s"a like $quantifier()", "Expected something between '(' and ')'")
+    }
   }
 
   test("is null expressions") {

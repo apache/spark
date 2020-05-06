@@ -593,6 +593,17 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  test("SPARK-27340 Alias on TimeWindow expression cause watermark metadata lost") {
+    val inputData = MemoryStream[Int]
+    val aliasWindow = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .select(window($"eventTime", "5 seconds") as 'aliasWindow)
+    // Check the eventTime metadata is kept in the top level alias.
+    assert(aliasWindow.logicalPlan.output.exists(
+      _.metadata.contains(EventTimeWatermark.delayKey)))
+  }
+
   test("test no-data flag") {
     val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 

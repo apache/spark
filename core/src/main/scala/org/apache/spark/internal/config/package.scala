@@ -544,6 +544,16 @@ package object config {
       .version("1.2.0")
       .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
 
+  private[spark] val LEGACY_LOCALITY_WAIT_RESET =
+    ConfigBuilder("spark.locality.wait.legacyResetOnTaskLaunch")
+    .doc("Whether to use the legacy behavior of locality wait, which resets the delay timer " +
+      "anytime a task is scheduled. See Delay Scheduling section of TaskSchedulerImpl's class " +
+      "documentation for more details.")
+    .internal()
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .version("0.5.0")
     .timeConf(TimeUnit.MILLISECONDS)

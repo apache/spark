@@ -18,17 +18,22 @@
 package org.apache.spark.sql.jdbc
 
 import java.io.{File, FileInputStream, FileOutputStream}
+import java.sql.Connection
+import java.util.Properties
 import javax.security.auth.login.Configuration
 
 import scala.io.Source
 
 import org.apache.hadoop.minikdc.MiniKdc
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SecurityUtils, Utils}
 
 abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
   private var kdc: MiniKdc = _
-  protected var workDir: File = _
+  protected var entryPointDir: File = _
+  protected var initDbDir: File = _
   protected val userName: String
   protected var principal: String = _
   protected val keytabFileName: String
@@ -46,8 +51,9 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
 
     principal = s"$userName@${kdc.getRealm}"
 
-    workDir = Utils.createTempDir()
-    val keytabFile = new File(workDir, keytabFileName)
+    entryPointDir = Utils.createTempDir()
+    initDbDir = Utils.createTempDir()
+    val keytabFile = new File(initDbDir, keytabFileName)
     keytabFullPath = keytabFile.getAbsolutePath
     kdc.createPrincipal(keytabFile, userName)
     logInfo(s"Created keytab file: $keytabFullPath")
@@ -62,6 +68,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     try {
       if (kdc != null) {
         kdc.stop()
+        kdc = null
       }
       Configuration.setConfiguration(null)
       SecurityUtils.setGlobalKrbDebug(false)
@@ -70,8 +77,10 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     }
   }
 
+  protected def replaceIp(s: String): String = s.replace("__IP_ADDRESS_REPLACE_ME__", dockerIp)
+
   protected def copyExecutableResource(
-      fileName: String, dir: File, processLine: String => String) = {
+      fileName: String, dir: File, processLine: String => String = identity) = {
     val newEntry = new File(dir.getAbsolutePath, fileName)
     newEntry.createNewFile()
     Utils.tryWithResource(
@@ -90,5 +99,65 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     newEntry.setExecutable(true, false)
     logInfo(s"Created executable resource file: ${newEntry.getAbsolutePath}")
     newEntry
+  }
+
+  override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement("CREATE TABLE bar (c0 VARCHAR(8))").executeUpdate()
+    conn.prepareStatement("INSERT INTO bar VALUES ('hello')").executeUpdate()
+  }
+
+  test("Basic read test in query option") {
+    // This makes sure Spark must do authentication
+    Configuration.setConfiguration(null)
+
+    val expectedResult = Set("hello").map(Row(_))
+
+    val query = "SELECT c0 FROM bar"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("keytab", keytabFullPath)
+      .option("principal", principal)
+      .option("query", query)
+      .load()
+    assert(df.collect().toSet === expectedResult)
+  }
+
+  test("Basic read test in create table path") {
+    // This makes sure Spark must do authentication
+    Configuration.setConfiguration(null)
+
+    val expectedResult = Set("hello").map(Row(_))
+
+    val query = "SELECT c0 FROM bar"
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl', query '$query', keytab '$keytabFullPath', principal '$principal')
+       """.stripMargin.replaceAll("\n", " "))
+    assert(sql("select c0 from queryOption").collect().toSet === expectedResult)
+  }
+
+  test("Basic write test") {
+    // This makes sure Spark must do authentication
+    Configuration.setConfiguration(null)
+
+    val props = new Properties
+    props.setProperty("keytab", keytabFullPath)
+    props.setProperty("principal", principal)
+
+    val tableName = "write_test"
+    sqlContext.createDataFrame(Seq(("foo", "bar")))
+      .write.jdbc(jdbcUrl, tableName, props)
+    val df = sqlContext.read.jdbc(jdbcUrl, tableName, props)
+
+    val schema = df.schema
+    assert(schema.map(_.dataType).toSeq === Seq(StringType, StringType))
+    val rows = df.collect()
+    assert(rows.length === 1)
+    assert(rows(0).getString(0) === "foo")
+    assert(rows(0).getString(1) === "bar")
   }
 }
