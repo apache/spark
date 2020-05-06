@@ -18,6 +18,7 @@
 package org.apache.spark.status
 
 import java.util.{List => JList}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
@@ -35,8 +36,21 @@ private[spark] class AppStatusStore(
     val store: KVStore,
     val listener: Option[AppStatusListener] = None) {
 
+  /**
+   * This method contains an automatic retry logic and tries to get a valid [[v1.ApplicationInfo]].
+   * See [SPARK-31632] The ApplicationInfo in KVStore may be accessed before it's prepared
+   */
   def applicationInfo(): v1.ApplicationInfo = {
-    store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
+    var iterator = store.view(classOf[ApplicationInfoWrapper]).max(1).iterator()
+    val startTime = System.nanoTime()
+    while (!iterator.hasNext &&
+      System.nanoTime() - startTime < AppStatusStore.FETCH_APP_INFO_TIMEOUT) {
+      // Wait a while to see if the ApplicationInfo has been written to the store.
+      Thread.sleep(200)
+      iterator = store.view(classOf[ApplicationInfoWrapper]).max(1).iterator()
+    }
+    // The next() call may still throw a NoSuchElement exception.
+    iterator.next().info
   }
 
   def environmentInfo(): v1.ApplicationEnvironmentInfo = {
@@ -545,6 +559,11 @@ private[spark] class AppStatusStore(
 }
 
 private[spark] object AppStatusStore {
+
+  /**
+   * The timeout value used by [[AppStatusStore.applicationInfo()]].
+   */
+  private val FETCH_APP_INFO_TIMEOUT = TimeUnit.MILLISECONDS.toNanos(5000) // 5 seconds
 
   val CURRENT_VERSION = 2L
 
