@@ -181,6 +181,7 @@ private[spark] class BarrierCoordinator(
             s"tasks, finished successfully.")
           barrierEpoch += 1
           requesters.clear()
+          requestMethods.clear()
           cancelTimerTask()
         }
       }
