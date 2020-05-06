@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.{ClientRMService, RMAppMana
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter
 import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyShort, eq => meq}
@@ -226,7 +227,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val yarnClient = mock(classOf[YarnClient])
     val rmApps = new ConcurrentHashMap[ApplicationId, RMApp]()
     val rmContext = mock(classOf[RMContext])
-    val conf = mock(classOf[Configuration])
     when(rmContext.getRMApps).thenReturn(rmApps)
     val dispatcher = mock(classOf[Dispatcher])
     when(rmContext.getDispatcher).thenReturn(dispatcher)
@@ -239,17 +239,19 @@ class ClientSuite extends SparkFunSuite with Matchers {
     when(rmContext.getRMApplicationHistoryWriter).thenReturn(writer)
     val publisher = mock(classOf[SystemMetricsPublisher])
     when(rmContext.getSystemMetricsPublisher).thenReturn(publisher)
+    val yarnScheduler = mock(classOf[YarnScheduler])
     val rmAppManager = new RMAppManager(rmContext,
-      null,
+      yarnScheduler,
       null,
       mock(classOf[ApplicationACLsManager]),
-      conf)
+      new Configuration())
     val clientRMService = new ClientRMService(rmContext,
-      null,
+      yarnScheduler,
       rmAppManager,
       null,
       null,
       null)
+    clientRMService.init(new Configuration())
     when(yarnClient.submitApplication(any())).thenAnswer((invocationOnMock: InvocationOnMock) => {
       val subContext = invocationOnMock.getArguments()(0)
         .asInstanceOf[ApplicationSubmissionContext]
