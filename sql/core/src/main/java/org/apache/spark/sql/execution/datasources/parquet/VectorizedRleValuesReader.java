@@ -27,6 +27,7 @@ import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
+import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import java.io.IOException;
@@ -211,7 +212,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) throws IOException {
+      VectorizedValuesReader data,
+      boolean failIfRebase) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -219,7 +221,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       switch (mode) {
         case RLE:
           if (currentValue == level) {
-            data.readIntegersWithRebase(n, c, rowId);
+            data.readIntegersWithRebase(n, c, rowId, failIfRebase);
           } else {
             c.putNulls(rowId, n);
           }
@@ -227,8 +229,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
         case PACKED:
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
-              c.putInt(rowId + i,
-                RebaseDateTime.rebaseJulianToGregorianDays(data.readInteger()));
+              int days = data.readInteger();
+              if (failIfRebase && days < RebaseDateTime.lastSwitchJulianDay()) {
+                throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+              }
+              c.putInt(rowId + i, RebaseDateTime.rebaseJulianToGregorianDays(days));
             } else {
               c.putNull(rowId + i);
             }
@@ -387,7 +392,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) throws IOException {
+      VectorizedValuesReader data,
+      boolean failIfRebase) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -395,7 +401,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       switch (mode) {
         case RLE:
           if (currentValue == level) {
-            data.readLongsWithRebase(n, c, rowId);
+            data.readLongsWithRebase(n, c, rowId, failIfRebase);
           } else {
             c.putNulls(rowId, n);
           }
@@ -403,8 +409,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
         case PACKED:
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
-              c.putLong(rowId + i,
-                RebaseDateTime.rebaseJulianToGregorianMicros(data.readLong()));
+              long micros = data.readLong();
+              if (failIfRebase && micros < RebaseDateTime.lastSwitchJulianTs()) {
+                throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+              }
+              c.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(micros));
             } else {
               c.putNull(rowId + i);
             }
@@ -584,7 +593,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-  public void readIntegersWithRebase(int total, WritableColumnVector c, int rowId) {
+  public void readIntegersWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
@@ -604,7 +614,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-  public void readLongsWithRebase(int total, WritableColumnVector c, int rowId) {
+  public void readLongsWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 

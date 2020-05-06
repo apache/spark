@@ -161,9 +161,10 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
               Seq(true, false).foreach { modernDates =>
                 Seq(false, true).foreach { rebase =>
                   benchmark.addCase(caseName(modernDates, dateTime, Some(rebase)), 1) { _ =>
+                    val mode = if (rebase) "LEGACY" else "CORRECTED"
                     withSQLConf(
                       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> getOutputType(dateTime),
-                      SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> rebase.toString) {
+                      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> mode.toString) {
                       genDF(rowsNum, dateTime, modernDates)
                         .write
                         .mode("overwrite")

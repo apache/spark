@@ -21,12 +21,14 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 import org.apache.parquet.bytes.ByteBufferInputStream;
-import org.apache.parquet.io.ParquetDecodingException;
-import org.apache.spark.sql.catalyst.util.RebaseDateTime;
-import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
-
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
+import org.apache.parquet.io.ParquetDecodingException;
+
+import org.apache.spark.sql.catalyst.util.RebaseDateTime;
+import org.apache.spark.sql.execution.datasources.DataSourceUtils;
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+
 
 /**
  * An implementation of the Parquet PLAIN decoder that supports the vectorized interface.
@@ -86,12 +88,16 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   // iterates the values twice: check if we need to rebase first, then go to the optimized branch
   // if rebase is not needed.
   @Override
-  public final void readIntegersWithRebase(int total, WritableColumnVector c, int rowId) {
+  public final void readIntegersWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     int requiredBytes = total * 4;
     ByteBuffer buffer = getBuffer(requiredBytes);
     boolean rebase = false;
     for (int i = 0; i < total; i += 1) {
       rebase |= buffer.getInt(buffer.position() + i * 4) < RebaseDateTime.lastSwitchJulianDay();
+    }
+    if (rebase && failIfRebase) {
+      throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
     }
     if (rebase) {
       for (int i = 0; i < total; i += 1) {
@@ -128,12 +134,16 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   // iterates the values twice: check if we need to rebase first, then go to the optimized branch
   // if rebase is not needed.
   @Override
-  public final void readLongsWithRebase(int total, WritableColumnVector c, int rowId) {
+  public final void readLongsWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     int requiredBytes = total * 8;
     ByteBuffer buffer = getBuffer(requiredBytes);
     boolean rebase = false;
     for (int i = 0; i < total; i += 1) {
       rebase |= buffer.getLong(buffer.position() + i * 8) < RebaseDateTime.lastSwitchJulianTs();
+    }
+    if (rebase && failIfRebase) {
+      throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
     }
     if (rebase) {
       for (int i = 0; i < total; i += 1) {

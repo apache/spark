@@ -36,6 +36,7 @@ import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
+import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataTypes;
@@ -102,14 +103,14 @@ public class VectorizedColumnReader {
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final ZoneId convertTz;
   private static final ZoneId UTC = ZoneOffset.UTC;
-  private final boolean rebaseDateTime;
+  private final String datetimeRebaseMode;
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       OriginalType originalType,
       PageReader pageReader,
       ZoneId convertTz,
-      boolean rebaseDateTime) throws IOException {
+      String datetimeRebaseMode) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
@@ -132,7 +133,7 @@ public class VectorizedColumnReader {
     if (totalValueCount == 0) {
       throw new IOException("totalValueCount == 0");
     }
-    this.rebaseDateTime = rebaseDateTime;
+    this.datetimeRebaseMode = datetimeRebaseMode;
   }
 
   /**
@@ -466,12 +467,13 @@ public class VectorizedColumnReader {
       defColumn.readShorts(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.DateType ) {
-      if (rebaseDateTime) {
-        defColumn.readIntegersWithRebase(
+      if ("CORRECTED".equals(datetimeRebaseMode)) {
+        defColumn.readIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else {
-        defColumn.readIntegers(
-           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+        boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
+        defColumn.readIntegersWithRebase(
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, failIfRebase);
       }
     } else {
       throw constructConvertNotSupportedException(descriptor, column);
@@ -485,19 +487,32 @@ public class VectorizedColumnReader {
       defColumn.readLongs(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
-      if (rebaseDateTime) {
-        defColumn.readLongsWithRebase(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-      } else {
+      if ("CORRECTED".equals(datetimeRebaseMode)) {
         defColumn.readLongs(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+      } else {
+        boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
+        defColumn.readLongsWithRebase(
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, failIfRebase);
       }
     } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
-      if (rebaseDateTime) {
+      if ("LEGACY".equals(datetimeRebaseMode)) {
         for (int i = 0; i < num; i++) {
           if (defColumn.readInteger() == maxDefLevel) {
             long micros = DateTimeUtils.millisToMicros(dataColumn.readLong());
             column.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(micros));
+          } else {
+            column.putNull(rowId + i);
+          }
+        }
+      } else if ("EXCEPTION".equals(datetimeRebaseMode)) {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            long micros = DateTimeUtils.millisToMicros(dataColumn.readLong());
+            if (micros < RebaseDateTime.lastSwitchJulianTs()) {
+              throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+            }
+            column.putLong(rowId + i, micros);
           } else {
             column.putNull(rowId + i);
           }
