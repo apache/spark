@@ -26,12 +26,11 @@ import scala.io.Source
 
 import org.apache.hadoop.minikdc.MiniKdc
 
-import org.apache.spark.MiniKDCHelper
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SecurityUtils, Utils}
 
-abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite with MiniKDCHelper {
+abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
   private var kdc: MiniKdc = _
   protected var entryPointDir: File = _
   protected var initDbDir: File = _
@@ -43,8 +42,15 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
 
   override def beforeAll(): Unit = {
     SecurityUtils.setGlobalKrbDebug(true)
-    kdc = startMiniKdc()
+
+    val kdcDir = Utils.createTempDir()
+    val kdcConf = MiniKdc.createConf()
+    kdcConf.setProperty(MiniKdc.DEBUG, "true")
+    kdc = new MiniKdc(kdcConf, kdcDir)
+    kdc.start()
+
     principal = s"$userName@${kdc.getRealm}"
+
     entryPointDir = Utils.createTempDir()
     initDbDir = Utils.createTempDir()
     val keytabFile = new File(initDbDir, keytabFileName)
