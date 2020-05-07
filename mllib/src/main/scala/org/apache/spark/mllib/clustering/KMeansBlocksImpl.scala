@@ -15,29 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.clustering
+package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.linalg.{BLAS, DenseMatrix, Vector, Vectors}
-import org.apache.spark.ml.linalg.BLAS.axpy
+import org.apache.spark.ml.feature.InstanceBlock
 import org.apache.spark.ml.util.Instrumentation
-import org.apache.spark.mllib.clustering.{KMeansModel => MLlibKMeansModel}
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, Vector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS.axpy
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
-
 /**
- * K-means clustering using RDD[DenseMatrix] as input format.
+ * K-means clustering using RDD[InstanceBlock] as input format.
  */
-@Since("0.8.0")
-class KMeansMatrixImpl private(
+class KMeansBlocksImpl (
     private var k: Int,
     private var maxIterations: Int,
     private var initializationMode: String,
@@ -46,19 +43,12 @@ class KMeansMatrixImpl private(
     private var seed: Long,
     private var distanceMeasure: String) extends Serializable with Logging {
 
-  @Since("0.8.0")
-  private def this(k: Int, maxIterations: Int, initializationMode: String, initializationSteps: Int,
-                   epsilon: Double, seed: Long) =
-    this(k, maxIterations, initializationMode, initializationSteps,
-      epsilon, seed, DistanceMeasure.EUCLIDEAN)
-
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20,
    * initializationMode: "k-means||", initializationSteps: 2, epsilon: 1e-4, seed: random,
    * distanceMeasure: "euclidean"}.
    */
-  @Since("0.8.0")
-  def this() = this(2, 20, KMeansMatrixImpl.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong(),
+  def this() = this(2, 20, KMeansBlocksImpl.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong(),
     DistanceMeasure.EUCLIDEAN)
 
   /**
@@ -115,7 +105,7 @@ class KMeansMatrixImpl private(
    */
   @Since("0.8.0")
   def setInitializationMode(initializationMode: String): this.type = {
-    KMeansMatrixImpl.validateInitMode(initializationMode)
+    KMeansBlocksImpl.validateInitMode(initializationMode)
     this.initializationMode = initializationMode
     this
   }
@@ -189,8 +179,9 @@ class KMeansMatrixImpl private(
 
   // Initial cluster centers can be provided as a KMeansModel object rather than using the
   // random or k-means|| initializationMode
-  private var initialModel: Option[MLlibKMeansModel] = None
+  private var initialModel: Option[KMeansModel] = None
 
+/*
   /**
    * Set the initial starting point, bypassing the random initialization or k-means||
    * The condition model.k == this.k must be met, failure results
@@ -202,15 +193,15 @@ class KMeansMatrixImpl private(
     initialModel = Some(model)
     this
   }
-
-  private[spark] def VectorsToDenseMatrix(vectors: Array[VectorWithNorm]): DenseMatrix = {
+*/
+  private def VectorsToDenseMatrix(vectors: Array[VectorWithNorm]): DenseMatrix = {
 
     val v: Array[Vector] = vectors.map(_.vector)
 
     VectorsToDenseMatrix(v.toIterator)
   }
 
-  private[spark] def VectorsToDenseMatrix(vectors: Iterator[Vector]): DenseMatrix = {
+  private def VectorsToDenseMatrix(vectors: Iterator[Vector]): DenseMatrix = {
     val vector_array = vectors.toArray
     val column_num = vector_array(0).size
     val row_num = vector_array.length
@@ -229,22 +220,22 @@ class KMeansMatrixImpl private(
     new DenseMatrix(row_num, column_num, values)
   }
 
-  private[spark] def run(data: RDD[DenseMatrix], row_num: Int,
-                         instr: Option[Instrumentation]): MLlibKMeansModel = {
-
-    // Cache RDD data
-    data.cache.count()
-
-    val model = runAlgorithm(data, instr)
-
-    // Warn at the end of the run as well, for increased visibility.
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data was not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
-    model
-
-  }
+//  private[spark] def runWithWeight(data: RDD[InstanceBlock], row_num: Int,
+//                                   instr: Option[Instrumentation]): MLlibKMeansModel = {
+//
+//    // Cache RDD data
+//    data.cache.count()
+//
+//    val model = runAlgorithmWithWeight(data, instr)
+//
+//    // Warn at the end of the run as well, for increased visibility.
+//    if (data.getStorageLevel == StorageLevel.NONE) {
+//      logWarning("The input data was not directly cached, which may hurt performance if its"
+//        + " parent RDDs are also uncached.")
+//    }
+//    model
+//
+//  }
 
   private def computeSquaredDistances(points_matrix: DenseMatrix,
                                       points_square_sums: DenseMatrix,
@@ -298,7 +289,8 @@ class KMeansMatrixImpl private(
     matrix2
   }
 
-  private def findClosest(distances: DenseMatrix): (Array[Int], Array[Double]) = {
+  private def findClosest(distances: DenseMatrix,
+      weights: Array[Double]): (Array[Int], Array[Double]) = {
     val points_num = distances.numRows
     val ret_closest = new Array[Int](points_num)
     val ret_cost = new Array[Double](points_num)
@@ -313,16 +305,17 @@ class KMeansMatrixImpl private(
         }
       }
       ret_closest(index) = closest
-      // mllib use squared distance as cost, not sqrt
-      ret_cost(index) = cost
+
+      // use weighted squared distance as cost
+      ret_cost(index) = cost * weights(index)
     }
 
     (ret_closest, ret_cost)
 
   }
 
-  private def runAlgorithm(data: RDD[DenseMatrix],
-                           instr: Option[Instrumentation]): MLlibKMeansModel = {
+    def runAlgorithmWithWeight(data: RDD[InstanceBlock],
+                               instr: Option[Instrumentation]): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -330,7 +323,7 @@ class KMeansMatrixImpl private(
 
     val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
-    val centers = if (initializationMode == KMeansMatrixImpl.RANDOM) {
+    val centers = if (initializationMode == KMeansBlocksImpl.RANDOM) {
       initRandom(data)
     } else {
       initKMeansParallel(data, distanceMeasureInstance)
@@ -359,15 +352,16 @@ class KMeansMatrixImpl private(
       val centers_dim = centers_matrix.numCols
 
       // Compute squared sums for points
-      val data_square_sums: RDD[DenseMatrix] = data.mapPartitions { points_matrices =>
-        points_matrices.map { points_matrix => computePointsSquareSum(points_matrix, centers_num) }
+      val data_square_sums: RDD[DenseMatrix] = data.mapPartitions { blocks =>
+        blocks.map { block =>
+          computePointsSquareSum(DenseMatrix.fromML(block.matrix.toDense), centers_num) }
       }
 
       // Find the new centers
       val collected = data.zip(data_square_sums).flatMap {
-        case (points_matrix, points_square_sums) =>
+        case (blocks, points_square_sums) =>
           val centers_matrix = bcCenters.value
-          val points_num = points_matrix.numRows
+          val points_num = blocks.matrix.numRows
 
           val sums = Array.fill(centers_num)(Vectors.zeros(centers_dim))
           val counts = Array.fill(centers_num)(0L)
@@ -377,18 +371,18 @@ class KMeansMatrixImpl private(
 
           // Compute squared distances
           val distances = computeSquaredDistances(
-            points_matrix, points_square_sums,
+            DenseMatrix.fromML(blocks.matrix.toDense), points_square_sums,
             centers_matrix, centers_square_sums)
 
-          val (bestCenters, costs) = findClosest(distances)
+          val (bestCenters, weightedCosts) = findClosest(distances, blocks.weights)
 
-          for (cost <- costs)
+          for (cost <- weightedCosts)
             costAccum.add(cost)
 
           // sums points around best center
-          for ((row, index) <- points_matrix.rowIter.zipWithIndex) {
+          for ((row, index) <- blocks.matrix.rowIter.zipWithIndex) {
             val bestCenter = bestCenters(index)
-            axpy(1.0, row, sums(bestCenter))
+            axpy(blocks.weights(index), Vectors.fromML(row), sums(bestCenter))
             counts(bestCenter) += 1
           }
 
@@ -433,15 +427,18 @@ class KMeansMatrixImpl private(
 
     logInfo(s"The cost is $cost.")
 
-    new MLlibKMeansModel(centers.map { c => OldVectors.fromML(c.vector) },
+    new KMeansModel(centers.map { c => c.vector },
       distanceMeasure, cost, iteration)
   }
 
   /**
    * Initialize a set of cluster centers at random.
    */
-  private def initRandom(data: RDD[DenseMatrix]): Array[VectorWithNorm] = {
-    val vectorWithNorms: RDD[VectorWithNorm] = data.flatMap(_.rowIter).map(new VectorWithNorm(_))
+  private def initRandom(data: RDD[InstanceBlock]): Array[VectorWithNorm] = {
+
+    val vectorWithNorms: RDD[VectorWithNorm] = data.flatMap(_.matrix.rowIter)
+      .map(Vectors.fromML(_)).map(new VectorWithNorm(_))
+
 
     // Select without replacement; may still produce duplicates if the data has < k distinct
     // points, so deduplicate the centroids to match the behavior of k-means|| in the same situation
@@ -459,10 +456,11 @@ class KMeansMatrixImpl private(
    *
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
-  private[clustering] def initKMeansParallel(rdd_matrix: RDD[DenseMatrix],
-    distanceMeasureInstance: DistanceMeasure): Array[VectorWithNorm] = {
+  private[clustering] def initKMeansParallel(rdd_matrix: RDD[InstanceBlock],
+      distanceMeasureInstance: DistanceMeasure): Array[VectorWithNorm] = {
 
-    val data: RDD[VectorWithNorm] = rdd_matrix.flatMap(_.rowIter).map(new VectorWithNorm(_))
+    val data: RDD[VectorWithNorm] = rdd_matrix.flatMap(_.matrix.rowIter)
+      .map(Vectors.fromML(_)).map(new VectorWithNorm(_))
 
     // Initialize empty centers and point costs.
     var costs = data.map(_ => Double.PositiveInfinity)
@@ -474,7 +472,7 @@ class KMeansMatrixImpl private(
     require(sample.nonEmpty, s"No samples available from $data")
 
     val centers = ArrayBuffer[VectorWithNorm]()
-    var newCenters = Seq(sample.head.toDense)
+    var newCenters = Array(sample.head.toDense)
     centers ++= newCenters
 
     // On each step, sample 2 * k points on average with probability proportional
@@ -506,10 +504,10 @@ class KMeansMatrixImpl private(
     costs.unpersist()
     bcNewCentersList.foreach(_.destroy())
 
-    val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_))
+    val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_)).toArray
 
-    if (distinctCenters.size <= k) {
-      distinctCenters.toArray
+    if (distinctCenters.length <= k) {
+      distinctCenters
     } else {
       // Finally, we might have a set of more than k distinct candidate centers; weight each
       // candidate by the number of points in the dataset mapping to it and run a local k-means++
@@ -522,7 +520,7 @@ class KMeansMatrixImpl private(
       bcCenters.destroy()
 
       val myWeights = distinctCenters.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
-      LocalKMeans.kMeansPlusPlus(0, distinctCenters.toArray, myWeights, k, 30)
+      LocalKMeans.kMeansPlusPlus(0, distinctCenters, myWeights, k, 30)
     }
   }
 }
@@ -531,34 +529,18 @@ class KMeansMatrixImpl private(
 /**
  * Top-level methods for calling K-means clustering.
  */
-@Since("0.8.0")
-object KMeansMatrixImpl {
+object KMeansBlocksImpl {
 
   // Initialization mode names
-  @Since("0.8.0")
   val RANDOM = "random"
-  @Since("0.8.0")
   val K_MEANS_PARALLEL = "k-means||"
 
   private[spark] def validateInitMode(initMode: String): Boolean = {
     initMode match {
-      case KMeansMatrixImpl.RANDOM => true
-      case KMeansMatrixImpl.K_MEANS_PARALLEL => true
+      case KMeansBlocksImpl.RANDOM => true
+      case KMeansBlocksImpl.K_MEANS_PARALLEL => true
       case _ => false
     }
   }
 }
 
-/**
- * A vector with its norm for fast distance computation.
- */
-private[ml] class VectorWithNorm(val vector: Vector, val norm: Double)
-  extends Serializable {
-
-  def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
-
-  def this(array: Array[Double]) = this(Vectors.dense(array))
-
-  /** Converts the vector to a dense vector. */
-  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
-}

@@ -21,15 +21,15 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkConf
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansBlocksImpl, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
@@ -43,7 +43,8 @@ import org.apache.spark.util.VersionUtils.majorVersion
  * Common params for KMeans and KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasTol with HasDistanceMeasure with HasWeightCol {
+  with HasSeed with HasPredictionCol with HasTol with HasDistanceMeasure with HasWeightCol
+  with HasBlockSize {
 
   /**
    * The number of clusters to create (k). Must be &gt; 1. Note that it is possible for fewer than
@@ -331,67 +332,42 @@ class KMeans @Since("1.5.0") (
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /**
+   * Set block size for stacking input data in matrices.
+   * If blockSize == 1, then stacking will be skipped, and each vector is treated individually;
+   * If blockSize &gt; 1, then vectors will be stacked to blocks, and high-level BLAS routines
+   * will be used if possible (for example, GEMV instead of DOT, GEMM instead of GEMV).
+   * Recommended size is between 10 and 1000. An appropriate choice of the block size depends
+   * on the sparsity and dim of input datasets, the underlying BLAS implementation (for example,
+   * f2jBLAS, OpenBLAS, intel MKL) and its configuration (for example, number of threads).
+   * Note that existing BLAS implementations are mainly optimized for dense matrices, if the
+   * input dataset is sparse, stacking may bring no performance gain, the worse is possible
+   * performance regression.
+   * Default is 1.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.1.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+  setDefault(blockSize -> 1)
+
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): KMeansModel = {
-    val conf = new SparkConf(true)
-    val enableMatrixImpl = conf.getBoolean("spark.ml.kmeans.matrixImplementation.enabled", false)
-
-    if (enableMatrixImpl && $(distanceMeasure) == "euclidean") {
-      val matrixRowNum = conf.getInt("spark.ml.kmeans.matrixImplementation.rowsPerMatrix", 1000)
-      fitMatrixImpl(dataset, matrixRowNum)
-    } else {
-      // Calling the old K-Means implementation
-      fitOld(dataset)
-    }
-  }
-
-  private def fitMatrixImpl(dataset: Dataset[_],
-    matrix_row_num: Int): KMeansModel = instrumented { instr =>
-
-    instr.logInfo(s"k-means matrix implementation enabled! rowsPerMatrix = ${matrix_row_num}")
+  override def fit(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
 
     transformSchema(dataset.schema, logging = true)
-
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val instances = DatasetUtils.columnToDenseMatrix(dataset, getFeaturesCol, matrix_row_num)
-
-    if (handlePersistence) {
-      instances.persist(StorageLevel.MEMORY_AND_DISK)
-    }
-
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
-      maxIter, seed, tol)
-    val algo = new KMeansMatrixImpl()
-      .setK($(k))
-      .setInitializationMode($(initMode))
-      .setInitializationSteps($(initSteps))
-      .setMaxIterations($(maxIter))
-      .setSeed($(seed))
-      .setEpsilon($(tol))
-      .setDistanceMeasure($(distanceMeasure))
-    val parentModel = algo.run(instances, matrix_row_num, Option(instr))
-    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
-    val summary = new KMeansSummary(
-      model.transform(dataset),
-      $(predictionCol),
-      $(featuresCol),
-      $(k),
-      parentModel.numIter,
-      parentModel.trainingCost)
+      maxIter, seed, tol, weightCol, blockSize)
 
-    model.setSummary(Some(summary))
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    if (handlePersistence) {
-      instances.unpersist()
+    if ($(blockSize) == 1) {
+      trainOnRows(dataset)
+    } else {
+      trainOnBlocks(dataset)
     }
-    model
   }
 
-  private def fitOld(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
-    transformSchema(dataset.schema, logging = true)
-
+  private def trainOnRows(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
       col($(weightCol)).cast(DoubleType)
@@ -408,10 +384,6 @@ class KMeans @Since("1.5.0") (
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    instr.logPipelineStage(this)
-    instr.logDataset(dataset)
-    instr.logParams(this, featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
-      maxIter, seed, tol, weightCol)
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -435,6 +407,45 @@ class KMeans @Since("1.5.0") (
     if (handlePersistence) {
       instances.unpersist()
     }
+    model
+  }
+
+  private def trainOnBlocks(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
+
+    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
+      col($(weightCol)).cast(DoubleType)
+    } else {
+      lit(1.0)
+    }
+
+    val instances: RDD[Instance] = dataset
+      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd.map {
+      case Row(point: Vector, weight: Double) => Instance(0.0, weight, point)
+    }
+
+    val blocks = InstanceBlock.blokify(instances, $(blockSize))
+      .persist(StorageLevel.MEMORY_AND_DISK)
+      .setName(s"training dataset (blockSize=${$(blockSize)})")
+
+    val algo = new KMeansBlocksImpl($(k), $(maxIter), $(initMode),
+      $(initSteps), $(tol), $(seed), $(distanceMeasure))
+
+    val parentModel = algo.runAlgorithmWithWeight(blocks, Option(instr))
+
+    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+    val summary = new KMeansSummary(
+      model.transform(dataset),
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      parentModel.numIter,
+      parentModel.trainingCost)
+
+    model.setSummary(Some(summary))
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
+
+    blocks.unpersist()
+
     model
   }
 
