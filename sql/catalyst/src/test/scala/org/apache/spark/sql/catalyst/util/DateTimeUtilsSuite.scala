@@ -696,7 +696,6 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     }
   }
 
-<<<<<<< HEAD
   test("parsing timestamp strings up to microsecond precision") {
     DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
       def check(pattern: String, input: String, reference: String): Unit = {
