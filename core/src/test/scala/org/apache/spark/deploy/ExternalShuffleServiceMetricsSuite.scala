@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.SHUFFLE_SERVICE_ENABLED
 import org.apache.spark.util.Utils
 
 class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
@@ -30,7 +31,7 @@ class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
     sparkConf = new SparkConf()
-    sparkConf.set("spark.shuffle.service.enabled", "true")
+    sparkConf.set(SHUFFLE_SERVICE_ENABLED, true)
     sparkConf.set("spark.local.dir", System.getProperty("java.io.tmpdir"))
     Utils.loadDefaultSparkProperties(sparkConf, null)
     val securityManager = new SecurityManager(sparkConf)
@@ -43,7 +44,10 @@ class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
   }
 
   test("SPARK-31646: metrics should be registered") {
-    assert(externalShuffleService.shuffleServiceSource.metricRegistry.getMetrics.keySet().asScala ==
+    val sourceRef = classOf[ExternalShuffleService].getDeclaredField("shuffleServiceSource")
+    sourceRef.setAccessible(true)
+    val source = sourceRef.get(externalShuffleService).asInstanceOf[ExternalShuffleServiceSource]
+    assert(source.metricRegistry.getMetrics.keySet().asScala ==
       Set(
         "blockTransferRateBytes",
         "numActiveConnections",

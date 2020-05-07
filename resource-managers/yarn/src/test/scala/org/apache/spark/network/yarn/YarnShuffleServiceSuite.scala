@@ -26,6 +26,7 @@ import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
+import com.codahale.metrics.MetricSet
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.metrics2.impl.MetricsSystemImpl
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem
@@ -388,9 +389,11 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s1 = new YarnShuffleService
     s1.init(yarnConfig)
 
-    val metricsSystem = DefaultMetricsSystem.instance.asInstanceOf[MetricsSystemImpl]
-    val metrics = metricsSystem.getSource("sparkShuffleService")
-      .asInstanceOf[YarnShuffleServiceMetrics].getMetricSet.getMetrics
+    val metricsSource = DefaultMetricsSystem.instance.asInstanceOf[MetricsSystemImpl]
+      .getSource("sparkShuffleService").asInstanceOf[YarnShuffleServiceMetrics]
+    val metricSetRef = classOf[YarnShuffleServiceMetrics].getDeclaredField("metricSet")
+    metricSetRef.setAccessible(true)
+    val metrics = metricSetRef.get(metricsSource).asInstanceOf[MetricSet].getMetrics
 
     assert(metrics.keySet().asScala == Set(
       "blockTransferRateBytes",

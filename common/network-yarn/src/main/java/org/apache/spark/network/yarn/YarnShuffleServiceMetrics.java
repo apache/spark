@@ -20,7 +20,6 @@ package org.apache.spark.network.yarn;
 import java.util.Map;
 
 import com.codahale.metrics.*;
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
@@ -117,11 +116,6 @@ class YarnShuffleServiceMetrics implements MetricsSource {
       long counterValue = c.getCount();
       metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForCounter(name), counterValue);
     }
-  }
-
-  @VisibleForTesting
-  MetricSet getMetricSet() {
-    return metricSet;
   }
 
   private static MetricsInfo getShuffleServiceMetricsInfoForGauge(String name) {

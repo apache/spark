@@ -59,7 +59,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private var server: TransportServer = _
 
-  private[deploy] val shuffleServiceSource = new ExternalShuffleServiceSource
+  private val shuffleServiceSource = new ExternalShuffleServiceSource
 
   protected def findRegisteredExecutorsDBFile(dbName: String): File = {
     val localDirs = sparkConf.getOption("spark.local.dir").map(_.split(",")).getOrElse(Array())
