@@ -245,7 +245,7 @@ function createRowMetadataForColumn(colKey, data, checkboxId) {
 function reselectCheckboxesBasedOnTaskTableState() {
     var allChecked = true;
     var taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
-    if (typeof taskTableSelector !== 'undefined' && taskSummaryMetricsTableCurrentStateArray.length > 0) {
+    if (typeof taskTableSelector !== 'undefined' && typeof executorSummaryTableSelector !== 'undefined' && taskSummaryMetricsTableCurrentStateArray.length > 0) {
         for (var k = 0; k < optionalColumns.length; k++) {
             if (taskTableSelector.column(optionalColumns[k]).visible()) {
                 $("#box-"+optionalColumns[k]).prop('checked', true);
