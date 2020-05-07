@@ -106,8 +106,10 @@ private[spark] class BarrierCoordinator(
     // The messages will be replied to all tasks once sync finished.
     private val messages = Array.ofDim[String](numTasks)
 
-    // The request method which is called inside this barrier sync. All tasks should make sure
-    // that they're calling the same method within the same barrier sync phase.
+    // Request methods collected from tasks inside this barrier sync. All tasks should make sure
+    // that they're calling the same method within the same barrier sync phase. In other words,
+    // the size of requestMethods should always be 1 for a legitimate barrier sync. Otherwise,
+    // the barrier sync would fail if the size of requestMethods becomes greater than 1.
     private val requestMethods = new HashSet[RequestMethod.Value]
 
     // A timer task that ensures we may timeout for a barrier() call.
