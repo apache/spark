@@ -665,6 +665,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(2015, 11, 31, 16, 0, 0)
     assert(millisToDays(c.getTimeInMillis, TimeZonePST) === 16800)
     assert(millisToDays(c.getTimeInMillis, TimeZoneGMT) === 16801)
+    assert(millisToDays(-1 * MILLIS_PER_DAY + 1, TimeZoneGMT) == -1)
 
     c.set(2015, 11, 31, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
@@ -770,5 +771,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         "yyyy-MM-dd HH:mm:ss", "2019-10-14T09:39:07.123456",
         "2019-10-14 09:39:07")
     }
+  }
+
+  test("toMillis") {
+    assert(DateTimeUtils.toMillis(-9223372036844776001L) === -9223372036844777L)
+    assert(DateTimeUtils.toMillis(-157700927876544L) === -157700927877L)
   }
 }
