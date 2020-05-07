@@ -845,8 +845,10 @@ object SQLConf {
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
-      "distinct semantics. By default the optimization is disabled, since it may return " +
-      "incorrect results when the files are empty.")
+      "distinct semantics. By default the optimization is disabled, and deprecated as of Spark " +
+      "3.0 since it may return incorrect results when the files are empty, see also SPARK-26709." +
+      "It will be removed in the future releases. If you must use, use 'SparkSessionExtensions' " +
+      "instead to inject it as a custom rule.")
     .version("2.1.1")
     .booleanConf
     .createWithDefault(false)
@@ -2068,7 +2070,8 @@ object SQLConf {
       .internal()
       .doc("A comma-separated list of data source short names or fully qualified data source " +
         "implementation class names for which Spark tries to push down predicates for nested " +
-        "columns and/or names containing `dots` to data sources. Currently, Parquet implements " +
+        "columns and/or names containing `dots` to data sources. This configuration is only " +
+        "effective with file-based data source in DSv1. Currently, Parquet implements " +
         "both optimizations while ORC only supports predicates for names containing `dots`. The " +
         "other data sources don't support this feature yet. So the default value is 'parquet,orc'.")
       .version("3.0.0")
@@ -2606,7 +2609,10 @@ object SQLConf {
       DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
         s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it."),
       DeprecatedConfig(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "3.0",
-        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it.")
+        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it."),
+      DeprecatedConfig(OPTIMIZER_METADATA_ONLY.key, "3.0",
+        "Avoid to depend on this optimization to prevent a potential correctness issue. " +
+          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
