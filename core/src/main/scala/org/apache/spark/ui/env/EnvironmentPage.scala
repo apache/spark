@@ -43,8 +43,7 @@ private[ui] class EnvironmentPage(
     def constructExecutorRequestString(execReqs: Map[String, ExecutorResourceRequest]): String = {
       execReqs.map {
         case (_, execReq) =>
-          val execStr = new StringBuilder()
-          execStr ++= s"\t${execReq.resourceName}: [amount: ${execReq.amount}"
+          val execStr = new StringBuilder(s"\t${execReq.resourceName}: [amount: ${execReq.amount}")
           if (execReq.discoveryScript.nonEmpty) {
             execStr ++= s", discovery: ${execReq.discoveryScript}"
           }
