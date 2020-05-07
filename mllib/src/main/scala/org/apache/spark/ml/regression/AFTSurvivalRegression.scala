@@ -218,6 +218,12 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   override protected def train(
       dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, featuresCol, censorCol, predictionCol, quantilesCol,
+      fitIntercept, maxIter, tol, aggregationDepth, blockSize)
+    instr.logNamedValue("quantileProbabilities.size", $(quantileProbabilities).length)
+
     val instances = extractAFTPoints(dataset)
     if ($(blockSize) == 1 && dataset.storageLevel == StorageLevel.NONE) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -235,15 +241,8 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       combOp = (c1: SummarizerBuffer, c2: SummarizerBuffer) => c1.merge(c2),
       depth = $(aggregationDepth)
     )
-
     val featuresStd = summarizer.std.toArray
     val numFeatures = featuresStd.length
-
-    instr.logPipelineStage(this)
-    instr.logDataset(dataset)
-    instr.logParams(this, labelCol, featuresCol, censorCol, predictionCol, quantilesCol,
-      fitIntercept, maxIter, tol, aggregationDepth, blockSize)
-    instr.logNamedValue("quantileProbabilities.size", $(quantileProbabilities).length)
     instr.logNumFeatures(numFeatures)
     instr.logNumExamples(summarizer.count)
     if ($(blockSize) > 1) {
