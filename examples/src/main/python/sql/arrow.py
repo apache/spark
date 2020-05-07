@@ -21,8 +21,6 @@ Run with:
   ./bin/spark-submit examples/src/main/python/sql/arrow.py
 """
 
-from __future__ import print_function
-
 import sys
 
 from pyspark.sql import SparkSession

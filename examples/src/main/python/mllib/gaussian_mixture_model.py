@@ -18,8 +18,6 @@
 """
 A Gaussian Mixture Model clustering program using MLlib.
 """
-from __future__ import print_function
-
 import sys
 if sys.version >= '3':
     long = int

@@ -20,8 +20,6 @@ An example demonstrating MinHashLSH.
 Run with:
   bin/spark-submit examples/src/main/python/ml/min_hash_lsh_example.py
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml.feature import MinHashLSH
 from pyspark.ml.linalg import Vectors

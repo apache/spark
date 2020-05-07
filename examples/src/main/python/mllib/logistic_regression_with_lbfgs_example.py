@@ -18,8 +18,6 @@
 """
 Logistic Regression With LBFGS Example.
 """
-from __future__ import print_function
-
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel

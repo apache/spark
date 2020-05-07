@@ -20,8 +20,6 @@ An example demonstrating BucketedRandomProjectionLSH.
 Run with:
   bin/spark-submit examples/src/main/python/ml/bucketed_random_projection_lsh_example.py
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml.feature import BucketedRandomProjectionLSH
 from pyspark.ml.linalg import Vectors

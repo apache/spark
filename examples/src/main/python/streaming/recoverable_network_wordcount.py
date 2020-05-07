@@ -35,8 +35,6 @@
  checkpoint data exists in ~/checkpoint/, then it will create StreamingContext from
  the checkpoint data.
 """
-from __future__ import print_function
-
 import os
 import sys
 
