@@ -869,7 +869,7 @@ object ApplicationMaster extends Logging {
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()
 
-        if (master.appAttemptId == null && master.appAttemptId.getAttemptId > 1) {
+        if (master.appAttemptId == null || master.appAttemptId.getAttemptId > 1) {
           // Re-obtain delegation tokens if this is not a first attempt, as they might be outdated
           // as of now. Add the fresh tokens on top of the original user's credentials (overwrite).
           // Set the context class loader so that the token manager has access to jars
