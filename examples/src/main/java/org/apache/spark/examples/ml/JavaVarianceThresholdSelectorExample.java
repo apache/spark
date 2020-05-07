@@ -69,8 +69,8 @@ public class JavaVarianceThresholdSelectorExample {
 
     Dataset<Row> result = selector.fit(df).transform(df);
 
-    System.out.println("Output: Features with variance lower than " + selector.getVarianceThreshold()
-        + " are removed.");
+    System.out.println("Output: Features with variance lower than "
+        + selector.getVarianceThreshold() + " are removed.");
     result.show();
 
     // $example off$
