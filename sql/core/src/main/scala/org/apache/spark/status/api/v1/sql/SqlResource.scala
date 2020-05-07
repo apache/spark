@@ -34,7 +34,7 @@ private[v1] class SqlResource extends BaseAppResource {
 
   @GET
   def sqlList(
-      @DefaultValue("false") @QueryParam("details") details: Boolean,
+      @DefaultValue("true") @QueryParam("details") details: Boolean,
       @DefaultValue("true") @QueryParam("planDescription") planDescription: Boolean,
       @DefaultValue("0") @QueryParam("offset") offset: Int,
       @DefaultValue("20") @QueryParam("length") length: Int): Seq[ExecutionData] = {
@@ -52,7 +52,7 @@ private[v1] class SqlResource extends BaseAppResource {
   @Path("{executionId:\\d+}")
   def sql(
       @PathParam("executionId") execId: Long,
-      @DefaultValue("false") @QueryParam("details") details: Boolean,
+      @DefaultValue("true") @QueryParam("details") details: Boolean,
       @DefaultValue("true") @QueryParam("planDescription")
       planDescription: Boolean): ExecutionData = {
     withUI { ui =>
@@ -61,7 +61,7 @@ private[v1] class SqlResource extends BaseAppResource {
       sqlStore
         .execution(execId)
         .map(prepareExecutionData(_, edges, nodeIdAndWSCGIdMap, details, planDescription))
-        .getOrElse(throw new NotFoundException("unknown execution id: " + execId))
+        .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
   }
 
@@ -137,7 +137,7 @@ private[v1] class SqlResource extends BaseAppResource {
     }
 
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
-    val planDetails = if (details && planDescription) exec.physicalPlanDescription else ""
+    val planDetails = if (planDescription) exec.physicalPlanDescription else ""
     val nodes =
       if (details) {
         printableMetrics(exec.metrics, exec.metricValues, nodeIdAndWSCGIdMap)
