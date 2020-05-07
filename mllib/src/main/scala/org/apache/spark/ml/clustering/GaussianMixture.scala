@@ -764,13 +764,13 @@ private class ExpectationAggregator(
   def add(weightedVector: (Vector, Double)): this.type = {
     val (instance: Vector, weight: Double) = weightedVector
     val localWeights = bcWeights.value
-    val localOldGaussians = gaussians
+    val localGaussians = gaussians
 
     val prob = new Array[Double](k)
     var probSum = 0.0
     var i = 0
     while (i < k) {
-      val p = EPSILON + localWeights(i) * localOldGaussians(i).pdf(instance)
+      val p = EPSILON + localWeights(i) * localGaussians(i).pdf(instance)
       prob(i) = p
       probSum += p
       i += 1

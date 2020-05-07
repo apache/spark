@@ -96,7 +96,7 @@ class MultivariateGaussian @Since("2.0.0") (
     val pdfVec = mat.multiply(rootSigmaInvMulMu)
 
     val blas = BLAS.getBLAS(n)
-    val squared1 = BLAS.dot(rootSigmaInvMulMu, rootSigmaInvMulMu)
+    val squared1 = blas.ddot(n, rootSigmaInvMulMu.values, 1, rootSigmaInvMulMu.values, 1)
 
     val localU = u
     var i = 0
