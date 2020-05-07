@@ -106,9 +106,10 @@ object SqlResourceSuite {
   }
 
   private def verifyExpectedExecutionData(executionData: ExecutionData,
-                                          nodes: Seq[Node],
-                                          edges: Seq[SparkPlanGraphEdge],
-                                          planDescription: String): Unit = {
+    nodes: Seq[Node],
+    edges: Seq[SparkPlanGraphEdge],
+    planDescription: String): Unit = {
+
     assert(executionData.id == 0)
     assert(executionData.status == "COMPLETED")
     assert(executionData.description == DESCRIPTION)
@@ -120,7 +121,9 @@ object SqlResourceSuite {
     assert(executionData.failedJobIds == Seq.empty)
     assert(executionData.nodes == nodes)
     assert(executionData.edges == edges)
+
   }
+
 }
 
 /**

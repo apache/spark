@@ -66,8 +66,8 @@ private[v1] class SqlResource extends BaseAppResource {
   }
 
   private def computeDetailsIfTrue(sqlStore: SQLAppStatusStore,
-                               executionId: Long,
-                               details: Boolean):
+    executionId: Long,
+    details: Boolean):
   (Seq[SparkPlanGraphEdge], Map[Long, Option[Long]]) = {
     if (details) {
       val graph = sqlStore.planGraph(executionId)
