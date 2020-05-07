@@ -688,10 +688,11 @@ private[spark] class TaskSchedulerImpl(
             val errorMsg =
               s"Fail resource offers for barrier stage ${taskSet.stageId} because only " +
                 s"${addressesWithDescs.size} out of a total number of ${taskSet.numTasks}" +
-                s" tasks got resource offers. This happens because barrier execution currently " +
-                s"does not work gracefully with delay scheduling. We highly recommend you to " +
-                s"disable delay scheduling by setting spark.locality.wait=0 as a workaround if " +
-                s"you see this error frequently."
+                s" tasks got resource offers. This could happen if delay scheduling or " +
+                s"blacklisting is enabled, as barrier execution currently does not work " +
+                s"gracefully with them. We highly recommend you to disable delay scheduling " +
+                s"by setting spark.locality.wait=0 or disable blacklisting by setting " +
+                s"spark.blacklist.enabled=false as a workaround if you see this error frequently."
             logWarning(errorMsg)
             taskSet.abort(errorMsg)
             throw new SparkException(errorMsg)
