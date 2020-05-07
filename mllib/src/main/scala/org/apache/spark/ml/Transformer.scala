@@ -122,3 +122,27 @@ abstract class UnaryTransformer[IN: TypeTag, OUT: TypeTag, T <: UnaryTransformer
 
   override def copy(extra: ParamMap): T = defaultCopy(extra)
 }
+
+/**
+ * A MultiTransformer is a transformer that will chain together a sequence of UnaryTransformers
+ *
+ * @param transformers
+ */
+class MultiTransformer(transformers: List[UnaryTransformer[_, _, _]]) {
+
+  def composeTransformers(otherTransformers: List[UnaryTransformer[_, _, _]]): Unit = {
+    new MultiTransformer(transformers ++ otherTransformers) }
+
+  def transform(dataSet: Dataset[_]): Dataset[_] = {
+    def transform2(dataSet: Dataset[_], xFormers: List[UnaryTransformer[_, _, _]]): Dataset[_] = {
+      xFormers match {
+        case Nil => dataSet
+        case head::tail => transform2(head.transform(dataSet), tail)
+      }
+    }
+
+    transform2(dataSet, transformers)
+  }
+}
+
+
