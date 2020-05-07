@@ -44,11 +44,11 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   override def simpleString(maxFields: Int): String = {
     val result =
       s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)} ${scan.description()}"
-    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, result)
+    redact(result)
   }
 
   /**
-   * Shorthand for calling redactString() without specifying redacting rules
+   * Redact the sensitive information in the given string.
    */
   protected def redact(text: String): String = {
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
