@@ -516,7 +516,7 @@ private[spark] object IndylambdaScalaClosures extends Logging {
   /**
    * Check if the callee of a call site is a inner class constructor.
    * - A constructor has to be invoked via INVOKESPECIAL
-   * - A constructor's internal name is "<init>" and the return type is "V" (void)
+   * - A constructor's internal name is "&lt;init&gt;" and the return type is "V" (void)
    * - An inner class' first argument in the signature has to be a reference to the
    *   enclosing "this", aka `$outer` in Scala.
    */
