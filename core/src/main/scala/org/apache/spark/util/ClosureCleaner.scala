@@ -373,12 +373,13 @@ private[spark] object ClosureCleaner extends Logging {
 
       if (needsCleaning) {
         // indylambda closures do not reference enclosing closures via an `$outer` chain, so no
-        // transitive cleaning is needed. Thus clean() shouldn't be recursively called with a
-        // non-empty accessedFields.
+        // transitive cleaning on the `$outer` chain is needed.
+        // Thus clean() shouldn't be recursively called with a non-empty accessedFields.
         assert(accessedFields.isEmpty)
 
         initAccessedFields(accessedFields, Seq(capturingClass))
-        IndylambdaScalaClosures.findAccessedFields(lambdaProxy, classLoader, accessedFields)
+        IndylambdaScalaClosures.findAccessedFields(
+          lambdaProxy, classLoader, accessedFields, cleanTransitively)
 
         logDebug(s" + fields accessed by starting closure: ${accessedFields.size} classes")
         accessedFields.foreach { f => logDebug("     " + f) }
@@ -489,43 +490,108 @@ private[spark] object IndylambdaScalaClosures extends Logging {
   }
 
   /**
+   * Check if the handle represents the LambdaMetafactory that indylambda Scala closures
+   * use for creating the lambda class and getting a closure instance.
+   */
+  def isLambdaMetafactory(bsmHandle: Handle): Boolean = {
+    bsmHandle.getOwner == LambdaMetafactoryClassName &&
+      bsmHandle.getName == LambdaMetafactoryMethodName &&
+      bsmHandle.getDesc == LambdaMetafactoryMethodDesc
+  }
+
+  /**
+   * Check if the handle represents a target method that is:
+   * - a STATIC method that implements a Scala lambda body in the indylambda style
+   * - captures the enclosing `this`, i.e. the first argument is a reference to the same type as
+   *   the owning class.
+   * Returns true if both criteria above are met.
+   */
+  def isLambdaBodyCapturingOuter(handle: Handle, ownerInternalName: String): Boolean = {
+    handle.getTag == H_INVOKESTATIC &&
+      handle.getName.contains("$anonfun$") &&
+      handle.getOwner == ownerInternalName &&
+      handle.getDesc.startsWith(s"(L$ownerInternalName;")
+  }
+
+  /**
+   * Check if the callee of a call site is a inner class constructor.
+   * - A constructor has to be invoked via INVOKESPECIAL
+   * - A constructor's internal name is "<init>" and the return type is "V" (void)
+   * - An inner class' first argument in the signature has to be a reference to the
+   *   enclosing "this", aka `$outer` in Scala.
+   */
+  def isInnerClassCtorCapturingOuter(
+      op: Int, owner: String, name: String, desc: String, callerInternalName: String): Boolean = {
+    op == INVOKESPECIAL && name == "<init>" && desc.startsWith(s"(L$callerInternalName;")
+  }
+
+  /**
    * Scans an indylambda Scala closure, along with its lexically nested closures, and populate
    * the accessed fields info on which fields on the outer object are accessed.
    */
   def findAccessedFields(
       lambdaProxy: SerializedLambda,
       lambdaClassLoader: ClassLoader,
-      accessedFields: Map[Class[_], Set[String]]): Unit = {
-    val implClassInternalName = lambdaProxy.getImplClass
-    // scalastyle:off classforname
-    val implClass = Class.forName(
-      implClassInternalName.replace('/', '.'), false, lambdaClassLoader)
-    // scalastyle:on classforname
-    val implClassNode = new ClassNode()
-    val implClassReader = ClosureCleaner.getClassReader(implClass)
-    implClassReader.accept(implClassNode, 0)
+      accessedFields: Map[Class[_], Set[String]],
+      findTransitively: Boolean): Unit = {
 
-    val methodsByName = Map.empty[MethodIdentifier[_], MethodNode]
-    for (m <- implClassNode.methods.asScala) {
-      methodsByName(MethodIdentifier(implClass, m.name, m.desc)) = m
+    // We may need to visit the same class multiple times for different methods on it, and we'll
+    // need to lookup by name. So we use ASM's Tree API and cache the ClassNode/MethodNode.
+    val classInfoByInternalName = Map.empty[String, (Class[_], ClassNode)]
+    val methodNodeById = Map.empty[MethodIdentifier[_], MethodNode]
+    def getOrUpdateClassInfo(classInternalName: String): (Class[_], ClassNode) = {
+      val classInfo = classInfoByInternalName.getOrElseUpdate(classInternalName, {
+        val classExternalName = classInternalName.replace('/', '.')
+        // scalastyle:off classforname
+        val clazz = Class.forName(classExternalName, false, lambdaClassLoader)
+        // scalastyle:on classforname
+        val classNode = new ClassNode()
+        val classReader = ClosureCleaner.getClassReader(clazz)
+        classReader.accept(classNode, 0)
+
+        for (m <- classNode.methods.asScala) {
+          methodNodeById(MethodIdentifier(clazz, m.name, m.desc)) = m
+        }
+
+        (clazz, classNode)
+      })
+      classInfo
     }
+
+    val implClassInternalName = lambdaProxy.getImplClass
+    val (implClass, _) = getOrUpdateClassInfo(implClassInternalName)
 
     val implMethodId = MethodIdentifier(
       implClass, lambdaProxy.getImplMethodName, lambdaProxy.getImplMethodSignature)
 
+    // The set of classes that we would consider following the calls into.
+    // Candidates are: known outer class which happens to be the starting closure's impl class,
+    // and all inner classes discovered below.
+    val trackedClasses = Set[Class[_]](implClass)
+
+    // Depth-first search for inner closures and track the fields that were accessed in them.
+    // Start from the lambda body's implementation method, follow method invocations
     val visited = Set.empty[MethodIdentifier[_]]
     val stack = Stack[MethodIdentifier[_]](implMethodId)
+    def pushIfNotVisited(methodId: MethodIdentifier[_]): Unit = {
+      if (!visited.contains(methodId)) {
+        stack.push(methodId)
+      }
+    }
+
     while (!stack.isEmpty) {
       val currentId = stack.pop
       visited += currentId
 
-      val currentMethodNode = methodsByName(currentId)
-      logTrace(s"  scanning $currentId")
+      val currentClass = currentId.cls
+      val currentMethodNode = methodNodeById(currentId)
+      logTrace(s"  scanning ${currentId.cls.getName}.${currentId.name}${currentId.desc}")
       currentMethodNode.accept(new MethodVisitor(ASM7) {
-        // FIXME: record self class name, get a Class[_] for it
-        // val selfClassName: String =
-        // val selfClass: Class[_] =
+        val currentClassName = currentClass.getName
+        val currentClassInternalName = currentClassName.replace('.', '/')
 
+        // Find and update the accessedFields info. Only fields on known outer classes are tracked.
+        // This is the FieldAccessFinder equivalent.
         override def visitFieldInsn(op: Int, owner: String, name: String, desc: String): Unit = {
           if (op == GETFIELD || op == PUTFIELD) {
             val ownerExternalName = owner.replace('/', '.')
@@ -538,43 +604,56 @@ private[spark] object IndylambdaScalaClosures extends Logging {
 
         override def visitMethodInsn(
             op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
-          if (owner == implClassInternalName) {
-            val ownerExternalName = owner.replace('/', '.')
+          val ownerExternalName = owner.replace('/', '.')
+          if (owner == currentClassInternalName) {
             logTrace(s"    found intra class call to $ownerExternalName.$name$desc")
-            val calleeMethodId = MethodIdentifier(implClass, name, desc)
-            if (!visited.contains(calleeMethodId)) {
-              stack.push(calleeMethodId)
+            // could be invoking a helper method or a field accessor method, just follow it.
+            pushIfNotVisited(MethodIdentifier(currentClass, name, desc))
+          } else if (isInnerClassCtorCapturingOuter(
+              op, owner, name, desc, currentClassInternalName)) {
+            // Discover inner classes.
+            // This this the InnerClassFinder equivalent for inner classes, which still use the
+            // `$outer` chain. So this is NOT controlled by the `findTransitively` flag.
+            logTrace(s"    found inner class $ownerExternalName")
+            val innerClassInfo = getOrUpdateClassInfo(owner)
+            val innerClass = innerClassInfo._1
+            val innerClassNode = innerClassInfo._2
+            trackedClasses += innerClass
+            // We need to visit all methods on the inner class so that we don't missing anything.
+            for (m <- innerClassNode.methods.asScala) {
+              pushIfNotVisited(MethodIdentifier(innerClass, m.name, m.desc))
             }
+          } else if (findTransitively &&
+              trackedClasses.find(_.getName == ownerExternalName).isDefined) {
+            logTrace(s"    found call to outer $ownerExternalName.$name$desc")
+            val (calleeClass, _) = getOrUpdateClassInfo(owner)
+            pushIfNotVisited(MethodIdentifier(calleeClass, name, desc))
           } else {
-            // FIXME: implement findTransitively
             // keep the same behavior as the original ClosureCleaner
-            logTrace(s"    ignoring call to $owner.$name$desc")
+            logTrace(s"    ignoring call to $ownerExternalName.$name$desc")
           }
         }
 
-        // find the lexically nested closures
+        // Find the lexically nested closures
+        // This is the InnerClosureFinder equivalent for indylambda nested closures
         override def visitInvokeDynamicInsn(
             name: String, desc: String, bsmHandle: Handle, bsmArgs: Object*): Unit = {
           logTrace(s"    invokedynamic: $name$desc, bsmHandle=$bsmHandle, bsmArgs=$bsmArgs")
 
           // fast check: we only care about Scala lambda creation
+          // TODO: maybe lift this restriction and support other functional interfaces
           if (!name.startsWith("apply")) return
           if (!Type.getReturnType(desc).getDescriptor.startsWith("Lscala/Function")) return
 
-          if (bsmHandle.getOwner == LambdaMetafactoryClassName &&
-              bsmHandle.getName == LambdaMetafactoryMethodName &&
-              bsmHandle.getDesc == LambdaMetafactoryMethodDesc) {
+          if (isLambdaMetafactory(bsmHandle)) {
             // OK we're in the right bootstrap method for serializable Java 8 style lambda creation
             val targetHandle = bsmArgs(1).asInstanceOf[Handle]
-            if (targetHandle.getOwner == implClassInternalName &&
-                targetHandle.getDesc.startsWith(s"(L$implClassInternalName;")) {
+            if (isLambdaBodyCapturingOuter(targetHandle, currentClassInternalName)) {
               // this is a lexically nested closure that also captures the enclosing `this`
               logDebug(s"    found inner closure $targetHandle")
               val calleeMethodId =
-                MethodIdentifier(implClass, targetHandle.getName, targetHandle.getDesc)
-              if (!visited.contains(calleeMethodId)) {
-                stack.push(calleeMethodId)
-              }
+                MethodIdentifier(currentClass, targetHandle.getName, targetHandle.getDesc)
+              pushIfNotVisited(calleeMethodId)
             }
           }
         }
