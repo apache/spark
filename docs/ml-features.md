@@ -1793,6 +1793,70 @@ for more details on the API.
 </div>
 </div>
 
+## VarianceThresholdSelector
+
+`VarianceThresholdSelector` is a selector that removes low-variance features. Features with a
+ variance not greater than the `varianceThreshold` will be removed. If not set, `varianceThreshold`
+ defaults to 0, which means only features with variance 0 (i.e. features that have the same value in all samples)
+ will be removed.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id` and `features`, which is used as
+our target to be predicted:
+
+~~~
+id | features
+---|--------------------------------
+ 1 | [6.0, 7.0, 0.0, 7.0, 6.0, 0.0]
+ 2 | [0.0, 9.0, 6.0, 0.0, 5.0, 9.0]
+ 3 | [0.0, 9.0, 3.0, 0.0, 5.0, 5.0]
+ 4 | [0.0, 9.0, 8.0, 5.0, 6.0, 4.0]
+ 5 | [8.0, 9.0, 6.0, 5.0, 4.0, 4.0]
+ 6 | [8.0, 9.0, 6.0, 0.0, 0.0, 0.0]
+~~~
+
+The variance for the 6 features are 16.67, 0.67, 8.17, 10.17,
+5.07, and 11.47 respectively. If we use `VarianceThresholdSelector` with
+`varianceThreshold = 8.0`, then the features with variance <= 8.0 are removed:
+
+~~~
+id | features                       | selectedFeatures
+---|--------------------------------|-------------------
+ 1 | [6.0, 7.0, 0.0, 7.0, 6.0, 0.0] | [6.0,0.0,7.0,0.0]
+ 2 | [0.0, 9.0, 6.0, 0.0, 5.0, 9.0] | [0.0,6.0,0.0,9.0]
+ 3 | [0.0, 9.0, 3.0, 0.0, 5.0, 5.0] | [0.0,3.0,0.0,5.0]
+ 4 | [0.0, 9.0, 8.0, 5.0, 6.0, 4.0] | [0.0,8.0,5.0,4.0]
+ 5 | [8.0, 9.0, 6.0, 5.0, 4.0, 4.0] | [8.0,6.0,5.0,4.0]
+ 6 | [8.0, 9.0, 6.0, 0.0, 0.0, 0.0] | [8.0,6.0,0.0,0.0]
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [VarianceThresholdSelector Scala docs]((api/python/pyspark.ml.html#pyspark.ml.feature.ChiSqSelector))
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/VarianceThresholdSelectorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [VarianceThresholdSelector Java docs](api/java/org/apache/spark/ml/feature/VarianceThresholdSelector.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaVarianceThresholdSelectorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VarianceThresholdSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VarianceThresholdSelector)
+for more details on the API.
+
+{% include_example python/ml/variance_threshold_selector_example.py %}
+</div>
+</div>
+
 # Locality Sensitive Hashing
 [Locality Sensitive Hashing (LSH)](https://en.wikipedia.org/wiki/Locality-sensitive_hashing) is an important class of hashing techniques, which is commonly used in clustering, approximate nearest neighbor search and outlier detection with large datasets.
 
