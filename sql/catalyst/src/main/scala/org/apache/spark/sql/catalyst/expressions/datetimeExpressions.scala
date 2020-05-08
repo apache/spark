@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, Tim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -1205,8 +1206,9 @@ case class DatetimeSub(
     start: Expression,
     interval: Expression,
     child: Expression) extends RuntimeReplaceable {
+  override def exprsReplaced: Seq[Expression] = Seq(start, interval)
   override def toString: String = s"$start - $interval"
-  override def sql: String = s"${start.sql} - ${interval.sql}"
+  override def mkString(childrenString: Seq[String]): String = childrenString.mkString(" - ")
 }
 
 /**
@@ -1553,14 +1555,8 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
     this(left, None, Cast(left, DateType))
   }
 
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
   override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def sql: String = {
-    if (format.isDefined) {
-      s"$prettyName(${left.sql}, ${format.get.sql})"
-    } else {
-      s"$prettyName(${left.sql})"
-    }
-  }
 
   override def prettyName: String = "to_date"
 }
@@ -1601,13 +1597,7 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   def this(left: Expression) = this(left, None, Cast(left, TimestampType))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def sql: String = {
-    if (format.isDefined) {
-      s"$prettyName(${left.sql}, ${format.get.sql})"
-    } else {
-      s"$prettyName(${left.sql})"
-    }
-  }
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
 
   override def prettyName: String = "to_timestamp"
   override def dataType: DataType = TimestampType
@@ -2161,7 +2151,8 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
-  override def sql: String = s"$prettyName(${field.sql}, ${source.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(field, source)
+
   override def prettyName: String = "date_part"
 }
 
@@ -2221,8 +2212,12 @@ case class Extract(field: Expression, source: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
-  override def sql: String = s"$prettyName(${field.sql} FROM ${source.sql})"
-  override def prettyName: String = "extract"
+
+  override def exprsReplaced: Seq[Expression] = Seq(field, source)
+
+  override def mkString(childrenString: Seq[String]): String = {
+    prettyName + childrenString.mkString("(", " FROM ", ")")
+  }
 }
 
 /**

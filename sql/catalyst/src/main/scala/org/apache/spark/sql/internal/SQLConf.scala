@@ -621,7 +621,7 @@ object SQLConf {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
-    .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
+    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
     .doc("Sets the compression codec used when writing Parquet files. If either `compression` or " +
@@ -845,8 +845,10 @@ object SQLConf {
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
-      "distinct semantics. By default the optimization is disabled, since it may return " +
-      "incorrect results when the files are empty.")
+      "distinct semantics. By default the optimization is disabled, and deprecated as of Spark " +
+      "3.0 since it may return incorrect results when the files are empty, see also SPARK-26709." +
+      "It will be removed in the future releases. If you must use, use 'SparkSessionExtensions' " +
+      "instead to inject it as a custom rule.")
     .version("2.1.1")
     .booleanConf
     .createWithDefault(false)
@@ -2063,16 +2065,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val NESTED_PREDICATE_PUSHDOWN_ENABLED =
-    buildConf("spark.sql.optimizer.nestedPredicatePushdown.enabled")
+  val NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST =
+    buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources")
       .internal()
-      .doc("When true, Spark tries to push down predicates for nested columns and or names " +
-        "containing `dots` to data sources. Currently, Parquet implements both optimizations " +
-        "while ORC only supports predicates for names containing `dots`. The other data sources" +
-        "don't support this feature yet.")
+      .doc("A comma-separated list of data source short names or fully qualified data source " +
+        "implementation class names for which Spark tries to push down predicates for nested " +
+        "columns and/or names containing `dots` to data sources. This configuration is only " +
+        "effective with file-based data source in DSv1. Currently, Parquet implements " +
+        "both optimizations while ORC only supports predicates for names containing `dots`. The " +
+        "other data sources don't support this feature yet. So the default value is 'parquet,orc'.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(true)
+      .stringConf
+      .createWithDefault("parquet,orc")
 
   val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
@@ -2605,7 +2609,10 @@ object SQLConf {
       DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
         s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it."),
       DeprecatedConfig(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "3.0",
-        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it.")
+        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it."),
+      DeprecatedConfig(OPTIMIZER_METADATA_ONLY.key, "3.0",
+        "Avoid to depend on this optimization to prevent a potential correctness issue. " +
+          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -3097,8 +3104,6 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
-
-  def nestedPredicatePushdownEnabled: Boolean = getConf(NESTED_PREDICATE_PUSHDOWN_ENABLED)
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)

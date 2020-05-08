@@ -49,18 +49,18 @@ other `SQL` constructs.
 </style>
 
 The following illustrates the schema layout and data of a table named `person`. The data contains `NULL` values in
-the `age` column and this table will be used in various examples in the sections below.
+the `age` column and this table will be used in various examples in the sections below.<br/>
 **<u>TABLE: person</u>**
-<table class="tsclass" border="1">
-<tr><th>Id</th><th>Name</th><th>Age</th></tr>
-<tr><td>100</td><td>Joe</td><td>30</td></tr>
-<tr><td>200</td><td>Marry</td><td>NULL</td></tr>
-<tr><td>300</td><td>Mike</td><td>18</td></tr>
-<tr><td>400</td><td>Fred</td><td>50</td></tr>
-<tr><td>500</td><td>Albert</td><td>NULL</td></tr>
-<tr><td>600</td><td>Michelle</td><td>30</td></tr>
-<tr><td>700</td><td>Dan</td><td>50</td></tr>
-</table>
+
+|Id |Name|Age|
+|---|----|---|
+|100|Joe|30|
+|200|Marry|NULL|
+|300|Mike|18|
+|400|Fred|50|
+|500|Albert|NULL|
+|600|Michelle|30|
+|700|Dan|50|
 
 ### Comparison Operators <a name="comp-operators"></a>
 
@@ -71,48 +71,11 @@ equal operator ('<=>'), which returns `False` when one of the operand is `NULL` 
 both the operands are `NULL`. The following table illustrates the behaviour of comparison operators when
 one or both operands are `NULL`:
 
-<table class="tsclass" border="1">
-  <tr>
-    <th>Left Operand</th>
-    <th>Right  Operand</th>
-    <th>></th>
-    <th>>=</th>
-    <th>=</th>
-    <th><</th>
-    <th><=</th>
-    <th><=></th>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>Any value</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>False</td>
-  </tr>
-  <tr>
-    <td>Any value</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>False</td>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>True</td>
-  </tr>
-</table>
+|Left Operand|Right  Operand|>  |>= |=  |<  |<= |<=>|
+|------------|--------------|---|---|---|---|---|---|
+|NULL|Any value|NULL|NULL|NULL|NULL|NULL|False|
+|Any value|NULL|NULL|NULL|NULL|NULL|NULL|False|
+|NULL|NULL|NULL|NULL|NULL|NULL|NULL|True|
 
 ### Examples
 
@@ -157,55 +120,17 @@ as the arguments and return a `Boolean` value.
 
 The following tables illustrate the behavior of logical operators when one or both operands are `NULL`.
 
-<table class="tsclass" border="1">
-  <tr>
-    <th>Left Operand</th>
-    <th>Right Operand</th>
-    <th>OR</th>
-    <th>AND</th>
-  </tr>
-  <tr>
-    <td>True</td>
-    <td>NULL</td>
-    <td>True</td>
-    <td>NULL</td>
-  </tr>
-  <tr>
-    <td>False</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>False</td>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>True</td>
-    <td>True</td>
-    <td>NULL</td>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>False</td>
-    <td>NULL</td>
-    <td>NULL</td>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-  </tr>
-</table>
-<br>
-<table class="tsclass" border="1">
-  <tr>
-    <th>operand</th>
-    <th>NOT</th>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>NULL</td>
-  </tr>
-</table>
+|Left Operand|Right Operand|OR |AND|
+|------------|-------------|---|---|
+|True|NULL|True|NULL|
+|False|NULL|NULL|False|
+|NULL|True|True|NULL|
+|NULL|False|NULL|NULL|
+|NULL|NULL|NULL|NULL|
+
+|operand|NOT|
+|-------|---|
+|NULL|NULL|
 
 ### Examples
 
@@ -335,7 +260,7 @@ the rules of how `NULL` values are handled by aggregate functions.
 - `NULL` values are ignored from processing by all the aggregate functions.
   - Only exception to this rule is COUNT(*) function.
 - Some aggregate functions return `NULL` when all input values are `NULL` or the input data set
-  is empty.<br> The list of these functions is:
+  is empty.<br/> The list of these functions is:
   - MAX
   - MIN
   - SUM

@@ -698,15 +698,17 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
   test("case sensitivity: created temporary view") {
-    val testData =
-      TestHive.sparkContext.parallelize(
-        TestData(1, "str1") ::
-        TestData(2, "str2") :: Nil)
-    testData.toDF().createOrReplaceTempView("REGisteredTABle")
+    withTempView("REGisteredTABle") {
+      val testData =
+        TestHive.sparkContext.parallelize(
+          TestData(1, "str1") ::
+          TestData(2, "str2") :: Nil)
+      testData.toDF().createOrReplaceTempView("REGisteredTABle")
 
-    assertResult(Array(Row(2, "str2"))) {
-      sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
-        "WHERE TableAliaS.a > 1").collect()
+      assertResult(Array(Row(2, "str2"))) {
+        sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
+          "WHERE TableAliaS.a > 1").collect()
+      }
     }
   }
 
@@ -725,16 +727,18 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
-    val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
-      .zipWithIndex.map {case ((value, attr), key) => HavingRow(key, value, attr)}
-    TestHive.sparkContext.parallelize(fixture).toDF().createOrReplaceTempView("having_test")
-    val results =
-      sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
-      .collect()
-      .map(x => (x.getString(0), x.getInt(1)))
+    withTempView("having_test") {
+      val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
+        .zipWithIndex.map {case ((value, attr), key) => HavingRow(key, value, attr)}
+      TestHive.sparkContext.parallelize(fixture).toDF().createOrReplaceTempView("having_test")
+      val results =
+        sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+        .collect()
+        .map(x => (x.getString(0), x.getInt(1)))
 
-    assert(results === Array(("foo", 4)))
-    TestHive.reset()
+      assert(results === Array(("foo", 4)))
+      TestHive.reset()
+    }
   }
 
   test("SPARK-2180: HAVING with non-boolean clause raises no exceptions") {
@@ -966,22 +970,24 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-3414 regression: should store analyzed logical plan when creating a temporary view") {
-    sparkContext.makeRDD(Seq.empty[LogEntry]).toDF().createOrReplaceTempView("rawLogs")
-    sparkContext.makeRDD(Seq.empty[LogFile]).toDF().createOrReplaceTempView("logFiles")
+    withTempView("rawLogs", "logFiles", "boom") {
+      sparkContext.makeRDD(Seq.empty[LogEntry]).toDF().createOrReplaceTempView("rawLogs")
+      sparkContext.makeRDD(Seq.empty[LogFile]).toDF().createOrReplaceTempView("logFiles")
 
-    sql(
-      """
-      SELECT name, message
-      FROM rawLogs
-      JOIN (
-        SELECT name
-        FROM logFiles
-      ) files
-      ON rawLogs.filename = files.name
-      """).createOrReplaceTempView("boom")
+      sql(
+        """
+        SELECT name, message
+        FROM rawLogs
+        JOIN (
+          SELECT name
+          FROM logFiles
+        ) files
+        ON rawLogs.filename = files.name
+        """).createOrReplaceTempView("boom")
 
-    // This should be successfully analyzed
-    sql("SELECT * FROM boom").queryExecution.analyzed
+      // This should be successfully analyzed
+      sql("SELECT * FROM boom").queryExecution.analyzed
+    }
   }
 
   test("SPARK-3810: PreprocessTableInsertion static partitioning support") {

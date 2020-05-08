@@ -260,26 +260,28 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("nanvl") {
-    val testData = spark.createDataFrame(sparkContext.parallelize(
-      Row(null, 3.0, Double.NaN, Double.PositiveInfinity, 1.0f, 4) :: Nil),
-      StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
-        StructField("c", DoubleType), StructField("d", DoubleType),
-        StructField("e", FloatType), StructField("f", IntegerType))))
+    withTempView("t") {
+      val testData = spark.createDataFrame(sparkContext.parallelize(
+        Row(null, 3.0, Double.NaN, Double.PositiveInfinity, 1.0f, 4) :: Nil),
+        StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
+          StructField("c", DoubleType), StructField("d", DoubleType),
+          StructField("e", FloatType), StructField("f", IntegerType))))
 
-    checkAnswer(
-      testData.select(
-        nanvl($"a", lit(5)), nanvl($"b", lit(10)), nanvl(lit(10), $"b"),
-        nanvl($"c", lit(null).cast(DoubleType)), nanvl($"d", lit(10)),
-        nanvl($"b", $"e"), nanvl($"e", $"f")),
-      Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
-    )
-    testData.createOrReplaceTempView("t")
-    checkAnswer(
-      sql(
-        "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
-          " nanvl(b, e), nanvl(e, f) from t"),
-      Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
-    )
+      checkAnswer(
+        testData.select(
+          nanvl($"a", lit(5)), nanvl($"b", lit(10)), nanvl(lit(10), $"b"),
+          nanvl($"c", lit(null).cast(DoubleType)), nanvl($"d", lit(10)),
+          nanvl($"b", $"e"), nanvl($"e", $"f")),
+        Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
+      )
+      testData.createOrReplaceTempView("t")
+      checkAnswer(
+        sql(
+          "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
+            " nanvl(b, e), nanvl(e, f) from t"),
+        Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
+      )
+    }
   }
 
   test("===") {

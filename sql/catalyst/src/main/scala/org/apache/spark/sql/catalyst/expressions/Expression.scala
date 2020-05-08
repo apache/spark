@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -323,6 +324,19 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
   override lazy val canonicalized: Expression = child.canonicalized
+
+  /**
+   * Only used to generate SQL representation of this expression.
+   *
+   * Implementations should override this with original parameters
+   */
+  def exprsReplaced: Seq[Expression]
+
+  override def sql: String = mkString(exprsReplaced.map(_.sql))
+
+  def mkString(childrenString: Seq[String]): String = {
+    prettyName + childrenString.mkString("(", ", ", ")")
+  }
 }
 
 /**

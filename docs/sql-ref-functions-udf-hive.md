@@ -30,7 +30,7 @@ An example below uses [GenericUDFAbs](https://github.com/apache/hive/blob/master
 
 {% highlight sql %}
 -- Register `GenericUDFAbs` and use it in Spark SQL.
--- Note that, if you use your own programmed one, you need to add a JAR containig it
+-- Note that, if you use your own programmed one, you need to add a JAR containing it
 -- into a classpath,
 -- e.g., ADD JAR yourHiveUDF.jar;
 CREATE TEMPORARY FUNCTION testUDF AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFAbs';

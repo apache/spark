@@ -2558,7 +2558,7 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   error_msg <- paste("joinType must be one of the following types:",
                  "'inner', 'cross', 'outer', 'full', 'fullouter', 'full_outer',",
                  "'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer',",
-                 "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti' or 'left_anti'.")
+                 "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti', 'left_anti'")
   expect_error(join(df2, df, df2$name == df$name, "invalid"), error_msg)
 
   merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)

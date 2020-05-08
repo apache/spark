@@ -431,7 +431,7 @@ setMethod("coltypes",
                 if (is.null(type)) {
                   specialtype <- specialtypeshandle(x)
                   if (is.null(specialtype)) {
-                    stop(paste("Unsupported data type: ", x))
+                    stop("Unsupported data type: ", x)
                   }
                   type <- PRIMITIVE_TYPES[[specialtype]]
                 }
@@ -829,8 +829,8 @@ setMethod("repartitionByRange",
                 jcol <- lapply(cols, function(c) { c@jc })
                 sdf <- callJMethod(x@sdf, "repartitionByRange", numToInt(numPartitions), jcol)
               } else {
-                stop(paste("numPartitions and col must be numeric and Column; however, got",
-                           class(numPartitions), "and", class(col)))
+                stop("numPartitions and col must be numeric and Column; however, got ",
+                     class(numPartitions), " and ", class(col))
               }
             } else if (!is.null(col))  {
               # only columns are specified
@@ -839,7 +839,7 @@ setMethod("repartitionByRange",
                 jcol <- lapply(cols, function(c) { c@jc })
                 sdf <- callJMethod(x@sdf, "repartitionByRange", jcol)
               } else {
-                stop(paste("col must be Column; however, got", class(col)))
+                stop("col must be Column; however, got ", class(col))
               }
             } else if (!is.null(numPartitions)) {
               # only numPartitions is specified
@@ -1068,10 +1068,10 @@ setMethod("sample",
           signature(x = "SparkDataFrame"),
           function(x, withReplacement = FALSE, fraction, seed) {
             if (!is.numeric(fraction)) {
-              stop(paste("fraction must be numeric; however, got", class(fraction)))
+              stop("fraction must be numeric; however, got ", class(fraction))
             }
             if (!is.logical(withReplacement)) {
-              stop(paste("withReplacement must be logical; however, got", class(withReplacement)))
+              stop("withReplacement must be logical; however, got ", class(withReplacement))
             }
 
             if (!missing(seed)) {
@@ -1211,11 +1211,10 @@ setMethod("collect",
                 checkSchemaInArrow(schema(x))
                 TRUE
               }, error = function(e) {
-                warning(paste0("The conversion from Spark DataFrame to R DataFrame was attempted ",
-                               "with Arrow optimization because ",
-                               "'spark.sql.execution.arrow.sparkr.enabled' is set to true; ",
-                               "however, failed, attempting non-optimization. Reason: ",
-                               e))
+                warning("The conversion from Spark DataFrame to R DataFrame was attempted ",
+                        "with Arrow optimization because ",
+                        "'spark.sql.execution.arrow.sparkr.enabled' is set to true; ",
+                        "however, failed, attempting non-optimization. Reason: ", e)
                 FALSE
               })
             }
@@ -1508,8 +1507,8 @@ dapplyInternal <- function(x, func, schema) {
     if (inherits(schema, "structType")) {
       checkSchemaInArrow(schema)
     } else if (is.null(schema)) {
-      stop(paste0("Arrow optimization does not support 'dapplyCollect' yet. Please disable ",
-                  "Arrow optimization or use 'collect' and 'dapply' APIs instead."))
+      stop("Arrow optimization does not support 'dapplyCollect' yet. Please disable ",
+           "Arrow optimization or use 'collect' and 'dapply' APIs instead.")
     } else {
       stop("'schema' should be DDL-formatted string or structType.")
     }
@@ -2012,8 +2011,8 @@ setMethod("[", signature(x = "SparkDataFrame"),
               x
             } else {
               if (class(i) != "Column") {
-                stop(paste0("Expressions other than filtering predicates are not supported ",
-                      "in the first parameter of extract operator [ or subset() method."))
+                stop("Expressions other than filtering predicates are not supported ",
+                      "in the first parameter of extract operator [ or subset() method.")
               }
               filter(x, i)
             }
@@ -2604,18 +2603,17 @@ setMethod("join",
               if (is.null(joinType)) {
                 sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc)
               } else {
-                if (joinType %in% c("inner", "cross",
+                validJoinTypes <- c("inner", "cross",
                     "outer", "full", "fullouter", "full_outer",
                     "left", "leftouter", "left_outer",
                     "right", "rightouter", "right_outer",
-                    "semi", "left_semi", "leftsemi", "anti", "left_anti", "leftanti")) {
+                    "semi", "leftsemi", "left_semi", "anti", "leftanti", "left_anti")
+                if (joinType %in% validJoinTypes) {
                   joinType <- gsub("_", "", joinType, fixed = TRUE)
                   sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
                 } else {
-                  stop(paste("joinType must be one of the following types:",
-                       "'inner', 'cross', 'outer', 'full', 'fullouter', 'full_outer',",
-                       "'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer',",
-                       "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti' or 'left_anti'."))
+                  stop("joinType must be one of the following types: ",
+                       "'", paste(validJoinTypes, collapse = "', '"), "'")
                 }
               }
             }
