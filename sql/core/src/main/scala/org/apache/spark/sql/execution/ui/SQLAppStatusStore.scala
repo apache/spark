@@ -146,6 +146,4 @@ class SparkPlanGraphNodeWrapper(
 case class SQLPlanMetric(
     name: String,
     accumulatorId: Long,
-    metricType: String,
-    nodeId: Option[Long] = None,
-    nodeName: Option[String] = None)
+    metricType: String)

@@ -80,8 +80,7 @@ object SparkPlanGraph {
     planInfo.nodeName match {
       case name if name.startsWith("WholeStageCodegen") =>
         val metrics = planInfo.metrics.map { metric =>
-          SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType,
-            Some(nodeIdGenerator.get()), Some(planInfo.nodeName))
+          SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
         }
 
         val cluster = new SparkPlanGraphCluster(
@@ -124,8 +123,7 @@ object SparkPlanGraph {
         edges += SparkPlanGraphEdge(node.id, parent.id)
       case name =>
         val metrics = planInfo.metrics.map { metric =>
-          SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType,
-            Some(nodeIdGenerator.get()), Some(planInfo.nodeName))
+          SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
         }
         val node = new SparkPlanGraphNode(
           nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
@@ -155,7 +153,7 @@ object SparkPlanGraph {
  * @param name the name of this SparkPlan node
  * @param metrics metrics that this SparkPlan node will track
  */
-private[ui] class SparkPlanGraphNode(
+class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,

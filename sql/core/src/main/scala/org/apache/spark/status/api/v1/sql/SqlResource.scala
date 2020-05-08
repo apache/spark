@@ -24,7 +24,7 @@ import javax.ws.rs.core.MediaType
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SQLAppStatusStore, SQLExecutionUIData, SQLPlanMetric}
+import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLAppStatusStore, SQLExecutionUIData}
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -41,8 +41,9 @@ private[v1] class SqlResource extends BaseAppResource {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       sqlStore.executionsList(offset, length).map { exec =>
-        val (edges, nodeIdAndWSCGIdMap) = computeDetailsIfTrue(sqlStore, exec.executionId, details)
-        prepareExecutionData(exec, edges, nodeIdAndWSCGIdMap,
+        val (allNodes, edges, nodeIdAndWSCGIdMap) =
+          computeDetailsIfTrue(sqlStore, exec.executionId, details)
+        prepareExecutionData(exec, allNodes, edges, nodeIdAndWSCGIdMap,
           details = details, planDescription = planDescription)
       }
     }
@@ -57,10 +58,10 @@ private[v1] class SqlResource extends BaseAppResource {
       planDescription: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      val (edges, nodeIdAndWSCGIdMap) = computeDetailsIfTrue(sqlStore, execId, details)
+      val (allNodes, edges, nodeIdAndWSCGIdMap) = computeDetailsIfTrue(sqlStore, execId, details)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData(_, edges, nodeIdAndWSCGIdMap, details, planDescription))
+        .map(prepareExecutionData(_, allNodes, edges, nodeIdAndWSCGIdMap, details, planDescription))
         .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
   }
@@ -68,49 +69,41 @@ private[v1] class SqlResource extends BaseAppResource {
   private def computeDetailsIfTrue(sqlStore: SQLAppStatusStore,
     executionId: Long,
     details: Boolean):
-  (Seq[SparkPlanGraphEdge], Map[Long, Option[Long]]) = {
+  (Seq[SparkPlanGraphNode], Seq[SparkPlanGraphEdge], Map[Long, Option[Long]]) = {
     if (details) {
       val graph = sqlStore.planGraph(executionId)
       val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = getNodeIdAndWSCGIdMap(graph)
-      (graph.edges, nodeIdAndWSCGIdMap)
+      (graph.allNodes, graph.edges, nodeIdAndWSCGIdMap)
     } else {
-      (Seq.empty, Map.empty)
+      (Seq.empty, Seq.empty, Map.empty)
     }
   }
 
-  private def printableMetrics(
-      sqlPlanMetrics: Seq[SQLPlanMetric],
-      metricValues: Map[Long, String],
-      nodeIdAndWSCGIdMap: Map[Long, Option[Long]]): Seq[Node] = {
+  private def getNodeIdAndWSCGIdMap(graph: SparkPlanGraph): Map[Long, Option[Long]] = {
+    val wscgNodes = graph.allNodes.filter(_.name.trim.startsWith(WHOLE_STAGE_CODEGEN))
+    val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = wscgNodes.flatMap {
+      _ match {
+        case x: SparkPlanGraphCluster => x.nodes.map(_.id -> getWholeStageCodegenId(x.name.trim))
+        case _ => Seq.empty
+      }
+    }.toMap
 
-    def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
-                  metricName: String): Option[Metric] = {
-      metricValues.get(accumulatorId).map( mv => {
-        val metricValue = if (mv.startsWith("\n")) mv.substring(1, mv.length) else mv
-        Metric(metricName, metricValue)
-      })
+    nodeIdAndWSCGIdMap
+  }
+
+  private def getWholeStageCodegenId(wscgNodeName: String): Option[Long] = {
+    Try(wscgNodeName.substring(
+      s"$WHOLE_STAGE_CODEGEN (".length, wscgNodeName.length - 1).toLong) match {
+      case Success(wscgId) => Some(wscgId)
+      case Failure(t) => None
     }
-
-    val groupedMap: Map[(Long, String), Seq[SQLPlanMetric]] =
-      sqlPlanMetrics.groupBy[(Long, String)](
-        sqlPlanMetric => (sqlPlanMetric.nodeId.getOrElse(-1), sqlPlanMetric.nodeName.getOrElse("")))
-
-    val metrics = groupedMap.mapValues[Seq[Metric]](sqlPlanMetrics =>
-      sqlPlanMetrics.flatMap(m => getMetric(metricValues, m.accumulatorId, m.name.trim)))
-
-    val nodes = metrics.map {
-      case ((nodeId: Long, nodeName: String), metrics: Seq[Metric]) =>
-        val wholeStageCodegenId = nodeIdAndWSCGIdMap.get(nodeId).flatten
-        Node(nodeId = nodeId, nodeName = nodeName.trim, wholeStageCodegenId, metrics)
-    }.toSeq
-
-    nodes.sortBy(_.nodeId).reverse
   }
 
   private def prepareExecutionData(
     exec: SQLExecutionUIData,
-    sparkPlanGraphEdges: Seq[SparkPlanGraphEdge] = Seq.empty,
-    nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map.empty,
+    sparkPlanGraphNodes: Seq[SparkPlanGraphNode],
+    sparkPlanGraphEdges: Seq[SparkPlanGraphEdge],
+    nodeIdAndWSCGIdMap: Map[Long, Option[Long]],
     details: Boolean,
     planDescription: Boolean): ExecutionData = {
 
@@ -140,7 +133,8 @@ private[v1] class SqlResource extends BaseAppResource {
     val planDetails = if (planDescription) exec.physicalPlanDescription else ""
     val nodes =
       if (details) {
-        printableMetrics(exec.metrics, exec.metricValues, nodeIdAndWSCGIdMap)
+        printableMetrics(
+          sparkPlanGraphNodes, exec.metricValues, nodeIdAndWSCGIdMap)
       } else {
         Seq.empty
       }
@@ -160,24 +154,26 @@ private[v1] class SqlResource extends BaseAppResource {
       edges)
   }
 
-  private def getNodeIdAndWSCGIdMap(graph: SparkPlanGraph): Map[Long, Option[Long]] = {
-    val wscgNodes = graph.allNodes.filter(_.name.trim.startsWith(WHOLE_STAGE_CODEGEN))
-    val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = wscgNodes.flatMap {
-      _ match {
-        case x: SparkPlanGraphCluster => x.nodes.map(_.id -> getWholeStageCodegenId(x.name.trim))
-        case _ => Seq.empty
-      }
-    }.toMap
+  private def printableMetrics(sparkPlanGraphNodes: Seq[SparkPlanGraphNode],
+    metricValues: Map[Long, String],
+    nodeIdAndWSCGIdMap: Map[Long, Option[Long]]): Seq[Node] = {
 
-    nodeIdAndWSCGIdMap
-  }
-
-  private def getWholeStageCodegenId(wscgNodeName: String): Option[Long] = {
-    Try(wscgNodeName.substring(
-      s"$WHOLE_STAGE_CODEGEN (".length, wscgNodeName.length - 1).toLong) match {
-      case Success(wscgId) => Some(wscgId)
-      case Failure(t) => None
+    def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
+                  metricName: String): Option[Metric] = {
+      metricValues.get(accumulatorId).map( mv => {
+        val metricValue = if (mv.startsWith("\n")) mv.substring(1, mv.length) else mv
+        Metric(metricName, metricValue)
+      })
     }
+
+    val nodes = sparkPlanGraphNodes.map { node =>
+      val wholeStageCodegenId = nodeIdAndWSCGIdMap.get(node.id).flatten
+      val metrics =
+        node.metrics.flatMap(m => getMetric(metricValues, m.accumulatorId, m.name.trim))
+      Node(nodeId = node.id, nodeName = node.name.trim, wholeStageCodegenId, metrics)
+    }
+
+    nodes.sortBy(_.nodeId).reverse
   }
 
 }
