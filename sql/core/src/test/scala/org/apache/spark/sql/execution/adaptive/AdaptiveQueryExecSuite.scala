@@ -1004,10 +1004,13 @@ class AdaptiveQueryExecSuite
           }
         }
         spark.sparkContext.addSparkListener(listener)
-        sql("CREATE TABLE t1 AS SELECT 1 col").collect()
-        spark.sparkContext.listenerBus.waitUntilEmpty()
-        assert(checkDone)
-        spark.sparkContext.removeSparkListener(listener)
+        try {
+          sql("CREATE TABLE t1 AS SELECT 1 col").collect()
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          assert(checkDone)
+        } catch {
+          spark.sparkContext.removeSparkListener(listener)
+        }
       }
     }
   }
