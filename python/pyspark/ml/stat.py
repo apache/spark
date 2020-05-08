@@ -37,45 +37,8 @@ class ChiSquareTest(object):
 
     """
     @staticmethod
-    @since("2.2.0")
-    def test(dataset, featuresCol, labelCol):
-        """
-        Perform a Pearson's independence test using dataset.
-
-        :param dataset:
-          DataFrame of categorical labels and categorical features.
-          Real-valued features will be treated as categorical for each distinct value.
-        :param featuresCol:
-          Name of features column in dataset, of type `Vector` (`VectorUDT`).
-        :param labelCol:
-          Name of label column in dataset, of any numerical type.
-        :return:
-          DataFrame containing the test result for every feature against the label.
-          This DataFrame will contain a single Row with the following fields:
-          - `pValues: Vector`
-          - `degreesOfFreedom: Array[int]`
-          - `statistics: Vector`
-          Each of these fields has one value per feature.
-
-        >>> from pyspark.ml.linalg import Vectors
-        >>> from pyspark.ml.stat import ChiSquareTest
-        >>> dataset = [[0, Vectors.dense([0, 0, 1])],
-        ...            [0, Vectors.dense([1, 0, 1])],
-        ...            [1, Vectors.dense([2, 1, 1])],
-        ...            [1, Vectors.dense([3, 1, 1])]]
-        >>> dataset = spark.createDataFrame(dataset, ["label", "features"])
-        >>> chiSqResult = ChiSquareTest.test(dataset, 'features', 'label')
-        >>> chiSqResult.select("degreesOfFreedom").collect()[0]
-        Row(degreesOfFreedom=[3, 1, 0])
-        """
-        sc = SparkContext._active_spark_context
-        javaTestObj = _jvm().org.apache.spark.ml.stat.ChiSquareTest
-        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol)]
-        return _java2py(sc, javaTestObj.test(*args))
-
-    @staticmethod
     @since("3.1.0")
-    def test(dataset, featuresCol, labelCol, flatten):
+    def test(dataset, featuresCol, labelCol, flatten = False):
         """
         Perform a Pearson's independence test using dataset.
 
@@ -108,6 +71,9 @@ class ChiSquareTest(object):
         ...            [1, Vectors.dense([2, 1, 1])],
         ...            [1, Vectors.dense([3, 1, 1])]]
         >>> dataset = spark.createDataFrame(dataset, ["label", "features"])
+        >>> chiSqResult = ChiSquareTest.test(dataset, 'features', 'label')
+        >>> chiSqResult.select("degreesOfFreedom").collect()[0]
+        Row(degreesOfFreedom=[3, 1, 0])
         >>> chiSqResult = ChiSquareTest.test(dataset, 'features', 'label', True)
         >>> row = chiSqResult.orderBy("featureIndex").collect()
         >>> row[0].statistic
@@ -464,7 +430,7 @@ class ANOVATest(object):
     """
     @staticmethod
     @since("3.1.0")
-    def test(dataset, featuresCol, labelCol):
+    def test(dataset, featuresCol, labelCol, flatten = False):
         """
         Perform an ANOVA test using dataset.
 
@@ -474,9 +440,16 @@ class ANOVATest(object):
           Name of features column in dataset, of type `Vector` (`VectorUDT`).
         :param labelCol:
           Name of label column in dataset, of any numerical type.
+        :param flatten: if True, flattens the returned dataframe.
         :return:
           DataFrame containing the test result for every feature against the label.
-          This DataFrame will contain a single Row with the following fields:
+          If flatten is True, this DataFrame will contain one row per feature with the following
+          fields:
+          - `featureIndex: int`
+          - `pValue: float`
+          - `degreesOfFreedom: int`
+          - `fValue: float`
+          If flatten is False, this DataFrame will contain a single Row with the following fields:
           - `pValues: Vector`
           - `degreesOfFreedom: Array[int]`
           - `fValues: Vector`
@@ -499,50 +472,6 @@ class ANOVATest(object):
         DenseVector([4.0264, 18.4713, 3.4659, 1.9042, 0.5532, 0.512])
         >>> row[0].pValues
         DenseVector([0.3324, 0.1623, 0.3551, 0.456, 0.689, 0.7029])
-        """
-        sc = SparkContext._active_spark_context
-        javaTestObj = _jvm().org.apache.spark.ml.stat.ANOVATest
-        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol)]
-        return _java2py(sc, javaTestObj.test(*args))
-
-    @staticmethod
-    @since("3.1.0")
-    def test(dataset, featuresCol, labelCol, flatten):
-        """
-        Perform an ANOVA test using dataset.
-
-        :param dataset:
-          DataFrame of categorical labels and continuous features.
-        :param featuresCol:
-          Name of features column in dataset, of type `Vector` (`VectorUDT`).
-        :param labelCol:
-          Name of label column in dataset, of any numerical type.
-        :param flatten: if True, flattens the returned dataframe.
-        :return:
-          DataFrame containing the test result for every feature against the label.
-          If flatten is True, this DataFrame will contain one row per feature with the following
-          fields:
-          - `featureIndex: int`
-          - `pValue: float`
-          - `degreesOfFreedom: int`
-          - `fValue: float`
-          If flatten is False, this DataFrame will contain a single Row with the following fields:
-          - `pValues: Vector`
-          - `degreesOfFreedom: Array[int]`
-          - `fValues: Vector`
-          Each of these fields has one value per feature.
-
-        >>> from pyspark.ml.linalg import Vectors
-        >>> from pyspark.ml.stat import ANOVATest
-        >>> dataset = [[2.0, Vectors.dense([0.43486404, 0.57153633, 0.43175686,
-        ...                                 0.51418671, 0.61632374, 0.96565515])],
-        ...            [1.0, Vectors.dense([0.49162732, 0.6785187, 0.85460572,
-        ...                                 0.59784822, 0.12394819, 0.53783355])],
-        ...            [2.0, Vectors.dense([0.30879653, 0.54904515, 0.17103889,
-        ...                                 0.40492506, 0.18957493, 0.5440016])],
-        ...            [3.0, Vectors.dense([0.68114391, 0.60549825, 0.69094651,
-        ...                                 0.62102109, 0.05471483, 0.96449167])]]
-        >>> dataset = spark.createDataFrame(dataset, ["label", "features"])
         >>> anovaResult = ANOVATest.test(dataset, 'features', 'label', True)
         >>> row = anovaResult.orderBy("featureIndex").collect()
         >>> row[0].fValue
@@ -562,7 +491,7 @@ class FValueTest(object):
     """
     @staticmethod
     @since("3.1.0")
-    def test(dataset, featuresCol, labelCol):
+    def test(dataset, featuresCol, labelCol, flatten = False):
         """
         Perform a F Regression test using dataset.
 
@@ -572,9 +501,16 @@ class FValueTest(object):
           Name of features column in dataset, of type `Vector` (`VectorUDT`).
         :param labelCol:
           Name of label column in dataset, of any numerical type.
+        :param flatten: if True, flattens the returned dataframe.
         :return:
           DataFrame containing the test result for every feature against the label.
-          This DataFrame will contain a single Row with the following fields:
+          If flatten is True, this DataFrame will contain one row per feature with the following
+          fields:
+          - `featureIndex: int`
+          - `pValue: float`
+          - `degreesOfFreedom: int`
+          - `fValue: float`
+          If flatten is False, this DataFrame will contain a single Row with the following fields:
           - `pValues: Vector`
           - `degreesOfFreedom: Array[int]`
           - `fValues: Vector`
@@ -597,50 +533,6 @@ class FValueTest(object):
         DenseVector([3.741, 7.5807, 142.0684, 34.9849, 0.4112, 0.0539])
         >>> row[0].pValues
         DenseVector([0.1928, 0.1105, 0.007, 0.0274, 0.5871, 0.838])
-        """
-        sc = SparkContext._active_spark_context
-        javaTestObj = _jvm().org.apache.spark.ml.stat.FValueTest
-        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol)]
-        return _java2py(sc, javaTestObj.test(*args))
-
-    @staticmethod
-    @since("3.1.0")
-    def test(dataset, featuresCol, labelCol, flatten):
-        """
-        Perform a F Regression test using dataset.
-
-        :param dataset:
-          DataFrame of continuous labels and continuous features.
-        :param featuresCol:
-          Name of features column in dataset, of type `Vector` (`VectorUDT`).
-        :param labelCol:
-          Name of label column in dataset, of any numerical type.
-        :param flatten: if True, flattens the returned dataframe.
-        :return:
-          DataFrame containing the test result for every feature against the label.
-          If flatten is True, this DataFrame will contain one row per feature with the following
-          fields:
-          - `featureIndex: int`
-          - `pValue: float`
-          - `degreesOfFreedom: int`
-          - `fValue: float`
-          If flatten is False, this DataFrame will contain a single Row with the following fields:
-          - `pValues: Vector`
-          - `degreesOfFreedom: Array[int]`
-          - `fValues: Vector`
-          Each of these fields has one value per feature.
-
-        >>> from pyspark.ml.linalg import Vectors
-        >>> from pyspark.ml.stat import FValueTest
-        >>> dataset = [[0.57495218, Vectors.dense([0.43486404, 0.57153633, 0.43175686,
-        ...                                        0.51418671, 0.61632374, 0.96565515])],
-        ...            [0.84619853, Vectors.dense([0.49162732, 0.6785187, 0.85460572,
-        ...                                        0.59784822, 0.12394819, 0.53783355])],
-        ...            [0.39777647, Vectors.dense([0.30879653, 0.54904515, 0.17103889,
-        ...                                        0.40492506, 0.18957493, 0.5440016])],
-        ...            [0.79201573, Vectors.dense([0.68114391, 0.60549825, 0.69094651,
-        ...                                        0.62102109, 0.05471483, 0.96449167])]]
-        >>> dataset = spark.createDataFrame(dataset, ["label", "features"])
         >>> fValueResult = FValueTest.test(dataset, 'features', 'label', True)
         >>> row = fValueResult.orderBy("featureIndex").collect()
         >>> row[0].fValue
