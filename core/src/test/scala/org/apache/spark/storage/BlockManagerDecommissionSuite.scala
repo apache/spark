@@ -28,10 +28,11 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkLis
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.util.ThreadUtils
 
-class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
+class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
+    with ResetSystemProperties {
 
   override def beforeEach(): Unit = {
-    val conf = new SparkConf().setAppName("test").setMaster("local")
+    val conf = new SparkConf().setAppName("test")
       .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
 
