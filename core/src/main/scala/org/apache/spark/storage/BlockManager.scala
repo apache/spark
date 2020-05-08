@@ -1801,7 +1801,7 @@ private[spark] class BlockManager(
       logInfo(s"Need to replicate ${replicateBlocksInfo.size} blocks " +
         "for block manager decommissioning")
     } else {
-      logWarn(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
+      logWarning(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
       return
     }
 
@@ -1935,6 +1935,7 @@ private[spark] class BlockManager(
             stopped = true
         }
       }
+    }
     blockReplicationThread.setDaemon(true)
     blockReplicationThread.setName("block-replication-thread")
 
@@ -1944,11 +1945,9 @@ private[spark] class BlockManager(
     }
 
     def stop(): Unit = {
-      if (!stopped) {
-        stopped = true
-        logInfo("Stopping block replication thread")
-        blockReplicationThread.interrupt()
-      }
+      stopped = true
+      logInfo("Stopping block replication thread")
+      blockReplicationThread.interrupt()
     }
   }
 
