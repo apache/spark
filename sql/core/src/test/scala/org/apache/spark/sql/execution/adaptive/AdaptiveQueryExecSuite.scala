@@ -943,9 +943,11 @@ class AdaptiveQueryExecSuite
   test("SPARK-30953: InsertAdaptiveSparkPlan should apply AQE on child plan of write commands") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
-      val plan = sql("CREATE TABLE t1 AS SELECT 1 col").queryExecution.executedPlan
-      assert(plan.isInstanceOf[DataWritingCommandExec])
-      assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+      withTable("t1") {
+        val plan = sql("CREATE TABLE t1 AS SELECT 1 col").queryExecution.executedPlan
+        assert(plan.isInstanceOf[DataWritingCommandExec])
+        assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+      }
     }
   }
 
