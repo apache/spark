@@ -526,8 +526,8 @@ case class AdaptiveSparkPlanExec(
     } else {
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
         executionId,
-        SQLExecution.getQueryExecution(executionId).toString,
-        SparkPlanInfo.fromSparkPlan(this)))
+        context.qe.toString,
+        SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
     }
   }
 
