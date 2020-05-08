@@ -161,36 +161,52 @@ object RandomDataGenerator {
       })
       case BooleanType => Some(() => rand.nextBoolean())
       case DateType =>
-        val generator =
-          () => {
-            var milliseconds = rand.nextLong() % 253402329599999L
-            // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
-            // for "0001-01-01 00:00:00.000000". We need to find a
-            // number that is greater or equals to this number as a valid timestamp value.
-            while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the number of milliseconds since
-              // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
-              milliseconds = rand.nextLong() % 253402329599999L
-            }
-            DateTimeUtils.toJavaDate((milliseconds / MILLIS_PER_DAY).toInt)
+        def uniformDateRand(rand: Random): java.sql.Date = {
+          var milliseconds = rand.nextLong() % 253402329599999L
+          // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+          // for "0001-01-01 00:00:00.000000". We need to find a
+          // number that is greater or equals to this number as a valid timestamp value.
+          while (milliseconds < -62135740800000L) {
+            // 253402329599999L is the number of milliseconds since
+            // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+            milliseconds = rand.nextLong() % 253402329599999L
           }
-        Some(generator)
+          DateTimeUtils.toJavaDate((milliseconds / MILLIS_PER_DAY).toInt)
+        }
+        randomNumeric[java.sql.Date](
+          rand,
+          uniformDateRand,
+          Seq(
+            "0001-01-01", // the fist day of Common Era
+            "1000-02-29", // not existed date in Proleptic Gregorian calendar
+            "1582-10-15", // the cutover date from Julian to Gregorian calendar
+            "1970-01-01", // the epoch date
+            "9999-12-31"  // the last supported date according to SQL standard
+          ).map(java.sql.Date.valueOf))
       case TimestampType =>
-        val generator =
-          () => {
-            var milliseconds = rand.nextLong() % 253402329599999L
-            // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
-            // for "0001-01-01 00:00:00.000000". We need to find a
-            // number that is greater or equals to this number as a valid timestamp value.
-            while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the number of milliseconds since
-              // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
-              milliseconds = rand.nextLong() % 253402329599999L
-            }
-            // DateTimeUtils.toJavaTimestamp takes microsecond.
-            DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
+        def uniformTimestampRand(rand: Random): java.sql.Timestamp = {
+          var milliseconds = rand.nextLong() % 253402329599999L
+          // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+          // for "0001-01-01 00:00:00.000000". We need to find a
+          // number that is greater or equals to this number as a valid timestamp value.
+          while (milliseconds < -62135740800000L) {
+            // 253402329599999L is the number of milliseconds since
+            // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+            milliseconds = rand.nextLong() % 253402329599999L
           }
-        Some(generator)
+          // DateTimeUtils.toJavaTimestamp takes microsecond.
+          DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
+        }
+        randomNumeric[java.sql.Timestamp](
+          rand,
+          uniformTimestampRand,
+          Seq(
+            "0001-01-01 00:00:00", // the fist timestamp of Common Era
+            "1000-02-29 10:11:12.123", // not existed date in Proleptic Gregorian calendar
+            "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
+            "1970-01-01 00:00:00", // the epoch timestamp
+            "9999-12-31 23:59:59.999" // the last supported timestamp according to SQL standard
+          ).map(java.sql.Timestamp.valueOf))
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
         val days = rand.nextInt(10000)
