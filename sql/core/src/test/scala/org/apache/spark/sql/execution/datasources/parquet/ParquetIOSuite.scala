@@ -985,6 +985,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> "true") {
           Seq.tabulate(N)(_ => "1001-01-01").toDF("dateS")
             .select($"dateS".cast("date").as("date"))
+            .repartition(1)
             .write
             .option("parquet.enable.dictionary", dictionaryEncoding)
             .parquet(path)
