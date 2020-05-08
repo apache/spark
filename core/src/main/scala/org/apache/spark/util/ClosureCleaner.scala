@@ -525,10 +525,60 @@ private[spark] object IndylambdaScalaClosures extends Logging {
     op == INVOKESPECIAL && name == "<init>" && desc.startsWith(s"(L$callerInternalName;")
   }
 
+  // scalastyle:off line.size.limit
   /**
    * Scans an indylambda Scala closure, along with its lexically nested closures, and populate
    * the accessed fields info on which fields on the outer object are accessed.
+   *
+   * Example: run the following code snippet in a Spark Shell w/ Scala 2.12+:
+   *   val topLevelValue = "someValue"; val closure = (j: Int) => {
+   *     class InnerFoo {
+   *       val innerClosure = (x: Int) => (1 to x).map { y => y + topLevelValue }
+   *     }
+   *     val innerFoo = new InnerFoo
+   *     (1 to j).flatMap(innerFoo.innerClosure)
+   *   }
+   *   sc.parallelize(0 to 2).map(closure).collect
+   *
+   * produces the following trace-level logs: (omitting the "ignoring ..." logs)
+   *   Cleaning indylambda closure: $anonfun$closure$1$adapted
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.$anonfun$closure$1$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw;Ljava/lang/Object;)Lscala/collection/immutable/IndexedSeq;
+   *       found intra class call to $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.$anonfun$closure$1(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw;I)Lscala/collection/immutable/IndexedSeq;
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.$anonfun$closure$1(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw;I)Lscala/collection/immutable/IndexedSeq;
+   *       found inner class $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1
+   *       found call to outer $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.innerClosure()Lscala/Function1;
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.innerClosure()Lscala/Function1;
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$deserializeLambda$(Ljava/lang/invoke/SerializedLambda;)Ljava/lang/Object;
+   *       invokedynamic: lambdaDeserialize(Ljava/lang/invoke/SerializedLambda;)Ljava/lang/Object;, bsmHandle=scala/runtime/LambdaDeserialize.bootstrap(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;[Ljava/lang/invoke/MethodHandle;)Ljava/lang/invoke/CallSite; (6), bsmArgs=WrappedArray($line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Ljava/lang/String; (6), $line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$1$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Lscala/collection/immutable/IndexedSeq; (6))
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$1$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Lscala/collection/immutable/IndexedSeq;
+   *       found intra class call to $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$1(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;I)Lscala/collection/immutable/IndexedSeq;
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$1(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;I)Lscala/collection/immutable/IndexedSeq;
+   *       invokedynamic: apply(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;)Lscala/Function1;, bsmHandle=java/lang/invoke/LambdaMetafactory.altMetafactory(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite; (6), bsmArgs=WrappedArray((Ljava/lang/Object;)Ljava/lang/Object;, $line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Ljava/lang/String; (6), (Ljava/lang/Object;)Ljava/lang/String;, 7, 1, Lscala/Serializable;, 1, (Ljava/lang/Object;)Ljava/lang/String;)
+   *       found inner closure $line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Ljava/lang/String; (6)
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Ljava/lang/String;
+   *       found intra class call to $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;I)Ljava/lang/String;
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;I)Ljava/lang/String;
+   *       found call to outer $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.topLevelValue()Ljava/lang/String;
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.topLevelValue()Ljava/lang/String;
+   *       found field access topLevelValue on $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Ljava/lang/String;
+   *       found intra class call to $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;I)Ljava/lang/String;
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.<init>(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw;)V
+   *       invokedynamic: apply(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;)Lscala/Function1;, bsmHandle=java/lang/invoke/LambdaMetafactory.altMetafactory(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite; (6), bsmArgs=WrappedArray((Ljava/lang/Object;)Ljava/lang/Object;, $line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$1$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Lscala/collection/immutable/IndexedSeq; (6), (Ljava/lang/Object;)Lscala/collection/immutable/IndexedSeq;, 7, 1, Lscala/Serializable;, 1, (Ljava/lang/Object;)Lscala/collection/immutable/IndexedSeq;)
+   *       found inner closure $line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$1$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Lscala/collection/immutable/IndexedSeq; (6)
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$1(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;I)Lscala/collection/immutable/IndexedSeq;
+   *       invokedynamic: apply(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;)Lscala/Function1;, bsmHandle=java/lang/invoke/LambdaMetafactory.altMetafactory(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite; (6), bsmArgs=WrappedArray((Ljava/lang/Object;)Ljava/lang/Object;, $line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Ljava/lang/String; (6), (Ljava/lang/Object;)Ljava/lang/String;, 7, 1, Lscala/Serializable;, 1, (Ljava/lang/Object;)Ljava/lang/String;)
+   *       found inner closure $line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2$adapted(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;Ljava/lang/Object;)Ljava/lang/String; (6)
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.$anonfun$innerClosure$2(L$line16/$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1;I)Ljava/lang/String;
+   *       found call to outer $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.topLevelValue()Ljava/lang/String;
+   *     scanning $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$InnerFoo$1.innerClosure()Lscala/Function1;
+   *    + fields accessed by starting closure: 2 classes
+   *        (class java.lang.Object,Set())
+   *        (class $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw,Set(topLevelValue))
+   *    + cloning instance of REPL class $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw
+   *    +++ indylambda closure ($anonfun$closure$1$adapted) is now cleaned +++
    */
+  // scalastyle:on line.size.limit
   def findAccessedFields(
       lambdaProxy: SerializedLambda,
       lambdaClassLoader: ClassLoader,
