@@ -162,12 +162,16 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
               spark.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
             val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
 
-            df.write
-              .mode("overwrite")
-              .format(dataSourceName)
-              .option("dataSchema", df.schema.json)
-              .options(extraOptions)
-              .save(path)
+            withSQLConf(
+              SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED",
+              SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+              df.write
+                .mode("overwrite")
+                .format(dataSourceName)
+                .option("dataSchema", df.schema.json)
+                .options(extraOptions)
+                .save(path)
+            }
 
             val loadedDF = spark
               .read
