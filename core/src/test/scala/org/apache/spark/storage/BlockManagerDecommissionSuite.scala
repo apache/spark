@@ -26,7 +26,7 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSui
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
-import org.apache.spark.util.{ThreadUtils, ResetSystemProperties}
+import org.apache.spark.util.{ResetSystemProperties, ThreadUtils}
 
 class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     with ResetSystemProperties {

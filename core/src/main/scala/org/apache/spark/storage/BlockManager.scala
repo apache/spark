@@ -1914,25 +1914,17 @@ private[spark] class BlockManager(
       override def run(): Unit = {
         try {
           while (blockManagerDecommissioning && !stopped && !Thread.interrupted()) {
-            try {
-              logDebug("Attempting to replicate all cached RDD blocks")
-              decommissionRddCacheBlocks()
-              logInfo("Attempt to replicate all cached blocks done")
-              Thread.sleep(sleepInterval)
-            } catch {
-              // Rethrow interrupt exception
-              case e: InterruptedException =>
-                throw e
-              // Everything else we may retry
-              case NonFatal(e) =>
-                logError("Error occurred while trying to " +
-                  "replicate cached RDD blocks for block manager decommissioning", e)
-            }
+            logDebug("Attempting to replicate all cached RDD blocks")
+            decommissionRddCacheBlocks()
+            logInfo("Attempt to replicate all cached blocks done")
+            Thread.sleep(sleepInterval)
           }
         } catch {
           case _: InterruptedException =>
             logInfo("Interrupted during migration, will not refresh migrations.")
             stopped = true
+          case NonFatal(t) =>
+            logError("Migration failed", t)
         }
       }
     }
