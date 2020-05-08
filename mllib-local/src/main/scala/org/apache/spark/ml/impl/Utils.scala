@@ -60,7 +60,7 @@ private[spark] object Utils {
    * Sequentially group input elements to groups, and do aggregation within each group.
    * A group only contains single key, and be of size no greater than the corresponding size.
    * For example, input keys = [1, 1, 1, 2, 2, 2, 3, 3, 1],
-   * group sizes are: 1->2, 2->5, 3->1,
+   * group sizes are: 1:2, 2:5, 3:1,
    * then the groups are {1, 1}, {1}, {2, 2, 2}, {3}, {3}, {1}.
    *
    * @param input input iterator containing (key, value), usually sorted by key
