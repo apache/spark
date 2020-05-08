@@ -225,22 +225,21 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     instr.logNamedValue("quantileProbabilities.size", $(quantileProbabilities).length)
 
     val instances = extractAFTPoints(dataset)
+      .setName("training instances")
+
     if ($(blockSize) == 1 && dataset.storageLevel == StorageLevel.NONE) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    val requestedMetrics = if ($(blockSize) == 1) {
-      Seq("mean", "std", "count")
-    } else {
-      Seq("mean", "std", "count", "numNonZeros")
-    }
-
+    var requestedMetrics = Seq("mean", "std", "count")
+    if ($(blockSize) != 1) requestedMetrics +:= "numNonZeros"
     val summarizer = instances.treeAggregate(
       Summarizer.createSummarizerBuffer(requestedMetrics: _*))(
       seqOp = (c: SummarizerBuffer, v: AFTPoint) => c.add(v.features),
       combOp = (c1: SummarizerBuffer, c2: SummarizerBuffer) => c1.merge(c2),
       depth = $(aggregationDepth)
     )
+
     val featuresStd = summarizer.std.toArray
     val numFeatures = featuresStd.length
     instr.logNumFeatures(numFeatures)
@@ -334,7 +333,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       }
     }
     blocks.persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training dataset (blockSize=${$(blockSize)})")
+      .setName(s"training blocks (blockSize=${$(blockSize)})")
 
     val getAggregatorFunc = new BlockAFTAggregator($(fitIntercept))(_)
     val costFun = new RDDLossFunction(blocks, getAggregatorFunc, None, $(aggregationDepth))

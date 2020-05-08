@@ -517,16 +517,17 @@ class LogisticRegression @Since("1.2.0") (
       probabilityCol, regParam, elasticNetParam, standardization, threshold, maxIter, tol,
       fitIntercept, blockSize)
 
-    val instances = extractInstances(dataset).setName("training instances")
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+    val instances = extractInstances(dataset)
+      .setName("training instances")
 
-    val (summarizer, labelSummarizer) = if ($(blockSize) == 1) {
-      Summarizer.getClassificationSummarizers(instances, $(aggregationDepth))
-    } else {
-      // instances will be standardized and converted to blocks, so no need to cache instances.
-      Summarizer.getClassificationSummarizers(instances, $(aggregationDepth),
-        Seq("mean", "std", "count", "numNonZeros"))
+    if (handlePersistence && $(blockSize) == 1) {
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
+
+    var requestedMetrics = Seq("mean", "std", "count")
+    if ($(blockSize) != 1) requestedMetrics +:= "numNonZeros"
+    val (summarizer, labelSummarizer) = Summarizer
+      .getClassificationSummarizers(instances, $(aggregationDepth), requestedMetrics)
 
     val numFeatures = summarizer.mean.size
     val histogram = labelSummarizer.histogram
@@ -591,7 +592,7 @@ class LogisticRegression @Since("1.2.0") (
       } else {
         Vectors.dense(if (numClasses == 2) Double.PositiveInfinity else Double.NegativeInfinity)
       }
-      if (handlePersistence) instances.unpersist()
+      if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
       return createModel(dataset, numClasses, coefMatrix, interceptVec, Array.empty)
     }
 
@@ -650,7 +651,7 @@ class LogisticRegression @Since("1.2.0") (
       trainOnBlocks(instances, featuresStd, numClasses, initialCoefWithInterceptMatrix,
         regularization, optimizer)
     }
-    if (handlePersistence) instances.unpersist()
+    if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
 
     if (allCoefficients == null) {
       val msg = s"${optimizer.getClass.getName} failed."
@@ -1002,7 +1003,7 @@ class LogisticRegression @Since("1.2.0") (
     }
     val blocks = InstanceBlock.blokify(standardized, $(blockSize))
       .persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training dataset (blockSize=${$(blockSize)})")
+      .setName(s"training blocks (blockSize=${$(blockSize)})")
 
     val getAggregatorFunc = new BlockLogisticAggregator(numFeatures, numClasses, $(fitIntercept),
       checkMultinomial(numClasses))(_)

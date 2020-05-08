@@ -355,16 +355,14 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val instances = extractInstances(dataset)
       .setName("training instances")
 
-    val (featuresSummarizer, ySummarizer) = if ($(blockSize) == 1) {
-      if (dataset.storageLevel == StorageLevel.NONE) {
-        instances.persist(StorageLevel.MEMORY_AND_DISK)
-      }
-      Summarizer.getRegressionSummarizers(instances, $(aggregationDepth))
-    } else {
-      // instances will be standardized and converted to blocks, so no need to cache instances.
-      Summarizer.getRegressionSummarizers(instances, $(aggregationDepth),
-        Seq("mean", "std", "count", "numNonZeros"))
+    if (dataset.storageLevel == StorageLevel.NONE && $(blockSize) == 1) {
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
+
+    var requestedMetrics = Seq("mean", "std", "count")
+    if ($(blockSize) != 1) requestedMetrics +:= "numNonZeros"
+    val (featuresSummarizer, ySummarizer) = Summarizer
+      .getRegressionSummarizers(instances, $(aggregationDepth), requestedMetrics)
 
     val yMean = ySummarizer.mean(0)
     val rawYStd = ySummarizer.std(0)
@@ -617,7 +615,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
     val blocks = InstanceBlock.blokify(standardized, $(blockSize))
       .persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training dataset (blockSize=${$(blockSize)})")
+      .setName(s"training blocks (blockSize=${$(blockSize)})")
 
     val costFun = $(loss) match {
       case SquaredError =>
