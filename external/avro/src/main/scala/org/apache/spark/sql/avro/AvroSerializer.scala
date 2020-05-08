@@ -34,7 +34,7 @@ import org.apache.avro.util.Utf8
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -59,27 +59,11 @@ class AvroSerializer(
     converter.apply(catalystData)
   }
 
-  private val dateRebaseFunc: Int => Int = datetimeRebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION =>
-      days: Int =>
-        if (days < RebaseDateTime.lastSwitchGregorianDay) {
-          throw DataSourceUtils.newRebaseExceptionInWrite("Avro")
-        }
-        days
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianDays
-    case LegacyBehaviorPolicy.CORRECTED => identity[Int]
-  }
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFunc(
+    datetimeRebaseMode, "Avro", isRead = false)
 
-  private val timestampRebaseFunc: Long => Long = datetimeRebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION =>
-      micros: Long =>
-        if (micros < RebaseDateTime.lastSwitchGregorianTs) {
-          throw DataSourceUtils.newRebaseExceptionInWrite("Avro")
-        }
-        micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
-    case LegacyBehaviorPolicy.CORRECTED => identity[Long]
-  }
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFunc(
+    datetimeRebaseMode, "Avro", isRead = false)
 
   private val converter: Any => Any = {
     val actualAvroType = resolveNullableType(rootAvroType, nullable)

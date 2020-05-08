@@ -26,6 +26,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.BaseRelation
@@ -87,7 +88,8 @@ object DataSourceUtils {
     }
 
   def datetimeRebaseMode(
-      lookupFileMeta: String => String, modeByConfig: String): LegacyBehaviorPolicy.Value = {
+      lookupFileMeta: String => String,
+      modeByConfig: String): LegacyBehaviorPolicy.Value = {
     if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
       return LegacyBehaviorPolicy.CORRECTED
     }
@@ -106,25 +108,82 @@ object DataSourceUtils {
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
+    val config = if (format == "Parquet") {
+      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
+    } else if (format == "Avro") {
+      SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
+    } else {
+      throw new IllegalStateException("unrecognized format " + format)
+    }
     new SparkUpgradeException("3.0", "reading dates before 1582-10-15 or timestamps before " +
-      s"1900-01-01 from $format files can be ambiguous, as the files may be written by Spark 2.x " +
-      "or legacy versions of Hive, which uses a legacy hybrid calendar that is different from " +
-      "Spark 3.0+'s Proleptic Gregorian calendar. See more details in SPARK-31404. You can set " +
-      s"${SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key} to 'LEGACY' to rebase the datetime " +
-      "values w.r.t. the calendar switch during reading, or set " +
-      s"${SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key} to 'CORRECTED' to read the datetime " +
-      "values as it is.", null)
+      s"1900-01-01T00:00:00Z from $format files can be ambiguous, as the files may be written by " +
+      "Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar that is " +
+      "different from Spark 3.0+'s Proleptic Gregorian calendar. See more details in " +
+      s"SPARK-31404. You can set $config to 'LEGACY' to rebase the datetime values w.r.t. " +
+      s"the calendar difference during reading. Or set $config to 'CORRECTED' to read the " +
+      "datetime values as it is.", null)
   }
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
+    val config = if (format == "Parquet") {
+      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
+    } else if (format == "Avro") {
+      SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key
+    } else {
+      throw new IllegalStateException("unrecognized format " + format)
+    }
     new SparkUpgradeException("3.0", "writing dates before 1582-10-15 or timestamps before " +
-      s"1900-01-01 into $format files can be dangerous, as the files may be read by Spark 2.x " +
-      "or legacy versions of Hive later, which uses a legacy hybrid calendar that is different " +
-      "from Spark 3.0+'s Proleptic Gregorian calendar. See more details in SPARK-31404. You can " +
-      s"set ${SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key} to 'LEGACY' to rebase the datetime " +
-      "values w.r.t. the calendar switch during writing, to get maximum interoperability, or set " +
-      s"${SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key} to 'CORRECTED' to write the datetime " +
-      "values as it is, if you are 100% sure the written files will only be read by Spark 3.0+ " +
-      "or other systems that use Proleptic Gregorian calendar.", null)
+      s"1900-01-01T00:00:00Z into $format files can be dangerous, as the files may be read by " +
+      "Spark 2.x or legacy versions of Hive later, which uses a legacy hybrid calendar that is " +
+      "different from Spark 3.0+'s Proleptic Gregorian calendar. See more details in " +
+      s"SPARK-31404. You can set $config to 'LEGACY' to rebase the datetime values w.r.t. " +
+      "the calendar difference during writing, to get maximum interoperability. Or set " +
+      s"$config to 'CORRECTED' to write the datetime values as it is, if you are 100% sure that " +
+      "the written files will only be read by Spark 3.0+ or other systems that use Proleptic " +
+      "Gregorian calendar.", null)
+  }
+
+  def creteDateRebaseFunc(
+      rebaseMode: LegacyBehaviorPolicy.Value,
+      format: String,
+      isRead: Boolean): Int => Int = rebaseMode match {
+    case LegacyBehaviorPolicy.EXCEPTION if isRead => days: Int =>
+      if (days < RebaseDateTime.lastSwitchJulianDay) {
+        throw DataSourceUtils.newRebaseExceptionInRead(format)
+      }
+      days
+    case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
+      if (days < RebaseDateTime.lastSwitchGregorianDay) {
+        throw DataSourceUtils.newRebaseExceptionInWrite(format)
+      }
+      days
+    case LegacyBehaviorPolicy.LEGACY => if (isRead) {
+      RebaseDateTime.rebaseJulianToGregorianDays
+    } else {
+      RebaseDateTime.rebaseGregorianToJulianDays
+    }
+    case LegacyBehaviorPolicy.CORRECTED => identity[Int]
+  }
+
+  def creteTimestampRebaseFunc(
+      rebaseMode: LegacyBehaviorPolicy.Value,
+      format: String,
+      isRead: Boolean): Long => Long = rebaseMode match {
+    case LegacyBehaviorPolicy.EXCEPTION if isRead => micros: Long =>
+      if (micros < RebaseDateTime.lastSwitchJulianTs) {
+        throw DataSourceUtils.newRebaseExceptionInRead(format)
+      }
+      micros
+    case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
+      if (micros < RebaseDateTime.lastSwitchGregorianTs) {
+        throw DataSourceUtils.newRebaseExceptionInWrite(format)
+      }
+      micros
+    case LegacyBehaviorPolicy.LEGACY => if (isRead) {
+      RebaseDateTime.rebaseJulianToGregorianMicros
+    } else {
+      RebaseDateTime.rebaseGregorianToJulianMicros
+    }
+    case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 }

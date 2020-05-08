@@ -2545,12 +2545,12 @@ object SQLConf {
   val LEGACY_PARQUET_REBASE_MODE_IN_READ =
     buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
       .internal()
-      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the legacy hybrid (Julian + Gregorian) calendar when reading Parquet files. " +
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
         "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
         "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
-        "only affective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
+        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -2574,12 +2574,12 @@ object SQLConf {
   val LEGACY_AVRO_REBASE_MODE_IN_READ =
     buildConf("spark.sql.legacy.avro.datetimeRebaseModeInRead")
       .internal()
-      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the legacy hybrid (Julian + Gregorian) calendar when reading Avro files. " +
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Avro files. " +
         "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
         "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
-        "only affective if the writer info (like Spark, Hive) of the Avro files is unknown.")
+        "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))

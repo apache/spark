@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
-import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -183,27 +182,11 @@ private[parquet] class ParquetRowConverter(
    */
   def currentRecord: InternalRow = currentRow
 
-  private val dateRebaseFunc: Int => Int = datetimeRebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION =>
-      days: Int =>
-        if (days < RebaseDateTime.lastSwitchJulianDay) {
-          throw DataSourceUtils.newRebaseExceptionInRead("Parquet")
-        }
-        days
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianDays
-    case LegacyBehaviorPolicy.CORRECTED => identity[Int]
-  }
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFunc(
+    datetimeRebaseMode, "Parquet", isRead = true)
 
-  private val timestampRebaseFunc: Long => Long = datetimeRebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION =>
-      micros: Long =>
-        if (micros < RebaseDateTime.lastSwitchJulianTs) {
-          throw DataSourceUtils.newRebaseExceptionInRead("Parquet")
-        }
-        micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianMicros
-    case LegacyBehaviorPolicy.CORRECTED => identity[Long]
-  }
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFunc(
+    datetimeRebaseMode, "Parquet", isRead = true)
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {

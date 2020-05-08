@@ -943,7 +943,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       }
     }
 
-    Seq(true).foreach { vectorized =>
+    Seq(false, true).foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         checkReadMixedFiles("before_1582_date_v2_4.snappy.parquet", "date", "1001-01-01")
         checkReadMixedFiles(

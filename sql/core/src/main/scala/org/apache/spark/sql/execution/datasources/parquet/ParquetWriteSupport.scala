@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -81,6 +81,12 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
   private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
     SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE))
+
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFunc(
+    datetimeRebaseMode, "Parquet", isRead = false)
+
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFunc(
+    datetimeRebaseMode, "Parquet", isRead = false)
 
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
@@ -142,28 +148,6 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       }
       i += 1
     }
-  }
-
-  private val dateRebaseFunc: Int => Int = datetimeRebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION =>
-      days: Int =>
-        if (days < RebaseDateTime.lastSwitchGregorianDay) {
-          throw DataSourceUtils.newRebaseExceptionInWrite("Parquet")
-        }
-        days
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianDays
-    case LegacyBehaviorPolicy.CORRECTED => identity[Int]
-  }
-
-  private val timestampRebaseFunc: Long => Long = datetimeRebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION =>
-      micros: Long =>
-        if (micros < RebaseDateTime.lastSwitchGregorianTs) {
-          throw DataSourceUtils.newRebaseExceptionInWrite("Parquet")
-        }
-        micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
-    case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 
   private def makeWriter(dataType: DataType): ValueWriter = {

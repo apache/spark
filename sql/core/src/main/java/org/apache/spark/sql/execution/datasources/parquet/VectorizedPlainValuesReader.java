@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
-
 /**
  * An implementation of the Parquet PLAIN decoder that supports the vectorized interface.
  */
@@ -96,12 +95,13 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     for (int i = 0; i < total; i += 1) {
       rebase |= buffer.getInt(buffer.position() + i * 4) < RebaseDateTime.lastSwitchJulianDay();
     }
-    if (rebase && failIfRebase) {
-      throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
-    }
     if (rebase) {
-      for (int i = 0; i < total; i += 1) {
-        c.putInt(rowId + i, RebaseDateTime.rebaseJulianToGregorianDays(buffer.getInt()));
+      if (failIfRebase) {
+        throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+      } else {
+        for (int i = 0; i < total; i += 1) {
+          c.putInt(rowId + i, RebaseDateTime.rebaseJulianToGregorianDays(buffer.getInt()));
+        }
       }
     } else {
       if (buffer.hasArray()) {
@@ -142,12 +142,13 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     for (int i = 0; i < total; i += 1) {
       rebase |= buffer.getLong(buffer.position() + i * 8) < RebaseDateTime.lastSwitchJulianTs();
     }
-    if (rebase && failIfRebase) {
-      throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
-    }
     if (rebase) {
-      for (int i = 0; i < total; i += 1) {
-        c.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(buffer.getLong()));
+      if (failIfRebase) {
+        throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+      } else {
+        for (int i = 0; i < total; i += 1) {
+          c.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(buffer.getLong()));
+        }
       }
     } else {
       if (buffer.hasArray()) {

@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
-import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -56,27 +55,11 @@ class AvroDeserializer(
 
   private lazy val decimalConversions = new DecimalConversion()
 
-  private val dateRebaseFunc: Int => Int = datetimeRebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION =>
-      days: Int =>
-        if (days < RebaseDateTime.lastSwitchJulianDay) {
-          throw DataSourceUtils.newRebaseExceptionInRead("Avro")
-        }
-        days
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianDays
-    case LegacyBehaviorPolicy.CORRECTED => identity[Int]
-  }
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFunc(
+    datetimeRebaseMode, "Avro", isRead = true)
 
-  private val timestampRebaseFunc: Long => Long = datetimeRebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION =>
-      micros: Long =>
-        if (micros < RebaseDateTime.lastSwitchJulianTs) {
-          throw DataSourceUtils.newRebaseExceptionInRead("Avro")
-        }
-        micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianMicros
-    case LegacyBehaviorPolicy.CORRECTED => identity[Long]
-  }
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFunc(
+    datetimeRebaseMode, "Avro", isRead = true)
 
   private val converter: Any => Any = rootCatalystType match {
     // A shortcut for empty schema.
