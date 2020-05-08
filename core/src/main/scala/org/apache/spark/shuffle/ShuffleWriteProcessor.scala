@@ -21,6 +21,7 @@ import org.apache.spark.{Partition, ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.util.Utils
 
 /**
  * The interface for customizing shuffle write process. The driver create a ShuffleWriteProcessor
@@ -57,7 +58,19 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         createMetricsReporter(context))
       writer.write(
         rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
-      writer.stop(success = true).get
+      val mapStatus = writer.stop(success = true)
+      if (mapStatus.isDefined) {
+        // Initiate shuffle push process if push based shuffle is enabled
+        // The map task only takes care of converting the shuffle data file into multiple
+        // block push requests and pushing the first batch of blocks to the remote shuffle
+        // service. The remaining block pushes is handled by netty client threads.
+        if (Utils.isPushBasedShuffleEnabled(SparkEnv.get.conf)) {
+          writer.initiateBlockPush(
+            manager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
+            writer.getPartitionLengths(), dep, partition.index, mapId, SparkEnv.get.conf)
+        }
+      }
+      mapStatus.get
     } catch {
       case e: Exception =>
         try {
