@@ -1008,7 +1008,7 @@ class AdaptiveQueryExecSuite
           sql("CREATE TABLE t1 AS SELECT 1 col").collect()
           spark.sparkContext.listenerBus.waitUntilEmpty()
           assert(checkDone)
-        } catch {
+        } finally {
           spark.sparkContext.removeSparkListener(listener)
         }
       }
