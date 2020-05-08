@@ -68,7 +68,10 @@ class ChiSquareTest(object):
         >>> chiSqResult.select("degreesOfFreedom").collect()[0]
         Row(degreesOfFreedom=[3, 1, 0])
         """
-        test(dataset, featuresCol, labelCol, False)
+        sc = SparkContext._active_spark_context
+        javaTestObj = _jvm().org.apache.spark.ml.stat.ChiSquareTest
+        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol)]
+        return _java2py(sc, javaTestObj.test(*args))
 
     @staticmethod
     @since("3.1.0")
@@ -497,7 +500,10 @@ class ANOVATest(object):
         >>> row[0].pValues
         DenseVector([0.3324, 0.1623, 0.3551, 0.456, 0.689, 0.7029])
         """
-        test(dataset, featuresCol, labelCol, False)
+        sc = SparkContext._active_spark_context
+        javaTestObj = _jvm().org.apache.spark.ml.stat.ANOVATest
+        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol)]
+        return _java2py(sc, javaTestObj.test(*args))
 
     @staticmethod
     @since("3.1.0")
@@ -592,7 +598,10 @@ class FValueTest(object):
         >>> row[0].pValues
         DenseVector([0.1928, 0.1105, 0.007, 0.0274, 0.5871, 0.838])
         """
-        test(dataset, featuresCol, labelCol, False)
+        sc = SparkContext._active_spark_context
+        javaTestObj = _jvm().org.apache.spark.ml.stat.FValueTest
+        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol)]
+        return _java2py(sc, javaTestObj.test(*args))
 
     @staticmethod
     @since("3.1.0")
