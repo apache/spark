@@ -1653,6 +1653,10 @@ private[spark] class BlockManager(
         peersForReplication = peersForReplication.tail
         peersReplicatedTo += peer
       } catch {
+        // Rethrow interrupt exception
+        case e: InterruptedException =>
+          throw e
+        // Everything else we may retry
         case NonFatal(e) =>
           logWarning(s"Failed to replicate $blockId to $peer, failure #$numFailures", e)
           peersFailedToReplicateTo += peer
@@ -1796,6 +1800,9 @@ private[spark] class BlockManager(
     if (replicateBlocksInfo.nonEmpty) {
       logInfo(s"Need to replicate ${replicateBlocksInfo.size} blocks " +
         "for block manager decommissioning")
+    } else {
+      logWarn(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
+      return
     }
 
     // Maximum number of storage replication failure which replicateBlock can handle
@@ -1905,23 +1912,29 @@ private[spark] class BlockManager(
 
     private val blockReplicationThread = new Thread {
       override def run(): Unit = {
-        while (blockManagerDecommissioning && !stopped) {
-          try {
-            logDebug("Attempting to replicate all cached RDD blocks")
-            decommissionRddCacheBlocks()
-            logInfo("Attempt to replicate all cached blocks done")
-            Thread.sleep(sleepInterval)
-          } catch {
-            case _: InterruptedException =>
-              logInfo("Interrupted during migration, will not refresh migrations.")
-              stopped = true
-            case NonFatal(e) =>
-              logError("Error occurred while trying to " +
-                "replicate cached RDD blocks for block manager decommissioning", e)
+        try {
+          while (blockManagerDecommissioning && !stopped && !Thread.interrupted()) {
+            try {
+              logDebug("Attempting to replicate all cached RDD blocks")
+              decommissionRddCacheBlocks()
+              logInfo("Attempt to replicate all cached blocks done")
+              Thread.sleep(sleepInterval)
+            } catch {
+              // Rethrow interrupt exception
+              case e: InterruptedException =>
+                throw e
+              // Everything else we may retry
+              case NonFatal(e) =>
+                logError("Error occurred while trying to " +
+                  "replicate cached RDD blocks for block manager decommissioning", e)
+            }
           }
+        } catch {
+          case _: InterruptedException =>
+            logInfo("Interrupted during migration, will not refresh migrations.")
+            stopped = true
         }
       }
-    }
     blockReplicationThread.setDaemon(true)
     blockReplicationThread.setName("block-replication-thread")
 

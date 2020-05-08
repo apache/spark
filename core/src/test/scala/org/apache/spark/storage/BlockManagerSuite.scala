@@ -1710,9 +1710,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val exec1 = "exec1"
     val exec2 = "exec2"
     val exec3 = "exec3"
-    val store1 = makeBlockManager(2000, exec1)
-    val store2 = makeBlockManager(2000, exec2)
-    val store3 = makeBlockManager(2000, exec3)
+    val store1 = makeBlockManager(200, exec1)
+    val store2 = makeBlockManager(200, exec2)
+    val store3 = makeBlockManager(200, exec3)
 
     assert(master.getPeers(store3.blockManagerId).map(_.executorId).toSet === Set(exec1, exec2))
 
