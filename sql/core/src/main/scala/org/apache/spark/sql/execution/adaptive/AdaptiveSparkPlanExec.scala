@@ -524,12 +524,11 @@ case class AdaptiveSparkPlanExec(
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveSQLMetricUpdates(
         executionId.toLong, newMetrics))
     } else {
-      val queryExecution = context.qe
       val planDescriptionMode = ExplainMode.fromString(conf.uiExplainMode)
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
         executionId,
-        queryExecution.explainString(planDescriptionMode),
-        SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)))
+        context.qe.explainString(planDescriptionMode),
+        SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
     }
   }
 
