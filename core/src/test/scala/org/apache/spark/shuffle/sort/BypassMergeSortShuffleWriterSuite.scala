@@ -19,6 +19,7 @@ package org.apache.spark.shuffle.sort
 
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.{Semaphore, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -27,11 +28,14 @@ import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
@@ -71,6 +75,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
     when(dependency.partitioner).thenReturn(new HashPartitioner(7))
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
+    when(dependency.getMergerLocs).thenReturn(Seq(BlockManagerId("test-client", "test-client", 1)))
+
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
     when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
@@ -235,5 +241,50 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     assert(temporaryFilesCreated.nonEmpty)
     writer.stop( /* success = */ false)
     assert(temporaryFilesCreated.count(_.exists()) === 0)
+  }
+
+  // TODO: Move this to ShuffleWriterSuite. It passes in the IDE but fails consistently with mvn.
+  ignore("test block push") {
+    def records: Iterator[(Int, Int)] = Iterator((1, 1), (2, 2), (3, 3))
+
+    val writer = new BypassMergeSortShuffleWriter[Int, Int](
+      blockManager,
+      shuffleHandle,
+      0, // MapId
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      shuffleExecutorComponents
+    )
+    conf.set("spark.shuffle.push.based.enabled", "true")
+    conf.set("spark.shuffle.service.enabled", "true")
+    val mockEnv = mock(classOf[SparkEnv])
+    when(mockEnv.conf).thenReturn(conf)
+    when(mockEnv.blockManager).thenReturn(blockManager)
+    val shuffleClient = mock(classOf[BlockStoreClient])
+    when(blockManager.blockStoreClient).thenReturn(shuffleClient)
+    SparkEnv.set(mockEnv)
+
+    val sem = new Semaphore(0)
+    var blockIds : Array[String] = null
+    when(shuffleClient.pushBlocks(any(), anyInt(), any(), any(), any()))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        blockIds = invocation.getArguments()(2).asInstanceOf[Array[String]]
+        val managedBuffers = invocation.getArguments()(3).asInstanceOf[Array[ManagedBuffer]]
+        val blockFetchListener =
+          invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        (blockIds, managedBuffers).zipped.foreach((blockId, buffer) => {
+          blockFetchListener.onBlockFetchSuccess(blockId, buffer)
+        })
+        sem.release()
+      })
+
+    writer.write(records)
+    writer.initiateBlockPush(blockResolver, writer.getPartitionLengths(), dependency, 0, 0, conf)
+
+    sem.tryAcquire(1, 500, TimeUnit.MILLISECONDS)
+    for (i <- 1 to 3) {
+      assert(blockIds(i - 1) === ShuffleBlockId(0, 0, i).toString)
+    }
+    writer.stop(true)
   }
 }
