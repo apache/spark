@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{HashMap, HashSet}
@@ -115,6 +115,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
+  private val stopping = new AtomicBoolean(false)
+
   class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
@@ -199,10 +201,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeWorker(workerId, host, message)
 
       case LaunchedExecutor(executorId) =>
-        executorDataMap.get(executorId).foreach { data =>
-          data.freeCores = data.totalCores
+        if (!stopping.get) {
+          executorDataMap.get(executorId).foreach { data =>
+            data.freeCores = data.totalCores
+          }
+          makeOffers(executorId)
+        } else {
+          // Driver has been commanded a shutdown, stop the executor that just launched
+          executorDataMap.get(executorId).foreach { data =>
+            data.executorEndpoint.send(StopExecutor)
+          }
         }
-        makeOffers(executorId)
+
       case e =>
         logError(s"Received unexpected message. ${e}")
     }
@@ -211,7 +221,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls,
           attributes, resources, resourceProfileId) =>
-        if (executorDataMap.contains(executorId)) {
+        if (stopping.get) {
+          context.sendFailure(new SparkException("Driver has been commanded a shutdown"))
+        } else if (executorDataMap.contains(executorId)) {
           context.sendFailure(new IllegalStateException(s"Duplicate executor ID: $executorId"))
         } else if (scheduler.nodeBlacklist.contains(hostname) ||
             isBlacklisted(executorId, hostname)) {
@@ -259,7 +271,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case StopDriver =>
         context.reply(true)
-        stop()
 
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
@@ -513,6 +524,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def stop(): Unit = {
+    stopping.set(true)
     reviveThread.shutdownNow()
     stopExecutors()
     delegationTokenManager.foreach(_.stop())
