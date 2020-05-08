@@ -46,7 +46,7 @@ import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
-import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleWriter}
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -313,6 +313,7 @@ private[spark] class Executor(
         case NonFatal(e) =>
           logWarning("Unable to stop heartbeater", e)
       }
+      ShuffleWriter.stop
       threadPool.shutdown()
 
       // Notify plugins that executor is shutting down so they can terminate cleanly
