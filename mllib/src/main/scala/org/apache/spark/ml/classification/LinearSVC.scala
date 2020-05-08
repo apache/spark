@@ -187,16 +187,14 @@ class LinearSVC @Since("2.2.0") (
     val instances = extractInstances(dataset)
       .setName("training instances")
 
-    val (summarizer, labelSummarizer) = if ($(blockSize) == 1) {
-      if (dataset.storageLevel == StorageLevel.NONE) {
-        instances.persist(StorageLevel.MEMORY_AND_DISK)
-      }
-      Summarizer.getClassificationSummarizers(instances, $(aggregationDepth))
-    } else {
-      // instances will be standardized and converted to blocks, so no need to cache instances.
-      Summarizer.getClassificationSummarizers(instances, $(aggregationDepth),
-        Seq("mean", "std", "count", "numNonZeros"))
+    if (dataset.storageLevel == StorageLevel.NONE && $(blockSize) == 1) {
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
+
+    var requestedMetrics = Seq("mean", "std", "count")
+    if ($(blockSize) != 1) requestedMetrics +:= "numNonZeros"
+    val (summarizer, labelSummarizer) = Summarizer
+      .getClassificationSummarizers(instances, $(aggregationDepth), requestedMetrics)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -316,7 +314,7 @@ class LinearSVC @Since("2.2.0") (
     }
     val blocks = InstanceBlock.blokify(standardized, $(blockSize))
       .persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training dataset (blockSize=${$(blockSize)})")
+      .setName(s"training blocks (blockSize=${$(blockSize)})")
 
     val getAggregatorFunc = new BlockHingeAggregator($(fitIntercept))(_)
     val costFun = new RDDLossFunction(blocks, getAggregatorFunc,

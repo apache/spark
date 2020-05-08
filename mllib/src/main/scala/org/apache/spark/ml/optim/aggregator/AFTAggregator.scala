@@ -155,8 +155,102 @@ private[ml] class AFTAggregator(
     }
     gradientSumArray(dim - 2) += { if (fitIntercept) multiplier else 0.0 }
     gradientSumArray(dim - 1) += delta + multiplier * sigma * epsilon
-
     weightSum += 1.0
+
+    this
+  }
+}
+
+
+/**
+ * BlockAFTAggregator computes the gradient and loss as used in AFT survival regression
+ * for blocks in sparse or dense matrix in an online fashion.
+ *
+ * Two BlockAFTAggregators can be merged together to have a summary of loss and gradient of
+ * the corresponding joint dataset.
+ *
+ * NOTE: The feature values are expected to be standardized before computation.
+ *
+ * @param bcCoefficients The coefficients corresponding to the features.
+ * @param fitIntercept Whether to fit an intercept term.
+ */
+private[ml] class BlockAFTAggregator(
+    fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
+  extends DifferentiableLossAggregator[(Matrix, Array[Double], Array[Double]),
+    BlockAFTAggregator] {
+
+  protected override val dim: Int = bcCoefficients.value.size
+  private val numFeatures = dim - 2
+
+  @transient private lazy val coefficientsArray = bcCoefficients.value match {
+    case DenseVector(values) => values
+    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
+      s" but got type ${bcCoefficients.value.getClass}.")
+  }
+
+  @transient private lazy val linear = Vectors.dense(coefficientsArray.take(numFeatures))
+
+  /**
+   * Add a new training instance block to this BlockAFTAggregator, and update the loss and
+   * gradient of the objective function.
+   *
+   * @return This BlockAFTAggregator object.
+   */
+  def add(block: (Matrix, Array[Double], Array[Double])): this.type = {
+    val (matrix, labels, censors) = block
+    require(matrix.isTransposed)
+    require(numFeatures == matrix.numCols, s"Dimensions mismatch when adding new " +
+      s"instance. Expecting $numFeatures but got ${matrix.numCols}.")
+    require(labels.forall(_ > 0.0), "The lifetime or label should be  greater than 0.")
+
+    val size = matrix.numRows
+    require(labels.length == size && censors.length == size)
+
+    val intercept = coefficientsArray(dim - 2)
+    // sigma is the scale parameter of the AFT model
+    val sigma = math.exp(coefficientsArray(dim - 1))
+
+    // vec here represents margins
+    val vec = if (fitIntercept) {
+      Vectors.dense(Array.fill(size)(intercept)).toDense
+    } else {
+      Vectors.zeros(size).toDense
+    }
+    BLAS.gemv(1.0, matrix, linear, 1.0, vec)
+
+    // in-place convert margins to gradient scales
+    // then, vec represents gradient scales
+    var i = 0
+    var sigmaGradSum = 0.0
+    while (i < size) {
+      val ti = labels(i)
+      val delta = censors(i)
+      val margin = vec(i)
+      val epsilon = (math.log(ti) - margin) / sigma
+      val expEpsilon = math.exp(epsilon)
+      lossSum += delta * math.log(sigma) - delta * epsilon + expEpsilon
+      val multiplier = (delta - expEpsilon) / sigma
+      vec.values(i) = multiplier
+      sigmaGradSum += delta + multiplier * sigma * epsilon
+      i += 1
+    }
+
+    matrix match {
+      case dm: DenseMatrix =>
+        BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
+          vec.values, 1, 1.0, gradientSumArray, 1)
+
+      case sm: SparseMatrix =>
+        val linearGradSumVec = Vectors.zeros(numFeatures).toDense
+        BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
+        BLAS.getBLAS(numFeatures).daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
+          gradientSumArray, 1)
+    }
+
+    if (fitIntercept) gradientSumArray(dim - 2) += vec.values.sum
+    gradientSumArray(dim - 1) += sigmaGradSum
+    weightSum += size
+
     this
   }
 }
