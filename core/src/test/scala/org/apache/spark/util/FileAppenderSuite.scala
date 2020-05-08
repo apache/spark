@@ -263,7 +263,9 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       val loggingEvent = loggingEventCaptor.getValue
       assert(loggingEvent.getThrowableInformation !== null)
       val exception = loggingEvent.getThrowableInformation.getThrowable
-      assert(exception.isInstanceOf[IOException], s"Exception was not an IOException ${exception}")
+      val stackTrace = exception.getStackTrace.mkString("\n")
+      assert(exception.isInstanceOf[IOException],
+        s"Exception was not an IOException ${exception} trace: ${stackTrace}")
     } finally {
       logger.setLevel(oldLogLevel)
     }
