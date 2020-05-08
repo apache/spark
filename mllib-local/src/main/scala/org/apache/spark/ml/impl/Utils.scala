@@ -28,6 +28,33 @@ private[spark] object Utils {
     eps
   }
 
+  /**
+   * Convert an n * (n + 1) / 2 dimension array representing the upper triangular part of a matrix
+   * into an n * n array representing the full symmetric matrix (column major).
+   *
+   * @param n The order of the n by n matrix.
+   * @param triangularValues The upper triangular part of the matrix packed in an array
+   *                         (column major).
+   * @return A dense matrix which represents the symmetric matrix in column major.
+   */
+  def unpackUpperTriangular(
+      n: Int,
+      triangularValues: Array[Double]): Array[Double] = {
+    val symmetricValues = new Array[Double](n * n)
+    var r = 0
+    var i = 0
+    while (i < n) {
+      var j = 0
+      while (j <= i) {
+        symmetricValues(i * n + j) = triangularValues(r)
+        symmetricValues(j * n + i) = triangularValues(r)
+        r += 1
+        j += 1
+      }
+      i += 1
+    }
+    symmetricValues
+  }
 
   /**
    * Sequentially group input elements to groups, and do aggregation within each group.
