@@ -27,6 +27,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.lang3.SystemUtils;
@@ -78,6 +79,17 @@ public class JavaUtils {
    */
   public static String bytesToString(ByteBuffer b) {
     return Unpooled.wrappedBuffer(b).toString(StandardCharsets.UTF_8);
+  }
+
+  /**
+   * Encode the header ByteBuffer into the error string to be returned via RpcFailure.
+   * Use ISO_8859_1 encoding instead of UTF_8. UTF_8 will change the byte content
+   * for bytes larger than 127. This would render incorrect result when encoding
+   * decoding the index inside the PushBlockStream message.
+   */
+  public static String encodeHeaderIntoErrorString(ByteBuffer headerBuffer, Throwable e) {
+    String encodedHeader = StandardCharsets.ISO_8859_1.decode(headerBuffer).toString();
+    return encodedHeader + Throwables.getStackTraceAsString(e);
   }
 
   /**

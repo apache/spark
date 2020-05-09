@@ -29,6 +29,7 @@ import com.codahale.metrics.MetricSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
@@ -134,5 +135,40 @@ public abstract class BlockStoreClient implements Closeable {
     } catch (IOException | InterruptedException e) {
       hostLocalDirsCompletable.completeExceptionally(e);
     }
+  }
+
+  /**
+   * Push a sequence of shuffle blocks to a remote node asynchronously to be merged into
+   * a larger shuffle block.
+   *
+   * @param host the host of the remote node.
+   * @param port the port of the remote node.
+   * @param blockIds block ids to be pushed
+   * @param buffers buffers to be pushed
+   * @param listener the listener to receive block push status.
+   */
+  public void pushBlocks(
+      String host,
+      int port,
+      String[] blockIds,
+      ManagedBuffer[] buffers,
+      BlockFetchingListener listener) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Get the meta information of the merged blocks from the remote shuffle service.
+   *
+   * @param host the host of the remote node.
+   * @param port the port of the remote node.
+   * @param blocks  block ids of the merged shuffle blocks.
+   * @param listener the listener to receive chunk counts.
+   */
+  public void getMergedBlocksMeta(
+      String host,
+      int port,
+      String[] blocks,
+      MergedBlocksMetaListener listener) {
+    throw new UnsupportedOperationException();
   }
 }

@@ -32,6 +32,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.*;
 import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
@@ -181,6 +182,18 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   private void processStreamUpload(final UploadStream req) {
     assert (req.body() == null);
     try {
+      // Retain the original metadata buffer, since it will be used during the invocation of
+      // this method. Will be released later.
+      req.meta.retain();
+      // Make a copy of the original metadata buffer. In benchmark, we noticed that
+      // we cannot respond the original metadata buffer back to the client, otherwise
+      // in cases where multiple concurrent shuffles are present, a wrong metadata might
+      // be sent back to client. This is related to the eager release of the metadata buffer,
+      // i.e., we always release the original buffer by the time the invocation of this
+      // method ends, instead of by the time we respond it to the client. This is necessary,
+      // otherwise we start seeing memory issues very quickly in benchmarks.
+      // TODO check if the way metadata buffer is handled can be further improved
+      ByteBuffer meta = cloneBuffer(req.meta.nioByteBuffer());
       RpcResponseCallback callback = new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {
@@ -189,13 +202,17 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
         @Override
         public void onFailure(Throwable e) {
-          respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+          // Piggyback request metadata as part of the exception error String, so we can
+          // respond the metadata upon a failure without changing the existing protocol.
+          respond(new RpcFailure(req.requestId,
+              JavaUtils.encodeHeaderIntoErrorString(meta.duplicate(), e)));
+          req.meta.release();
         }
       };
       TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
           channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
-      ByteBuffer meta = req.meta.nioByteBuffer();
-      StreamCallbackWithID streamHandler = rpcHandler.receiveStream(reverseClient, meta, callback);
+      StreamCallbackWithID streamHandler =
+          rpcHandler.receiveStream(reverseClient, meta.duplicate(), callback);
       if (streamHandler == null) {
         throw new NullPointerException("rpcHandler returned a null streamHandler");
       }
@@ -209,12 +226,17 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         public void onComplete(String streamId) throws IOException {
            try {
              streamHandler.onComplete(streamId);
-             callback.onSuccess(ByteBuffer.allocate(0));
+             callback.onSuccess(meta.duplicate());
            } catch (Exception ex) {
              IOException ioExc = new IOException("Failure post-processing complete stream;" +
                " failing this rpc and leaving channel active", ex);
+             // req.meta will be released once inside callback.onFailure. Retain it one more
+             // time to be released in the finally block.
+             req.meta.retain();
              callback.onFailure(ioExc);
              streamHandler.onFailure(streamId, ioExc);
+           } finally {
+             req.meta.release();
            }
         }
 
@@ -238,12 +260,26 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       }
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
-      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+      try {
+        // It's OK to respond the original metadata buffer here, because this is still inside
+        // the invocation of this method.
+        respond(new RpcFailure(req.requestId,
+            JavaUtils.encodeHeaderIntoErrorString(req.meta.nioByteBuffer(), e)));
+      } catch (IOException ioe) {
+        // No exception will be thrown here. req.meta.nioByteBuffer will not throw IOException
+        // because it's a NettyManagedBuffer. This try-catch block is to make compiler happy.
+        logger.error("Error in handling failure while invoking RpcHandler#receive() on RPC id "
+            + req.requestId, e);
+      } finally {
+        req.meta.release();
+      }
       // We choose to totally fail the channel, rather than trying to recover as we do in other
       // cases.  We don't know how many bytes of the stream the client has already sent for the
       // stream, it's not worth trying to recover.
       channel.pipeline().fireExceptionCaught(e);
     } finally {
+      // Make sure we always release the original metadata buffer by the time we exit the
+      // invocation of this method. Otherwise, we see memory issues fairly quickly in benchmarks.
       req.meta.release();
     }
   }
@@ -256,6 +292,16 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     } finally {
       req.body().release();
     }
+  }
+
+  /**
+   * Make a full copy of a nio ByteBuffer.
+   */
+  private ByteBuffer cloneBuffer(ByteBuffer buf) {
+    ByteBuffer clone = ByteBuffer.allocate(buf.capacity());
+    clone.put(buf.duplicate());
+    clone.flip();
+    return clone;
   }
 
   /**

@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -32,6 +33,7 @@ import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.shuffle.protocol.*;
 
 import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.crypto.AuthClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
@@ -113,6 +115,113 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       for (String blockId : blockIds) {
         listener.onBlockFetchFailure(blockId, e);
       }
+    }
+  }
+
+  @Override
+  public void pushBlocks(
+      String host,
+      int port,
+      String[] blockIds,
+      ManagedBuffer[] buffers,
+      BlockFetchingListener listener) {
+    checkInit();
+    assert blockIds.length == buffers.length : "Number of block ids and buffers do not match.";
+
+    Map<String, ManagedBuffer> buffersWithId = new HashMap<>();
+    for (int i = 0; i < blockIds.length; i++) {
+      buffersWithId.put(blockIds[i], buffers[i]);
+    }
+    logger.debug("Push shuffle blocks to {}:{} with {} blocks", host, port, blockIds.length);
+    try {
+      RetryingBlockFetcher.BlockFetchStarter blockPushStarter =
+          (blockIds1, listener1) -> {
+            TransportClient client = clientFactory.createClient(host, port);
+            new OneForOneBlockPusher(client, appId, blockIds1, listener1, buffersWithId).start();
+          };
+      int maxRetries = conf.maxIORetries();
+      if (maxRetries > 0) {
+        new RetryingBlockFetcher(conf, blockPushStarter, blockIds, listener).start();
+      } else {
+        blockPushStarter.createAndStart(blockIds, listener);
+      }
+    } catch (Exception e) {
+      logger.error("Exception while beginning pushBlocks", e);
+      for (String blockId : blockIds) {
+        listener.onBlockFetchFailure(blockId, e);
+      }
+    }
+  }
+
+  @Override
+  public void getMergedBlocksMeta(
+      String host,
+      int port,
+      String[] blocks,
+      MergedBlocksMetaListener listener) {
+    checkInit();
+    logger.debug("Get merged blocks meta from {}:{} with {} blocks", host, port, blocks.length);
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      FetchMergedBlocksMeta mergedBlocksMetaReq = new FetchMergedBlocksMeta(appId, blocks);
+      client.sendRpc(mergedBlocksMetaReq.toByteBuffer(), new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+
+          MergedBlocksMeta blocksMeta =
+              (MergedBlocksMeta) BlockTransferMessage.Decoder.fromByteBuffer(response);
+          logger.trace("Successfully got merged blocks meta {}", blocksMeta);
+          listener.onSuccess(blocks, blocksMeta.numChunks);
+        }
+
+        @Override
+        public void onFailure(Throwable e) {
+          logger.error("Failed while getting merged blocks meta", e);
+          listener.onFailure(blocks, e);
+        }
+      });
+    } catch (Exception e) {
+      logger.error("Exception while getting merged blocks meta", e);
+      listener.onFailure(blocks, e);
+    }
+  }
+
+  /**
+   * Invoked by Spark driver to notify external shuffle services to finalize the shuffle merge
+   * for a given shuffle. This allows the driver to start the shuffle reducer stage after properly
+   * finishing the shuffle merge process associated with the shuffle mapper stage.
+   *
+   * @param host host of shuffle server
+   * @param port port of shuffle server.
+   * @param shuffleId shuffle ID of the shuffle to be finalized
+   * @param listener the listener to receive MergeStatuses
+   */
+  // TODO Might be better create a separate shuffle client similar to MesosExternalShuffleClient,
+  // TODO as this is going to be used by the driver, to avoid having to initialize an
+  // TODO ExternalShuffleClient.
+  public void finalizeShuffleMerge(
+      String host,
+      int port,
+      int shuffleId,
+      MergeFinalizerListener listener) {
+    checkInit();
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      ByteBuffer finalizeShuffleMerge = new FinalizeShuffleMerge(appId, shuffleId).toByteBuffer();
+      client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+          listener.onShuffleMergeSuccess(
+              (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response));
+        }
+
+        @Override
+        public void onFailure(Throwable e) {
+          listener.onShuffleMergeFailure(e);
+        }
+      });
+    } catch (Exception e) {
+      logger.error("Exception while sending finalizeShuffleMerge request", e);
     }
   }
 

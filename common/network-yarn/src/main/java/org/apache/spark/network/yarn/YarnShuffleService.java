@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -54,6 +55,7 @@ import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalBlockHandler;
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
@@ -94,6 +96,12 @@ public class YarnShuffleService extends AuxiliaryService {
   static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
 
+  // Used by shuffle merge manager to create merged shuffle files.
+  private static final String YARN_LOCAL_DIRS = "yarn.nodemanager.local-dirs";
+  private static final String MERGE_MANAGER_DIR = "merge_manager";
+  protected static final String MERGE_DIR_RELATIVE_PATH =
+      "usercache/%s/appcache/%s/" + MERGE_MANAGER_DIR;
+
   // just for testing when you want to find an open port
   @VisibleForTesting
   static int boundPort = -1;
@@ -126,6 +134,7 @@ public class YarnShuffleService extends AuxiliaryService {
   // Handles registering executors and opening shuffle blocks
   @VisibleForTesting
   ExternalBlockHandler blockHandler;
+  private RemoteBlockPushResolver shuffleMergeManager;
 
   // Where to store & reload executor info for recovering state after an NM restart
   @VisibleForTesting
@@ -172,7 +181,10 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
-      blockHandler = new ExternalBlockHandler(transportConf, registeredExecutorFile);
+      String[] localDirs = Arrays.stream(conf.getTrimmedStrings(YARN_LOCAL_DIRS))
+          .map(dir -> new Path(dir).toUri().getPath()).toArray(String[]::new);
+      shuffleMergeManager = new RemoteBlockPushResolver(transportConf, localDirs);
+      blockHandler = new ExternalBlockHandler(transportConf, registeredExecutorFile, shuffleMergeManager);
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
@@ -276,6 +288,8 @@ public class YarnShuffleService extends AuxiliaryService {
         }
         secretManager.registerApp(appId, shuffleSecret);
       }
+      shuffleMergeManager.registerApplication(
+          appId, String.format(MERGE_DIR_RELATIVE_PATH, context.getUser(), appId));
     } catch (Exception e) {
       logger.error("Exception when initializing application {}", appId, e);
     }
@@ -297,6 +311,9 @@ public class YarnShuffleService extends AuxiliaryService {
         secretManager.unregisterApp(appId);
       }
       blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
+      // TODO change cleanupLocalDirs to false. These should be deleted by yarn when the app
+      //    finishes.
+      shuffleMergeManager.applicationRemoved(appId, true);
     } catch (Exception e) {
       logger.error("Exception when stopping application {}", appId, e);
     }

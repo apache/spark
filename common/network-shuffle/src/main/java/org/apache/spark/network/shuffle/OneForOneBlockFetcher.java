@@ -25,6 +25,7 @@ import java.util.HashMap;
 
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
+import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +35,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
+import org.apache.spark.network.shuffle.protocol.AbstractFetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
@@ -51,6 +53,9 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class OneForOneBlockFetcher {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockFetcher.class);
+
+  private static final String SHUFFLE_BLOCK_PREFIX = "shuffle";
+  private static final String SHUFFLE_CHUNK_PREFIX = "shuffleChunk";
 
   private final TransportClient client;
   private final BlockTransferMessage message;
@@ -89,20 +94,66 @@ public class OneForOneBlockFetcher {
     if (blockIds.length == 0) {
       throw new IllegalArgumentException("Zero-sized blockIds array");
     }
-    if (!transportConf.useOldFetchProtocol() && isShuffleBlocks(blockIds)) {
-      this.message = createFetchShuffleBlocksMsg(appId, execId, blockIds);
+    if (!transportConf.useOldFetchProtocol() && areShuffleBlocksOrChunks(blockIds)) {
+      this.message = createFetchShuffleBlocksOrChunksMsg(appId, execId, blockIds);
     } else {
       this.message = new OpenBlocks(appId, execId, blockIds);
     }
   }
 
-  private boolean isShuffleBlocks(String[] blockIds) {
+  /**
+   * Check if the array of block IDs are all shuffle block IDs. With push based shuffle,
+   * the shuffle block ID could be either unmerged shuffle block IDs or merged shuffle chunk
+   * IDs. For a given stream of shuffle blocks to be fetched in one request, they would be either
+   * all unmerged shuffle blocks or all merged shuffle chunks.
+   * @param blockIds block ID array
+   * @return whether the array contains only shuffle block IDs
+   */
+  private boolean areShuffleBlocksOrChunks(String[] blockIds) {
     for (String blockId : blockIds) {
-      if (!blockId.startsWith("shuffle_")) {
+      if (!blockId.startsWith(SHUFFLE_BLOCK_PREFIX) &&
+          !blockId.startsWith(SHUFFLE_CHUNK_PREFIX)) {
         return false;
       }
     }
     return true;
+  }
+
+  /** Creates either a {@link FetchShuffleBlocks} or {@link FetchShuffleBlockChunks} message. */
+  private AbstractFetchShuffleBlocks createFetchShuffleBlocksOrChunksMsg(
+      String appId, String execId, String[] blockIds) {
+    if (blockIds[0].startsWith(SHUFFLE_CHUNK_PREFIX)) {
+      return createFetchShuffleBlockChunksMsg(appId, execId, blockIds);
+    } else {
+      return createFetchShuffleBlocksMsg(appId, execId, blockIds);
+    }
+  }
+
+  /**
+   * Creates FetchShuffleBlockChunks message.
+   */
+  private FetchShuffleBlockChunks createFetchShuffleBlockChunksMsg(
+      String appId, String execId, String[] blockIds) {
+    String[] firstBlock = splitBlockId(blockIds[0]);
+    int shuffleId = Integer.parseInt(firstBlock[1]);
+    HashMap<Integer, ArrayList<Integer>> reduceIdsToChunkIds = new HashMap<>();
+    for (String blockId : blockIds) {
+      String[] blockIdParts = splitBlockId(blockId);
+      if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
+        throw new IllegalArgumentException("Expected shuffleId=" + shuffleId + ", got:" + blockId);
+      }
+      int reduceId = Integer.parseInt(blockIdParts[2]);
+      if (!reduceIdsToChunkIds.containsKey(reduceId)) {
+        reduceIdsToChunkIds.put(reduceId, new ArrayList<>());
+      }
+      reduceIdsToChunkIds.get(reduceId).add(Integer.parseInt(blockIdParts[3]));
+    }
+    int[] reduceIds = Ints.toArray(reduceIdsToChunkIds.keySet());
+    int[][] chunkIdArr = new int[reduceIds.length][];
+    for (int i = 0; i < chunkIdArr.length; i++) {
+      chunkIdArr[i] = Ints.toArray(reduceIdsToChunkIds.get(reduceIds[i]));
+    }
+    return new FetchShuffleBlockChunks(appId, execId, shuffleId, reduceIds, chunkIdArr);
   }
 
   /**
@@ -150,7 +201,8 @@ public class OneForOneBlockFetcher {
     String[] blockIdParts = blockId.split("_");
     // For batch block id, the format contains shuffleId, mapId, begin reduceId, end reduceId.
     // For single block id, the format contains shuffleId, mapId, educeId.
-    if (blockIdParts.length < 4 || blockIdParts.length > 5 || !blockIdParts[0].equals("shuffle")) {
+    if (blockIdParts.length < 4 || blockIdParts.length > 5
+        || !(blockIdParts[0].equals("shuffle") || blockIdParts[0].equals(SHUFFLE_CHUNK_PREFIX))) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);
     }
@@ -167,9 +219,16 @@ public class OneForOneBlockFetcher {
 
     @Override
     public void onFailure(int chunkIndex, Throwable e) {
-      // On receipt of a failure, fail every block from chunkIndex onwards.
-      String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
-      failRemainingBlocks(remainingBlockIds, e);
+      // If failed block is a merged block, we only fail this block and do not
+      // fail the remaining blocks. The failed merged block will be retried by
+      // falling back to fetching the original unmerged blocks.
+      if (isMergedBlock(blockIds[chunkIndex])) {
+        failSingleMergedBlock(blockIds[chunkIndex], e);
+      } else {
+        // On receipt of a failure, fail every block from chunkIndex onwards.
+        String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
+        failRemainingBlocks(remainingBlockIds, e);
+      }
     }
   }
 
@@ -221,6 +280,23 @@ public class OneForOneBlockFetcher {
     }
   }
 
+  private void failSingleMergedBlock(String mergedBlockId, Throwable e) {
+    try {
+      listener.onBlockFetchFailure(mergedBlockId, e);
+    } catch (Exception e2) {
+      logger.error("Error in block fetch failure callback", e2);
+    }
+  }
+
+  /** Verify if a given block id represents a merged block. */
+  // TODO this needs to be updated to support merged shuffle chunks. Right now
+  // TODO fallback handling for merged shuffle chunk is not enabled.
+  private boolean isMergedBlock(String blockId) {
+    String[] blockIdParts = blockId.split("_");
+    return blockIdParts.length == 4 && blockIdParts[0].equals("shuffle")
+        && blockIdParts[2].equals("-1");
+  }
+
   private class DownloadCallback implements StreamCallback {
 
     private DownloadFileWritableChannel channel = null;
@@ -251,9 +327,14 @@ public class OneForOneBlockFetcher {
     @Override
     public void onFailure(String streamId, Throwable cause) throws IOException {
       channel.close();
-      // On receipt of a failure, fail every block from chunkIndex onwards.
-      String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
-      failRemainingBlocks(remainingBlockIds, cause);
+      // Do not fail the remaining blocks if the failed block is a merged block.
+      if (isMergedBlock(blockIds[chunkIndex])) {
+        failSingleMergedBlock(blockIds[chunkIndex], cause);
+      } else {
+        // On receipt of a failure, fail every block from chunkIndex onwards.
+        String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
+        failRemainingBlocks(remainingBlockIds, cause);
+      }
       targetFile.delete();
     }
   }
