@@ -159,11 +159,13 @@ private[v1] class SqlResource extends BaseAppResource {
     nodeIdAndWSCGIdMap: Map[Long, Option[Long]]): Seq[Node] = {
 
     def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
-                  metricName: String): Option[Metric] = {
+      metricName: String): Option[Metric] = {
+
       metricValues.get(accumulatorId).map( mv => {
         val metricValue = if (mv.startsWith("\n")) mv.substring(1, mv.length) else mv
         Metric(metricName, metricValue)
       })
+
     }
 
     val nodes = sparkPlanGraphNodes.map { node =>

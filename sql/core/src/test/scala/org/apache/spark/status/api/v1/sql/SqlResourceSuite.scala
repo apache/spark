@@ -22,8 +22,9 @@ import java.util.Date
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
-import org.apache.spark.sql.execution.ui.{SQLExecutionUIData, SQLPlanMetric, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode}
+import org.apache.spark.sql.execution.ui.{SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
 
 object SqlResourceSuite {
 
