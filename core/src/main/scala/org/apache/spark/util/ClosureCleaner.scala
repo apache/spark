@@ -552,13 +552,20 @@ private[spark] object IndylambdaScalaClosures extends Logging {
   // produces the following trace-level logs:
   // (slightly simplified:
   //   - omitting the "ignoring ..." lines;
-  //   - "$iw" is actually "$line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw";
+  //   - "$iw" is actually "$line14.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw";
   //   - "invokedynamic" lines are simplified to just show the name+desc, omitting the bsm info)
   //   Cleaning indylambda closure: $anonfun$closure$1$adapted
   //     scanning $iw.$anonfun$closure$1$adapted(L$iw;Ljava/lang/Object;)Lscala/collection/immutable/IndexedSeq;
   //       found intra class call to $iw.$anonfun$closure$1(L$iw;I)Lscala/collection/immutable/IndexedSeq;
   //     scanning $iw.$anonfun$closure$1(L$iw;I)Lscala/collection/immutable/IndexedSeq;
   //       found inner class $iw$InnerFoo$1
+  //         found method innerClosure()Lscala/Function1;
+  //         found method $anonfun$innerClosure$2(L$iw$InnerFoo$1;I)Ljava/lang/String;
+  //         found method $anonfun$innerClosure$1(L$iw$InnerFoo$1;I)Lscala/collection/immutable/IndexedSeq;
+  //         found method <init>(L$iw;)V
+  //         found method $anonfun$innerClosure$2$adapted(L$iw$InnerFoo$1;Ljava/lang/Object;)Ljava/lang/String;
+  //         found method $anonfun$innerClosure$1$adapted(L$iw$InnerFoo$1;Ljava/lang/Object;)Lscala/collection/immutable/IndexedSeq;
+  //         found method $deserializeLambda$(Ljava/lang/invoke/SerializedLambda;)Ljava/lang/Object;
   //       found call to outer $iw$InnerFoo$1.innerClosure()Lscala/Function1;
   //     scanning $iw$InnerFoo$1.innerClosure()Lscala/Function1;
   //     scanning $iw$InnerFoo$1.$deserializeLambda$(Ljava/lang/invoke/SerializedLambda;)Ljava/lang/Object;
@@ -627,10 +634,18 @@ private[spark] object IndylambdaScalaClosures extends Logging {
     val implMethodId = MethodIdentifier(
       implClass, lambdaProxy.getImplMethodName, lambdaProxy.getImplMethodSignature)
 
-    // The set of classes that we would consider following the calls into.
+    // The set internal names of classes that we would consider following the calls into.
     // Candidates are: known outer class which happens to be the starting closure's impl class,
     // and all inner classes discovered below.
-    val trackedClassesByInternalName = Map[String, Class[_]](implClassInternalName -> implClass)
+    // Note that code in an inner class can make calls to methods in any of its enclosing classes,
+    // e.g.
+    //   starting closure (in class T)
+    //     inner class A
+    //        inner class B
+    //          inner closure
+    // we need to track calls from "inner closure" to outer classes relative to it (class T, A, B)
+    // to better find and track field accesses.
+    val trackedClassInternalNames = Set[String](implClassInternalName)
 
     // Depth-first search for inner closures and track the fields that were accessed in them.
     // Start from the lambda body's implementation method, follow method invocations
@@ -677,16 +692,17 @@ private[spark] object IndylambdaScalaClosures extends Logging {
             // Discover inner classes.
             // This this the InnerClassFinder equivalent for inner classes, which still use the
             // `$outer` chain. So this is NOT controlled by the `findTransitively` flag.
-            logTrace(s"    found inner class $ownerExternalName")
+            logDebug(s"    found inner class $ownerExternalName")
             val innerClassInfo = getOrUpdateClassInfo(owner)
             val innerClass = innerClassInfo._1
             val innerClassNode = innerClassInfo._2
-            trackedClassesByInternalName(owner) = innerClass
+            trackedClassInternalNames += owner
             // We need to visit all methods on the inner class so that we don't missing anything.
             for (m <- innerClassNode.methods.asScala) {
+              logTrace(s"      found method ${m.name}${m.desc}")
               pushIfNotVisited(MethodIdentifier(innerClass, m.name, m.desc))
             }
-          } else if (findTransitively && trackedClassesByInternalName.contains(owner)) {
+          } else if (findTransitively && trackedClassInternalNames.contains(owner)) {
             logTrace(s"    found call to outer $ownerExternalName.$name$desc")
             val (calleeClass, _) = getOrUpdateClassInfo(owner) // make sure MethodNodes are cached
             pushIfNotVisited(MethodIdentifier(calleeClass, name, desc))
