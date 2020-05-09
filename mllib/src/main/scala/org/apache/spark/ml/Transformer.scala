@@ -130,9 +130,21 @@ abstract class UnaryTransformer[IN: TypeTag, OUT: TypeTag, T <: UnaryTransformer
  */
 class MultiTransformer(transformers: List[UnaryTransformer[_, _, _]]) {
 
+  /**
+   * Add additional transformers to the sequence.
+   *
+   * @param otherTransformers
+   */
   def composeTransformers(otherTransformers: List[UnaryTransformer[_, _, _]]): Unit = {
     new MultiTransformer(transformers ++ otherTransformers) }
 
+  /**
+   * Transform the dataSet by applying all of the transformers.
+   *
+   * @param dataSet
+   *
+   * @return The result of applying the transformers in sequence.
+   */
   def transform(dataSet: Dataset[_]): Dataset[_] = {
     def transform2(dataSet: Dataset[_], xFormers: List[UnaryTransformer[_, _, _]]): Dataset[_] = {
       xFormers match {
