@@ -21,8 +21,8 @@ import java.io.File
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
-import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
@@ -2370,8 +2370,8 @@ class HiveDDLSuite
         OrcFileOperator.getFileReader(maybeFile.get.toPath.toString).get.getCompression.name
 
       case "parquet" =>
-        val footer = ParquetFileReader.readFooter(
-          sparkContext.hadoopConfiguration, new Path(maybeFile.get.getPath), NO_FILTER)
+        val footer = ParquetFileReader.open(HadoopInputFile.fromPath(
+          new Path(maybeFile.get.getPath), sparkContext.hadoopConfiguration)).getFooter
         footer.getBlocks.get(0).getColumns.get(0).getCodec.toString
     }
 

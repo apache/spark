@@ -25,9 +25,9 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
 import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.DataFrame
@@ -135,14 +135,13 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   protected def readAllFootersWithoutSummaryFiles(
       path: Path, configuration: Configuration): Seq[Footer] = {
     val fs = path.getFileSystem(configuration)
-    ParquetFileReader.readAllFootersInParallel(configuration, fs.getFileStatus(path)).asScala.toSeq
+    Seq(new Footer(path, ParquetFileReader.open(
+      HadoopInputFile.fromStatus(fs.getFileStatus(path), configuration)).getFooter))
   }
 
   protected def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {
-    ParquetFileReader.readFooter(
-      configuration,
-      new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE),
-      ParquetMetadataConverter.NO_FILTER)
+    ParquetFileReader.open(HadoopInputFile.fromPath(
+      new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE), configuration)).getFooter
   }
 
   protected def testStandardAndLegacyModes(testName: String)(f: => Unit): Unit = {

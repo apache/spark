@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,12 +29,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
+import org.apache.parquet.HadoopReadOptions;
+import org.apache.parquet.filter2.compat.RowGroupFilter;
+import org.apache.parquet.hadoop.util.HadoopInputFile;
 import scala.Option;
 
 import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
-import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
-import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
-import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
 import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
 
 import org.apache.hadoop.conf.Configuration;
@@ -52,7 +52,6 @@ import org.apache.parquet.filter2.compat.FilterCompat;
 import org.apache.parquet.hadoop.BadConfigurationException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetInputFormat;
-import org.apache.parquet.hadoop.ParquetInputSplit;
 import org.apache.parquet.hadoop.api.InitContext;
 import org.apache.parquet.hadoop.api.ReadSupport;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
@@ -92,49 +91,19 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
     Configuration configuration = taskAttemptContext.getConfiguration();
-    ParquetInputSplit split = (ParquetInputSplit)inputSplit;
+    FileSplit split = (FileSplit)inputSplit;
     this.file = split.getPath();
-    long[] rowGroupOffsets = split.getRowGroupOffsets();
 
     ParquetMetadata footer;
     List<BlockMetaData> blocks;
 
     // if task.side.metadata is set, rowGroupOffsets is null
-    if (rowGroupOffsets == null) {
-      // then we need to apply the predicate push down filter
-      footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
-      MessageType fileSchema = footer.getFileMetaData().getSchema();
-      FilterCompat.Filter filter = getFilter(configuration);
-      blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
-    } else {
-      // otherwise we find the row groups that were selected on the client
-      footer = readFooter(configuration, file, NO_FILTER);
-      Set<Long> offsets = new HashSet<>();
-      for (long offset : rowGroupOffsets) {
-        offsets.add(offset);
-      }
-      blocks = new ArrayList<>();
-      for (BlockMetaData block : footer.getBlocks()) {
-        if (offsets.contains(block.getStartingPos())) {
-          blocks.add(block);
-        }
-      }
-      // verify we found them all
-      if (blocks.size() != rowGroupOffsets.length) {
-        long[] foundRowGroupOffsets = new long[footer.getBlocks().size()];
-        for (int i = 0; i < foundRowGroupOffsets.length; i++) {
-          foundRowGroupOffsets[i] = footer.getBlocks().get(i).getStartingPos();
-        }
-        // this should never happen.
-        // provide a good error message in case there's a bug
-        throw new IllegalStateException(
-            "All the offsets listed in the split should be found in the file."
-                + " expected: " + Arrays.toString(rowGroupOffsets)
-                + " found: " + blocks
-                + " out of: " + Arrays.toString(foundRowGroupOffsets)
-                + " in range " + split.getStart() + ", " + split.getEnd());
-      }
-    }
+    // then we need to apply the predicate push down filter
+    footer = reader.open(HadoopInputFile.fromPath(file, configuration)).getFooter();
+    MessageType fileSchema = footer.getFileMetaData().getSchema();
+    FilterCompat.Filter filter = getFilter(configuration);
+
+
     this.fileSchema = footer.getFileMetaData().getSchema();
     Map<String, String> fileMetadata = footer.getFileMetaData().getKeyValueMetaData();
     ReadSupport<T> readSupport = getReadSupportInstance(getReadSupportClass(configuration));
@@ -144,12 +113,15 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
-    this.reader = new ParquetFileReader(
-        configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
+    this.reader =  new ParquetFileReader(HadoopInputFile.fromPath(file, configuration),
+            HadoopReadOptions.builder(configuration).build());
     // use the blocks from the reader in case some do not match filters and will not be read
     for (BlockMetaData block : reader.getRowGroups()) {
       this.totalRowCount += block.getRowCount();
     }
+
+    blocks = filterRowGroups( Collections.singletonList(RowGroupFilter.FilterLevel.STATISTICS),
+            filter, footer.getBlocks(), reader);
 
     // For test purpose.
     // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
@@ -200,7 +172,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
-    ParquetMetadata footer = readFooter(config, file, range(0, length));
+    ParquetMetadata footer = reader.open(HadoopInputFile.fromPath(file, config)).getFooter();
 
     List<BlockMetaData> blocks = footer.getBlocks();
     this.fileSchema = footer.getFileMetaData().getSchema();
