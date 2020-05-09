@@ -38,7 +38,7 @@ class ChiSquareTest(object):
     """
     @staticmethod
     @since("3.1.0")
-    def test(dataset, featuresCol, labelCol, flatten = False):
+    def test(dataset, featuresCol, labelCol, flatten=False):
         """
         Perform a Pearson's independence test using dataset.
 
@@ -430,7 +430,7 @@ class ANOVATest(object):
     """
     @staticmethod
     @since("3.1.0")
-    def test(dataset, featuresCol, labelCol, flatten = False):
+    def test(dataset, featuresCol, labelCol, flatten=False):
         """
         Perform an ANOVA test using dataset.
 
@@ -491,7 +491,7 @@ class FValueTest(object):
     """
     @staticmethod
     @since("3.1.0")
-    def test(dataset, featuresCol, labelCol, flatten = False):
+    def test(dataset, featuresCol, labelCol, flatten=False):
         """
         Perform a F Regression test using dataset.
 
