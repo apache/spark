@@ -188,6 +188,39 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   }
 
   @Override
+  public void getMergedBlocksMeta(
+    String host,
+    int port,
+    String[] blocks,
+    MergedBlocksMetaListener listener) {
+    checkInit();
+    logger.debug("Get merged blocks meta from {}:{} with {} blocks", host, port, blocks.length);
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      FetchMergedBlocksMeta mergedBlocksMetaReq = new FetchMergedBlocksMeta(appId, blocks);
+      client.sendRpc(mergedBlocksMetaReq.toByteBuffer(), new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+
+          MergedBlocksMeta blocksMeta =
+            (MergedBlocksMeta) BlockTransferMessage.Decoder.fromByteBuffer(response);
+          logger.trace("Successfully got merged blocks meta {}", blocksMeta);
+          listener.onSuccess(blocks, blocksMeta.numChunks);
+        }
+
+        @Override
+        public void onFailure(Throwable e) {
+          logger.error("Failed while getting merged blocks meta", e);
+          listener.onFailure(blocks, e);
+        }
+      });
+    } catch (Exception e) {
+      logger.error("Exception while getting merged blocks meta", e);
+      listener.onFailure(blocks, e);
+    }
+  }
+
+  @Override
   public MetricSet shuffleMetrics() {
     checkInit();
     return clientFactory.getAllMetrics();
