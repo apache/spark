@@ -19,7 +19,6 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.examples.ml.UnaryTransformerExample.MyTransformer
 import org.apache.spark.ml.MultiTransformer
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.DoubleParam
@@ -27,12 +26,11 @@ import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, I
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{DataType, DataTypes}
-import org.apache.spark.util.Utils
 // $example off$
 
 /**
  * An example demonstrating creating a custom [[org.apache.spark.ml.Transformer]] using
- * the [[UnaryTransformer]] abstraction.
+ * the [[MultiTransformer]] abstraction.
  *
  * Run with
  * {{{
@@ -46,12 +44,7 @@ object MultiTransformerExample {
    * Simple Transformer which adds a constant value to input Doubles.
    *
    * [[MultiTransformerExample]] can be used to create a stage usable within Pipelines.
-   * It defines parameters for specifying input and output columns:
-   * [[UnaryTransformer.inputCol]] and [[UnaryTransformer.outputCol]].
-   * It can optionally handle schema validation.
    *
-   * [[DefaultParamsWritable]] provides a default implementation for persisting instances
-   * of this Transformer.
    */
   class MyTransformer(override val uid: String)
     extends UnaryTransformer[Double, Double, MyTransformer] with DefaultParamsWritable {
@@ -88,7 +81,7 @@ object MultiTransformerExample {
     println("Hello there")
     val spark = SparkSession
       .builder()
-      .appName("UnaryTransformerExample")
+      .appName("MultiTransformerExample")
       .getOrCreate()
 
     // $example on$
@@ -103,11 +96,17 @@ object MultiTransformerExample {
       .setInputCol("output1")
       .setOutputCol("output2")
 
-    val multiTransformer = new MultiTransformer(Nil)
+    val multiTransformer = new MultiTransformer(List(myTransformer1, myTransformer2))
 
     // Create data, transform, and display it.
     val data = spark.range(0, 5).toDF("input")
       .select(col("input").cast("double").as("input"))
+
+    val result = multiTransformer.transform(data)
+
+    println("Two transforms adding constant value")
+
+    result.show()
 
     spark.stop()
   }
