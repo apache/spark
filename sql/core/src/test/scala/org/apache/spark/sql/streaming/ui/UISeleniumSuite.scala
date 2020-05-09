@@ -86,26 +86,28 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
             case _: StreamingQueryException =>
           }
 
-          eventually(timeout(30.seconds), interval(100.milliseconds)) {
+          eventually(timeout(300.seconds), interval(100.milliseconds)) {
             // Check the query list page
             goToUi(spark, "/StreamingQuery")
 
             findAll(cssSelector("h3")).map(_.text).toSeq should contain("Streaming Query")
-            findAll(cssSelector("""#activeQueries-table th""")).map(_.text).toSeq should be {
-              List("Name", "Status", "Id", "Run ID", "Start Time", "Duration", "Avg Input /sec",
-                "Avg Process /sec", "Lastest Batch")
+
+            val arrow = 0x25BE.toChar
+            findAll(cssSelector("""#active-table th""")).map(_.text).toList should be {
+              List("Name", "Status", "ID", "Run ID", s"Start Time $arrow", "Duration",
+                "Avg Input /sec", "Avg Process /sec", "Lastest Batch")
             }
             val activeQueries =
-              findAll(cssSelector("""#activeQueries-table td""")).map(_.text).toSeq
+              findAll(cssSelector("""#active-table td""")).map(_.text).toSeq
             activeQueries should contain(activeQuery.id.toString)
             activeQueries should contain(activeQuery.runId.toString)
-            findAll(cssSelector("""#completedQueries-table th"""))
-              .map(_.text).toSeq should be {
-                List("Name", "Status", "Id", "Run ID", "Start Time", "Duration", "Avg Input /sec",
-                  "Avg Process /sec", "Lastest Batch", "Error")
+            findAll(cssSelector("""#completed-table th"""))
+              .map(_.text).toList should be {
+                List("Name", "Status", "ID", "Run ID", s"Start Time $arrow", "Duration",
+                  "Avg Input /sec", "Avg Process /sec", "Lastest Batch", "Error")
               }
             val completedQueries =
-              findAll(cssSelector("""#completedQueries-table td""")).map(_.text).toSeq
+              findAll(cssSelector("""#completed-table td""")).map(_.text).toSeq
             completedQueries should contain(completedQuery.id.toString)
             completedQueries should contain(completedQuery.runId.toString)
             completedQueries should contain(failedQuery.id.toString)
@@ -113,7 +115,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
             // Check the query statistics page
             val activeQueryLink =
-              findAll(cssSelector("""#activeQueries-table a""")).flatMap(_.attribute("href")).next
+              findAll(cssSelector("""#active-table td a""")).flatMap(_.attribute("href")).next
             go to activeQueryLink
 
             findAll(cssSelector("h3"))
