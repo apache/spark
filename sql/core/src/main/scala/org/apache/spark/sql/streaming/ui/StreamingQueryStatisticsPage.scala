@@ -44,7 +44,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val query = parent.statusListener.allQueryStatus.find { case q =>
+    val query = parent.store.allQueryStatus.find { case q =>
       q.runId.equals(UUID.fromString(parameterId))
     }.getOrElse(throw new IllegalArgumentException(s"Failed to find streaming query $parameterId"))
 

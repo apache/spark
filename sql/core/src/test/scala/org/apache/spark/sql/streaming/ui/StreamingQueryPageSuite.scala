@@ -20,10 +20,12 @@ package org.apache.spark.sql.streaming.ui
 import java.util.{Locale, UUID}
 import javax.servlet.http.HttpServletRequest
 
-import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
-import org.scalatest.BeforeAndAfter
 import scala.xml.Node
 
+import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
+import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -33,13 +35,13 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     val id = UUID.randomUUID()
     val request = mock(classOf[HttpServletRequest])
     val tab = mock(classOf[StreamingQueryTab], RETURNS_SMART_NULLS)
-    val statusListener = mock(classOf[StreamingQueryStatusListener], RETURNS_SMART_NULLS)
+    val store = mock(classOf[StreamingQueryStatusStore], RETURNS_SMART_NULLS)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
-    when(tab.statusListener).thenReturn(statusListener)
+    when(tab.store).thenReturn(store)
 
     val streamQuery = createStreamQueryUIData(id)
-    when(statusListener.allQueryStatus).thenReturn(Seq(streamQuery))
+    when(store.allQueryStatus).thenReturn(Seq(streamQuery))
     var html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (1)"))
@@ -64,14 +66,14 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     val id = UUID.randomUUID()
     val request = mock(classOf[HttpServletRequest])
     val tab = mock(classOf[StreamingQueryTab], RETURNS_SMART_NULLS)
-    val statusListener = mock(classOf[StreamingQueryStatusListener], RETURNS_SMART_NULLS)
+    val store = mock(classOf[StreamingQueryStatusStore], RETURNS_SMART_NULLS)
     when(request.getParameter("id")).thenReturn(id.toString)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
-    when(tab.statusListener).thenReturn(statusListener)
+    when(tab.store).thenReturn(store)
 
     val streamQuery = createStreamQueryUIData(id)
-    when(statusListener.allQueryStatus).thenReturn(Seq(streamQuery))
+    when(store.allQueryStatus).thenReturn(Seq(streamQuery))
     val html = renderStreamingQueryStatisticsPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
 

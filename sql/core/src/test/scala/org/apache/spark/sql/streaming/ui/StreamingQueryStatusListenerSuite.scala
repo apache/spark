@@ -21,15 +21,20 @@ import java.util.UUID
 
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 
+import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryProgress, StreamTest}
 import org.apache.spark.sql.streaming
+import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.util.kvstore.InMemoryStore
 
 class StreamingQueryStatusListenerSuite extends StreamTest {
 
   test("onQueryStarted, onQueryProgress, onQueryTerminated") {
-    val listener = new StreamingQueryStatusListener(spark.sparkContext.conf)
+    val kvStore = new ElementTrackingStore(new InMemoryStore(), sparkConf)
+    val listener = new StreamingQueryStatusListener(spark.sparkContext.conf, kvStore)
+    val queryStore = new StreamingQueryStatusStore(kvStore)
 
-    // hanlde query started event
+    // handle query started event
     val id = UUID.randomUUID()
     val runId = UUID.randomUUID()
     val startEvent = new StreamingQueryListener.QueryStartedEvent(
@@ -37,8 +42,8 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryStarted(startEvent)
 
     // result checking
-    assert(listener.activeQueryStatus.size() == 1)
-    assert(listener.activeQueryStatus.get(runId).name == "test")
+    assert(queryStore.activeQuery().length == 1)
+    assert(queryStore.activeQuery().exists(q => q.runId == runId && q.name.equals("test")))
 
     // handle query progress event
     val progress = mock(classOf[StreamingQueryProgress], RETURNS_SMART_NULLS)
@@ -53,28 +58,31 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryProgress(processEvent)
 
     // result checking
-    val activeQuery = listener.activeQueryStatus.get(runId)
-    assert(activeQuery.isActive)
-    assert(activeQuery.recentProgress.length == 1)
-    assert(activeQuery.lastProgress.id == id)
-    assert(activeQuery.lastProgress.runId == runId)
-    assert(activeQuery.lastProgress.timestamp == "2001-10-01T01:00:00.100Z")
-    assert(activeQuery.lastProgress.inputRowsPerSecond == 10.0)
-    assert(activeQuery.lastProgress.processedRowsPerSecond == 12.0)
-    assert(activeQuery.lastProgress.batchId == 2)
-    assert(activeQuery.lastProgress.prettyJson == """{"a":1}""")
+    val activeQuery = queryStore.activeQuery().find(_.runId == runId)
+    assert(activeQuery.isDefined)
+    assert(activeQuery.get.isActive)
+    assert(activeQuery.get.recentProgress.length == 1)
+    assert(activeQuery.get.lastProgress.id == id)
+    assert(activeQuery.get.lastProgress.runId == runId)
+    assert(activeQuery.get.lastProgress.timestamp == "2001-10-01T01:00:00.100Z")
+    assert(activeQuery.get.lastProgress.inputRowsPerSecond == 10.0)
+    assert(activeQuery.get.lastProgress.processedRowsPerSecond == 12.0)
+    assert(activeQuery.get.lastProgress.batchId == 2)
+    assert(activeQuery.get.lastProgress.prettyJson == """{"a":1}""")
 
     // handle terminate event
     val terminateEvent = new StreamingQueryListener.QueryTerminatedEvent(id, runId, None)
     listener.onQueryTerminated(terminateEvent)
 
-    assert(!listener.inactiveQueryStatus.head.isActive)
-    assert(listener.inactiveQueryStatus.head.runId == runId)
-    assert(listener.inactiveQueryStatus.head.id == id)
+    assert(!queryStore.inactiveQuery().head.isActive)
+    assert(queryStore.inactiveQuery().head.runId == runId)
+    assert(queryStore.inactiveQuery().head.id == id)
   }
 
   test("same query start multiple times") {
-    val listener = new StreamingQueryStatusListener(spark.sparkContext.conf)
+    val kvStore = new ElementTrackingStore(new InMemoryStore(), sparkConf)
+    val listener = new StreamingQueryStatusListener(spark.sparkContext.conf, kvStore)
+    val queryStore = new StreamingQueryStatusStore(kvStore)
 
     // handle first time start
     val id = UUID.randomUUID()
@@ -94,11 +102,11 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryStarted(startEvent1)
 
     // result checking
-    assert(listener.activeQueryStatus.size() == 1)
-    assert(listener.inactiveQueryStatus.length == 1)
-    assert(listener.activeQueryStatus.containsKey(runId1))
-    assert(listener.activeQueryStatus.get(runId1).id == id)
-    assert(listener.inactiveQueryStatus.head.runId == runId0)
-    assert(listener.inactiveQueryStatus.head.id == id)
+    assert(queryStore.activeQuery().length == 1)
+    assert(queryStore.inactiveQuery().length == 1)
+    assert(queryStore.activeQuery().exists(_.runId == runId1))
+    assert(queryStore.activeQuery().exists(q => q.runId == runId1 && q.id == id))
+    assert(queryStore.inactiveQuery().head.runId == runId0)
+    assert(queryStore.inactiveQuery().head.id == id)
   }
 }

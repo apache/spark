@@ -40,7 +40,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
   }
 
   private def generateStreamingQueryTable(request: HttpServletRequest): Seq[Node] = {
-    val (activeQueries, inactiveQueries) = parent.statusListener.allQueryStatus
+    val (activeQueries, inactiveQueries) = parent.store.allQueryStatus
       .partition(_.isActive)
 
     val content = mutable.ListBuffer[Node]()
