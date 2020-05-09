@@ -17,18 +17,21 @@
 
 package org.apache.spark.network.client;
 
-import java.nio.ByteBuffer;
+import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
- * Callback for the result of a single RPC. This will be invoked once with either success or
- * failure.
+ * Callback for the result of a single
+ * {@link org.apache.spark.network.protocol.MergedBlockMetaRequest}.
+ *
+ * @since 3.2.0
  */
-public interface RpcResponseCallback extends BaseResponseCallback {
+public interface MergedBlockMetaResponseCallback extends BaseResponseCallback {
   /**
-   * Successful serialized result from server.
+   * Called upon receipt of a particular merged block meta.
    *
-   * After `onSuccess` returns, `response` will be recycled and its content will become invalid.
-   * Please copy the content of `response` if you want to use it after `onSuccess` returns.
+   * The given buffer will initially have a refcount of 1, but will be release()'d as soon as this
+   * call returns. You must therefore either retain() the buffer or copy its contents before
+   * returning.
    */
-  void onSuccess(ByteBuffer response);
+  void onSuccess(int numChunks, ManagedBuffer buffer);
 }
