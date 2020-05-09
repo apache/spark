@@ -471,7 +471,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("SPARK-31593: remove unnecessary streaming query progress update") {
-    // This test will start a query but not push any data, and then check if we push too many events
     withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "100") {
       @volatile var numProgressEvent = 0
       val listener = new StreamingQueryListener {
@@ -522,7 +521,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       }
     }
   }
-  
+
   private def testReplayListenerBusWithBrokenEventJsons(
       fileName: String,
       expectedEventSize: Int): Unit = {
