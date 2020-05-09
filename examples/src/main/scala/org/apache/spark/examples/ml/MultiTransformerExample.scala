@@ -20,6 +20,7 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.examples.ml.UnaryTransformerExample.MyTransformer
+import org.apache.spark.ml.MultiTransformer
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
@@ -102,30 +103,11 @@ object MultiTransformerExample {
       .setInputCol("output1")
       .setOutputCol("output2")
 
-    val multiTransformer = myTransformer1.compose(myTransformer2)
+    val multiTransformer = new MultiTransformer(Nil)
 
     // Create data, transform, and display it.
     val data = spark.range(0, 5).toDF("input")
       .select(col("input").cast("double").as("input"))
-
-    val result = multiTransformer.transform(data)
-    println("Transformed by adding constant value")
-
-    result.show()
-
-    // Save and load the Transformer.
-    val tmpDir = Utils.createTempDir()
-    val dirName = tmpDir.getCanonicalPath
-    // myTransformer.write.overwrite().save(dirName)
-    val sameTransformer = MyTransformer.load(dirName)
-
-    // Transform the data to show the results are identical.
-    println("Same transform applied from loaded model")
-    val sameResult = sameTransformer.transform(data)
-    sameResult.show()
-
-    Utils.deleteRecursively(tmpDir)
-    // $example off$
 
     spark.stop()
   }
