@@ -18,9 +18,10 @@
 package org.apache.spark.sql
 
 import java.math.MathContext
+import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
-import scala.util.Random
+import scala.util.{Random, Try}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
@@ -172,7 +173,8 @@ object RandomDataGenerator {
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }
-            DateTimeUtils.toJavaDate((milliseconds / MILLIS_PER_DAY).toInt)
+            val date = DateTimeUtils.toJavaDate((milliseconds / MILLIS_PER_DAY).toInt)
+            Try { date.toLocalDate; date }.getOrElse(new Date(date.getTime + MILLIS_PER_DAY))
           }
         Some(generator)
       case TimestampType =>
@@ -188,7 +190,8 @@ object RandomDataGenerator {
               milliseconds = rand.nextLong() % 253402329599999L
             }
             // DateTimeUtils.toJavaTimestamp takes microsecond.
-            DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
+            val ts = DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
+            Try { ts.toLocalDateTime; ts }.getOrElse(new Timestamp(ts.getTime + MILLIS_PER_DAY))
           }
         Some(generator)
       case CalendarIntervalType => Some(() => {
