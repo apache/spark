@@ -758,11 +758,11 @@ private class ExpectationAggregator(
    * Add a new training instance to this ExpectationAggregator, update the weights,
    * means and covariances for each distributions, and update the log likelihood.
    *
-   * @param weightedVector The instance of data point to be added.
+   * @param instance The instance of data point to be added.
    * @return This ExpectationAggregator object.
    */
-  def add(weightedVector: (Vector, Double)): this.type = {
-    val (instance: Vector, weight: Double) = weightedVector
+  def add(instance: (Vector, Double)): this.type = {
+    val (vector: Vector, weight: Double) = instance
     val localWeights = bcWeights.value
     val localGaussians = gaussians
 
@@ -770,7 +770,7 @@ private class ExpectationAggregator(
     var probSum = 0.0
     var i = 0
     while (i < k) {
-      val p = EPSILON + localWeights(i) * localGaussians(i).pdf(instance)
+      val p = EPSILON + localWeights(i) * localGaussians(i).pdf(vector)
       prob(i) = p
       probSum += p
       i += 1
@@ -784,8 +784,8 @@ private class ExpectationAggregator(
     while (i < k) {
       val w = prob(i) / probSum * weight
       localNewWeights(i) += w
-      BLAS.axpy(w, instance, localNewMeans(i))
-      BLAS.spr(w, instance, localNewCovs(i))
+      BLAS.axpy(w, vector, localNewMeans(i))
+      BLAS.spr(w, vector, localNewCovs(i))
       i += 1
     }
 
@@ -860,20 +860,17 @@ private class BlockExpectationAggregator(
     java.util.Arrays.fill(probMat.values, EPSILON)
 
     val pdfMat = if (blockSize == size) auxiliaryPDFMat else DenseMatrix.zeros(size, numFeatures)
-    val probSumVec = Vectors.zeros(size).toDense
     var j = 0
     while (j < k) {
       val pdfVec = gaussians(j).pdf(matrix, pdfMat)
-      val w = bcWeights.value(j)
-      blas1.daxpy(size, w, pdfVec.values, 1, probSumVec.values, 1)
-      blas1.daxpy(size, w, pdfVec.values, 0, 1, probMat.values, j * size, 1)
+      blas1.daxpy(size, bcWeights.value(j), pdfVec.values, 0, 1, probMat.values, j * size, 1)
       j += 1
     }
 
     var i = 0
     while (i < size) {
-      val probSum = probSumVec(i)
       val weight = weights(i)
+      val probSum = blas2.dasum(k, probMat.values, i, size)
       blas2.dscal(k, weight / probSum, probMat.values, i, size)
       blas2.daxpy(k, 1.0, probMat.values, i, size, newWeights, 0, 1)
       newLogLikelihood += math.log(probSum) * weight
