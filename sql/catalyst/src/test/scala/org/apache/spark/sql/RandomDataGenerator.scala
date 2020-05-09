@@ -178,7 +178,6 @@ object RandomDataGenerator {
           uniformDateRand,
           Seq(
             "0001-01-01", // the fist day of Common Era
-            "1000-02-29", // not existed date in Proleptic Gregorian calendar
             "1582-10-15", // the cutover date from Julian to Gregorian calendar
             "1970-01-01", // the epoch date
             "9999-12-31"  // the last supported date according to SQL standard
@@ -202,7 +201,6 @@ object RandomDataGenerator {
           uniformTimestampRand,
           Seq(
             "0001-01-01 00:00:00", // the fist timestamp of Common Era
-            "1000-02-29 10:11:12.123", // not existed date in Proleptic Gregorian calendar
             "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
             "1970-01-01 00:00:00", // the epoch timestamp
             "9999-12-31 23:59:59.999" // the last supported timestamp according to SQL standard
