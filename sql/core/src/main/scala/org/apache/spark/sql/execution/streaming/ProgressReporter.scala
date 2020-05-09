@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, Stream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
+import org.apache.spark.util.kvstore.KVStore
 
 /**
  * Responsible for continually reporting statistics about the amount of data processed as well
@@ -65,6 +66,7 @@ trait ProgressReporter extends Logging {
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
   protected def postEvent(event: StreamingQueryListener.Event): Unit
+  protected def store: KVStore
 
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
@@ -78,9 +80,6 @@ trait ProgressReporter extends Logging {
 
   /** Flag that signals whether any error with input metrics have already been logged */
   private var metricWarningLogged: Boolean = false
-
-  /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
-  private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
 
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
@@ -103,13 +102,13 @@ trait ProgressReporter extends Logging {
   def status: StreamingQueryStatus = currentStatus
 
   /** Returns an array containing the most recent query progress updates. */
-  def recentProgress: Array[StreamingQueryProgress] = progressBuffer.synchronized {
-    progressBuffer.toArray
+  def recentProgress: Array[StreamingQueryProgress] = {
+    sparkSession.sharedState.streamingQueryStatusListener.recentProgressByRunId(runId)
   }
 
   /** Returns the most recent query progress update or null if there were no progress updates. */
-  def lastProgress: StreamingQueryProgress = progressBuffer.synchronized {
-    progressBuffer.lastOption.orNull
+  def lastProgress: StreamingQueryProgress = {
+    sparkSession.sharedState.streamingQueryStatusListener.lastProgressByRunId(runId)
   }
 
   /** Begins recording statistics about query progress for a given trigger. */
@@ -132,12 +131,6 @@ trait ProgressReporter extends Logging {
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
-    progressBuffer.synchronized {
-      progressBuffer += newProgress
-      while (progressBuffer.length >= sparkSession.sqlContext.conf.streamingProgressRetention) {
-        progressBuffer.dequeue()
-      }
-    }
     postEvent(new QueryProgressEvent(newProgress))
     logInfo(s"Streaming query made progress: $newProgress")
   }

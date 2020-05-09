@@ -109,16 +109,14 @@ private[sql] class SharedState(
    * A [[StreamingQueryListener]] for structured streaming ui, it contains all streaming query ui
    * data to show.
    */
-  lazy val streamingQueryStatusListener: Option[StreamingQueryStatusListener] = {
-    sparkContext.ui.flatMap { ui =>
+  lazy val streamingQueryStatusListener: StreamingQueryStatusListener = {
+    val statusListener = new StreamingQueryStatusListener(conf)
+    sparkContext.ui.foreach { ui =>
       if (conf.get(STREAMING_UI_ENABLED)) {
-        val statusListener = new StreamingQueryStatusListener(conf)
         new StreamingQueryTab(statusListener, ui)
-        Some(statusListener)
-      } else {
-        None
       }
     }
+    statusListener
   }
 
   /**

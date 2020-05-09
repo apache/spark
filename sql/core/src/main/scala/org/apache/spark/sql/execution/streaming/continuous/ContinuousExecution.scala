@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relati
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.Clock
+import org.apache.spark.util.kvstore.KVStore
 
 class ContinuousExecution(
     sparkSession: SparkSession,
@@ -46,10 +47,11 @@ class ContinuousExecution(
     triggerClock: Clock,
     outputMode: OutputMode,
     extraOptions: Map[String, String],
-    deleteCheckpointOnStop: Boolean)
+    deleteCheckpointOnStop: Boolean,
+    store: KVStore)
   extends StreamExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
-    trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
+    trigger, triggerClock, outputMode, deleteCheckpointOnStop, store) {
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
 

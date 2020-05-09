@@ -29,7 +29,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
@@ -38,6 +37,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
+import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -51,6 +51,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
   private val listenerBus = new StreamingQueryListenerBus(sparkSession.sparkContext.listenerBus)
+  private val kvStore =
+    sparkSession.sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
 
   @GuardedBy("activeQueriesSharedLock")
   private val activeQueries = new mutable.HashMap[UUID, StreamingQuery]
@@ -78,7 +80,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         logInfo(s"Registered listener ${listener.getClass.getName}")
       })
     }
-    sparkSession.sharedState.streamingQueryStatusListener.foreach { listener =>
+    Option(sparkSession.sharedState.streamingQueryStatusListener).foreach { listener =>
+      listener.setStore(kvStore)
       addListener(listener)
     }
   } catch {
@@ -299,7 +302,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           triggerClock,
           outputMode,
           extraOptions,
-          deleteCheckpointOnStop))
+          deleteCheckpointOnStop,
+          kvStore))
       case _ =>
         if (operationCheckEnabled) {
           UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
@@ -314,7 +318,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           triggerClock,
           outputMode,
           extraOptions,
-          deleteCheckpointOnStop))
+          deleteCheckpointOnStop,
+          kvStore))
     }
   }
 

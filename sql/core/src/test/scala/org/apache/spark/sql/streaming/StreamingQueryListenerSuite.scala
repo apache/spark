@@ -225,7 +225,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(isListenerActive(listener1) === false)
       assert(isListenerActive(listener2))
     } finally {
-      spark.streams.listListeners().foreach(spark.streams.removeListener)
+      allListenerExcludeDefault(spark).foreach(spark.streams.removeListener)
     }
   }
 
@@ -366,10 +366,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     assert(session1.streams.ne(session2.streams))
 
     withListenerAdded(collector1, session1) {
-      assert(session1.streams.listListeners().nonEmpty)
+      assert(allListenerExcludeDefault(session1).nonEmpty)
 
       withListenerAdded(collector2, session2) {
-        assert(session2.streams.listListeners().nonEmpty)
+        assert(allListenerExcludeDefault(session2).nonEmpty)
 
         // query on session1 should send events only to collector1
         runQuery(session1)
@@ -462,6 +462,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     } finally {
       spark.streams.removeListener(listener)
     }
+  }
+
+  private def allListenerExcludeDefault(session: SparkSession): Array[StreamingQueryListener] = {
+    session.streams.listListeners().filterNot(_.isInstanceOf[StreamingQueryStatusListener])
   }
 
   private def testReplayListenerBusWithBorkenEventJsons(

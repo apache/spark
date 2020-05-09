@@ -23,13 +23,16 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 
 import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryProgress, StreamTest}
 import org.apache.spark.sql.streaming
+import org.apache.spark.status.ElementTrackingStore
 
 class StreamingQueryStatusListenerSuite extends StreamTest {
 
   test("onQueryStarted, onQueryProgress, onQueryTerminated") {
     val listener = new StreamingQueryStatusListener(spark.sparkContext.conf)
+    val kvStore = spark.sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
+    listener.setStore(kvStore)
 
-    // hanlde query started event
+    // handle query started event
     val id = UUID.randomUUID()
     val runId = UUID.randomUUID()
     val startEvent = new StreamingQueryListener.QueryStartedEvent(
@@ -37,8 +40,8 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryStarted(startEvent)
 
     // result checking
-    assert(listener.activeQueryStatus.size() == 1)
-    assert(listener.activeQueryStatus.get(runId).name == "test")
+    assert(listener.activeQueries.size == 1)
+    assert(listener.activeQueries((id, runId)) == "test")
 
     // handle query progress event
     val progress = mock(classOf[StreamingQueryProgress], RETURNS_SMART_NULLS)
@@ -53,7 +56,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryProgress(processEvent)
 
     // result checking
-    val activeQuery = listener.activeQueryStatus.get(runId)
+    val activeQuery = listener.allQueryStatus.filter(_.runId == runId).head
     assert(activeQuery.isActive)
     assert(activeQuery.recentProgress.length == 1)
     assert(activeQuery.lastProgress.id == id)
@@ -68,9 +71,10 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     val terminateEvent = new StreamingQueryListener.QueryTerminatedEvent(id, runId, None)
     listener.onQueryTerminated(terminateEvent)
 
-    assert(!listener.inactiveQueryStatus.head.isActive)
-    assert(listener.inactiveQueryStatus.head.runId == runId)
-    assert(listener.inactiveQueryStatus.head.id == id)
+    val queryUIData = listener.allQueryStatus.filter(_.runId == runId).head
+    assert(!queryUIData.isActive)
+    assert(queryUIData.runId == runId)
+    assert(queryUIData.id == id)
   }
 
   test("same query start multiple times") {
@@ -94,11 +98,10 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryStarted(startEvent1)
 
     // result checking
-    assert(listener.activeQueryStatus.size() == 1)
-    assert(listener.inactiveQueryStatus.length == 1)
-    assert(listener.activeQueryStatus.containsKey(runId1))
-    assert(listener.activeQueryStatus.get(runId1).id == id)
-    assert(listener.inactiveQueryStatus.head.runId == runId0)
-    assert(listener.inactiveQueryStatus.head.id == id)
+    assert(listener.activeQueries.size == 1)
+    assert(listener.inactiveQueryQueue.size == 1)
+    assert(listener.activeQueries.contains((id, runId1)))
+    assert(listener.inactiveQueryQueue.head._2 == runId0)
+    assert(listener.inactiveQueryQueue.head._1 == id)
   }
 }

@@ -48,6 +48,7 @@ import org.apache.spark.sql.internal.connector.SupportsStreamingUpdate
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
+import org.apache.spark.util.kvstore.KVStore
 
 /** States for [[StreamExecution]]'s lifecycle. */
 trait State
@@ -75,7 +76,8 @@ abstract class StreamExecution(
     val trigger: Trigger,
     val triggerClock: Clock,
     val outputMode: OutputMode,
-    deleteCheckpointOnStop: Boolean)
+    deleteCheckpointOnStop: Boolean,
+    override val store: KVStore)
   extends StreamingQuery with ProgressReporter with Logging {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
