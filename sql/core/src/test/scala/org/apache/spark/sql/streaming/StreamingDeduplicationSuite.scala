@@ -259,9 +259,10 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
   }
 
   test("test no-data flag") {
-    val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
+    val noDataProgressIntervalKey = SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key
+    val noDataBatchEnableKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 
-    def testWithFlag(flag: Boolean): Unit = withClue(s"with $flagKey = $flag") {
+    def testWithFlag(flag: Boolean): Unit = withClue(s"with $noDataBatchEnableKey = $flag") {
       val inputData = MemoryStream[Int]
       val result = inputData.toDS()
         .withColumn("eventTime", $"value".cast("timestamp"))
@@ -270,7 +271,12 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
         .select($"eventTime".cast("long").as[Long])
 
       testStream(result, Append)(
-        StartStream(additionalConfs = Map(flagKey -> flag.toString)),
+        StartStream(additionalConfs = Map(
+          noDataBatchEnableKey -> flag.toString,
+          // set `STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL` a small value to
+          // report an `empty` progress when no data come.
+          noDataProgressIntervalKey -> "1")
+        ),
         AddData(inputData, 10, 11, 12, 13, 14, 15),
         CheckAnswer(10, 11, 12, 13, 14, 15),
         assertNumStateRows(total = 6, updated = 6),
