@@ -14,15 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.hive.service.cli.session
+package org.apache.spark.sql.hive.thriftserver
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hive.service.cli.OperationHandle
 import org.apache.hive.service.cli.operation.{GetCatalogsOperation, OperationManager}
 import org.apache.hive.service.cli.session.{HiveSessionImpl, SessionManager}
-import org.apache.hive.service.rpc.thrift.TProtocolVersion
 import org.mockito.Mockito.{mock, verify, when}
 import org.mockito.invocation.InvocationOnMock
-import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 
@@ -34,7 +35,7 @@ class HiveSessionImplSuite extends SparkFunSuite {
     super.beforeAll()
 
     session = new HiveSessionImpl(
-      TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1,
+      ThriftserverShimUtils.testedProtocolVersions.head,
       "",
       "",
       new HiveConf(),
@@ -45,7 +46,11 @@ class HiveSessionImplSuite extends SparkFunSuite {
     operationManager = mock(classOf[OperationManager])
     session.setOperationManager(operationManager)
     when(operationManager.newGetCatalogsOperation(session)).thenAnswer(
-      (_: InvocationOnMock) => mock(classOf[GetCatalogsOperation])
+      (_: InvocationOnMock) => {
+        val operation = mock(classOf[GetCatalogsOperation])
+        when(operation.getHandle).thenReturn(mock(classOf[OperationHandle]))
+        operation
+      }
     )
 
     session.open(Map.empty[String, String].asJava)
