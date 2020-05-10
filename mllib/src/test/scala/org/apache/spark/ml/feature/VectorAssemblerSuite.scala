@@ -261,6 +261,7 @@ class VectorAssemblerSuite
     val output = vectorAssembler.transform(dfWithNullsAndNaNs)
     assert(output.select("a").limit(1).collect().head == Row(Vectors.sparse(0, Seq.empty)))
   }
+  
   test("SPARK-31671: should give explicit error message when can not infer column lengths") {
     val df = Seq(
       (Vectors.dense(1.0), Vectors.dense(2.0))
