@@ -44,6 +44,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
+import org.apache.spark.rdd.util.PrefetchingIterator
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
@@ -1047,81 +1048,9 @@ abstract class RDD[T: ClassTag](
    * recomputing the input RDD should be cached first.
    */
   def toLocalIterator(prefetchPartitions: Boolean = false): Iterator[T] = withScope {
-    if (!prefetchPartitions || partitions.indices.isEmpty) {
-      def collectPartition(p: Int): Array[T] = {
-        sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p)).head
-      }
-      partitions.indices.iterator.flatMap(i => collectPartition(i))
-    } else {
-      val iterator: Iterator[Array[T]] = prefetchingIterator
-      iterator.hasNext
-      iterator.flatMap(data => data)
-    }
-  }
-
-  private def prefetchingIterator: Iterator[Array[T]] = {
-
-    val partitionIterator = partitions.indices.iterator
-
-    new Iterator[Array[T]] with Serializable {
-
-      private val lock = new ReentrantLock()
-      private val ready = lock.newCondition()
-
-      private var nextResult: Array[T] = _
-      private var fetchInProgress = false
-
-      /**
-       * In addition, it prefetches next element, if it exists
-       */
-      override def hasNext(): Boolean = withLock(() => {
-        if (fetchInProgress) true
-        else if (nextResult == null) {
-          if (partitionIterator.hasNext) {
-            initPrefetch(partitionIterator.next())
-            true
-          } else false
-        } else true
-      })
-
-      override def next(): Array[T] = withLock(() => {
-        while (fetchInProgress) ready.await()
-
-        val partitionArray = nextResult
-
-        nextResult = null
-        fetchInProgress = false
-
-        if (partitionIterator.hasNext) initPrefetch(partitionIterator.next())
-
-        partitionArray
-      })
-
-      private def initPrefetch(p: Int): Unit = {
-        fetchInProgress = true
-
-        sc.submitJob(
-          RDD.this,
-          (iter: Iterator[T]) => iter.toArray,
-          Seq(p),
-          (_, value: Array[T]) => rememberResultAndSignal(value),
-          nextResult)
-      }
-
-      private def rememberResultAndSignal(value: Array[T]): Unit = withLock(() => {
-        nextResult = value
-        fetchInProgress = false
-
-        ready.signal()
-      })
-
-      private def withLock[A](fn: () => A): A = {
-        lock.lock()
-        try fn()
-        finally lock.unlock()
-      }
-
-    }
+    val iterator = new PrefetchingIterator(this, prefetchPartitions)
+    if (prefetchPartitions) iterator.hasNext
+    iterator.flatMap(data => data)
   }
 
   /**

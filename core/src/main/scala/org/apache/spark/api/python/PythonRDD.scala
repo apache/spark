@@ -40,6 +40,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.util.PrefetchingIterator
 import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer, SocketFuncServer}
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util._
@@ -195,22 +196,16 @@ private[spark] object PythonRDD extends Logging {
    *         data collected from this job, the secret for authentication, and a socket auth
    *         server object that can be used to join the JVM serving thread in Python.
    */
-  def toLocalIteratorAndServe[T](rdd: RDD[T], prefetchPartitions: Boolean = false): Array[Any] = {
+  def toLocalIteratorAndServe[T : ClassTag](rdd: RDD[T],
+                                            prefetchPartitions: Boolean = false): Array[Any] = {
     val handleFunc = (sock: Socket) => {
       val out = new DataOutputStream(sock.getOutputStream)
       val in = new DataInputStream(sock.getInputStream)
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+
         // Collects a partition on each iteration
-        val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
-          var result: Array[Any] = null
-          rdd.sparkContext.submitJob(
-            rdd,
-            (iter: Iterator[Any]) => iter.toArray,
-            Seq(i), // The partition we are evaluating
-            (_, res: Array[Any]) => result = res,
-            result)
-        }
-        val prefetchIter = collectPartitionIter.buffered
+        val prefetchIter = new PrefetchingIterator(rdd, prefetchPartitions)
+        if (prefetchPartitions) prefetchIter.hasNext
 
         // Write data until iteration is complete, client stops iteration, or error occurs
         var complete = false
@@ -220,14 +215,7 @@ private[spark] object PythonRDD extends Logging {
           if (in.readInt() == 0) {
             complete = true
           } else if (prefetchIter.hasNext) {
-
-            // Client requested more data, attempt to collect the next partition
-            val partitionFuture = prefetchIter.next()
-            // Cause the next job to be submitted if prefetchPartitions is enabled.
-            if (prefetchPartitions) {
-              prefetchIter.headOption
-            }
-            val partitionArray = ThreadUtils.awaitResult(partitionFuture, Duration.Inf)
+            val partitionArray = prefetchIter.next()
 
             // Send response there is a partition to read
             out.writeInt(1)
