@@ -21,28 +21,25 @@ license: |
 
 ### Description
 
-The <code>DISTRIBUTE BY</code> clause is used to repartition the data based
+The `DISTRIBUTE BY` clause is used to repartition the data based
 on the input expressions. Unlike the [CLUSTER BY](sql-ref-syntax-qry-select-clusterby.html)
 clause, this does not sort the data within each partition.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 DISTRIBUTE BY { expression [ , ... ] }
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>expression</em></code></dt>
-  <dd>
+* **expression**
+
     Specifies combination of one or more values, operators and SQL functions that results in a value.
-  </dd>
-</dl>
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CREATE TABLE person (name STRING, age INT);
 INSERT INTO person VALUES
     ('Zen Hui', 25),
@@ -85,15 +82,15 @@ SELECT age, name FROM person DISTRIBUTE BY age;
 | 16|Shone S|
 | 16| Jack N|
 +---+-------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [SELECT Main](sql-ref-syntax-qry-select.html)
- * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
- * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
- * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
- * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
- * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
- * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
- * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [SELECT Main](sql-ref-syntax-qry-select.html)
+* [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+* [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+* [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+* [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+* [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+* [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+* [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

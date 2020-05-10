@@ -25,118 +25,95 @@ A SQL join is used to combine rows from two relations based on join criteria. Th
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 relation { [ join_type ] JOIN relation [ join_criteria ] | NATURAL join_type JOIN relation }
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>relation</em></code></dt>
-  <dd>
+* **relation**
+
     Specifies the relation to be joined.
-  </dd>
-  <dt><code><em>join_type</em></code></dt>
-  <dd>
-    Specifies the join type.<br><br>
-    <b>Syntax:</b><br>
-      <code>
-        [ INNER ]
-        | CROSS
-        | LEFT [ OUTER ]
-        | [ LEFT ] SEMI
-        | RIGHT [ OUTER ]
-        | FULL [ OUTER ]
-        | [ LEFT ] ANTI
-      </code>
-  </dd>
-  <dt><code><em>join_criteria</em></code></dt>
-  <dd>
-    Specifies how the rows from one relation will be combined with the rows of another relation.<br><br>
-    <b>Syntax:</b>
-      <code>
-        ON boolean_expression | USING ( column_name [ , column_name ... ] )
-      </code> <br><br>
-      <code>boolean_expression</code><br>
-      Specifies an expression with a return type of boolean.
-  </dd>
-</dl>
+
+* **join_type**
+
+    Specifies the join type.
+
+    **Syntax:**
+
+    `[ INNER ] | CROSS | LEFT [ OUTER ] | [ LEFT ] SEMI | RIGHT [ OUTER ] | FULL [ OUTER ] | [ LEFT ] ANTI`
+
+* **join_criteria**
+
+    Specifies how the rows from one relation will be combined with the rows of another relation.
+
+    **Syntax:** `ON boolean_expression | USING ( column_name [ , ... ] )`
+
+    `boolean_expression`
+
+    Specifies an expression with a return type of boolean.
 
 ### Join Types
 
-#### <b>Inner Join</b>
+#### **Inner Join**
 
-<dd>
-The inner join is the default join in Spark SQL. It selects rows that have matching values in both relations.<br><br>
-  <b>Syntax:</b><br>
-    <code>
-    relation [ INNER ] JOIN relation [ join_criteria ]
-    </code>
-</dd>
+The inner join is the default join in Spark SQL. It selects rows that have matching values in both relations.
 
-#### <b>Left Join </b>
+**Syntax:**
 
-<dd>
-A left join returns all values from the left relation and the matched values from the right relation, or appends NULL if there is no match. It is also referred to as a left outer join.<br><br>
-  <b>Syntax:</b><br>
-    <code>
-    relation LEFT [ OUTER ] JOIN relation [ join_criteria ]
-    </code>
-</dd>
+`relation [ INNER ] JOIN relation [ join_criteria ]`
 
-#### <b>Right Join </b>
+#### **Left Join**
 
-<dd>
-A right join returns all values from the right relation and the matched values from the left relation, or appends NULL if there is no match. It is also referred to as a right outer join.<br><br>
-  <b>Syntax:</b><br>
-    <code>
-    relation RIGHT [ OUTER ] JOIN relation [ join_criteria ]
-    </code>
-</dd>
+A left join returns all values from the left relation and the matched values from the right relation, or appends NULL if there is no match. It is also referred to as a left outer join.
 
-#### <b>Full Join </b>
+**Syntax:**
 
-<dd>
-A full join returns all values from both relations, appending NULL values on the side that does not have a match. It is also referred to as a full outer join.<br><br>
-  <b>Syntax:</b><br>
-    <code>
-    relation FULL [ OUTER ] JOIN relation [ join_criteria ]
-    </code>
-</dd>
+`relation LEFT [ OUTER ] JOIN relation [ join_criteria ]`
 
-#### <b>Cross Join </b>
+#### **Right Join**
 
-<dd>
-A cross join returns the Cartesian product of two relations.<br><br>
-  <b>Syntax:</b><br>
-    <code>
-    relation CROSS JOIN relation [ join_criteria ]
-    </code>
-</dd>
+A right join returns all values from the right relation and the matched values from the left relation, or appends NULL if there is no match. It is also referred to as a right outer join.
 
-#### <b>Semi Join </b>
+**Syntax:**
 
-<dd>
-A semi join returns values from the left side of the relation that has a match with the right. It is also referred to as a left semi join.<br><br>
-  <b>Syntax:</b><br>
-    <code>
-    relation [ LEFT ] SEMI JOIN relation [ join_criteria ]
-    </code>
-</dd>
+`relation RIGHT [ OUTER ] JOIN relation [ join_criteria ]`
 
-#### <b>Anti Join </b>
+#### **Full Join**
 
-<dd>
-An anti join returns values from the left relation that has no match with the right. It is also referred to as a left anti join.<br><br>
-  <b>Syntax:</b><br>
-    <code>
-    relation [ LEFT ] ANTI JOIN relation [ join_criteria ]
-    </code>
-</dd>
+A full join returns all values from both relations, appending NULL values on the side that does not have a match. It is also referred to as a full outer join.
+
+**Syntax:**
+
+`relation FULL [ OUTER ] JOIN relation [ join_criteria ]`
+
+#### **Cross Join**
+
+A cross join returns the Cartesian product of two relations.
+
+**Syntax:**
+
+`relation CROSS JOIN relation [ join_criteria ]`
+
+#### **Semi Join**
+
+A semi join returns values from the left side of the relation that has a match with the right. It is also referred to as a left semi join.
+
+**Syntax:**
+
+`relation [ LEFT ] SEMI JOIN relation [ join_criteria ]`
+
+#### **Anti Join**
+
+An anti join returns values from the left relation that has no match with the right. It is also referred to as a left anti join.
+
+**Syntax:**
+
+`relation [ LEFT ] ANTI JOIN relation [ join_criteria ]`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Use employee and department tables to demonstrate different type of joins.
 SELECT * FROM employee;
 +---+-----+------+
@@ -253,9 +230,9 @@ SELECT * FROM employee ANTI JOIN department ON employee.deptno = department.dept
 |104| Evan|     4|
 |106|  Amy|     6|
 +---+-----+------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
-  * [SELECT](sql-ref-syntax-qry-select.html)
-  * [Join Hints](sql-ref-syntax-qry-select-hints.html)
+* [SELECT](sql-ref-syntax-qry-select.html)
+* [Join Hints](sql-ref-syntax-qry-select-hints.html)

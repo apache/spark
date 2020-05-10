@@ -26,19 +26,19 @@ The `TABLESAMPLE` statement is used to sample the table. It supports the followi
   * `TABLESAMPLE`(x `PERCENT`): Sample the table down to the given percentage. Note that percentages are defined as a number between 0 and 100.
   * `TABLESAMPLE`(`BUCKET` x `OUT OF` y): Sample the table down to a `x` out of `y` fraction.
 
-Note: `TABLESAMPLE` returns the approximate number of rows or fraction requested.
+**Note:** `TABLESAMPLE` returns the approximate number of rows or fraction requested.
 
 ### Syntax
 
-{% highlight sql %}
-TABLESAMPLE ((integer_expression | decimal_expression) PERCENT)
-    | TABLESAMPLE (integer_expression ROWS)
-    | TABLESAMPLE (BUCKET integer_expression OUT OF integer_expression)
-{% endhighlight %}
+```sql
+TABLESAMPLE ({ integer_expression | decimal_expression } PERCENT)
+    | TABLESAMPLE ( integer_expression ROWS )
+    | TABLESAMPLE ( BUCKET integer_expression OUT OF integer_expression )
+```
 
 ### Examples
 
-{% highlight sql %}
+```sql
 SELECT * FROM test;
 +--+----+
 |id|name|
@@ -87,8 +87,8 @@ SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10);
 | 9|Eric|
 | 6|Mark|
 +--+----+
-{% endhighlight %}
+```
 
-### Related Statement
+### Related Statements
 
-  * [SELECT](sql-ref-syntax-qry-select.html)
+* [SELECT](sql-ref-syntax-qry-select.html)
