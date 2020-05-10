@@ -174,6 +174,13 @@ object RandomDataGenerator {
               milliseconds = rand.nextLong() % 253402329599999L
             }
             val date = DateTimeUtils.toJavaDate((milliseconds / MILLIS_PER_DAY).toInt)
+            // The generated `date` is based on the hybrid calendar Julian + Gregorian since
+            // 1582-10-15 but it should be valid in Proleptic Gregorian calendar too which is used
+            // by Spark SQL since version 3.0 (see SPARK-26651). We try to convert `date` to
+            // a local date in Proleptic Gregorian calendar to satisfy this requirement.
+            // Some years are leap years in Julian calendar but not in Proleptic Gregorian calendar.
+            // As the consequence of that, 29 February of such years might not exist in Proleptic
+            // Gregorian calendar. When this happens, we shift the date by one day.
             Try { date.toLocalDate; date }.getOrElse(new Date(date.getTime + MILLIS_PER_DAY))
           }
         Some(generator)
@@ -191,6 +198,13 @@ object RandomDataGenerator {
             }
             // DateTimeUtils.toJavaTimestamp takes microsecond.
             val ts = DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
+            // The generated `ts` is based on the hybrid calendar Julian + Gregorian since
+            // 1582-10-15 but it should be valid in Proleptic Gregorian calendar too which is used
+            // by Spark SQL since version 3.0 (see SPARK-26651). We try to convert `ts` to
+            // a local timestamp in Proleptic Gregorian calendar to satisfy this requirement.
+            // Some years are leap years in Julian calendar but not in Proleptic Gregorian calendar.
+            // As the consequence of that, 29 February of such years might not exist in Proleptic
+            // Gregorian calendar. When this happens, we shift the timestamp `ts` by one day.
             Try { ts.toLocalDateTime; ts }.getOrElse(new Timestamp(ts.getTime + MILLIS_PER_DAY))
           }
         Some(generator)
