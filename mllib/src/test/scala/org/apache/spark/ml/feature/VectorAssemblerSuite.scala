@@ -272,3 +272,4 @@ class VectorAssemblerSuite
     assert(!intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(hintedDf))
       .getMessage.contains("n1"), "should only show no vector size columns' name")
   }
+}
