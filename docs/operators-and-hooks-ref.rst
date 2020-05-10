@@ -754,7 +754,7 @@ These integrations allow you to perform various operations within the Google Clo
      -
 
    * - `Cloud Speech-to-Text <https://cloud.google.com/speech-to-text/>`__
-     - :doc:`How to use <howto/operator/gcp/speech>`
+     - :doc:`How to use <howto/operator/gcp/speech_to_text>`
      - :mod:`airflow.providers.google.cloud.hooks.speech_to_text`
      - :mod:`airflow.providers.google.cloud.operators.speech_to_text`
      -
@@ -790,7 +790,7 @@ These integrations allow you to perform various operations within the Google Clo
      -
 
    * - `Cloud Text-to-Speech <https://cloud.google.com/text-to-speech/>`__
-     - :doc:`How to use <howto/operator/gcp/speech>`
+     - :doc:`How to use <howto/operator/gcp/text_to_speech>`
      - :mod:`airflow.providers.google.cloud.hooks.text_to_speech`
      - :mod:`airflow.providers.google.cloud.operators.text_to_speech`
      -
@@ -967,7 +967,7 @@ Other operators and hooks
      - Operator
      - Hook
 
-   * - :doc:`How to use <howto/operator/gcp/translate-speech>`
+   * - :doc:`How to use <howto/operator/gcp/translate_speech>`
      - :mod:`airflow.providers.google.cloud.operators.translate_speech`
      -
 
