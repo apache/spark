@@ -44,7 +44,7 @@ class Avro4sInteroperSuite extends SparkFunSuite
                            string: String
                          )
 
-  test("Case class with scalar types") {
+  test("SPARK-30267: Case class with scalar types") {
     val sample = ScalarSample(
       int = 2000,
       long = 100000L,
@@ -71,7 +71,7 @@ class Avro4sInteroperSuite extends SparkFunSuite
                         seq: Seq[String]
                       )
 
-  test("Case class with Seq type") {
+  test("SPARK-30267: Case class with Seq type") {
     val sample = SeqSample(
       "str",
       Seq("a", "b", "c")
@@ -98,7 +98,7 @@ class Avro4sInteroperSuite extends SparkFunSuite
                         innerSeq: Seq[String]
                         )
 
-  test("Inner class with Seq type") {
+  test("SPARK-30267: Inner class with Seq type") {
     val sample = OuterSample(
       "outer",
       InnerSample(
