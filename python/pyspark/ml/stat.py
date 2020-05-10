@@ -37,7 +37,7 @@ class ChiSquareTest(object):
 
     """
     @staticmethod
-    @since("3.1.0")
+    @since("2.2.0")
     def test(dataset, featuresCol, labelCol, flatten=False):
         """
         Perform a Pearson's independence test using dataset.
@@ -63,6 +63,9 @@ class ChiSquareTest(object):
           - `degreesOfFreedom: Array[int]`
           - `statistics: Vector`
           Each of these fields has one value per feature.
+
+        .. versionchanged:: 3.1.0
+           Added optional ``flatten`` argument.
 
         >>> from pyspark.ml.linalg import Vectors
         >>> from pyspark.ml.stat import ChiSquareTest
