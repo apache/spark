@@ -64,6 +64,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(sc.makeRDD(Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 5)
       .toLocalIterator(prefetchPartitions = true).toList === List(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
 
+    assert(sc.makeRDD(Array.empty[Int], 5)
+      .toLocalIterator(prefetchPartitions = true).toList === List())
+
     val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4), 2)
     assert(dups.distinct().count() === 4)
     assert(dups.distinct().count === 4)  // Can distinct and count be called without parentheses?

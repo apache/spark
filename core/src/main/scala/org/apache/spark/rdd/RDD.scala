@@ -1047,15 +1047,12 @@ abstract class RDD[T: ClassTag](
    * recomputing the input RDD should be cached first.
    */
   def toLocalIterator(prefetchPartitions: Boolean = false): Iterator[T] = withScope {
-
     if (!prefetchPartitions || partitions.indices.isEmpty) {
       def collectPartition(p: Int): Array[T] = {
         sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p)).head
       }
       partitions.indices.iterator.flatMap(i => collectPartition(i))
-
     } else {
-
       val iterator: Iterator[Array[T]] = prefetchingIterator
       iterator.hasNext
       iterator.flatMap(data => data)
@@ -1101,7 +1098,6 @@ abstract class RDD[T: ClassTag](
       })
 
       private def initPrefetch(p: Int): Unit = {
-
         fetchInProgress = true
 
         sc.submitJob(
@@ -1113,7 +1109,6 @@ abstract class RDD[T: ClassTag](
       }
 
       private def rememberResultAndSignal(value: Array[T]): Unit = withLock(() => {
-
         nextResult = value
         fetchInProgress = false
 
