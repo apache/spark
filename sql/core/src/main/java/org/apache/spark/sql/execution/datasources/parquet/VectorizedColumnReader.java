@@ -159,15 +159,10 @@ public class VectorizedColumnReader {
         isSupported = originalType != OriginalType.DATE || !rebaseDateTime;
         break;
       case INT64:
-        switch (originalType) {
-          case TIMESTAMP_MILLIS:
-            isSupported = false;
-            break;
-          case TIMESTAMP_MICROS:
-            isSupported = !rebaseDateTime;
-            break;
-          default:
-            isSupported = true;
+        if (originalType == OriginalType.TIMESTAMP_MICROS) {
+          isSupported = !rebaseDateTime;
+        } else {
+          isSupported = originalType != OriginalType.TIMESTAMP_MILLIS;
         }
         break;
       case FLOAT:
