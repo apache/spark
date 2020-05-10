@@ -25,67 +25,52 @@ Window functions operate on a group of rows, referred to as a window, and calcul
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 window_function OVER
 ( [  { PARTITION | DISTRIBUTE } BY partition_col_name = partition_col_val ( [ , ... ] ) ]
   { ORDER | SORT } BY expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ... ]
   [ window_frame ] )
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>window_function</em></code></dt>
-  <dd>
-    <ul>
-      <li>Ranking Functions</li>
-      <br>
-      <b>Syntax:</b>
-        <code>
-          RANK | DENSE_RANK | PERCENT_RANK | NTILE | ROW_NUMBER
-        </code>
-    </ul>
-    <ul>
-      <li>Analytic Functions</li>
-      <br>
-      <b>Syntax:</b>
-        <code>
-          CUME_DIST | LAG | LEAD
-        </code>
-    </ul>
-    <ul>
-      <li>Aggregate Functions</li>
-      <br>
-      <b>Syntax:</b>
-        <code>
-          MAX | MIN | COUNT | SUM | AVG | ...
-        </code>
-        <br>
-        Please refer to the <a href="api/sql/">Built-in Functions</a> document for a complete list of Spark aggregate functions.
-    </ul>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>window_frame</em></code></dt>
-  <dd>
-    Specifies which row to start the window on and where to end it.<br>
-    <b>Syntax:</b><br>
-      <code>{ RANGE | ROWS } { frame_start | BETWEEN frame_start AND frame_end }</code><br>
-      If frame_end is omitted it defaults to CURRENT ROW.<br><br>
-      <ul>
-      <code>frame_start</code> and <code>frame_end</code> have the following syntax<br>
-      <b>Syntax:</b><br>
-        <code>
-          UNBOUNDED PRECEDING | offset PRECEDING | CURRENT ROW | offset FOLLOWING | UNBOUNDED FOLLOWING
-        </code><br>
-        <code>offset:</code>specifies the <code>offset</code> from the position of the current row.
-      </ul>
-  </dd>
-</dl>
+* **window_function**
+
+    * Ranking Functions
+
+      **Syntax:** `RANK | DENSE_RANK | PERCENT_RANK | NTILE | ROW_NUMBER`
+
+    * Analytic Functions
+
+      **Syntax:** `CUME_DIST | LAG | LEAD`
+
+    * Aggregate Functions
+
+      **Syntax:** `MAX | MIN | COUNT | SUM | AVG | ...`
+
+      Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) document for a complete list of Spark aggregate functions.
+
+* **window_frame**
+
+    Specifies which row to start the window on and where to end it.
+
+    **Syntax:**
+
+    `{ RANGE | ROWS } { frame_start | BETWEEN frame_start AND frame_end }`
+
+    * `frame_start` and `frame_end` have the following syntax:
+
+      **Syntax:**
+
+      `UNBOUNDED PRECEDING | offset PRECEDING | CURRENT ROW | offset FOLLOWING | UNBOUNDED FOLLOWING`
+
+      `offset:` specifies the `offset` from the position of the current row.
+
+    **Note:** If `frame_end` is omitted it defaults to `CURRENT ROW`.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CREATE TABLE employees (name STRING, dept STRING, salary INT, age INT);
 
 INSERT INTO employees VALUES ("Lisa", "Sales", 10000, 35);
@@ -199,8 +184,8 @@ SELECT name, salary,
 | Jane|  Marketing| 29000|29000|35000|
 | Jeff|  Marketing| 35000|29000|    0|
 +-----+-----------+------+-----+-----+
-{% endhighlight %}
+```
 
 ### Related Statements
 
-  * [SELECT](sql-ref-syntax-qry-select.html)
+* [SELECT](sql-ref-syntax-qry-select.html)

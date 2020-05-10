@@ -29,35 +29,25 @@ license: |
 
 #### Syntax
 
-{% highlight sql %}
+```sql
 ALTER TABLE table_identifier RENAME TO table_identifier
 
 ALTER TABLE table_identifier partition_spec RENAME TO partition_spec
-{% endhighlight %}
+```
 
 #### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
 
-<dl>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
-    Partition to be renamed. <br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
-      </code>
-  </dd>
-</dl>
+    Specifies a table name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
+    Partition to be renamed.
+
+    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
 ### ADD COLUMNS
 
@@ -65,66 +55,47 @@ ALTER TABLE table_identifier partition_spec RENAME TO partition_spec
 
 #### Syntax
 
-{% highlight sql %}
+```sql
 ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
-{% endhighlight %}
+```
 
 #### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
 
-<dl>
-  <dt><code><em>COLUMNS ( col_spec )</em></code></dt>
-  <dd>Specifies the columns to be added.</dd>
-</dl>
+    Specifies a table name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **COLUMNS ( col_spec )**
+
+    Specifies the columns to be added.
 
 ### ALTER OR CHANGE COLUMN
 
-`ALTER TABLE ALTER COLUMN` or `ALTER TABLE CHANGE COLUMN` statement changes column's comment.
+`ALTER TABLE ALTER COLUMN` or `ALTER TABLE CHANGE COLUMN` statement changes column's definition.
 
 #### Syntax
 
-{% highlight sql %}
+```sql
 ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnAction
-{% endhighlight %}
+```
 
 #### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
 
-<dl>
-  <dt><code><em>COLUMN col_spec</em></code></dt>
-  <dd>Specifies the column to be altered or be changed.</dd>
-</dl>
+    Specifies a table name, which may be optionally qualified with a database name.
 
-<dl>
-  <dt><code><em>alterColumnAction</em></code></dt>
-   <dd>
-     Change the comment string.<br><br>
-     <b>Syntax:</b>
-        <code>
-            COMMENT STRING
-        </code>     
-   </dd>     
-</dl>
+    **Syntax:** `[ database_name. ] table_name`
+
+* **COLUMNS ( col_spec )**
+
+    Specifies the column to be altered or be changed.
+
+* **alterColumnAction**
+
+    Change column's definition.
 
 ### ADD AND DROP PARTITION
 
@@ -134,34 +105,24 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 
 ##### Syntax
 
-{% highlight sql %}
+```sql
 ALTER TABLE table_identifier ADD [IF NOT EXISTS] 
     ( partition_spec [ partition_spec ... ] )
-{% endhighlight %}
+```
      
 ##### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
 
-<dl>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
-    Partition to be added. <br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
-      </code>
-  </dd>
-</dl>     
+    Specifies a table name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
+    Partition to be added.
+
+    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
 #### DROP PARTITION
 
@@ -169,33 +130,23 @@ ALTER TABLE table_identifier ADD [IF NOT EXISTS]
 
 ##### Syntax
 
-{% highlight sql %}
+```sql
 ALTER TABLE table_identifier DROP [ IF EXISTS ] partition_spec [PURGE]
-{% endhighlight %}
+```
      
 ##### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
 
-<dl>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
-    Partition to be dropped. <br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
-      </code>
-  </dd>
-</dl>     
+    Specifies a table name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
+    Partition to be dropped.
+
+    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
      
 ### SET AND UNSET
 
@@ -208,30 +159,28 @@ this overrides the old value with the new one.
 
 ##### Syntax
 
-{% highlight sql %}
+```sql
 -- Set Table Properties 
 ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
 
 -- Unset Table Properties
 ALTER TABLE table_identifier UNSET TBLPROPERTIES [ IF EXISTS ] ( key1, key2, ... )
-{% endhighlight %}
+```
 
 #### SET SERDE
 
-`ALTER TABLE SET` command is used for setting the SERDE or SERDE properties in Hive tables. If a particular property was already set,  
-this overrides the old value with the new one.
+`ALTER TABLE SET` command is used for setting the SERDE or SERDE properties in Hive tables. If a particular property was already set, this overrides the old value with the new one.
 
 ##### Syntax
 
-{% highlight sql %}
+```sql
 -- Set SERDE Properties
 ALTER TABLE table_identifier [ partition_spec ]
     SET SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )
 
 ALTER TABLE table_identifier [ partition_spec ] SET SERDE serde_class_name
     [ WITH SERDEPROPERTIES ( key1 = val1, key2 = val2, ... ) ]
-
-{% endhighlight %}
+```
 
 #### SET LOCATION And SET FILE FORMAT
 
@@ -240,46 +189,35 @@ existing tables.
 
 ##### Syntax
 
-{% highlight sql %}
+```sql
 -- Changing File Format
 ALTER TABLE table_identifier [ partition_spec ] SET FILEFORMAT file_format
 
 -- Changing File Location
 ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
-{% endhighlight %}
+```
 
 #### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
 
-<dl>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
-    Specifies the partition on which the property has to be set.<br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
-      </code>
-  </dd>
-</dl>
+    Specifies a table name, which may be optionally qualified with a database name.
 
-<dl>
-  <dt><code><em>SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )</em></code></dt>
-  <dd>Specifies the SERDE properties to be set.</dd>
-</dl>
+    **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
+    Specifies the partition on which the property has to be set.
+
+    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
+
+* **SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )**
+
+    Specifies the SERDE properties to be set.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- RENAME table 
 DESC student;
 +-----------------------+---------+-------+
@@ -477,13 +415,19 @@ ALTER TABLE test_tab SET SERDE 'org.apache.hadoop.hive.serde2.columnar.LazyBinar
 ALTER TABLE dbx.tab1 SET SERDE 'org.apache.hadoop' WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')
 
 -- SET TABLE PROPERTIES
-ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('winner' = 'loser')
+ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('winner' = 'loser');
+
+-- SET TABLE COMMENT Using SET PROPERTIES
+ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('comment' = 'A table comment.');
+
+-- Alter TABLE COMMENT Using SET PROPERTIES
+ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('comment' = 'This is a new comment.');
 
 -- DROP TABLE PROPERTIES
-ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner')
-{% endhighlight %}
+ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner');
+```
 
 ### Related Statements
 
- * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
- * [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
+* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+* [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)

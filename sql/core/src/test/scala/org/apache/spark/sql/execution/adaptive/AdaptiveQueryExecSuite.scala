@@ -943,9 +943,11 @@ class AdaptiveQueryExecSuite
   test("SPARK-30953: InsertAdaptiveSparkPlan should apply AQE on child plan of write commands") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
-      val plan = sql("CREATE TABLE t1 AS SELECT 1 col").queryExecution.executedPlan
-      assert(plan.isInstanceOf[DataWritingCommandExec])
-      assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+      withTable("t1") {
+        val plan = sql("CREATE TABLE t1 AS SELECT 1 col").queryExecution.executedPlan
+        assert(plan.isInstanceOf[DataWritingCommandExec])
+        assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+      }
     }
   }
 
@@ -982,6 +984,33 @@ class AdaptiveQueryExecSuite
         df.collect()
       } finally {
         spark.experimental.extraStrategies = Nil
+      }
+    }
+  }
+
+  test("SPARK-31658: SQL UI should show write commands") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      withTable("t1") {
+        var checkDone = false
+        val listener = new SparkListener {
+          override def onOtherEvent(event: SparkListenerEvent): Unit = {
+            event match {
+              case SparkListenerSQLAdaptiveExecutionUpdate(_, _, planInfo) =>
+                assert(planInfo.nodeName == "Execute CreateDataSourceTableAsSelectCommand")
+                checkDone = true
+              case _ => // ignore other events
+            }
+          }
+        }
+        spark.sparkContext.addSparkListener(listener)
+        try {
+          sql("CREATE TABLE t1 AS SELECT 1 col").collect()
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          assert(checkDone)
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
+        }
       }
     }
   }
