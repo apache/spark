@@ -32,42 +32,36 @@ cannot be used with a partition specification.
 
 ### Syntax
 
-{% highlight sql %}
-SHOW TABLE EXTENDED [ IN | FROM database_name ] LIKE regex_pattern
+```sql
+SHOW TABLE EXTENDED [ { IN | FROM } database_name ] LIKE regex_pattern
     [ partition_spec ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
- <dt><code><em>IN|FROM database_name</em></code></dt>
-  <dd>
+* **{ IN`|`FROM } database_name**
+
     Specifies database name. If not provided, will use the current database.
-  </dd>
-  <dt><code><em>regex_pattern</em></code></dt>
-  <dd>
+
+* **regex_pattern**
+
     Specifies the regular expression pattern that is used to filter out unwanted tables.
-    <ul>
-       <li> Except for <code>*</code> and <code>|</code> character, the pattern works like a regular expression.</li>
-       <li> <code>*</code> alone matches 0 or more characters and <code>|</code> is used to separate multiple different regular expressions,
-             any of which can match. </li>
-       <li> The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
-    </ul>
-  </dd>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
+
+    * Except for `*` and `|` character, the pattern works like a regular expression.
+    * `*` alone matches 0 or more characters and `|` is used to separate multiple different regular expressions,
+      any of which can match.
+    * The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.
+
+* **partition_spec**
+
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. Note that a table regex cannot be used with a partition specification.<br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )
-      </code>
-  </dd>
-</dl>
+    for partitions. Note that a table regex cannot be used with a partition specification.
+
+    **Syntax:** `PARTITION ( partition_col_name = partition_col_val [ , ... ] )`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Assumes `employee` table created with partitioned by column `grade`
 CREATE TABLE employee(name STRING, grade INT) PARTITIONED BY (grade);
 INSERT INTO employee PARTITION (grade = 1) VALUES ('sam');
@@ -152,7 +146,7 @@ SHOW TABLE EXTENDED  LIKE `employe*`;
 +--------+---------+----------+---------------------------------------------------------------+
   
 -- show partition file system details
-SHOW TABLE EXTENDED  IN `default` LIKE `employee` PARTITION (`grade=1`);
+SHOW TABLE EXTENDED  IN default LIKE `employee` PARTITION (`grade=1`);
 +--------+---------+-----------+--------------------------------------------------------------+
 |database|tableName|isTemporary|                         information                          |
 +--------+---------+-----------+--------------------------------------------------------------+
@@ -175,12 +169,12 @@ SHOW TABLE EXTENDED  IN `default` LIKE `employee` PARTITION (`grade=1`);
 +--------+---------+-----------+--------------------------------------------------------------+
 
 -- show partition file system details with regex fails as shown below
-SHOW TABLE EXTENDED  IN `default` LIKE `empl*` PARTITION (`grade=1`);
-  Error: Error running query: org.apache.spark.sql.catalyst.analysis.NoSuchTableException:
-   Table or view 'emplo*' not found in database 'default'; (state=,code=0)
-{% endhighlight %}
+SHOW TABLE EXTENDED  IN default LIKE `empl*` PARTITION (`grade=1`);
+Error: Error running query: org.apache.spark.sql.catalyst.analysis.NoSuchTableException:
+ Table or view 'emplo*' not found in database 'default'; (state=,code=0)
+```
 
 ### Related Statements
 
- * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
- * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+* [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)

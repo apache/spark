@@ -25,53 +25,40 @@ license: |
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 LOAD DATA [ LOCAL ] INPATH path [ OVERWRITE ] INTO TABLE table_identifier [ partition_spec ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>path</em></code></dt>
-  <dd>Path of the file system. It can be either an absolute or a relative path.</dd>
-</dl>
+* **path**
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+    Path of the file system. It can be either an absolute or a relative path.
 
-<dl>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
+* **table_identifier**
+
+    Specifies a table name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions.<br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name = partition_col_val [ , ... ] )
-      </code>
-  </dd>
-</dl>
+    for partitions.
 
-<dl>
-  <dt><code><em>LOCAL</em></code></dt>
-  <dd>If specified, it causes the <code>INPATH</code> to be resolved against the local file system, instead of the default file system, which is typically a distributed storage.</dd>
-</dl>
+    **Syntax:** `PARTITION ( partition_col_name = partition_col_val [ , ... ] )`
 
-<dl>
-  <dt><code><em>OVERWRITE</em></code></dt>
-  <dd>By default, new data is appended to the table. If <code>OVERWRITE</code> is used, the table is instead overwritten with new data.</dd>
-</dl>
+* **LOCAL**
+
+    If specified, it causes the `INPATH` to be resolved against the local file system, instead of the default file system, which is typically a distributed storage.
+
+* **OVERWRITE**
+
+    By default, new data is appended to the table. If `OVERWRITE` is used, the table is instead overwritten with new data.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Example without partition specification.
 -- Assuming the students table has already been created and populated.
 SELECT * FROM students;
@@ -123,4 +110,4 @@ SELECT * FROM test_load_partition;
 +---+---+---+
 |  1|  2|  3|
 +---+---+---+
-{% endhighlight %}
+```
