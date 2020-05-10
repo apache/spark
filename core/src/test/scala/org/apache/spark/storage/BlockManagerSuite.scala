@@ -1710,13 +1710,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val exec1 = "exec1"
     val exec2 = "exec2"
     val exec3 = "exec3"
-    val store1 = makeBlockManager(200, exec1)
-    val store2 = makeBlockManager(200, exec2)
-    val store3 = makeBlockManager(200, exec3)
+    val store1 = makeBlockManager(800, exec1)
+    val store2 = makeBlockManager(800, exec2)
+    val store3 = makeBlockManager(800, exec3)
 
     assert(master.getPeers(store3.blockManagerId).map(_.executorId).toSet === Set(exec1, exec2))
 
-    val data = new Array[Byte](400)
+    val data = new Array[Byte](4)
     val blockId = rdd(0, 0)
     store1.putSingle(blockId, data, StorageLevel.MEMORY_ONLY_2)
     assert(master.getLocations(blockId).size === 2)
@@ -1727,11 +1727,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("test decommissionRddCacheBlocks should offload all cached blocks") {
-    val store1 = makeBlockManager(200, "exec1")
-    val store2 = makeBlockManager(200, "exec2")
-    val store3 = makeBlockManager(200, "exec3")
+    val store1 = makeBlockManager(800, "exec1")
+    val store2 = makeBlockManager(800, "exec2")
+    val store3 = makeBlockManager(800, "exec3")
 
-    val data = new Array[Byte](400)
+    val data = new Array[Byte](4)
     val blockId = rdd(0, 0)
     store1.putSingle(blockId, data, StorageLevel.MEMORY_ONLY_2)
     assert(master.getLocations(blockId).size === 2)
@@ -1747,9 +1747,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val store1 = makeBlockManager(1200, "exec1")
     val store2 = makeBlockManager(200, "exec2")
 
-    val dataLarge = new Array[Byte](5000)
+    val dataLarge = new Array[Byte](500)
     val blockIdLarge = rdd(0, 0)
-    val dataSmall = new Array[Byte](500)
+    val dataSmall = new Array[Byte](10)
     val blockIdSmall = rdd(0, 1)
 
     store1.putSingle(blockIdLarge, dataLarge, StorageLevel.MEMORY_ONLY)
