@@ -3495,6 +3495,59 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(df4.schema.head.name === "randn(1)")
     checkIfSeedExistsInExplain(df2)
   }
+
+  test("SPARK-31670: Struct Field in groupByExpr with CUBE") {
+    withTable("t1") {
+      sql(
+        """create table t1(
+          |a string,
+          |b int,
+          |c array<struct<row_id:int,json_string:string>>,
+          |d array<array<string>>,
+          |e array<map<string, int>>)
+          |using orc""".stripMargin)
+
+      checkAnswer(
+        sql(
+          """
+            |select a, each.json_string, sum(b)
+            |from t1
+            |LATERAL VIEW explode(c) x AS each
+            |group by a, each.json_string
+            |with cube
+            |""".stripMargin), Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |select a, get_json_object(each.json_string, '$.i'), sum(b)
+            |from t1
+            |LATERAL VIEW explode(c) x AS each
+            |group by a, get_json_object(each.json_string, '$.i')
+            |with cube
+            |""".stripMargin), Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |select a, each.json_string as json_string, sum(b)
+            |from t1
+            |LATERAL VIEW explode(c) x AS each
+            |group by a, each.json_string
+            |with cube
+            |""".stripMargin), Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |select a, each.json_string as js, sum(b)
+            |from t1
+            |LATERAL VIEW explode(c) x AS each
+            |group by a, each.json_string
+            |with cube
+            |""".stripMargin), Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

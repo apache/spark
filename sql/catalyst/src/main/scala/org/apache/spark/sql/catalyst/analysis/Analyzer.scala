@@ -506,31 +506,55 @@ class Analyzer(
         aggregations: Seq[NamedExpression],
         groupByAliases: Seq[Alias],
         groupingAttrs: Seq[Expression],
-        gid: Attribute): Seq[NamedExpression] = aggregations.map {
-      // collect all the found AggregateExpression, so we can check an expression is part of
-      // any AggregateExpression or not.
-      val aggsBuffer = ArrayBuffer[Expression]()
-      // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
-      def isPartOfAggregation(e: Expression): Boolean = {
-        aggsBuffer.exists(a => a.find(_ eq e).isDefined)
+        gid: Attribute): Seq[NamedExpression] = {
+      val resolvedGroupByAliases = groupByAliases.map(_.transformDown {
+        case a @ Alias(Alias(GetStructField(_, _, _), _), _) => a
+        case e => e.transformDown {
+          case Alias(gsf: GetStructField, _) => gsf
+        }
+      }.asInstanceOf[Alias])
+      aggregations.map {
+        // collect all the found AggregateExpression, so we can check an expression is part of
+        // any AggregateExpression or not.
+        val aggsBuffer = ArrayBuffer[Expression]()
+        // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
+        def isPartOfAggregation(e: Expression): Boolean = {
+          aggsBuffer.exists(a => a.find(_ eq e).isDefined)
+        }
+
+        replaceGroupingFunc(_, groupByExprs, gid) match {
+          case a @ Alias(e: GetStructField, _) =>
+            val index = resolvedGroupByAliases.indexWhere(alias => alias.child match {
+              case child: GetStructField =>
+                child.semanticEquals(e)
+              case _ => false
+            })
+            if (index == -1) {
+              a
+            } else {
+              groupingAttrs(index)
+            }.asInstanceOf[NamedExpression]
+          case e => e.transformDown {
+            case Alias(gsf: GetStructField, _) => gsf
+          }.transformDown {
+            // AggregateExpression should be computed on the unmodified value of its argument
+            // expressions, so we should not replace any references to grouping expression
+            // inside it.
+            case e: AggregateExpression =>
+              aggsBuffer += e
+              e
+            case e if isPartOfAggregation(e) => e
+            case e =>
+              // Replace expression by expand output attribute.
+              val index = resolvedGroupByAliases.indexWhere(_.child.semanticEquals(e))
+              if (index == -1) {
+                e
+              } else {
+                groupingAttrs(index)
+              }
+          }.asInstanceOf[NamedExpression]
+        }
       }
-      replaceGroupingFunc(_, groupByExprs, gid).transformDown {
-        // AggregateExpression should be computed on the unmodified value of its argument
-        // expressions, so we should not replace any references to grouping expression
-        // inside it.
-        case e: AggregateExpression =>
-          aggsBuffer += e
-          e
-        case e if isPartOfAggregation(e) => e
-        case e =>
-          // Replace expression by expand output attribute.
-          val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
-          if (index == -1) {
-            e
-          } else {
-            groupingAttrs(index)
-          }
-      }.asInstanceOf[NamedExpression]
     }
 
     /*
