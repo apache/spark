@@ -1916,8 +1916,7 @@ private[spark] class BlockManager(
         try {
           while (blockManagerDecommissioning &&
             !stopped &&
-            !Thread.interrupted() &&
-            failures < 15) {
+            !Thread.interrupted()) {
             logDebug("Attempting to replicate all cached RDD blocks")
             try {
               decommissionRddCacheBlocks()
