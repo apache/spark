@@ -119,11 +119,16 @@ class BaseSerialization:
     @classmethod
     def _is_excluded(cls, var: Any, attrname: str, instance: Any) -> bool:
         """Types excluded from serialization."""
-        # pylint: disable=unused-argument
+
+        if var is None:
+            if not cls._is_constructor_param(attrname, instance):
+                # Any instance attribute, that is not a constructor argument, we exclude None as the default
+                return True
+
+            return cls._value_is_hardcoded_default(attrname, var, instance)
         return (
-            var is None or
             isinstance(var, cls._excluded_types) or
-            cls._value_is_hardcoded_default(attrname, var)
+            cls._value_is_hardcoded_default(attrname, var, instance)
         )
 
     @classmethod
@@ -254,7 +259,12 @@ class BaseSerialization:
         return datetime.timedelta(seconds=seconds)
 
     @classmethod
-    def _value_is_hardcoded_default(cls, attrname: str, value: Any) -> bool:
+    def _is_constructor_param(cls, attrname: str, instance: Any) -> bool:
+        # pylint: disable=unused-argument
+        return attrname in cls._CONSTRUCTOR_PARAMS
+
+    @classmethod
+    def _value_is_hardcoded_default(cls, attrname: str, value: Any, instance: Any) -> bool:
         """
         Return true if ``value`` is the hard-coded default for the given attribute.
 
@@ -270,8 +280,9 @@ class BaseSerialization:
         to account for the case where the default value of the field is None but has the
         ``field = field or {}`` set.
         """
+        # pylint: disable=unused-argument
         if attrname in cls._CONSTRUCTOR_PARAMS and \
-                (cls._CONSTRUCTOR_PARAMS[attrname].default is value or (value in [{}, []])):
+                (cls._CONSTRUCTOR_PARAMS[attrname] is value or (value in [{}, []])):
             return True
         return False
 
@@ -286,7 +297,7 @@ class SerializedBaseOperator(BaseOperator, BaseSerialization):
     _decorated_fields = {'executor_config'}
 
     _CONSTRUCTOR_PARAMS = {
-        k: v for k, v in signature(BaseOperator).parameters.items()
+        k: v.default for k, v in signature(BaseOperator).parameters.items()
         if v.default is not v.empty
     }
 
@@ -524,7 +535,7 @@ class SerializedDAG(DAG, BaseSerialization):
             'access_control': '_access_control',
         }
         return {
-            param_to_attr.get(k, k): v for k, v in signature(DAG).parameters.items()
+            param_to_attr.get(k, k): v.default for k, v in signature(DAG).parameters.items()
             if v.default is not v.empty
         }
     _CONSTRUCTOR_PARAMS = __get_constructor_defaults.__func__()  # type: ignore
