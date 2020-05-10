@@ -64,6 +64,7 @@ private class ClientEndpoint(
    private val waitAppCompletion = conf.getBoolean("spark.standalone.submit.waitAppCompletion",
      false)
    private val REPORT_DRIVER_STATUS_INTERVAL = 1000
+   private var submittedDriverID = ""
 
 
   private def getProperty(key: String, conf: SparkConf): Option[String] = {
@@ -138,7 +139,6 @@ private class ClientEndpoint(
     logInfo("... waiting before polling master for driver state")
     Thread.sleep(5000)
     logInfo("... polling master for driver state")
-    while (true) {
       val statusResponse =
         activeMasterEndpoint.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
       if (statusResponse.found) {
@@ -161,31 +161,21 @@ private class ClientEndpoint(
                 s"exiting spark-submit JVM.")
               System.exit(0)
             } else {
-              statusResponse.state.get match {
-                case DriverState.FINISHED | DriverState.FAILED |
-                     DriverState.ERROR | DriverState.KILLED =>
-                  logInfo(s"State of $driverId is  ${statusResponse.state.get}, " +
-                    s"exiting spark-submit JVM.")
-                  System.exit(0)
-                case _ =>
-                  logTrace(s"State of $driverId is  ${statusResponse.state.get}, " +
-                    s"continue monitoring driver status.")
-              }
+              asyncSendToMasterAndForwardReply[DriverStatusResponse](RequestDriverStatus(driverId))
             }
         }
       } else {
         logError(s"ERROR: Cluster master did not recognize $driverId")
         System.exit(-1)
       }
-      Thread.sleep(REPORT_DRIVER_STATUS_INTERVAL)
     }
-  }
   override def receive: PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(master, success, driverId, message) =>
       logInfo(message)
       if (success) {
         activeMasterEndpoint = master
+        submittedDriverID = driverId.get
         pollAndReportStatus(driverId.get)
       } else if (!Utils.responseFromBackup(message)) {
         System.exit(-1)
@@ -198,6 +188,25 @@ private class ClientEndpoint(
         activeMasterEndpoint = master
         pollAndReportStatus(driverId)
       } else if (!Utils.responseFromBackup(message)) {
+        System.exit(-1)
+      }
+
+    case DriverStatusResponse(found, state, _, _, _) =>
+      if (found) {
+        state.get match {
+          case DriverState.FINISHED | DriverState.FAILED |
+               DriverState.ERROR | DriverState.KILLED =>
+            logInfo(s"State of $submittedDriverID is ${state.get}, " +
+              s"exiting spark-submit JVM.")
+            System.exit(0)
+          case _ =>
+            Thread.sleep(REPORT_DRIVER_STATUS_INTERVAL)
+            logInfo(s"State of $submittedDriverID is ${state.get}, " +
+              s"continue monitoring driver status.")
+            asyncSendToMasterAndForwardReply[DriverStatusResponse](
+              RequestDriverStatus(submittedDriverID))
+        }
+      } else {
         System.exit(-1)
       }
   }
