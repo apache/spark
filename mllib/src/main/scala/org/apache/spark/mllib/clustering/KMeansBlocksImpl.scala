@@ -19,7 +19,6 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.InstanceBlock
@@ -51,149 +50,10 @@ class KMeansBlocksImpl (
   def this() = this(2, 20, KMeansBlocksImpl.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong(),
     DistanceMeasure.EUCLIDEAN)
 
-  /**
-   * Number of clusters to create (k).
-   *
-   * @note It is possible for fewer than k clusters to
-   *       be returned, for example, if there are fewer than k distinct points to cluster.
-   */
-  @Since("1.4.0")
-  def getK: Int = k
-
-  /**
-   * Set the number of clusters to create (k).
-   *
-   * @note It is possible for fewer than k clusters to
-   *       be returned, for example, if there are fewer than k distinct points to cluster.
-   *       Default: 2.
-   */
-  @Since("0.8.0")
-  def setK(k: Int): this.type = {
-    require(k > 0,
-      s"Number of clusters must be positive but got ${k}")
-    this.k = k
-    this
-  }
-
-  /**
-   * Maximum number of iterations allowed.
-   */
-  @Since("1.4.0")
-  def getMaxIterations: Int = maxIterations
-
-  /**
-   * Set maximum number of iterations allowed. Default: 20.
-   */
-  @Since("0.8.0")
-  def setMaxIterations(maxIterations: Int): this.type = {
-    require(maxIterations >= 0,
-      s"Maximum of iterations must be nonnegative but got ${maxIterations}")
-    this.maxIterations = maxIterations
-    this
-  }
-
-  /**
-   * The initialization algorithm. This can be either "random" or "k-means||".
-   */
-  @Since("1.4.0")
-  def getInitializationMode: String = initializationMode
-
-  /**
-   * Set the initialization algorithm. This can be either "random" to choose random points as
-   * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
-   * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
-   */
-  @Since("0.8.0")
-  def setInitializationMode(initializationMode: String): this.type = {
-    KMeansBlocksImpl.validateInitMode(initializationMode)
-    this.initializationMode = initializationMode
-    this
-  }
-
-  /**
-   * Number of steps for the k-means|| initialization mode
-   */
-  @Since("1.4.0")
-  def getInitializationSteps: Int = initializationSteps
-
-  /**
-   * Set the number of steps for the k-means|| initialization mode. This is an advanced
-   * setting -- the default of 2 is almost always enough. Default: 2.
-   */
-  @Since("0.8.0")
-  def setInitializationSteps(initializationSteps: Int): this.type = {
-    require(initializationSteps > 0,
-      s"Number of initialization steps must be positive but got ${initializationSteps}")
-    this.initializationSteps = initializationSteps
-    this
-  }
-
-  /**
-   * The distance threshold within which we've consider centers to have converged.
-   */
-  @Since("1.4.0")
-  def getEpsilon: Double = epsilon
-
-  /**
-   * Set the distance threshold within which we've consider centers to have converged.
-   * If all centers move less than this Euclidean distance, we stop iterating one run.
-   */
-  @Since("0.8.0")
-  def setEpsilon(epsilon: Double): this.type = {
-    require(epsilon >= 0,
-      s"Distance threshold must be nonnegative but got ${epsilon}")
-    this.epsilon = epsilon
-    this
-  }
-
-  /**
-   * The random seed for cluster initialization.
-   */
-  @Since("1.4.0")
-  def getSeed: Long = seed
-
-  /**
-   * Set the random seed for cluster initialization.
-   */
-  @Since("1.4.0")
-  def setSeed(seed: Long): this.type = {
-    this.seed = seed
-    this
-  }
-
-  /**
-   * The distance suite used by the algorithm.
-   */
-  @Since("2.4.0")
-  def getDistanceMeasure: String = distanceMeasure
-
-  /**
-   * Set the distance suite used by the algorithm.
-   */
-  @Since("2.4.0")
-  def setDistanceMeasure(distanceMeasure: String): this.type = {
-    DistanceMeasure.validateDistanceMeasure(distanceMeasure)
-    this.distanceMeasure = distanceMeasure
-    this
-  }
-
   // Initial cluster centers can be provided as a KMeansModel object rather than using the
   // random or k-means|| initializationMode
   private var initialModel: Option[KMeansModel] = None
 
-/*
-  /**
-   * Set the initial starting point, bypassing the random initialization or k-means||
-   * The condition model.k == this.k must be met, failure results
-   * in an IllegalArgumentException.
-   */
-  @Since("1.4.0")
-  def setInitialModel(model: MLlibKMeansModel): this.type = {
-    require(model.k == k, "mismatched cluster count")
-    initialModel = Some(model)
-    this
-  }
-*/
   private def VectorsToDenseMatrix(vectors: Array[VectorWithNorm]): DenseMatrix = {
 
     val v: Array[Vector] = vectors.map(_.vector)
@@ -220,28 +80,11 @@ class KMeansBlocksImpl (
     new DenseMatrix(row_num, column_num, values)
   }
 
-//  private[spark] def runWithWeight(data: RDD[InstanceBlock], row_num: Int,
-//                                   instr: Option[Instrumentation]): MLlibKMeansModel = {
-//
-//    // Cache RDD data
-//    data.cache.count()
-//
-//    val model = runAlgorithmWithWeight(data, instr)
-//
-//    // Warn at the end of the run as well, for increased visibility.
-//    if (data.getStorageLevel == StorageLevel.NONE) {
-//      logWarning("The input data was not directly cached, which may hurt performance if its"
-//        + " parent RDDs are also uncached.")
-//    }
-//    model
-//
-//  }
-
   private def computeSquaredDistances(points_matrix: DenseMatrix,
                                       points_square_sums: DenseMatrix,
                                       centers_matrix: DenseMatrix,
                                       centers_square_sums: DenseMatrix): DenseMatrix = {
-    // (x + y)^2 = x^2 + y^2 + 2 * x * y
+    // (x - y)^2 = x^2 + y^2 - 2 * x * y
 
     // Add up squared sums of points and centers (x^2 + y^2)
     val ret: DenseMatrix = computeMatrixSum(points_square_sums, centers_square_sums)
@@ -307,15 +150,19 @@ class KMeansBlocksImpl (
       ret_closest(index) = closest
 
       // use weighted squared distance as cost
-      ret_cost(index) = cost * weights(index)
+      if (weights.nonEmpty) {
+        ret_cost(index) = cost * weights(index)
+      } else {
+        ret_cost(index) = cost
+      }
     }
 
     (ret_closest, ret_cost)
 
   }
 
-    def runAlgorithmWithWeight(data: RDD[InstanceBlock],
-                               instr: Option[Instrumentation]): KMeansModel = {
+    def runWithWeight(data: RDD[InstanceBlock],
+                      instr: Option[Instrumentation]): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -382,7 +229,11 @@ class KMeansBlocksImpl (
           // sums points around best center
           for ((row, index) <- blocks.matrix.rowIter.zipWithIndex) {
             val bestCenter = bestCenters(index)
-            axpy(blocks.weights(index), Vectors.fromML(row), sums(bestCenter))
+            if (blocks.weights.nonEmpty) {
+              axpy(blocks.weights(index), Vectors.fromML(row), sums(bestCenter))
+            } else {
+              axpy(1, Vectors.fromML(row), sums(bestCenter))
+            }
             counts(bestCenter) += 1
           }
 

@@ -278,7 +278,9 @@ class KMeans @Since("1.5.0") (
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
     initSteps -> 2,
     tol -> 1e-4,
-    distanceMeasure -> DistanceMeasure.EUCLIDEAN)
+    distanceMeasure -> DistanceMeasure.EUCLIDEAN,
+    blockSize -> 1
+  )
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
@@ -411,7 +413,6 @@ class KMeans @Since("1.5.0") (
   }
 
   private def trainOnBlocks(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
-
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
       col($(weightCol)).cast(DoubleType)
     } else {
@@ -430,7 +431,7 @@ class KMeans @Since("1.5.0") (
     val algo = new KMeansBlocksImpl($(k), $(maxIter), $(initMode),
       $(initSteps), $(tol), $(seed), $(distanceMeasure))
 
-    val parentModel = algo.runAlgorithmWithWeight(blocks, Option(instr))
+    val parentModel = algo.runWithWeight(blocks, Option(instr))
 
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(

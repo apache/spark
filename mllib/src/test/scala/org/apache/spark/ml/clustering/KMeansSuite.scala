@@ -58,6 +58,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(kmeans.getInitSteps === 2)
     assert(kmeans.getTol === 1e-4)
     assert(kmeans.getDistanceMeasure === DistanceMeasure.EUCLIDEAN)
+    assert(kmeans.getBlockSize == 1)
     val model = kmeans.setMaxIter(1).fit(dataset)
 
     val transformed = model.transform(dataset)
@@ -67,6 +68,19 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
+  }
+
+  test("default parameters on blocks") {
+    val kmeans = new KMeans()
+    val model = kmeans.fit(dataset)
+    Seq(4, 16, 64).foreach { blockSize =>
+      val model2 = kmeans.setBlockSize(blockSize).fit(dataset)
+
+      model.clusterCenters.zip(model2.clusterCenters).map {
+        case (v1, v2) => assert(v1 ~== v2 relTol 1e-9)
+      }
+      assert(model.summary.trainingCost ~== model2.summary.trainingCost relTol 1e-9)
+    }
   }
 
   test("set parameters") {
