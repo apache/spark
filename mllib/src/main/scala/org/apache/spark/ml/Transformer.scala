@@ -135,7 +135,7 @@ class MultiTransformer(transformers: List[UnaryTransformer[_, _, _]]) {
    *
    * @param otherTransformers
    */
-  def composeTransformers(otherTransformers: List[UnaryTransformer[_, _, _]]): Unit = {
+  def composeTransformers(otherTransformers: List[UnaryTransformer[_, _, _]]): MultiTransformer = {
     new MultiTransformer(transformers ++ otherTransformers) }
 
   /**

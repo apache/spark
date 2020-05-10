@@ -78,7 +78,6 @@ object MultiTransformerExample {
   // $example off$
 
   def main(args: Array[String]): Unit = {
-    println("Hello there")
     val spark = SparkSession
       .builder()
       .appName("MultiTransformerExample")
@@ -96,15 +95,17 @@ object MultiTransformerExample {
       .setInputCol("output1")
       .setOutputCol("output2")
 
-    val multiTransformer = new MultiTransformer(List(myTransformer1, myTransformer2))
+    val multiTransformer = new MultiTransformer(List(myTransformer1))
+
+    val multiTransformer2 = multiTransformer.composeTransformers(List(myTransformer2))
 
     // Create data, transform, and display it.
     val data = spark.range(0, 5).toDF("input")
       .select(col("input").cast("double").as("input"))
 
-    val result = multiTransformer.transform(data)
+    val result = multiTransformer2.transform(data)
 
-    println("Two transforms adding constant value")
+    println("Apply transforms adding constant value")
 
     result.show()
 
