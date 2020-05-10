@@ -17,9 +17,12 @@
 
 package org.apache.spark.rdd.util
 
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import org.apache.spark.rdd.RDD
 
@@ -36,7 +39,7 @@ class PrefetchingIterator[T : ClassTag](rdd: RDD[T],
   private val lock = new ReentrantLock()
   private val ready = lock.newCondition()
 
-  private var nextResult: Array[T] = _
+  private var nextResult: Either[Throwable, Array[T]] = _
   private var fetchInProgress = false
 
   /**
@@ -49,37 +52,45 @@ class PrefetchingIterator[T : ClassTag](rdd: RDD[T],
         initPrefetch(partitionIterator.next())
         true
       } else false
-    } else true
+    } else if (nextResult.isLeft) throw nextResult.left.get
+    else true
   })
 
   override def next(): Array[T] = withLock(() => {
     while (fetchInProgress) ready.await()
 
-    val partitionArray = nextResult
+    nextResult match {
 
-    nextResult = null
-    fetchInProgress = false
+      case Right(partitionArray) =>
+        nextResult = null
+        if (prefetch && partitionIterator.hasNext) initPrefetch(partitionIterator.next())
+        partitionArray
 
-    if (prefetch && partitionIterator.hasNext) initPrefetch(partitionIterator.next())
-
-    partitionArray
+      case Left(e) =>
+        // not setting nextResult to null to remember exception and prevent further iteration
+        throw e
+    }
   })
 
   private def initPrefetch(p: Int): Unit = {
     fetchInProgress = true
 
-    rdd.sparkContext.submitJob(
-      rdd,
-      (iter: Iterator[T]) => iter.toArray,
-      Seq(p),
-      (_, value: Array[T]) => rememberResultAndSignal(value),
-      nextResult)
+    val localResult = new AtomicReference[Array[T]]
+
+    rdd.sparkContext
+      .submitJob(
+        rdd,
+        (iter: Iterator[T]) => iter.toArray,
+        Seq(p),
+        (_, value: Array[T]) => localResult.set(value),
+        localResult.get()
+      )
+      .onComplete(result => rememberResultAndSignal(result))(global)
   }
 
-  private def rememberResultAndSignal(value: Array[T]): Unit = withLock(() => {
-    nextResult = value
+  private def rememberResultAndSignal(value: Try[Array[T]]): Unit = withLock(() => {
+    nextResult = value.toEither
     fetchInProgress = false
-
     ready.signal()
   })
 

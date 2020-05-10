@@ -102,7 +102,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     }
   }
 
-  test("toLocalIterator prefetch") {
+  test("toLocalIterator prefetch happens async") {
     // Test that we fetch the next partition in parallel
     // We do this by returning the current time and:
     // reading the first elem, waiting, and reading the second elem
@@ -129,6 +129,21 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     val timesPrefetchNext = fetchNextOrThrow(timesIterPrefetch)
     assert(time.Duration.between(timesHead, timesNext).toMillis >= 2000)
     assert(time.Duration.between(timesPrefetchHead, timesPrefetchNext).toMillis < 1000)
+  }
+
+  test("toLocalIterator exception must be propagated") {
+
+    // division by zero exception for 2nd element
+    val rdd = sc.parallelize(Array(2, 0, 1), 3).map(v => v / v)
+
+    val iterator = rdd.toLocalIterator(true)
+    assert(iterator.hasNext)
+    val firstElement = iterator.next()
+    assert(firstElement == 1)
+
+    intercept[SparkException] {
+      iterator.hasNext
+    }
   }
 
   test("serialization") {
