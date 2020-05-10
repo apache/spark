@@ -18,38 +18,32 @@
 package org.apache.spark.rdd
 
 import java.util.Random
-
-import scala.collection.{mutable, Map}
-import scala.collection.mutable.ArrayBuffer
-import scala.io.Codec
-import scala.language.implicitConversions
-import scala.ref.WeakReference
-import scala.reflect.{classTag, ClassTag}
-import scala.util.hashing
+import java.util.concurrent.locks.ReentrantLock
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
-import org.apache.hadoop.io.{BytesWritable, NullWritable, Text}
 import org.apache.hadoop.io.compress.CompressionCodec
+import org.apache.hadoop.io.{BytesWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.TextOutputFormat
-
-import org.apache.spark._
 import org.apache.spark.Partitioner._
+import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.RDD_LIMIT_SCALE_UP_FACTOR
-import org.apache.spark.partial.BoundedDouble
-import org.apache.spark.partial.CountEvaluator
-import org.apache.spark.partial.GroupedCountEvaluator
-import org.apache.spark.partial.PartialResult
+import org.apache.spark.internal.config.{RDD_LIMIT_SCALE_UP_FACTOR, _}
+import org.apache.spark.partial.{BoundedDouble, CountEvaluator, GroupedCountEvaluator, PartialResult}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap, Utils => collectionUtils}
+import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler, SamplingUtils}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
-import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
-  Utils => collectionUtils}
-import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
-  SamplingUtils}
+
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.{Map, mutable}
+import scala.io.Codec
+import scala.language.implicitConversions
+import scala.ref.WeakReference
+import scala.reflect.{ClassTag, classTag}
+import scala.util.hashing
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -1031,20 +1025,101 @@ abstract class RDD[T: ClassTag](
     Array.concat(results: _*)
   }
 
+  def toLocalIterator : Iterator[T] = toLocalIterator(false)
+
   /**
    * Return an iterator that contains all of the elements in this RDD.
    *
    * The iterator will consume as much memory as the largest partition in this RDD.
+   * With prefetch it may consume up to the memory of the 2 largest partitions.
+   *
+   * @param prefetchPartitions If Spark should pre-fetch the next partition before it is needed.
    *
    * @note This results in multiple Spark jobs, and if the input RDD is the result
    * of a wide transformation (e.g. join with different partitioners), to avoid
    * recomputing the input RDD should be cached first.
    */
-  def toLocalIterator: Iterator[T] = withScope {
-    def collectPartition(p: Int): Array[T] = {
-      sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p)).head
+  def toLocalIterator(prefetchPartitions: Boolean = false): Iterator[T] = withScope {
+
+    if (!prefetchPartitions || partitions.indices.isEmpty) {
+      def collectPartition(p: Int): Array[T] = {
+        sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p)).head
+      }
+      partitions.indices.iterator.flatMap(i => collectPartition(i))
+
+    } else {
+
+      val iterator: Iterator[Array[T]] = prefetchingIterator
+      iterator.hasNext
+      iterator.flatMap(data => data)
     }
-    partitions.indices.iterator.flatMap(i => collectPartition(i))
+  }
+
+  private def prefetchingIterator: Iterator[Array[T]] = {
+
+    val partitionIterator = partitions.indices.iterator
+
+    new Iterator[Array[T]] with Serializable {
+
+      private val lock = new ReentrantLock()
+      private val ready = lock.newCondition()
+
+      private var nextResult: Array[T] = _
+      private var fetchInProgress = false
+
+      /**
+       * In addition, it prefetches next element, if it exists
+       */
+      override def hasNext(): Boolean = withLock(() => {
+        if (fetchInProgress) true
+        else if (nextResult == null) {
+          if (partitionIterator.hasNext) {
+            initPrefetch(partitionIterator.next())
+            true
+          } else false
+        } else true
+      })
+
+      override def next(): Array[T] = withLock(() => {
+        while (fetchInProgress) ready.await()
+
+        val partitionArray = nextResult
+
+        nextResult = null
+        fetchInProgress = false
+
+        if (partitionIterator.hasNext) initPrefetch(partitionIterator.next())
+
+        partitionArray
+      })
+
+      private def initPrefetch(p: Int): Unit = {
+
+        fetchInProgress = true
+
+        sc.submitJob(
+          RDD.this,
+          (iter: Iterator[T]) => iter.toArray,
+          Seq(p),
+          (_, value: Array[T]) => rememberResultAndSignal(value),
+          nextResult)
+      }
+
+      private def rememberResultAndSignal(value: Array[T]): Unit = withLock(() => {
+
+        nextResult = value
+        fetchInProgress = false
+
+        ready.signal()
+      })
+
+      private def withLock[A](fn: () => A): A = {
+        lock.lock()
+        try fn()
+        finally lock.unlock()
+      }
+
+    }
   }
 
   /**

@@ -368,6 +368,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def toLocalIterator(): JIterator[T] =
      asJavaIteratorConverter(rdd.toLocalIterator).asJava
 
+  def toLocalIterator(prefetchPartitions: Boolean): JIterator[T] =
+    asJavaIteratorConverter(rdd.toLocalIterator(prefetchPartitions)).asJava
+
   /**
    * Return an array that contains all of the elements in a specific partition of this RDD.
    */

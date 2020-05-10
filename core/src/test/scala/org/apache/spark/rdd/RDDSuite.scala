@@ -19,17 +19,18 @@ package org.apache.spark.rdd
 
 import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
 import java.lang.management.ManagementFactory
+import java.time
+import java.time.LocalDateTime
+import java.util.NoSuchElementException
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
-
 import com.esotericsoftware.kryo.KryoException
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
 import org.scalatest.concurrent.Eventually
-
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
@@ -57,6 +58,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(nums.getNumPartitions === 2)
     assert(nums.collect().toList === List(1, 2, 3, 4))
     assert(nums.toLocalIterator.toList === List(1, 2, 3, 4))
+
+    assert(sc.makeRDD(Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 5)
+      .toLocalIterator(prefetchPartitions = true).toList === List(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+
     val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4), 2)
     assert(dups.distinct().count() === 4)
     assert(dups.distinct().count === 4)  // Can distinct and count be called without parentheses?
@@ -90,6 +95,35 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     intercept[UnsupportedOperationException] {
       nums.filter(_ > 5).reduce(_ + _)
     }
+  }
+
+  test("toLocalIterator prefetch") {
+    // Test that we fetch the next partition in parallel
+    // We do this by returning the current time and:
+    // reading the first elem, waiting, and reading the second elem
+    // If not in parallel then these would be at different times
+    // But since they are being computed in parallel we see the time
+    // is "close enough" to the same.
+
+    def fetchNextOrThrow[T](iterator: Iterator[T]): T =
+      if (iterator.hasNext) iterator.next()
+      else throw new NoSuchElementException()
+
+    val rdd = sc.parallelize(Range(0, 2), 2)
+    val times1 = rdd.map(_ => LocalDateTime.now())
+    val times2 = rdd.map(_ => LocalDateTime.now())
+    val timesIterPrefetch = times1.toLocalIterator(prefetchPartitions = true)
+    val timesIter = times2.toLocalIterator(prefetchPartitions = false)
+    val timesPrefetchHead = fetchNextOrThrow(timesIterPrefetch)
+
+    val timesHead = fetchNextOrThrow(timesIter)
+
+    Thread.sleep(2000)
+
+    val timesNext = fetchNextOrThrow(timesIter)
+    val timesPrefetchNext = fetchNextOrThrow(timesIterPrefetch)
+    assert(time.Duration.between(timesHead, timesNext).toMillis >= 2000)
+    assert(time.Duration.between(timesPrefetchHead, timesPrefetchNext).toMillis < 1000)
   }
 
   test("serialization") {
