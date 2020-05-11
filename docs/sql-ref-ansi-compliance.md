@@ -41,10 +41,10 @@ This means that in case an operation causes overflows, the result is the same wi
 On the other hand, Spark SQL returns null for decimal overflows.
 When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric and interval arithmetic operations, it throws an arithmetic exception at runtime.
 
-{% highlight sql %}
+```sql
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
-  java.lang.ArithmeticException: integer overflow
+java.lang.ArithmeticException: integer overflow
 
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
@@ -53,7 +53,7 @@ SELECT 2147483647 + 1;
 +----------------+
 |     -2147483648|
 +----------------+
-{% endhighlight %}
+```
 
 ### Type Conversion
 
@@ -64,15 +64,15 @@ On the other hand, `INSERT INTO` syntax throws an analysis exception when the AN
 Currently, the ANSI mode affects explicit casting and assignment casting only.
 In future releases, the behaviour of type coercion might change along with the other two type conversion rules.
 
-{% highlight sql %}
+```sql
 -- Examples of explicit casting
 
 -- `spark.sql.ansi.enabled=true`
 SELECT CAST('a' AS INT);
-  java.lang.NumberFormatException: invalid input syntax for type numeric: a
+java.lang.NumberFormatException: invalid input syntax for type numeric: a
 
 SELECT CAST(2147483648L AS INT);
-  java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
 
 -- `spark.sql.ansi.enabled=false` (This is a default behaviour)
 SELECT CAST('a' AS INT);
@@ -94,8 +94,8 @@ CREATE TABLE t (v INT);
 
 -- `spark.sql.storeAssignmentPolicy=ANSI`
 INSERT INTO t VALUES ('1');
-  org.apache.spark.sql.AnalysisException: Cannot write incompatible data to table '`default`.`t`':
-  - Cannot safely cast 'v': StringType to IntegerType;
+org.apache.spark.sql.AnalysisException: Cannot write incompatible data to table '`default`.`t`':
+- Cannot safely cast 'v': StringType to IntegerType;
 
 -- `spark.sql.storeAssignmentPolicy=LEGACY` (This is a legacy behaviour until Spark 2.x)
 INSERT INTO t VALUES ('1');
@@ -105,7 +105,7 @@ SELECT * FROM t;
 +---+
 |  1|
 +---+
-{% endhighlight %}
+```
 
 ### SQL Functions
 

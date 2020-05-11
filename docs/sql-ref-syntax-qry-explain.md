@@ -26,46 +26,38 @@ By default, this clause provides information about a physical plan only.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED ] statement
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>EXTENDED</em></code></dt>
-  <dd>Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
-   Parsed Logical plan is a unresolved plan that extracted from the query.
-   Analyzed logical plans transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
-   The optimized logical plan transforms through a set of optimization rules, resulting in the physical plan.
-  </dd>
-</dl> 
+* **EXTENDED**
 
-<dl>
-  <dt><code><em>CODEGEN</em></code></dt>
-  <dd>Generates code for the statement, if any and a physical plan.</dd>
-</dl>
+    Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
+    Parsed Logical plan is a unresolved plan that extracted from the query.
+    Analyzed logical plans transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
+    The optimized logical plan transforms through a set of optimization rules, resulting in the physical plan.
 
-<dl>
-  <dt><code><em>COST</em></code></dt>
-  <dd>If plan node statistics are available, generates a logical plan and the statistics.</dd>
-</dl>
+* **CODEGEN**
 
-<dl>
-  <dt><code><em>FORMATTED</em></code></dt>
-  <dd>Generates two sections: a physical plan outline and node details.</dd>
-</dl>
+    Generates code for the statement, if any and a physical plan.
 
-<dl>
-  <dt><code><em>statement</em></code></dt>
-  <dd>
+* **COST**
+
+    If plan node statistics are available, generates a logical plan and the statistics.
+
+* **FORMATTED**
+
+    Generates two sections: a physical plan outline and node details.
+
+* **statement**
+
     Specifies a SQL statement to be explained.
-  </dd>
- </dl>
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Default Output
 EXPLAIN select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k;
 +----------------------------------------------------+
@@ -132,4 +124,4 @@ EXPLAIN FORMATTED select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k
  Input: [k#19, sum#24L]
 |
 +----------------------------------------------------+
-{% endhighlight %}
+```
