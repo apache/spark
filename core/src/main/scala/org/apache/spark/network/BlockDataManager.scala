@@ -71,4 +71,6 @@ trait BlockDataManager {
    * Release locks acquired by [[putBlockData()]] and [[getLocalBlockData()]].
    */
   def releaseLock(blockId: BlockId, taskContext: Option[TaskContext]): Unit
+
+  def getMergedBlockData(blockId: ShuffleBlockId): Seq[ManagedBuffer]
 }
