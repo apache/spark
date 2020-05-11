@@ -29,8 +29,9 @@ import org.apache.spark.rdd.RDD
 /**
  * Iterator that optionally prefetches next partition asynchronously
  */
-class PrefetchingIterator[T : ClassTag](rdd: RDD[T],
-                                        prefetch: Boolean)
+private[spark] class PrefetchingIterator[T : ClassTag](
+    rdd: RDD[T],
+    prefetch: Boolean)
   extends Iterator[Array[T]]
     with Serializable {
 
