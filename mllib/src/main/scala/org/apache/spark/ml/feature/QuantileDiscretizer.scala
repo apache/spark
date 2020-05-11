@@ -236,6 +236,15 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   private def getDistinctSplits(splits: Array[Double]): Array[Double] = {
     splits(0) = Double.NegativeInfinity
     splits(splits.length - 1) = Double.PositiveInfinity
+
+    // -0.0 and 0.0 has different hashCode and they may be remained as two distinct value in splits
+    // but 0.0 > -0.0 is False and it will break parameter check (require strictly increasing order)
+    // so here normalize all -0.0 and 0.0 to be 0.0
+    for (i <- 0 until splits.length) {
+      if (splits(i) == -0.0) {
+        splits(i) = 0.0
+      }
+    }
     val distinctSplits = splits.distinct
     if (splits.length != distinctSplits.length) {
       log.warn(s"Some quantiles were identical. Bucketing to ${distinctSplits.length - 1}" +
