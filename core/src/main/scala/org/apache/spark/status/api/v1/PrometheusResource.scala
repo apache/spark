@@ -23,15 +23,18 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties
 import org.glassfish.jersey.servlet.ServletContainer
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ui.SparkUI
 
 /**
+ * :: Experimental ::
  * This aims to expose Executor metrics like REST API which is documented in
  *
  *    https://spark.apache.org/docs/3.0.0/monitoring.html#executor-metrics
  *
  * Note that this is based on ExecutorSummary which is different from ExecutorSource.
  */
+@Experimental
 @Path("/executors")
 private[v1] class PrometheusResource extends ApiRequestContext {
   @GET
