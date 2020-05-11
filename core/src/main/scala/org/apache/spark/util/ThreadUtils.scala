@@ -259,7 +259,7 @@ private[spark] object ThreadUtils {
    */
   def newDaemonFixedThreadPool(nThreads: Int, prefix: String): ThreadPoolExecutor = {
     val threadFactory = namedThreadFactory(prefix)
-    MDCAwareThreadPoolExecutor.newFixedThreadPool(nThreads, threadFactory)
+    Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
 
   /**
