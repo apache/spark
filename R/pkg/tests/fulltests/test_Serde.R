@@ -123,6 +123,37 @@ test_that("SerDe of list of lists", {
   expect_equal(x, y)
 })
 
+test_that("SPARK-20007 *apply() can return empty data.frame", {
+  df <- createDataFrame(
+    list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
+    c("a", "b", "c"))
+
+  # dapply
+  schema_d <- structType(structField("a", "integer"), structField("b", "double"),
+                         structField("c", "string"))
+  df1 <- dapply(
+    df,
+    function(x) {
+      y <- x[x[1] > 10, ]
+    },
+    schema_d)
+
+  collect(df1)   # This should work
+
+  # gapply
+  schema_g <-  structType(structField("a", "integer"), structField("c", "string"),
+                          structField("avg", "double"))
+
+  result <- gapply(
+    df,
+    c("a", "c"),
+    function(key, x) {
+      x[x[1] > 1, c(1, 3, 2)]
+    }, schema_g)
+
+  collect(result)   # This should work
+})
+
 sparkR.session.stop()
 
 # Note that this test should be at the end of tests since the configruations used here are not
