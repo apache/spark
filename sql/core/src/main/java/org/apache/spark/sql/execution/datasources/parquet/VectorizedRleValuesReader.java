@@ -213,7 +213,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       int rowId,
       int level,
       VectorizedValuesReader data,
-      boolean failIfRebase) throws IOException {
+      final boolean failIfRebase) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -229,11 +229,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
         case PACKED:
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
-              int days = data.readInteger();
-              if (failIfRebase && days < RebaseDateTime.lastSwitchJulianDay()) {
-                throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
-              }
-              c.putInt(rowId + i, RebaseDateTime.rebaseJulianToGregorianDays(days));
+              int julianDays = data.readInteger();
+              c.putInt(rowId + i, VectorizedColumnReader.rebaseDays(julianDays, failIfRebase));
             } else {
               c.putNull(rowId + i);
             }
@@ -393,7 +390,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       int rowId,
       int level,
       VectorizedValuesReader data,
-      boolean failIfRebase) throws IOException {
+      final boolean failIfRebase) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -409,11 +406,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
         case PACKED:
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
-              long micros = data.readLong();
-              if (failIfRebase && micros < RebaseDateTime.lastSwitchJulianTs()) {
-                throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
-              }
-              c.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(micros));
+              long julianMicros = data.readLong();
+              c.putLong(rowId + i, VectorizedColumnReader.rebaseMicros(julianMicros, failIfRebase));
             } else {
               c.putNull(rowId + i);
             }
