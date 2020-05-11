@@ -405,7 +405,7 @@ abstract class DeclarativeAggregate
     // the aggregate function will be transformed to a new copied node during `PlanSubqueries` and
     // lost original attributes because `TreeNode` does not preserve "lazy val" during `makeCopy`.
     // As a result, the final agg could fail to resolve references through partial agg. So we use
-    // the tag to save the original attributes to let the new copy node share the same attributes
+    // the tag to save the original attributes to let the new copied node share the same attributes
     // with old node.
     getTagValue(inputAggBufferAttributeTag).getOrElse {
       val attrs = aggBufferAttributes.map(_.newInstance())
