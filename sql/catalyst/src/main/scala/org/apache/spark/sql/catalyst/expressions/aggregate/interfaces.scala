@@ -400,13 +400,15 @@ abstract class DeclarativeAggregate
   final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
   final lazy val inputAggBufferAttributes: Seq[AttributeReference] = {
-    // SPARK-31620: inputAggBufferAttributes from a partial agg can be referenced by a final agg
-    // in order to merge agg values. However, in case of an aggregate function contains a subquery,
-    // the aggregate function will be transformed to a new copied node during `PlanSubqueries` and
-    // lost original attributes because `TreeNode` does not preserve "lazy val" during `makeCopy`.
-    // As a result, the final agg could fail to resolve references through partial agg. So we use
-    // the tag to save the original attributes to let the new copied node share the same attributes
-    // with old node.
+    // SPARK-31620: inputAggBufferAttributes from a partial aggregate can be referenced by a final
+    // aggregate in order to merge aggregate values. However, in case of an aggregate function
+    // contains a subquery, the aggregate function will be transformed to a new copied node during
+    // `PlanSubqueries` and lost original attributes because `TreeNode` does not preserve them
+    // during `makeCopy`. As a result, the final aggregate could fail to resolve references through
+    // partial aggregate's output. So, we use the tag to save the original attributes to let the
+    // new copied node share the same attributes with old node. Note, we don't save other attributes
+    // within an aggregate function and ImperativeAggregate's inputAggBufferAttributes because they
+    // will not be referenced out of the aggregate function itself.
     getTagValue(inputAggBufferAttributeTag).getOrElse {
       val attrs = aggBufferAttributes.map(_.newInstance())
       setTagValue(inputAggBufferAttributeTag, attrs)
