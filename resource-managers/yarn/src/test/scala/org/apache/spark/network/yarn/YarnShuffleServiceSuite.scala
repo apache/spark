@@ -402,7 +402,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       "numRegisteredConnections",
       "openBlockRequestLatencyMillis",
       "registeredExecutorsSize",
-      "registerExecutorRequestLatencyMillis"
+      "registerExecutorRequestLatencyMillis",
+      "shuffle-server.usedDirectMemory",
+      "shuffle-server.usedHeapMemory"
     ))
   }
 

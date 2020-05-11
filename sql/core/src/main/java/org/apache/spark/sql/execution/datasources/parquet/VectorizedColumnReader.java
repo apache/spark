@@ -152,6 +152,28 @@ public class VectorizedColumnReader {
     return definitionLevelColumn.nextInt() == maxDefLevel;
   }
 
+  private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
+    boolean isSupported = false;
+    switch (typeName) {
+      case INT32:
+        isSupported = originalType != OriginalType.DATE || !rebaseDateTime;
+        break;
+      case INT64:
+        if (originalType == OriginalType.TIMESTAMP_MICROS) {
+          isSupported = !rebaseDateTime;
+        } else {
+          isSupported = originalType != OriginalType.TIMESTAMP_MILLIS;
+        }
+        break;
+      case FLOAT:
+      case DOUBLE:
+      case BINARY:
+        isSupported = true;
+        break;
+    }
+    return isSupported;
+  }
+
   /**
    * Reads `total` values from this columnReader into column.
    */
@@ -181,13 +203,7 @@ public class VectorizedColumnReader {
 
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
-        if (column.hasDictionary() || (rowId == 0 &&
-            (typeName == PrimitiveType.PrimitiveTypeName.INT32 ||
-            (typeName == PrimitiveType.PrimitiveTypeName.INT64 &&
-              originalType != OriginalType.TIMESTAMP_MILLIS) ||
-            typeName == PrimitiveType.PrimitiveTypeName.FLOAT ||
-            typeName == PrimitiveType.PrimitiveTypeName.DOUBLE ||
-            typeName == PrimitiveType.PrimitiveTypeName.BINARY))) {
+        if (column.hasDictionary() || (rowId == 0 && isLazyDecodingSupported(typeName))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
@@ -266,7 +282,8 @@ public class VectorizedColumnReader {
     switch (descriptor.getPrimitiveType().getPrimitiveTypeName()) {
       case INT32:
         if (column.dataType() == DataTypes.IntegerType ||
-            DecimalType.is32BitDecimalType(column.dataType())) {
+            DecimalType.is32BitDecimalType(column.dataType()) ||
+            (column.dataType() == DataTypes.DateType && !rebaseDateTime)) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putInt(i, dictionary.decodeToInt(dictionaryIds.getDictId(i)));
@@ -284,6 +301,14 @@ public class VectorizedColumnReader {
               column.putShort(i, (short) dictionary.decodeToInt(dictionaryIds.getDictId(i)));
             }
           }
+        } else if (column.dataType() == DataTypes.DateType) {
+          for (int i = rowId; i < rowId + num; ++i) {
+            if (!column.isNullAt(i)) {
+              int julianDays = dictionary.decodeToInt(dictionaryIds.getDictId(i));
+              int gregorianDays = RebaseDateTime.rebaseJulianToGregorianDays(julianDays);
+              column.putInt(i, gregorianDays);
+            }
+          }
         } else {
           throw constructConvertNotSupportedException(descriptor, column);
         }
@@ -292,17 +317,36 @@ public class VectorizedColumnReader {
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
             DecimalType.is64BitDecimalType(column.dataType()) ||
-            originalType == OriginalType.TIMESTAMP_MICROS) {
+            (originalType == OriginalType.TIMESTAMP_MICROS && !rebaseDateTime)) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
             }
           }
         } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
+          if (rebaseDateTime) {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                long julianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(i));
+                long julianMicros = DateTimeUtils.millisToMicros(julianMillis);
+                long gregorianMicros = RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros);
+                column.putLong(i, gregorianMicros);
+              }
+            }
+          } else {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                long gregorianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(i));
+                column.putLong(i, DateTimeUtils.millisToMicros(gregorianMillis));
+              }
+            }
+          }
+        } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
-              column.putLong(i,
-                DateTimeUtils.millisToMicros(dictionary.decodeToLong(dictionaryIds.getDictId(i))));
+              long julianMicros = dictionary.decodeToLong(dictionaryIds.getDictId(i));
+              long gregorianMicros = RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros);
+              column.putLong(i, gregorianMicros);
             }
           }
         } else {

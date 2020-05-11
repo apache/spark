@@ -18,9 +18,10 @@
 package org.apache.spark.sql
 
 import java.math.MathContext
+import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
-import scala.util.Random
+import scala.util.{Random, Try}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
@@ -161,36 +162,66 @@ object RandomDataGenerator {
       })
       case BooleanType => Some(() => rand.nextBoolean())
       case DateType =>
-        val generator =
-          () => {
-            var milliseconds = rand.nextLong() % 253402329599999L
-            // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
-            // for "0001-01-01 00:00:00.000000". We need to find a
-            // number that is greater or equals to this number as a valid timestamp value.
-            while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the number of milliseconds since
-              // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
-              milliseconds = rand.nextLong() % 253402329599999L
-            }
-            DateTimeUtils.toJavaDate((milliseconds / MILLIS_PER_DAY).toInt)
+        def uniformDateRand(rand: Random): java.sql.Date = {
+          var milliseconds = rand.nextLong() % 253402329599999L
+          // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+          // for "0001-01-01 00:00:00.000000". We need to find a
+          // number that is greater or equals to this number as a valid timestamp value.
+          while (milliseconds < -62135740800000L) {
+            // 253402329599999L is the number of milliseconds since
+            // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+            milliseconds = rand.nextLong() % 253402329599999L
           }
-        Some(generator)
+          val date = DateTimeUtils.toJavaDate((milliseconds / MILLIS_PER_DAY).toInt)
+          // The generated `date` is based on the hybrid calendar Julian + Gregorian since
+          // 1582-10-15 but it should be valid in Proleptic Gregorian calendar too which is used
+          // by Spark SQL since version 3.0 (see SPARK-26651). We try to convert `date` to
+          // a local date in Proleptic Gregorian calendar to satisfy this requirement.
+          // Some years are leap years in Julian calendar but not in Proleptic Gregorian calendar.
+          // As the consequence of that, 29 February of such years might not exist in Proleptic
+          // Gregorian calendar. When this happens, we shift the date by one day.
+          Try { date.toLocalDate; date }.getOrElse(new Date(date.getTime + MILLIS_PER_DAY))
+        }
+        randomNumeric[java.sql.Date](
+          rand,
+          uniformDateRand,
+          Seq(
+            "0001-01-01", // the fist day of Common Era
+            "1582-10-15", // the cutover date from Julian to Gregorian calendar
+            "1970-01-01", // the epoch date
+            "9999-12-31"  // the last supported date according to SQL standard
+          ).map(java.sql.Date.valueOf))
       case TimestampType =>
-        val generator =
-          () => {
-            var milliseconds = rand.nextLong() % 253402329599999L
-            // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
-            // for "0001-01-01 00:00:00.000000". We need to find a
-            // number that is greater or equals to this number as a valid timestamp value.
-            while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the number of milliseconds since
-              // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
-              milliseconds = rand.nextLong() % 253402329599999L
-            }
-            // DateTimeUtils.toJavaTimestamp takes microsecond.
-            DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
+        def uniformTimestampRand(rand: Random): java.sql.Timestamp = {
+          var milliseconds = rand.nextLong() % 253402329599999L
+          // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+          // for "0001-01-01 00:00:00.000000". We need to find a
+          // number that is greater or equals to this number as a valid timestamp value.
+          while (milliseconds < -62135740800000L) {
+            // 253402329599999L is the number of milliseconds since
+            // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+            milliseconds = rand.nextLong() % 253402329599999L
           }
-        Some(generator)
+          // DateTimeUtils.toJavaTimestamp takes microsecond.
+          val ts = DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
+          // The generated `ts` is based on the hybrid calendar Julian + Gregorian since
+          // 1582-10-15 but it should be valid in Proleptic Gregorian calendar too which is used
+          // by Spark SQL since version 3.0 (see SPARK-26651). We try to convert `ts` to
+          // a local timestamp in Proleptic Gregorian calendar to satisfy this requirement.
+          // Some years are leap years in Julian calendar but not in Proleptic Gregorian calendar.
+          // As the consequence of that, 29 February of such years might not exist in Proleptic
+          // Gregorian calendar. When this happens, we shift the timestamp `ts` by one day.
+          Try { ts.toLocalDateTime; ts }.getOrElse(new Timestamp(ts.getTime + MILLIS_PER_DAY))
+        }
+        randomNumeric[java.sql.Timestamp](
+          rand,
+          uniformTimestampRand,
+          Seq(
+            "0001-01-01 00:00:00", // the fist timestamp of Common Era
+            "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
+            "1970-01-01 00:00:00", // the epoch timestamp
+            "9999-12-31 23:59:59.999" // the last supported timestamp according to SQL standard
+          ).map(java.sql.Timestamp.valueOf))
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
         val days = rand.nextInt(10000)

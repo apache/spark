@@ -159,7 +159,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
               .add("index", IntegerType, nullable = false)
               .add("col", dataType, nullable = true)
             val rdd =
-              spark.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
+              spark.sparkContext.parallelize((1 to 20).map(i => Row(i, dataGenerator())))
             val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
 
             df.write

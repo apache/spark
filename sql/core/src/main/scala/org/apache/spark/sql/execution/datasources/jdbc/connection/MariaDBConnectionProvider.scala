@@ -27,7 +27,7 @@ private[jdbc] class MariaDBConnectionProvider(driver: Driver, options: JDBCOptio
     "Krb5ConnectorContext"
   }
 
-  override def setAuthenticationConfigIfNeeded(): Unit = {
+  override def setAuthenticationConfigIfNeeded(): Unit = SecurityConfigurationLock.synchronized {
     val (parent, configEntry) = getConfigWithAppEntry()
     /**
      * Couple of things to mention here:

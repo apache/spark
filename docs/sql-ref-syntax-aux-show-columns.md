@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-Return the list of columns in a table. If the table does not exist, an exception is thrown.
+Returns the list of columns in a table. If the table does not exist, an exception is thrown.
 
 ### Syntax
 
