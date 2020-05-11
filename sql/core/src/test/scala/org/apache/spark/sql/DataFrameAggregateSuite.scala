@@ -973,4 +973,13 @@ class DataFrameAggregateSuite extends QueryTest
       assert(error.message.contains("function count_if requires boolean type"))
     }
   }
+
+  test("SPARK-31620: agg with subquery") {
+    withTempView("t1", "t2") {
+      sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
+      sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")
+      checkAnswer(sql("select sum(if(c > (select a from t1), d, 0)) as csum from t2"),
+        Row(4) :: Nil)
+    }
+  }
 }

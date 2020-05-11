@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -398,8 +399,20 @@ abstract class DeclarativeAggregate
   /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
   final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
+  final lazy val inputAggBufferAttributes: Seq[AttributeReference] = {
+    // SPARK-31620: inputAggBufferAttributes from a partial agg can be referenced by a final agg
+    // in order to merge agg values. However, in case of an aggregate function contains a subquery,
+    // the aggregate function will be transformed to new copy during `PlanSubqueries` and lost
+    // original attributes because `TreeNode` does not preserve "lazy val" during `makeCopy`. As a
+    // result, the final agg could fail to resolve references through partial agg. So we use the
+    // tag to save the original attributes to let the new copy node share the same attributes with
+    // old node.
+    getTagValue(inputAggBufferAttributeTag).getOrElse {
+      val attrs = aggBufferAttributes.map(_.newInstance())
+      setTagValue(inputAggBufferAttributeTag, attrs)
+      attrs
+    }
+  }
 
   /**
    * A helper class for representing an attribute used in merging two
@@ -415,6 +428,9 @@ abstract class DeclarativeAggregate
     /** Represents this attribute at the input buffer side (the data value is read-only). */
     def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
+
+  private val inputAggBufferAttributeTag =
+    TreeNodeTag[Seq[AttributeReference]]("inputAggBufferAttributes")
 }
 
 
