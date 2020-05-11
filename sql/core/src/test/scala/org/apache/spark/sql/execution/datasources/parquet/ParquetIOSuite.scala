@@ -1029,8 +1029,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
         Seq(false, true).foreach { vectorized =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-            // The file metadata indicates if it needs rebase or not, so we can always get the correct
-            // result regardless of the "rebase mode" config.
+            // The file metadata indicates if it needs rebase or not, so we can always get the
+            // correct result regardless of the "rebase mode" config.
             Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
               withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
                 checkAnswer(
