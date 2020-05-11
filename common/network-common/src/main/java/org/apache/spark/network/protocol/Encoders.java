@@ -54,13 +54,13 @@ public class Encoders {
   /** Bitmaps are encoded with their serialization length followed by the serialization bytes. */
   public static class Bitmaps {
     public static int encodedLength(RoaringBitmap b) {
+      // Compress the bitmap before serializing it
+      b.trim();
+      b.runOptimize();
       return 4 + b.serializedSizeInBytes();
     }
 
     public static void encode(ByteBuf buf, RoaringBitmap b) {
-      // Compress the bitmap before serializing it
-      b.trim();
-      b.runOptimize();
       ByteBuffer outBuffer = ByteBuffer.allocate(b.serializedSizeInBytes());
       try {
         b.serialize(new DataOutputStream(new OutputStream() {
