@@ -1048,9 +1048,7 @@ abstract class RDD[T: ClassTag](
    * recomputing the input RDD should be cached first.
    */
   def toLocalIterator(prefetchPartitions: Boolean = false): Iterator[T] = withScope {
-    val iterator = new PrefetchingIterator(this, prefetchPartitions)
-    if (prefetchPartitions) iterator.hasNext
-    iterator.flatMap(data => data)
+    new PrefetchingIterator(this, prefetchPartitions).flatMap(data => data)
   }
 
   /**

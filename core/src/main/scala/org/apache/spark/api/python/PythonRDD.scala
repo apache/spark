@@ -205,7 +205,6 @@ private[spark] object PythonRDD extends Logging {
 
         // Collects a partition on each iteration
         val prefetchIter = new PrefetchingIterator(rdd, prefetchPartitions)
-        if (prefetchPartitions) prefetchIter.hasNext
 
         // Write data until iteration is complete, client stops iteration, or error occurs
         var complete = false
