@@ -21,7 +21,7 @@ import unittest
 if sys.version > '3':
     basestring = str
 
-from pyspark.ml.classification import LogisticRegression, BinaryLogisticRegressionSummary, \
+from pyspark.ml.classification import BinaryLogisticRegressionSummary, LogisticRegression, \
     LogisticRegressionSummary
 from pyspark.ml.clustering import BisectingKMeans, GaussianMixture, KMeans
 from pyspark.ml.linalg import Vectors
