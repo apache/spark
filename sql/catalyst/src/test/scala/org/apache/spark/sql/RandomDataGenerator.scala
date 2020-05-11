@@ -227,7 +227,7 @@ object RandomDataGenerator {
             rand,
             (rand: Random) => DateTimeUtils.microsToInstant(uniformMicorsRand(rand)),
             specialTs.map { s =>
-              val ldt = LocalDateTime.parse(s.replace(" ", "'T'"))
+              val ldt = LocalDateTime.parse(s.replace(" ", "T"))
               ldt.atZone(ZoneId.systemDefault()).toInstant
             })
         } else {
