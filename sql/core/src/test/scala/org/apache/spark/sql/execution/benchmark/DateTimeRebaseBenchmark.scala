@@ -25,6 +25,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.SECONDS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 
 object DateTime extends Enumeration {
@@ -161,10 +162,10 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
               Seq(true, false).foreach { modernDates =>
                 Seq(false, true).foreach { rebase =>
                   benchmark.addCase(caseName(modernDates, dateTime, Some(rebase)), 1) { _ =>
-                    val mode = if (rebase) "LEGACY" else "CORRECTED"
+                    val mode = if (rebase) LEGACY else CORRECTED
                     withSQLConf(
                       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> getOutputType(dateTime),
-                      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> mode) {
+                      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> mode.toString) {
                       genDF(rowsNum, dateTime, modernDates)
                         .write
                         .mode("overwrite")

@@ -344,7 +344,8 @@ public class VectorizedColumnReader {
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
             DecimalType.is64BitDecimalType(column.dataType()) ||
-            (originalType == OriginalType.TIMESTAMP_MICROS && "CORRECTED".equals(datetimeRebaseMode))) {
+            (originalType == OriginalType.TIMESTAMP_MICROS &&
+              "CORRECTED".equals(datetimeRebaseMode))) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));

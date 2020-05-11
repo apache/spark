@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -163,8 +164,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
 
             withSQLConf(
-              SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED",
-              SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+              SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
+              SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
               df.write
                 .mode("overwrite")
                 .format(dataSourceName)
