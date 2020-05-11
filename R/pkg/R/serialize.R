@@ -58,7 +58,7 @@ writeObject <- function(con, object, writeType = TRUE) {
   # Checking types is needed here, since 'is.na' only handles atomic vectors,
   # lists and pairlists
   if (type %in% c("integer", "character", "logical", "double", "numeric")) {
-    if (is.na(object)) {
+    if (is.null(object) || is.na(object)) {
       object <- NULL
       type <- "NULL"
     }
