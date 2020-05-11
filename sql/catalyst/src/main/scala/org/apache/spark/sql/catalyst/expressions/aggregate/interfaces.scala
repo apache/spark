@@ -402,11 +402,11 @@ abstract class DeclarativeAggregate
   final lazy val inputAggBufferAttributes: Seq[AttributeReference] = {
     // SPARK-31620: inputAggBufferAttributes from a partial agg can be referenced by a final agg
     // in order to merge agg values. However, in case of an aggregate function contains a subquery,
-    // the aggregate function will be transformed to new copy during `PlanSubqueries` and lost
-    // original attributes because `TreeNode` does not preserve "lazy val" during `makeCopy`. As a
-    // result, the final agg could fail to resolve references through partial agg. So we use the
-    // tag to save the original attributes to let the new copy node share the same attributes with
-    // old node.
+    // the aggregate function will be transformed to a new copied node during `PlanSubqueries` and
+    // lost original attributes because `TreeNode` does not preserve "lazy val" during `makeCopy`.
+    // As a result, the final agg could fail to resolve references through partial agg. So we use
+    // the tag to save the original attributes to let the new copy node share the same attributes
+    // with old node.
     getTagValue(inputAggBufferAttributeTag).getOrElse {
       val attrs = aggBufferAttributes.map(_.newInstance())
       setTagValue(inputAggBufferAttributeTag, attrs)
