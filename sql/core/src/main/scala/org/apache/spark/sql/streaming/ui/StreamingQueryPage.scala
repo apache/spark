@@ -159,11 +159,11 @@ class StreamingQueryPagedTable(
 
   override def pageLink(page: Int): String = {
     parameterPath +
-    s"&$pageNumberFormField=$page" +
-    s"&$tableTag.sort=$encodedSortColumn" +
-    s"&$tableTag.desc=$sortDesc" +
-    s"&$pageSizeFormField=$pageSize" +
-    s"#$tableTag"
+      s"&$pageNumberFormField=$page" +
+      s"&$tableTag.sort=$encodedSortColumn" +
+      s"&$tableTag.desc=$sortDesc" +
+      s"&$pageSizeFormField=$pageSize" +
+      s"#$tableTag"
   }
 
   override def goButtonFormPath: String =

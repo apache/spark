@@ -86,7 +86,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
             case _: StreamingQueryException =>
           }
 
-          eventually(timeout(300.seconds), interval(100.milliseconds)) {
+          eventually(timeout(30.seconds), interval(100.milliseconds)) {
             // Check the query list page
             goToUi(spark, "/StreamingQuery")
 
