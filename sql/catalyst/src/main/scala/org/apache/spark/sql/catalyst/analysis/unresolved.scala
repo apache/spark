@@ -544,7 +544,7 @@ case class UnresolvedOrdinal(ordinal: Int)
  */
 case class AggregateWithHaving(
     havingCondition: Expression,
-    child: Aggregate)
+    child: LogicalPlan)
   extends UnaryNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
