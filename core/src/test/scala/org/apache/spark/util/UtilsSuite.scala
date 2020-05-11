@@ -745,10 +745,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     manager.add(3, () => output += 3)
     manager.add(2, () => output += 2)
     manager.add(4, () => output += 4)
+    manager.add(Int.MinValue, () => output += Int.MinValue)
+    manager.add(Int.MinValue, () => output += Int.MinValue)
+    manager.add(Int.MaxValue, () => output += Int.MaxValue)
+    manager.add(Int.MaxValue, () => output += Int.MaxValue)
     manager.remove(hook1)
 
     manager.runAll()
-    assert(output.toList === List(4, 3, 2))
+    assert(output.toList === List(Int.MaxValue, Int.MaxValue, 4, 3, 2, Int.MinValue, Int.MinValue))
   }
 
   test("isInDirectory") {
