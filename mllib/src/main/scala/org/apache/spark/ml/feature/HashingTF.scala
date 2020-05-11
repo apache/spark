@@ -48,7 +48,7 @@ class HashingTF @Since("3.0.0") (
   extends Transformer with HasInputCol with HasOutputCol with HasNumFeatures
     with DefaultParamsWritable {
 
-  @transient lazy val hashFunc = hashFuncVersion match {
+  lazy val hashFunc = hashFuncVersion match {
     case HashingTF.SPARK_2_MURMUR3_HASH => OldHashingTF.murmur3Hash _
     case HashingTF.SPARK_3_MURMUR3_HASH => FeatureHasher.murmur3Hash _
     case _ => throw new IllegalArgumentException("Illegal hash function version setting.")
@@ -140,6 +140,13 @@ class HashingTF @Since("3.0.0") (
   @Since("3.0.0")
   override def toString: String = {
     s"HashingTF: uid=$uid, binary=${$(binary)}, numFeatures=${$(numFeatures)}"
+  }
+
+  @Since("3.0.0")
+  override def save(path: String): Unit = {
+    require(hashFuncVersion == HashingTF.SPARK_3_MURMUR3_HASH,
+      "Cannot save model which is loaded from lower version spark saved model.")
+    super.save(path)
   }
 }
 
