@@ -28,7 +28,7 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.yarn.config.{YARN_BLACKLIST_WAITING_MILLIS, YARN_EXCLUDE_NODES, YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED}
+import org.apache.spark.deploy.yarn.config.{YARN_EXCLUDE_NODES, YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED}
 import org.apache.spark.internal.config.{BLACKLIST_TIMEOUT_CONF, MAX_FAILED_EXEC_PER_NODE}
 import org.apache.spark.util.ManualClock
 
@@ -37,7 +37,6 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
 
   val BLACKLIST_TIMEOUT = 100L
   val MAX_FAILED_EXEC_PER_NODE_VALUE = 2
-  val YARN_BLACKLIST_WAITING_Millis_VALUE = 0L
 
   var sparkConf: SparkConf = _
   var amClientMock: AMRMClient[ContainerRequest] = _
@@ -49,7 +48,6 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     sparkConf.set(BLACKLIST_TIMEOUT_CONF, BLACKLIST_TIMEOUT)
     sparkConf.set(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED, true)
     sparkConf.set(MAX_FAILED_EXEC_PER_NODE, MAX_FAILED_EXEC_PER_NODE_VALUE)
-    sparkConf.set(YARN_BLACKLIST_WAITING_MILLIS, YARN_BLACKLIST_WAITING_Millis_VALUE)
     clock = new ManualClock()
     amClientMock = mock(classOf[AMRMClient[ContainerRequest]])
     yarnClientMock = mock(classOf[YarnClient])
@@ -61,6 +59,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     val failureTracker = new FailureTracker(sparkConf, clock)
     val yarnBlacklistTracker =
       new YarnAllocatorBlacklistTracker(sparkConf, amClientMock, yarnClientMock, failureTracker)
+    yarnBlacklistTracker.setNumClusterNodes(4)
     yarnBlacklistTracker
   }
 
@@ -110,12 +109,14 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
     yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set())
 
     // initial1 and initial2 is added as blacklisted nodes at the very first updateBlacklist call
-    // and they are never removed
+    // and they are never removed.
+    // But initial3 is not added as blacklisted nodes because it is not in cluster.
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("initial1", "initial2"), Collections.emptyList())
 
     prepareYarnNodes(3)
     yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set())
+    // initial3 is added as blacklisted nodes.
     verify(amClientMock)
       .updateBlacklist(Arrays.asList("initial3"), Collections.emptyList())
 
@@ -165,28 +166,6 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
 
     verify(amClientMock).updateBlacklist(Arrays.asList("host4"), Collections.emptyList())
     assert(yarnBlacklistTracker.isAllNodeBlacklisted)
-  }
-
-  test("blacklist waits for resource ready") {
-    prepareYarnNodes(2)
-    sparkConf.set(YARN_EXCLUDE_NODES, Seq("initial1", "initial2"))
-    sparkConf.set(YARN_BLACKLIST_WAITING_MILLIS, 100L)
-    val yarnBlacklistTracker = createYarnAllocatorBlacklistTracker(sparkConf)
-    yarnBlacklistTracker.setSchedulerBlacklistedNodes(Set())
-
-    assert(yarnBlacklistTracker.isAllNodeBlacklisted === false)
-    Thread.sleep(50)
-    assert(yarnBlacklistTracker.isAllNodeBlacklisted === false)
-    prepareYarnNodes(3)
-    yarnBlacklistTracker.refreshYarnNodes()
-    Thread.sleep(100)
-    assert(yarnBlacklistTracker.isAllNodeBlacklisted === false)
-
-    prepareYarnNodes(2)
-    yarnBlacklistTracker.refreshYarnNodes()
-    assert(yarnBlacklistTracker.isAllNodeBlacklisted === false)
-    Thread.sleep(101)
-    assert(yarnBlacklistTracker.isAllNodeBlacklisted === true)
   }
 
   private def prepareYarnNodes(numNodes: Int): Unit = {

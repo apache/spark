@@ -21,7 +21,6 @@ import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import org.apache.hadoop.yarn.api.records.NodeState
-import org.apache.hadoop.yarn.api.records.NodeState._
 import org.apache.hadoop.yarn.client.api.{AMRMClient, YarnClient}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
@@ -61,10 +60,6 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   private val maxFailuresPerHost = sparkConf.get(MAX_FAILED_EXEC_PER_NODE)
 
-  private val blacklistWaitingTimeMillis = sparkConf.get(YARN_BLACKLIST_WAITING_MILLIS)
-
-  private var blacklistWaitingBeginMillis: Long = -1L
-
   private def excludeNodes = {
     refreshYarnNodes()
     val nodesToExclude = sparkConf.get(YARN_EXCLUDE_NODES).toSet
@@ -82,6 +77,12 @@ private[spark] class YarnAllocatorBlacklistTracker(
   private var currentBlacklistedYarnNodes = Set.empty[String]
 
   private var schedulerBlacklist = Set.empty[String]
+
+  private var numClusterNodes = Int.MaxValue
+
+  def setNumClusterNodes(numClusterNodes: Int): Unit = {
+    this.numClusterNodes = numClusterNodes
+  }
 
   def handleResourceAllocationFailure(hostOpt: Option[String]): Unit = {
     hostOpt match {
@@ -116,33 +117,8 @@ private[spark] class YarnAllocatorBlacklistTracker(
     refreshBlacklistedNodes()
   }
 
-  def isAllNodeBlacklisted: Boolean = {
-    refreshYarnNodes()
-    val allBlacklisted = allNodes.filter { case (_, state) => state.equals(RUNNING) }
-      .keySet.diff(currentBlacklistedYarnNodes).isEmpty
-    if (allBlacklisted) {
-      val currentTime = System.currentTimeMillis()
-      if (blacklistWaitingBeginMillis == -1L) {
-        blacklistWaitingBeginMillis = currentTime
-      }
-
-      val timeWaited = currentTime - blacklistWaitingBeginMillis
-      if (timeWaited >= blacklistWaitingTimeMillis) {
-        logWarning(s"$timeWaited ms passed, but there are no other active nodes except " +
-          s"blacklisted nodes. You can increase 'spark.blacklist.waiting.millis' to give more " +
-          s"time waiting for yarn resources before application master exit.")
-        true
-      } else {
-        logDebug(s"$timeWaited passed to wait for other active nodes except blacklisted nodes.")
-        false
-      }
-    } else {
-      if (blacklistWaitingBeginMillis > 0L) {
-        blacklistWaitingBeginMillis = -1L
-      }
-      false
-    }
-  }
+  def isAllNodeBlacklisted: Boolean =
+    numClusterNodes != 0 && currentBlacklistedYarnNodes.size >= numClusterNodes
 
   private def refreshBlacklistedNodes(): Unit = {
     removeExpiredYarnBlacklistedNodes()
