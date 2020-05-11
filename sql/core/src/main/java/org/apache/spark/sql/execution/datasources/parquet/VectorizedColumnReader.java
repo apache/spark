@@ -159,7 +159,11 @@ public class VectorizedColumnReader {
         isSupported = originalType != OriginalType.DATE || !rebaseDateTime;
         break;
       case INT64:
-        isSupported = originalType != OriginalType.TIMESTAMP_MILLIS;
+        if (originalType == OriginalType.TIMESTAMP_MICROS) {
+          isSupported = !rebaseDateTime;
+        } else {
+          isSupported = originalType != OriginalType.TIMESTAMP_MILLIS;
+        }
         break;
       case FLOAT:
       case DOUBLE:
@@ -313,17 +317,36 @@ public class VectorizedColumnReader {
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
             DecimalType.is64BitDecimalType(column.dataType()) ||
-            originalType == OriginalType.TIMESTAMP_MICROS) {
+            (originalType == OriginalType.TIMESTAMP_MICROS && !rebaseDateTime)) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
             }
           }
         } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
+          if (rebaseDateTime) {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                long julianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(i));
+                long julianMicros = DateTimeUtils.millisToMicros(julianMillis);
+                long gregorianMicros = RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros);
+                column.putLong(i, gregorianMicros);
+              }
+            }
+          } else {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                long gregorianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(i));
+                column.putLong(i, DateTimeUtils.millisToMicros(gregorianMillis));
+              }
+            }
+          }
+        } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
-              column.putLong(i,
-                DateTimeUtils.millisToMicros(dictionary.decodeToLong(dictionaryIds.getDictId(i))));
+              long julianMicros = dictionary.decodeToLong(dictionaryIds.getDictId(i));
+              long gregorianMicros = RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros);
+              column.putLong(i, gregorianMicros);
             }
           }
         } else {
