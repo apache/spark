@@ -70,6 +70,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       context,
       blockManager.blockStoreClient,
       blockManager,
+      mapOutputTracker,
       blocksByAddress,
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility

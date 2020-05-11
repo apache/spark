@@ -386,7 +386,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Seq((BlockManagerId("a", "hostA", 1000), Seq((ShuffleBlockId(10, -1, 0), 1000L, -1)))))
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     assert(slaveTracker.getMapSizesForMergeResult(10, 0) ===
-      Seq((BlockManagerId("a", "hostA", 1000), Seq((ShuffleBlockId(10, 0, 0), size1000))))
+      Seq((BlockManagerId("a", "hostA", 1000), Seq((ShuffleBlockId(10, 0, 0), size1000, 0))))
     )
     masterTracker.stop()
     slaveTracker.stop()

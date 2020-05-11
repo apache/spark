@@ -101,6 +101,16 @@ private[spark] class IndexShuffleBlockResolver(
       .getOrElse(blockManager.diskBlockManager.getFile(blockId))
   }
 
+  private def getMergedBlockDataFile(appId: String, shuffleId: Int, reduceId: Int): File = {
+    blockManager.diskBlockManager.getMergedShuffleFile(
+      ShuffleMergedBlockId(appId, shuffleId, reduceId))
+  }
+
+  private def getMergedBlockIndexFile(appId: String, shuffleId: Int, reduceId: Int): File = {
+    blockManager.diskBlockManager.getMergedShuffleFile(
+      ShuffleMergedIndexBlockId(appId, shuffleId, reduceId))
+  }
+
   /**
    * Remove data file and index file that contain the output data from one map.
    */
@@ -306,6 +316,37 @@ private[spark] class IndexShuffleBlockResolver(
       if (indexTmp.exists() && !indexTmp.delete()) {
         logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
       }
+    }
+  }
+
+  /**
+   * This is only used for reading local merged block data. In such cases, all chunks in the
+   * merged shuffle file need to be identified at once, so the ShuffleBlockFetcherIterator
+   * knows how to consume local merged shuffle file as multiple chunks.
+   */
+  override def getMergedBlockData(blockId: ShuffleBlockId): Seq[ManagedBuffer] = {
+    val indexFile = getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId, blockId.reduceId)
+    val dataFile = getMergedBlockDataFile(conf.getAppId, blockId.shuffleId, blockId.reduceId)
+    // Load all the indexes in order to identify all chunks in the specified merged shuffle file.
+    val size = indexFile.length.toInt
+    val buffer = ByteBuffer.allocate(size)
+    val offsets = buffer.asLongBuffer
+    val dis = new DataInputStream(Files.newInputStream(indexFile.toPath))
+    try {
+      dis.readFully(buffer.array)
+    } finally {
+      dis.close()
+    }
+    // Number of chunks is number of indexes - 1
+    val numChunks = size / 8 - 1
+    val chunkSizes = new Array[Long](numChunks)
+    for (index <- 0 until numChunks) {
+      chunkSizes(index) = offsets.get(index + 1) - offsets.get(index)
+    }
+    chunkSizes.indices.map {
+      index =>
+        new FileSegmentManagedBuffer(transportConf, dataFile,
+          offsets.get(index), chunkSizes(index))
     }
   }
 

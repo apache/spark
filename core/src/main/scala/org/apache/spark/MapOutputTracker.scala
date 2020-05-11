@@ -464,7 +464,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    */
   def getMapSizesForMergeResult(
       shuffleId: Int,
-      partitionId: Int): Seq[(BlockManagerId, Seq[(BlockId, Long)])]
+      partitionId: Int): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -952,7 +952,7 @@ private[spark] class MapOutputTrackerMaster(
   // enabled in local-mode, this method returns empty list.
   def getMapSizesForMergeResult(
       shuffleId: Int,
-      partitionId: Int): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      partitionId: Int): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     Seq.empty
   }
 
@@ -1024,7 +1024,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    */
   override def getMapSizesForMergeResult(
       shuffleId: Int,
-      partitionId: Int): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      partitionId: Int): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     logDebug(s"Fetching backup outputs for shuffle $shuffleId, partition $partitionId")
     // Fetch the map statuses and merge statuses again since they might have already been
     // cleared by another task running in the same executor.
@@ -1293,9 +1293,9 @@ private[spark] object MapOutputTracker extends Logging {
       shuffleId: Int,
       partitionId: Int,
       mapStatuses: Array[MapStatus],
-      mergeStatuses: Array[MergeStatus]): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      mergeStatuses: Array[MergeStatus]): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     assert (mapStatuses != null && mergeStatuses != null)
-    val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long)]]
+    val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
     val mergeStatus = mergeStatuses(partitionId)
     // The original MergeStatus is no longer available, we cannot identify the list of
     // unmerged blocks to fetch in this case. Throw MetadataFetchFailedException.
@@ -1305,18 +1305,12 @@ private[spark] object MapOutputTracker extends Logging {
       logError(errorMessage)
       throw new MetadataFetchFailedException(shuffleId, partitionId, errorMessage)
     }
-    for ((status, mapId) <- mapStatuses.zipWithIndex) {
-      // Only add blocks that are merged
-      if (mergeStatus.tracker.contains(mapId)) {
-        if (status == null) {
-          val errorMessage = s"Missing an output location for shuffle $shuffleId " +
-            s"for merge block backup"
-          logError(errorMessage)
-          throw new MetadataFetchFailedException(shuffleId, partitionId, errorMessage)
-        } else {
-          splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-            ((ShuffleBlockId(shuffleId, mapId, partitionId), status.getSizeForBlock(partitionId)))
-        }
+    for ((status, mapIndex) <- mapStatuses.zipWithIndex) {
+      if (mergeStatus.tracker.contains(mapIndex)) {
+        validateStatus(status, shuffleId, partitionId)
+        splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
+          ((ShuffleBlockId(shuffleId, status.mapId, partitionId),
+            status.getSizeForBlock(partitionId), mapIndex))
       }
     }
     splitsByAddress.toSeq
