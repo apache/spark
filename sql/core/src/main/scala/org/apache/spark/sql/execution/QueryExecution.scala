@@ -295,7 +295,7 @@ class QueryExecution(
      */
     def toFile(path: String,
         maxFields: Int = Int.MaxValue,
-        explainMode: ExplainMode = ExtendedMode): Unit = {
+        explainMode: Option[String] = None): Unit = {
       val filePath = new Path(path)
       val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
@@ -303,8 +303,9 @@ class QueryExecution(
         writer.write(s)
       }
       try {
-        explainString(explainMode, maxFields, append)
-        if (explainMode != CodegenMode) {
+        val mode = explainMode.map(ExplainMode.fromString(_)).getOrElse(ExtendedMode)
+        explainString(mode, maxFields, append)
+        if (mode != CodegenMode) {
           writer.write("\n== Whole Stage Codegen ==\n")
           org.apache.spark.sql.execution.debug.writeCodegen(writer.write, executedPlan)
         }

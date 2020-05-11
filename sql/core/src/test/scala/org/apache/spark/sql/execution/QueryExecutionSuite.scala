@@ -112,7 +112,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     withTempDir { dir =>
       val path = dir.getCanonicalPath + "/plans.txt"
       val df = spark.range(0, 10)
-      df.queryExecution.debug.toFile(path, explainMode = FormattedMode)
+      df.queryExecution.debug.toFile(path, explainMode = Option("formatted"))
       checkDumpedPlansInFormattedMode(path, expected = 10)
     }
   }
