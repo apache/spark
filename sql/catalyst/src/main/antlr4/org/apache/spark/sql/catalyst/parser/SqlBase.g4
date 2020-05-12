@@ -33,7 +33,7 @@ grammar SqlBase;
    * When false, CREATE TABLE syntax without a provider will use
    * the value of spark.sql.sources.default as its provider.
    */
-  public boolean legacy_create_hive_table_by_default_enabled = false;
+  public boolean legacy_create_hive_table_by_default_enabled = true;
 
   /**
    * Verify whether current token is a valid decimal token (which contains dot).
