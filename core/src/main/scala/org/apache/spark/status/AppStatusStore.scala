@@ -18,7 +18,6 @@
 package org.apache.spark.status
 
 import java.util.{List => JList}
-import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
@@ -36,24 +35,15 @@ private[spark] class AppStatusStore(
     val store: KVStore,
     val listener: Option[AppStatusListener] = None) {
 
-  /**
-   * This method contains an automatic retry logic and tries to get a valid [[v1.ApplicationInfo]].
-   * See [SPARK-31632] The ApplicationInfo in KVStore may be accessed before it's prepared
-   */
   def applicationInfo(): v1.ApplicationInfo = {
-    var iterator = store.view(classOf[ApplicationInfoWrapper]).max(1).iterator()
-    val startTime = System.nanoTime()
-    while (!iterator.hasNext &&
-      System.nanoTime() - startTime < AppStatusStore.FETCH_APP_INFO_TIMEOUT) {
-      // Wait a while to see if the ApplicationInfo has been written to the store.
-      Thread.sleep(100)
-      iterator = store.view(classOf[ApplicationInfoWrapper]).max(1).iterator()
+    try {
+      // The ApplicationInfo may not be available when Spark is starting up.
+      store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
+    } catch {
+      case _: NoSuchElementException =>
+        throw new SparkException("Failed to get the application information. " +
+          "If you are starting up Spark, please wait a while until it's ready.")
     }
-    if (!iterator.hasNext) {
-      throw new SparkException(s"No available ApplicationInfo after waiting for " +
-        s"${TimeUnit.NANOSECONDS.toSeconds(AppStatusStore.FETCH_APP_INFO_TIMEOUT)} seconds.")
-    }
-    iterator.next().info
   }
 
   def environmentInfo(): v1.ApplicationEnvironmentInfo = {
@@ -562,11 +552,6 @@ private[spark] class AppStatusStore(
 }
 
 private[spark] object AppStatusStore {
-
-  /**
-   * The timeout value used by [[AppStatusStore.applicationInfo()]].
-   */
-  private val FETCH_APP_INFO_TIMEOUT = TimeUnit.MILLISECONDS.toNanos(5000) // 5 seconds
 
   val CURRENT_VERSION = 2L
 
