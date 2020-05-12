@@ -59,11 +59,11 @@ class AvroSerializer(
     converter.apply(catalystData)
   }
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFunc(
-    datetimeRebaseMode, "Avro", isRead = false)
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
+    datetimeRebaseMode, "Avro")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFunc(
-    datetimeRebaseMode, "Avro", isRead = false)
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+    datetimeRebaseMode, "Avro")
 
   private val converter: Any => Any = {
     val actualAvroType = resolveNullableType(rootAvroType, nullable)

@@ -143,47 +143,51 @@ object DataSourceUtils {
       "Gregorian calendar.", null)
   }
 
-  def creteDateRebaseFunc(
+  def creteDateRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
-      format: String,
-      isRead: Boolean): Int => Int = rebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION if isRead => days: Int =>
+      format: String): Int => Int = rebaseMode match {
+    case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
       if (days < RebaseDateTime.lastSwitchJulianDay) {
         throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
       days
+    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianDays
+    case LegacyBehaviorPolicy.CORRECTED => identity[Int]
+  }
+
+  def creteDateRebaseFuncInWrite(
+      rebaseMode: LegacyBehaviorPolicy.Value,
+      format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
       if (days < RebaseDateTime.lastSwitchGregorianDay) {
         throw DataSourceUtils.newRebaseExceptionInWrite(format)
       }
       days
-    case LegacyBehaviorPolicy.LEGACY => if (isRead) {
-      RebaseDateTime.rebaseJulianToGregorianDays
-    } else {
-      RebaseDateTime.rebaseGregorianToJulianDays
-    }
+    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianDays
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def creteTimestampRebaseFunc(
+  def creteTimestampRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
-      format: String,
-      isRead: Boolean): Long => Long = rebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION if isRead => micros: Long =>
+      format: String): Long => Long = rebaseMode match {
+    case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
       if (micros < RebaseDateTime.lastSwitchJulianTs) {
         throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
       micros
+    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianMicros
+    case LegacyBehaviorPolicy.CORRECTED => identity[Long]
+  }
+
+  def creteTimestampRebaseFuncInWrite(
+      rebaseMode: LegacyBehaviorPolicy.Value,
+      format: String): Long => Long = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
       if (micros < RebaseDateTime.lastSwitchGregorianTs) {
         throw DataSourceUtils.newRebaseExceptionInWrite(format)
       }
       micros
-    case LegacyBehaviorPolicy.LEGACY => if (isRead) {
-      RebaseDateTime.rebaseJulianToGregorianMicros
-    } else {
-      RebaseDateTime.rebaseGregorianToJulianMicros
-    }
+    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 }

@@ -55,11 +55,11 @@ class AvroDeserializer(
 
   private lazy val decimalConversions = new DecimalConversion()
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFunc(
-    datetimeRebaseMode, "Avro", isRead = true)
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+    datetimeRebaseMode, "Avro")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFunc(
-    datetimeRebaseMode, "Avro", isRead = true)
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+    datetimeRebaseMode, "Avro")
 
   private val converter: Any => Any = rootCatalystType match {
     // A shortcut for empty schema.
