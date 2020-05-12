@@ -19,7 +19,7 @@ select current_date = current_date(), current_timestamp = current_timestamp()
 -- !query
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd')
 -- !query schema
-struct<to_date(NULL):date,to_date('2016-12-31'):date,to_date('2016-12-31', 'yyyy-MM-dd'):date>
+struct<to_date(NULL):date,to_date(2016-12-31):date,to_date(2016-12-31, yyyy-MM-dd):date>
 -- !query output
 NULL	2016-12-31	2016-12-31
 
@@ -27,7 +27,7 @@ NULL	2016-12-31	2016-12-31
 -- !query
 select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('2016-12-31', 'yyyy-MM-dd')
 -- !query schema
-struct<to_timestamp(NULL):timestamp,to_timestamp('2016-12-31 00:12:00'):timestamp,to_timestamp('2016-12-31', 'yyyy-MM-dd'):timestamp>
+struct<to_timestamp(NULL):timestamp,to_timestamp(2016-12-31 00:12:00):timestamp,to_timestamp(2016-12-31, yyyy-MM-dd):timestamp>
 -- !query output
 NULL	2016-12-31 00:12:00	2016-12-31 00:00:00
 
@@ -152,7 +152,7 @@ struct<CAST(TIMESTAMP '2011-11-11 11:11:11' + INTERVAL '2 days' AS TIMESTAMP):ti
 -- !query
 select timestamp'2011-11-11 11:11:11' - interval '2' day
 -- !query schema
-struct<CAST(TIMESTAMP '2011-11-11 11:11:11' + (- INTERVAL '2 days') AS TIMESTAMP):timestamp>
+struct<CAST(TIMESTAMP '2011-11-11 11:11:11' - INTERVAL '2 days' AS TIMESTAMP):timestamp>
 -- !query output
 2011-11-09 11:11:11
 
@@ -178,7 +178,7 @@ requirement failed: Cannot add hours, minutes or seconds, milliseconds, microsec
 -- !query
 select '2011-11-11' - interval '2' day
 -- !query schema
-struct<CAST(CAST(2011-11-11 AS TIMESTAMP) + (- INTERVAL '2 days') AS STRING):string>
+struct<CAST(2011-11-11 - INTERVAL '2 days' AS STRING):string>
 -- !query output
 2011-11-09 00:00:00
 
@@ -186,7 +186,7 @@ struct<CAST(CAST(2011-11-11 AS TIMESTAMP) + (- INTERVAL '2 days') AS STRING):str
 -- !query
 select '2011-11-11 11:11:11' - interval '2' second
 -- !query schema
-struct<CAST(CAST(2011-11-11 11:11:11 AS TIMESTAMP) + (- INTERVAL '2 seconds') AS STRING):string>
+struct<CAST(2011-11-11 11:11:11 - INTERVAL '2 seconds' AS STRING):string>
 -- !query output
 2011-11-11 11:11:09
 
@@ -194,7 +194,7 @@ struct<CAST(CAST(2011-11-11 11:11:11 AS TIMESTAMP) + (- INTERVAL '2 seconds') AS
 -- !query
 select '1' - interval '2' second
 -- !query schema
-struct<CAST(CAST(1 AS TIMESTAMP) + (- INTERVAL '2 seconds') AS STRING):string>
+struct<CAST(1 - INTERVAL '2 seconds' AS STRING):string>
 -- !query output
 NULL
 
@@ -493,7 +493,7 @@ struct<subtractdates(DATE '2001-10-01', DATE '2001-09-28'):interval>
 -- !query
 select to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12., yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 NULL
 
@@ -501,7 +501,7 @@ NULL
 -- !query
 select to_timestamp('2019-10-06 10:11:12.0', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.0', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.0, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 2019-10-06 10:11:12
 
@@ -509,7 +509,7 @@ struct<to_timestamp('2019-10-06 10:11:12.0', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):
 -- !query
 select to_timestamp('2019-10-06 10:11:12.1', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.1', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.1, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 2019-10-06 10:11:12.1
 
@@ -517,7 +517,7 @@ struct<to_timestamp('2019-10-06 10:11:12.1', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):
 -- !query
 select to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.12, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 2019-10-06 10:11:12.12
 
@@ -525,7 +525,7 @@ struct<to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query
 select to_timestamp('2019-10-06 10:11:12.123UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.123UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.123UTC, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 2019-10-06 03:11:12.123
 
@@ -533,7 +533,7 @@ struct<to_timestamp('2019-10-06 10:11:12.123UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zz
 -- !query
 select to_timestamp('2019-10-06 10:11:12.1234', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.1234', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.1234, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 2019-10-06 10:11:12.1234
 
@@ -541,7 +541,7 @@ struct<to_timestamp('2019-10-06 10:11:12.1234', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]
 -- !query
 select to_timestamp('2019-10-06 10:11:12.12345CST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.12345CST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.12345CST, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 2019-10-06 08:11:12.12345
 
@@ -549,7 +549,7 @@ struct<to_timestamp('2019-10-06 10:11:12.12345CST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[
 -- !query
 select to_timestamp('2019-10-06 10:11:12.123456PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.123456PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.123456PST, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 2019-10-06 10:11:12.123456
 
@@ -557,7 +557,7 @@ struct<to_timestamp('2019-10-06 10:11:12.123456PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS
 -- !query
 select to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.1234567PST, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 NULL
 
@@ -565,7 +565,7 @@ NULL
 -- !query
 select to_timestamp('123456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('123456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(123456 2019-10-06 10:11:12.123456PST, SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 2019-10-06 10:11:12.123456
 
@@ -573,7 +573,7 @@ struct<to_timestamp('123456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd H
 -- !query
 select to_timestamp('223456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp('223456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]'):timestamp>
+struct<to_timestamp(223456 2019-10-06 10:11:12.123456PST, SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
 NULL
 
@@ -581,7 +581,7 @@ NULL
 -- !query
 select to_timestamp('2019-10-06 10:11:12.1234', 'yyyy-MM-dd HH:mm:ss.[SSSSSS]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.1234', 'yyyy-MM-dd HH:mm:ss.[SSSSSS]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.1234, yyyy-MM-dd HH:mm:ss.[SSSSSS]):timestamp>
 -- !query output
 2019-10-06 10:11:12.1234
 
@@ -589,7 +589,7 @@ struct<to_timestamp('2019-10-06 10:11:12.1234', 'yyyy-MM-dd HH:mm:ss.[SSSSSS]'):
 -- !query
 select to_timestamp('2019-10-06 10:11:12.123', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.123', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.123, yyyy-MM-dd HH:mm:ss[.SSSSSS]):timestamp>
 -- !query output
 2019-10-06 10:11:12.123
 
@@ -597,7 +597,7 @@ struct<to_timestamp('2019-10-06 10:11:12.123', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]'):t
 -- !query
 select to_timestamp('2019-10-06 10:11:12', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12, yyyy-MM-dd HH:mm:ss[.SSSSSS]):timestamp>
 -- !query output
 2019-10-06 10:11:12
 
@@ -605,7 +605,7 @@ struct<to_timestamp('2019-10-06 10:11:12', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]'):times
 -- !query
 select to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11:12.12, yyyy-MM-dd HH:mm[:ss.SSSSSS]):timestamp>
 -- !query output
 2019-10-06 10:11:12.12
 
@@ -613,7 +613,7 @@ struct<to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]'):ti
 -- !query
 select to_timestamp('2019-10-06 10:11', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]')
 -- !query schema
-struct<to_timestamp('2019-10-06 10:11', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]'):timestamp>
+struct<to_timestamp(2019-10-06 10:11, yyyy-MM-dd HH:mm[:ss.SSSSSS]):timestamp>
 -- !query output
 2019-10-06 10:11:00
 
@@ -621,7 +621,7 @@ struct<to_timestamp('2019-10-06 10:11', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]'):timestam
 -- !query
 select to_timestamp("2019-10-06S10:11:12.12345", "yyyy-MM-dd'S'HH:mm:ss.SSSSSS")
 -- !query schema
-struct<to_timestamp('2019-10-06S10:11:12.12345', 'yyyy-MM-dd\'S\'HH:mm:ss.SSSSSS'):timestamp>
+struct<to_timestamp(2019-10-06S10:11:12.12345, yyyy-MM-dd'S'HH:mm:ss.SSSSSS):timestamp>
 -- !query output
 2019-10-06 10:11:12.12345
 
@@ -629,7 +629,7 @@ struct<to_timestamp('2019-10-06S10:11:12.12345', 'yyyy-MM-dd\'S\'HH:mm:ss.SSSSSS
 -- !query
 select to_timestamp("12.12342019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm")
 -- !query schema
-struct<to_timestamp('12.12342019-10-06S10:11', 'ss.SSSSyyyy-MM-dd\'S\'HH:mm'):timestamp>
+struct<to_timestamp(12.12342019-10-06S10:11, ss.SSSSyyyy-MM-dd'S'HH:mm):timestamp>
 -- !query output
 2019-10-06 10:11:12.1234
 
@@ -637,7 +637,7 @@ struct<to_timestamp('12.12342019-10-06S10:11', 'ss.SSSSyyyy-MM-dd\'S\'HH:mm'):ti
 -- !query
 select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm")
 -- !query schema
-struct<to_timestamp('12.1232019-10-06S10:11', 'ss.SSSSyyyy-MM-dd\'S\'HH:mm'):timestamp>
+struct<to_timestamp(12.1232019-10-06S10:11, ss.SSSSyyyy-MM-dd'S'HH:mm):timestamp>
 -- !query output
 NULL
 
@@ -645,7 +645,7 @@ NULL
 -- !query
 select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyy-MM-dd'S'HH:mm")
 -- !query schema
-struct<to_timestamp('12.1232019-10-06S10:11', 'ss.SSSSyy-MM-dd\'S\'HH:mm'):timestamp>
+struct<to_timestamp(12.1232019-10-06S10:11, ss.SSSSyy-MM-dd'S'HH:mm):timestamp>
 -- !query output
 NULL
 
@@ -653,7 +653,7 @@ NULL
 -- !query
 select to_timestamp("12.1234019-10-06S10:11", "ss.SSSSy-MM-dd'S'HH:mm")
 -- !query schema
-struct<to_timestamp('12.1234019-10-06S10:11', 'ss.SSSSy-MM-dd\'S\'HH:mm'):timestamp>
+struct<to_timestamp(12.1234019-10-06S10:11, ss.SSSSy-MM-dd'S'HH:mm):timestamp>
 -- !query output
 0019-10-06 10:11:12.1234
 
@@ -661,7 +661,7 @@ struct<to_timestamp('12.1234019-10-06S10:11', 'ss.SSSSy-MM-dd\'S\'HH:mm'):timest
 -- !query
 select to_timestamp("2019-10-06S", "yyyy-MM-dd'S'")
 -- !query schema
-struct<to_timestamp('2019-10-06S', 'yyyy-MM-dd\'S\''):timestamp>
+struct<to_timestamp(2019-10-06S, yyyy-MM-dd'S'):timestamp>
 -- !query output
 2019-10-06 00:00:00
 
@@ -669,7 +669,7 @@ struct<to_timestamp('2019-10-06S', 'yyyy-MM-dd\'S\''):timestamp>
 -- !query
 select to_timestamp("S2019-10-06", "'S'yyyy-MM-dd")
 -- !query schema
-struct<to_timestamp('S2019-10-06', '\'S\'yyyy-MM-dd'):timestamp>
+struct<to_timestamp(S2019-10-06, 'S'yyyy-MM-dd):timestamp>
 -- !query output
 2019-10-06 00:00:00
 
@@ -703,7 +703,7 @@ struct<date_format(TIMESTAMP '2019-10-06 00:00:00', yyyy-MM-dd uuuu):string>
 -- !query
 select to_timestamp("2019-10-06T10:11:12'12", "yyyy-MM-dd'T'HH:mm:ss''SSSS")
 -- !query schema
-struct<to_timestamp('2019-10-06T10:11:12\'12', 'yyyy-MM-dd\'T\'HH:mm:ss\'\'SSSS'):timestamp>
+struct<to_timestamp(2019-10-06T10:11:12'12, yyyy-MM-dd'T'HH:mm:ss''SSSS):timestamp>
 -- !query output
 2019-10-06 10:11:12.12
 
@@ -711,7 +711,7 @@ struct<to_timestamp('2019-10-06T10:11:12\'12', 'yyyy-MM-dd\'T\'HH:mm:ss\'\'SSSS'
 -- !query
 select to_timestamp("2019-10-06T10:11:12'", "yyyy-MM-dd'T'HH:mm:ss''")
 -- !query schema
-struct<to_timestamp('2019-10-06T10:11:12\'', 'yyyy-MM-dd\'T\'HH:mm:ss\'\''):timestamp>
+struct<to_timestamp(2019-10-06T10:11:12', yyyy-MM-dd'T'HH:mm:ss''):timestamp>
 -- !query output
 2019-10-06 10:11:12
 
@@ -719,7 +719,7 @@ struct<to_timestamp('2019-10-06T10:11:12\'', 'yyyy-MM-dd\'T\'HH:mm:ss\'\''):time
 -- !query
 select to_timestamp("'2019-10-06T10:11:12", "''yyyy-MM-dd'T'HH:mm:ss")
 -- !query schema
-struct<to_timestamp('\'2019-10-06T10:11:12', '\'\'yyyy-MM-dd\'T\'HH:mm:ss'):timestamp>
+struct<to_timestamp('2019-10-06T10:11:12, ''yyyy-MM-dd'T'HH:mm:ss):timestamp>
 -- !query output
 2019-10-06 10:11:12
 
@@ -727,6 +727,6 @@ struct<to_timestamp('\'2019-10-06T10:11:12', '\'\'yyyy-MM-dd\'T\'HH:mm:ss'):time
 -- !query
 select to_timestamp("P2019-10-06T10:11:12", "'P'yyyy-MM-dd'T'HH:mm:ss")
 -- !query schema
-struct<to_timestamp('P2019-10-06T10:11:12', '\'P\'yyyy-MM-dd\'T\'HH:mm:ss'):timestamp>
+struct<to_timestamp(P2019-10-06T10:11:12, 'P'yyyy-MM-dd'T'HH:mm:ss):timestamp>
 -- !query output
 2019-10-06 10:11:12

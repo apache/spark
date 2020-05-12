@@ -502,6 +502,7 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.ml.attribute.NumericAttribute",
 
       "org.apache.spark.ml.feature.Instance",
+      "org.apache.spark.ml.feature.InstanceBlock",
       "org.apache.spark.ml.feature.LabeledPoint",
       "org.apache.spark.ml.feature.OffsetInstance",
       "org.apache.spark.ml.linalg.DenseMatrix",

@@ -486,18 +486,47 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
+  test("SPARK-31102 spark-sql fails to parse when contains comment") {
+    runCliWithin(1.minute)(
+      """SELECT concat('test', 'comment'),
+        |    -- someone's comment here
+        | 2;""".stripMargin -> "testcomment"
+    )
+  }
+
   test("SPARK-30049 Should not complain for quotes in commented with multi-lines") {
     runCliWithin(1.minute)(
-      """SELECT concat('test', 'comment') -- someone's comment here \\
-        | comment continues here with single ' quote \\
-        | extra ' \\
+      """SELECT concat('test', 'comment') -- someone's comment here \
+        | comment continues here with single ' quote \
+        | extra ' \
         |;""".stripMargin -> "testcomment"
     )
+  }
+
+  test("SPARK-31595 Should allow unescaped quote mark in quoted string") {
     runCliWithin(1.minute)(
-      """SELECT concat('test', 'comment') -- someone's comment here \\
-        |   comment continues here with single ' quote \\
-        |   extra ' \\
-        |   ;""".stripMargin -> "testcomment"
+      "SELECT '\"legal string a';select 1 + 234;".stripMargin -> "235"
     )
+    runCliWithin(1.minute)(
+      "SELECT \"legal 'string b\";select 22222 + 1;".stripMargin -> "22223"
+    )
+  }
+
+  test("AnalysisException with root cause will be printStacktrace") {
+    // If it is not in silent mode, will print the stacktrace
+    runCliWithin(
+      1.minute,
+      extraArgs = Seq("--hiveconf", "hive.session.silent=false",
+        "-e", "select date_sub(date'2011-11-11', '1.2');"),
+      errorResponses = Seq("NumberFormatException"))(
+      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."),
+      ("", "NumberFormatException: invalid input syntax for type numeric: 1.2"))
+    // If it is in silent mode, will print the error message only
+    runCliWithin(
+      1.minute,
+      extraArgs = Seq("--conf", "spark.hive.session.silent=true",
+        "-e", "select date_sub(date'2011-11-11', '1.2');"),
+      errorResponses = Seq("AnalysisException"))(
+      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."))
   }
 }

@@ -937,33 +937,48 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-31159: rebasing timestamps in write") {
-    Seq(
-      ("TIMESTAMP_MILLIS", "1001-01-01 01:02:03.123", "1001-01-07 01:09:05.123"),
-      ("TIMESTAMP_MICROS", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456"),
-      ("INT96", "1001-01-01 01:02:03.123456", "1001-01-01 01:02:03.123456")
-    ).foreach { case (outType, tsStr, nonRebased) =>
-      withClue(s"output type $outType") {
-        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
-          withTempPath { dir =>
-            val path = dir.getAbsolutePath
-            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> "true") {
-              Seq(tsStr).toDF("tsS")
-                .select($"tsS".cast("timestamp").as("ts"))
-                .write
-                .parquet(path)
-            }
-            // The file metadata indicates if it needs rebase or not, so we can always get the
-            // correct result regardless of the "rebaseInRead" config.
-            Seq(true, false).foreach { rebase =>
-              withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
-                checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(tsStr)))
+    val N = 8
+    Seq(false, true).foreach { dictionaryEncoding =>
+      Seq(
+        ("TIMESTAMP_MILLIS", "1001-01-01 01:02:03.123", "1001-01-07 01:09:05.123"),
+        ("TIMESTAMP_MICROS", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456"),
+        ("INT96", "1001-01-01 01:02:03.123456", "1001-01-01 01:02:03.123456")
+      ).foreach { case (outType, tsStr, nonRebased) =>
+        withClue(s"output type $outType") {
+          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
+            withTempPath { dir =>
+              val path = dir.getAbsolutePath
+              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> "true") {
+                Seq.tabulate(N)(_ => tsStr).toDF("tsS")
+                  .select($"tsS".cast("timestamp").as("ts"))
+                  .repartition(1)
+                  .write
+                  .option("parquet.enable.dictionary", dictionaryEncoding)
+                  .parquet(path)
               }
-            }
 
-            // Force to not rebase to prove the written datetime values are rebased and we will get
-            // wrong result if we don't rebase while reading.
-            withSQLConf("spark.test.forceNoRebase" -> "true") {
-              checkAnswer(spark.read.parquet(path), Row(Timestamp.valueOf(nonRebased)))
+              Seq(false, true).foreach { vectorized =>
+                withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+                  // The file metadata indicates if it needs rebase or not, so we can always get the
+                  // correct result regardless of the "rebaseInRead" config.
+                  Seq(true, false).foreach { rebase =>
+                    withSQLConf(
+                      SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+                      checkAnswer(
+                        spark.read.parquet(path),
+                        Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
+                    }
+                  }
+
+                  // Force to not rebase to prove the written datetime values are rebased
+                  // and we will get wrong result if we don't rebase while reading.
+                  withSQLConf("spark.test.forceNoRebase" -> "true") {
+                    checkAnswer(
+                      spark.read.parquet(path),
+                      Seq.tabulate(N)(_ => Row(Timestamp.valueOf(nonRebased))))
+                  }
+                }
+              }
             }
           }
         }
@@ -972,27 +987,40 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-31159: rebasing dates in write") {
-    withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> "true") {
-        Seq("1001-01-01").toDF("dateS")
-          .select($"dateS".cast("date").as("date"))
-          .write
-          .parquet(path)
-      }
-
-      // The file metadata indicates if it needs rebase or not, so we can always get the correct
-      // result regardless of the "rebaseInRead" config.
-      Seq(true, false).foreach { rebase =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
-          checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-01")))
+    val N = 8
+    Seq(false, true).foreach { dictionaryEncoding =>
+      withTempPath { dir =>
+        val path = dir.getAbsolutePath
+        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> "true") {
+          Seq.tabulate(N)(_ => "1001-01-01").toDF("dateS")
+            .select($"dateS".cast("date").as("date"))
+            .repartition(1)
+            .write
+            .option("parquet.enable.dictionary", dictionaryEncoding)
+            .parquet(path)
         }
-      }
 
-      // Force to not rebase to prove the written datetime values are rebased and we will get
-      // wrong result if we don't rebase while reading.
-      withSQLConf("spark.test.forceNoRebase" -> "true") {
-        checkAnswer(spark.read.parquet(path), Row(Date.valueOf("1001-01-07")))
+        Seq(false, true).foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+            // The file metadata indicates if it needs rebase or not, so we can always get
+            // the correct result regardless of the "rebaseInRead" config.
+            Seq(true, false).foreach { rebase =>
+              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ.key -> rebase.toString) {
+                checkAnswer(
+                  spark.read.parquet(path),
+                  Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-01"))))
+              }
+            }
+
+            // Force to not rebase to prove the written datetime values are rebased and we will get
+            // wrong result if we don't rebase while reading.
+            withSQLConf("spark.test.forceNoRebase" -> "true") {
+              checkAnswer(
+                spark.read.parquet(path),
+                Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-07"))))
+            }
+          }
+        }
       }
     }
   }

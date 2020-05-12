@@ -157,6 +157,15 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.applicationType</code></td>
+  <td><code>SPARK</code></td>
+  <td>
+    Defines more specific application types, e.g. <code>SPARK</code>, <code>SPARK-SQL</code>, <code>SPARK-STREAMING</code>,
+    <code>SPARK-MLLIB</code> and <code>SPARK-GRAPH</code>. Please be careful not to exceed 20 characters.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.driver.resource.{resource-type}.amount</code></td>
   <td><code>(none)</code></td>
   <td>

@@ -24,15 +24,18 @@ import com.codahale.metrics.MetricRegistry
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ui.JettyUtils._
 
 /**
+ * :: Experimental ::
  * This exposes the metrics of the given registry with Prometheus format.
  *
  * The output is consistent with /metrics/json result in terms of item ordering
  * and with the previous result of Spark JMX Sink + Prometheus JMX Converter combination
  * in terms of key string format.
  */
+@Experimental
 private[spark] class PrometheusServlet(
     val property: Properties,
     val registry: MetricRegistry,
