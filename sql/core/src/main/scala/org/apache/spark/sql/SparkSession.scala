@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.util.concurrent.TimeUnit._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
