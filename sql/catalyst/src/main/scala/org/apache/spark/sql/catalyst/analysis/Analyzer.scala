@@ -634,14 +634,17 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case a @ AggregateWithHaving(
           havingCondition, agg @ Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, _))
-          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+          if agg.childrenResolved && !havingCondition.isInstanceOf[SubqueryExpression]
+            && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(a, havingCondition, agg)
       case a @ AggregateWithHaving(
           havingCondition, agg @ Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, _))
-          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+          if agg.childrenResolved && !havingCondition.isInstanceOf[SubqueryExpression]
+            && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(a, havingCondition, agg)
       case a @ AggregateWithHaving(havingCondition, g: GroupingSets)
-          if g.childrenResolved && g.expressions.forall(_.resolved) =>
+          if g.childrenResolved && !havingCondition.isInstanceOf[SubqueryExpression]
+            && g.expressions.forall(_.resolved) =>
         tryResolveHavingCondition(a, havingCondition, g)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
