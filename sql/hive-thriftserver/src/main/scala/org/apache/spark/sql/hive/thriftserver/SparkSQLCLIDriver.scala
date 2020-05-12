@@ -511,7 +511,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     var insideComment = false
     var escape = false
     var beginIndex = 0
-    var endIndex = line.length
     val ret = new JArrayList[String]
 
     for (index <- 0 until line.length) {
@@ -539,8 +538,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         } else if (hasNext && line.charAt(index + 1) == '-') {
           // ignore quotes and ;
           insideComment = true
-          // ignore eol
-          endIndex = index
         }
       } else if (line.charAt(index) == ';') {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
@@ -550,8 +547,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           ret.add(line.substring(beginIndex, index))
           beginIndex = index + 1
         }
-      } else {
-        // nothing to do
+      } else if (line.charAt(index) == '\n') {
+        // with a new line the inline comment should end.
+        if (!escape) {
+          insideComment = false
+        }
       }
       // set the escape
       if (escape) {
@@ -560,7 +560,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         escape = true
       }
     }
-    ret.add(line.substring(beginIndex, endIndex))
+    ret.add(line.substring(beginIndex))
     ret
   }
 }
