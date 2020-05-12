@@ -596,7 +596,7 @@ class Analyzer(
     }
 
     private def tryResolveHavingCondition(
-        a: AggregateWithHaving, havingCond: Expression, agg: LogicalPlan): LogicalPlan = {
+        a: UnresolvedHaving, havingCond: Expression, agg: LogicalPlan): LogicalPlan = {
       val aggForResolver = agg match {
         case a: Aggregate =>
           // For CUBE/ROLLUP expressions, since they don't have their own logical plan, we need
@@ -632,17 +632,17 @@ class Analyzer(
 
     // This require transformUp to replace grouping()/grouping_id() in resolved Filter/Sort
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case a @ AggregateWithHaving(
+      case a @ UnresolvedHaving(
           havingCondition, agg @ Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, _))
           if agg.childrenResolved && !havingCondition.isInstanceOf[SubqueryExpression]
             && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(a, havingCondition, agg)
-      case a @ AggregateWithHaving(
+      case a @ UnresolvedHaving(
           havingCondition, agg @ Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, _))
           if agg.childrenResolved && !havingCondition.isInstanceOf[SubqueryExpression]
             && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(a, havingCondition, agg)
-      case a @ AggregateWithHaving(havingCondition, g: GroupingSets)
+      case a @ UnresolvedHaving(havingCondition, g: GroupingSets)
           if g.childrenResolved && !havingCondition.isInstanceOf[SubqueryExpression]
             && g.expressions.forall(_.resolved) =>
         tryResolveHavingCondition(a, havingCondition, g)
@@ -1454,7 +1454,7 @@ class Analyzer(
         }
 
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
-      case h: AggregateWithHaving => h
+      case h: UnresolvedHaving => h
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
@@ -2099,7 +2099,7 @@ class Analyzer(
       // Resolve aggregate with having clause to Filter(..., Aggregate()). Note, to avoid wrongly
       // resolve the having condition expression, here we skip resolving it in ResolveReferences
       // and transform it to Filter after aggregate is resolved. See more details in SPARK-31519.
-      case AggregateWithHaving(cond, agg: Aggregate) if agg.resolved =>
+      case UnresolvedHaving(cond, agg: Aggregate) if agg.resolved =>
         resolveHaving(Filter(cond, agg), agg)
 
       case f @ Filter(_, agg: Aggregate) if agg.resolved =>
@@ -2673,12 +2673,12 @@ class Analyzer(
       case Filter(condition, _) if hasWindowFunction(condition) =>
         failAnalysis("It is not allowed to use window functions inside WHERE clause")
 
-      case AggregateWithHaving(condition, _) if hasWindowFunction(condition) =>
+      case UnresolvedHaving(condition, _) if hasWindowFunction(condition) =>
         failAnalysis("It is not allowed to use window functions inside HAVING clause")
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
-      case f @ AggregateWithHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
+      case f @ UnresolvedHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
         if child.resolved &&
            hasWindowFunction(aggregateExprs) &&
            a.expressions.forall(_.resolved) =>

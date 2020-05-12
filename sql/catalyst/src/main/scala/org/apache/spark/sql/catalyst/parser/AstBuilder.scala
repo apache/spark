@@ -629,7 +629,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case p: Predicate => p
       case e => Cast(e, BooleanType)
     }
-    AggregateWithHaving(predicate, plan)
+    UnresolvedHaving(predicate, plan)
   }
 
   /**
