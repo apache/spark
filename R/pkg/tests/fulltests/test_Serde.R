@@ -144,10 +144,6 @@ test_that("SPARK-20007 *apply() can return empty data.frame", {
   colnames(expected1) <- names
   for (k in names) expected1[[k]] <- list()
 
-  # The following should be the correct way to generate expected1,
-  # but result1 can not match this in the current fix.
-  # x <- collect(df)
-  # expected1 <- func1(x)
   expect_equal(expected1, result1)
 
   # gapply
@@ -162,7 +158,7 @@ test_that("SPARK-20007 *apply() can return empty data.frame", {
     }, schema2)
 
   result2 <- collect(df2)
-  expected2 <- data.frame(a=3L, c="3", avg=3, stringsAsFactors = FALSE)
+  expected2 <- data.frame(a = 3L, c = "3", avg = 3, stringsAsFactors = FALSE)
   expect_equal(expected2, result2)
 })
 
