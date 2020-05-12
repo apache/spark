@@ -42,7 +42,7 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
  * otherwise the features will not be mapped evenly to the columns.
  */
 @Since("1.2.0")
-class HashingTF @Since("3.0.0") private[m] (
+class HashingTF @Since("3.0.0") private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("3.1.0") val hashFuncVersion: Int)
   extends Transformer with HasInputCol with HasOutputCol with HasNumFeatures
