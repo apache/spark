@@ -527,8 +527,8 @@ case class AdaptiveSparkPlanExec(
       val planDescriptionMode = ExplainMode.fromString(conf.uiExplainMode)
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
         executionId,
-        SQLExecution.getQueryExecution(executionId).explainString(planDescriptionMode),
-        SparkPlanInfo.fromSparkPlan(this)))
+        context.qe.explainString(planDescriptionMode),
+        SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
     }
   }
 

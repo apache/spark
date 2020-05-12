@@ -715,7 +715,7 @@ A list of the available metrics, with a short description:
 Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
 Executor metric values and their measured memory peak values per executor are exposed via the REST API in JSON format and in Prometheus format.
 The JSON end point is exposed at: `/applications/[app-id]/executors`, and the Prometheus endpoint at: `/metrics/executors/prometheus`.
-The Prometheus endpoint is conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
+The Prometheus endpoint is experimental and conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
 In addition, aggregated per-stage peak values of the executor memory metrics are written to the event log if
 `spark.eventLog.logStageExecutorMetrics` is true.  
 Executor memory metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
@@ -963,7 +963,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `CSVSink`: Exports metrics data to CSV files at regular intervals.
 * `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
-* `PrometheusServlet`: Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
+* `PrometheusServlet`: (Experimental) Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
 * `GraphiteSink`: Sends metrics to a Graphite node.
 * `Slf4jSink`: Sends metrics to slf4j as log entries.
 * `StatsdSink`: Sends metrics to a StatsD node.

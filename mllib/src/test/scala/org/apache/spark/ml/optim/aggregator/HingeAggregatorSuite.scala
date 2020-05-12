@@ -63,22 +63,7 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     new HingeAggregator(bcFeaturesStd, fitIntercept)(bcCoefficients)
   }
 
-  private def standardize(instances: Array[Instance]): Array[Instance] = {
-    val (featuresSummarizer, _) =
-      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
-    val stdArray = featuresSummarizer.std.toArray
-    val numFeatures = stdArray.length
-    instances.map { case Instance(label, weight, features) =>
-      val standardized = Array.ofDim[Double](numFeatures)
-      features.foreachNonZero { (i, v) =>
-        val std = stdArray(i)
-        if (std != 0) standardized(i) = v / std
-      }
-      Instance(label, weight, Vectors.dense(standardized).compressed)
-    }
-  }
-
-   /** Get summary statistics for some data and create a new BlockHingeAggregator. */
+  /** Get summary statistics for some data and create a new BlockHingeAggregator. */
   private def getNewBlockAggregator(
       coefficients: Vector,
       fitIntercept: Boolean): BlockHingeAggregator = {
@@ -180,8 +165,8 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
         val blockAgg = getNewBlockAggregator(Vectors.dense(coefArray ++ Array(intercept)),
           fitIntercept = true)
         blocks.foreach(blockAgg.add)
-        assert(loss ~== blockAgg.loss relTol 1e-9)
-        assert(gradient ~== blockAgg.gradient relTol 1e-9)
+        assert(agg.loss ~== blockAgg.loss relTol 1e-9)
+        assert(agg.gradient ~== blockAgg.gradient relTol 1e-9)
       }
     }
   }

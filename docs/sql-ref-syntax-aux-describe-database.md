@@ -28,23 +28,20 @@ interchangeable.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 { DESC | DESCRIBE } DATABASE [ EXTENDED ] db_name
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>db_name</em></code></dt>
-  <dd>
+* **db_name**
+
     Specifies a name of an existing database or an existing schema in the system. If the name does not exist, an
     exception is thrown.
-  </dd>
-</dl>
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Create employees DATABASE
 CREATE DATABASE employees COMMENT 'For software companies';
 
@@ -89,10 +86,10 @@ DESC DATABASE deployment;
 |              Description|        Deployment environment|
 |                 Location|file:/Users/Temp/deployment.db|
 +-------------------------+------------------------------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
- * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
- * [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)
+* [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+* [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+* [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)

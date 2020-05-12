@@ -25,26 +25,21 @@ license: |
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 SHOW CREATE TABLE table_identifier
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table or view name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
+
+    Specifies a table or view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CREATE TABLE test (c INT) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
     STORED AS TEXTFILE
     TBLPROPERTIES ('prop1' = 'value1', 'prop2' = 'value2');
@@ -60,9 +55,9 @@ SHOW CREATE TABLE test;
    'prop1' = 'value1',
    'prop2' = 'value2')
 +----------------------------------------------------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
- * [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
+* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+* [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)

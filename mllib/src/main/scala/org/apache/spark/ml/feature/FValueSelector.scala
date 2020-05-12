@@ -150,7 +150,7 @@ class FValueSelectorModel private[ml](
 
   @Since("3.1.0")
   override def toString: String = {
-    s"FValueModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
+    s"FValueSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
   }
 }
 

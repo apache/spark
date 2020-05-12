@@ -128,7 +128,7 @@ cannot resolve 't.`a`' due to data type mismatch: cannot cast string to map<stri
 -- !query
 select to_timestamp(a) from t
 -- !query schema
-struct<to_timestamp(t.`a`):timestamp>
+struct<to_timestamp(a):timestamp>
 -- !query output
 NULL
 
@@ -136,7 +136,7 @@ NULL
 -- !query
 select to_timestamp('2018-01-01', a) from t
 -- !query schema
-struct<to_timestamp('2018-01-01', t.`a`):timestamp>
+struct<to_timestamp(2018-01-01, a):timestamp>
 -- !query output
 NULL
 
