@@ -253,7 +253,7 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Log]("ln"),
     expression[Remainder]("mod", true),
-    expression[UnaryMinus]("negative"),
+    expression[UnaryMinus]("negative", true),
     expression[Pi]("pi"),
     expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),

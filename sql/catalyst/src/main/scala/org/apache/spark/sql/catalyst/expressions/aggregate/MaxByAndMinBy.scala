@@ -31,7 +31,6 @@ abstract class MaxMinBy extends DeclarativeAggregate {
   def valueExpr: Expression
   def orderingExpr: Expression
 
-  protected def funcName: String
   // The predicate compares two ordering values.
   protected def predicate(oldExpr: Expression, newExpr: Expression): Expression
   // The arithmetic expression returns greatest/least value of all parameters.
@@ -46,7 +45,7 @@ abstract class MaxMinBy extends DeclarativeAggregate {
   override def dataType: DataType = valueExpr.dataType
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForOrderingExpr(orderingExpr.dataType, s"function $funcName")
+    TypeUtils.checkForOrderingExpr(orderingExpr.dataType, s"function $prettyName")
 
   // The attributes used to keep extremum (max or min) and associated aggregated values.
   private lazy val extremumOrdering =
@@ -101,7 +100,8 @@ abstract class MaxMinBy extends DeclarativeAggregate {
   group = "agg_funcs",
   since = "3.0.0")
 case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMinBy {
-  override protected def funcName: String = "max_by"
+
+  override def prettyName: String = "max_by"
 
   override protected def predicate(oldExpr: Expression, newExpr: Expression): Expression =
     oldExpr > newExpr
@@ -120,7 +120,8 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   group = "agg_funcs",
   since = "3.0.0")
 case class MinBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMinBy {
-  override protected def funcName: String = "min_by"
+
+  override def prettyName: String = "min_by"
 
   override protected def predicate(oldExpr: Expression, newExpr: Expression): Expression =
     oldExpr < newExpr
