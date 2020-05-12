@@ -597,10 +597,10 @@ class Analyzer(
 
     private def tryResolveHavingCondition(
         a: UnresolvedHaving, havingCond: Expression, agg: LogicalPlan): LogicalPlan = {
-      val aggForResolver = agg match {
+      val aggForResolving = agg match {
         case a: Aggregate =>
-          // For CUBE/ROLLUP expressions, since they don't have their own logical plan, we need
-          // to delete them from groupingExpressions for condition resolving.
+          // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
+          // groupingExpressions for condition resolving.
           a.copy(groupingExpressions = Seq.empty)
         case g: GroupingSets =>
           Aggregate(g.groupByExprs, g.aggregations, g.child)
@@ -608,7 +608,7 @@ class Analyzer(
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val (extraAggExprs, transformedAggregateFilter) =
         ResolveAggregateFunctions.resolveFilterCondInAggregate(
-          havingCond, aggForResolver, true)
+          havingCond, aggForResolving, resolveFilterNotInGroupingExprs = true)
 
       // Push the aggregate expressions into the aggregate (if any).
       if (extraAggExprs.nonEmpty) {
@@ -2178,7 +2178,7 @@ class Analyzer(
     def resolveFilterCondInAggregate(
         filterCond: Expression,
         agg: Aggregate,
-        resolveFilterNotInAggOutput: Boolean = false)
+        resolveFilterNotInGroupingExprs: Boolean = false)
       : (Seq[NamedExpression], Option[Expression]) = {
       val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
       try {
@@ -2198,7 +2198,7 @@ class Analyzer(
         if (resolvedOperator.resolved) {
           // Try to replace all aggregate expressions in the filter by an alias.
           val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
-          val groupingExpressions = if (resolveFilterNotInAggOutput) {
+          val groupingExpressions = if (resolveFilterNotInGroupingExprs) {
             agg.groupingExpressions :+ resolvedAggregateFilter
           } else {
             agg.groupingExpressions

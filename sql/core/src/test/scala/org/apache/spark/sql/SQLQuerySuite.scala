@@ -3448,6 +3448,96 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(df4.schema.head.name === "randn(1)")
     checkIfSeedExistsInExplain(df2)
   }
+
+//  test("aaa") {
+//    sql("select sum(a) as b FROM VALUES " +
+//      "(1, 10), (2, 20) AS T(a, b) group by GROUPING SETS ((b), (a, b)) having b > 10;").show()
+//  }
+
+//  test("aaa") {
+//    sql("select sum(a) as b FROM VALUES " +
+//      "(1, 10), (2, 20) AS T(a, b) group by CUBE(a, b) having b > 10;").show()
+//  }
+
+//  test("aaa") {
+//    val a =
+//      """
+//        |CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
+//        |(1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)
+//        |AS testData(a, b);
+//      """.stripMargin
+//    sql(a)
+//    val b =
+//      """
+//        |SELECT course, year FROM courseSales GROUP BY CUBE(course, year) HAVING grouping__id > 0;
+//      """.stripMargin
+//    sql(b)
+//  }
+
+//  test("aaa") {
+//    val a =
+//      """
+//        |create table gstest2 (a integer, b integer, c integer, d integer,
+//        |                      e integer, f integer, g integer, h integer) using parquet;
+//      """.stripMargin
+//    sql(a)
+//    val b =
+//      """
+//        |insert into gstest2 values
+//        |  (1, 1, 1, 1, 1, 1, 1, 1),
+//        |  (1, 1, 1, 1, 1, 1, 1, 2),
+//        |  (1, 1, 1, 1, 1, 1, 2, 2),
+//        |  (1, 1, 1, 1, 1, 2, 2, 2),
+//        |  (1, 1, 1, 1, 2, 2, 2, 2),
+//        |  (1, 1, 1, 2, 2, 2, 2, 2),
+//        |  (1, 1, 2, 2, 2, 2, 2, 2),
+//        |  (1, 2, 2, 2, 2, 2, 2, 2),
+//        |  (2, 2, 2, 2, 2, 2, 2, 2);
+//      """.stripMargin
+//    sql(b)
+//    val c =
+//      """
+//        |select a,count(*) from gstest2 group by rollup(a) having a is distinct from 1 order by a;
+//      """.stripMargin
+//    sql(c)
+//  }
+
+  test("aaa") {
+    spark
+      .read
+      .format("csv")
+      .options(Map("delimiter" -> "\t", "header" -> "false"))
+      .schema(
+        """
+          |unique1 int,
+          |unique2 int,
+          |two int,
+          |four int,
+          |ten int,
+          |twenty int,
+          |hundred int,
+          |thousand int,
+          |twothousand int,
+          |fivethous int,
+          |tenthous int,
+          |odd int,
+          |even int,
+          |stringu1 string,
+          |stringu2 string,
+          |string4 string
+        """.stripMargin)
+      .load(testFile("test-data/postgresql/onek.data"))
+      .write
+      .format("parquet")
+      .saveAsTable("onek")
+    sql(
+      """
+        |select ten, sum(distinct four) from onek a
+        |group by grouping sets((ten,four),(ten))
+        |having exists (select 1 from onek b where sum(distinct a.four) = b.four)
+      """.stripMargin)
+    spark.sql("DROP TABLE IF EXISTS onek")
+  }
 }
 
 case class Foo(bar: Option[String])
