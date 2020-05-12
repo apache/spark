@@ -17,22 +17,25 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.net.URI
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog, ExternalCatalogUtils, ExternalCatalogWithListener}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
-import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.hive.client.{HiveClientImpl, HiveVersion}
+import org.apache.spark.sql.hive.client.hive._
 
 
 /**
@@ -281,11 +284,27 @@ case class InsertIntoHiveTable(
             oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
           }
 
+          val hiveVersion = externalCatalog.asInstanceOf[ExternalCatalogWithListener]
+            .unwrapped.asInstanceOf[HiveExternalCatalog]
+            .client
+            .version
+          // https://issues.apache.org/jira/browse/SPARK-31684,
+          // For Hive 2.0.0 and onwards, as https://issues.apache.org/jira/browse/HIVE-11940
+          // has been fixed, and there is no performance issue anymore.
+          // We should leave the overwrite logic to hive to avoid failure in `FileSystem#checkPath`
+          // For Hive versions before 2.0.0, we leave the replace work to hive when the table
+          // and partition locations do not belong to the same FileSystem
+          // TODO(SPARK-31675): For Hive 2.2.0 and earlier, if the table and partition locations
+          // do not belong together, we will still get the same error thrown by hive encryption
+          // check.
+          val hiveVersDoHiveOverwrite: Set[HiveVersion] = Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
+          val canDisable = !hiveVersDoHiveOverwrite.contains(hiveVersion) &&
+            canDisableHiveOverwrite(table.location, partitionPath.map(_.toUri).orNull, hadoopConf)
           // SPARK-18107: Insert overwrite runs much slower than hive-client.
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
           // version and we may not want to catch up new Hive version every time. We delete the
           // Hive partition first and then load data file into the Hive partition.
-          if (partitionPath.nonEmpty && overwrite) {
+          if (partitionPath.nonEmpty && overwrite && canDisable) {
             partitionPath.foreach { path =>
               val fs = path.getFileSystem(hadoopConf)
               if (fs.exists(path)) {
@@ -319,6 +338,44 @@ case class InsertIntoHiveTable(
         tmpLocation.toString, // TODO: URI
         overwrite,
         isSrcLocal = false)
+    }
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * If the table location and partition location do not belong to the same [[FileSystem]], We
+   * should not disable hive overwrite. Otherwise, hive will use the [[FileSystem]] instance belong
+   * to the table location to copy files, which will fail in [[FileSystem#checkPath]]
+   * see https://github.com/apache/hive/blob/rel/release-2.3.7/ql/src/java/org/apache/hadoop/hive/ql/metadata/Hive.java#L1648-L1659
+   */
+  // scalastyle:on line.size.limit
+  private def canDisableHiveOverwrite(
+      tableLocation: URI,
+      partitionLocation: URI,
+      hadoopConf: Configuration): Boolean = {
+    if (tableLocation == null || partitionLocation == null) return true
+    val partScheme = partitionLocation.getScheme
+    if (partScheme == null) return true // relative path
+
+    val tblScheme = tableLocation.getScheme
+    // authority and scheme are not case sensitive
+    if (partScheme.equalsIgnoreCase(tblScheme)) {
+      val partAuthority = partitionLocation.getAuthority
+      val tblAuthority = tableLocation.getAuthority
+      if (partAuthority != null && tblAuthority != null) {
+        tblAuthority.equalsIgnoreCase(partAuthority)
+      } else {
+        val defaultUri = FileSystem.getDefaultUri(hadoopConf)
+        if (tblAuthority != null) {
+          tblAuthority.equalsIgnoreCase(defaultUri.getAuthority)
+        } else if (partAuthority != null) {
+          partAuthority.equalsIgnoreCase(defaultUri.getAuthority)
+        } else {
+          true
+        }
+      }
+    } else {
+      false
     }
   }
 }
