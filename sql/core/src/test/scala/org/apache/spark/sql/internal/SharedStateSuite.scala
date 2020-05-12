@@ -33,7 +33,7 @@ class SharedStateSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
-      .set("spark.hadoop.test", "value")
+      .set("spark.hadoop.fs.defaultFS", "file:///")
   }
 
   test("Url handler factory should have the hadoop configs from Spark conf") {
@@ -50,6 +50,6 @@ class SharedStateSuite extends SharedSparkSession {
     val conf = confField.get(streamFactory)
 
     assert(conf.isInstanceOf[Configuration])
-    assert(conf.asInstanceOf[Configuration].get("test") == "value")
+    assert(conf.asInstanceOf[Configuration].get("fs.defaultFS") == "file:///")
   }
 }
