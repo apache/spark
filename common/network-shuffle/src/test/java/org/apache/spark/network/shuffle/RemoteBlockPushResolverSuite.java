@@ -46,29 +46,25 @@ import org.apache.spark.network.util.TransportConf;
 public class RemoteBlockPushResolverSuite {
 
   private static final Logger log = LoggerFactory.getLogger(RemoteBlockPushResolverSuite.class);
-  private static final String[] LOCAL_DIRS = new String[]{"target/l1", "target/l2"};
-  private static final String TEST_APP = "testApp";
 
   private TransportConf conf;
   private RemoteBlockPushResolver pushResolver;
+  private String[] localDirs;
 
   @Before
   public void before() throws IOException {
+    localDirs = new String[]{Paths.get("target/l1").toAbsolutePath().toString(),
+        Paths.get("target/l2").toAbsolutePath().toString()};
     cleanupLocalDirs();
-    for (String localDir : LOCAL_DIRS) {
-      Files.createDirectories(Paths.get(localDir).resolve(TEST_APP));
-    }
     MapConfigProvider provider = new MapConfigProvider(
         ImmutableMap.of("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "4"));
     conf = new TransportConf("shuffle", provider);
-    pushResolver = new RemoteBlockPushResolver(conf, LOCAL_DIRS);
-    pushResolver.registerApplication(TEST_APP, TEST_APP);
+    pushResolver = new RemoteBlockPushResolver(conf, localDirs);
   }
 
   @After
   public void after() {
     try {
-      pushResolver.applicationRemoved(TEST_APP, true);
       cleanupLocalDirs();
     } catch (IOException e) {
       // don't fail if clean up doesn't succeed.
@@ -76,8 +72,8 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  private static void cleanupLocalDirs() throws IOException {
-    for (String local : LOCAL_DIRS) {
+  private void cleanupLocalDirs() throws IOException {
+    for (String local : localDirs) {
       FileUtils.deleteDirectory(new File(local));
     }
   }
@@ -85,7 +81,10 @@ public class RemoteBlockPushResolverSuite {
   @Test(expected = RuntimeException.class)
   public void testNoIndexFile() {
     try {
-      pushResolver.getChunkCount(TEST_APP, 0, 0);
+      String appId = "app_NoIndexFile";
+      registerApplication(appId);
+      pushResolver.getChunkCount(appId, 0, 0);
+      removeApplication(appId);
     } catch (Throwable t) {
       assertTrue(t.getMessage().startsWith("Application merged shuffle index file is not found"));
       Throwables.propagate(t);
@@ -94,27 +93,32 @@ public class RemoteBlockPushResolverSuite {
 
   @Test
   public void testChunkCountsAndBlockData() throws IOException {
+    String appId = "app_ChunkCountsAndBlockData";
+    registerApplication(appId);
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
-        new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
+        new PushBlockStream(appId, "shuffle_0_0_0", 0),
+        new PushBlockStream(appId, "shuffle_0_1_0", 0),
     };
     ByteBuffer[] blocks = new ByteBuffer[]{
         ByteBuffer.wrap(new byte[4]),
         ByteBuffer.wrap(new byte[5])
     };
-    pushBlockHelper(pushBlocks, blocks);
-    int numChunks = pushResolver.getChunkCount(TEST_APP, 0, 0);
+    pushBlockHelper(appId, pushBlocks, blocks);
+    int numChunks = pushResolver.getChunkCount(appId, 0, 0);
     assertEquals(2, numChunks);
-    validateChunks(0, 0, numChunks, new int[]{4, 5});
+    validateChunks(appId,0, 0, numChunks, new int[]{4, 5});
+    removeApplication(appId);
   }
 
   @Test
   public void testMultipleBlocksInAChunk() throws IOException {
+    String appId = "app_MultipleBlocksInAChunk";
+    registerApplication(appId);
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
-        new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_3_0", 0),
+        new PushBlockStream(appId, "shuffle_0_0_0", 0),
+        new PushBlockStream(appId, "shuffle_0_1_0", 0),
+        new PushBlockStream(appId, "shuffle_0_2_0", 0),
+        new PushBlockStream(appId, "shuffle_0_3_0", 0),
     };
     ByteBuffer[] buffers = new ByteBuffer[]{
         ByteBuffer.wrap(new byte[2]),
@@ -122,31 +126,48 @@ public class RemoteBlockPushResolverSuite {
         ByteBuffer.wrap(new byte[5]),
         ByteBuffer.wrap(new byte[3])
     };
-    pushBlockHelper(pushBlocks, buffers);
-    int numChunks = pushResolver.getChunkCount(TEST_APP, 0, 0);
+    pushBlockHelper(appId, pushBlocks, buffers);
+    int numChunks = pushResolver.getChunkCount(appId, 0, 0);
     assertEquals(3, numChunks);
-    validateChunks(0, 0, numChunks, new int[]{5, 5, 3});
+    validateChunks(appId,0, 0, numChunks, new int[]{5, 5, 3});
+    removeApplication(appId);
+  }
+
+  /**
+   * Registers the app with RemoteBlockPushResolver. Use a different appId for different tests.
+   * This is because when the application gets removed, the directory cleaner removes the merged
+   * data and file in a different thread which can delete the relevant data of a different test.
+   */
+  private void registerApplication(String appId) throws IOException {
+    for (String localDir : localDirs) {
+      Files.createDirectories(Paths.get(localDir).resolve(appId + "/merge_manager"));
+    }
+    pushResolver.registerApplication(appId, appId + "/merge_manager");
+  }
+
+  private void removeApplication(String appId) {
+    pushResolver.applicationRemoved(appId,  true);
   }
 
   private void validateChunks(
-      int shuffleId, int reduceId, int numChunks, int[] expectedSizes) {
+      String appId, int shuffleId, int reduceId, int numChunks, int[] expectedSizes) {
     for (int i = 0; i < numChunks; i++) {
       FileSegmentManagedBuffer mb =
-          (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(TEST_APP, shuffleId, reduceId,
+          (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(appId, shuffleId, reduceId,
               i);
       assertEquals(expectedSizes[i], mb.getLength());
     }
   }
 
-  private void pushBlockHelper(PushBlockStream[] pushBlocks, ByteBuffer[] blocks)
+  private void pushBlockHelper(String appId, PushBlockStream[] pushBlocks, ByteBuffer[] blocks)
       throws IOException {
     Preconditions.checkArgument(pushBlocks.length == blocks.length);
     for (int i = 0; i < pushBlocks.length; i++) {
       StreamCallbackWithID stream = pushResolver.receiveBlockDataAsStream(
-          new PushBlockStream(TEST_APP, pushBlocks[i].blockId, 0));
+          new PushBlockStream(appId, pushBlocks[i].blockId, 0));
       stream.onData(stream.getID(), blocks[i]);
       stream.onComplete(stream.getID());
     }
-    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, 0));
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(appId, 0));
   }
 }

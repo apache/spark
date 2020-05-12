@@ -151,7 +151,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     File mergedShuffleFile = getMergedShuffleFile(id);
     if (!mergedShuffleFile.exists()) {
       throw new RuntimeException(
-          String.format("Application merged shuffle file is not found (id=%s)", id.toString()));
+          String.format("Merged shuffle file %s of %s not found", mergedShuffleFile.getPath(),
+              id.toString()));
     }
     File indexFile = getMergedIndexFile(id);
     try {
