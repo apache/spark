@@ -204,4 +204,9 @@ private[spark] object History {
     .version("3.1.0")
     .booleanConf
     .createWithDefault(false)
+
+  val MAX_IN_MEMORY_STORE_USAGE = ConfigBuilder("spark.history.store.hybridKVStore.maxMemoryUsage")
+    .version("3.1.0")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("1g")
 }

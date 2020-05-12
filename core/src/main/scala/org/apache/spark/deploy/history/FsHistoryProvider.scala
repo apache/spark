@@ -128,7 +128,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val storePath = conf.get(LOCAL_STORE_DIR).map(new File(_))
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
-  private val hybridKVStoreEnabled = conf.get(HYBRID_KVSTORE_ENABLED)
+
+  private val hybridKVStoreEnabled = conf.get(History.HYBRID_KVSTORE_ENABLED)
+  private val maxInMemoryStoreUsage = conf.get(History.MAX_IN_MEMORY_STORE_USAGE)
+  private val currentInMemoryStoreUsage = new java.util.concurrent.atomic.AtomicLong(0L)
+
+  if (hybridKVStoreEnabled) {
+    logInfo("Hybrid kvstore is enabled. Max in-memory store usage: " +
+      s"${Utils.bytesToString(maxInMemoryStoreUsage)}")
+  }
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
@@ -1169,69 +1177,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
 
-    // TODO: Maybe need to do other check to see if there's enough memory to
-    // use inMemoryStore.
+    // If hybrid kvstore is enabled, try it first.
     if (hybridKVStoreEnabled) {
-      logInfo("Using HybridKVStore as KVStore")
-      var retried = false
-      var store: HybridKVStore = null
-      while(store == null) {
-        val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
-          attempt.lastIndex)
-        val isCompressed = reader.compressionCodec.isDefined
-        logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
-        val lease = dm.lease(reader.totalSize, isCompressed)
-        val isRolledBackLeaseOnFailure = new AtomicBoolean(false)
-        var s: HybridKVStore = null
-        try {
-          s = new HybridKVStore()
-          val levelDB = KVUtils.open(lease.tmpPath, metadata)
-          s.setLevelDB(levelDB)
-
-          s.startBackgroundThreadToWriteToDB(new HybridKVStore.SwitchingToLevelDBListener {
-            override def onSwitchingToLevelDBSuccess: Unit = {
-              levelDB.close()
-              val newStorePath = lease.commit(appId, attempt.info.attemptId)
-              s.setLevelDB(KVUtils.open(newStorePath, metadata))
-              logInfo(s"Completely switched to use leveldb for app" +
-              s" $appId / ${attempt.info.attemptId}")
-            }
-
-            override def onSwitchingToLevelDBFail(e: Exception): Unit = {
-              logWarning(s"Failed to switch to use LevelDb for app" +
-              s" $appId / ${attempt.info.attemptId}")
-              levelDB.close()
-              if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
-                lease.rollback()
-              }
-              throw e
-            }
-          })
-
-          rebuildAppStore(s, reader, attempt.info.lastUpdated.getTime())
-          s.stopBackgroundThreadAndSwitchToLevelDB()
-          store = s
-        } catch {
-          case _: IOException if !retried =>
-            // compaction may touch the file(s) which app rebuild wants to read
-            // compaction wouldn't run in short interval, so try again...
-            logWarning(s"Exception occurred while rebuilding app $appId - trying again...")
-            // Closes kvstore and rollback lease
-            s.close()
-            if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
-              lease.rollback()
-            }
-            retried = true
-          case e: Exception =>
-            // Closes kvstore and rollback lease
-            s.close()
-            if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
-              lease.rollback()
-            }
-            throw e
-        }
+      try {
+        return createHybridKVStore(dm, appId, attempt, metadata)
+      } catch {
+        case e: Exception =>
+          logInfo(s"Failed to create hybrid kvstore for $appId/${attempt.info.attemptId}." +
+            " Using leveldb.", e)
       }
-      return store
     }
 
     var retried = false
@@ -1262,6 +1216,71 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     KVUtils.open(newStorePath, metadata)
+  }
+
+  private def createHybridKVStore(
+      dm: HistoryServerDiskManager,
+      appId: String,
+      attempt: AttemptInfoWrapper,
+      metadata: AppStatusStoreMetadata): KVStore = {
+
+    val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
+      attempt.lastIndex)
+    val isCompressed = reader.compressionCodec.isDefined
+    val memoryUsage = approximateMemoryUsage(reader.totalSize, isCompressed)
+
+    if (currentInMemoryStoreUsage.get + memoryUsage > maxInMemoryStoreUsage) {
+      throw new IllegalStateException("Not enough in-memory storage to create hybrid kvstore.")
+    }
+
+    currentInMemoryStoreUsage.addAndGet(memoryUsage)
+    logInfo(s"Attempt creating hyrbid kvstore to parse $appId / ${attempt.info.attemptId}.")
+    logInfo(s"Requested ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
+
+    logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
+    val lease = dm.lease(reader.totalSize, isCompressed)
+    val isRolledBackLeaseOnFailure = new AtomicBoolean(false)
+    var store: HybridKVStore = null
+    try {
+      store = new HybridKVStore()
+      val levelDB = KVUtils.open(lease.tmpPath, metadata)
+      store.setLevelDB(levelDB)
+
+      store.startBackgroundThreadToWriteToDB(new HybridKVStore.SwitchingToLevelDBListener {
+        override def onSwitchingToLevelDBSuccess: Unit = {
+          levelDB.close()
+          val newStorePath = lease.commit(appId, attempt.info.attemptId)
+          store.setLevelDB(KVUtils.open(newStorePath, metadata))
+          currentInMemoryStoreUsage.addAndGet(-memoryUsage)
+          logInfo(s"Completely switched to use leveldb for app" +
+          s" $appId / ${attempt.info.attemptId}.")
+          logInfo(s"Released ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
+        }
+
+        override def onSwitchingToLevelDBFail(e: Exception): Unit = {
+          logWarning(s"Failed to switch to use leveldb for app" +
+          s" $appId / ${attempt.info.attemptId}")
+          levelDB.close()
+          if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
+            lease.rollback()
+          }
+          throw e
+        }
+      })
+
+      rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
+      store.stopBackgroundThreadAndSwitchToLevelDB()
+      store
+    } catch {
+      case e: Exception =>
+        store.close()
+        currentInMemoryStoreUsage.addAndGet(-memoryUsage)
+        logInfo(s"Released ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
+        if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
+          lease.rollback()
+        }
+        throw e
+    }
   }
 
   private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {
@@ -1329,6 +1348,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: Exception =>
         logError(s"Exception while submitting task", e)
         endProcessing(rootPath)
+    }
+  }
+
+  private def approximateMemoryUsage(eventLogSize: Long, isCompressed: Boolean): Long = {
+    if (isCompressed) {
+      eventLogSize * 2
+    } else {
+      eventLogSize / 2
     }
   }
 }

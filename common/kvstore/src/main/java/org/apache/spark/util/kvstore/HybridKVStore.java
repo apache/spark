@@ -287,7 +287,6 @@ public class HybridKVStore implements KVStore {
             } else {
               // Notify the caller to commit the lease when success
               myListener.onSwitchingToLevelDBSuccess();
-
               // Set flag for starting use leveldb
               shouldUseInMemoryStore.set(false);
               // Clear the queue in case there is any operations left
