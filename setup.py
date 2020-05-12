@@ -380,7 +380,7 @@ sentry = [
 ]
 singularity = ['spython>=0.0.56']
 slack = [
-    'slackclient>=1.0.0,<2.0.0',
+    'slackclient>=2.0.0,<3.0.0',
 ]
 snowflake = [
     'snowflake-connector-python>=1.5.2',
