@@ -125,7 +125,14 @@ private[spark] class RRunner[IN, OUT](
               eos = true
               null.asInstanceOf[OUT]
           }
-        } catch handleException
+        } catch {
+          case e: EOFException =>
+            // End of stream resulted from empty dataframe
+            eos = true
+            null.asInstanceOf[OUT]
+          case e: Exception =>
+            handleException(e)
+        }
       }
     }
   }

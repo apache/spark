@@ -129,29 +129,41 @@ test_that("SPARK-20007 *apply() can return empty data.frame", {
     c("a", "b", "c"))
 
   # dapply
-  schema_d <- structType(structField("a", "integer"), structField("b", "double"),
+  schema1 <- structType(structField("a", "integer"), structField("b", "double"),
                          structField("c", "string"))
-  df1 <- dapply(
-    df,
-    function(x) {
-      y <- x[x[1] > 10, ]
-    },
-    schema_d)
+  func1 <- function(x) {
+    y <- x[x[1] > 3, ]
+  }
 
-  collect(df1)   # This should work
+  df1 <- dapply(df, func1, schema1)
+  result1 <- collect(df1)
+
+  # construct expected1
+  expected1 <- data.frame(matrix(ncol = 3, nrow = 0))
+  names <- c("a", "b", "c")
+  colnames(expected1) <- names
+  for (k in names) expected1[[k]] <- list()
+
+  # The following should be the correct way to generate expected1,
+  # but result1 can not match this in the current fix.
+  # x <- collect(df)
+  # expected1 <- func1(x)
+  expect_equal(expected1, result1)
 
   # gapply
-  schema_g <-  structType(structField("a", "integer"), structField("c", "string"),
-                          structField("avg", "double"))
+  schema2 <-  structType(structField("a", "integer"), structField("c", "string"),
+                         structField("avg", "double"))
 
-  result <- gapply(
+  df2 <- gapply(
     df,
     c("a", "c"),
     function(key, x) {
-      x[x[1] > 1, c(1, 3, 2)]
-    }, schema_g)
+      x[x[1] > 2, c(1, 3, 2)]
+    }, schema2)
 
-  collect(result)   # This should work
+  result2 <- collect(df2)
+  expected2 <- data.frame(a=3L, c="3", avg=3, stringsAsFactors = FALSE)
+  expect_equal(expected2, result2)
 })
 
 sparkR.session.stop()
