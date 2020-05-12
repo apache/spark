@@ -27,7 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 
 /**
- * Tests for the user-facing [[org.apache.spark.sql.catalog.Catalog]].
+ * Tests for [[org.apache.spark.sql.internal.SharedState]].
  */
 class SharedStateSuite extends SharedSparkSession {
 
@@ -51,7 +51,5 @@ class SharedStateSuite extends SharedSparkSession {
 
     assert(conf.isInstanceOf[Configuration])
     assert(conf.asInstanceOf[Configuration].get("test") == "value")
-
-
   }
 }
