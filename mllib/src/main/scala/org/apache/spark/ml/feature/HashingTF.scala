@@ -48,12 +48,6 @@ class HashingTF @Since("3.0.0") private[ml] (
   extends Transformer with HasInputCol with HasOutputCol with HasNumFeatures
     with DefaultParamsWritable {
 
-  lazy val hashFunc = hashFuncVersion match {
-    case HashingTF.SPARK_2_MURMUR3_HASH => OldHashingTF.murmur3Hash _
-    case HashingTF.SPARK_3_MURMUR3_HASH => FeatureHasher.murmur3Hash _
-    case _ => throw new IllegalArgumentException("Illegal hash function version setting.")
-  }
-
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("hashingTF"), HashingTF.SPARK_3_MURMUR3_HASH)
 
@@ -131,7 +125,12 @@ class HashingTF @Since("3.0.0") private[ml] (
    */
   @Since("3.0.0")
   def indexOf(term: Any): Int = {
-    Utils.nonNegativeMod(hashFunc(term), $(numFeatures))
+    val hashValue = hashFuncVersion match {
+      case HashingTF.SPARK_2_MURMUR3_HASH => OldHashingTF.murmur3Hash(term)
+      case HashingTF.SPARK_3_MURMUR3_HASH => FeatureHasher.murmur3Hash(term)
+      case _ => throw new IllegalArgumentException("Illegal hash function version setting.")
+    }
+    Utils.nonNegativeMod(hashValue, $(numFeatures))
   }
 
   @Since("1.4.1")
