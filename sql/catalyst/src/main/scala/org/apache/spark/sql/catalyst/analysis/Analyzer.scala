@@ -606,19 +606,24 @@ class Analyzer(
           Aggregate(g.groupByExprs, g.aggregations, g.child)
       }
       // Try resolving the condition of the filter as though it is in the aggregate clause
-      val (aggregateExpressions, transformedAggregateFilter) =
+      val (extraAggExprs, transformedAggregateFilter) =
         ResolveAggregateFunctions.resolveFilterCondInAggregate(
           havingCond, aggForResolver, true)
 
       // Push the aggregate expressions into the aggregate (if any).
-      if (aggregateExpressions.nonEmpty) {
+      if (extraAggExprs.nonEmpty) {
         val newChild = agg match {
-          case a: Aggregate =>
-            a.copy(aggregateExpressions = a.aggregateExpressions ++ aggregateExpressions)
-          case g: GroupingSets =>
-            g.copy(aggregations = g.aggregations ++ aggregateExpressions)
+          case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
+            constructAggregate(
+              cubeExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
+          case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
+            constructAggregate(
+              rollupExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
+          case x: GroupingSets =>
+            constructAggregate(
+              x.selectedGroupByExprs, x.groupByExprs, x.aggregations ++ extraAggExprs, x.child)
         }
-        Project(agg.output,
+        Project(newChild.output.filter(_.name != "havingCondition"),
           Filter(transformedAggregateFilter.get, newChild))
       } else {
         a
@@ -629,14 +634,14 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case a @ AggregateWithHaving(
           havingCondition, agg @ Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, _))
-          if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(a, havingCondition, agg)
       case a @ AggregateWithHaving(
           havingCondition, agg @ Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, _))
-          if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(a, havingCondition, agg)
-      case a @ AggregateWithHaving(
-          havingCondition, g: GroupingSets) if g.expressions.forall(_.resolved) =>
+      case a @ AggregateWithHaving(havingCondition, g: GroupingSets)
+          if g.childrenResolved && g.expressions.forall(_.resolved) =>
         tryResolveHavingCondition(a, havingCondition, g)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
