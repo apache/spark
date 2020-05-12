@@ -510,7 +510,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
-  test("SPARK-31678: AnalysisException with root cause will be printStacktrace") {
+  test("AnalysisException with root cause will be printStacktrace") {
     // If it is not in silent mode, will print the stacktrace
     runCliWithin(
       1.minute,

@@ -394,7 +394,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
               }
               case _ => err.println(rc.getErrorMessage())
             }
-
             driver.close()
             return ret
           }
