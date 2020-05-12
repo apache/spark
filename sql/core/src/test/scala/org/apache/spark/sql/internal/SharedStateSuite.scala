@@ -37,7 +37,7 @@ class SharedStateSuite extends SharedSparkSession {
   }
 
   test("Url handler factory should have the hadoop configs from Spark conf") {
-    // Accesing shared state to init the object sicne it is `lazy val`
+    // Accessing shared state to init the object since it is `lazy val`
     spark.sharedState
     val field = classOf[URL].getDeclaredField("factory")
     field.setAccessible(true)
