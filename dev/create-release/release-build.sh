@@ -103,7 +103,7 @@ if [ -z "$SPARK_VERSION" ]; then
   # Run $MVN in a separate command so that 'set -e' does the right thing.
   TMP=$(mktemp)
   $MVN help:evaluate -Dexpression=project.version > $TMP
-  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -v Download)
+  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -vi Download)
   rm $TMP
 fi
 
