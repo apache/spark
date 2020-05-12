@@ -42,9 +42,9 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
  * otherwise the features will not be mapped evenly to the columns.
  */
 @Since("1.2.0")
-class HashingTF @Since("3.0.0") (
+class HashingTF @Since("3.0.0") private[m] (
     @Since("1.4.0") override val uid: String,
-    @Since("3.0.0") val hashFuncVersion: Int)
+    @Since("3.1.0") val hashFuncVersion: Int)
   extends Transformer with HasInputCol with HasOutputCol with HasNumFeatures
     with DefaultParamsWritable {
 
@@ -145,7 +145,9 @@ class HashingTF @Since("3.0.0") (
   @Since("3.0.0")
   override def save(path: String): Unit = {
     require(hashFuncVersion == HashingTF.SPARK_3_MURMUR3_HASH,
-      "Cannot save model which is loaded from lower version spark saved model.")
+      "Cannot save model which is loaded from lower version spark saved model. We can address " +
+      "it by (1) use old spark version to save the model, or (2) use new version spark to " +
+      "re-train the pipeline.")
     super.save(path)
   }
 }
