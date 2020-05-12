@@ -77,7 +77,7 @@ install_mvn() {
       local TEST_MIRROR_URL="${APACHE_MIRROR}/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz"
       if ! curl -L --output /dev/null --silent --head --fail "$TEST_MIRROR_URL" ; then
 	# Fall back to archive.apache.org for older Maven
-	echo "Falling back to archive.apache.org to download Maven since ${TEST_MIRROR_URL} failed"
+	>&2 echo "Falling back to archive.apache.org since ${TEST_MIRROR_URL} failed"
 	APACHE_MIRROR="https://archive.apache.org/dist"
       fi
     fi
