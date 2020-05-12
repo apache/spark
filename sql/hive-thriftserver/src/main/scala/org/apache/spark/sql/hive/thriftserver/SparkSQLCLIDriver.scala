@@ -388,6 +388,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
                     s"""Error in query: ${e.getMessage}
                        |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
                      """.stripMargin)
+                // For simple analysis exception such as `NoSuchDatabaseException`, only the error
+                // is printed out to the console.
                 case _ => err.println(s"""Error in query: ${e.getMessage}""")
               }
               case _ => err.println(rc.getErrorMessage())
