@@ -28,7 +28,7 @@ The `CREATE TABLE` statement defines a new table using a Data Source.
 ```sql
 CREATE TABLE [ IF NOT EXISTS ] table_identifier
     [ ( col_name1 col_type1 [ COMMENT col_comment1 ], ... ) ]
-    [ USING data_source ]
+    USING data_source
     [ OPTIONS ( key1=val1, key2=val2, ... ) ]
     [ PARTITIONED BY ( col_name1, col_name2, ... ) ]
     [ CLUSTERED BY ( col_name3, col_name4, ... ) 
@@ -40,7 +40,7 @@ CREATE TABLE [ IF NOT EXISTS ] table_identifier
     [ AS select_statement ]
 ```
 
-Note that, the clauses between the USING clause and the AS SELECT clause can come in
+Note that, the clauses between the OPTIONS clause and the AS SELECT clause can come in
 as any order. For example, you can write COMMENT table_comment after TBLPROPERTIES.
 
 ### Parameters
