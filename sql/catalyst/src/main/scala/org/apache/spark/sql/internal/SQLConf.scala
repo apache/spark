@@ -844,12 +844,10 @@ object SQLConf {
       .doc("Comma-separated list of supported blobstore schemes (e.g. 's3,s3a'). " +
         "If any blobstore schemes are specified, this feature is enabled. " +
         "When writing data out to a Hive table, " +
-        "Spark writes the data first into non blobstore storage, and move it to blobstore. " +
-        "This is because moving data on blobstore is expensive. " +
+        "Spark writes the data first into non blobstore storage, and then moves it to blobstore. " +
         "By default, this option is set to empty. It means this feature is disabled.")
       .version("3.1.0")
       .stringConf
-      .transform(_.toLowerCase(Locale.ROOT))
       .createWithDefault("")
 
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")

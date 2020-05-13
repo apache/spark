@@ -163,8 +163,10 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       // Copied from Context.java#getTempDirForPath of Hive 2.3.
       if (supportSchemeToUseNonBlobStore(path)) {
         // Hive sets session_path as HDFS_SESSION_PATH_KEY(_hive.hdfs.session.path) in hive config
+        val HDFS_SESSION_PATH_KEY = "_hive.hdfs.session.path"
         val sessionScratchDir = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
-          .client.getConf("_hive.hdfs.session.path", "")
+          .client.getConf(HDFS_SESSION_PATH_KEY, "")
+        logDebug(s"session scratch dir '$sessionScratchDir' is used")
         getMRTmpPath(hadoopConf, sessionScratchDir, scratchDir)
       } else {
         newVersionExternalTempPath(path, hadoopConf, stagingDir)
