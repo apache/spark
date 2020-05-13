@@ -693,6 +693,15 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     out.close()
   }
 
+  test("SPARK-31697: HistoryServer should set Content-Type") {
+    val port = server.boundPort
+    val nonExistenceAppId = "local-non-existence"
+    val url = new URL(s"http://localhost:$port/history/$nonExistenceAppId")
+    val conn = url.openConnection()
+    val expectedContentType = "text/html;charset=utf-8"
+    val actualContentType = conn.getContentType
+    assert(actualContentType === expectedContentType)
+  }
 }
 
 object HistoryServerSuite {
