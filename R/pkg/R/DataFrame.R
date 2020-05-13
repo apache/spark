@@ -3446,7 +3446,7 @@ setMethod("as.data.frame",
 setMethod("attach",
           signature(what = "SparkDataFrame"),
           function(what, pos = 2L,
-                   name = paste(deparse(substitute(what), backtick = FALSE), collapse = ' '),
+                   name = paste(deparse(substitute(what), backtick = FALSE), collapse = " "),
                    warn.conflicts = TRUE) {
             args <- as.list(environment()) # capture all parameters - this must be the first line
             newEnv <- assignNewEnv(args$what)
