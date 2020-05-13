@@ -24,6 +24,7 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
 
+
   val KUBERNETES_CONTEXT =
     ConfigBuilder("spark.kubernetes.context")
       .doc("The desired context from your K8S config file used to configure the K8S " +
