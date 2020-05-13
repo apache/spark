@@ -598,10 +598,12 @@ class Analyzer(
     private def tryResolveHavingCondition(
         a: UnresolvedHaving, havingCond: Expression, agg: LogicalPlan): LogicalPlan = {
       val aggForResolving = agg match {
-        case a: Aggregate =>
-          // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
-          // groupingExpressions for condition resolving.
-          a.copy(groupingExpressions = Seq.empty)
+        // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
+        // groupingExpressions for condition resolving.
+        case a @ Aggregate(Seq(c @ Cube(groupByExprs)), _, _) =>
+          a.copy(groupingExpressions = groupByExprs)
+        case a @ Aggregate(Seq(r @ Rollup(groupByExprs)), _, _) =>
+          a.copy(groupingExpressions = groupByExprs)
         case g: GroupingSets =>
           Aggregate(g.groupByExprs, g.aggregations, g.child)
       }
@@ -630,7 +632,9 @@ class Analyzer(
       }
     }
 
-    // This require transformUp to replace grouping()/grouping_id() in resolved Filter/Sort
+    // This require transformDown to resolve having condition when generating aggregate node for
+    // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
+    // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case a @ UnresolvedHaving(
           havingCondition, agg @ Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, _))
