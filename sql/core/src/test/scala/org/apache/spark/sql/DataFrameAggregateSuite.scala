@@ -974,12 +974,20 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
-  test("SPARK-31620: agg with subquery") {
-    withTempView("t1", "t2") {
-      sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
-      sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")
-      checkAnswer(sql("select sum(if(c > (select a from t1), d, 0)) as csum from t2"),
-        Row(4) :: Nil)
+  Seq(true, false).foreach { value =>
+    test(s"SPARK-31620: agg with subquery (codegen = $value)") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
+        withTempView("t1", "t2") {
+          sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
+          sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")
+          // test without grouping keys
+          checkAnswer(sql("select sum(if(c > (select a from t1), d, 0)) as csum from t2"),
+            Row(4) :: Nil)
+          // test with grouping keys
+          checkAnswer(sql("select c, sum(if(c > (select a from t1), d, 0)) as csum from " +
+            "t2 group by c"), Row(3, 4) :: Nil)
+        }
+      }
     }
   }
 }

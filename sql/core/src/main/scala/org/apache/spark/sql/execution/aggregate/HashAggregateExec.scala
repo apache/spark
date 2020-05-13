@@ -129,7 +129,7 @@ case class HashAggregateExec(
             resultExpressions,
             (expressions, inputSchema) =>
               MutableProjection.create(expressions, inputSchema),
-            child.output,
+            inputAttributes,
             iter,
             testFallbackStartsAt,
             numOutputRows,
@@ -331,10 +331,32 @@ case class HashAggregateExec(
     }
   }
 
+  private def inputAttributes: Seq[Attribute] = {
+    if (modes.contains(Final) || modes.contains(PartialMerge)) {
+      // SPARK-31620: when planning aggregates, the partial aggregate uses aggregate function's
+      // `inputAggBufferAttributes` as its output. And Final and PartialMerge aggregate rely on the
+      // output to bind references for `DeclarativeAggregate.mergeExpressions`. But if we copy the
+      // aggregate function somehow after aggregate planning, like `PlanSubqueries`, the
+      // `DeclarativeAggregate` will be replaced by a new instance with new
+      // `inputAggBufferAttributes` and `mergeExpressions`. Then Final and PartialMerge aggregate
+      // can't bind the `mergeExpressions` with the output of the partial aggregate, as they use
+      // the `inputAggBufferAttributes` of the original `DeclarativeAggregate` before copy. Instead,
+      // we shall use `inputAggBufferAttributes` after copy to match the new `mergeExpressions`.
+      val aggAttrs = aggregateExpressions.map(_.aggregateFunction)
+        .flatMap(_.inputAggBufferAttributes)
+      val distinctAttrs = child.output.filterNot(
+        a => (groupingAttributes ++ aggAttrs).exists(_.name == a.name))
+      // the order is consistent with `AggUtils.planAggregateWithOneDistinct`
+      groupingAttributes ++ distinctAttrs ++ aggAttrs
+    } else {
+      child.output
+    }
+  }
+
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ child.output
+    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ inputAttributes
     // To individually generate code for each aggregate function, an element in `updateExprs` holds
     // all the expressions for the buffer of an aggregation function.
     val updateExprs = aggregateExpressions.map { e =>
@@ -848,9 +870,9 @@ case class HashAggregateExec(
   private def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // create grouping key
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
-      ctx, bindReferences[Expression](groupingExpressions, child.output))
+      ctx, bindReferences[Expression](groupingExpressions, inputAttributes))
     val fastRowKeys = ctx.generateExpressions(
-      bindReferences[Expression](groupingExpressions, child.output))
+      bindReferences[Expression](groupingExpressions, inputAttributes))
     val unsafeRowKeys = unsafeRowKeyCode.value
     val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
@@ -931,7 +953,7 @@ case class HashAggregateExec(
       }
     }
 
-    val inputAttr = aggregateBufferAttributes ++ child.output
+    val inputAttr = aggregateBufferAttributes ++ inputAttributes
     // Here we set `currentVars(0)` to `currentVars(numBufferSlots)` to null, so that when
     // generating code for buffer columns, we use `INPUT_ROW`(will be the buffer row), while
     // generating input columns, we use `currentVars`.
