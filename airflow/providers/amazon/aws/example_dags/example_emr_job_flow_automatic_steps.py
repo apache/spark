@@ -51,7 +51,23 @@ SPARK_TEST_STEPS = [
 
 JOB_FLOW_OVERRIDES = {
     'Name': 'PiCalc',
-    'Steps': SPARK_TEST_STEPS
+    'ReleaseLabel': 'emr-5.29.0',
+    'Instances': {
+        'InstanceGroups': [
+            {
+                'Name': 'Master node',
+                'Market': 'SPOT',
+                'InstanceRole': 'MASTER',
+                'InstanceType': 'm1.medium',
+                'InstanceCount': 1,
+            }
+        ],
+        'KeepJobFlowAliveWhenNoSteps': False,
+        'TerminationProtected': False,
+    },
+    'Steps': SPARK_TEST_STEPS,
+    'JobFlowRole': 'EMR_EC2_DefaultRole',
+    'ServiceRole': 'EMR_DefaultRole',
 }
 
 with DAG(
