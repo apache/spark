@@ -36,7 +36,7 @@ class SharedStateSuite extends SharedSparkSession {
       .set("spark.hadoop.fs.defaultFS", "file:///")
   }
 
-  test("Url handler factory should have the hadoop configs from Spark conf") {
+  test("SPARK-31692: Url handler factory should have the hadoop configs from Spark conf") {
     // Accessing shared state to init the object since it is `lazy val`
     spark.sharedState
     val field = classOf[URL].getDeclaredField("factory")
