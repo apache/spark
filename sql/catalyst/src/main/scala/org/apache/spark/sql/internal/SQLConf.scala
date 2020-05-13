@@ -841,23 +841,16 @@ object SQLConf {
 
   val HIVE_SUPPORTED_SCHEMES_TO_USE_NONBLOBSTORE =
     buildConf("spark.sql.hive.supportedSchemesToUseNonBlobstore")
-      .doc("Comma-separated list of supported blobstore schemes. " +
-        "When spark.sql.hive.useBlobstoreAsScratchDir is false, " +
-        "Spark refers the schemes to treat the location as blobstore. ")
+      .doc("Comma-separated list of supported blobstore schemes (e.g. 's3,s3a'). " +
+        "If any blobstore schemes are specified, this feature is enabled. " +
+        "When writing data out to a Hive table, " +
+        "Spark writes the data first into non blobstore storage, and move it to blobstore. " +
+        "This is because moving data on blobstore is expensive. " +
+        "By default, this option is set to empty. It means this feature is disabled.")
       .version("3.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
       .createWithDefault("")
-
-  val HIVE_USE_BLOBSTORE_AS_SCRATCHDIR =
-    buildConf("spark.sql.hive.useBlobstoreAsScratchDir")
-      .doc("Enable the use of scratch directories directly on blob storage systems " +
-        "when writing data out to a Hive table (it may cause performance penalties). " +
-        "If you disable this parameter, Spark writes the data first in scratch dir, " +
-        "and move it to blobstore because moving it on blobstore is expensive.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
 
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
@@ -2832,8 +2825,6 @@ class SQLConf extends Serializable with Logging {
 
   def supportedSchemesToUseNonBlobstore: String =
     getConf(HIVE_SUPPORTED_SCHEMES_TO_USE_NONBLOBSTORE)
-
-  def useBlobstoreAsScratchDir: Boolean = getConf(HIVE_USE_BLOBSTORE_AS_SCRATCHDIR)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 

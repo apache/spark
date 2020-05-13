@@ -161,7 +161,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     } else if (hiveVersionsUsingNewExternalTempPath.contains(hiveVersion)) {
       // HIVE-14270: Write temporary data to HDFS when doing inserts on tables located on S3
       // Copied from Context.java#getTempDirForPath of Hive 2.3.
-      if (!SQLConf.get.useBlobstoreAsScratchDir && supportSchemeToUseNonBlobStore(path)) {
+      if (supportSchemeToUseNonBlobStore(path)) {
         // Hive sets session_path as HDFS_SESSION_PATH_KEY(_hive.hdfs.session.path) in hive config
         val sessionScratchDir = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
           .client.getConf("_hive.hdfs.session.path", "")

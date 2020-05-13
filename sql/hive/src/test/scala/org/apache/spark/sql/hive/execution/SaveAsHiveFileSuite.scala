@@ -69,7 +69,6 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     val stagingDir = ".hive-staging"
 
     val localPath = new Path("/tmp/test/", "path")
-    spark.conf.set(SQLConf.HIVE_SUPPORTED_SCHEMES_TO_USE_NONBLOBSTORE.key, "s3a, s3, s3n")
     val localStagingTmpPath = insertIntoHiveTable.getExternalTmpPath(
       spark, hadoopConf, localPath).toString
 
@@ -85,7 +84,6 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     val scratchDir = "/tmp/hive_scratch"
 
     val s3Path = new Path("s3a://bucket/", "path")
-    spark.conf.set(SQLConf.HIVE_USE_BLOBSTORE_AS_SCRATCHDIR.key, false)
     spark.conf.set(SQLConf.HIVE_SUPPORTED_SCHEMES_TO_USE_NONBLOBSTORE.key, "s3a, s3, s3n")
     val localMRTmpPathForS3 = insertIntoHiveTable.getExternalTmpPath(
       spark, hadoopConf, s3Path).toString
