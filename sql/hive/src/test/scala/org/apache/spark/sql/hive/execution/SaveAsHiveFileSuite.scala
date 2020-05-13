@@ -34,12 +34,12 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     val resultFromSessionDir = insertIntoHiveTable.getMRTmpPath(
       hadoopConf, sessionScratchDir, scratchDir).toString
 
-    // The result should start with 'file:$sessionScratchDir/' & end with '/-mr-10000'
-    // file:/tmp/hive/user_a/session_b/hive_2017-10-07_03-18-53_479_412884638516200146-1/-mr-10000
+    // The result should start with 'file:$sessionScratchDir/' & end with '/-mr-10000'.
+    // file:/tmp/hive/user_a/session_b/hive_2017-10-07_03-18-53_479_412884638516200146-1/-mr-10000.
     assert(resultFromSessionDir.startsWith(s"file:$sessionScratchDir/"))
     assert(resultFromSessionDir.endsWith("/-mr-10000"))
 
-    // The result should NOT start with 'file:$scratchDir/'
+    // The result should NOT start with 'file:$scratchDir/'.
     assert(!resultFromSessionDir.startsWith(s"file:$scratchDir/"))
   }
 
@@ -52,12 +52,12 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     val resultFromScratchDir = insertIntoHiveTable.getMRTmpPath(
       hadoopConf, emptySessionScratchDir, scratchDir).toString
 
-    // The result should start with 'file:$scratchDir/' & end with '/-mr-10000'
+    // The result should start with 'file:$scratchDir/' & end with '/-mr-10000'.
     // e.g) file:/tmp/hive/hive_2017-10-07_03-18-53_479_412884638516200146-1/-mr-10000
     assert(resultFromScratchDir.startsWith(s"file:$scratchDir/"))
     assert(resultFromScratchDir.endsWith("/-mr-10000"))
 
-    // The result should NOT start with '-mr-10000' nor equal to '-mr-10000'
+    // The result should NOT start with '-mr-10000' nor equal to '-mr-10000'.
     assert(!resultFromScratchDir.startsWith("-mr-10000"))
     assert(!resultFromScratchDir.equals("-mr-10000"))
   }
@@ -69,30 +69,32 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     val stagingDir = ".hive-staging"
 
     val localPath = new Path("/tmp/test/", "path")
+    spark.conf.set(SQLConf.HIVE_SUPPORTED_SCHEMES_TO_USE_NONBLOBSTORE.key, "s3a, s3, s3n")
     val localStagingTmpPath = insertIntoHiveTable.getExternalTmpPath(
       spark, hadoopConf, localPath).toString
 
-    // The path should start with 'file:$localPath/$stagingDir' & end with '/-ext-10000'
+    // The path should start with 'file:$localPath/$stagingDir' & end with '/-ext-10000'.
     assert(localStagingTmpPath.startsWith(s"file:$localPath/$stagingDir"))
     assert(localStagingTmpPath.endsWith("/-ext-10000"))
   }
 
-  test("'hive.blobstore.use.blobstore.as.scratchdir=false' & s3 path") {
+  test("'spark.sql.hive.supportedSchemesToUseNonBlobstore=false' & s3 path") {
     val insertIntoHiveTable = InsertIntoHiveTable(null, Map.empty, null, true, false, null)
 
     val hadoopConf = new Configuration()
     val scratchDir = "/tmp/hive_scratch"
 
     val s3Path = new Path("s3a://bucket/", "path")
-    spark.conf.set(SQLConf.HIVE_BLOBSTORE_USE_BLOBSTORE_AS_SCRATCHDIR.key, false)
+    spark.conf.set(SQLConf.HIVE_USE_BLOBSTORE_AS_SCRATCHDIR.key, false)
+    spark.conf.set(SQLConf.HIVE_SUPPORTED_SCHEMES_TO_USE_NONBLOBSTORE.key, "s3a, s3, s3n")
     val localMRTmpPathForS3 = insertIntoHiveTable.getExternalTmpPath(
       spark, hadoopConf, s3Path).toString
 
-    // The path should start with 'file:/' & end with '/-mr-10000'
+    // The path should start with 'file:/' & end with '/-mr-10000'.
     assert(localMRTmpPathForS3.startsWith(s"file:/"))
     assert(localMRTmpPathForS3.endsWith("/-mr-10000"))
 
-    // It should NOT start with s3
+    // It should NOT start with s3.
     assert(!localMRTmpPathForS3.startsWith("s3"))
     assert(!localMRTmpPathForS3.startsWith(s"file:$scratchDir"))
   }

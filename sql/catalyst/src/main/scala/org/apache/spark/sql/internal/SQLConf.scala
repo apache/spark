@@ -839,18 +839,20 @@ object SQLConf {
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER.toString)
 
-  val HIVE_BLOBSTORE_SUPPORTED_SCHEMES =
-    buildConf("spark.sql.hive.blobstore.supported.schemes")
-      .doc("Comma-separated list of supported blobstore schemes.")
+  val HIVE_SUPPORTED_SCHEMES_TO_USE_NONBLOBSTORE =
+    buildConf("spark.sql.hive.supportedSchemesToUseNonBlobstore")
+      .doc("Comma-separated list of supported blobstore schemes. " +
+        "When spark.sql.hive.useBlobstoreAsScratchDir is false, " +
+        "Spark refers the schemes to treat the location as blobstore. ")
       .version("3.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
-      .createWithDefault("s3,s3a,s3n")
+      .createWithDefault("")
 
-  val HIVE_BLOBSTORE_USE_BLOBSTORE_AS_SCRATCHDIR =
-    buildConf("spark.sql.hive.blobstore.use.blobstore.as.scratchdir")
+  val HIVE_USE_BLOBSTORE_AS_SCRATCHDIR =
+    buildConf("spark.sql.hive.useBlobstoreAsScratchDir")
       .doc("Enable the use of scratch directories directly on blob storage systems " +
-        "(it may cause performance penalties). " +
+        "when writing data out to a Hive table (it may cause performance penalties). " +
         "If you disable this parameter, Spark writes the data first in scratch dir, " +
         "and move it to blobstore because moving it on blobstore is expensive.")
       .version("3.1.0")
@@ -2828,9 +2830,10 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
 
-  def blobstoreSupportedSchemas: String = getConf(HIVE_BLOBSTORE_SUPPORTED_SCHEMES)
+  def supportedSchemesToUseNonBlobstore: String =
+    getConf(HIVE_SUPPORTED_SCHEMES_TO_USE_NONBLOBSTORE)
 
-  def useBlobstoreAsScratchDir: Boolean = getConf(HIVE_BLOBSTORE_USE_BLOBSTORE_AS_SCRATCHDIR)
+  def useBlobstoreAsScratchDir: Boolean = getConf(HIVE_USE_BLOBSTORE_AS_SCRATCHDIR)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 

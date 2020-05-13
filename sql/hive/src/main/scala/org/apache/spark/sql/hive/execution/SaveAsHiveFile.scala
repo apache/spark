@@ -99,40 +99,31 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       options = Map.empty)
   }
 
-  /*
-   * Mostly copied from Context.java#getMRTmpPath of Hive 2.3
-   *
-   */
-  def getMRTmpPath(
+  // Mostly copied from Context.java#getMRTmpPath of Hive 2.3.
+  // Visible for testing.
+  private[execution] def getMRTmpPath(
       hadoopConf: Configuration,
       sessionScratchDir: String,
       scratchDir: String): Path = {
 
     // Hive's getMRTmpPath uses nonLocalScratchPath + '-mr-10000',
     // which is ruled by 'hive.exec.scratchdir' including file system.
-    // This is the same as Spark's #oldVersionExternalTempPath
-    // Only difference between #oldVersionExternalTempPath and Hive 2.3.0's is HIVE-7090
+    // This is the same as Spark's #oldVersionExternalTempPath.
+    // Only difference between #oldVersionExternalTempPath and Hive 2.3.0's is HIVE-7090.
     // HIVE-7090 added user_name/session_id on top of 'hive.exec.scratchdir'
-    // Here it uses session_path unless it's emtpy, otherwise uses scratchDir
+    // Here it uses session_path unless it's emtpy, otherwise uses scratchDir.
     val sessionPath = if (!sessionScratchDir.isEmpty) sessionScratchDir else scratchDir
-    logDebug(s"session path '${sessionPath.toString}' is used")
-
     val mrScratchDir = oldVersionExternalTempPath(new Path(sessionPath), hadoopConf, sessionPath)
     logDebug(s"MR scratch dir '$mrScratchDir/-mr-10000' is used")
     new Path(mrScratchDir, "-mr-10000")
   }
 
-  private def isBlobStoragePath(path: Path): Boolean = {
-    path != null && isBlobStorageScheme(Option(path.toUri.getScheme).getOrElse(""))
-  }
-
-  private def isBlobStorageScheme(scheme: String): Boolean = {
-    val supportedBlobSchemes = SQLConf.get.blobstoreSupportedSchemas
-    Utils.stringToSeq(supportedBlobSchemes).contains(scheme.toLowerCase(Locale.ROOT))
-  }
-
-  private def useBlobStorageAsScratchDir(): Boolean = {
-    SQLConf.get.useBlobstoreAsScratchDir
+  private def supportSchemeToUseNonBlobStore(path: Path): Boolean = {
+    path != null && {
+      val supportedBlobSchemes = SQLConf.get.supportedSchemesToUseNonBlobstore
+      val scheme = Option(path.toUri.getScheme).getOrElse("")
+      Utils.stringToSeq(supportedBlobSchemes).contains(scheme.toLowerCase(Locale.ROOT))
+    }
   }
 
   def getExternalTmpPath(
@@ -169,12 +160,11 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       oldVersionExternalTempPath(path, hadoopConf, scratchDir)
     } else if (hiveVersionsUsingNewExternalTempPath.contains(hiveVersion)) {
       // HIVE-14270: Write temporary data to HDFS when doing inserts on tables located on S3
-      // Copied from Context.java#getTempDirForPath of Hive 2.3
-      if (isBlobStoragePath(path) && !useBlobStorageAsScratchDir) {
+      // Copied from Context.java#getTempDirForPath of Hive 2.3.
+      if (!SQLConf.get.useBlobstoreAsScratchDir && supportSchemeToUseNonBlobStore(path)) {
         // Hive sets session_path as HDFS_SESSION_PATH_KEY(_hive.hdfs.session.path) in hive config
         val sessionScratchDir = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
           .client.getConf("_hive.hdfs.session.path", "")
-        logDebug(s"session scratch dir '$sessionScratchDir' is used")
         getMRTmpPath(hadoopConf, sessionScratchDir, scratchDir)
       } else {
         newVersionExternalTempPath(path, hadoopConf, stagingDir)
@@ -202,7 +192,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     }
   }
 
-  // Mostly copied from Context.java#getExternalTmpPath of Hive 0.13
+  // Mostly copied from Context.java#getExternalTmpPath of Hive 0.13.
   private def oldVersionExternalTempPath(
       path: Path,
       hadoopConf: Configuration,
@@ -230,7 +220,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     dirPath
   }
 
-  // Mostly copied from Context.java#getExternalTmpPath of Hive 1.2
+  // Mostly copied from Context.java#getExternalTmpPath of Hive 1.2.
   private def newVersionExternalTempPath(
       path: Path,
       hadoopConf: Configuration,
