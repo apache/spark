@@ -329,8 +329,14 @@ private[spark] trait PagedTable[T] {
     }
   }
 
-  def headerRow(headerInfo: Seq[(String, Boolean, Option[String])], desc: Boolean, pageSize: Int,
-      sortColumn: String, parameterPath: String, tableTag: String, headerId: String): Seq[Node] = {
+  def headerRow(
+      headerInfo: Seq[(String, Boolean, Option[String])],
+      desc: Boolean,
+      pageSize: Int,
+      sortColumn: String,
+      parameterPath: String,
+      tableTag: String,
+      headerId: String): Seq[Node] = {
     val row: Seq[Node] = {
       headerInfo.map { case (header, sortable, tooltip) =>
         if (header == sortColumn) {
