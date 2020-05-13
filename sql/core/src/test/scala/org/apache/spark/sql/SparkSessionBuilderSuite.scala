@@ -157,7 +157,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("SPARK-31354: SparkContext only register one SparkSession ApplicationEnd listener") {
     val conf = new SparkConf()
       .setMaster("local")
-      .setAppName("test-app-SPARK-XXXXX-1")
+      .setAppName("test-app-SPARK-31354-1")
     val context = new SparkContext(conf)
     assert(!context.isSessionListenerRegistered)
     val preSessionCreation = context.listenerBus.listeners.size()
