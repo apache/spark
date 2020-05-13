@@ -342,12 +342,10 @@ case class HashAggregateExec(
       // can't bind the `mergeExpressions` with the output of the partial aggregate, as they use
       // the `inputAggBufferAttributes` of the original `DeclarativeAggregate` before copy. Instead,
       // we shall use `inputAggBufferAttributes` after copy to match the new `mergeExpressions`.
-      val aggAttrs = aggregateExpressions.map(_.aggregateFunction)
+      val aggAttrs = aggregateExpressions
+        .filter(a => a.mode == Final || !a.isDistinct).map(_.aggregateFunction)
         .flatMap(_.inputAggBufferAttributes)
-      val distinctAttrs = child.output.filterNot(
-        a => (groupingAttributes ++ aggAttrs).exists(_.name == a.name))
-      // the order is consistent with `AggUtils.planAggregateWithOneDistinct`
-      groupingAttributes ++ distinctAttrs ++ aggAttrs
+      child.output.dropRight(aggAttrs.length) ++ aggAttrs
     } else {
       child.output
     }
@@ -870,9 +868,9 @@ case class HashAggregateExec(
   private def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // create grouping key
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
-      ctx, bindReferences[Expression](groupingExpressions, inputAttributes))
+      ctx, bindReferences[Expression](groupingExpressions, child.output))
     val fastRowKeys = ctx.generateExpressions(
-      bindReferences[Expression](groupingExpressions, inputAttributes))
+      bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
     val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
