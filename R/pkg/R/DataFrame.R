@@ -2285,7 +2285,7 @@ setMethod("mutate",
               #   output is length>1, so need to collapse it to scalar
               colsub <- substitute(list(...))[-1L]
               ns[!named_idx] <- sapply(which(!named_idx), function(ii) {
-                paste(gsub('^\\s*|\\s*$', '', deparse(colsub[[ii]])), collapse = " ")
+                paste(gsub("^\\s*|\\s*$", "", deparse(colsub[[ii]])), collapse = " ")
               })
             }
 
