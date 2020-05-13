@@ -299,6 +299,9 @@ private[spark] trait PagedTable[T] {
    */
   def goButtonFormPath: String
 
+  /**
+   * Returns parameters of other tables in the page.
+   */
   def getParameterOtherTable(request: HttpServletRequest, tableTag: String): String = {
     request.getParameterMap.asScala
       .filterNot(_._1.startsWith(tableTag))
@@ -306,7 +309,12 @@ private[spark] trait PagedTable[T] {
       .mkString("&")
   }
 
-  def getTableParameters(request: HttpServletRequest, tableTag: String,
+  /**
+   * Returns parameter of this table.
+   */
+  def getTableParameters(
+      request: HttpServletRequest,
+      tableTag: String,
       defaultSortColumn: String): (String, Boolean, Int) = {
     val parameterSortColumn = request.getParameter(s"$tableTag.sort")
     val parameterSortDesc = request.getParameter(s"$tableTag.desc")
@@ -322,7 +330,11 @@ private[spark] trait PagedTable[T] {
     (sortColumn, desc, pageSize)
   }
 
-  def isSortColumnValid(headerInfo: Seq[(String, Boolean, Option[String])],
+  /**
+   * Check if given sort column is valid or not. If invalid then an exception is thrown.
+   */
+  def isSortColumnValid(
+      headerInfo: Seq[(String, Boolean, Option[String])],
       sortColumn: String): Any = {
     if (!headerInfo.filter(_._2).map(_._1).contains(sortColumn)) {
       throw new IllegalArgumentException(s"Unknown column: $sortColumn")
