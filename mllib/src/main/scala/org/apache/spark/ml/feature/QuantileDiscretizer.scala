@@ -237,12 +237,11 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     splits(0) = Double.NegativeInfinity
     splits(splits.length - 1) = Double.PositiveInfinity
 
-    // If array contains both -0.0 and 0.0, current array.distinct is buggy, the distinct result
-    // may contain both -0.0 and 0.0 or only contain -0.0 or 0.0, this is because:
-    //  -0.0 and 0.0 has different hashCode but they are equal, this break the contract between
-    // equals() and hashCode(): If two objects are equal, then they must have the same hash code.
-    // And then, because 0.0 > -0.0 is False and it will break parameter check (require strictly
-    // increasing order) so here normalize all -0.0 and 0.0 to be 0.0
+    // 0.0 and -0.0 are distinct values, array.distinct will preserve both of them.
+    // but 0.0 > -0.0 is False which will break the parameter validation checking.
+    // and in scala <= 2.12, there's bug which will cause array.distinct generate
+    // non-deterministic results when array contains both 0.0 and -0.0
+    // So that here we should first normalize all 0.0 and -0.0 to be 0.0
     for (i <- 0 until splits.length) {
       if (splits(i) == -0.0) {
         splits(i) = 0.0
