@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
