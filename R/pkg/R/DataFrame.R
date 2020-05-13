@@ -2285,7 +2285,7 @@ setMethod("mutate",
               #   output is length>1, so need to collapse it to scalar
               colsub <- substitute(list(...))[-1L]
               ns[!named_idx] <- sapply(which(!named_idx), function(ii) {
-                paste(trimws(deparse(colsub[[ii]])), collapse = " ")
+                paste(gsub('^\\s*|\\s*$', '', deparse(colsub[[ii]])), collapse = " ")
               })
             }
 
@@ -3445,7 +3445,8 @@ setMethod("as.data.frame",
 #' @note attach since 1.6.0
 setMethod("attach",
           signature(what = "SparkDataFrame"),
-          function(what, pos = 2L, name = deparse1(substitute(what), backtick = FALSE),
+          function(what, pos = 2L,
+                   name = paste(deparse(substitute(what), backtick = FALSE), collapse = ' '),
                    warn.conflicts = TRUE) {
             args <- as.list(environment()) # capture all parameters - this must be the first line
             newEnv <- assignNewEnv(args$what)
