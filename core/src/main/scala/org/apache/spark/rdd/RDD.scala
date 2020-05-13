@@ -18,7 +18,6 @@
 package org.apache.spark.rdd
 
 import java.util.Random
-import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
