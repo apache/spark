@@ -343,7 +343,10 @@ case class HashAggregateExec(
       // the `inputAggBufferAttributes` of the original `DeclarativeAggregate` before copy. Instead,
       // we shall use `inputAggBufferAttributes` after copy to match the new `mergeExpressions`.
       val aggAttrs = aggregateExpressions
-        .filter(a => a.mode == Final || !a.isDistinct).map(_.aggregateFunction)
+        // there're exactly four cases needs `inputAggBufferAttributes` from child according to the
+        // agg planning in `AggUtils`: Partial -> Final, PartialMerge -> Final,
+        // Partial -> PartialMerge, PartialMerge -> PartialMerge.
+        .filter(a => a.mode == Final || a.mode == PartialMerge).map(_.aggregateFunction)
         .flatMap(_.inputAggBufferAttributes)
       child.output.dropRight(aggAttrs.length) ++ aggAttrs
     } else {
