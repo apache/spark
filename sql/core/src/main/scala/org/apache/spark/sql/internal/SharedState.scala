@@ -159,8 +159,10 @@ object SharedState extends Logging {
   try {
     SparkSession.getActiveSession match {
       case Some(spark) =>
+        // scalastyle:off hadoopconfiguration
         URL.setURLStreamHandlerFactory(
           new FsUrlStreamHandlerFactory(spark.sparkContext.hadoopConfiguration))
+        // scalastyle:on hadoopconfiguration
       case _ =>
         URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
     }
