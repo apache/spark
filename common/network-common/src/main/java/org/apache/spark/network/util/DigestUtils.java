@@ -17,10 +17,10 @@
 
 package org.apache.spark.network.util;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.zip.CRC32;
 
 import org.slf4j.Logger;
@@ -41,13 +41,18 @@ public class DigestUtils {
 
     public static long getDigest(File file, long offset, long length) {
         if (length <= 0) {
-            return -1;
+            return -1L;
         }
-        try {
-            LimitedInputStream inputStream = new LimitedInputStream(new FileInputStream(file),
-              offset + length, true);
-            inputStream.skip(offset);
-            return getDigest(inputStream);
+        try (RandomAccessFile rf = new RandomAccessFile(file, "r")) {
+            MappedByteBuffer data = rf.getChannel().map(FileChannel.MapMode.READ_ONLY, offset, length);
+            CRC32 crc32 = getCRC32();
+            byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
+            int len;
+            while ((len = Math.min(STREAM_BUFFER_LENGTH, data.remaining())) > 0) {
+                data.get(buffer, 0, len);
+                crc32.update(buffer, 0, len);
+            }
+            return crc32.getValue();
         } catch (IOException e) {
             LOG.error(String.format("Exception while computing digest for file segment: " +
               "%s(offset:%d, length:%d)", file.getName(), offset, length ));
