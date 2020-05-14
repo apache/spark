@@ -1653,6 +1653,10 @@ private[spark] class BlockManager(
         peersForReplication = peersForReplication.tail
         peersReplicatedTo += peer
       } catch {
+        // Rethrow interrupt exception
+        case e: InterruptedException =>
+          throw e
+        // Everything else we may retry
         case NonFatal(e) =>
           logWarning(s"Failed to replicate $blockId to $peer, failure #$numFailures", e)
           peersFailedToReplicateTo += peer
@@ -1796,6 +1800,9 @@ private[spark] class BlockManager(
     if (replicateBlocksInfo.nonEmpty) {
       logInfo(s"Need to replicate ${replicateBlocksInfo.size} blocks " +
         "for block manager decommissioning")
+    } else {
+      logWarning(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
+      return
     }
 
     // Maximum number of storage replication failure which replicateBlock can handle
