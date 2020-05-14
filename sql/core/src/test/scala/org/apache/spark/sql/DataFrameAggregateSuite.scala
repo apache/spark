@@ -996,6 +996,14 @@ class DataFrameAggregateSuite extends QueryTest
           // test subquery with agg
           checkAnswer(sql("select sum(distinct(if(c > (select sum(distinct(a)) from t1)," +
             " d, 0))) as csum from t2 group by c"), Row(4) :: Nil)
+
+          // test SortAggregateExec
+          checkAnswer(sql("select max(if(c > (select a from t1), 'str1', 'str2')) as csum from t2"),
+            Row("str1") :: Nil)
+
+          // test ObjectHashAggregateExec
+          checkAnswer(sql("select collect_list(d), sum(if(c > (select a from t1), d, 0)) as csum" +
+            " from t2"), Row(Array(4), 4) :: Nil)
         }
       }
     }
