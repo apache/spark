@@ -2248,13 +2248,13 @@ class Analyzer(
 
     def resolveHaving(filter: Filter, agg: Aggregate): LogicalPlan = {
       // Try resolving the condition of the filter as though it is in the aggregate clause
-      val (aggregateExpressions, transformedAggregateFilter) =
+      val (aggregateExpressions, resolvedHavingCond) =
         resolveFilterCondInAggregate(filter.condition, agg)
 
       // Push the aggregate expressions into the aggregate (if any).
       if (aggregateExpressions.nonEmpty) {
         Project(agg.output,
-          Filter(transformedAggregateFilter.get,
+          Filter(resolvedHavingCond.get,
             agg.copy(aggregateExpressions = agg.aggregateExpressions ++ aggregateExpressions)))
       } else {
         filter
