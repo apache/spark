@@ -52,7 +52,7 @@ from airflow.utils.session import create_session, provide_session
 from airflow.utils.state import State
 from airflow.utils.types import DagRunType
 from tests.test_utils.asserts import assert_queries_count
-from tests.test_utils.config import conf_vars
+from tests.test_utils.config import conf_vars, env_vars
 from tests.test_utils.db import (
     clear_db_dags, clear_db_errors, clear_db_pools, clear_db_runs, clear_db_sla_miss, set_default_pool_slots,
 )
@@ -81,7 +81,8 @@ TEMP_DAG_FILENAME = "temp_dag.py"
 @pytest.fixture(scope="class")
 def disable_load_example():
     with conf_vars({('core', 'load_examples'): 'false'}):
-        yield
+        with env_vars({('core', 'load_examples'): 'false'}):
+            yield
 
 
 @pytest.mark.usefixtures("disable_load_example")
@@ -2874,10 +2875,11 @@ class TestSchedulerJob(unittest.TestCase):
     def test_add_unparseable_file_before_sched_start_creates_import_error(self):
         dags_folder = mkdtemp()
         try:
-            unparseable_filename = os.path.join(dags_folder, TEMP_DAG_FILENAME)
-            with open(unparseable_filename, 'w') as unparseable_file:
-                unparseable_file.writelines(UNPARSEABLE_DAG_FILE_CONTENTS)
-            self.run_single_scheduler_loop_with_no_dags(dags_folder)
+            with env_vars({('core', 'dags_folder'): dags_folder}):
+                unparseable_filename = os.path.join(dags_folder, TEMP_DAG_FILENAME)
+                with open(unparseable_filename, 'w') as unparseable_file:
+                    unparseable_file.writelines(UNPARSEABLE_DAG_FILE_CONTENTS)
+                self.run_single_scheduler_loop_with_no_dags(dags_folder)
         finally:
             shutil.rmtree(dags_folder)
 
