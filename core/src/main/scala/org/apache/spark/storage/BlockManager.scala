@@ -1912,7 +1912,11 @@ private[spark] class BlockManager(
 
     private val blockReplicationThread = new Thread {
       override def run(): Unit = {
-        while (blockManagerDecommissioning && !stopped) {
+        var failures = 0
+        while (blockManagerDecommissioning
+          && !stopped
+          && !Thread.interrupted()
+          && failures < 20) {
           try {
             logDebug("Attempting to replicate all cached RDD blocks")
             decommissionRddCacheBlocks()
@@ -1923,8 +1927,9 @@ private[spark] class BlockManager(
               logInfo("Interrupted during migration, will not refresh migrations.")
               stopped = true
             case NonFatal(e) =>
-              logError("Error occurred while trying to " +
-                "replicate cached RDD blocks for block manager decommissioning", e)
+              failures += 1
+              logError("Error occurred while trying to replicate cached RDD blocks" +
+                s" for block manager decommissioning (failure count: $failures)", e)
           }
         }
       }
