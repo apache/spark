@@ -30,9 +30,10 @@ object ChiSqSelectorExample {
       .builder
       .appName("ChiSqSelectorExample")
       .getOrCreate()
-    import spark.implicits._
 
     // $example on$
+    import spark.implicits._
+
     val data = Seq(
       (7, Vectors.dense(0.0, 0.0, 18.0, 1.0), 1.0),
       (8, Vectors.dense(0.0, 1.0, 12.0, 0.0), 0.0),
