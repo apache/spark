@@ -419,7 +419,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     manager.unregisterShuffle(0)
   }
 
-  test("[SPARK-27562]: test shuffle with shuffle digest enabled is true") {
+  test("SPARK-27562: Test shuffle with checking digest of transmitted data") {
       conf.set(config.SHUFFLE_DIGEST_ENABLED, true)
       val sc = new SparkContext("local", "test", conf)
       val numRecords = 10000

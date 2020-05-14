@@ -159,7 +159,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     }
   }
 
-  test("[SPARK-27562]: check the digest when shuffle digest enabled is true") {
+  test("SPARK-27562: check the digest when shuffle digest enabled is true") {
     val confClone = conf.clone
     confClone.set(config.SHUFFLE_DIGEST_ENABLED, true)
     val resolver = new IndexShuffleBlockResolver(confClone, blockManager)
