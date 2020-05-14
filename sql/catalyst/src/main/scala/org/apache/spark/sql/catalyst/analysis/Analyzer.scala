@@ -533,18 +533,13 @@ class Analyzer(
       }.asInstanceOf[NamedExpression]
     }
 
-    /*
-     * Construct [[Aggregate]] operator from Cube/Rollup/GroupingSets.
-     */
-    private def constructAggregate(
+    private def getFinalGroupByExpressions(
         selectedGroupByExprs: Seq[Seq[Expression]],
-        groupByExprs: Seq[Expression],
-        aggregationExprs: Seq[NamedExpression],
-        child: LogicalPlan): LogicalPlan = {
+        groupByExprs: Seq[Expression]): Seq[Expression] = {
       // In case of ANSI-SQL compliant syntax for GROUPING SETS, groupByExprs is optional and
       // can be null. In such case, we derive the groupByExprs from the user supplied values for
       // grouping sets.
-      val finalGroupByExpressions = if (groupByExprs == Nil) {
+      if (groupByExprs == Nil) {
         selectedGroupByExprs.flatten.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
           // Only unique expressions are included in the group by expressions and is determined
           // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
@@ -558,6 +553,17 @@ class Analyzer(
       } else {
         groupByExprs
       }
+    }
+
+    /*
+     * Construct [[Aggregate]] operator from Cube/Rollup/GroupingSets.
+     */
+    private def constructAggregate(
+        selectedGroupByExprs: Seq[Seq[Expression]],
+        groupByExprs: Seq[Expression],
+        aggregationExprs: Seq[NamedExpression],
+        child: LogicalPlan): LogicalPlan = {
+      val finalGroupByExpressions = getFinalGroupByExpressions(selectedGroupByExprs, groupByExprs)
 
       if (finalGroupByExpressions.size > GroupingID.dataType.defaultSize * 8) {
         throw new AnalysisException(
@@ -605,12 +611,13 @@ class Analyzer(
         case a @ Aggregate(Seq(r @ Rollup(groupByExprs)), _, _) =>
           a.copy(groupingExpressions = groupByExprs)
         case g: GroupingSets =>
-          Aggregate(g.groupByExprs, g.aggregations, g.child)
+          Aggregate(
+            getFinalGroupByExpressions(g.selectedGroupByExprs, g.groupByExprs),
+            g.aggregations, g.child)
       }
       // Try resolving the condition of the filter as though it is in the aggregate clause
-      val (extraAggExprs, transformedAggregateFilter) =
-        ResolveAggregateFunctions.resolveFilterCondInAggregate(
-          havingCond, aggForResolving, resolveFilterNotInGroupingExprs = true)
+      val (extraAggExprs, resolvedHavingCond) =
+        ResolveAggregateFunctions.resolveFilterCondInAggregate(havingCond, aggForResolving)
 
       // Push the aggregate expressions into the aggregate (if any).
       if (extraAggExprs.nonEmpty) {
@@ -625,8 +632,18 @@ class Analyzer(
             constructAggregate(
               x.selectedGroupByExprs, x.groupByExprs, x.aggregations ++ extraAggExprs, x.child)
         }
-        Project(newChild.output.filter(_.name != "havingCondition"),
-          Filter(transformedAggregateFilter.get, newChild))
+
+        // Since the exprId of extraAggExprs will be changed in the constructed aggregate, and the
+        // aggregateExpressions keeps the input order. So here we build an exprMap to resolve the
+        // condition again.
+        val exprMap = extraAggExprs.zip(
+          newChild.asInstanceOf[Aggregate].aggregateExpressions.takeRight(
+            extraAggExprs.length)).toMap
+        val newCond = resolvedHavingCond.get.transform {
+          case ne: NamedExpression if exprMap.contains(ne) => exprMap(ne)
+        }
+        Project(newChild.output.dropRight(extraAggExprs.length),
+          Filter(newCond, newChild))
       } else {
         a
       }
@@ -2180,10 +2197,7 @@ class Analyzer(
     }
 
     def resolveFilterCondInAggregate(
-        filterCond: Expression,
-        agg: Aggregate,
-        resolveFilterNotInGroupingExprs: Boolean = false)
-      : (Seq[NamedExpression], Option[Expression]) = {
+        filterCond: Expression, agg: Aggregate): (Seq[NamedExpression], Option[Expression]) = {
       val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
       try {
         val aggregatedCondition =
@@ -2202,18 +2216,13 @@ class Analyzer(
         if (resolvedOperator.resolved) {
           // Try to replace all aggregate expressions in the filter by an alias.
           val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
-          val groupingExpressions = if (resolveFilterNotInGroupingExprs) {
-            agg.groupingExpressions :+ resolvedAggregateFilter
-          } else {
-            agg.groupingExpressions
-          }
           val transformedAggregateFilter = resolvedAggregateFilter.transform {
             case ae: AggregateExpression =>
               val alias = Alias(ae, ae.toString)()
               aggregateExpressions += alias
               alias.toAttribute
             // Grouping functions are handled in the rule [[ResolveGroupingAnalytics]].
-            case e: Expression if groupingExpressions.exists(_.semanticEquals(e)) &&
+            case e: Expression if agg.groupingExpressions.exists(_.semanticEquals(e)) &&
                 !ResolveGroupingAnalytics.hasGroupingFunction(e) &&
                 !agg.output.exists(_.semanticEquals(e)) =>
               e match {
