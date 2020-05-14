@@ -1002,7 +1002,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.digest.enabled</code></td>
   <td>false</td>
   <td>
-    The parameter to control whether check the transmitted data during shuffle.
+    The parameter to control whether check the digest of transmitted data during shuffle.
   </td>
 </tr>
 </table>
