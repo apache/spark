@@ -89,9 +89,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private final ZoneId convertTz;
 
   /**
-   * true if need to rebase date/timestamp from Julian to Proleptic Gregorian calendar.
+   * The mode of rebasing date/timestamp from Julian to Proleptic Gregorian calendar.
    */
-  private final boolean rebaseDateTime;
+  private final String datetimeRebaseMode;
 
   /**
    * columnBatch object that is used for batch decoding. This is created on first use and triggers
@@ -122,16 +122,16 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private final MemoryMode MEMORY_MODE;
 
   public VectorizedParquetRecordReader(
-    ZoneId convertTz, boolean rebaseDateTime, boolean useOffHeap, int capacity) {
+    ZoneId convertTz, String datetimeRebaseMode, boolean useOffHeap, int capacity) {
     this.convertTz = convertTz;
-    this.rebaseDateTime = rebaseDateTime;
+    this.datetimeRebaseMode = datetimeRebaseMode;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
   }
 
   // For test only.
   public VectorizedParquetRecordReader(boolean useOffHeap, int capacity) {
-    this(null, false, useOffHeap, capacity);
+    this(null, "CORRECTED", useOffHeap, capacity);
   }
 
   /**
@@ -321,7 +321,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
       columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
-        pages.getPageReader(columns.get(i)), convertTz, rebaseDateTime);
+        pages.getPageReader(columns.get(i)), convertTz, datetimeRebaseMode);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }
