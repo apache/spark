@@ -70,11 +70,6 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
   // value type like CompactBuffer[_] and Array[CompactBuffer[_]]
   private var totalValueElements = 0
 
-  private val updateValueElements: Map[Class[_], () => Unit] = Map(
-    (classOf[CompactBuffer[_]], () => totalValueElements += 1),
-    (classOf[Array[CompactBuffer[_]]], () => totalValueElements += 1)
-  )
-
   // Triggered by destructiveSortedIterator; the underlying data array may no longer be used
   private var destroyed = false
   private val destructionMessage = "Map state is invalid from destructive sorting!"
@@ -167,8 +162,9 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
       } else if (k.eq(curKey) || k.equals(curKey)) {
         val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
         data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
-        if (updateValueElements.isDefinedAt(valueClassTag.runtimeClass)) {
-          updateValueElements(valueClassTag.runtimeClass)()
+        valueClassTag.runtimeClass match {
+          case CompactBufferClass | ArrayCompactBufferClass =>
+            totalValueElements += 1
         }
         return newValue
       } else {
@@ -329,4 +325,8 @@ class AppendOnlyMap[K, V: ClassTag](initialCapacity: Int = 64)
 
 private object AppendOnlyMap {
   val MAXIMUM_CAPACITY = (1 << 29)
+
+  val CompactBufferClass = classOf[CompactBuffer[_]]
+
+  val ArrayCompactBufferClass = classOf[Array[CompactBuffer[_]]]
 }

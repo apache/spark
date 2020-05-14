@@ -248,9 +248,9 @@ class SizeEstimatorSuite
     }
 
     val keyNums = Array.fill(100)(1000) ++ Array.fill(100000)(1)
+    Random.setSeed(42)
     for (i <- keyNums.indices) {
       val key = Random.nextString(100)
-      val valueBuffer = new CompactBuffer[DummyString]
       for (j <- 0 until keyNums(i)) {
         val value = DummyString(Random.nextString(100))
         val updateFunc: (Boolean, CompactBuffer[DummyString]) => CompactBuffer[DummyString] =
@@ -258,7 +258,6 @@ class SizeEstimatorSuite
             if (hadVal) mergeValue(oldVal, value) else createCombiner(value)
           }
         map.changeValue(key, updateFunc)
-        valueBuffer += value
       }
     }
 
