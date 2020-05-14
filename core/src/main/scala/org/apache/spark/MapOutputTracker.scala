@@ -805,8 +805,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       endPartition: Int)
     : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
-    val statuses = getStatuses(shuffleId, conf)
     try {
+      val statuses = getStatuses(shuffleId, conf)
       MapOutputTracker.convertMapStatuses(
         shuffleId, startPartition, endPartition, statuses, 0, statuses.length)
     } catch {
