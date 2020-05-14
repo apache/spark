@@ -40,7 +40,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.util.PrefetchingIterator
 import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer, SocketFuncServer}
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util._
@@ -202,9 +201,17 @@ private[spark] object PythonRDD extends Logging {
       val out = new DataOutputStream(sock.getOutputStream)
       val in = new DataInputStream(sock.getInputStream)
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-
         // Collects a partition on each iteration
-        val prefetchIter = new PrefetchingIterator(rdd, prefetchPartitions)
+        val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
+          var result: Array[Any] = null
+          rdd.sparkContext.submitJob(
+            rdd,
+            (iter: Iterator[Any]) => iter.toArray,
+            Seq(i), // The partition we are evaluating
+            (_, res: Array[Any]) => result = res,
+            result)
+        }
+        val prefetchIter = collectPartitionIter.buffered
 
         // Write data until iteration is complete, client stops iteration, or error occurs
         var complete = false
@@ -214,7 +221,14 @@ private[spark] object PythonRDD extends Logging {
           if (in.readInt() == 0) {
             complete = true
           } else if (prefetchIter.hasNext) {
-            val partitionArray = prefetchIter.next()
+
+            // Client requested more data, attempt to collect the next partition
+            val partitionFuture = prefetchIter.next()
+            // Cause the next job to be submitted if prefetchPartitions is enabled.
+            if (prefetchPartitions) {
+              prefetchIter.headOption
+            }
+            val partitionArray = ThreadUtils.awaitResult(partitionFuture, Duration.Inf)
 
             // Send response there is a partition to read
             out.writeInt(1)
