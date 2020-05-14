@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-set -e
+set -ex
 
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
