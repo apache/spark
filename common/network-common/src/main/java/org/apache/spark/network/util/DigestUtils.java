@@ -23,7 +23,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.zip.CRC32;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DigestUtils {
+    private static final Logger LOG = LoggerFactory.getLogger(DigestUtils.class);
     private static final int STREAM_BUFFER_LENGTH = 8192;
     private static final int DIGEST_LENGTH = 8;
 
@@ -45,15 +49,17 @@ public class DigestUtils {
             inputStream.skip(offset);
             return getDigest(inputStream);
         } catch (IOException e) {
+            LOG.error(String.format("Exception while computing digest for file segment: " +
+              "%s(offset:%d, length:%d)", file.getName(), offset, length ));
             return -1;
         }
     }
 
-    public static CRC32 getCRC32() {
+    private static CRC32 getCRC32() {
         return new CRC32();
     }
 
-    public static long updateCRC32(CRC32 crc32, InputStream data) throws IOException {
+    private static long updateCRC32(CRC32 crc32, InputStream data) throws IOException {
         byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
         int len;
         while ((len = data.read(buffer)) >= 0) {
