@@ -823,7 +823,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Add the Kubernetes <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/">annotation</a> specified by <code>AnnotationName</code> to the driver service.
     For example, <code>spark.kubernetes.driver.service.annotation.something=true</code>.
   </td>
-  <td>3.1.0</td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.label.[LabelName]</code></td>
