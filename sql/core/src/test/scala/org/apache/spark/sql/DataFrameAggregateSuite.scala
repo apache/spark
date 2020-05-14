@@ -998,12 +998,16 @@ class DataFrameAggregateSuite extends QueryTest
             " d, 0))) as csum from t2 group by c"), Row(4) :: Nil)
 
           // test SortAggregateExec
-          checkAnswer(sql("select max(if(c > (select a from t1), 'str1', 'str2')) as csum from t2"),
-            Row("str1") :: Nil)
+          var df = sql("select max(if(c > (select a from t1), 'str1', 'str2')) as csum from t2")
+          assert(df.queryExecution.executedPlan
+            .find { case _: SortAggregateExec => true }.isDefined)
+          checkAnswer(df, Row("str1") :: Nil)
 
           // test ObjectHashAggregateExec
-          checkAnswer(sql("select collect_list(d), sum(if(c > (select a from t1), d, 0)) as csum" +
-            " from t2"), Row(Array(4), 4) :: Nil)
+          df = sql("select collect_list(d), sum(if(c > (select a from t1), d, 0)) as csum from t2")
+          assert(df.queryExecution.executedPlan
+            .find { case _: ObjectHashAggregateExec => true }.isDefined)
+          checkAnswer(df, Row(Array(4), 4) :: Nil)
         }
       }
     }
