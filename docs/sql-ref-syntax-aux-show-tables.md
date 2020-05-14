@@ -28,84 +28,79 @@ current database.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 SHOW TABLES [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>{ FROM | IN } database_name</em></code></dt>
-  <dd>
+* **{ FROM `|` IN } database_name**
+
      Specifies the database name from which tables are listed.
-  </dd>
-  <dt><code><em>regex_pattern</em></code></dt>
-  <dd>
+
+* **regex_pattern**
+
      Specifies the regular expression pattern that is used to filter out unwanted tables. 
-     <ul> 
-          <li> Except for <code>*</code> and <code>|</code> character, the pattern works like a regular expression.</li>
-          <li> <code>*</code> alone matches 0 or more characters and <code>|</code> is used to separate multiple different regular expressions,
-           any of which can match. </li>
-          <li> The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
-     </ul>
-    
-  </dd>
-</dl>
 
-### Example
+     * Except for `*` and `|` character, the pattern works like a regular expression.
+     * `*` alone matches 0 or more characters and `|` is used to separate multiple different regular expressions,
+       any of which can match.
+     * The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.
 
-{% highlight sql %}
+### Examples
+
+```sql
 -- List all tables in default database
 SHOW TABLES;
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  | default|      sam|      false|
-  | default|     sam1|      false|
-  | default|      suj|      false|
-  +--------+---------+-----------+
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+| default|      sam|      false|
+| default|     sam1|      false|
+| default|      suj|      false|
++--------+---------+-----------+
 
 -- List all tables from userdb database 
 SHOW TABLES FROM userdb;
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  |  userdb|    user1|      false|
-  |  userdb|    user2|      false|
-  +--------+---------+-----------+
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+|  userdb|    user1|      false|
+|  userdb|    user2|      false|
++--------+---------+-----------+
 
 -- List all tables in userdb database
 SHOW TABLES IN userdb;
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  |  userdb|    user1|      false|
-  |  userdb|    user2|      false|
-  +--------+---------+-----------+
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+|  userdb|    user1|      false|
+|  userdb|    user2|      false|
++--------+---------+-----------+
 
 -- List all tables from default database matching the pattern `sam*`
 SHOW TABLES FROM default LIKE 'sam*';
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  | default|      sam|      false|
-  | default|     sam1|      false|
-  +--------+---------+-----------+
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+| default|      sam|      false|
+| default|     sam1|      false|
++--------+---------+-----------+
   
 -- List all tables matching the pattern `sam*|suj`
 SHOW TABLES LIKE 'sam*|suj';
-  +--------+---------+-----------+
-  |database|tableName|isTemporary|
-  +--------+---------+-----------+
-  | default|      sam|      false|
-  | default|     sam1|      false|
-  | default|      suj|      false|
-  +--------+---------+-----------+
-{% endhighlight %}
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+| default|      sam|      false|
+| default|     sam1|      false|
+| default|      suj|      false|
++--------+---------+-----------+
+```
 
 ### Related Statements
 
- * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
- * [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
- * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
- * [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+* [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
+* [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+* [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)

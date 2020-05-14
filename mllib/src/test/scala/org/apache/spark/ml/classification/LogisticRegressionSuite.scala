@@ -522,6 +522,35 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     testProbClassificationModelSingleProbPrediction(mlorModel, smallMultinomialDataset)
   }
 
+  test("LogisticRegression on blocks") {
+    for (dataset <- Seq(smallBinaryDataset, smallMultinomialDataset, binaryDataset,
+      multinomialDataset, multinomialDatasetWithZeroVar); fitIntercept <- Seq(true, false)) {
+      val mlor = new LogisticRegression()
+        .setFitIntercept(fitIntercept)
+        .setMaxIter(5)
+        .setFamily("multinomial")
+      val model = mlor.fit(dataset)
+      Seq(4, 16, 64).foreach { blockSize =>
+        val model2 = mlor.setBlockSize(blockSize).fit(dataset)
+        assert(model.interceptVector ~== model2.interceptVector relTol 1e-6)
+        assert(model.coefficientMatrix ~== model2.coefficientMatrix relTol 1e-6)
+      }
+    }
+
+    for (dataset <- Seq(smallBinaryDataset, binaryDataset); fitIntercept <- Seq(true, false)) {
+      val blor = new LogisticRegression()
+        .setFitIntercept(fitIntercept)
+        .setMaxIter(5)
+        .setFamily("binomial")
+      val model = blor.fit(dataset)
+      Seq(4, 16, 64).foreach { blockSize =>
+        val model2 = blor.setBlockSize(blockSize).fit(dataset)
+        assert(model.intercept ~== model2.intercept relTol 1e-6)
+        assert(model.coefficients ~== model2.coefficients relTol 1e-6)
+      }
+    }
+  }
+
   test("coefficients and intercept methods") {
     val mlr = new LogisticRegression().setMaxIter(1).setFamily("multinomial")
     val mlrModel = mlr.fit(smallMultinomialDataset)

@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-Return the list of columns in a table. If the table does not exist, an exception is thrown.
+Returns the list of columns in a table. If the table does not exist, an exception is thrown.
 
 ### Syntax
 
@@ -62,33 +62,33 @@ CREATE TABLE customer(
 
 -- List the columns of `customer` table in current database.
 SHOW COLUMNS IN customer;
-  +---------+
-  | col_name|
-  +---------+
-  |  cust_cd|
-  |     name|
-  |cust_addr|
-  +---------+
++---------+
+| col_name|
++---------+
+|  cust_cd|
+|     name|
+|cust_addr|
++---------+
 
 -- List the columns of `customer` table in `salesdb` database.
 SHOW COLUMNS IN salesdb.customer;
-  +---------+
-  | col_name|
-  +---------+
-  |  cust_cd|
-  |     name|
-  |cust_addr|
-  +---------+
++---------+
+| col_name|
++---------+
+|  cust_cd|
+|     name|
+|cust_addr|
++---------+
 
 -- List the columns of `customer` table in `salesdb` database
 SHOW COLUMNS IN customer IN salesdb;
-  +---------+
-  | col_name|
-  +---------+
-  |  cust_cd|
-  |     name|
-  |cust_addr|
-  +---------+
++---------+
+| col_name|
++---------+
+|  cust_cd|
+|     name|
+|cust_addr|
++---------+
 ```
 
 ### Related Statements

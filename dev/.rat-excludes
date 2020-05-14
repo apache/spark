@@ -25,7 +25,6 @@ bootstrap.bundle.min.js
 bootstrap.bundle.min.js.map
 bootstrap.min.css
 bootstrap.min.css.map
-bootstrap-tooltip.js
 jquery-3.4.1.min.js
 d3.min.js
 dagre-d3.min.js
