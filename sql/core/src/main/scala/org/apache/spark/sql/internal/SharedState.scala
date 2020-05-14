@@ -22,13 +22,11 @@ import java.util.Locale
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
-
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
@@ -157,7 +155,13 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
 object SharedState extends Logging {
   try {
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+    SparkSession.getActiveSession match {
+      case Some(spark) =>
+        URL.setURLStreamHandlerFactory(
+          new FsUrlStreamHandlerFactory(spark.sparkContext.hadoopConfiguration))
+      case _ =>
+        URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+    }
   } catch {
     case e: Error =>
       logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
