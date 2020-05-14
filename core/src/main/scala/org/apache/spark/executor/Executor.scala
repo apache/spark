@@ -122,7 +122,7 @@ private[spark] class Executor(
   // create. The map key is a task id.
   private val taskReaperForTask: HashMap[Long, TaskReaper] = HashMap[Long, TaskReaper]()
 
-  val executorMetricsSource =
+  private val executorMetricsSource =
     if (conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
       Some(new ExecutorMetricsSource)
     } else {
@@ -135,7 +135,10 @@ private[spark] class Executor(
     env.metricsSystem.registerSource(new JVMCPUSource())
     executorMetricsSource.foreach(_.register(env.metricsSystem))
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
+  } else {
+    Executor.executorSource = executorSource
   }
+
 
   // Whether to load classes in user jars before those in Spark jars
   private val userClassPathFirst = conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
@@ -979,4 +982,7 @@ private[spark] object Executor {
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
   val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
+
+  // Used to store executorSource, for local mode only
+  var executorSource: ExecutorSource = _
 }
