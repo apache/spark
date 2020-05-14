@@ -42,7 +42,7 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  */
 private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
-  SharedState.setFsUrlStreamHandlerFactory(sparkContext.conf)
+  SharedState.setFsUrlStreamHandlerFactory(sparkContext.conf, sparkContext.hadoopConfiguration)
 
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
@@ -160,13 +160,13 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 object SharedState extends Logging {
   @volatile private var fsUrlStreamHandlerFactoryInitialized = false
 
-  private def setFsUrlStreamHandlerFactory(conf: SparkConf): Unit = {
+  private def setFsUrlStreamHandlerFactory(conf: SparkConf, hadoopConf: Configuration): Unit = {
     if (!fsUrlStreamHandlerFactoryInitialized &&
         conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED)) {
       synchronized {
         if (!fsUrlStreamHandlerFactoryInitialized) {
           try {
-            URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+            URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hadoopConf))
             fsUrlStreamHandlerFactoryInitialized = true
           } catch {
             case NonFatal(_) =>
