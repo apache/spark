@@ -314,7 +314,8 @@ class SessionCatalog(
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
       // make the location of the table qualified.
-      val qualifiedTableLocation = makeQualifiedTablePath(tableDefinition.storage.locationUri.get, db)
+      val qualifiedTableLocation =
+        makeQualifiedTablePath(tableDefinition.storage.locationUri.get, db)
       tableDefinition.copy(
         storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
         identifier = tableIdentifier)
