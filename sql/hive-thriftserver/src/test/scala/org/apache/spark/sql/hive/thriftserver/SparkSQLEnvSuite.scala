@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import org.apache.commons.io.FileUtils
 import test.custom.listener.{DummyQueryExecutionListener, DummyStreamingQueryListener}
 
 import org.apache.spark.SparkFunSuite
@@ -30,8 +31,10 @@ import org.apache.spark.util.Utils
 class SparkSQLEnvSuite extends SparkFunSuite {
   test("SPARK-29604 external listeners should be initialized with Spark classloader") {
     val metastorePath = Utils.createTempDir("spark_derby")
+    FileUtils.forceDelete(metastorePath)
 
     val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
+
     withSystemProperties(
       "javax.jdo.option.ConnectionURL" -> jdbcUrl,
       "derby.system.durability" -> "test",
