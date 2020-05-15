@@ -2439,6 +2439,18 @@ class DataFrameSuite extends QueryTest
     val nestedDecArray = Array(decSpark)
     checkAnswer(Seq(nestedDecArray).toDF(), Row(Array(wrapRefArray(decJava))))
   }
+
+  test("as[BigDecimal] should not lost data precision or scale") {
+    withTempPath { f =>
+      sql("select 11111111111111111111111111111111111111 as d").
+        selectExpr("cast (d as decimal(38, 0))")
+        .write.mode("overwrite")
+        .parquet(f.getAbsolutePath)
+
+      val df = spark.read.parquet("/tmp/foo").as[BigDecimal]
+      assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
