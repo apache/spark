@@ -601,9 +601,8 @@ class Analyzer(
       }
     }
 
-    private def tryResolveHavingCondition(
-        a: UnresolvedHaving, agg: LogicalPlan): LogicalPlan = {
-      val aggForResolving = agg match {
+    private def tryResolveHavingCondition(h: UnresolvedHaving): LogicalPlan = {
+      val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
         case a @ Aggregate(Seq(c @ Cube(groupByExprs)), _, _) =>
@@ -617,12 +616,12 @@ class Analyzer(
       }
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val resolvedInfo =
-        ResolveAggregateFunctions.resolveFilterCondInAggregate(a.havingCondition, aggForResolving)
+        ResolveAggregateFunctions.resolveFilterCondInAggregate(h.havingCondition, aggForResolving)
 
       // Push the aggregate expressions into the aggregate (if any).
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
-        val newChild = agg match {
+        val newChild = h.child match {
           case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
             constructAggregate(
               cubeExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
@@ -646,7 +645,7 @@ class Analyzer(
         Project(newChild.output.dropRight(extraAggExprs.length),
           Filter(newCond, newChild))
       } else {
-        a
+        h
       }
     }
 
@@ -654,17 +653,17 @@ class Analyzer(
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case a @ UnresolvedHaving(
+      case h @ UnresolvedHaving(
           _, agg @ Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, _))
           if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        tryResolveHavingCondition(a, agg)
-      case a @ UnresolvedHaving(
+        tryResolveHavingCondition(h)
+      case h @ UnresolvedHaving(
           _, agg @ Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, _))
           if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        tryResolveHavingCondition(a, agg)
-      case a @ UnresolvedHaving(_, g: GroupingSets)
+        tryResolveHavingCondition(h)
+      case h @ UnresolvedHaving(_, g: GroupingSets)
           if g.childrenResolved && g.expressions.forall(_.resolved) =>
-        tryResolveHavingCondition(a, g)
+        tryResolveHavingCondition(h)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
@@ -2241,8 +2240,8 @@ class Analyzer(
           None
         }
       } catch {
-        // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
-        // just return the original plan.
+        // Attempting to resolve in the aggregate can result in ambiguity. When this happens,
+        // just return None and the caller side will return the original plan.
         case ae: AnalysisException => None
       }
     }
