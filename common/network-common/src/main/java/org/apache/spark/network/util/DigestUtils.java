@@ -36,7 +36,13 @@ public class DigestUtils {
     }
 
     public static long getDigest(InputStream data) throws IOException {
-        return updateCRC32(getCRC32(), data);
+        CRC32 crc32 = new CRC32();
+        byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
+        int len;
+        while ((len = data.read(buffer)) >= 0) {
+            crc32.update(buffer, 0, len);
+        }
+        return crc32.getValue();
     }
 
     public static long getDigest(File file, long offset, long length) {
@@ -46,7 +52,7 @@ public class DigestUtils {
         try (RandomAccessFile rf = new RandomAccessFile(file, "r")) {
             MappedByteBuffer data = rf.getChannel().map(FileChannel.MapMode.READ_ONLY, offset,
               length);
-            CRC32 crc32 = getCRC32();
+            CRC32 crc32 = new CRC32();
             byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
             int len;
             while ((len = Math.min(STREAM_BUFFER_LENGTH, data.remaining())) > 0) {
@@ -59,18 +65,5 @@ public class DigestUtils {
               "%s(offset:%d, length:%d)", file.getName(), offset, length ));
             return -1L;
         }
-    }
-
-    private static CRC32 getCRC32() {
-        return new CRC32();
-    }
-
-    private static long updateCRC32(CRC32 crc32, InputStream data) throws IOException {
-        byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
-        int len;
-        while ((len = data.read(buffer)) >= 0) {
-            crc32.update(buffer, 0, len);
-        }
-        return crc32.getValue();
     }
 }
