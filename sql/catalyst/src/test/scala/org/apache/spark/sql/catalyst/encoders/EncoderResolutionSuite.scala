@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
@@ -245,6 +245,12 @@ class EncoderResolutionSuite extends PlanTest {
          |- root class: "org.apache.spark.sql.catalyst.encoders.ComplexClass"
          |You can either add an explicit cast to the input data or choose a higher precision type
        """.stripMargin.trim + " of the field in the target object")
+  }
+
+  test("eliminate UpCast when the output data type of the leaf node is already decimal type") {
+    val encoder = ExpressionEncoder[BigDecimal]
+    val attr = Seq(AttributeReference("a", DecimalType(38, 0))())
+    testFromRow(encoder, attr, InternalRow(Decimal(0)))
   }
 
   // test for leaf types

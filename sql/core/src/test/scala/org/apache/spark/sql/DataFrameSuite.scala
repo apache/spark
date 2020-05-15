@@ -2442,8 +2442,7 @@ class DataFrameSuite extends QueryTest
 
   test("as[BigDecimal] should not lost data precision or scale") {
     withTempPath { f =>
-      sql("select 11111111111111111111111111111111111111 as d").
-        selectExpr("cast (d as decimal(38, 0))")
+      sql("select cast(11111111111111111111111111111111111111 as decimal(38, 0)) as d")
         .write.mode("overwrite")
         .parquet(f.getAbsolutePath)
 
