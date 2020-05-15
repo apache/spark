@@ -379,12 +379,12 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
          |""".stripMargin,
       s"""
          |(11) ShuffleQueryStage
-         |Output [6]: [k#x, count#xL, sum#xL, isEmptyOrNulls#x, sum#x, count#xL]
+         |Output [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
          |Arguments: 1
          |""".stripMargin,
       s"""
          |(12) CustomShuffleReader
-         |Input [6]: [k#x, count#xL, sum#xL, isEmptyOrNulls#x, sum#x, count#xL]
+         |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
          |Arguments: coalesced
          |""".stripMargin,
       s"""

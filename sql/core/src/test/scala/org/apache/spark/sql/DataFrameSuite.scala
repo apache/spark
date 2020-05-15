@@ -200,14 +200,14 @@ class DataFrameSuite extends QueryTest
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
-        checkAnsi(structDf, ansiEnabled)
+        checkAnsi(structDf, ansiEnabled, Row(null))
       }
     }
   }
 
-  private def checkAnsi(df: DataFrame, ansiEnabled: Boolean): Unit = {
+  private def checkAnsi(df: DataFrame, ansiEnabled: Boolean, expectedAnswer: Row ): Unit = {
     if (!ansiEnabled) {
-    checkAnswer(df, Row(null))
+    checkAnswer(df, expectedAnswer)
     } else {
       val e = intercept[SparkException] {
         df.collect()
@@ -252,26 +252,48 @@ class DataFrameSuite extends QueryTest
             val df = df0.union(df1)
             val df2 = df.withColumnRenamed("decNum", "decNum2").
               join(df, "intNum").agg(sum("decNum"))
-            checkAnsi(df2, ansiEnabled)
+
+            val expectedAnswer = Row(null)
+            checkAnsi(df2, ansiEnabled, expectedAnswer)
 
             val decStr = "1" + "0" * 19
             val d1 = spark.range(0, 12, 1, 1)
             val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
-            checkAnsi(d2, ansiEnabled)
+            checkAnsi(d2, ansiEnabled, expectedAnswer)
 
             val d3 = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
             val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
-            checkAnsi(d4, ansiEnabled)
+            checkAnsi(d4, ansiEnabled, expectedAnswer)
 
             val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
               lit(1).as("key")).groupBy("key").agg(sum($"d").alias("sumd")).select($"sumd")
-            checkAnsi(d5, ansiEnabled)
+            checkAnsi(d5, ansiEnabled, expectedAnswer)
 
             val nullsDf = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
 
             val largeDecimals = Seq(BigDecimal("1"* 20 + ".123"), BigDecimal("9"* 20 + ".123")).
               toDF("d")
-            checkAnsi(nullsDf.union(largeDecimals).agg(sum($"d")), ansiEnabled)
+            checkAnsi(nullsDf.union(largeDecimals).agg(sum($"d")), ansiEnabled, expectedAnswer)
+
+            val df3 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("50000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+
+            val df4 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+
+            val df5 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("20000000000000000000"), 2)).toDF("decNum", "intNum")
+
+            val df6 = df3.union(df4).union(df5)
+            val df7 = df6.groupBy("intNum").agg(sum("decNum"), countDistinct("decNum")).
+              filter("intNum == 1")
+            checkAnsi(df7, ansiEnabled, Row(1, null, 2))
           }
         }
       }

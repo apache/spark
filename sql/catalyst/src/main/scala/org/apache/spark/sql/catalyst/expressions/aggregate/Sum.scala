@@ -66,12 +66,15 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
 
   private lazy val zero = Literal.default(sumDataType)
 
-  override lazy val aggBufferAttributes = sum :: isEmptyOrNulls :: Nil
+  override lazy val aggBufferAttributes = resultType match {
+    case _: DecimalType => sum :: isEmptyOrNulls :: Nil
+    case _ => sum :: Nil
+  }
 
-  override lazy val initialValues: Seq[Expression] = Seq(
-    /* sum = */  zero,
-    /* isEmptyOrNulls = */ Literal.create(true, BooleanType)
-  )
+  override lazy val initialValues: Seq[Expression] = resultType match {
+    case _: DecimalType => Seq(zero, Literal.create(true, BooleanType))
+    case other => Seq(Literal.create(null, other))
+  }
 
   /**
    * For decimal types and when child is nullable:
@@ -105,10 +108,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
             If(isEmptyOrNulls, IsNull(child.cast(sumDataType)), isEmptyOrNulls)
           )
         case _ =>
-          Seq(
-            coalesce(sum + child.cast(sumDataType), sum),
-            If(isEmptyOrNulls, IsNull(child.cast(sumDataType)), isEmptyOrNulls)
-          )
+          Seq(coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum))
       }
     } else {
       resultType match {
@@ -119,13 +119,15 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
             /* isEmptyOrNulls */
             false
           )
-        case _ => Seq(sum + child.cast(sumDataType), false)
+        case _ => Seq(coalesce(sum, zero) + child.cast(sumDataType))
       }
     }
   }
 
   /**
    * For decimal type:
+   * If isEmptyOrNulls is false and if sum is null, then it means we have an overflow.
+   *
    * update of the sum is as follows:
    * Check if either portion of the left.sum or right.sum has overflowed
    * If it has, then the sum value will remain null.
@@ -148,10 +150,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
           And(isEmptyOrNulls.left, isEmptyOrNulls.right)
           )
       case _ =>
-        Seq(
-          coalesce(sum.left + sum.right, sum.left),
-          And(isEmptyOrNulls.left, isEmptyOrNulls.right)
-        )
+        Seq(coalesce(coalesce(sum.left, zero) + sum.right, sum.left))
     }
   }
 
@@ -168,7 +167,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
         Literal.create(null, sumDataType),
         If(And(SQLConf.get.ansiEnabled, IsNull(sum)),
           OverflowException(resultType, "Arithmetic Operation overflow"), sum))
-    case _ => If(EqualTo(isEmptyOrNulls, true), Literal.create(null, resultType), sum)
+    case _ => sum
   }
 
 }
