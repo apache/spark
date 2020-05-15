@@ -46,7 +46,9 @@ abstract class BenchmarkBase {
     if (regenerateBenchmarkFiles) {
       val version = System.getProperty("java.version").split("\\D+")(0).toInt
       val jdkString = if (version > 8) s"-jdk$version" else ""
-      val resultFileName = s"${this.getClass.getSimpleName.replace("$", "")}$jdkString-results.txt"
+      val suffixWithHyphen = if (suffix == null || suffix.isEmpty) "" else "-" + suffix
+      val resultFileName =
+        s"${this.getClass.getSimpleName.replace("$", "")}$jdkString$suffixWithHyphen-results.txt"
       val file = new File(s"benchmarks/$resultFileName")
       if (!file.exists()) {
         file.createNewFile()
@@ -64,6 +66,8 @@ abstract class BenchmarkBase {
 
     afterAll()
   }
+
+  def suffix: String = ""
 
   /**
    * Any shutdown code to ensure a clean shutdown
