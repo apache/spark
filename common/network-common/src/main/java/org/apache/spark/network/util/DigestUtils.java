@@ -56,7 +56,7 @@ public class DigestUtils {
         } catch (IOException e) {
             LOG.error(String.format("Exception while computing digest for file segment: " +
               "%s(offset:%d, length:%d)", file.getName(), offset, length ));
-            return -1;
+            return -1L;
         }
     }
 
