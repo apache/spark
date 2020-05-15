@@ -472,8 +472,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           } else {
             deferredBufs = null;
             canWrite = false;
-            throw new RuntimeException(String.format("Couldn't find an opportunity to write "
-                + "block %s to merged shuffle", msg.blockId));
+            throw new RuntimeException(String.format("%s %s to merged shuffle",
+                BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX, msg.blockId));
           }
         }
       }
