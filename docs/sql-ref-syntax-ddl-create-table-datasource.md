@@ -40,7 +40,7 @@ CREATE TABLE [ IF NOT EXISTS ] table_identifier
     [ AS select_statement ]
 ```
 
-Note that, the clauses between the OPTIONS clause and the AS SELECT clause can come in
+Note that, the clauses between the USING clause and the AS SELECT clause can come in
 as any order. For example, you can write COMMENT table_comment after TBLPROPERTIES.
 
 ### Parameters
