@@ -215,7 +215,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     appContext.getPriority.getPriority should be (1)
   }
 
-  test("specify a more specific type for the application") {
+  ignore("specify a more specific type for the application") {
     // When the type exceeds 20 characters will be truncated by yarn
     val appTypes = Map(
       1 -> ("", ""),
