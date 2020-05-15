@@ -178,6 +178,25 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedSparkSession
         'f.cast("string")).collect())
     }
   }
+
+  // only add no-serde test here
+  test("SPARK-30973: TRANSFORM should wait for the termination of the script (no serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+    val e = intercept[SparkException] {
+      val plan =
+        new ScriptTransformationExec(
+          input = Seq(rowsDf.col("a").expr),
+          script = "some_non_existent_command",
+          output = Seq(AttributeReference("a", StringType)()),
+          child = rowsDf.queryExecution.sparkPlan,
+          ioschema = noSerdeIOSchema)
+      SparkPlanTest.executePlan(plan, sqlContext)
+    }
+    assert(e.getMessage.contains("Subprocess exited with status"))
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
 }
 
 private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {

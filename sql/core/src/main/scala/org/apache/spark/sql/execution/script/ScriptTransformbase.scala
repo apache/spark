@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, SerializableConfiguration, Utils}
 
@@ -59,9 +60,17 @@ private[sql] trait ScriptTransformBase extends UnaryExecNode {
       cause: Throwable = null,
       proc: Process,
       stderrBuffer: CircularBuffer): Unit = {
-    proc.waitFor(3000, TimeUnit.MILLISECONDS)
     if (writerThread.exception.isDefined) {
       throw writerThread.exception.get
+    }
+
+    // There can be a lag between reader read EOF and the process termination.
+    // If the script fails to startup, this kind of error may be missed.
+    // So explicitly waiting for the process termination.
+    val timeout = conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_EXIT_TIMEOUT)
+    val exitRes = proc.waitFor(timeout, TimeUnit.SECONDS)
+    if (!exitRes) {
+      log.warn(s"Transformation script process exits timeout in $timeout seconds")
     }
 
     if (!proc.isAlive) {

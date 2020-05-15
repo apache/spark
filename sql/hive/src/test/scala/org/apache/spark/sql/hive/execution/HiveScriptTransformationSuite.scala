@@ -242,7 +242,7 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     val e = intercept[SparkException] {
       val plan =
-        new ScriptTransformationExec(
+        new HiveScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
@@ -260,7 +260,7 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     val e = intercept[SparkException] {
       val plan =
-        new ScriptTransformationExec(
+        new HiveScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),

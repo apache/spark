@@ -156,7 +156,6 @@ case class HiveScriptTransformationExec(
                   // Ideally the proc should *not* be alive at this point but
                   // there can be a lag between EOF being written out and the process
                   // being terminated. So explicitly waiting for the process to be done.
-                  proc.waitFor()
                   checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
                   return false
               }
