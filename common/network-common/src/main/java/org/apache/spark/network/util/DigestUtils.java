@@ -44,7 +44,8 @@ public class DigestUtils {
             return -1L;
         }
         try (RandomAccessFile rf = new RandomAccessFile(file, "r")) {
-            MappedByteBuffer data = rf.getChannel().map(FileChannel.MapMode.READ_ONLY, offset, length);
+            MappedByteBuffer data = rf.getChannel().map(FileChannel.MapMode.READ_ONLY, offset,
+              length);
             CRC32 crc32 = getCRC32();
             byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
             int len;
