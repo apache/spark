@@ -16,37 +16,40 @@
 #
 
 """
-An example for FValue testing.
+An example for ANOVASelector.
 Run with:
-  bin/spark-submit examples/src/main/python/ml/fvalue_test_example.py
+  bin/spark-submit examples/src/main/python/ml/anova_selector_example.py
 """
 from __future__ import print_function
 
 from pyspark.sql import SparkSession
 # $example on$
+from pyspark.ml.feature import ANOVASelector
 from pyspark.ml.linalg import Vectors
-from pyspark.ml.stat import FValueTest
 # $example off$
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("FValueTestExample") \
+    spark = SparkSession\
+        .builder\
+        .appName("ANOVASelectorExample")\
         .getOrCreate()
 
     # $example on$
-    data = [(4.6, Vectors.dense(6.0, 7.0, 0.0, 7.0, 6.0, 0.0)),
-            (6.6, Vectors.dense(0.0, 9.0, 6.0, 0.0, 5.0, 9.0)),
-            (5.1, Vectors.dense(0.0, 9.0, 3.0, 0.0, 5.0, 5.0)),
-            (7.6, Vectors.dense(0.0, 9.0, 8.0, 5.0, 6.0, 4.0)),
-            (9.0, Vectors.dense(8.0, 9.0, 6.0, 5.0, 4.0, 4.0)),
-            (9.0, Vectors.dense(8.0, 9.0, 6.0, 4.0, 0.0, 0.0))]
-    df = spark.createDataFrame(data, ["label", "features"])
+    df = spark.createDataFrame([
+        (1, Vectors.dense([1.7, 4.4, 7.6, 5.8, 9.6, 2.3]), 3.0,),
+        (2, Vectors.dense([8.8, 7.3, 5.7, 7.3, 2.2, 4.1]), 2.0,),
+        (3, Vectors.dense([1.2, 9.5, 2.5, 3.1, 8.7, 2.5]), 3.0,),
+        (4, Vectors.dense([3.7, 9.2, 6.1, 4.1, 7.5, 3.8]), 2.0,),
+        (5, Vectors.dense([8.9, 5.2, 7.8, 8.3, 5.2, 3.0]), 4.0,),
+        (6, Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]), 4.0,)], ["id", "features", "label"])
 
-    ftest = FValueTest.test(df, "features", "label").head()
-    print("pValues: " + str(ftest.pValues))
-    print("degreesOfFreedom: " + str(ftest.degreesOfFreedom))
-    print("fvalues: " + str(ftest.fValues))
+    selector = ANOVASelector(numTopFeatures=1, featuresCol="features",
+                             outputCol="selectedFeatures", labelCol="label")
+
+    result = selector.fit(df).transform(df)
+
+    print("ANOVASelector output with top %d features selected" % selector.getNumTopFeatures())
+    result.show()
     # $example off$
 
     spark.stop()

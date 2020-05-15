@@ -1299,6 +1299,18 @@ class CastSuite extends CastSuiteBase {
       }
     }
   }
+
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
+      checkEvaluation(cast(negativeTs, ByteType), expectedSecs.toByte)
+      checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
+      checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
+    }
+  }
 }
 
 /**
@@ -1339,6 +1351,21 @@ class AnsiCastSuite extends CastSuiteBase {
         cast("123.000.00", dataType), "invalid input")
       checkExceptionInExpression[NumberFormatException](
         cast("abc.com", dataType), "invalid input")
+    }
+  }
+
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
+      checkExceptionInExpression[ArithmeticException](
+        cast(negativeTs, ByteType), "to byte causes overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(negativeTs, ShortType), "to short causes overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(negativeTs, IntegerType), "to int causes overflow")
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
 }

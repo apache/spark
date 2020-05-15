@@ -33,6 +33,7 @@ import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
@@ -43,12 +44,12 @@ private[avro] class AvroOutputWriter(
     avroSchema: Schema) extends OutputWriter {
 
   // Whether to rebase datetimes from Gregorian to Julian calendar in write
-  private val rebaseDateTime: Boolean =
-    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_WRITE)
+  private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
+    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE))
 
   // The input rows will never be null.
   private lazy val serializer =
-    new AvroSerializer(schema, avroSchema, nullable = false, rebaseDateTime)
+    new AvroSerializer(schema, avroSchema, nullable = false, datetimeRebaseMode)
 
   /**
    * Overrides the couple of methods responsible for generating the output streams / files so
@@ -56,7 +57,11 @@ private[avro] class AvroOutputWriter(
    */
   private val recordWriter: RecordWriter[AvroKey[GenericRecord], NullWritable] = {
     val fileMeta = Map(SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT) ++ {
-      if (rebaseDateTime) Some(SPARK_LEGACY_DATETIME -> "") else None
+      if (datetimeRebaseMode == LegacyBehaviorPolicy.LEGACY) {
+        Some(SPARK_LEGACY_DATETIME -> "")
+      } else {
+        None
+      }
     }
 
     new SparkAvroKeyOutputFormat(fileMeta.asJava) {
