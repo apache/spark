@@ -540,7 +540,7 @@ case class UnresolvedOrdinal(ordinal: Int)
 }
 
 /**
- * Represents unresolved having clause, the child for it can be Aggregate, Grouping Sets, Rollup
+ * Represents unresolved having clause, the child for it can be Aggregate, GroupingSets, Rollup
  * and Cube. It is turned by the analyzer into a Filter.
  */
 case class UnresolvedHaving(
