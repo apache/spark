@@ -45,14 +45,17 @@ private[spark] abstract class MemoryManager(
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
+  private[this] val waitingInterval: Long = conf.get(MEMORY_ALLOCATE_WAIT_TIME)
   @GuardedBy("this")
   protected val onHeapStorageMemoryPool = new StorageMemoryPool(this, MemoryMode.ON_HEAP)
   @GuardedBy("this")
   protected val offHeapStorageMemoryPool = new StorageMemoryPool(this, MemoryMode.OFF_HEAP)
   @GuardedBy("this")
-  protected val onHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.ON_HEAP)
+  protected val onHeapExecutionMemoryPool =
+    new ExecutionMemoryPool(this, MemoryMode.ON_HEAP, waitingInterval)
   @GuardedBy("this")
-  protected val offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.OFF_HEAP)
+  protected val offHeapExecutionMemoryPool =
+    new ExecutionMemoryPool(this, MemoryMode.OFF_HEAP, waitingInterval)
 
   onHeapStorageMemoryPool.incrementPoolSize(onHeapStorageMemory)
   onHeapExecutionMemoryPool.incrementPoolSize(onHeapExecutionMemory)

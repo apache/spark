@@ -41,7 +41,8 @@ import org.apache.spark.internal.Logging
  */
 private[memory] class ExecutionMemoryPool(
     lock: Object,
-    memoryMode: MemoryMode
+    memoryMode: MemoryMode,
+    waitInterval: Long
   ) extends MemoryPool(lock) with Logging {
 
   private[this] val poolName: String = memoryMode match {
@@ -105,11 +106,12 @@ private[memory] class ExecutionMemoryPool(
       lock.notifyAll()
     }
 
+    var waitTimes = 0
     // Keep looping until we're either sure that we don't want to grant this request (because this
     // task would have more than 1 / numActiveTasks of the memory) or we have enough free
     // memory to give it (we always let each task get at least 1 / (2 * numActiveTasks)).
     // TODO: simplify this to limit each task to its own slot
-    while (true) {
+    while (waitTimes < 3) {
       val numActiveTasks = memoryForTask.keys.size
       val curMem = memoryForTask(taskAttemptId)
 
@@ -138,6 +140,11 @@ private[memory] class ExecutionMemoryPool(
       if (toGrant < numBytes && curMem + toGrant < minMemoryPerTask) {
         logInfo(s"TID $taskAttemptId waiting for at least 1/2N of $poolName pool to be free")
         lock.wait()
+      } else if (toGrant == 0 && memoryFree > 0) {
+        logInfo(s"TID $taskAttemptId acquired 0 bytes memory," +
+          s"wait for other task finish and adjust the ceiling")
+        waitTimes += 1
+        lock.wait(waitInterval)
       } else {
         memoryForTask(taskAttemptId) += toGrant
         return toGrant

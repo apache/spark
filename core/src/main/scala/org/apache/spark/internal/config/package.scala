@@ -357,6 +357,12 @@ package object config {
     .doubleConf
     .createWithDefault(0.6)
 
+  private[spark] val MEMORY_ALLOCATE_WAIT_TIME = ConfigBuilder("spark.memory.allocate.waiting")
+    .doc("When TaskMemoryManager allocate 0 byte, wait for other task in this executor release")
+    .version("3.0.0")
+    .longConf
+    .createWithDefault(100)
+
   private[spark] val STORAGE_SAFETY_FRACTION = ConfigBuilder("spark.storage.safetyFraction")
     .version("1.1.0")
     .doubleConf
