@@ -51,6 +51,7 @@ import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
 @ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
 
+
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
 
   private val TEST_PYFILE = """
