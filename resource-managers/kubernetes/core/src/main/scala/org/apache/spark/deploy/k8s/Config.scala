@@ -419,6 +419,7 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
+  val KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX = "spark.kubernetes.driver.service.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
   val KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX = "spark.kubernetes.driver.secretKeyRef."
   val KUBERNETES_DRIVER_VOLUMES_PREFIX = "spark.kubernetes.driver.volumes."
@@ -432,6 +433,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_HOSTPATH_TYPE = "hostPath"
   val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"
   val KUBERNETES_VOLUMES_EMPTYDIR_TYPE = "emptyDir"
+  val KUBERNETES_VOLUMES_NFS_TYPE = "nfs"
   val KUBERNETES_VOLUMES_MOUNT_PATH_KEY = "mount.path"
   val KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY = "mount.subPath"
   val KUBERNETES_VOLUMES_MOUNT_READONLY_KEY = "mount.readOnly"
@@ -439,6 +441,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY = "options.claimName"
   val KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY = "options.medium"
   val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
+  val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 }

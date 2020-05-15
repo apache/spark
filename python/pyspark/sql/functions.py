@@ -296,6 +296,8 @@ _window_functions = {
 
 # Wraps deprecated functions (keys) with the messages (values).
 _functions_deprecated = {
+    'toDegrees': 'Deprecated in 2.1, use degrees instead.',
+    'toRadians': 'Deprecated in 2.1, use radians instead.',
 }
 
 for _name, _doc in _functions.items():
@@ -317,6 +319,15 @@ for _name, _message in _functions_deprecated.items():
 for _name, _doc in _functions_2_4.items():
     globals()[_name] = since(2.4)(_create_function(_name, _doc))
 del _name, _doc
+
+
+@since(1.3)
+def approxCountDistinct(col, rsd=None):
+    """
+    .. note:: Deprecated in 2.1, use :func:`approx_count_distinct` instead.
+    """
+    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", DeprecationWarning)
+    return approx_count_distinct(col, rsd)
 
 
 @since(2.1)
@@ -641,7 +652,7 @@ def percentile_approx(col, percentage, accuracy=10000):
 @since(1.4)
 def rand(seed=None):
     """Generates a random column with independent and identically distributed (i.i.d.) samples
-    from U[0.0, 1.0].
+    uniformly distributed in [0.0, 1.0).
 
     .. note:: The function is non-deterministic in general case.
 
@@ -1196,8 +1207,6 @@ def to_date(col, format=None):
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
 
-    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
-
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_date(df.t).alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
@@ -1220,8 +1229,6 @@ def to_timestamp(col, format=None):
     using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
-
-    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_timestamp(df.t).alias('dt')).collect()
@@ -1359,7 +1366,12 @@ def from_utc_timestamp(timestamp, tz):
     timestamp to string according to the session local timezone.
 
     :param timestamp: the column that contains timestamps
-    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+    :param tz: A string detailing the time zone ID that the input should be adjusted to. It should
+               be in the format of either region-based zone IDs or zone offsets. Region IDs must
+               have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
+               the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are
+               supported as aliases of '+00:00'. Other short names are not recommended to use
+               because they can be ambiguous.
 
     .. versionchanged:: 2.4
        `tz` can take a :class:`Column` containing timezone ID strings.
@@ -1393,7 +1405,12 @@ def to_utc_timestamp(timestamp, tz):
     timestamp to string according to the session local timezone.
 
     :param timestamp: the column that contains timestamps
-    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+    :param tz: A string detailing the time zone ID that the input should be adjusted to. It should
+               be in the format of either region-based zone IDs or zone offsets. Region IDs must
+               have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
+               the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are
+               supported as aliases of '+00:00'. Other short names are not recommended to use
+               because they can be ambiguous.
 
     .. versionchanged:: 2.4
        `tz` can take a :class:`Column` containing timezone ID strings.

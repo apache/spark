@@ -58,19 +58,29 @@ select date_add('2011-11-11', 1L);
 select date_add('2011-11-11', 1.0);
 select date_add('2011-11-11', 1E1);
 select date_add('2011-11-11', '1');
+select date_add('2011-11-11', '1.2');
 select date_add(date'2011-11-11', 1);
 select date_add(timestamp'2011-11-11', 1);
 select date_sub(date'2011-11-11', 1);
+select date_sub(date'2011-11-11', '1');
+select date_sub(date'2011-11-11', '1.2');
 select date_sub(timestamp'2011-11-11', 1);
 select date_sub(null, 1);
 select date_sub(date'2011-11-11', null);
 select date'2011-11-11' + 1E1;
+select date'2011-11-11' + '1';
 select null + date '2001-09-28';
 select date '2001-09-28' + 7Y;
 select 7S + date '2001-09-28';
 select date '2001-10-01' - 7;
+select date '2001-10-01' - '7';
 select date '2001-09-28' + null;
 select date '2001-09-28' - null;
+
+-- date add/sub with non-literal string column
+create temp view v as select '1' str;
+select date_add('2011-11-11', str) from v;
+select date_sub('2011-11-11', str) from v;
 
 -- subtract dates
 select null - date '2019-10-06';

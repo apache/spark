@@ -530,6 +530,22 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-31500: collect_set() of BinaryType returns duplicate elements") {
+    val bytesTest1 = "test1".getBytes
+    val bytesTest2 = "test2".getBytes
+    val df = Seq(bytesTest1, bytesTest1, bytesTest2).toDF("a")
+    checkAnswer(df.select(size(collect_set($"a"))), Row(2) :: Nil)
+
+    val a = "aa".getBytes
+    val b = "bb".getBytes
+    val c = "cc".getBytes
+    val d = "dd".getBytes
+    val df1 = Seq((a, b), (a, b), (c, d))
+      .toDF("x", "y")
+      .select(struct($"x", $"y").as("a"))
+    checkAnswer(df1.select(size(collect_set($"a"))), Row(2) :: Nil)
+  }
+
   test("collect_set functions cannot have maps") {
     val df = Seq((1, 3, 0), (2, 3, 0), (3, 4, 1))
       .toDF("a", "x", "y")

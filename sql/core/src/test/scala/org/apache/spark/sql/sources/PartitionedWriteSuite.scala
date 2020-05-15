@@ -139,15 +139,15 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
       checkPartitionValues(files.head, "2016-12-01 00:00:00")
     }
     withTempPath { f =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .partitionBy("ts").parquet(f.getAbsolutePath)
       val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
       assert(files.length == 1)
-      // use timeZone option "GMT" to format partition value.
+      // use timeZone option utcTz.getId to format partition value.
       checkPartitionValues(files.head, "2016-12-01 08:00:00")
     }
     withTempPath { f =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         df.write.partitionBy("ts").parquet(f.getAbsolutePath)
         val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
         assert(files.length == 1)

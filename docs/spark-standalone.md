@@ -192,6 +192,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     The maximum number of completed applications to display. Older applications will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.retainedDrivers</code></td>
@@ -199,6 +200,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
    The maximum number of completed drivers to display. Older drivers will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.spreadOut</code></td>
@@ -208,6 +210,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
   </td>
+  <td>0.6.1</td>
 </tr>
 <tr>
   <td><code>spark.deploy.defaultCores</code></td>
@@ -219,6 +222,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.maxExecutorRetries</code></td>
@@ -234,6 +238,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     <code>-1</code>.
     <br/>
   </td>
+  <td>1.6.3</td>
 </tr>
 <tr>
   <td><code>spark.worker.timeout</code></td>
@@ -250,6 +255,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Amount of a particular resource to use on the worker.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
@@ -258,6 +264,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Path to resource discovery script, which is used to find a particular resource while worker starting up.
     And the output of the script should be formatted like the <code>ResourceInformation</code> class.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.resourcesFile</code></td>
@@ -317,6 +324,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
     eventually gets cleaned up.  This config may be removed in the future.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
@@ -327,8 +335,9 @@ SPARK_WORKER_OPTS supports the following system properties:
     overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
     local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
     all files/subdirectories of a stopped and timeout application.
-    This only affects Standalone mode, support of other cluster manangers can be added in the future.
+    This only affects Standalone mode, support of other cluster managers can be added in the future.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
@@ -490,14 +499,16 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
 <table class="table">
-  <tr><th style="width:21%">System property</th><th>Meaning</th></tr>
+  <tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>Set to FILESYSTEM to enable single-node recovery mode (default: NONE).</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.</td>
+    <td>0.8.1</td>
   </tr>
 </table>
 

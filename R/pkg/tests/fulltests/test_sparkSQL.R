@@ -106,6 +106,15 @@ if (is_windows()) {
   Sys.setenv(TZ = "GMT")
 }
 
+test_that("calling sparkRSQL.init returns existing SQL context", {
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
+})
+
+test_that("calling sparkRSQL.init returns existing SparkSession", {
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sparkSession)
+})
+
 test_that("calling sparkR.session returns existing SparkSession", {
   expect_equal(sparkR.session(), sparkSession)
 })
@@ -656,10 +665,10 @@ test_that("test tableNames and tables", {
   expect_true("tableName" %in% colnames(tables()))
   expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
-  createOrReplaceTempView(df, "table2")
+  suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
   expect_equal(count(tables), count + 2)
-  dropTempView("table1")
+  suppressWarnings(dropTempTable("table1"))
   expect_true(dropTempView("table2"))
 
   tables <- listTables()
@@ -2549,7 +2558,7 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   error_msg <- paste("joinType must be one of the following types:",
                  "'inner', 'cross', 'outer', 'full', 'fullouter', 'full_outer',",
                  "'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer',",
-                 "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti' or 'left_anti'.")
+                 "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti', 'left_anti'")
   expect_error(join(df2, df, df2$name == df$name, "invalid"), error_msg)
 
   merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
@@ -2584,8 +2593,8 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   writeLines(mockLines3, jsonPath3)
   df3 <- read.json(jsonPath3)
   expect_error(merge(df, df3),
-               paste("The following column name: name_y occurs more than once in the 'DataFrame'.",
-                     "Please use different suffixes for the intersected columns.", sep = ""))
+               paste0("The following column name: name_y occurs more than once in the 'DataFrame'.",
+                      "Please use different suffixes for the intersected columns."))
 
   unlink(jsonPath2)
   unlink(jsonPath3)
@@ -2628,20 +2637,20 @@ test_that("toJSON() on DataFrame", {
 
 test_that("showDF()", {
   df <- read.json(jsonPath)
-  expected <- paste("+----+-------+\n",
-                    "| age|   name|\n",
-                    "+----+-------+\n",
-                    "|null|Michael|\n",
-                    "|  30|   Andy|\n",
-                    "|  19| Justin|\n",
-                    "+----+-------+\n", sep = "")
-  expected2 <- paste("+---+----+\n",
-                     "|age|name|\n",
-                     "+---+----+\n",
-                     "|nul| Mic|\n",
-                     "| 30| And|\n",
-                     "| 19| Jus|\n",
-                     "+---+----+\n", sep = "")
+  expected <- paste("+----+-------+",
+                    "| age|   name|",
+                    "+----+-------+",
+                    "|null|Michael|",
+                    "|  30|   Andy|",
+                    "|  19| Justin|",
+                    "+----+-------+\n", sep = "\n")
+  expected2 <- paste("+---+----+",
+                     "|age|name|",
+                     "+---+----+",
+                     "|nul| Mic|",
+                     "| 30| And|",
+                     "| 19| Jus|",
+                     "+---+----+\n", sep = "\n")
   expect_output(showDF(df), expected)
   expect_output(showDF(df, truncate = 3), expected2)
 })

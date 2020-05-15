@@ -909,6 +909,23 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
 
+  test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+    val exception = intercept[AnalysisException] {
+      sql("SHOW TABLES FROM a.b")
+    }
+
+    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+  }
+
+  test("ShowViews: using v2 catalog, command not supported.") {
+    val exception = intercept[AnalysisException] {
+      sql("SHOW VIEWS FROM testcat")
+    }
+
+    assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
+      " only SessionCatalog supports this command."))
+  }
+
   test("ShowTables: using v2 catalog with empty namespace") {
     spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
     runShowTablesSql("SHOW TABLES FROM testcat", Seq(Row("", "table")))
@@ -2105,8 +2122,6 @@ class DataSourceV2SQLSuite
         .add("value", StringType, nullable = false)
 
       val expected = Seq(
-        Row(TableCatalog.PROP_OWNER, defaultUser),
-        Row("provider", provider),
         Row("status", status),
         Row("user", user))
 

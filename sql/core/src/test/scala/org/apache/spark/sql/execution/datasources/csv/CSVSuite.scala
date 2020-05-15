@@ -1080,7 +1080,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .format("csv")
         .option("header", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1102,7 +1102,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .option("header", "true")
         .option("inferSchema", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)
@@ -1894,6 +1894,20 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
 
     checkAnswer(spark.read.schema(schema).csv(input), Row(null))
     checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
+    assert(spark.read.csv(input).collect().toSet == Set(Row()))
+  }
+
+  test("SPARK-31261: bad csv input with `columnNameCorruptRecord` should not cause NPE") {
+    val schema = StructType(
+      StructField("a", IntegerType) :: StructField("_corrupt_record", StringType) :: Nil)
+    val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+
+    checkAnswer(
+      spark.read
+        .option("columnNameOfCorruptRecord", "_corrupt_record")
+        .schema(schema)
+        .csv(input),
+      Row(null, null))
     assert(spark.read.csv(input).collect().toSet == Set(Row()))
   }
 

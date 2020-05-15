@@ -157,8 +157,8 @@ if not (ENV['SKIP_API'] == '1')
     curr_dir = pwd
     cd("..")
 
-    puts "Running 'build/sbt clean package' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean package") || raise("SQL doc generation failed")
+    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")

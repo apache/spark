@@ -49,8 +49,15 @@ package object sql {
    * Metadata key which is used to write Spark version in the followings:
    * - Parquet file metadata
    * - ORC file metadata
+   * - Avro file metadata
    *
    * Note that Hive table property `spark.sql.create.version` also has Spark version.
    */
   private[sql] val SPARK_VERSION_METADATA_KEY = "org.apache.spark.version"
+
+  /**
+   * Parquet/Avro file metadata key to indicate that the file was written with legacy datetime
+   * values.
+   */
+  private[sql] val SPARK_LEGACY_DATETIME = "org.apache.spark.legacyDateTime"
 }

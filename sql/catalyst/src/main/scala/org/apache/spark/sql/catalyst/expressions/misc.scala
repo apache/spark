@@ -173,6 +173,7 @@ case class SparkVersion() extends LeafExpression with CodegenFallback {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
   override def dataType: DataType = StringType
+  override def prettyName: String = "version"
   override def eval(input: InternalRow): Any = {
     UTF8String.fromString(SPARK_VERSION_SHORT + " " + SPARK_REVISION)
   }

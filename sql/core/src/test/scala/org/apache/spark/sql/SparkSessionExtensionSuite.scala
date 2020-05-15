@@ -327,6 +327,9 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseDataType(sqlText: String): DataType =
     delegate.parseDataType(sqlText)
+
+  override def parseRawDataType(sqlText: String): DataType =
+    delegate.parseRawDataType(sqlText)
 }
 
 object MyExtensions {
@@ -342,6 +345,7 @@ object MyExtensions {
       """
        note
       """,
+      "",
       "3.0.0",
       """
        deprecated
@@ -752,6 +756,7 @@ object MyExtensions2 {
       """
        note
       """,
+      "",
       "3.0.0",
       """
        deprecated
@@ -784,6 +789,7 @@ object MyExtensions2Duplicate {
       """
        note
       """,
+      "",
       "3.0.0",
       """
        deprecated

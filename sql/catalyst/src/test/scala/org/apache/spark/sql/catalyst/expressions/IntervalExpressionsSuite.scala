@@ -34,42 +34,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Literal(stringToInterval( "interval " + s))
   }
 
-  test("millenniums") {
-    checkEvaluation(ExtractIntervalMillenniums("0 years"), 0)
-    checkEvaluation(ExtractIntervalMillenniums("9999 years"), 9)
-    checkEvaluation(ExtractIntervalMillenniums("1000 years"), 1)
-    checkEvaluation(ExtractIntervalMillenniums("-2000 years"), -2)
-    // Microseconds part must not be taken into account
-    checkEvaluation(ExtractIntervalMillenniums("999 years 400 days"), 0)
-    // Millennium must be taken from years and months
-    checkEvaluation(ExtractIntervalMillenniums("999 years 12 months"), 1)
-    checkEvaluation(ExtractIntervalMillenniums("1000 years -1 months"), 0)
-  }
-
-  test("centuries") {
-    checkEvaluation(ExtractIntervalCenturies("0 years"), 0)
-    checkEvaluation(ExtractIntervalCenturies("9999 years"), 99)
-    checkEvaluation(ExtractIntervalCenturies("1000 years"), 10)
-    checkEvaluation(ExtractIntervalCenturies("-2000 years"), -20)
-    // Microseconds part must not be taken into account
-    checkEvaluation(ExtractIntervalCenturies("99 years 400 days"), 0)
-    // Century must be taken from years and months
-    checkEvaluation(ExtractIntervalCenturies("99 years 12 months"), 1)
-    checkEvaluation(ExtractIntervalCenturies("100 years -1 months"), 0)
-  }
-
-  test("decades") {
-    checkEvaluation(ExtractIntervalDecades("0 years"), 0)
-    checkEvaluation(ExtractIntervalDecades("9999 years"), 999)
-    checkEvaluation(ExtractIntervalDecades("1000 years"), 100)
-    checkEvaluation(ExtractIntervalDecades("-2000 years"), -200)
-    // Microseconds part must not be taken into account
-    checkEvaluation(ExtractIntervalDecades("9 years 400 days"), 0)
-    // Decade must be taken from years and months
-    checkEvaluation(ExtractIntervalDecades("9 years 12 months"), 1)
-    checkEvaluation(ExtractIntervalDecades("10 years -1 months"), 0)
-  }
-
   test("years") {
     checkEvaluation(ExtractIntervalYears("0 years"), 0)
     checkEvaluation(ExtractIntervalYears("9999 years"), 9999)
@@ -80,19 +44,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Year must be taken from years and months
     checkEvaluation(ExtractIntervalYears("9 years 12 months"), 10)
     checkEvaluation(ExtractIntervalYears("10 years -1 months"), 9)
-  }
-
-  test("quarters") {
-    checkEvaluation(ExtractIntervalQuarters("0 months"), 1.toByte)
-    checkEvaluation(ExtractIntervalQuarters("1 months"), 1.toByte)
-    checkEvaluation(ExtractIntervalQuarters("-1 months"), 1.toByte)
-    checkEvaluation(ExtractIntervalQuarters("2 months"), 1.toByte)
-    checkEvaluation(ExtractIntervalQuarters("-2 months"), 1.toByte)
-    checkEvaluation(ExtractIntervalQuarters("1 years -1 months"), 4.toByte)
-    checkEvaluation(ExtractIntervalQuarters("-1 years 1 months"), -2.toByte)
-    checkEvaluation(ExtractIntervalQuarters("2 years 3 months"), 2.toByte)
-    checkEvaluation(ExtractIntervalQuarters("-2 years -3 months"), 0.toByte)
-    checkEvaluation(ExtractIntervalQuarters("9999 years"), 1.toByte)
   }
 
   test("months") {
@@ -117,6 +68,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Years and months must not be taken into account
     checkEvaluation(ExtractIntervalDays("100 year 10 months 5 days"), 5)
     checkEvaluation(ExtractIntervalDays(largeInterval), 31)
+    checkEvaluation(ExtractIntervalDays("25 hours"), 1)
   }
 
   test("hours") {
@@ -130,6 +82,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Minutes should be taken into account
     checkEvaluation(ExtractIntervalHours("10 hours 100 minutes"), 11L)
     checkEvaluation(ExtractIntervalHours(largeInterval), 11L)
+    checkEvaluation(ExtractIntervalHours("25 hours"), 1L)
+
   }
 
   test("minutes") {
@@ -156,46 +110,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ExtractIntervalSeconds("10 seconds 1 milliseconds 1 microseconds"),
       Decimal(10001001, 8, 6))
     checkEvaluation(ExtractIntervalSeconds("61 seconds 1 microseconds"), Decimal(1000001, 8, 6))
-  }
-
-  test("milliseconds") {
-    checkEvaluation(ExtractIntervalMilliseconds("0 milliseconds"), Decimal(0, 8, 3))
-    checkEvaluation(ExtractIntervalMilliseconds("1 milliseconds"), Decimal(1.0, 8, 3))
-    checkEvaluation(ExtractIntervalMilliseconds("-1 milliseconds"), Decimal(-1.0, 8, 3))
-    checkEvaluation(
-      ExtractIntervalMilliseconds("1 second 999 milliseconds"),
-      Decimal(1999.0, 8, 3))
-    checkEvaluation(
-      ExtractIntervalMilliseconds("999 milliseconds 1 microsecond"),
-      Decimal(999.001, 8, 3))
-    checkEvaluation(
-      ExtractIntervalMilliseconds("-1 second -999 milliseconds"),
-      Decimal(-1999.0, 8, 3))
-    // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalMilliseconds("100 year 1 millisecond"), Decimal(1.0, 8, 3))
-    checkEvaluation(ExtractIntervalMilliseconds(largeInterval), Decimal(59999.999, 8, 3))
-  }
-
-  test("microseconds") {
-    checkEvaluation(ExtractIntervalMicroseconds("0 microseconds"), 0L)
-    checkEvaluation(ExtractIntervalMicroseconds("1 microseconds"), 1L)
-    checkEvaluation(ExtractIntervalMicroseconds("-1 microseconds"), -1L)
-    checkEvaluation(ExtractIntervalMicroseconds("1 second 999 microseconds"), 1000999L)
-    checkEvaluation(ExtractIntervalMicroseconds("999 milliseconds 1 microseconds"), 999001L)
-    checkEvaluation(ExtractIntervalMicroseconds("-1 second -999 microseconds"), -1000999L)
-    // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalMicroseconds("11 year 1 microseconds"), 1L)
-    checkEvaluation(ExtractIntervalMicroseconds(largeInterval), 59999999L)
-  }
-
-  test("epoch") {
-    checkEvaluation(ExtractIntervalEpoch("0 months"), Decimal(0.0, 18, 6))
-    checkEvaluation(ExtractIntervalEpoch("10000 years"), Decimal(315576000000.0, 18, 6))
-    checkEvaluation(ExtractIntervalEpoch("1 year"), Decimal(31557600.0, 18, 6))
-    checkEvaluation(ExtractIntervalEpoch("-1 year"), Decimal(-31557600.0, 18, 6))
-    checkEvaluation(
-      ExtractIntervalEpoch("1 second 1 millisecond 1 microsecond"),
-      Decimal(1.001001, 18, 6))
   }
 
   test("multiply") {
