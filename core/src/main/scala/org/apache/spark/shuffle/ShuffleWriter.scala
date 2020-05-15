@@ -209,7 +209,16 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
       }
 
       override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
-        logWarning(s"Pushing block $blockId to $address failed.", exception)
+        if ((exception.getMessage != null &&
+          exception.getMessage.contains(
+            BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX)) ||
+          (exception.getCause != null && exception.getCause.getMessage != null &&
+            exception.getCause.getMessage.contains(
+              BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))) {
+          logTrace(s"Pushing block $blockId to $address failed.", exception)
+        } else {
+          logWarning(s"Pushing block $blockId to $address failed.", exception)
+        }
         handleResult(PushResult(blockId, exception))
       }
     }
@@ -274,9 +283,12 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     if (remainingBlocks.isEmpty) {
       reqsInFlight = reqsInFlight - 1
     }
-    if (pushResult.failure != null && pushResult.failure.getCause != null &&
-      pushResult.failure.getCause.getMessage != null &&
-      pushResult.failure.getCause.getMessage.contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)) {
+    if (pushResult.failure != null &&
+      ((pushResult.failure.getMessage != null &&
+        pushResult.failure.getMessage.contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)) ||
+      (pushResult.failure.getCause != null && pushResult.failure.getCause.getMessage != null &&
+        pushResult.failure.getCause.getMessage.contains(
+          BlockPushException.TOO_LATE_MESSAGE_SUFFIX)))) {
       false
     } else {
       remainingBlocks.isEmpty && (pushRequests.nonEmpty || deferredPushRequests.nonEmpty)
