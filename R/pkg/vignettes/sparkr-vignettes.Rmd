@@ -533,6 +533,10 @@ SparkR supports the following machine learning models and algorithms.
 
 * Isotonic Regression
 
+* Linear Regression
+
+* Factorization Machines (FM) Regressor
+
 #### Tree - Classification and Regression
 
 * Decision Tree
@@ -831,6 +835,32 @@ For example, when the input is $3.2$, the two closest feature values are $3.0$ a
 ```{r}
 newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
 head(predict(isoregModel, newDF))
+```
+
+#### Linear Regression
+
+Linear regression model.
+
+```{r}
+model <- spark.lm(carsDF, mpg ~ wt + hp)
+
+summary(model)
+predictions <- predict(model, carsDF)
+head(select(predictions, predictions$prediction))
+```
+
+#### Factorization Machines Regressor
+
+Factorization Machines for regression problems.
+
+For background and details about the implementation of factorization machines,
+refer to the [Factorization Machines section](https://spark.apache.org/docs/latest/ml-classification-regression.html#factorization-machines).
+
+```{r}
+model <- spark.fmRegressor(carsDF, mpg ~ wt + hp)
+summary(model)
+predictions <- predict(model, carsDF)
+head(select(predictions, predictions$prediction))
 ```
 
 #### Decision Tree

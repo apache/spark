@@ -73,7 +73,9 @@ exportMethods("glm",
               "spark.associationRules",
               "spark.findFrequentSequentialPatterns",
               "spark.assignClusters",
-              "spark.fmClassifier")
+              "spark.fmClassifier",
+              "spark.lm",
+              "spark.fmRegressor")
 
 # Job group lifecycle management methods
 export("setJobGroup",

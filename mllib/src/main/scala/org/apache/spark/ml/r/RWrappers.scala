@@ -76,6 +76,10 @@ private[r] object RWrappers extends MLReader[Object] {
         FPGrowthWrapper.load(path)
       case "org.apache.spark.ml.r.FMClassifierWrapper" =>
         FMClassifierWrapper.load(path)
+     case "org.apache.spark.ml.r.LinearRegressionWrapper" =>
+        LinearRegressionWrapper.load(path)
+      case "org.apache.spark.ml.r.FMRegressorWrapper" =>
+        FMRegressorWrapper.load(path)
       case _ =>
         throw new SparkException(s"SparkR read.ml does not support load $className")
     }

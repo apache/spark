@@ -52,7 +52,7 @@ Using the data from the above example:
 
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -242,7 +242,7 @@ refreshTable("my_table")
 
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 REFRESH TABLE my_table;

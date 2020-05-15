@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.sql.Date
-
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch
 import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument => OrcSearchArgument}
@@ -39,7 +37,9 @@ private[sql] object OrcShimUtils {
   private[sql] type Operator = OrcOperator
   private[sql] type SearchArgument = OrcSearchArgument
 
-  def getSqlDate(value: Any): Date = value.asInstanceOf[DateWritable].get
+  def getGregorianDays(value: Any): Int = {
+    new DaysWritable(value.asInstanceOf[DateWritable]).gregorianDays
+  }
 
   def getDecimal(value: Any): Decimal = {
     val decimal = value.asInstanceOf[HiveDecimalWritable].getHiveDecimal()

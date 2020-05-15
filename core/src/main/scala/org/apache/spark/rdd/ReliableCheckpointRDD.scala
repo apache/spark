@@ -199,8 +199,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
 
     val finalOutputName = ReliableCheckpointRDD.checkpointFileName(ctx.partitionId())
     val finalOutputPath = new Path(outputDir, finalOutputName)
-    val tempOutputPath =
-      new Path(outputDir, s".$finalOutputName-attempt-${ctx.attemptNumber()}")
+    val tempOutputPath = new Path(outputDir, s".$finalOutputName-attempt-${ctx.taskAttemptId()}")
 
     val bufferSize = env.conf.get(BUFFER_SIZE)
 
@@ -218,11 +217,16 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     }
     val serializer = env.serializer.newInstance()
     val serializeStream = serializer.serializeStream(fileOutputStream)
-    Utils.tryWithSafeFinally {
+    Utils.tryWithSafeFinallyAndFailureCallbacks {
       serializeStream.writeAll(iterator)
-    } {
+    } (catchBlock = {
+      val deleted = fs.delete(tempOutputPath, false)
+      if (!deleted) {
+        logInfo(s"Failed to delete tempOutputPath $tempOutputPath.")
+      }
+    }, finallyBlock = {
       serializeStream.close()
-    }
+    })
 
     if (!fs.rename(tempOutputPath, finalOutputPath)) {
       if (!fs.exists(finalOutputPath)) {

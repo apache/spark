@@ -1483,6 +1483,10 @@ setGeneric("spark.bisectingKmeans",
 setGeneric("spark.fmClassifier",
            function(data, formula, ...) { standardGeneric("spark.fmClassifier") })
 
+#' @rdname spark.fmRegressor
+setGeneric("spark.fmRegressor",
+           function(data, formula, ...) { standardGeneric("spark.fmRegressor") })
+
 #' @rdname spark.gaussianMixture
 setGeneric("spark.gaussianMixture",
            function(data, formula, ...) { standardGeneric("spark.gaussianMixture") })
@@ -1550,6 +1554,10 @@ setGeneric("spark.findFrequentSequentialPatterns",
 #' @rdname spark.powerIterationClustering
 setGeneric("spark.assignClusters",
             function(data, ...) { standardGeneric("spark.assignClusters") })
+
+#' @rdname spark.lm
+setGeneric("spark.lm",
+           function(data, formula, ...) { standardGeneric("spark.lm") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.

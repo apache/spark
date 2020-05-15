@@ -73,7 +73,7 @@ case class ForeachWriterTable[T](
                 val boundEnc = enc.resolveAndBind(
                   inputSchema.toAttributes,
                   SparkSession.getActiveSession.get.sessionState.analyzer)
-                boundEnc.fromRow
+                boundEnc.createDeserializer()
               case Right(func) =>
                 func
             }

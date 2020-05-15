@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
 import java.net.URI
 import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
@@ -28,13 +29,21 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse
+import org.apache.hadoop.yarn.api.protocolrecords.{GetNewApplicationResponse, SubmitApplicationRequest}
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.api.YarnClientApplication
+import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.event.{Dispatcher, Event, EventHandler}
+import org.apache.hadoop.yarn.server.resourcemanager.{ClientRMService, RMAppManager, RMContext}
+import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter
+import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler
+import org.apache.hadoop.yarn.server.security.ApplicationACLsManager
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyShort, eq => meq}
-import org.mockito.Mockito.{spy, verify}
+import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
@@ -204,6 +213,73 @@ class ClientSuite extends SparkFunSuite with Matchers {
     }
     appContext.getMaxAppAttempts should be (42)
     appContext.getPriority.getPriority should be (1)
+  }
+
+  test("specify a more specific type for the application") {
+    // When the type exceeds 20 characters will be truncated by yarn
+    val appTypes = Map(
+      1 -> ("", ""),
+      2 -> (" ", " "),
+      3 -> ("SPARK-SQL", "SPARK-SQL"),
+      4 -> ("012345678901234567890123", "01234567890123456789"))
+
+    // Mock yarn submit application
+    val yarnClient = mock(classOf[YarnClient])
+    val rmApps = new ConcurrentHashMap[ApplicationId, RMApp]()
+    val rmContext = mock(classOf[RMContext])
+    when(rmContext.getRMApps).thenReturn(rmApps)
+    val dispatcher = mock(classOf[Dispatcher])
+    when(rmContext.getDispatcher).thenReturn(dispatcher)
+    when[EventHandler[_]](dispatcher.getEventHandler).thenReturn(
+      new EventHandler[Event[_]] {
+        override def handle(event: Event[_]): Unit = {}
+      }
+    )
+    val writer = mock(classOf[RMApplicationHistoryWriter])
+    when(rmContext.getRMApplicationHistoryWriter).thenReturn(writer)
+    val publisher = mock(classOf[SystemMetricsPublisher])
+    when(rmContext.getSystemMetricsPublisher).thenReturn(publisher)
+    val yarnScheduler = mock(classOf[YarnScheduler])
+    val rmAppManager = new RMAppManager(rmContext,
+      yarnScheduler,
+      null,
+      mock(classOf[ApplicationACLsManager]),
+      new Configuration())
+    val clientRMService = new ClientRMService(rmContext,
+      yarnScheduler,
+      rmAppManager,
+      null,
+      null,
+      null)
+    clientRMService.init(new Configuration())
+    when(yarnClient.submitApplication(any())).thenAnswer((invocationOnMock: InvocationOnMock) => {
+      val subContext = invocationOnMock.getArguments()(0)
+        .asInstanceOf[ApplicationSubmissionContext]
+      val request = Records.newRecord(classOf[SubmitApplicationRequest])
+      request.setApplicationSubmissionContext(subContext)
+      clientRMService.submitApplication(request)
+      null
+    })
+
+    // Spark submit application
+    val appContext = spy(Records.newRecord(classOf[ApplicationSubmissionContext]))
+    when(appContext.getUnmanagedAM).thenReturn(true)
+    for ((id, (sourceType, targetType)) <- appTypes) {
+      val sparkConf = new SparkConf().set("spark.yarn.applicationType", sourceType)
+      val args = new ClientArguments(Array())
+      val appId = ApplicationId.newInstance(123456, id)
+      appContext.setApplicationId(appId)
+      val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+      val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+      val client = new Client(args, sparkConf, null)
+      val context = client.createApplicationSubmissionContext(
+        new YarnClientApplication(getNewApplicationResponse, appContext),
+        containerLaunchContext)
+
+      yarnClient.submitApplication(context)
+      assert(rmApps.get(appId).getApplicationType === targetType)
+    }
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
@@ -480,6 +556,25 @@ class ClientSuite extends SparkFunSuite with Matchers {
       withTempDir { distDir =>
         intercept[FileNotFoundException] {
           client.prepareLocalResources(new Path(distDir.getAbsolutePath), Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-31582 Being able to not populate Hadoop classpath") {
+    Seq(true, false).foreach { populateHadoopClassPath =>
+      withAppConf(Fixtures.mapAppConf) { conf =>
+        val sparkConf = new SparkConf()
+          .set(POPULATE_HADOOP_CLASSPATH, populateHadoopClassPath)
+        val env = new MutableHashMap[String, String]()
+        val args = new ClientArguments(Array("--jar", USER))
+        populateClasspath(args, conf, sparkConf, env)
+        if (populateHadoopClassPath) {
+          classpath(env) should
+            (contain (Fixtures.knownYARNAppCP) and contain (Fixtures.knownMRAppCP))
+        } else {
+          classpath(env) should
+            (not contain (Fixtures.knownYARNAppCP) and not contain (Fixtures.knownMRAppCP))
         }
       }
     }

@@ -521,14 +521,14 @@ package object config {
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(60)
 
-  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING =
+  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val DYN_ALLOCATION_SHUFFLE_TIMEOUT =
-    ConfigBuilder("spark.dynamicAllocation.shuffleTimeout")
+  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.shuffleTracking.timeout")
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
@@ -543,6 +543,16 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")
       .version("1.2.0")
       .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
+
+  private[spark] val LEGACY_LOCALITY_WAIT_RESET =
+    ConfigBuilder("spark.locality.wait.legacyResetOnTaskLaunch")
+    .doc("Whether to use the legacy behavior of locality wait, which resets the delay timer " +
+      "anytime a task is scheduled. See Delay Scheduling section of TaskSchedulerImpl's class " +
+      "documentation for more details.")
+    .internal()
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(false)
 
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .version("0.5.0")

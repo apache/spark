@@ -121,8 +121,8 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>mysql</groupId>
-      <artifactId>mysql-connector-java</artifactId>
+      <groupId>org.mariadb.jdbc</groupId>
+      <artifactId>mariadb-java-client</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -149,20 +149,19 @@
           -Dmaven.repo.drivers=http://my.local.repo
 
         2) have a copy of the DB2 JCC driver and run the following commands :
-          mvn install:install-file -Dfile=${path to db2jcc4.jar} \
+          mvn install:install-file -Dfile=${path to jcc.jar} \
             -DgroupId=com.ibm.db2 \
-            -DartifactId=db2jcc4 \
-            -Dversion=10.5 \
+            -DartifactId=jcc \
+            -Dversion=11.5 \
             -Dpackaging=jar
 
        Note: IBM DB2 JCC driver is available for download at
           http://www-01.ibm.com/support/docview.wss?uid=swg21363866
      -->
     <dependency>
-      <groupId>com.ibm.db2.jcc</groupId>
-      <artifactId>db2jcc4</artifactId>
-      <version>10.5.0.5</version>
-      <type>jar</type>
+      <groupId>com.ibm.db2</groupId>
+      <artifactId>jcc</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.microsoft.sqlserver</groupId>

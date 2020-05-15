@@ -169,7 +169,7 @@ head(join(src, hint(records, "broadcast"), src$key == records$key))
 
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 -- We accept BROADCAST, BROADCASTJOIN and MAPJOIN for broadcast hint
@@ -178,6 +178,8 @@ SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 
 </div>
 </div>
+
+For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html).
 
 ## Coalesce Hints for SQL Queries
 

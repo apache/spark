@@ -45,6 +45,16 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("int", "long", "short", "byte", "float", "double")
   }
 
+  def createDFWithNestedColumns: DataFrame = {
+    val schema = new StructType()
+      .add("c1", new StructType()
+        .add("c1-1", StringType)
+        .add("c1-2", StringType))
+    val data = Seq(Row(Row(null, "a2")), Row(Row("b1", "b2")), Row(null))
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(data), schema)
+  }
+
   test("drop") {
     val input = createDF()
     val rows = input.collect()
@@ -275,33 +285,35 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(message.contains("Reference 'f2' is ambiguous"))
   }
 
-  test("fill/drop with col(*)") {
+  test("fill with col(*)") {
     val df = createDF()
     // If columns are specified with "*", they are ignored.
     checkAnswer(df.na.fill("new name", Seq("*")), df.collect())
-    checkAnswer(df.na.drop("any", Seq("*")), df.collect())
   }
 
-  test("fill/drop with nested columns") {
-    val schema = new StructType()
-      .add("c1", new StructType()
-        .add("c1-1", StringType)
-        .add("c1-2", StringType))
+  test("drop with col(*)") {
+    val df = createDF()
+    val exception = intercept[AnalysisException] {
+      df.na.drop("any", Seq("*"))
+    }
+    assert(exception.getMessage.contains("Cannot resolve column name \"*\""))
+  }
 
-    val data = Seq(
-      Row(Row(null, "a2")),
-      Row(Row("b1", "b2")),
-      Row(null))
+  test("fill with nested columns") {
+    val df = createDFWithNestedColumns
 
-    val df = spark.createDataFrame(
-      spark.sparkContext.parallelize(data), schema)
+    // Nested columns are ignored for fill().
+    checkAnswer(df.na.fill("a1", Seq("c1.c1-1")), df)
+  }
 
-    checkAnswer(df.select("c1.c1-1"),
-      Row(null) :: Row("b1") :: Row(null) :: Nil)
+  test("drop with nested columns") {
+    val df = createDFWithNestedColumns
 
-    // Nested columns are ignored for fill() and drop().
-    checkAnswer(df.na.fill("a1", Seq("c1.c1-1")), data)
-    checkAnswer(df.na.drop("any", Seq("c1.c1-1")), data)
+    // Rows with the specified nested columns whose null values are dropped.
+    assert(df.count == 3)
+    checkAnswer(
+      df.na.drop("any", Seq("c1.c1-1")),
+      Seq(Row(Row("b1", "b2"))))
   }
 
   test("replace") {

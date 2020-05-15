@@ -86,7 +86,12 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
     case _ => numeric.negate(input)
   }
 
-  override def sql: String = s"(- ${child.sql})"
+  override def sql: String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("-") match {
+      case "-" => s"(- ${child.sql})"
+      case funcName => s"$funcName(${child.sql})"
+    }
+  }
 }
 
 @ExpressionDescription(

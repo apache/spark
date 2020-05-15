@@ -831,10 +831,7 @@ object TypeCoercion {
       case s @ SubtractTimestamps(_, DateType()) =>
         s.copy(startTimestamp = Cast(s.startTimestamp, TimestampType))
 
-      case t @ TimeAdd(DateType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
       case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
-      case t @ TimeSub(DateType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
-      case t @ TimeSub(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }
   }
 
@@ -842,15 +839,26 @@ object TypeCoercion {
    * Casts types according to the expected input types for [[Expression]]s.
    */
   object ImplicitTypeCasts extends TypeCoercionRule {
+
+    private def canHandleTypeCoercion(leftType: DataType, rightType: DataType): Boolean = {
+      (leftType, rightType) match {
+        case (_: DecimalType, NullType) => true
+        case (NullType, _: DecimalType) => true
+        case _ =>
+          // If DecimalType operands are involved except for the two cases above,
+          // DecimalPrecision will handle it.
+          !leftType.isInstanceOf[DecimalType] && !rightType.isInstanceOf[DecimalType] &&
+            leftType != rightType
+      }
+    }
+
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      // If DecimalType operands are involved, DecimalPrecision will handle it
-      case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
-          !right.dataType.isInstanceOf[DecimalType] &&
-          left.dataType != right.dataType =>
+      case b @ BinaryOperator(left, right)
+          if canHandleTypeCoercion(left.dataType, right.dataType) =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.
