@@ -215,8 +215,11 @@ public class RetryingBlockFetcher {
           if (shouldRetry(exception)) {
             initiateRetry();
           } else {
-            logger.error(String.format("Failed to fetch block %s, and will not retry (%s retries)",
-              blockId, retryCount), exception);
+            if (shouldLogError(exception)) {
+              logger.error(
+                  String.format("Failed to fetch block %s, and will not retry (%s retries)",
+                      blockId, retryCount), exception);
+            }
             outstandingBlocksIds.remove(blockId);
             shouldForwardFailure = true;
           }
@@ -227,6 +230,17 @@ public class RetryingBlockFetcher {
       if (shouldForwardFailure) {
         listener.onBlockFetchFailure(blockId, exception);
       }
+    }
+
+    private boolean shouldLogError(Throwable t) {
+      if ((t.getMessage() != null && t.getMessage()
+          .contains(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX)) ||
+          (t.getCause() != null && t.getCause().getMessage() != null && t.getCause()
+              .getMessage()
+              .contains(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))) {
+        return false;
+      }
+      return true;
     }
   }
 }

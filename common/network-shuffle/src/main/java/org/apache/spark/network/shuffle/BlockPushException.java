@@ -39,6 +39,9 @@ public class BlockPushException extends RuntimeException {
   public static final String TOO_LATE_MESSAGE_SUFFIX =
       "received after merged shuffle is finalized";
 
+  public static final String COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX =
+      "Couldn't find an opportunity to write block";
+
   private BlockPushException(PushBlockStream header, String message) {
     super(message);
     this.header = header;
