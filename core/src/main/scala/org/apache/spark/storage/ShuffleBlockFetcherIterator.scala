@@ -662,6 +662,7 @@ final class ShuffleBlockFetcherIterator(
                 if (in.markSupported()) {
                   in.reset()
                 } else {
+                  in.close()
                   in = buf.createInputStream()
                 }
               }
