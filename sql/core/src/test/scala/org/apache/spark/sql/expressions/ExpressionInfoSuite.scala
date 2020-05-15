@@ -19,14 +19,14 @@ package org.apache.spark.sql.expressions
 
 import scala.collection.parallel.immutable.ParVector
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
+class ExpressionInfoSuite extends QueryTest with SharedSparkSession {
 
   test("Replace _FUNC_ in ExpressionInfo") {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("upper"))
