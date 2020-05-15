@@ -78,5 +78,6 @@ DROP VIEW IF EXISTS employeeView;
 ### Related Statements
 - [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
 - [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
+- [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
 - [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
 - [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)

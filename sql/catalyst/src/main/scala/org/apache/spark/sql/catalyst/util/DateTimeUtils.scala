@@ -991,13 +991,18 @@ object DateTimeUtils {
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
-    val ldt = microsToInstant(micros).atZone(ZoneId.systemDefault).toLocalDateTime
+    val instant = microsToInstant(micros)
+    val zoneId = ZoneId.systemDefault
+    val ldt = instant.atZone(zoneId).toLocalDateTime
     val cal = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
       .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
+      // Local time-line can overlaps, such as at an autumn daylight savings cutover.
+      // This setting selects the original local timestamp mapped to the given `micros`.
+      .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
       .build()
     millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
@@ -1030,7 +1035,16 @@ object DateTimeUtils {
       cal.get(Calendar.SECOND),
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
       .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
-    instantToMicros(localDateTime.atZone(ZoneId.systemDefault).toInstant)
+    val zonedDateTime = localDateTime.atZone(ZoneId.systemDefault)
+    // Zero DST offset means that local clocks have switched to the winter time already.
+    // So, clocks go back one hour. We should correct zoned date-time and change
+    // the zone offset to the later of the two valid offsets at a local time-line overlap.
+    val adjustedZdt = if (cal.get(Calendar.DST_OFFSET) == 0) {
+      zonedDateTime.withLaterOffsetAtOverlap()
+    } else {
+      zonedDateTime
+    }
+    instantToMicros(adjustedZdt.toInstant)
   }
 
   /**

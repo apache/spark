@@ -78,5 +78,6 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
 - [SHOW TABLE EXTENDED](sql-ref-syntax-aux-show-table.html)
 - [SHOW TABLES](sql-ref-syntax-aux-show-tables.html)
 - [SHOW TBLPROPERTIES](sql-ref-syntax-aux-show-tblproperties.html)
+- [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
 - [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
 - [UNSET](sql-ref-syntax-aux-conf-mgmt-reset.html)

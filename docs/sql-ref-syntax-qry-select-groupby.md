@@ -21,6 +21,7 @@ license: |
 The <code>GROUP BY</code> clause is used to group the rows based on a set of specified grouping expressions and compute aggregations on
 the group of rows based on one or more specified aggregate functions. Spark also supports advanced aggregations to do multiple
 aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
+When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
 
 ### Syntax
 {% highlight sql %}
@@ -28,6 +29,11 @@ GROUP BY group_expression [ , group_expression [ , ... ] ]
   [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
 
 GROUP BY GROUPING SETS (grouping_set [ , ...])
+{% endhighlight %}
+
+While aggregate functions are defined as
+{% highlight sql %}
+aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_expression ) ]
 {% endhighlight %}
 
 ### Parameters
@@ -69,6 +75,19 @@ GROUP BY GROUPING SETS (grouping_set [ , ...])
     <code>GROUP BY warehouse, product WITH CUBE</code> is equivalent to <code>GROUP BY GROUPING SETS
     ((warehouse, product), (warehouse), (product), ())</code>.
     The N elements of a <code>CUBE</code> specification results in 2^N <code>GROUPING SETS</code>.
+  </dd>
+  <dt><code><em>aggregate_name</em></code></dt>
+  <dd>
+    Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).
+  </dd>
+  <dt><code><em>DISTINCT</em></code></dt>
+  <dd>
+    Removes duplicates in input rows before they are passed to aggregate functions.
+  </dd>
+  <dt><code><em>FILTER</em></code></dt>
+  <dd>
+    Filters the input rows for which the <code>boolean_expression</code> in the <code>WHERE</code> clause evaluates
+    to true are passed to the aggregate function; other rows are discarded.
   </dd>
 </dl>
 
@@ -119,6 +138,31 @@ SELECT id, sum(quantity) AS sum, max(quantity) AS max FROM dealer GROUP BY id OR
   |200|33 |20 |
   |300|13 |8  |
   +---+---+---+
+
+-- Count the number of distinct dealer cities per car_model.
+SELECT car_model, count(DISTINCT city) AS count FROM dealer GROUP BY car_model;
+
+  +------------+-----+
+  |   car_model|count|
+  +------------+-----+
+  | Honda Civic|    3|
+  |   Honda CRV|    2|
+  |Honda Accord|    3|
+  +------------+-----+
+
+-- Sum of only 'Honda Civic' and 'Honda CRV' quantities per dealership.
+SELECT id, sum(quantity) FILTER (
+            WHERE car_model IN ('Honda Civic', 'Honda CRV')
+        ) AS `sum(quantity)` FROM dealer
+    GROUP BY id ORDER BY id;
+
+   +---+-------------+
+   | id|sum(quantity)|
+   +---+-------------+
+   |100|           17|
+   |200|           23|
+   |300|            5|
+   +---+-------------+
 
 -- Aggregations using multiple sets of grouping columns in a single statement.
 -- Following performs aggregations based on four sets of grouping columns.

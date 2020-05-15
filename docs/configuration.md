@@ -2456,7 +2456,8 @@ Apart from these, the following properties are also available, and may be useful
     For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
-    This requires <code>spark.shuffle.service.enabled</code> to be set.
+    This requires <code>spark.shuffle.service.enabled</code> or
+    <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be set.
     The following configurations are also relevant:
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and

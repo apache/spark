@@ -411,6 +411,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>USING</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>VALUES</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>VIEW</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>VIEWS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>WHEN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>WHERE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>WINDOW</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>

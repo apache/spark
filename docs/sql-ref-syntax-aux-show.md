@@ -26,3 +26,4 @@ license: |
 * [SHOW TBLPROPERTIES](sql-ref-syntax-aux-show-tblproperties.html)
 * [SHOW PARTITIONS](sql-ref-syntax-aux-show-partitions.html)
 * [SHOW CREATE TABLE](sql-ref-syntax-aux-show-create-table.html)
+* [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
