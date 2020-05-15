@@ -19,42 +19,48 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.stat.ANOVATest
+import org.apache.spark.ml.feature.FValueSelector
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
 /**
- * An example for ANOVA testing.
+ * An example for FValueSelector.
  * Run with
  * {{{
- * bin/run-example ml.ANOVATestExample
+ * bin/run-example ml.FValueSelectorExample
  * }}}
  */
-object ANOVATestExample {
-
+object FValueSelectorExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder
-      .appName("ANOVATestExample")
+      .appName("FValueSelectorExample")
       .getOrCreate()
     import spark.implicits._
 
     // $example on$
     val data = Seq(
-      (3.0, Vectors.dense(1.7, 4.4, 7.6, 5.8, 9.6, 2.3)),
-      (2.0, Vectors.dense(8.8, 7.3, 5.7, 7.3, 2.2, 4.1)),
-      (3.0, Vectors.dense(1.2, 9.5, 2.5, 3.1, 8.7, 2.5)),
-      (2.0, Vectors.dense(3.7, 9.2, 6.1, 4.1, 7.5, 3.8)),
-      (4.0, Vectors.dense(8.9, 5.2, 7.8, 8.3, 5.2, 3.0)),
-      (4.0, Vectors.dense(7.9, 8.5, 9.2, 4.0, 9.4, 2.1))
+      (1, Vectors.dense(6.0, 7.0, 0.0, 7.0, 6.0, 0.0), 4.6),
+      (2, Vectors.dense(0.0, 9.0, 6.0, 0.0, 5.0, 9.0), 6.6),
+      (3, Vectors.dense(0.0, 9.0, 3.0, 0.0, 5.0, 5.0), 5.1),
+      (4, Vectors.dense(0.0, 9.0, 8.0, 5.0, 6.0, 4.0), 7.6),
+      (5, Vectors.dense(8.0, 9.0, 6.0, 5.0, 4.0, 4.0), 9.0),
+      (6, Vectors.dense(8.0, 9.0, 6.0, 4.0, 0.0, 0.0), 9.0)
     )
 
-    val df = data.toDF("label", "features")
-    val anova = ANOVATest.test(df, "features", "label").head
-    println(s"pValues = ${anova.getAs[Vector](0)}")
-    println(s"degreesOfFreedom ${anova.getSeq[Int](1).mkString("[", ",", "]")}")
-    println(s"fValues ${anova.getAs[Vector](2)}")
+    val df = spark.createDataset(data).toDF("id", "features", "label")
+
+    val selector = new FValueSelector()
+      .setNumTopFeatures(1)
+      .setFeaturesCol("features")
+      .setLabelCol("label")
+      .setOutputCol("selectedFeatures")
+
+    val result = selector.fit(df).transform(df)
+
+    println(s"FValueSelector output with top ${selector.getNumTopFeatures} features selected")
+    result.show()
     // $example off$
 
     spark.stop()
