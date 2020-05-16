@@ -385,7 +385,7 @@ Spark applications supports the following configuration properties specific to s
   <td><code>false</code></td>
   <td>
   In standalone cluster mode, controls whether the client waits to exit until the application completes.
-  If set to <code>true</code>, the client process will stay alive polling the application's status.
+  If set to <code>true</code>, the client process will stay alive polling the driver's status.
   Otherwise, the client process will exit after submission.
   </td>
   <td>3.1.0</td>

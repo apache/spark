@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.mutable.HashSet
 import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
@@ -63,7 +65,7 @@ private class ClientEndpoint(
    private var activeMasterEndpoint: RpcEndpointRef = null
    private val waitAppCompletion = conf.getBoolean("spark.standalone.submit.waitAppCompletion",
      false)
-   private val REPORT_DRIVER_STATUS_INTERVAL = 1000
+   private val REPORT_DRIVER_STATUS_INTERVAL = 10000
    private var submittedDriverID = ""
 
 
@@ -110,6 +112,10 @@ private class ClientEndpoint(
         asyncSendToMasterAndForwardReply[SubmitDriverResponse](
           RequestSubmitDriver(driverDescription))
 
+        forwardMessageThread.scheduleAtFixedRate(() => Utils.tryLogNonFatalError {
+          MonitorDriverStatus()
+        }, 0, REPORT_DRIVER_STATUS_INTERVAL, TimeUnit.MILLISECONDS)
+
       case "kill" =>
         val driverId = driverArgs.driverId
         asyncSendToMasterAndForwardReply[KillDriverResponse](RequestKillDriver(driverId))
@@ -128,6 +134,11 @@ private class ClientEndpoint(
       }(forwardMessageExecutionContext)
     }
   }
+  private def MonitorDriverStatus(): Unit = {
+    if (submittedDriverID != "") {
+      asyncSendToMasterAndForwardReply[DriverStatusResponse](RequestDriverStatus(submittedDriverID))
+    }
+  }
 
   /**
    * Find out driver status then exit the JVM. If the waitAppCompletion is set to true, monitors
@@ -139,29 +150,30 @@ private class ClientEndpoint(
     logInfo("... waiting before polling master for driver state")
     Thread.sleep(5000)
     logInfo("... polling master for driver state")
-      val statusResponse =
+    val statusResponse =
         activeMasterEndpoint.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
-      if (statusResponse.found) {
-        logInfo(s"State of $driverId is ${statusResponse.state.get}")
-        // Worker node, if present
-        (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
-          case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-            logInfo(s"Driver running on $hostPort ($id)")
-          case _ =>
-        }
-        // Exception, if present
-        statusResponse.exception match {
-          case Some(e) =>
-            logError(s"Exception from cluster was: $e")
-            e.printStackTrace()
-            System.exit(-1)
-          case _ =>
-            if (!waitAppCompletion) {
-              logInfo(s"spark-submit not configured to wait for completion, " +
-                s"exiting spark-submit JVM.")
-              System.exit(0)
+    if (statusResponse.found) {
+      logInfo(s"State of $driverId is ${statusResponse.state.get}")
+      // Worker node, if present
+      (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
+        case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
+          logInfo(s"Driver running on $hostPort ($id)")
+        case _ =>
+      }
+      // Exception, if present
+      statusResponse.exception match {
+        case Some(e) =>
+          logError(s"Exception from cluster was: $e")
+          e.printStackTrace()
+          System.exit(-1)
+        case _ =>
+          if (!waitAppCompletion) {
+            logInfo(s"spark-submit not configured to wait for completion, " +
+              s"exiting spark-submit JVM.")
+            System.exit(0)
             } else {
-              asyncSendToMasterAndForwardReply[DriverStatusResponse](RequestDriverStatus(driverId))
+              logInfo(s"spark-submit is configured to wait for completion, " +
+                s"continue monitoring driver status.")
             }
         }
       } else {
@@ -196,15 +208,12 @@ private class ClientEndpoint(
         state.get match {
           case DriverState.FINISHED | DriverState.FAILED |
                DriverState.ERROR | DriverState.KILLED =>
-            logInfo(s"State of $submittedDriverID is ${state.get}, " +
+            logInfo(s"State of driver $submittedDriverID is ${state.get}, " +
               s"exiting spark-submit JVM.")
             System.exit(0)
           case _ =>
-            Thread.sleep(REPORT_DRIVER_STATUS_INTERVAL)
-            logInfo(s"State of $submittedDriverID is ${state.get}, " +
+            logDebug(s"State of driver $submittedDriverID is ${state.get}, " +
               s"continue monitoring driver status.")
-            asyncSendToMasterAndForwardReply[DriverStatusResponse](
-              RequestDriverStatus(submittedDriverID))
         }
       } else {
         System.exit(-1)
