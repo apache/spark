@@ -431,20 +431,13 @@ class Analyzer(
       }.asInstanceOf[NamedExpression]
     }
 
-    /*
-     * Construct [[Aggregate]] operator from Cube/Rollup/GroupingSets.
-     */
-    private def constructAggregate(
+    private def getFinalGroupByExpressions(
         selectedGroupByExprs: Seq[Seq[Expression]],
-        groupByExprs: Seq[Expression],
-        aggregationExprs: Seq[NamedExpression],
-        child: LogicalPlan): LogicalPlan = {
-      val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
-
+        groupByExprs: Seq[Expression]): Seq[Expression] = {
       // In case of ANSI-SQL compliant syntax for GROUPING SETS, groupByExprs is optional and
       // can be null. In such case, we derive the groupByExprs from the user supplied values for
       // grouping sets.
-      val finalGroupByExpressions = if (groupByExprs == Nil) {
+      if (groupByExprs == Nil) {
         selectedGroupByExprs.flatten.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
           // Only unique expressions are included in the group by expressions and is determined
           // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
@@ -458,6 +451,18 @@ class Analyzer(
       } else {
         groupByExprs
       }
+    }
+
+    /*
+     * Construct [[Aggregate]] operator from Cube/Rollup/GroupingSets.
+     */
+    private def constructAggregate(
+        selectedGroupByExprs: Seq[Seq[Expression]],
+        groupByExprs: Seq[Expression],
+        aggregationExprs: Seq[NamedExpression],
+        child: LogicalPlan): LogicalPlan = {
+      val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+      val finalGroupByExpressions = getFinalGroupByExpressions(selectedGroupByExprs, groupByExprs)
 
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
@@ -489,8 +494,70 @@ class Analyzer(
       }
     }
 
-    // This require transformUp to replace grouping()/grouping_id() in resolved Filter/Sort
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+    private def tryResolveHavingCondition(h: UnresolvedHaving): LogicalPlan = {
+      val aggForResolving = h.child match {
+        // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
+        // groupingExpressions for condition resolving.
+        case a @ Aggregate(Seq(c @ Cube(groupByExprs)), _, _) =>
+          a.copy(groupingExpressions = groupByExprs)
+        case a @ Aggregate(Seq(r @ Rollup(groupByExprs)), _, _) =>
+          a.copy(groupingExpressions = groupByExprs)
+        case g: GroupingSets =>
+          Aggregate(
+            getFinalGroupByExpressions(g.selectedGroupByExprs, g.groupByExprs),
+            g.aggregations, g.child)
+      }
+      // Try resolving the condition of the filter as though it is in the aggregate clause
+      val resolvedInfo =
+        ResolveAggregateFunctions.resolveFilterCondInAggregate(h.havingCondition, aggForResolving)
+
+      // Push the aggregate expressions into the aggregate (if any).
+      if (resolvedInfo.nonEmpty) {
+        val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
+        val newChild = h.child match {
+          case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
+            constructAggregate(
+              cubeExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
+          case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
+            constructAggregate(
+              rollupExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
+          case x: GroupingSets =>
+            constructAggregate(
+              x.selectedGroupByExprs, x.groupByExprs, x.aggregations ++ extraAggExprs, x.child)
+        }
+
+        // Since the exprId of extraAggExprs will be changed in the constructed aggregate, and the
+        // aggregateExpressions keeps the input order. So here we build an exprMap to resolve the
+        // condition again.
+        val exprMap = extraAggExprs.zip(
+          newChild.asInstanceOf[Aggregate].aggregateExpressions.takeRight(
+            extraAggExprs.length)).toMap
+        val newCond = resolvedHavingCond.transform {
+          case ne: NamedExpression if exprMap.contains(ne) => exprMap(ne)
+        }
+        Project(newChild.output.dropRight(extraAggExprs.length),
+          Filter(newCond, newChild))
+      } else {
+        h
+      }
+    }
+
+    // This require transformDown to resolve having condition when generating aggregate node for
+    // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
+    // Filter/Sort.
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
+      case h @ UnresolvedHaving(
+          _, agg @ Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, _))
+          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+        tryResolveHavingCondition(h)
+      case h @ UnresolvedHaving(
+          _, agg @ Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, _))
+          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+        tryResolveHavingCondition(h)
+      case h @ UnresolvedHaving(_, g: GroupingSets)
+          if g.childrenResolved && g.expressions.forall(_.resolved) =>
+        tryResolveHavingCondition(h)
+
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
@@ -964,7 +1031,7 @@ class Analyzer(
       case plan if containsDeserializer(plan.expressions) => plan
 
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
-      case h: AggregateWithHaving => h
+      case h: UnresolvedHaving => h
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
@@ -1542,7 +1609,7 @@ class Analyzer(
       // Resolve aggregate with having clause to Filter(..., Aggregate()). Note, to avoid wrongly
       // resolve the having condition expression, here we skip resolving it in ResolveReferences
       // and transform it to Filter after aggregate is resolved. See more details in SPARK-31519.
-      case AggregateWithHaving(cond, agg: Aggregate) if agg.resolved =>
+      case UnresolvedHaving(cond, agg: Aggregate) if agg.resolved =>
         resolveHaving(Filter(cond, agg), agg)
 
       case f @ Filter(_, agg: Aggregate) if agg.resolved =>
@@ -1618,13 +1685,13 @@ class Analyzer(
       condition.find(_.isInstanceOf[AggregateExpression]).isDefined
     }
 
-    def resolveHaving(filter: Filter, agg: Aggregate): LogicalPlan = {
-      // Try resolving the condition of the filter as though it is in the aggregate clause
+    def resolveFilterCondInAggregate(
+        filterCond: Expression, agg: Aggregate): Option[(Seq[NamedExpression], Expression)] = {
       try {
         val aggregatedCondition =
           Aggregate(
             agg.groupingExpressions,
-            Alias(filter.condition, "havingCondition")() :: Nil,
+            Alias(filterCond, "havingCondition")() :: Nil,
             agg.child)
         val resolvedOperator = executeSameContext(aggregatedCondition)
         def resolvedAggregateFilter =
@@ -1656,22 +1723,33 @@ class Analyzer(
                   alias.toAttribute
               }
           }
-
-          // Push the aggregate expressions into the aggregate (if any).
           if (aggregateExpressions.nonEmpty) {
-            Project(agg.output,
-              Filter(transformedAggregateFilter,
-                agg.copy(aggregateExpressions = agg.aggregateExpressions ++ aggregateExpressions)))
+            Some((aggregateExpressions, transformedAggregateFilter))
           } else {
-            filter
+            None
           }
         } else {
-          filter
+          None
         }
       } catch {
-        // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
-        // just return the original plan.
-        case ae: AnalysisException => filter
+        // Attempting to resolve in the aggregate can result in ambiguity. When this happens,
+        // just return None and the caller side will return the original plan.
+        case ae: AnalysisException => None
+      }
+    }
+
+    def resolveHaving(filter: Filter, agg: Aggregate): LogicalPlan = {
+      // Try resolving the condition of the filter as though it is in the aggregate clause
+      val resolvedInfo = resolveFilterCondInAggregate(filter.condition, agg)
+
+      // Push the aggregate expressions into the aggregate (if any).
+      if (resolvedInfo.nonEmpty) {
+        val (aggregateExpressions, resolvedHavingCond) = resolvedInfo.get
+        Project(agg.output,
+          Filter(resolvedHavingCond,
+            agg.copy(aggregateExpressions = agg.aggregateExpressions ++ aggregateExpressions)))
+      } else {
+        filter
       }
     }
   }
@@ -2064,12 +2142,12 @@ class Analyzer(
       case Filter(condition, _) if hasWindowFunction(condition) =>
         failAnalysis("It is not allowed to use window functions inside WHERE clause")
 
-      case AggregateWithHaving(condition, _) if hasWindowFunction(condition) =>
+      case UnresolvedHaving(condition, _) if hasWindowFunction(condition) =>
         failAnalysis("It is not allowed to use window functions inside HAVING clause")
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
-      case f @ AggregateWithHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
+      case f @ UnresolvedHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
         if child.resolved &&
            hasWindowFunction(aggregateExprs) &&
            a.expressions.forall(_.resolved) =>
