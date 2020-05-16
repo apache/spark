@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.{ClientRMService, RMAppMana
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter
 import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyShort, eq => meq}
@@ -245,7 +246,8 @@ class ClientSuite extends SparkFunSuite with Matchers {
         request.setApplicationSubmissionContext(subContext)
 
         val rmContext = mock(classOf[RMContext])
-        val conf = mock(classOf[Configuration])
+        val conf = new Configuration(false)
+        conf.set("yarn.timeline-service.enabled", "false")
         val map = new ConcurrentHashMap[ApplicationId, RMApp]()
         when(rmContext.getRMApps).thenReturn(map)
         val dispatcher = mock(classOf[Dispatcher])
@@ -262,7 +264,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
         when(appContext.getUnmanagedAM).thenReturn(true)
 
         val rmAppManager = new RMAppManager(rmContext,
-          null,
+          mock(classOf[YarnScheduler]),
           null,
           mock(classOf[ApplicationACLsManager]),
           conf)
@@ -272,6 +274,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
           null,
           null,
           null)
+        clientRMService.init(conf)
         clientRMService.submitApplication(request)
 
         assert(map.get(subContext.getApplicationId).getApplicationType === targetType)
