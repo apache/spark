@@ -21,6 +21,12 @@
 # to github via its API.
 # Environment variables are populated by the code here:
 # https://github.com/jenkinsci/ghprb-plugin/blob/master/src/main/java/org/jenkinsci/plugins/ghprb/GhprbTrigger.java#L139
+if [[ "$(hostname)" == "amp-jenkins-worker-05" ]]; then
+    echo "Clean up local Maven repository."
+    build/mvn dependency:purge-local-repository
+    exit 1
+fi
+exit 1
 
 FWDIR="$( cd "$( dirname "$0" )/.." && pwd )"
 cd "$FWDIR"
