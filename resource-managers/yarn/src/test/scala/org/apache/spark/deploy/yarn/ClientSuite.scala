@@ -247,7 +247,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
         val rmContext = mock(classOf[RMContext])
         val conf = new Configuration(false)
-        conf.set("yarn.timeline-service.enabled", "false")
         val map = new ConcurrentHashMap[ApplicationId, RMApp]()
         when(rmContext.getRMApps).thenReturn(map)
         val dispatcher = mock(classOf[Dispatcher])
