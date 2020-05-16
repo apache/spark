@@ -23,7 +23,7 @@
 # https://github.com/jenkinsci/ghprb-plugin/blob/master/src/main/java/org/jenkinsci/plugins/ghprb/GhprbTrigger.java#L139
 if [[ "$(hostname)" == "amp-jenkins-worker-05" ]]; then
     echo "Clean up local Maven repository."
-    build/mvn dependency:purge-local-repository
+    build/mvn -U dependency:purge-local-repository
     exit 1
 fi
 exit 1
