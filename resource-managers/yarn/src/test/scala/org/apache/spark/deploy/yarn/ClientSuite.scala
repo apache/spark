@@ -276,6 +276,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
           null)
         clientRMService.init(conf)
         clientRMService.submitApplication(request)
+        clientRMService.close()
 
         assert(map.get(subContext.getApplicationId).getApplicationType === targetType)
         null
