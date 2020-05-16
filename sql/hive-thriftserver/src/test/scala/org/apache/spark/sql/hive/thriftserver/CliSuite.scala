@@ -115,7 +115,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     }
     val warehouseConf =
       maybeWarehouse.map(dir => s"--hiveconf ${ConfVars.METASTOREWAREHOUSE}=$dir").getOrElse("")
-    // whether to use a separated derby metastore
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastore;create=true"
@@ -267,6 +266,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
             "--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=${sparkWareHouseDir}2"),
         metastore = metastore)(
         "desc database default;" -> sparkWareHouseDir.getAbsolutePath.concat("1"))
+    } finally {
+      Utils.deleteRecursively(metastore)
     }
   }
 
