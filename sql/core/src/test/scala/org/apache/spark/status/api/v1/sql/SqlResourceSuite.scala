@@ -20,11 +20,9 @@ package org.apache.spark.status.api.v1.sql
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
-import org.apache.spark.sql.execution.ui.{SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
+import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
 
 object SqlResourceSuite {
 
@@ -43,11 +41,10 @@ object SqlResourceSuite {
 
   val filterNode = new SparkPlanGraphNode(1, FILTER, "",
     metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "")))
-  val allNodes: Seq[SparkPlanGraphNode] = Seq(
+  val nodes: Seq[SparkPlanGraphNode] = Seq(
     new SparkPlanGraphCluster(0, WHOLE_STAGE_CODEGEN_1, "",
       nodes = ArrayBuffer(filterNode),
       metrics = Seq(SQLPlanMetric(DURATION, 0, ""))),
-    filterNode,
     new SparkPlanGraphNode(2, SCAN_TEXT, "",
       metrics = Seq(
       SQLPlanMetric(METADATA_TIME, 2, ""),
@@ -55,11 +52,11 @@ object SqlResourceSuite {
       SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, ""),
       SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))))
 
-  val allNodesWhenCodegenIsOff: Seq[SparkPlanGraphNode] =
-    allNodes.filterNot(_.name == WHOLE_STAGE_CODEGEN_1)
+  val nodesWhenCodegenIsOff: Seq[SparkPlanGraphNode] =
+    SparkPlanGraph(nodes, edges).allNodes.filterNot(_.name == WHOLE_STAGE_CODEGEN_1)
 
   val edges: Seq[SparkPlanGraphEdge] =
-    Seq(SparkPlanGraphEdge(3, 2), SparkPlanGraphEdge(2, 1), SparkPlanGraphEdge(1, 0))
+    Seq(SparkPlanGraphEdge(3, 2))
 
   val metrics: Seq[SQLPlanMetric] = {
     Seq(SQLPlanMetric(DURATION, 0, ""),
@@ -141,7 +138,6 @@ object SqlResourceSuite {
     assert(executionData.failedJobIds == Seq.empty)
     assert(executionData.nodes == nodes)
     assert(executionData.edges == edges)
-
   }
 
 }
@@ -159,7 +155,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = false and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, Seq.empty, Seq.empty, nodeIdAndWSCGIdMap, false, false)
+        sqlExecutionUIData, SparkPlanGraph(Seq.empty, Seq.empty), false, false)
     verifyExpectedExecutionData(executionData, edges = Seq.empty,
       nodes = Seq.empty, planDescription = "")
   }
@@ -167,7 +163,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = true and planDescription = false") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, allNodes, edges, nodeIdAndWSCGIdMap, true, false)
+        sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, false)
     verifyExpectedExecutionData(
       executionData,
       nodes = getNodes(),
@@ -178,7 +174,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = true and planDescription = true") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, allNodes, edges, nodeIdAndWSCGIdMap, true, true)
+        sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, true)
     verifyExpectedExecutionData(
       executionData,
       nodes = getNodes(),
@@ -189,7 +185,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
   test("Prepare ExecutionData when details = true and planDescription = false and WSCG = off") {
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
-        sqlExecutionUIData, allNodesWhenCodegenIsOff, edges, Map.empty, true, false)
+        sqlExecutionUIData, SparkPlanGraph(nodesWhenCodegenIsOff, edges), true, false)
     verifyExpectedExecutionData(
       executionData,
       nodes = getExpectedNodesWhenWholeStageCodegenIsOff(),
