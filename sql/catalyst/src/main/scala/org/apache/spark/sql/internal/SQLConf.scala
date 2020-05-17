@@ -2500,57 +2500,63 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.rebaseDateTimeInWrite.enabled")
+  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
       .internal()
-      .doc("When true, rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the hybrid calendar (Julian + Gregorian) in write. " +
-        "The rebasing is performed by converting micros/millis/days to " +
-        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
-        "timestamp in the target calendar, and getting the number of micros/millis/days " +
-        "since the epoch 1970-01-01 00:00:00Z.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_REBASE_DATETIME_IN_READ =
-    buildConf("spark.sql.legacy.parquet.rebaseDateTimeInRead.enabled")
+  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
       .internal()
-      .doc("When true, rebase dates/timestamps " +
-        "from the hybrid calendar to Proleptic Gregorian calendar in read. " +
-        "The rebasing is performed by converting micros/millis/days to " +
-        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
-        "timestamp in the target calendar, and getting the number of micros/millis/days " +
-        "since the epoch 1970-01-01 00:00:00Z.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_AVRO_REBASE_DATETIME_IN_WRITE =
-    buildConf("spark.sql.legacy.avro.rebaseDateTimeInWrite.enabled")
+  val LEGACY_AVRO_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInWrite")
       .internal()
-      .doc("When true, rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the hybrid calendar (Julian + Gregorian) in write. " +
-        "The rebasing is performed by converting micros/millis/days to " +
-        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
-        "timestamp in the target calendar, and getting the number of micros/millis/days " +
-        "since the epoch 1970-01-01 00:00:00Z.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the legacy hybrid (Julian + Gregorian) calendar when writing Avro files. " +
+        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_AVRO_REBASE_DATETIME_IN_READ =
-    buildConf("spark.sql.legacy.avro.rebaseDateTimeInRead.enabled")
+  val LEGACY_AVRO_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInRead")
       .internal()
-      .doc("When true, rebase dates/timestamps " +
-        "from the hybrid calendar to Proleptic Gregorian calendar in read. " +
-        "The rebasing is performed by converting micros/millis/days to " +
-        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
-        "timestamp in the target calendar, and getting the number of micros/millis/days " +
-        "since the epoch 1970-01-01 00:00:00Z.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Avro files. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
   val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
     buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
@@ -3135,10 +3141,6 @@ class SQLConf extends Serializable with Logging {
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
-
-  def parquetRebaseDateTimeInReadEnabled: Boolean = {
-    getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ)
-  }
 
   /** ********************** SQLConf functionality methods ************ */
 

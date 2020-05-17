@@ -456,6 +456,7 @@ class JacksonParser(
         }
       }
     } catch {
+      case e: SparkUpgradeException => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
