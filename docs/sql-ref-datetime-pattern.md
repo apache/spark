@@ -76,6 +76,57 @@ The count of pattern letters determines the format.
 
 - Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present.
 
+- Month: If the number of pattern letters is 3 or more, the month is interpreted as text; otherwise, it is interpreted as a number. The text form is depend on letters - 'M' denotes the 'standard' form, and 'L' is for 'stand-alone' form. The difference between the 'standard' and 'stand-alone' forms is trickier to describe as there is no difference in English. However, in other languages there is a difference in the word used when the text is used alone, as opposed to in a complete date. For example, the word used for a month when used alone in a date picker is different to the word used for month in association with a day and year in a date. Here are examples for all supported pattern letters:
+  - `'M'` or `'L'`: Month number in a year starting from 1. There is no difference between 'M' and 'L'. Month from 1 to 9 are printed without padding.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "M");
+    1
+    spark-sql> select date_format(date '1970-12-01', "L");
+    12
+    ```
+  - `'MM'` or `'LL'`: Month number in a year starting from 1. Zero padding is added for month 1-9.
+      ```sql
+      spark-sql> select date_format(date '1970-1-01', "LL");
+      01
+      spark-sql> select date_format(date '1970-09-01', "MM");
+      09
+      ```
+  - `'MMM'`: Short textual representation in the standard form. The month pattern should be a part of a date pattern not just a stand-alone month except locales where there is no difference between stand and stand-alone forms like in English.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "d MMM");
+    1 Jan
+    spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'dd MMM', 'locale', 'RU'));
+    01 янв.
+    ```
+  - `'LLL'`: Short textual representation in the stand-alone form. It should be used to format/parse only months without any other date fields.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "LLL");
+    Jan
+    spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'LLL', 'locale', 'RU'));
+    янв.
+    ```
+  - `'MMMM'`: full textual month representation in the standard form. It is used for parsing/formatting months as a part of dates/timestamps.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "MMMM yyyy");
+    January 1970
+    spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'd MMMM', 'locale', 'RU'));
+    1 января
+    ```
+  - `'LLLL'`: full textual month representation in the stand-alone form. The pattern can be used to format/parse only months.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "LLLL");
+    January
+    spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'LLLL', 'locale', 'RU'));
+    январь
+    ```
+  - `'LLLLL'` or `'MMMMM'`: Narrow textual representation of standard or stand-alone forms. Typically it is a single letter.
+    ```sql
+    spark-sql> select date_format(date '1970-07-01', "LLLLL");
+    J
+    spark-sql> select date_format(date '1970-01-01', "MMMMM");
+    J
+    ```
+
 - Zone ID(V): This outputs the display the time-zone ID. Pattern letter count must be 2.
 
 - Zone names(z): This outputs the display textual name of the time-zone ID. If the count of letters is one, two or three, then the short name is output. If the count of letters is four, then the full name is output. Five or more letters will fail.
