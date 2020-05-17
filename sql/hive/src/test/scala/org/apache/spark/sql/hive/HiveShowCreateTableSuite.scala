@@ -25,22 +25,6 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
 
-  private var origCreateHiveTableConfig = false
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    origCreateHiveTableConfig =
-      spark.conf.get(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
-    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key, true)
-  }
-
-  protected override def afterAll(): Unit = {
-    spark.conf.set(
-      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key,
-      origCreateHiveTableConfig)
-    super.afterAll()
-  }
-
   test("view") {
     Seq(true, false).foreach { serde =>
       withView("v1") {

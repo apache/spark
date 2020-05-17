@@ -806,7 +806,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
       withTable("t1") {
-        val plan = sql("CREATE TABLE t1 AS SELECT 1 col").queryExecution.executedPlan
+        val plan = sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").queryExecution.executedPlan
         assert(plan.isInstanceOf[DataWritingCommandExec])
         assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
       }
@@ -867,7 +867,7 @@ class AdaptiveQueryExecSuite
         }
         spark.sparkContext.addSparkListener(listener)
         try {
-          sql("CREATE TABLE t1 AS SELECT 1 col").collect()
+          sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").collect()
           spark.sparkContext.listenerBus.waitUntilEmpty()
           assert(checkDone)
         } finally {
