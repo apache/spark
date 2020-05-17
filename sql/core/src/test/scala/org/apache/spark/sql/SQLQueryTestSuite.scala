@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 import java.util.regex.Pattern
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -670,23 +670,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     session.sql("DROP TABLE IF EXISTS tenk1")
   }
 
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     createTestTables(spark)
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
     RuleExecutor.resetMetrics()
   }
 
   override def afterAll(): Unit = {
     try {
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
       removeTestTables(spark)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
