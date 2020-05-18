@@ -188,6 +188,27 @@ object RebaseDateTime {
     Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
   }
 
+  private[sql] def POC_localRebaseGregorianToJulianDays(tz: TimeZone, days: Int,
+        hour: Int, div: Boolean): Int = {
+    var localDate = LocalDate.ofEpochDay(days)
+    if (localDate.isAfter(julianEndDate) && localDate.isBefore(gregorianStartDate)) {
+      localDate = gregorianStartDate
+    }
+    val utcCal = new Calendar.Builder()
+      // `gregory` is a hybrid calendar that supports both
+      // the Julian and Gregorian calendar systems
+      .setCalendarType("gregory")
+      .setTimeZone(tz)
+      .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
+      .setTimeOfDay(hour, 0, 0)
+      .build()
+    if (div) {
+      Math.toIntExact(utcCal.getTimeInMillis/MILLIS_PER_DAY)
+    } else {
+      Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
+    }
+  }
+
   /**
    * An optimized version of [[localRebaseGregorianToJulianDays(Int)]]. This method leverages the
    * pre-calculated rebasing array to save calculation. For dates of Before Common Era, the
@@ -204,6 +225,14 @@ object RebaseDateTime {
     }
   }
 
+def POC_rebaseGregorianToJulianDays(tz: TimeZone, days: Int,
+        hour: Int, div: Boolean): Int = {
+    if (days < gregorianCommonEraStartDay) {
+      POC_localRebaseGregorianToJulianDays(tz, days, hour, div)
+    } else {
+      rebaseDays(gregJulianDiffSwitchDay, gregJulianDiffs, days)
+    }
+  }
 
   /**
    * The class describes JSON records with microseconds rebasing info.
