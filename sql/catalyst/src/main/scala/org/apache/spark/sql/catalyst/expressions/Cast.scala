@@ -511,7 +511,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType if ansiEnabled =>
-      buildCast[Long](_, t => LongExactNumeric.toInt(timestampToLong(t)))
+      buildCast[Long](_, t => {
+        val longValue = timestampToLong(t)
+        if (longValue == longValue.toInt) {
+          longValue.toInt
+        } else {
+          throw new ArithmeticException(s"Casting $t to int causes overflow")
+        }
+      })
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType if ansiEnabled =>

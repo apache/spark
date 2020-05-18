@@ -1355,16 +1355,14 @@ class AnsiCastSuite extends CastSuiteBase {
   }
 
   test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    def errMsg(t: String): String = s"Casting -2198208303900000 to $t causes overflow"
     withDefaultTimeZone(UTC) {
       val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
       assert(negativeTs.getTime < 0)
       val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
-      checkExceptionInExpression[ArithmeticException](
-        cast(negativeTs, ByteType), "to byte causes overflow")
-      checkExceptionInExpression[ArithmeticException](
-        cast(negativeTs, ShortType), "to short causes overflow")
-      checkExceptionInExpression[ArithmeticException](
-        cast(negativeTs, IntegerType), "to int causes overflow")
+      checkExceptionInExpression[ArithmeticException](cast(negativeTs, ByteType), errMsg("byte"))
+      checkExceptionInExpression[ArithmeticException](cast(negativeTs, ShortType), errMsg("short"))
+      checkExceptionInExpression[ArithmeticException](cast(negativeTs, IntegerType), errMsg("int"))
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
