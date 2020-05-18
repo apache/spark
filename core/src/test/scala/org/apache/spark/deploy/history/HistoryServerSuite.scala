@@ -314,7 +314,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     all (directSiteRelativeLinks) should not startWith (knoxBaseUrl)
   }
 
-  test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
+  // TODO (SPARK-31723): re-enable it
+  ignore("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
     val page = new HistoryPage(server)
     val request = mock[HttpServletRequest]
@@ -693,6 +694,17 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     out.close()
   }
 
+  test("SPARK-31697: HistoryServer should set Content-Type") {
+    val port = server.boundPort
+    val nonExistenceAppId = "local-non-existence"
+    val url = new URL(s"http://localhost:$port/history/$nonExistenceAppId")
+    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+    conn.setRequestMethod("GET")
+    conn.connect()
+    val expectedContentType = "text/html;charset=utf-8"
+    val actualContentType = conn.getContentType
+    assert(actualContentType === expectedContentType)
+  }
 }
 
 object HistoryServerSuite {

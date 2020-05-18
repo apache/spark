@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.LocalDate
 
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
@@ -32,7 +33,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
@@ -525,52 +527,62 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       def date: Date = Date.valueOf(s)
     }
 
-    val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21").map(_.date)
+    val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21")
     import testImplicits._
-    withNestedDataFrame(data.map(i => Tuple1(i)).toDF()) { case (inputDF, colName, resultFun) =>
-      withParquetDataFrame(inputDF) { implicit df =>
-        val dateAttr: Expression = df(colName).expr
-        assert(df(colName).expr.dataType === DateType)
 
-        checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
-        checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
-          data.map(i => Row.apply(resultFun(i))))
+    Seq(false, true).foreach { java8Api =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        val df = data.map(i => Tuple1(Date.valueOf(i))).toDF()
+        withNestedDataFrame(df) { case (inputDF, colName, fun) =>
+          def resultFun(dateStr: String): Any = {
+            val parsed = if (java8Api) LocalDate.parse(dateStr) else Date.valueOf(dateStr)
+            fun(parsed)
+          }
+          withParquetDataFrame(inputDF) { implicit df =>
+            val dateAttr: Expression = df(colName).expr
+            assert(df(colName).expr.dataType === DateType)
 
-        checkFilterPredicate(dateAttr === "2018-03-18".date, classOf[Eq[_]],
-          resultFun("2018-03-18".date))
-        checkFilterPredicate(dateAttr <=> "2018-03-18".date, classOf[Eq[_]],
-          resultFun("2018-03-18".date))
-        checkFilterPredicate(dateAttr =!= "2018-03-18".date, classOf[NotEq[_]],
-          Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i.date))))
+            checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+            checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
+              data.map(i => Row.apply(resultFun(i))))
 
-        checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
-          resultFun("2018-03-18".date))
-        checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
-          resultFun("2018-03-21".date))
-        checkFilterPredicate(dateAttr <= "2018-03-18".date, classOf[LtEq[_]],
-          resultFun("2018-03-18".date))
-        checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
-          resultFun("2018-03-21".date))
+            checkFilterPredicate(dateAttr === "2018-03-18".date, classOf[Eq[_]],
+              resultFun("2018-03-18"))
+            checkFilterPredicate(dateAttr <=> "2018-03-18".date, classOf[Eq[_]],
+              resultFun("2018-03-18"))
+            checkFilterPredicate(dateAttr =!= "2018-03-18".date, classOf[NotEq[_]],
+              Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i))))
 
-        checkFilterPredicate(Literal("2018-03-18".date) === dateAttr, classOf[Eq[_]],
-          resultFun("2018-03-18".date))
-        checkFilterPredicate(Literal("2018-03-18".date) <=> dateAttr, classOf[Eq[_]],
-          resultFun("2018-03-18".date))
-        checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
-          resultFun("2018-03-18".date))
-        checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
-          resultFun("2018-03-21".date))
-        checkFilterPredicate(Literal("2018-03-18".date) >= dateAttr, classOf[LtEq[_]],
-          resultFun("2018-03-18".date))
-        checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
-          resultFun("2018-03-21".date))
+            checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
+              resultFun("2018-03-18"))
+            checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(dateAttr <= "2018-03-18".date, classOf[LtEq[_]],
+              resultFun("2018-03-18"))
+            checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
+              resultFun("2018-03-21"))
 
-        checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
-          resultFun("2018-03-21".date))
-        checkFilterPredicate(
-          dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
-          classOf[Operators.Or],
-          Seq(Row(resultFun("2018-03-18".date)), Row(resultFun("2018-03-21".date))))
+            checkFilterPredicate(Literal("2018-03-18".date) === dateAttr, classOf[Eq[_]],
+              resultFun("2018-03-18"))
+            checkFilterPredicate(Literal("2018-03-18".date) <=> dateAttr, classOf[Eq[_]],
+              resultFun("2018-03-18"))
+            checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
+              resultFun("2018-03-18"))
+            checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(Literal("2018-03-18".date) >= dateAttr, classOf[LtEq[_]],
+              resultFun("2018-03-18"))
+            checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
+              resultFun("2018-03-21"))
+
+            checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(
+              dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
+              classOf[Operators.Or],
+              Seq(Row(resultFun("2018-03-18")), Row(resultFun("2018-03-21"))))
+          }
+        }
       }
     }
   }
@@ -1577,47 +1589,67 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
       expected: Seq[Row]): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
 
-    withSQLConf(
-      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
-      SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
-      SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> "true",
-      SQLConf.PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED.key -> "true",
-      SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
-      // Disable adding filters from constraints because it adds, for instance,
-      // is-not-null to pushed filters, which makes it hard to test if the pushed
-      // filter is expected or not (this had to be fixed with SPARK-13495).
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
-      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-      val query = df
-        .select(output.map(e => Column(e)): _*)
-        .where(Column(predicate))
+    Seq(("parquet", true), ("", false)).map { case (pushdownDsList, nestedPredicatePushdown) =>
+      withSQLConf(
+        SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> "true",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED.key -> "true",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
+        // Disable adding filters from constraints because it adds, for instance,
+        // is-not-null to pushed filters, which makes it hard to test if the pushed
+        // filter is expected or not (this had to be fixed with SPARK-13495).
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST.key -> pushdownDsList) {
+        val query = df
+          .select(output.map(e => Column(e)): _*)
+          .where(Column(predicate))
 
-      var maybeRelation: Option[HadoopFsRelation] = None
-      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-        case PhysicalOperation(_, filters,
-        LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
-          maybeRelation = Some(relation)
-          filters
-      }.flatten.reduceLeftOption(_ && _)
-      assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
+        val nestedOrAttributes = predicate.collectFirst {
+          case g: GetStructField => g
+          case a: Attribute => a
+        }
+        assert(nestedOrAttributes.isDefined, "No GetStructField nor Attribute is detected.")
 
-      val (_, selectedFilters, _) =
-        DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-      assert(selectedFilters.nonEmpty, "No filter is pushed down")
-      val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
-      val parquetFilters = createParquetFilters(schema)
-      // In this test suite, all the simple predicates are convertible here.
-      assert(parquetFilters.convertibleFilters(selectedFilters) === selectedFilters)
-      val pushedParquetFilters = selectedFilters.map { pred =>
-        val maybeFilter = parquetFilters.createFilter(pred)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-        maybeFilter.get
+        val parsed = parseColumnPath(
+          PushableColumnAndNestedColumn.unapply(nestedOrAttributes.get).get)
+
+        val containsNestedColumnOrDot = parsed.length > 1 || parsed(0).contains(".")
+
+        var maybeRelation: Option[HadoopFsRelation] = None
+        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+          case PhysicalOperation(_, filters,
+          LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
+            maybeRelation = Some(relation)
+            filters
+        }.flatten.reduceLeftOption(_ && _)
+        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
+
+        val (_, selectedFilters, _) =
+          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+        // If predicates contains nested column or dot, we push down the predicates only if
+        // "parquet" is in `NESTED_PREDICATE_PUSHDOWN_V1_SOURCE_LIST`.
+        if (nestedPredicatePushdown || !containsNestedColumnOrDot) {
+          assert(selectedFilters.nonEmpty, "No filter is pushed down")
+          val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
+          val parquetFilters = createParquetFilters(schema)
+          // In this test suite, all the simple predicates are convertible here.
+          assert(parquetFilters.convertibleFilters(selectedFilters) === selectedFilters)
+          val pushedParquetFilters = selectedFilters.map { pred =>
+            val maybeFilter = parquetFilters.createFilter(pred)
+            assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+            maybeFilter.get
+          }
+          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+          assert(pushedParquetFilters.exists(_.getClass === filterClass),
+            s"${pushedParquetFilters.map(_.getClass).toList} did not contain ${filterClass}.")
+
+          checker(stripSparkFilter(query), expected)
+        } else {
+          assert(selectedFilters.isEmpty, "There is filter pushed down")
+        }
       }
-      // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-      assert(pushedParquetFilters.exists(_.getClass === filterClass),
-        s"${pushedParquetFilters.map(_.getClass).toList} did not contain ${filterClass}.")
-
-      checker(stripSparkFilter(query), expected)
     }
   }
 }
@@ -1656,7 +1688,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
         case PhysicalOperation(_, filters,
             DataSourceV2ScanRelation(_, scan: ParquetScan, _)) =>
           assert(filters.nonEmpty, "No filter is analyzed from the given query")
-          val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter).toArray
+          val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter(_, true)).toArray
           val pushedFilters = scan.pushedFilters
           assert(pushedFilters.nonEmpty, "No filter is pushed down")
           val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)

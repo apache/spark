@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 class PythonSQLUtilsSuite extends SparkFunSuite {
 
   test("listing sql configurations contains runtime ones only") {
-    val configs = PythonSQLUtils.listSQLConfigs()
+    val configs = PythonSQLUtils.listRuntimeSQLConfigs()
 
     // static sql configurations
     assert(!configs.exists(entry => entry._1 == StaticSQLConf.SPARK_SESSION_EXTENSIONS.key),

@@ -25,86 +25,81 @@ A common table expression (CTE) defines a temporary result set that a user can r
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 WITH common_table_expression [ , ... ]
-{% endhighlight %}
+```
 
 While `common_table_expression` is defined as
-{% highlight sql %}
-expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( [ common_table_expression ] query )
-{% endhighlight %}
+```sql
+expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( query )
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>expression_name</em></code></dt>
-  <dd>
+* **expression_name**
+
     Specifies a name for the common table expression.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>query</em></code></dt>
-  <dd>
-    A <a href="sql-ref-syntax-qry-select.html">SELECT</a> statement.
-  </dd>
-</dl>
+
+* **query**
+
+    A [SELECT statement](sql-ref-syntax-qry-select.html).
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- CTE with multiple column aliases
 WITH t(x, y) AS (SELECT 1, 2)
 SELECT * FROM t WHERE x = 1 AND y = 2;
-  +---+---+
-  |  x|  y|
-  +---+---+
-  |  1|  2|
-  +---+---+
++---+---+
+|  x|  y|
++---+---+
+|  1|  2|
++---+---+
 
 -- CTE in CTE definition
-WITH t as (
+WITH t AS (
     WITH t2 AS (SELECT 1)
     SELECT * FROM t2
 )
 SELECT * FROM t;
-  +---+
-  |  1|
-  +---+
-  |  1|
-  +---+
++---+
+|  1|
++---+
+|  1|
++---+
 
 -- CTE in subquery
 SELECT max(c) FROM (
     WITH t(c) AS (SELECT 1)
     SELECT * FROM t
 );
-  +------+
-  |max(c)|
-  +------+
-  |     1|
-  +------+
++------+
+|max(c)|
++------+
+|     1|
++------+
 
 -- CTE in subquery expression
 SELECT (
     WITH t AS (SELECT 1)
     SELECT * FROM t
 );
-  +----------------+
-  |scalarsubquery()|
-  +----------------+
-  |               1|
-  +----------------+
++----------------+
+|scalarsubquery()|
++----------------+
+|               1|
++----------------+
 
 -- CTE in CREATE VIEW statement
 CREATE VIEW v AS
     WITH t(a, b, c, d) AS (SELECT 1, 2, 3, 4)
     SELECT * FROM t;
 SELECT * FROM v;
-  +---+---+---+---+
-  |  a|  b|  c|  d|
-  +---+---+---+---+
-  |  1|  2|  3|  4|
-  +---+---+---+---+
++---+---+---+---+
+|  a|  b|  c|  d|
++---+---+---+---+
+|  1|  2|  3|  4|
++---+---+---+---+
 
 -- If name conflict is detected in nested CTE, then AnalysisException is thrown by default.
 -- SET spark.sql.legacy.ctePrecedencePolicy = CORRECTED (which is recommended),
@@ -117,13 +112,13 @@ WITH
         SELECT * FROM t
     )
 SELECT * FROM t2;
-  +---+
-  |  2|
-  +---+
-  |  2|
-  +---+
-{% endhighlight %}
++---+
+|  2|
++---+
+|  2|
++---+
+```
 
 ### Related Statements
 
- * [SELECT](sql-ref-syntax-qry-select.html)
+* [SELECT](sql-ref-syntax-qry-select.html)

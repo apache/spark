@@ -25,60 +25,53 @@ An inline table is a temporary table created using a VALUES clause.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 VALUES ( expression [ , ... ] ) [ table_alias ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>expression</em></code></dt>
-  <dd>
+* **expression**
+
     Specifies a combination of one or more values, operators and SQL functions that results in a value.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>table_alias</em></code></dt>
-  <dd>
-    Specifies a temporary name with an optional column name list. <br><br>
-    <b>Syntax:</b>
-      <code>
-        [ AS ] table_name [ ( column_name [ , ... ] ) ]
-      </code>
-  </dd>
-</dl>
+
+* **table_alias**
+
+    Specifies a temporary name with an optional column name list.
+
+    **Syntax:** `[ AS ] table_name [ ( column_name [ , ... ] ) ]`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- single row, without a table alias
 SELECT * FROM VALUES ("one", 1);
-  +----+----+
-  |col1|col2|
-  +----+----+
-  | one|   1|
-  +----+----+
++----+----+
+|col1|col2|
++----+----+
+| one|   1|
++----+----+
 
 -- three rows with a table alias
 SELECT * FROM VALUES ("one", 1), ("two", 2), ("three", null) AS data(a, b);
-  +-----+----+
-  |    a|   b|
-  +-----+----+
-  |  one|   1|
-  |  two|   2|
-  |three|null|
-  +-----+----+
++-----+----+
+|    a|   b|
++-----+----+
+|  one|   1|
+|  two|   2|
+|three|null|
++-----+----+
 
 -- complex types with a table alias
 SELECT * FROM VALUES ("one", array(0, 1)), ("two", array(2, 3)) AS data(a, b);
-  +---+------+
-  |  a|     b|
-  +---+------+
-  |one|[0, 1]|
-  |two|[2, 3]|
-  +---+------+
-{% endhighlight %}
++---+------+
+|  a|     b|
++---+------+
+|one|[0, 1]|
+|two|[2, 3]|
++---+------+
+```
 
-### Related Statement
+### Related Statements
 
- * [SELECT](sql-ref-syntax-qry-select.html)
+* [SELECT](sql-ref-syntax-qry-select.html)

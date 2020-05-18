@@ -48,7 +48,8 @@ install:
 build_script:
   # '-Djna.nosys=true' is required to avoid kernel32.dll load failure.
   # See SPARK-28759.
-  - cmd: mvn -DskipTests -Psparkr -Phive -Djna.nosys=true package
+  # Ideally we should check the tests related to Hive in SparkR as well (SPARK-31745).
+  - cmd: mvn -DskipTests -Psparkr -Djna.nosys=true package
 
 environment:
   NOT_CRAN: true

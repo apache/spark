@@ -195,22 +195,25 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   }
 
   def verboseStringWithOperatorId(): String = {
-    val codegenIdStr =
-      getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s"[codegen id : $id]").getOrElse("")
-    val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
-    val baseStr = s"($operatorId) $nodeName $codegenIdStr"
     val argumentString = argString(SQLConf.get.maxToStringFields)
 
     if (argumentString.nonEmpty) {
       s"""
-         |$baseStr
+         |$formattedNodeName
          |Arguments: $argumentString
-      """.stripMargin
+         |""".stripMargin
     } else {
       s"""
-         |$baseStr
-      """.stripMargin
+         |$formattedNodeName
+         |""".stripMargin
     }
+  }
+
+  protected def formattedNodeName: String = {
+    val opId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    val codegenId =
+      getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s" [codegen id : $id]").getOrElse("")
+    s"($opId) $nodeName$codegenId"
   }
 
   /**

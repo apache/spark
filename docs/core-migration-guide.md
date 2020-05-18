@@ -35,6 +35,8 @@ license: |
 
 - Deprecated method `AccumulableInfo.apply` have been removed because creating `AccumulableInfo` is disallowed.
 
+- Deprecated accumulator v1 APIs have been removed and please use v2 APIs instead.
+
 - Event log file will be written as UTF-8 encoding, and Spark History Server will replay event log files as UTF-8 encoding. Previously Spark wrote the event log file as default charset of driver JVM process, so Spark History Server of Spark 2.x is needed to read the old event log files in case of incompatible encoding.
 
 - A new protocol for fetching shuffle blocks is used. It's recommended that external shuffle services be upgraded when running Spark 3.0 apps. You can still use old external shuffle services by setting the configuration `spark.shuffle.useOldFetchProtocol` to `true`. Otherwise, Spark may run into errors with messages like `IllegalArgumentException: Unexpected message type: <number>`.

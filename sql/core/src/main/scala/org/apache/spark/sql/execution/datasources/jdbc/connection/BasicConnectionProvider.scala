@@ -19,11 +19,17 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[jdbc] class BasicConnectionProvider(driver: Driver, options: JDBCOptions)
     extends ConnectionProvider {
   def getConnection(): Connection = {
-    driver.connect(options.url, options.asConnectionProperties)
+    val properties = getAdditionalProperties()
+    options.asConnectionProperties.entrySet().asScala.foreach { e =>
+      properties.put(e.getKey(), e.getValue())
+    }
+    driver.connect(options.url, properties)
   }
 }

@@ -61,7 +61,7 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val builtinHiveVersion: String = if (isHive23) hiveVersion else "1.2.1"
 
-  val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
+  val HIVE_METASTORE_VERSION = buildStaticConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
         "<code>0.12.0</code> through <code>2.3.7</code> and " +
         "<code>3.0.0</code> through <code>3.1.2</code>.")
@@ -75,10 +75,9 @@ private[spark] object HiveUtils extends Logging {
   val FAKE_HIVE_VERSION = buildConf("spark.sql.hive.version")
     .doc(s"deprecated, please use ${HIVE_METASTORE_VERSION.key} to get the Hive version in Spark.")
     .version("1.1.1")
-    .stringConf
-    .createWithDefault(builtinHiveVersion)
+    .fallbackConf(HIVE_METASTORE_VERSION)
 
-  val HIVE_METASTORE_JARS = buildConf("spark.sql.hive.metastore.jars")
+  val HIVE_METASTORE_JARS = buildStaticConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
       | This property can be one of three options: "
@@ -137,7 +136,7 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
-  val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
+  val HIVE_METASTORE_SHARED_PREFIXES = buildStaticConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
       "that should be shared is JDBC drivers that are needed to talk to the metastore. Other " +
@@ -151,7 +150,7 @@ private[spark] object HiveUtils extends Logging {
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 
-  val HIVE_METASTORE_BARRIER_PREFIXES = buildConf("spark.sql.hive.metastore.barrierPrefixes")
+  val HIVE_METASTORE_BARRIER_PREFIXES = buildStaticConf("spark.sql.hive.metastore.barrierPrefixes")
     .doc("A comma separated list of class prefixes that should explicitly be reloaded for each " +
       "version of Hive that Spark SQL is communicating with. For example, Hive UDFs that are " +
       "declared in a prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).")

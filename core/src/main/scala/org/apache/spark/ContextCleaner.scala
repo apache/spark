@@ -285,7 +285,7 @@ private object ContextCleaner {
 }
 
 /**
- * Listener class used for testing when any item has been cleaned by the Cleaner class.
+ * Listener class used when any item has been cleaned by the Cleaner class.
  */
 private[spark] trait CleanerListener {
   def rddCleaned(rddId: Int): Unit
