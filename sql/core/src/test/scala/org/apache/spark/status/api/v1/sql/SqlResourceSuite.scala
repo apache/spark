@@ -20,7 +20,9 @@ package org.apache.spark.status.api.v1.sql
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
 
