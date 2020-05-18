@@ -453,7 +453,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
   }
 
-  // converting seconds to us
+  // SPARK-31710 converting seconds to us,Add compatibility flag
+  private[this] def longToTimestamp(t: Long): Long = {
+    if ( SQLConf.get.getConf( SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS ) )
+    (t * MICROS_PER_SECOND).toLong
+    else
+    (t * MICROS_PER_MILLI).toLong
+  }
+  
   private[this] def longToTimestamp(t: Long): Long = SECONDS.toMicros(t)
   // converting us to seconds
   private[this] def timestampToLong(ts: Long): Long = {
@@ -1270,7 +1277,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     val block = inline"new java.math.BigDecimal($MICROS_PER_SECOND)"
     code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
   }
-  private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * (long)$MICROS_PER_SECOND"
+  
+   // SPARK-31710 converting seconds to us,Add compatibility flag
+  private[this] def longToTimeStampCode(l: ExprValue): Block = {
+  if ( SQLConf.get.getConf( SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS ) )
+  code"$l * (long)$MICROS_PER_SECOND"
+  else
+  code"$l * (long)$MICROS_PER_MILLI"
+  }
+  
   private[this] def timestampToLongCode(ts: ExprValue): Block =
     code"java.lang.Math.floorDiv($ts, $MICROS_PER_SECOND)"
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
