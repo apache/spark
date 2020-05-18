@@ -245,9 +245,19 @@ trait JoinSelectionHelper {
       hint: JoinHint,
       onlyLookingAtHint: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val (canBuildLeft, canBuildRight) =
-      getShuffleHashJoinSides(left, right, joinType, hint, onlyLookingAtHint, conf)
-    getBuildSide(canBuildLeft, canBuildRight, left, right)
+    val buildLeft = if (onlyLookingAtHint) {
+      hintToShuffleHashJoinLeft(hint)
+    } else {
+      canBuildLocalHashMapBySize(left, conf) && muchSmaller(right, left)
+    }
+    val buildRight = if (onlyLookingAtHint) {
+      hintToShuffleHashJoinRight(hint)
+    } else {
+      canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
+    }
+
+    getBuildSide(canBuildLeft(joinType) && buildLeft, canBuildRight(joinType) && buildRight,
+      left, right)
   }
 
   def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
@@ -325,26 +335,6 @@ trait JoinSelectionHelper {
     } else {
       None
     }
-  }
-
-  private def getShuffleHashJoinSides(
-      left: LogicalPlan,
-      right: LogicalPlan,
-      joinType: JoinType,
-      hint: JoinHint,
-      onlyLookingAtHint: Boolean,
-      conf: SQLConf): (Boolean, Boolean) = {
-    val buildLeft = if (onlyLookingAtHint) {
-      hintToShuffleHashJoinLeft(hint)
-    } else {
-      canBuildLocalHashMapBySize(left, conf) && muchSmaller(right, left)
-    }
-    val buildRight = if (onlyLookingAtHint) {
-      hintToShuffleHashJoinRight(hint)
-    } else {
-      canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
-    }
-    (canBuildLeft(joinType) && buildLeft, canBuildRight(joinType) && buildRight)
   }
 
   /**
