@@ -217,7 +217,7 @@ case object BuildLeft extends BuildSide
 
 trait JoinSelectionHelper {
 
-    def getBroadcastBuildSide(
+  def getBroadcastBuildSide(
       left: LogicalPlan,
       right: LogicalPlan,
       joinType: JoinType,
