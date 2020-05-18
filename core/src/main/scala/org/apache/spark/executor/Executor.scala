@@ -322,10 +322,11 @@ private[spark] class Executor(
     val taskId = taskDescription.taskId
     val threadName = s"Executor task launch worker for task $taskId"
     val taskName = taskDescription.name
-    val mdcProperties = taskDescription.properties.asScala.filter(_._1.startsWith("mdc.")).map { item =>
-      val key = item._1.substring(4)
-      (key, item._2)
-    }.toMap
+    val mdcProperties = taskDescription.properties.asScala
+      .filter(_._1.startsWith("mdc.")).map { item =>
+        val key = item._1.substring(4)
+        (key, item._2)
+      }.toMap
 
     /** If specified, this task has been killed and this option contains the reason. */
     @volatile private var reasonIfKilled: Option[String] = None
