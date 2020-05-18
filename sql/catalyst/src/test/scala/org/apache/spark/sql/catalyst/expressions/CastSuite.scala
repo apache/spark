@@ -1004,4 +1004,33 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ret, InternalRow(null))
     }
   }
+
+  test("SPARK-31710:Add compatibility flag to cast long to timestamp") {
+    withSQLConf(
+      SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS.key -> "false") {
+      for (tz <- ALL_TIMEZONES) {
+        def checkLongToTimestamp(str: Long, expected: Long): Unit = {
+          checkEvaluation(cast(str, TimestampType, Option(tz.getID)), expected)
+        }
+        checkLongToTimestamp(253402272000L, 253402272000000L)
+        checkLongToTimestamp(-5L, -5000L)
+        checkLongToTimestamp(1L, 1000L)
+        checkLongToTimestamp(0L, 0L)
+        checkLongToTimestamp(123L, 123000L)
+      }
+    }
+    withSQLConf(
+      SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS.key -> "true") {
+      for (tz <- ALL_TIMEZONES) {
+        def checkLongToTimestamp(str: Long, expected: Long): Unit = {
+          checkEvaluation(cast(str, TimestampType, Option(tz.toZoneId.getId)), expected)
+        }
+        checkLongToTimestamp(253402272000L, 253402272000000000L)
+        checkLongToTimestamp(-5L, -5000000L)
+        checkLongToTimestamp(1L, 1000000L)
+        checkLongToTimestamp(0L, 0L)
+        checkLongToTimestamp(123L, 123000000L)
+      }
+    }
+  }
 }
