@@ -3071,21 +3071,22 @@ class Analyzer(
       case p => p transformExpressions {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
-        case UpCast(child, dt: AtomicType, _)
+        case u @ UpCast(child, _, _)
             if SQLConf.get.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
+              u.dataType.isInstanceOf[AtomicType] &&
               child.dataType == StringType =>
-          Cast(child, dt.asNullable)
+          Cast(child, u.dataType.asNullable)
 
-        case UpCast(child, dataType, walkedTypePath)
+        case u @ UpCast(child, _, walkedTypePath)
           if child.dataType.isInstanceOf[DecimalType]
-            && dataType.isInstanceOf[DecimalType]
+            && u.dataType.isInstanceOf[DecimalType]
             && walkedTypePath.nonEmpty =>
           child
 
-        case UpCast(child, dataType, walkedTypePath) if !Cast.canUpCast(child.dataType, dataType) =>
-          fail(child, dataType, walkedTypePath)
+        case u @ UpCast(child, _, walkedTypePath) if !Cast.canUpCast(child.dataType, u.dataType) =>
+          fail(child, u.dataType, walkedTypePath)
 
-        case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
+        case u @ UpCast(child, _, _) => Cast(child, u.dataType.asNullable)
       }
     }
   }
