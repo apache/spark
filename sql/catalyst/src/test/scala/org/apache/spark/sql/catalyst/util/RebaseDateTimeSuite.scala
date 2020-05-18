@@ -167,8 +167,6 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-<<<<<<< HEAD
-=======
   test("SPARK-31579: Replace floorDiv by / in localRebaseGregorianToJulianDays()") {
     val start = localDateToDays(LocalDate.of(1, 1, 1))
     val end = localDateToDays(LocalDate.of(2100, 1, 1))
@@ -182,7 +180,6 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
->>>>>>> 189cb09dc4... proof of concept; replace floorDiv by /
   test("SPARK-31328: rebasing overlapped timestamps during daylight saving time") {
     Seq(
       LA.getId -> Seq("2019-11-03T08:00:00Z", "2019-11-03T08:30:00Z", "2019-11-03T09:00:00Z"),
