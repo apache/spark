@@ -356,6 +356,14 @@ package object dsl {
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
 
+      def having(
+          groupingExprs: Expression*)(
+          aggregateExprs: Expression*)(
+          havingCondition: Expression): LogicalPlan = {
+        UnresolvedHaving(havingCondition,
+          groupBy(groupingExprs: _*)(aggregateExprs: _*).asInstanceOf[Aggregate])
+      }
+
       def window(
           windowExpressions: Seq[NamedExpression],
           partitionSpec: Seq[Expression],

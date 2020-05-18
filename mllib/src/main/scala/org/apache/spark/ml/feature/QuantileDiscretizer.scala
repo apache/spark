@@ -243,6 +243,18 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   private def getDistinctSplits(splits: Array[Double]): Array[Double] = {
     splits(0) = Double.NegativeInfinity
     splits(splits.length - 1) = Double.PositiveInfinity
+
+    // 0.0 and -0.0 are distinct values, array.distinct will preserve both of them.
+    // but 0.0 > -0.0 is False which will break the parameter validation checking.
+    // and in scala <= 2.12, there's bug which will cause array.distinct generate
+    // non-deterministic results when array contains both 0.0 and -0.0
+    // So that here we should first normalize all 0.0 and -0.0 to be 0.0
+    // See https://github.com/scala/bug/issues/11995
+    for (i <- 0 until splits.length) {
+      if (splits(i) == -0.0) {
+        splits(i) = 0.0
+      }
+    }
     val distinctSplits = splits.distinct
     if (splits.length != distinctSplits.length) {
       log.warn(s"Some quantiles were identical. Bucketing to ${distinctSplits.length - 1}" +

@@ -61,11 +61,13 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates apt-tr
   # Install needed python packages. Use pip for installing packages (for consistency).
   $APT_INSTALL libpython2.7-dev libpython3-dev python-pip python3-pip && \
   pip install --upgrade pip && hash -r pip && \
+  pip install setuptools && \
   pip install $BASE_PIP_PKGS && \
   pip install $PIP_PKGS && \
   cd && \
   virtualenv -p python3 /opt/p35 && \
   . /opt/p35/bin/activate && \
+  pip install setuptools && \
   pip install $BASE_PIP_PKGS && \
   pip install $PIP_PKGS && \
   # Install R packages and dependencies used when building.

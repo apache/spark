@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.4.6-SNAPSHOT</version>
+  <version>2.4.7-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -161,7 +161,7 @@
     <fasterxml.jackson.version>2.6.7</fasterxml.jackson.version>
     <fasterxml.jackson-module-scala.version>2.6.7.1</fasterxml.jackson-module-scala.version>
     <fasterxml.jackson.databind.version>2.6.7.3</fasterxml.jackson.databind.version>
-    <snappy.version>1.1.7.3</snappy.version>
+    <snappy.version>1.1.7.5</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>

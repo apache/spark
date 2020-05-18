@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
 
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
@@ -393,7 +394,9 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   override def sql: String = {
     val valueSQL = child.sql
-    val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
+    val listSQL = hset.toSeq
+      .map(elem => Literal(elem, child.dataType).sql)
+      .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
 }

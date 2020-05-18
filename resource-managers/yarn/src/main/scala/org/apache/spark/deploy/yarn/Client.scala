@@ -1311,7 +1311,10 @@ private object Client extends Logging {
       }
     }
 
-    populateHadoopClasspath(conf, env)
+    if (sparkConf.get(POPULATE_HADOOP_CLASSPATH)) {
+      populateHadoopClasspath(conf, env)
+    }
+
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }

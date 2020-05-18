@@ -46,4 +46,8 @@ FROM (
     encode(string(id + 2), 'utf-8') col3,
     encode(string(id + 3), 'utf-8') col4
   FROM range(10)
-)
+);
+
+-- trim
+SELECT trim(" xyz "), ltrim(" xyz "), rtrim(" xyz ");
+SELECT trim('xyz', 'yxTomxx'), ltrim('xyz', 'yxTomxx'), rtrim('xyz', 'yxTomxx');

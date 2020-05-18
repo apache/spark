@@ -1005,6 +1005,18 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    withDefaultTimeZone(DateTimeUtils.TimeZoneUTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, DateTimeUtils.MILLIS_PER_SECOND)
+      checkEvaluation(cast(negativeTs, ByteType), expectedSecs.toByte)
+      checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
+      checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
+    }
+  }
+  
   test("SPARK-31710:Add compatibility flag to cast long to timestamp") {
     withSQLConf(
       SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS.key -> "false") {
@@ -1031,6 +1043,16 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkLongToTimestamp(0L, 0L)
         checkLongToTimestamp(123L, 123000000L)
       }
+
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    withDefaultTimeZone(DateTimeUtils.TimeZoneUTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, DateTimeUtils.MILLIS_PER_SECOND)
+      checkEvaluation(cast(negativeTs, ByteType), expectedSecs.toByte)
+      checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
+      checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
 }
