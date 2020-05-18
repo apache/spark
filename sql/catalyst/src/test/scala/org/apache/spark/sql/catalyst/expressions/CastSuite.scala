@@ -1023,7 +1023,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS.key -> "true") {
       for (tz <- ALL_TIMEZONES) {
         def checkLongToTimestamp(str: Long, expected: Long): Unit = {
-          checkEvaluation(cast(str, TimestampType, Option(tz.toZoneId.getId)), expected)
+          checkEvaluation(cast(str, TimestampType, Option(tz.getID)), expected)
         }
         checkLongToTimestamp(253402272000L, 253402272000000000L)
         checkLongToTimestamp(-5L, -5000000L)
