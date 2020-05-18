@@ -53,14 +53,6 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
   hadoopConf.set("hive.exec.dynamic.partition.mode", "nonstrict")
   hadoopConf.set("hive.exec.max.dynamic.partitions", numRows.toString)
 
-  def withTempTable(tableNames: String*)(f: => Unit): Unit = {
-    val ds = spark.range(numRows)
-    tableNames.foreach { name =>
-      ds.createOrReplaceTempView(name)
-    }
-    try f finally tableNames.foreach(spark.catalog.dropTempView)
-  }
-
   def withTable(tableNames: String*)(f: => Unit): Unit = {
     tableNames.foreach { name =>
       sql(s"CREATE TABLE $name(a INT) STORED AS TEXTFILE PARTITIONED BY (b INT, c INT)")
@@ -115,7 +107,9 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    withTempTable(tempTable) {
+    spark.range(numRows).createOrReplaceTempView(tempTable)
+
+    try {
       val t1 = "t1"
       val t2 = "t2"
       val t3 = "t3"
@@ -137,6 +131,8 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
 
         benchmark.run()
       }
+    } finally {
+      spark.catalog.dropTempView(tempTable)
     }
   }
 
