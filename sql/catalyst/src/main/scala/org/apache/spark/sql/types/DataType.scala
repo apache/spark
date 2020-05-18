@@ -309,10 +309,23 @@ object DataType {
         fromFields.length == toFields.length &&
           fromFields.zip(toFields).forall { case (l, r) =>
             l.name.equalsIgnoreCase(r.name) &&
-              equalsIgnoreCaseAndNullability(l.dataType, r.dataType)
+              equalsIgnoreCaseAndNullability(l.dataType, r.dataType) &&
+                equalsMetaData(l, r)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
+  /**
+   * Returns true if the two StructField have the same HIVE_TYPE_STRING,
+   * or none of them have this attribute.
+   */
+  private[sql] def equalsMetaData(from: StructField, to: StructField): Boolean = {
+    if (from.metadata.contains(HIVE_TYPE_STRING) && to.metadata.contains(HIVE_TYPE_STRING)) {
+      from.metadata.getString(HIVE_TYPE_STRING).equals(to.metadata.getString(HIVE_TYPE_STRING))
+    } else {
+      true
     }
   }
 

@@ -479,4 +479,42 @@ class DataTypeSuite extends SparkFunSuite {
 
     assert(result === expected)
   }
+
+  test("SPARK-31737: SparkSQL can't recognize the modified length of Hive varchar") {
+    def checkEqualsIgnoreCaseAndNullability(
+        from: DataType,
+        to: DataType,
+        expected: Boolean): Unit = {
+      assert(DataType.equalsIgnoreCaseAndNullability(from, to) === expected)
+    }
+
+    checkEqualsIgnoreCaseAndNullability(
+      from = StructType(Seq(
+        StructField("a", StringType, nullable = false, new MetadataBuilder()
+          .putString("HIVE_TYPE_STRING", "varchar(5)")
+          .build()))),
+      to = StructType(Seq(
+        StructField("a", StringType, nullable = false, new MetadataBuilder()
+          .putString("HIVE_TYPE_STRING", "varchar(10)")
+          .build()))),
+      expected = false)
+
+    checkEqualsIgnoreCaseAndNullability(
+      from = StructType(Seq(
+        StructField("a", StringType, nullable = false, new MetadataBuilder()
+          .putString("HIVE_TYPE_STRING", "varchar(10)")
+          .build()))),
+      to = StructType(Seq(
+        StructField("a", StringType, nullable = false, new MetadataBuilder()
+          .putString("HIVE_TYPE_STRING", "varchar(10)")
+          .build()))),
+      expected = true)
+
+    checkEqualsIgnoreCaseAndNullability(
+      from = StructType(Seq(
+        StructField("a", StringType, nullable = false))),
+      to = StructType(Seq(
+        StructField("a", StringType, nullable = false))),
+      expected = true)
+  }
 }
