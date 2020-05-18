@@ -217,16 +217,25 @@ case object BuildLeft extends BuildSide
 
 trait JoinSelectionHelper {
 
-  def getBroadcastBuildSide(
+    def getBroadcastBuildSide(
       left: LogicalPlan,
       right: LogicalPlan,
       joinType: JoinType,
       hint: JoinHint,
       onlyLookingAtHint: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val (canBuildLeft, canBuildRight) =
-      getBroadcastableSides(left, right, joinType, hint, onlyLookingAtHint, conf)
-    getBuildSide(canBuildLeft, canBuildRight, left, right)
+    val buildLeft = if (onlyLookingAtHint) {
+      hintToBroadcastLeft(hint)
+    } else {
+      canBroadcastBySize(left, conf) && !hintToNotBroadcastLeft(hint)
+    }
+    val buildRight = if (onlyLookingAtHint) {
+      hintToBroadcastRight(hint)
+    } else {
+      canBroadcastBySize(right, conf) && !hintToNotBroadcastRight(hint)
+    }
+    getBuildSide(canBuildLeft(joinType) && buildLeft, canBuildRight(joinType) && buildRight,
+      left, right)
   }
 
   def getShuffleHashJoinBuildSide(
@@ -243,14 +252,6 @@ trait JoinSelectionHelper {
 
   def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
     if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
-  }
-
-  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
-    val (leftSideOnlyLookingAtHint, rightSideOnlyLookingAtHint) =
-      getBroadcastableSides(join.left, join.right, join.joinType, join.hint, true, conf)
-    val (leftSide, rightSide) =
-      getBroadcastableSides(join.left, join.right, join.joinType, join.hint, false, conf)
-    leftSideOnlyLookingAtHint || rightSideOnlyLookingAtHint || leftSide || rightSide
   }
 
   /**
@@ -324,26 +325,6 @@ trait JoinSelectionHelper {
     } else {
       None
     }
-  }
-
-  private def getBroadcastableSides(
-      left: LogicalPlan,
-      right: LogicalPlan,
-      joinType: JoinType,
-      hint: JoinHint,
-      onlyLookingAtHint: Boolean,
-      conf: SQLConf): (Boolean, Boolean) = {
-    val buildLeft = if (onlyLookingAtHint) {
-      hintToBroadcastLeft(hint)
-    } else {
-      canBroadcastBySize(left, conf) && !hintToNotBroadcastLeft(hint)
-    }
-    val buildRight = if (onlyLookingAtHint) {
-      hintToBroadcastRight(hint)
-    } else {
-      canBroadcastBySize(right, conf) && !hintToNotBroadcastRight(hint)
-    }
-    (canBuildLeft(joinType) && buildLeft, canBuildRight(joinType) && buildRight)
   }
 
   private def getShuffleHashJoinSides(
