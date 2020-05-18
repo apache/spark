@@ -390,8 +390,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     if (d.isNaN || d.isInfinite) null else (d * 1000000L).toLong
   }
 
+  // SPARK-31710.Add compatibility flag to cast long to timestamp,
   // converting seconds to us
-  private[this] def longToTimestamp(t: Long): Long = t * 1000000L
+  private[this] def longToTimestamp(t: Long): Long = {
+    if (SQLConf.get.getConf(SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS)) t * 1000000L
+    else t * 1000L
+  }
   // converting us to seconds
   private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000000L).toLong
   // converting us to seconds in double
@@ -1069,7 +1073,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val block = inline"new java.math.BigDecimal(1000000L)"
     code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
   }
-  private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * 1000000L"
+  private[this] def longToTimeStampCode(l: ExprValue): Block = {
+    if (SQLConf.get.getConf(SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS)) code"$l * 1000000L"
+    else code"$l * 1000L"
+  }
   private[this] def timestampToIntegerCode(ts: ExprValue): Block =
     code"java.lang.Math.floor((double) $ts / 1000000L)"
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
