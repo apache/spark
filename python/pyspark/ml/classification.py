@@ -197,7 +197,7 @@ class _JavaClassificationModel(ClassificationModel, JavaPredictionModel):
     """
     Java Model produced by a ``Classifier``.
     Classes are indexed {0, 1, ..., numClasses - 1}.
-    To be mixed in with class:`pyspark.ml.JavaModel`
+    To be mixed in with :class:`pyspark.ml.JavaModel`
     """
 
     @property
