@@ -636,11 +636,7 @@ public class HiveSessionImpl implements HiveSession {
       acquire(true);
       // Iterate through the opHandles and close their operations
       for (OperationHandle opHandle : opHandleSet) {
-        try {
-          operationManager.closeOperation(opHandle);
-        } catch (Exception e) {
-          LOG.warn("Exception is thrown closing operation " + opHandle, e);
-        }
+        operationManager.closeOperation(opHandle);
       }
       opHandleSet.clear();
       // Cleanup session log directory.

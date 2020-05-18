@@ -36,6 +36,7 @@ import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
+import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataTypes;
@@ -102,14 +103,14 @@ public class VectorizedColumnReader {
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final ZoneId convertTz;
   private static final ZoneId UTC = ZoneOffset.UTC;
-  private final boolean rebaseDateTime;
+  private final String datetimeRebaseMode;
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       OriginalType originalType,
       PageReader pageReader,
       ZoneId convertTz,
-      boolean rebaseDateTime) throws IOException {
+      String datetimeRebaseMode) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
@@ -132,7 +133,9 @@ public class VectorizedColumnReader {
     if (totalValueCount == 0) {
       throw new IOException("totalValueCount == 0");
     }
-    this.rebaseDateTime = rebaseDateTime;
+    assert "LEGACY".equals(datetimeRebaseMode) || "EXCEPTION".equals(datetimeRebaseMode) ||
+      "CORRECTED".equals(datetimeRebaseMode);
+    this.datetimeRebaseMode = datetimeRebaseMode;
   }
 
   /**
@@ -156,11 +159,11 @@ public class VectorizedColumnReader {
     boolean isSupported = false;
     switch (typeName) {
       case INT32:
-        isSupported = originalType != OriginalType.DATE || !rebaseDateTime;
+        isSupported = originalType != OriginalType.DATE || "CORRECTED".equals(datetimeRebaseMode);
         break;
       case INT64:
         if (originalType == OriginalType.TIMESTAMP_MICROS) {
-          isSupported = !rebaseDateTime;
+          isSupported = "CORRECTED".equals(datetimeRebaseMode);
         } else {
           isSupported = originalType != OriginalType.TIMESTAMP_MILLIS;
         }
@@ -172,6 +175,30 @@ public class VectorizedColumnReader {
         break;
     }
     return isSupported;
+  }
+
+  static int rebaseDays(int julianDays, final boolean failIfRebase) {
+    if (failIfRebase) {
+      if (julianDays < RebaseDateTime.lastSwitchJulianDay()) {
+        throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+      } else {
+        return julianDays;
+      }
+    } else {
+      return RebaseDateTime.rebaseJulianToGregorianDays(julianDays);
+    }
+  }
+
+  static long rebaseMicros(long julianMicros, final boolean failIfRebase) {
+    if (failIfRebase) {
+      if (julianMicros < RebaseDateTime.lastSwitchJulianTs()) {
+        throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+      } else {
+        return julianMicros;
+      }
+    } else {
+      return RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros);
+    }
   }
 
   /**
@@ -283,7 +310,7 @@ public class VectorizedColumnReader {
       case INT32:
         if (column.dataType() == DataTypes.IntegerType ||
             DecimalType.is32BitDecimalType(column.dataType()) ||
-            (column.dataType() == DataTypes.DateType && !rebaseDateTime)) {
+            (column.dataType() == DataTypes.DateType && "CORRECTED".equals(datetimeRebaseMode))) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putInt(i, dictionary.decodeToInt(dictionaryIds.getDictId(i)));
@@ -302,11 +329,11 @@ public class VectorizedColumnReader {
             }
           }
         } else if (column.dataType() == DataTypes.DateType) {
+          final boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               int julianDays = dictionary.decodeToInt(dictionaryIds.getDictId(i));
-              int gregorianDays = RebaseDateTime.rebaseJulianToGregorianDays(julianDays);
-              column.putInt(i, gregorianDays);
+              column.putInt(i, rebaseDays(julianDays, failIfRebase));
             }
           }
         } else {
@@ -317,36 +344,37 @@ public class VectorizedColumnReader {
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
             DecimalType.is64BitDecimalType(column.dataType()) ||
-            (originalType == OriginalType.TIMESTAMP_MICROS && !rebaseDateTime)) {
+            (originalType == OriginalType.TIMESTAMP_MICROS &&
+              "CORRECTED".equals(datetimeRebaseMode))) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
             }
           }
         } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
-          if (rebaseDateTime) {
-            for (int i = rowId; i < rowId + num; ++i) {
-              if (!column.isNullAt(i)) {
-                long julianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(i));
-                long julianMicros = DateTimeUtils.millisToMicros(julianMillis);
-                long gregorianMicros = RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros);
-                column.putLong(i, gregorianMicros);
-              }
-            }
-          } else {
+          if ("CORRECTED".equals(datetimeRebaseMode)) {
             for (int i = rowId; i < rowId + num; ++i) {
               if (!column.isNullAt(i)) {
                 long gregorianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(i));
                 column.putLong(i, DateTimeUtils.millisToMicros(gregorianMillis));
               }
             }
+          } else {
+            final boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                long julianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(i));
+                long julianMicros = DateTimeUtils.millisToMicros(julianMillis);
+                column.putLong(i, rebaseMicros(julianMicros, failIfRebase));
+              }
+            }
           }
         } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
+          final boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               long julianMicros = dictionary.decodeToLong(dictionaryIds.getDictId(i));
-              long gregorianMicros = RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros);
-              column.putLong(i, gregorianMicros);
+              column.putLong(i, rebaseMicros(julianMicros, failIfRebase));
             }
           }
         } else {
@@ -466,12 +494,13 @@ public class VectorizedColumnReader {
       defColumn.readShorts(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.DateType ) {
-      if (rebaseDateTime) {
-        defColumn.readIntegersWithRebase(
+      if ("CORRECTED".equals(datetimeRebaseMode)) {
+        defColumn.readIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else {
-        defColumn.readIntegers(
-           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+        boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
+        defColumn.readIntegersWithRebase(
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, failIfRebase);
       }
     } else {
       throw constructConvertNotSupportedException(descriptor, column);
@@ -485,27 +514,29 @@ public class VectorizedColumnReader {
       defColumn.readLongs(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
-      if (rebaseDateTime) {
-        defColumn.readLongsWithRebase(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-      } else {
+      if ("CORRECTED".equals(datetimeRebaseMode)) {
         defColumn.readLongs(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+      } else {
+        boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
+        defColumn.readLongsWithRebase(
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, failIfRebase);
       }
     } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
-      if (rebaseDateTime) {
+      if ("CORRECTED".equals(datetimeRebaseMode)) {
         for (int i = 0; i < num; i++) {
           if (defColumn.readInteger() == maxDefLevel) {
-            long micros = DateTimeUtils.millisToMicros(dataColumn.readLong());
-            column.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(micros));
+            column.putLong(rowId + i, DateTimeUtils.millisToMicros(dataColumn.readLong()));
           } else {
             column.putNull(rowId + i);
           }
         }
       } else {
+        final boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
         for (int i = 0; i < num; i++) {
           if (defColumn.readInteger() == maxDefLevel) {
-            column.putLong(rowId + i, DateTimeUtils.millisToMicros(dataColumn.readLong()));
+            long julianMicros = DateTimeUtils.millisToMicros(dataColumn.readLong());
+            column.putLong(rowId + i, rebaseMicros(julianMicros, failIfRebase));
           } else {
             column.putNull(rowId + i);
           }

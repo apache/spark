@@ -461,15 +461,15 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
                   When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
                   field in an output schema.
-                *  ``DROPMALFORMED`` : ignores the whole corrupted records.
-                *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+                *  ``DROPMALFORMED``: ignores the whole corrupted records.
+                *  ``FAILFAST``: throws an exception when it meets corrupted records.
 
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
@@ -707,7 +707,7 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
@@ -716,8 +716,8 @@ class DataStreamReader(OptionUtils):
                   When it meets a record having fewer tokens than the length of the schema, \
                   sets ``null`` to extra fields. When the record has more tokens than the \
                   length of the schema, it drops extra tokens.
-                * ``DROPMALFORMED`` : ignores the whole corrupted records.
-                * ``FAILFAST`` : throws an exception when it meets corrupted records.
+                * ``DROPMALFORMED``: ignores the whole corrupted records.
+                * ``FAILFAST``: throws an exception when it meets corrupted records.
 
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
@@ -795,11 +795,11 @@ class DataStreamWriter(object):
 
         Options include:
 
-        * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to
+        * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
-        * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+        * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the sink
            every time these is some updates
-        * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+        * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
 
@@ -1170,11 +1170,11 @@ class DataStreamWriter(object):
         :param outputMode: specifies how data of a streaming DataFrame/Dataset is written to a
                            streaming sink.
 
-            * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to the
+            * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
-            * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
-               every time these is some updates
-            * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+            * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
+              sink every time these is some updates
+            * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
         :param partitionBy: names of partitioning columns

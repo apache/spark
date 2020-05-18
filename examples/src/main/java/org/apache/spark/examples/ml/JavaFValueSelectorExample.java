@@ -17,59 +17,65 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.ml.feature.FValueSelector;
 import org.apache.spark.ml.linalg.VectorUDT;
-import org.apache.spark.ml.stat.ANOVATest;
-import org.apache.spark.sql.Dataset;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.*;
 // $example off$
 
 /**
- * An example for ANOVA testing.
+ * An example demonstrating FValueSelector.
  * Run with
  * <pre>
- * bin/run-example ml.JavaANOVATestExample
+ * bin/run-example ml.JavaFValueSelectorExample
  * </pre>
  */
-public class JavaANOVATestExample {
-
+public class JavaFValueSelectorExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
       .builder()
-      .appName("JavaANOVATestExample")
+      .appName("JavaFValueSelectorExample")
       .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(
-      RowFactory.create(3.0, Vectors.dense(1.7, 4.4, 7.6, 5.8, 9.6, 2.3)),
-      RowFactory.create(2.0, Vectors.dense(8.8, 7.3, 5.7, 7.3, 2.2, 4.1)),
-      RowFactory.create(3.0, Vectors.dense(1.2, 9.5, 2.5, 3.1, 8.7, 2.5)),
-      RowFactory.create(2.0, Vectors.dense(3.7, 9.2, 6.1, 4.1, 7.5, 3.8)),
-      RowFactory.create(4.0, Vectors.dense(8.9, 5.2, 7.8, 8.3, 5.2, 3.0)),
-      RowFactory.create(4.0, Vectors.dense(7.9, 8.5, 9.2, 4.0, 9.4, 2.1))
+      RowFactory.create(1, Vectors.dense(6.0, 7.0, 0.0, 7.0, 6.0, 0.0), 4.6),
+      RowFactory.create(2, Vectors.dense(0.0, 9.0, 6.0, 0.0, 5.0, 9.0), 6.6),
+      RowFactory.create(3, Vectors.dense(0.0, 9.0, 3.0, 0.0, 5.0, 5.0), 5.1),
+      RowFactory.create(4, Vectors.dense(0.0, 9.0, 8.0, 5.0, 6.0, 4.0), 7.6),
+      RowFactory.create(5, Vectors.dense(8.0, 9.0, 6.0, 5.0, 4.0, 4.0), 9.0),
+      RowFactory.create(6, Vectors.dense(8.0, 9.0, 6.0, 4.0, 0.0, 0.0), 9.0)
     );
-
     StructType schema = new StructType(new StructField[]{
-      new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
+      new StructField("label", DataTypes.DoubleType, false, Metadata.empty())
     });
 
     Dataset<Row> df = spark.createDataFrame(data, schema);
-    Row r = ANOVATest.test(df, "features", "label").head();
-    System.out.println("pValues: " + r.get(0).toString());
-    System.out.println("degreesOfFreedom: " + r.getList(1).toString());
-    System.out.println("fValues: " + r.get(2).toString());
+
+    FValueSelector selector = new FValueSelector()
+      .setNumTopFeatures(1)
+      .setFeaturesCol("features")
+      .setLabelCol("label")
+      .setOutputCol("selectedFeatures");
+
+    Dataset<Row> result = selector.fit(df).transform(df);
+
+    System.out.println("FValueSelector output with top " + selector.getNumTopFeatures()
+        + " features selected");
+    result.show();
 
     // $example off$
-
     spark.stop();
   }
 }

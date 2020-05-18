@@ -197,7 +197,7 @@ class _JavaClassificationModel(ClassificationModel, JavaPredictionModel):
     """
     Java Model produced by a ``Classifier``.
     Classes are indexed {0, 1, ..., numClasses - 1}.
-    To be mixed in with class:`pyspark.ml.JavaModel`
+    To be mixed in with :class:`pyspark.ml.JavaModel`
     """
 
     @property
@@ -932,7 +932,10 @@ class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRe
         if not isinstance(dataset, DataFrame):
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
-        return BinaryLogisticRegressionSummary(java_blr_summary)
+        if self.numClasses <= 2:
+            return BinaryLogisticRegressionSummary(java_blr_summary)
+        else:
+            return LogisticRegressionSummary(java_blr_summary)
 
 
 class LogisticRegressionSummary(JavaWrapper):
