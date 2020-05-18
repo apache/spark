@@ -2706,33 +2706,6 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-30098: create table without provider should " +
-    "use default data source under non-legacy mode") {
-    val catalog = spark.sessionState.catalog
-    withSQLConf(
-      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "false") {
-      withTable("s") {
-        val defaultProvider = conf.defaultDataSourceName
-        sql("CREATE TABLE s(a INT, b INT)")
-        val table = catalog.getTableMetadata(TableIdentifier("s"))
-        assert(table.provider === Some(defaultProvider))
-      }
-    }
-  }
-
-  test("SPARK-30098: create table without provider should " +
-    "use hive under legacy mode") {
-    val catalog = spark.sessionState.catalog
-    withSQLConf(
-      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTable("s") {
-        sql("CREATE TABLE s(a INT, b INT)")
-        val table = catalog.getTableMetadata(TableIdentifier("s"))
-        assert(table.provider === Some("hive"))
-      }
-    }
-  }
-
   test("SPARK-30785: create table like a partitioned table") {
     val catalog = spark.sessionState.catalog
     withTable("sc_part", "ta_part") {
