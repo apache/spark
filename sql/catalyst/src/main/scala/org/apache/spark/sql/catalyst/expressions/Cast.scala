@@ -455,13 +455,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // SPARK-31710 converting seconds to us,Add compatibility flag
   private[this] def longToTimestamp(t: Long): Long = {
-    if ( SQLConf.get.getConf( SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS ) )
-    (t * MICROS_PER_SECOND).toLong
-    else
-    (t * MICROS_PER_MILLI).toLong
+    if ( SQLConf.get.getConf( SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS )) t * 1000000L
+    else t * 1000L
   }
-  
-  private[this] def longToTimestamp(t: Long): Long = SECONDS.toMicros(t)
   // converting us to seconds
   private[this] def timestampToLong(ts: Long): Long = {
     Math.floorDiv(ts, MICROS_PER_SECOND)
@@ -1287,10 +1283,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   
    // SPARK-31710 converting seconds to us,Add compatibility flag
   private[this] def longToTimeStampCode(l: ExprValue): Block = {
-  if ( SQLConf.get.getConf( SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS ) )
-  code"$l * (long)$MICROS_PER_SECOND"
-  else
-  code"$l * (long)$MICROS_PER_MILLI"
+    if (SQLConf.get.getConf(SQLConf.LONG_TIMESTAMP_CONVERSION_IN_SECONDS)) code"$l * 1000000L"
+    else code"$l * 1000L"
   }
   
   private[this] def timestampToLongCode(ts: ExprValue): Block =
