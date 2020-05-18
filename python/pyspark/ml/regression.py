@@ -77,7 +77,7 @@ class _JavaRegressor(Regressor, JavaPredictor):
 class _JavaRegressionModel(RegressionModel, JavaPredictionModel):
     """
     Java Model produced by a ``_JavaRegressor``.
-    To be mixed in with class:`pyspark.ml.JavaModel`
+    To be mixed in with :class:`pyspark.ml.JavaModel`
 
     .. versionadded:: 3.0.0
     """
