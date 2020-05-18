@@ -26,6 +26,7 @@ package object client {
     override def compare(that: HiveVersion): Int = {
       val thisVersionParts = fullVersion.split('.').map(_.toInt)
       val thatVersionParts = that.fullVersion.split('.').map(_.toInt)
+      assert(thisVersionParts.length == thatVersionParts.length)
       thisVersionParts.zip(thatVersionParts).foreach { case (l, r) =>
         val candidate = l - r
         if (candidate != 0) {

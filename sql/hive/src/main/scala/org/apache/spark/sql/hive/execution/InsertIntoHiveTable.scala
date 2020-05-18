@@ -283,6 +283,10 @@ case class InsertIntoHiveTable(
             oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
           }
 
+          // SPARK-18107: Insert overwrite runs much slower than hive-client.
+          // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
+          // version and we may not want to catch up new Hive version every time. We delete the
+          // Hive partition first and then load data file into the Hive partition.
           val hiveVersion = externalCatalog.asInstanceOf[ExternalCatalogWithListener]
             .unwrapped.asInstanceOf[HiveExternalCatalog]
             .client
@@ -297,11 +301,6 @@ case class InsertIntoHiveTable(
           // check. see https://issues.apache.org/jira/browse/HIVE-14380.
           // So we still disable for Hive overwrite for Hive 1.x for better performance because
           // the partition and table are on the same cluster in most cases.
-          // SPARK-18107:
-          // Insert overwrite runs much slower than hive-client.
-          // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
-          // version and we may not want to catch up new Hive version every time. We delete the
-          // Hive partition first and then load data file into the Hive partition.
           if (partitionPath.nonEmpty && overwrite && hiveVersion < v2_0) {
             partitionPath.foreach { path =>
               val fs = path.getFileSystem(hadoopConf)
