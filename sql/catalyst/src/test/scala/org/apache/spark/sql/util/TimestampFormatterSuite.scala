@@ -317,4 +317,95 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       }
     }
   }
+
+  test("parsing hour with various patterns") {
+    def createFormatter(pattern: String): TimestampFormatter = {
+      // Use `SIMPLE_DATE_FORMAT`, so that the legacy parser also fails with invalid value range.
+      TimestampFormatter(pattern, ZoneOffset.UTC, LegacyDateFormats.SIMPLE_DATE_FORMAT, false)
+    }
+
+    withClue("HH") {
+      val formatter = createFormatter("yyyy-MM-dd HH")
+
+      val micros1 = formatter.parse("2009-12-12 00")
+      assert(micros1 === TimeUnit.SECONDS.toMicros(
+        LocalDateTime.of(2009, 12, 12, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+
+      val micros2 = formatter.parse("2009-12-12 15")
+      assert(micros2 === TimeUnit.SECONDS.toMicros(
+        LocalDateTime.of(2009, 12, 12, 15, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+
+      intercept[DateTimeException](formatter.parse("2009-12-12 24"))
+    }
+
+    withClue("kk") {
+      val formatter = createFormatter("yyyy-MM-dd kk")
+
+      intercept[DateTimeException](formatter.parse("2009-12-12 00"))
+
+      val micros1 = formatter.parse("2009-12-12 15")
+      assert(micros1 === TimeUnit.SECONDS.toMicros(
+        LocalDateTime.of(2009, 12, 12, 15, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+
+      val micros2 = formatter.parse("2009-12-12 24")
+      assert(micros2 === TimeUnit.SECONDS.toMicros(
+        LocalDateTime.of(2009, 12, 12, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+    }
+
+    withClue("KK") {
+      val formatter = createFormatter("yyyy-MM-dd KK a")
+
+      val micros1 = formatter.parse("2009-12-12 00 am")
+      assert(micros1 === TimeUnit.SECONDS.toMicros(
+        LocalDateTime.of(2009, 12, 12, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+
+      // For `KK`, "12:00:00 am" is the same as "00:00:00 pm".
+      val micros2 = formatter.parse("2009-12-12 12 am")
+      assert(micros2 === TimeUnit.SECONDS.toMicros(
+        LocalDateTime.of(2009, 12, 12, 12, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+
+      val micros3 = formatter.parse("2009-12-12 00 pm")
+      assert(micros3 === TimeUnit.SECONDS.toMicros(
+        LocalDateTime.of(2009, 12, 12, 12, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+
+      intercept[DateTimeException](formatter.parse("2009-12-12 12 pm"))
+    }
+
+    withClue("hh") {
+      val formatter = createFormatter("yyyy-MM-dd hh a")
+
+      intercept[DateTimeException](formatter.parse("2009-12-12 00 am"))
+
+      val micros1 = formatter.parse("2009-12-12 12 am")
+      assert(micros1 === TimeUnit.SECONDS.toMicros(
+        LocalDateTime.of(2009, 12, 12, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+
+      intercept[DateTimeException](formatter.parse("2009-12-12 00 pm"))
+
+      val micros2 = formatter.parse("2009-12-12 12 pm")
+      assert(micros2 === TimeUnit.SECONDS.toMicros(
+        LocalDateTime.of(2009, 12, 12, 12, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+    }
+  }
+
+  test("missing date fields") {
+    val formatter = TimestampFormatter("HH:mm:ss", ZoneOffset.UTC)
+    val micros = formatter.parse("11:30:01")
+    assert(micros === TimeUnit.SECONDS.toMicros(
+      LocalDateTime.of(1970, 1, 1, 11, 30, 1).toEpochSecond(ZoneOffset.UTC)))
+  }
+
+  test("missing am/pm field") {
+    val formatter = TimestampFormatter("yyyy hh:mm:ss", ZoneOffset.UTC)
+    val micros = formatter.parse("2009 11:30:01")
+    assert(micros === TimeUnit.SECONDS.toMicros(
+      LocalDateTime.of(2009, 1, 1, 11, 30, 1).toEpochSecond(ZoneOffset.UTC)))
+  }
+
+  test("missing time fields") {
+    val formatter = TimestampFormatter("yyyy HH", ZoneOffset.UTC)
+    val micros = formatter.parse("2009 11")
+    assert(micros === TimeUnit.SECONDS.toMicros(
+      LocalDateTime.of(2009, 1, 1, 11, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+  }
 }

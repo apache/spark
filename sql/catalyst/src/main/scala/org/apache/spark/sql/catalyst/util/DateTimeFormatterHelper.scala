@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time._
 import java.time.chrono.IsoChronology
-import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, DateTimeParseException, ResolverStyle}
-import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
+import java.time.temporal.{ChronoField, TemporalAccessor}
 import java.util.Locale
 
 import com.google.common.cache.CacheBuilder
@@ -31,17 +31,39 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 trait DateTimeFormatterHelper {
+  private def getOrDefault(accessor: TemporalAccessor, field: ChronoField, default: Int): Int = {
+    if (accessor.isSupported(field)) {
+      accessor.get(field)
+    } else {
+      default
+    }
+  }
+
+  protected def toLocalDate(temporalAccessor: TemporalAccessor): LocalDate = {
+    val year = getOrDefault(temporalAccessor, ChronoField.YEAR, 1970)
+    val month = getOrDefault(temporalAccessor, ChronoField.MONTH_OF_YEAR, 1)
+    val day = getOrDefault(temporalAccessor, ChronoField.DAY_OF_MONTH, 1)
+    LocalDate.of(year, month, day)
+  }
+
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
   // if they does not exist in the parsed object.
   protected def toZonedDateTime(
       temporalAccessor: TemporalAccessor,
       zoneId: ZoneId): ZonedDateTime = {
-    // Parsed input might not have time related part. In that case, time component is set to zeros.
-    val parsedLocalTime = temporalAccessor.query(TemporalQueries.localTime)
-    val localTime = if (parsedLocalTime == null) LocalTime.MIDNIGHT else parsedLocalTime
-    // Parsed input must have date component. At least, year must present in temporalAccessor.
-    val localDate = temporalAccessor.query(TemporalQueries.localDate)
-
+    val hour = if (temporalAccessor.isSupported(ChronoField.HOUR_OF_DAY)) {
+      temporalAccessor.get(ChronoField.HOUR_OF_DAY)
+    } else if (temporalAccessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
+      // When we reach here, is mean am/pm is not specified. Here we assume it's am.
+      temporalAccessor.get(ChronoField.HOUR_OF_AMPM)
+    } else {
+      0
+    }
+    val minute = getOrDefault(temporalAccessor, ChronoField.MINUTE_OF_HOUR, 0)
+    val second = getOrDefault(temporalAccessor, ChronoField.SECOND_OF_MINUTE, 0)
+    val nanoSecond = getOrDefault(temporalAccessor, ChronoField.NANO_OF_SECOND, 0)
+    val localTime = LocalTime.of(hour, minute, second, nanoSecond)
+    val localDate = toLocalDate(temporalAccessor)
     ZonedDateTime.of(localDate, localTime, zoneId)
   }
 
@@ -72,18 +94,14 @@ trait DateTimeFormatterHelper {
   // DateTimeParseException will address by the caller side.
   protected def checkDiffResult[T](
       s: String, legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
-    case e: DateTimeParseException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
-      val res = try {
-        Some(legacyParseFunc(s))
-      } catch {
-        case _: Throwable => None
-      }
-      if (res.nonEmpty) {
+    case e: DateTimeException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
+      try {
+        legacyParseFunc(s)
         throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
           s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
           s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
-      } else {
-        throw e
+      } catch {
+        case _: Throwable => throw e
       }
   }
 }
@@ -101,10 +119,6 @@ private object DateTimeFormatterHelper {
 
   def toFormatter(builder: DateTimeFormatterBuilder, locale: Locale): DateTimeFormatter = {
     builder
-      .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
-      .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
-      .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
-      .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
       .withResolverStyle(ResolverStyle.STRICT)

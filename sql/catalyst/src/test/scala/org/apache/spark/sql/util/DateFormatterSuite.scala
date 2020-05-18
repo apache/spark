@@ -182,4 +182,10 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
+
+  test("missing date fields") {
+    val formatter = DateFormatter("HH", ZoneOffset.UTC)
+    val daysSinceEpoch = formatter.parse("20")
+    assert(daysSinceEpoch === LocalDate.of(1970, 1, 1).toEpochDay)
+  }
 }
