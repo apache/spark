@@ -42,7 +42,7 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
 
   override def getSparkSession: SparkSession = TestHive.sparkSession
 
-  val tempTable = "temp"
+  val tempView = "temp"
   val numRows = 1024 * 10
   val sql = spark.sql _
 
@@ -67,47 +67,47 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
   def insertOverwriteDynamic(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT OVERWRITE DYNAMIC") { _ =>
       sql(s"INSERT OVERWRITE TABLE $table SELECT CAST(id AS INT) AS a," +
-        s" CAST(id % 10 AS INT) AS b, CAST(id % 100 AS INT) AS c FROM $tempTable DISTRIBUTE BY a")
+        s" CAST(id % 10 AS INT) AS b, CAST(id % 100 AS INT) AS c FROM $tempView DISTRIBUTE BY a")
     }
   }
 
   def insertOverwriteHybrid(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT OVERWRITE HYBRID") { _ =>
       sql(s"INSERT OVERWRITE TABLE $table partition(b=1, c) SELECT CAST(id AS INT) AS a," +
-        s" CAST(id % 10 AS INT) AS c FROM $tempTable DISTRIBUTE BY a")
+        s" CAST(id % 10 AS INT) AS c FROM $tempView DISTRIBUTE BY a")
     }
   }
 
   def insertOverwriteStatic(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT OVERWRITE STATIC") { _ =>
       sql(s"INSERT OVERWRITE TABLE $table partition(b=1, c=10) SELECT CAST(id AS INT) AS a" +
-        s" FROM $tempTable DISTRIBUTE BY a")
+        s" FROM $tempView DISTRIBUTE BY a")
     }
   }
 
   def insertIntoDynamic(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT INTO DYNAMIC") { _ =>
       sql(s"INSERT INTO TABLE $table SELECT CAST(id AS INT) AS a," +
-        s" CAST(id % 10 AS INT) AS b, CAST(id % 100 AS INT) AS c FROM $tempTable DISTRIBUTE BY a")
+        s" CAST(id % 10 AS INT) AS b, CAST(id % 100 AS INT) AS c FROM $tempView DISTRIBUTE BY a")
     }
   }
 
   def insertIntoHybrid(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT INTO HYBRID") { _ =>
       sql(s"INSERT INTO TABLE $table partition(b=1, c) SELECT CAST(id AS INT) AS a," +
-        s" CAST(id % 10 AS INT) AS c FROM $tempTable DISTRIBUTE BY a")
+        s" CAST(id % 10 AS INT) AS c FROM $tempView DISTRIBUTE BY a")
     }
   }
 
   def insertIntoStatic(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT INTO STATIC") { _ =>
       sql(s"INSERT INTO TABLE $table partition(b=1, c=10) SELECT CAST(id AS INT) AS a" +
-        s" FROM $tempTable DISTRIBUTE BY a")
+        s" FROM $tempView DISTRIBUTE BY a")
     }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    spark.range(numRows).createOrReplaceTempView(tempTable)
+    spark.range(numRows).createOrReplaceTempView(tempView)
 
     try {
       val t1 = "t1"
@@ -132,7 +132,7 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
         benchmark.run()
       }
     } finally {
-      spark.catalog.dropTempView(tempTable)
+      spark.catalog.dropTempView(tempView)
     }
   }
 
