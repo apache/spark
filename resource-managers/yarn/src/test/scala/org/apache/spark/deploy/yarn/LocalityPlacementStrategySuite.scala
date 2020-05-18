@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
+import java.io.{PrintWriter, StringWriter}
+
 import scala.collection.mutable.{HashMap, HashSet, Set}
 
 import org.apache.hadoop.yarn.api.records._
@@ -45,7 +46,11 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
     thread.start()
     thread.join()
 
-    assert(error === null)
+    if (error != null) {
+      val errors = new StringWriter()
+      error.printStackTrace(new PrintWriter(errors))
+      fail(s"StackOverflowError should not be thrown; however, got:\n\n$errors")
+    }
   }
 
   private def runTest(): Unit = {
@@ -56,7 +61,6 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
     // goal is to create enough requests for localized containers (so there should be many
     // tasks on several hosts that have no allocated containers).
 
-    val resource = Resource.newInstance(8 * 1024, 4)
     val strategy = new LocalityPreferredContainerPlacementStrategy(new SparkConf(),
       yarnConf, resource, new MockResolver())
 
