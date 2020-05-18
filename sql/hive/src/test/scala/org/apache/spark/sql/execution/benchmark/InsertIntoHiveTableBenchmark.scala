@@ -140,5 +140,5 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  override def suffix: String = if (HiveUtils.isHive23) "hive2.3" else "hive1.2"
+  override def suffix: String = if (HiveUtils.isHive23) "-hive2.3" else "-hive1.2"
 }

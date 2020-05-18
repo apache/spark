@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
-import org.apache.spark.sql.hive.client.{HiveClientImpl, HiveVersion}
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.client.hive._
 
 
@@ -287,7 +287,7 @@ case class InsertIntoHiveTable(
             .unwrapped.asInstanceOf[HiveExternalCatalog]
             .client
             .version
-          // https://issues.apache.org/jira/browse/SPARK-31684,
+          // SPARK-31684:
           // For Hive 2.0.0 and onwards, as https://issues.apache.org/jira/browse/HIVE-11940
           // has been fixed, and there is no performance issue anymore. We should leave the
           // overwrite logic to hive to avoid failure in `FileSystem#checkPath` when the table
@@ -297,13 +297,12 @@ case class InsertIntoHiveTable(
           // check. see https://issues.apache.org/jira/browse/HIVE-14380.
           // So we still disable for Hive overwrite for Hive 1.x for better performance because
           // the partition and table are on the same cluster in most cases.
-          val hiveVersDoHiveOverwrite: Set[HiveVersion] = Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
-          // SPARK-18107: Insert overwrite runs much slower than hive-client.
+          // SPARK-18107:
+          // Insert overwrite runs much slower than hive-client.
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
           // version and we may not want to catch up new Hive version every time. We delete the
           // Hive partition first and then load data file into the Hive partition.
-          if (partitionPath.nonEmpty && overwrite &&
-            !hiveVersDoHiveOverwrite.contains(hiveVersion)) {
+          if (partitionPath.nonEmpty && overwrite && hiveVersion < v2_0) {
             partitionPath.foreach { path =>
               val fs = path.getFileSystem(hadoopConf)
               if (fs.exists(path)) {
