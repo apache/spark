@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -248,9 +248,9 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("eliminate UpCast when the output data type of the leaf node is already decimal type") {
-    val encoder = ExpressionEncoder[BigDecimal]
-    val attr = Seq(AttributeReference("a", DecimalType(38, 0))())
-    testFromRow(encoder, attr, InternalRow(Decimal(0)))
+    val encoder = ExpressionEncoder[Seq[BigDecimal]]
+    val attr = Seq(AttributeReference("a", ArrayType(DecimalType(38, 0)))())
+    testFromRow(encoder, attr, InternalRow(ArrayData.toArrayData(Array(Decimal(1.0)))))
   }
 
   // test for leaf types

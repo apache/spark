@@ -3079,7 +3079,7 @@ class Analyzer(
         case UpCast(child, dataType, walkedTypePath)
           if child.dataType.isInstanceOf[DecimalType]
             && dataType.isInstanceOf[DecimalType]
-            && walkedTypePath.size == 1 =>
+            && walkedTypePath.nonEmpty =>
           child
 
         case UpCast(child, dataType, walkedTypePath) if !Cast.canUpCast(child.dataType, dataType) =>
