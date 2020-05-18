@@ -2576,6 +2576,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+    val LONG_TIMESTAMP_CONVERSION_IN_SECONDS =
+    buildConf("spark.sql.legacy.longTimestampConversionInSeconds")
+      .internal()
+      .doc("When false, Byte/Short/Int/Long value is interpreted as milliseconds " +
+        "during the timestamp conversion ." +
+        "when true, the value will be  interpreted as seconds " +
+        "to be consistent with decimal/double. ")
+      .booleanConf
+      .createWithDefault(true)
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3160,6 +3169,9 @@ class SQLConf extends Serializable with Logging {
   def parquetRebaseDateTimeInReadEnabled: Boolean = {
     getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ)
   }
+  
+  def longTimestampConversionInSeconds: Boolean = getConf(LONG_TIMESTAMP_CONVERSION_IN_SECONDS)
+
 
   /** ********************** SQLConf functionality methods ************ */
 
