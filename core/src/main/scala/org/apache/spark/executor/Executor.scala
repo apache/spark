@@ -321,7 +321,11 @@ private[spark] class Executor(
 
     val taskId = taskDescription.taskId
     val threadName = s"Executor task launch worker for task $taskId"
-    private val taskName = taskDescription.name
+    val taskName = taskDescription.name
+    val mdcProperties = taskDescription.properties.asScala.filter(_._1.startsWith("mdc.")).map { item =>
+      val key = item._1.substring(4)
+      (key, item._2)
+    }.toMap
 
     /** If specified, this task has been killed and this option contains the reason. */
     @volatile private var reasonIfKilled: Option[String] = None
@@ -396,7 +400,8 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
-      setMDCForTask(taskDescription)
+
+      setMDCForTask(taskDescription.name, mdcProperties)
 
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
@@ -696,14 +701,11 @@ private[spark] class Executor(
     }
   }
 
-  private def setMDCForTask(taskDescription: TaskDescription): Unit = {
-    val properties = taskDescription.properties
+  private def setMDCForTask(taskName: String, mdc: scala.collection.Map[String, String]): Unit = {
+    MDC.put("taskName", taskName)
 
-    MDC.put("taskName", taskDescription.name)
-
-    properties.asScala.filter(_._1.startsWith("mdc.")).foreach { item =>
-      val key = item._1.substring(4)
-      MDC.put(key, item._2)
+    mdc.foreach { case (key, value) =>
+      MDC.put(key, value)
     }
   }
 
@@ -747,6 +749,9 @@ private[spark] class Executor(
     private[this] val takeThreadDump: Boolean = conf.get(TASK_REAPER_THREAD_DUMP)
 
     override def run(): Unit = {
+
+      setMDCForTask(taskRunner.taskName, taskRunner.mdcProperties)
+
       val startTimeNs = System.nanoTime()
       def elapsedTimeNs = System.nanoTime() - startTimeNs
       def timeoutExceeded(): Boolean = killTimeoutNs > 0 && elapsedTimeNs > killTimeoutNs
