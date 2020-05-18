@@ -544,6 +544,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val MAX_REWRITING_CNF_DEPTH =
+    buildConf("spark.sql.maxRewritingCNFDepth")
+      .internal()
+      .doc("The maximum depth of rewriting a join condition to conjunctive normal form " +
+        "expression. The deeper, the more predicate may be found, but the optimization time " +
+        "will increase. The default is 6. By setting this value to 0 this feature can be disabled.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0,
+        "The depth of the maximum rewriting conjunction normal form must be positive.")
+      .createWithDefault(6)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -2844,6 +2856,8 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def maxRewritingCNFDepth: Int = getConf(MAX_REWRITING_CNF_DEPTH)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 

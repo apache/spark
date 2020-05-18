@@ -118,7 +118,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Infer Filters", Once,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        rulesWithoutInferFiltersFromConstraints: _*) :: Nil
+        rulesWithoutInferFiltersFromConstraints: _*) ::
+      Batch("Push predicate through join by conjunctive normal form", Once,
+        PushPredicateThroughJoinByCNF) :: Nil
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
@@ -1365,6 +1367,80 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
           Join(newLeft, newRight, joinType, newJoinCond, hint)
+        case FullOuter => j
+        case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
+        case UsingJoin(_, _) => sys.error("Untransformed Using join node")
+      }
+  }
+}
+
+/**
+ * Rewriting join condition to conjunctive normal form expression so that we can push
+ * more predicate.
+ */
+object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHelper {
+
+  /**
+   * Rewrite pattern:
+   * 1. (a && b) || c --> (a || c) && (b || c)
+   * 2. a || (b && c) --> (a || b) && (a || c)
+   * 3. !(a || b) --> !a && !b
+   */
+  private def rewriteToCNF(condition: Expression, depth: Int = 0): Expression = {
+    if (depth < SQLConf.get.maxRewritingCNFDepth) {
+      val nextDepth = depth + 1
+      condition match {
+        case Or(And(a, b), c) =>
+          And(rewriteToCNF(Or(rewriteToCNF(a, nextDepth), rewriteToCNF(c, nextDepth)), nextDepth),
+            rewriteToCNF(Or(rewriteToCNF(b, nextDepth), rewriteToCNF(c, nextDepth)), nextDepth))
+        case Or(a, And(b, c)) =>
+          And(rewriteToCNF(Or(rewriteToCNF(a, nextDepth), rewriteToCNF(b, nextDepth)), nextDepth),
+            rewriteToCNF(Or(rewriteToCNF(a, nextDepth), rewriteToCNF(c, nextDepth)), nextDepth))
+        case Not(Or(a, b)) =>
+          And(rewriteToCNF(Not(rewriteToCNF(a, nextDepth)), nextDepth),
+            rewriteToCNF(Not(rewriteToCNF(b, nextDepth)), nextDepth))
+        case And(a, b) =>
+          And(rewriteToCNF(a, nextDepth), rewriteToCNF(b, nextDepth))
+        case other => other
+      }
+    } else {
+      condition
+    }
+  }
+
+  private def maybeWithFilter(joinCondition: Seq[Expression], plan: LogicalPlan) = {
+    (joinCondition.reduceLeftOption(And).reduceLeftOption(And), plan) match {
+      case (Some(condition), filter: Filter) if condition.semanticEquals(filter.condition) =>
+        plan
+      case (Some(condition), _) =>
+        Filter(condition, plan)
+      case _ =>
+        plan
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
+
+  val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+    case j @ Join(left, right, joinType, Some(joinCondition), hint) =>
+
+      val pushDownCandidates = splitConjunctivePredicates(rewriteToCNF(joinCondition))
+        .filter(_.deterministic)
+      val (leftEvaluateCondition, rest) =
+        pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
+      val (rightEvaluateCondition, _) =
+        rest.partition(expr => expr.references.subsetOf(right.outputSet))
+
+      val newLeft = maybeWithFilter(leftEvaluateCondition, left)
+      val newRight = maybeWithFilter(rightEvaluateCondition, right)
+
+      joinType match {
+        case _: InnerLike | LeftSemi =>
+          Join(newLeft, newRight, joinType, Some(joinCondition), hint)
+        case RightOuter =>
+          Join(newLeft, right, RightOuter, Some(joinCondition), hint)
+        case LeftOuter | LeftAnti | ExistenceJoin(_) =>
+          Join(left, newRight, joinType, Some(joinCondition), hint)
         case FullOuter => j
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
         case UsingJoin(_, _) => sys.error("Untransformed Using join node")

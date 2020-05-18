@@ -39,7 +39,9 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughNonJoin,
         BooleanSimplification,
         PushPredicateThroughJoin,
-        CollapseProject) :: Nil
+        CollapseProject) ::
+      Batch("PushPredicateThroughJoinByCNF", Once,
+        PushPredicateThroughJoinByCNF) :: Nil
   }
 
   val attrA = 'a.int
@@ -1229,5 +1231,107 @@ class FilterPushdownSuite extends PlanTest {
       condition = Some(pythonUDFJoinCond)).analyze
 
     comparePlans(Optimize.execute(query.analyze), expected)
+  }
+
+  test("inner join: rewrite filter predicates to conjunctive normal form") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y)
+        .where(("x.b".attr === "y.b".attr)
+          && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where(('a > 3 || 'a > 1)).subquery('x)
+    val right = testRelation.where('a > 13 || 'a > 11).subquery('y)
+    val correctAnswer =
+      left.join(right, condition = Some("x.b".attr === "y.b".attr
+        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("inner join: rewrite join predicates to conjunctive normal form") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, condition = Some(("x.b".attr === "y.b".attr)
+        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where('a > 3 || 'a > 1).subquery('x)
+    val right = testRelation.where('a > 13 || 'a > 11).subquery('y)
+    val correctAnswer =
+      left.join(right, condition = Some("x.b".attr === "y.b".attr
+        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("inner join: rewrite join predicates(with NOT predicate) to conjunctive normal form") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, condition = Some(("x.b".attr === "y.b".attr)
+        && Not(("x.a".attr > 3)
+        && ("x.a".attr < 2 || ("y.a".attr > 13)) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where('a <= 3 || 'a >= 2).subquery('x)
+    val right = testRelation.subquery('y)
+    val correctAnswer =
+      left.join(right, condition = Some("x.b".attr === "y.b".attr
+        && (("x.a".attr <= 3) || (("x.a".attr >= 2) && ("y.a".attr <= 13)))
+        && (("x.a".attr <= 1) || ("y.a".attr <= 11))))
+        .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("left join: rewrite join predicates to conjunctive normal form") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, joinType = LeftOuter, condition = Some(("x.b".attr === "y.b".attr)
+        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.subquery('x)
+    val right = testRelation.where('a > 13 || 'a > 11).subquery('y)
+    val correctAnswer =
+      left.join(right, joinType = LeftOuter, condition = Some("x.b".attr === "y.b".attr
+        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("right join: rewrite join predicates to conjunctive normal form") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, joinType = RightOuter, condition = Some(("x.b".attr === "y.b".attr)
+        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where('a > 3 || 'a > 1).subquery('x)
+    val right = testRelation.subquery('y)
+    val correctAnswer =
+      left.join(right, joinType = RightOuter, condition = Some("x.b".attr === "y.b".attr
+        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }
