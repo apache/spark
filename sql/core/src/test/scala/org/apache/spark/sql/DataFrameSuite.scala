@@ -2440,13 +2440,13 @@ class DataFrameSuite extends QueryTest
     checkAnswer(Seq(nestedDecArray).toDF(), Row(Array(wrapRefArray(decJava))))
   }
 
-  test("as[BigDecimal] should not lost data precision or scale") {
+  test("SPARK-31750: eliminate UpCast if child's dataType is DecimalType") {
     withTempPath { f =>
       sql("select cast(11111111111111111111111111111111111111 as decimal(38, 0)) as d")
         .write.mode("overwrite")
         .parquet(f.getAbsolutePath)
 
-      val df = spark.read.parquet("/tmp/foo").as[BigDecimal]
+      val df = spark.read.parquet(f.getAbsolutePath).as[BigDecimal]
       assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
     }
   }
