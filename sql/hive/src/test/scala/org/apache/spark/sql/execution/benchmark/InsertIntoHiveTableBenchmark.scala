@@ -34,7 +34,7 @@ import org.apache.spark.sql.hive.test.TestHive
  *      build/sbt "hive/test:runMain <this class>" -Phive-2.3
  *   3. generate result:
  *   SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/test:runMain <this class>"
- *      Results will be written to "benchmarks/InsertIntoHiveTableBenchmark-results.txt".
+ *      Results will be written to "benchmarks/InsertIntoHiveTableBenchmark-hive2.3-results.txt".
  *   4. -Phive-1.2 does not work for JDK 11
  * }}}
  */
@@ -140,5 +140,5 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  override def suffix: String = if (HiveUtils.isHive23) "" else "hive1.2"
+  override def suffix: String = if (HiveUtils.isHive23) "hive2.3" else "hive1.2"
 }

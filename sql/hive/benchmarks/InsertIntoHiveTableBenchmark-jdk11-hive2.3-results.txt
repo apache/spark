@@ -1,0 +1,11 @@
+Java HotSpot(TM) 64-Bit Server VM 11.0.5+10-LTS on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+insert hive table benchmark:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+INSERT INTO DYNAMIC                                9607          10174         802          0.0      938164.7       1.0X
+INSERT INTO HYBRID                                 1365           1408          60          0.0      133312.0       7.0X
+INSERT INTO STATIC                                  444            454           8          0.0       43340.2      21.6X
+INSERT OVERWRITE DYNAMIC                           9916           9929          19          0.0      968354.8       1.0X
+INSERT OVERWRITE HYBRID                            1441           1447           8          0.0      140767.1       6.7X
+INSERT OVERWRITE STATIC                             524            533          14          0.0       51181.2      18.3X
+
