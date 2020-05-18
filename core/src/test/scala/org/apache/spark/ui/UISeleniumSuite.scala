@@ -24,6 +24,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.io.Source
 import scala.xml.Node
 
+import com.gargoylesoftware.css.parser.CSSParseException
 import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
 import org.json4s._
 import org.json4s.jackson.JsonMethods
@@ -33,7 +34,6 @@ import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
-import org.w3c.css.sac.CSSParseException
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
@@ -784,6 +784,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
+
         val jobDesc =
           driver.findElement(By.cssSelector("div[class='application-timeline-content']"))
         jobDesc.getAttribute("data-title") should include  ("collect at &lt;console&gt;:25")
