@@ -1591,6 +1591,16 @@ object SQLConf {
        .doc("When true, use legacy MySqlServer SMALLINT and REAL type mapping.")
        .booleanConf
        .createWithDefault(false)
+  
+  val LONG_TIMESTAMP_CONVERSION_IN_SECONDS =
+    buildConf("spark.sql.legacy.longTimestampConversionInSeconds")
+      .internal()
+      .doc("When false, Byte/Short/Int/Long value is interpreted as milliseconds " +
+        "during the timestamp conversion ." +
+        "when true, the value will be  interpreted as seconds " +
+        "to be consistent with decimal/double. ")
+      .booleanConf
+      .createWithDefault(true)
 }
 
 /**
@@ -2003,6 +2013,8 @@ class SQLConf extends Serializable with Logging {
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
+
+  def longTimestampConversionInSeconds: Boolean = getConf(LONG_TIMESTAMP_CONVERSION_IN_SECONDS)
 
   /** ********************** SQLConf functionality methods ************ */
 
