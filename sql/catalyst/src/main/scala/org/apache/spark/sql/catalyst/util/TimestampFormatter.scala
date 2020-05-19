@@ -50,7 +50,10 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
   def parse(s: String): Long
+
   def format(us: Long): String
+  def format(ts: Timestamp): String
+  def format(instant: Instant): String
 }
 
 class Iso8601TimestampFormatter(
@@ -84,9 +87,17 @@ class Iso8601TimestampFormatter(
     }
   }
 
+  override def format(instant: Instant): String = {
+    formatter.withZone(zoneId).format(instant)
+  }
+
   override def format(us: Long): String = {
     val instant = DateTimeUtils.microsToInstant(us)
-    formatter.withZone(zoneId).format(instant)
+    format(instant)
+  }
+
+  override def format(ts: Timestamp): String = {
+    legacyFormatter.format(ts)
   }
 }
 
@@ -149,7 +160,7 @@ class LegacyFastTimestampFormatter(
     fastDateFormat.getTimeZone,
     fastDateFormat.getPattern.count(_ == 'S'))
 
-  def parse(s: String): SQLTimestamp = {
+  override def parse(s: String): SQLTimestamp = {
     cal.clear() // Clear the calendar because it can be re-used many times
     if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
       throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
@@ -160,11 +171,19 @@ class LegacyFastTimestampFormatter(
     rebaseJulianToGregorianMicros(julianMicros)
   }
 
-  def format(timestamp: SQLTimestamp): String = {
+  override def format(timestamp: SQLTimestamp): String = {
     val julianMicros = rebaseGregorianToJulianMicros(timestamp)
     cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
     cal.setMicros(Math.floorMod(julianMicros, MICROS_PER_SECOND))
     fastDateFormat.format(cal)
+  }
+
+  override def format(ts: Timestamp): String = {
+    fastDateFormat.format(ts)
+  }
+
+  override def format(instant: Instant): String = {
+    format(instantToMicros(instant))
   }
 }
 
@@ -186,6 +205,14 @@ class LegacySimpleTimestampFormatter(
 
   override def format(us: Long): String = {
     sdf.format(toJavaTimestamp(us))
+  }
+
+  override def format(ts: Timestamp): String = {
+    sdf.format(ts)
+  }
+
+  override def format(instant: Instant): String = {
+    format(instantToMicros(instant))
   }
 }
 
