@@ -1599,7 +1599,7 @@ setMethod("dapplyCollect",
             ldf
           })
 
-#' gapply
+#' Functions to apply native R code on groups or partitions
 #'
 #' \code{gapply} groups the SparkDataFrame using the specified columns and applies
 #' the R function to each group. \code{gapplyCollect} further \code{\link{collect}()}s

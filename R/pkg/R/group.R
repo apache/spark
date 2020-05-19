@@ -192,7 +192,7 @@ createMethods <- function() {
 
 createMethods()
 
-#' gapply
+#' Functions to apply native R code on groups or partitions
 #'
 #' @rdname distributed-group-apply
 #' @aliases gapply,GroupedData-method
