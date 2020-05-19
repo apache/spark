@@ -154,21 +154,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("SPARK-31354: SparkContext only register one SparkSession ApplicationEnd listener") {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test-app-SPARK-31354-1")
-    val context = new SparkContext(conf)
-    assert(!context.isSessionListenerRegistered)
-    val preSessionCreation = context.listenerBus.listeners.size()
-    val session1 = SparkSession.builder()
-      .master("local")
-      .sparkContext(context)
-      .getOrCreate()
-    assert(session1.sparkContext.listenerBus.listeners.size() == preSessionCreation + 1)
-    assert(session1.sparkContext.isSessionListenerRegistered)
-  }
-
   test("SPARK-31234: RESET command will not change static sql configs and " +
     "spark context conf values in SessionState") {
     val session = SparkSession.builder()

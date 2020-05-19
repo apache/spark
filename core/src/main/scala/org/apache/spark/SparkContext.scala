@@ -91,7 +91,6 @@ class SparkContext(config: SparkConf) extends Logging {
   val startTime = System.currentTimeMillis()
 
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
-  private[spark] val sessionListenerRegistered: AtomicBoolean = new AtomicBoolean(false)
 
   private[spark] def assertNotStopped(): Unit = {
     if (stopped.get()) {
@@ -256,15 +255,6 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return true if context is stopped or in the midst of stopping.
    */
   def isStopped: Boolean = stopped.get()
-
-  def isSessionListenerRegistered: Boolean = sessionListenerRegistered.get()
-
-  def registerSessionListener(listener: SparkListenerInterface) {
-    if (!isSessionListenerRegistered) {
-      addSparkListener(listener)
-      sessionListenerRegistered.set(true)
-    }
-  }
 
   private[spark] def statusStore: AppStatusStore = _statusStore
 

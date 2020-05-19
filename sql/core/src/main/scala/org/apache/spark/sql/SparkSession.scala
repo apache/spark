@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.util.concurrent.TimeUnit._
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
@@ -884,10 +884,6 @@ object SparkSession extends Logging {
       this
     }
 
-    def registerListenerIfUnregistered(session: SparkSession): Unit = {
-        session.sparkContext.registerSessionListener(_sessionListener)
-    }
-
     /**
      * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
      * one based on the options set in this builder.
@@ -943,10 +939,17 @@ object SparkSession extends Logging {
         options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
         setDefaultSession(session)
         setActiveSession(session)
-        registerListenerIfUnregistered(session)
+        registerSessionListenerOnContext(sparkContext)
       }
 
       return session
+    }
+
+    private def registerSessionListenerOnContext(sparkContext: SparkContext): Unit = {
+      if (!SparkSession.sessionListenerRegistered.get()) {
+        sparkContext.addSparkListener(_sessionListener)
+        SparkSession.sessionListenerRegistered.set(true)
+      }
     }
 
     private def applyModifiableSettings(session: SparkSession): Unit = {
@@ -1065,6 +1068,9 @@ object SparkSession extends Logging {
     }
   }
 
+  /** Whether the app end listener has been registered on the context */
+  private val sessionListenerRegistered: AtomicBoolean = new AtomicBoolean(false)
+
   /** The active SparkSession for the current thread. */
   private val activeThreadSession = new InheritableThreadLocal[SparkSession]
 
@@ -1080,6 +1086,8 @@ object SparkSession extends Logging {
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
     }
   }
+
+  private[spark] def isSessionListenerRegistered: Boolean = sessionListenerRegistered.get
 
   private def assertOnDriver(): Unit = {
     if (Utils.isTesting && TaskContext.get != null) {
