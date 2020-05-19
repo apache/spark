@@ -18,18 +18,20 @@ package org.apache.spark.streaming.kinesis2
 
 import java.util.concurrent._
 
+import scala.util.control.NonFatal
+
+import software.amazon.kinesis.processor.RecordProcessorCheckpointer
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, SystemClock}
-import software.amazon.kinesis.processor.RecordProcessorCheckpointer
-
-import scala.util.control.NonFatal
 
 /**
  * This is a helper class for managing Kinesis checkpointing.
  *
- * @param receiver           The receiver that keeps track of which sequence numbers we can checkpoint
+ * @param receiver           The receiver that keeps track of which sequence numbers we can
+ *                           checkpoint
  * @param checkpointInterval How frequently we will checkpoint to DynamoDB
  * @param workerId           Worker Id of KCL worker for logging purposes
  * @param clock              In order to use ManualClocks for the purpose of testing

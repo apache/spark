@@ -16,14 +16,16 @@
  */
 package org.apache.spark.streaming.kinesis2
 
-import org.apache.spark.internal.Logging
-import software.amazon.kinesis.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
+import scala.util.Random
+import scala.util.control.NonFatal
+
+import software.amazon.kinesis.exceptions.{InvalidStateException,
+  KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
 import software.amazon.kinesis.lifecycle.ShutdownReason
 import software.amazon.kinesis.lifecycle.events._
 import software.amazon.kinesis.processor.{ShardRecordProcessor, ShardRecordProcessorFactory}
 
-import scala.util.Random
-import scala.util.control.NonFatal
+import org.apache.spark.internal.Logging
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -114,7 +116,8 @@ private[kinesis2] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], 
       * Checkpoint to indicate that all records from the shard have been drained and processed.
       * It's now OK to read from the new shards that resulted from a resharding event.
       */
-          case ShutdownReason.SHARD_END => receiver.removeCheckpointer(shardId, shardEndedInput.checkpointer())
+          case ShutdownReason.SHARD_END => receiver.removeCheckpointer(shardId,
+            shardEndedInput.checkpointer())
           /*
            * ZOMBIE Use Case or Unknown reason.  NoOp.
            * No checkpoint because other workers may have taken over and already started processing
@@ -146,7 +149,8 @@ private[kinesis2] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], 
           * Checkpoint to indicate that all records from the shard have been drained and processed.
           * It's now OK to read from the new shards that resulted from a resharding event.
           */
-          case ShutdownReason.SHARD_END => receiver.removeCheckpointer(shardId, shardEndedInput.checkpointer())
+          case ShutdownReason.SHARD_END => receiver.removeCheckpointer(shardId,
+            shardEndedInput.checkpointer())
           /*
            * ZOMBIE Use Case or Unknown reason.  NoOp.
            * No checkpoint because other workers may have taken over and already started processing
@@ -236,7 +240,8 @@ private[kinesis2] object KinesisRecordProcessor extends Logging {
   }
 }
 
-class KinesisRecordProcessorFactory[T](receiver: KinesisReceiver[T], workerId: String) extends ShardRecordProcessorFactory {
+class KinesisRecordProcessorFactory[T](receiver: KinesisReceiver[T], workerId: String)
+    extends ShardRecordProcessorFactory {
   override def shardRecordProcessor(): ShardRecordProcessor = {
     new KinesisRecordProcessor[T](receiver, workerId)
   }

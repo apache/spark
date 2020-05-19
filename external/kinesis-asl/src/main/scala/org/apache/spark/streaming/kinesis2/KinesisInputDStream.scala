@@ -19,40 +19,40 @@ package org.apache.spark.streaming.kinesis2
 
 import java.net.URI
 
-import org.apache.hadoop.classification.InterfaceStability
-import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.streaming.api.java.JavaStreamingContext
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
-import org.apache.spark.streaming.{Duration, StreamingContext, Time}
+import scala.reflect.ClassTag
+
 import software.amazon.awssdk.http.Protocol
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.kinesis.model.Record
 import software.amazon.kinesis.common.InitialPositionInStream
 import software.amazon.kinesis.retrieval.KinesisClientRecord
 
-import scala.reflect.ClassTag
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.streaming.{Duration, StreamingContext, Time}
+import org.apache.spark.streaming.api.java.JavaStreamingContext
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 
 private[kinesis2] class KinesisInputDStream[T: ClassTag](_ssc: StreamingContext,
-                                                         val streamName: String,
-                                                         val endpointUrl: URI,
-                                                         val regionName: String,
-                                                         val kinesisCreds: SparkAWSCredentials,
-                                                         val dynamoDBCreds: Option[SparkAWSCredentials],
-                                                         val cloudWatchCreds: Option[SparkAWSCredentials],
-                                                         val cloudWatchUrl: Option[URI],
-                                                         val checkpointAppName: String,
-                                                         val checkpointInterval: Duration,
-                                                         val maxRecords: Option[Integer],
-                                                         val protocol: Option[Protocol],
-                                                         val initialPositionInStream: Option[InitialPositionInStream],
-                                                         val dynamoProxyHost: Option[String],
-                                                         val dynamoProxyPort: Option[Integer],
-                                                         val _storageLevel: StorageLevel,
-                                                         val messageHandler: KinesisClientRecord => T
-                                                        ) extends ReceiverInputDStream[T](_ssc) {
+                      val streamName: String,
+                      val endpointUrl: URI,
+                      val regionName: String,
+                      val kinesisCreds: SparkAWSCredentials,
+                      val dynamoDBCreds: Option[SparkAWSCredentials],
+                      val cloudWatchCreds: Option[SparkAWSCredentials],
+                      val cloudWatchUrl: Option[URI],
+                      val checkpointAppName: String,
+                      val checkpointInterval: Duration,
+                      val maxRecords: Option[Integer],
+                      val protocol: Option[Protocol],
+                      val initialPositionInStream: Option[InitialPositionInStream],
+                      val dynamoProxyHost: Option[String],
+                      val dynamoProxyPort: Option[Integer],
+                      val _storageLevel: StorageLevel,
+                      val messageHandler: KinesisClientRecord => T)
+  extends ReceiverInputDStream[T](_ssc) {
 
   private[streaming]
   override def createBlockRDD(time: Time, blockInfos: Seq[ReceivedBlockInfo]): RDD[T] = {
@@ -90,12 +90,14 @@ private[kinesis2] class KinesisInputDStream[T: ClassTag](_ssc: StreamingContext,
   }
 
   override def getReceiver(): Receiver[T] = {
-    new KinesisReceiver(streamName, endpointUrl, regionName, kinesisCreds, dynamoDBCreds, cloudWatchCreds, cloudWatchUrl, checkpointAppName,
-      checkpointInterval, initialPositionInStream, maxRecords, protocol, dynamoProxyHost, dynamoProxyPort, _storageLevel, messageHandler)
+    new KinesisReceiver(streamName, endpointUrl, regionName, kinesisCreds, dynamoDBCreds,
+      cloudWatchCreds, cloudWatchUrl, checkpointAppName, checkpointInterval,
+      initialPositionInStream, maxRecords, protocol, dynamoProxyHost, dynamoProxyPort,
+      _storageLevel, messageHandler)
   }
 }
 
-@InterfaceStability.Evolving
+@org.apache.hadoop.classification.InterfaceStability.Evolving
 object KinesisInputDStream {
 
   /**
@@ -103,7 +105,7 @@ object KinesisInputDStream {
    *
    * @since 2.2.0
    */
-  @InterfaceStability.Evolving
+  @org.apache.hadoop.classification.InterfaceStability.Evolving
   class Builder {
     // Required params
     private var streamingContext: Option[StreamingContext] = None
@@ -318,13 +320,15 @@ object KinesisInputDStream {
     }
 
     /**
-     * Create a new instance of [[KinesisInputDStream]] with configured parameters and the provided
-     * message handler.
+     * Create a new instance of [[KinesisInputDStream]] with configured parameters and the
+     * provided message handler.
      *
-     * @param handler Function converting [[Record]] instances read by the KCL to DStream type [[T]]
+     * @param handler Function converting [[Record]] instances read by the KCL to
+     *                DStream type [[T]]
      * @return Instance of [[KinesisInputDStream]] constructed with configured parameters
      */
-    def buildWithMessageHandler[T: ClassTag](handler: KinesisClientRecord => T): KinesisInputDStream[T] = {
+    def buildWithMessageHandler[T: ClassTag](handler: KinesisClientRecord => T):
+        KinesisInputDStream[T] = {
       val ssc = getRequiredParam(streamingContext, "streamingContext")
       val credentials = kinesisCreds.getOrElse(null)
       new KinesisInputDStream(
@@ -338,7 +342,7 @@ object KinesisInputDStream {
         Option(cloudWatchUrl.getOrElse(DEFAULT_MONITORING_ENDPOINT_URL)),
         getRequiredParam(checkpointAppName, "checkpointAppName"),
         checkpointInterval.getOrElse(ssc.graph.batchDuration),
-        Option(maxRecords.getOrElse(100:Integer)),
+        Option(maxRecords.getOrElse(100: Integer)),
         Option(protocol.getOrElse(Protocol.HTTP1_1)),
         Option(initialPosition.getOrElse(INITIAL_POSITION_INSTREAM)),
         Option(dynamoProxyHost.getOrElse("")),
@@ -376,10 +380,13 @@ object KinesisInputDStream {
     byteArray
   }
 
-  private[kinesis2] val DEFAULT_KINESIS_ENDPOINT_URL: URI = new URI("https://kinesis.us-east-1.amazonaws.com")
-  private[kinesis2] val DEFAULT_MONITORING_ENDPOINT_URL: URI = new URI("https://monitoring.us-east-1.amazonaws.com")
+  private[kinesis2] val DEFAULT_KINESIS_ENDPOINT_URL: URI =
+    new URI("https://kinesis.us-east-1.amazonaws.com")
+  private[kinesis2] val DEFAULT_MONITORING_ENDPOINT_URL: URI =
+    new URI("https://monitoring.us-east-1.amazonaws.com")
   private[kinesis2] val DEFAULT_KINESIS_REGION_NAME: String = Region.US_EAST_1.toString
   private[kinesis2] val DEFAULT_STORAGE_LEVEL: StorageLevel = StorageLevel.MEMORY_AND_DISK_2
-  private[kinesis2] val INITIAL_POSITION_INSTREAM: InitialPositionInStream = InitialPositionInStream.TRIM_HORIZON
+  private[kinesis2] val INITIAL_POSITION_INSTREAM:
+    InitialPositionInStream = InitialPositionInStream.TRIM_HORIZON
 }
 

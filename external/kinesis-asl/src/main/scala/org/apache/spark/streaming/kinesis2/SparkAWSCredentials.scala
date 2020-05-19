@@ -16,9 +16,10 @@
  */
 package org.apache.spark.streaming.kinesis2
 
-import org.apache.hadoop.classification.InterfaceStability
+import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials,
+  AwsCredentialsProvider, StaticCredentialsProvider}
+
 import org.apache.spark.internal.Logging
-import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials, AwsCredentialsProvider, StaticCredentialsProvider}
 
 /**
  * Serializable interface providing a method executors can call to obtain an
@@ -45,8 +46,8 @@ private[kinesis2] final case object DefaultCredentials extends SparkAWSCredentia
  * DefaultCredentialsProviderChain if unable to construct a AWSCredentialsProviderChain
  * instance with the provided arguments (e.g. if they are null).
  */
-private[kinesis2] final case class BasicCredentials(awsAccessKeyId: String,
-                                                    awsSecretKey: String) extends SparkAWSCredentials with Logging {
+private[kinesis2] final case class BasicCredentials(awsAccessKeyId: String, awsSecretKey: String)
+    extends SparkAWSCredentials with Logging {
 
   def provider: AwsCredentialsProvider =
     try {
@@ -56,12 +57,11 @@ private[kinesis2] final case class BasicCredentials(awsAccessKeyId: String,
       case e: IllegalArgumentException =>
         logWarning("Unable to construct AWSStaticCredentialsProvider with provided keypair; " +
           "falling back to DefaultCredentialsProviderChain.", e)
-        //new DefaultAWSCredentialsProviderChain
         DefaultCredentials.provider
     }
 }
 
-@InterfaceStability.Evolving
+@org.apache.hadoop.classification.InterfaceStability.Evolving
 object SparkAWSCredentials {
 
   /**
@@ -69,7 +69,7 @@ object SparkAWSCredentials {
    *
    * @since 2.2.0
    */
-  @InterfaceStability.Evolving
+  @org.apache.hadoop.classification.InterfaceStability.Evolving
   class Builder {
     private var basicCreds: Option[BasicCredentials] = None
 
@@ -79,7 +79,8 @@ object SparkAWSCredentials {
      * @note The given AWS keypair will be saved in DStream checkpoints if checkpointing is
      * enabled. Make sure that your checkpoint directory is secure. Prefer using the
      *       default provider chain instead if possible
-     *       (http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default).
+     *  (http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html
+     *  #credentials-default).
      * @param accessKeyId AWS access key ID
      * @param secretKey   AWS secret key
      * @return Reference to this [[SparkAWSCredentials.Builder]]

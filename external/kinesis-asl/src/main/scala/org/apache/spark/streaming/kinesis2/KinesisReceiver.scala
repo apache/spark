@@ -20,11 +20,10 @@ import java.net.URI
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.storage.{StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
-import org.apache.spark.streaming.{Duration, kinesis2}
-import org.apache.spark.util.Utils
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.util.control.NonFatal
+
 import software.amazon.awssdk.http.Protocol
 import software.amazon.awssdk.http.nio.netty.{NettyNioAsyncHttpClient, ProxyConfiguration}
 import software.amazon.awssdk.regions.Region
@@ -37,9 +36,15 @@ import software.amazon.kinesis.processor.RecordProcessorCheckpointer
 import software.amazon.kinesis.retrieval.KinesisClientRecord
 import software.amazon.kinesis.retrieval.polling.PollingConfig
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-import scala.util.control.NonFatal
+import org.apache.spark.internal.Logging
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.streaming.Duration
+import org.apache.spark.streaming.kinesis2
+import org.apache.spark.streaming.receiver.BlockGenerator
+import org.apache.spark.streaming.receiver.BlockGeneratorListener
+import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.Utils
 
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
@@ -65,9 +70,11 @@ import scala.util.control.NonFatal
  * @param dynamoDBCreds
  * @param cloudWatchCreds
  * @param regionName         Region name used by the Kinesis Client Library for
- *                           DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
+ *                           DynamoDB (lease coordination and checkpointing) and
+ *                           CloudWatch (metrics)
  * @param checkpointAppName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
- *                           by the Kinesis Client Library.  If you change the App name or Stream name,
+ *                           by the Kinesis Client Library.  If you change the App name or
+ *                           Stream name,
  *                           the KCL will throw errors.  This usually requires deleting the backing
  *                           DynamoDB table with the same name this Kinesis application.
  * @param checkpointInterval Checkpoint interval for Kinesis checkpointing.
@@ -78,21 +85,21 @@ import scala.util.control.NonFatal
  * @tparam T
  */
 private[kinesis2] class KinesisReceiver[T](streamName: String,
-                                           endpointUrl: URI,
-                                           regionName: String,
-                                           kinesisCreds: SparkAWSCredentials,
-                                           dynamoDBCreds: Option[SparkAWSCredentials],
-                                           cloudWatchCreds: Option[SparkAWSCredentials],
-                                           cloudWatchUrl: Option[URI],
-                                           checkpointAppName: String,
-                                           checkpointInterval: Duration,
-                                           initialPositionInStream: Option[InitialPositionInStream],
-                                           maxRecords: Option[Integer],
-                                           protocol: Option[Protocol],
-                                           dynamoProxyHost: Option[String],
-                                           dynamoProxyPort: Option[Integer],
-                                           storageLevel: StorageLevel,
-                                           messageHandler: KinesisClientRecord => T)
+                             endpointUrl: URI,
+                             regionName: String,
+                             kinesisCreds: SparkAWSCredentials,
+                             dynamoDBCreds: Option[SparkAWSCredentials],
+                             cloudWatchCreds: Option[SparkAWSCredentials],
+                             cloudWatchUrl: Option[URI],
+                             checkpointAppName: String,
+                             checkpointInterval: Duration,
+                             initialPositionInStream: Option[InitialPositionInStream],
+                             maxRecords: Option[Integer],
+                             protocol: Option[Protocol],
+                             dynamoProxyHost: Option[String],
+                             dynamoProxyPort: Option[Integer],
+                             storageLevel: StorageLevel,
+                             messageHandler: KinesisClientRecord => T)
 
   extends Receiver[T](storageLevel) with Logging {
   receiver =>
@@ -130,7 +137,8 @@ private[kinesis2] class KinesisReceiver[T](streamName: String,
   private val seqNumRangesInCurrentBlock = new mutable.ArrayBuffer[kinesis2.SequenceNumberRange]
 
   /** Sequence number ranges of data added to each generated block */
-  private val blockIdToSeqNumRanges = new ConcurrentHashMap[StreamBlockId, kinesis2.SequenceNumberRanges]
+  private val blockIdToSeqNumRanges = new ConcurrentHashMap[StreamBlockId,
+    kinesis2.SequenceNumberRanges]
 
   /**
    * The centralized kinesisCheckpointer that checkpoints based on the given checkpointInterval.
@@ -158,19 +166,24 @@ private[kinesis2] class KinesisReceiver[T](streamName: String,
     if (!dynamoHost.equalsIgnoreCase("")) {
       val proxy = ProxyConfiguration.builder().host(dynamoHost).port(dynamoPort).build
       val httpClient = NettyNioAsyncHttpClient.builder().proxyConfiguration(proxy).build
-      dynamoDbClient = DynamoDbAsyncClient.builder().credentialsProvider(dynamoDBCreds.getOrElse(kinesisCreds).provider).region(region).httpClient(httpClient).build
+      dynamoDbClient = DynamoDbAsyncClient.builder()
+        .credentialsProvider(dynamoDBCreds.getOrElse(kinesisCreds).provider)
+        .region(region).httpClient(httpClient).build
     } else {
-      dynamoDbClient = DynamoDbAsyncClient.builder().credentialsProvider(dynamoDBCreds.getOrElse(kinesisCreds).provider).region(region).build
+      dynamoDbClient = DynamoDbAsyncClient.builder()
+        .credentialsProvider(dynamoDBCreds.getOrElse(kinesisCreds).provider).region(region).build
     }
     val cloudWatchClient = CloudWatchAsyncClient.builder()
-      .endpointOverride(cloudWatchUrl.getOrElse(KinesisInputDStream.DEFAULT_MONITORING_ENDPOINT_URL))
+      .endpointOverride(cloudWatchUrl
+        .getOrElse(KinesisInputDStream.DEFAULT_MONITORING_ENDPOINT_URL))
       .credentialsProvider(cloudWatchCreds.getOrElse(kinesisCreds).provider)
       .region(region).build
 
     val kinesisClient = KinesisAsyncClient.builder
       .region(region)
       .credentialsProvider(kinesisCreds.provider)
-      .httpClient(NettyNioAsyncHttpClient.builder().protocol(protocol.getOrElse(Protocol.HTTP1_1)).build())
+      .httpClient(NettyNioAsyncHttpClient.builder()
+        .protocol(protocol.getOrElse(Protocol.HTTP1_1)).build())
       .endpointOverride(endpointUrl).build
 
     val initialPosition = initialPositionInStream.getOrElse(InitialPositionInStream.TRIM_HORIZON)
@@ -200,7 +213,8 @@ private[kinesis2] class KinesisReceiver[T](streamName: String,
       configsBuilder.processorConfig(),
       configsBuilder.retrievalConfig()
         .retrievalSpecificConfig(pollingConfig)
-        .initialPositionInStreamExtended(InitialPositionInStreamExtended.newInitialPosition(initialPosition)))
+        .initialPositionInStreamExtended(
+          InitialPositionInStreamExtended.newInitialPosition(initialPosition)))
 
     workerThread = new Thread() {
       override def run(): Unit = {
@@ -245,7 +259,8 @@ private[kinesis2] class KinesisReceiver[T](streamName: String,
   }
 
   /** Add records of the given shard to the current block being generated */
-  private[kinesis2] def addRecords(shardId: String, records: java.util.List[KinesisClientRecord]): Unit = {
+  private[kinesis2] def addRecords(shardId: String,
+                                   records: java.util.List[KinesisClientRecord]): Unit = {
     if (records.size > 0) {
       val dataIterator = records.iterator().asScala.map(messageHandler)
       val metadata = kinesis2.SequenceNumberRange(streamName, shardId,
@@ -298,13 +313,15 @@ private[kinesis2] class KinesisReceiver[T](streamName: String,
    * for next block. Internally, this is synchronized with `rememberAddedRange()`.
    */
   private def finalizeRangesForCurrentBlock(blockId: StreamBlockId): Unit = {
-    blockIdToSeqNumRanges.put(blockId, kinesis2.SequenceNumberRanges(seqNumRangesInCurrentBlock.toArray))
+    blockIdToSeqNumRanges.put(blockId,
+      kinesis2.SequenceNumberRanges(seqNumRangesInCurrentBlock.toArray))
     seqNumRangesInCurrentBlock.clear()
     logDebug(s"Generated block $blockId has $blockIdToSeqNumRanges")
   }
 
   /** Store the block along with its associated ranges */
-  private def storeBlockWithRanges(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[T]): Unit = {
+  private def storeBlockWithRanges(blockId: StreamBlockId,
+                                   arrayBuffer: mutable.ArrayBuffer[T]): Unit = {
     val rangesToReportOption = Option(blockIdToSeqNumRanges.remove(blockId))
     if (rangesToReportOption.isEmpty) {
       stop("Error while storing block into Spark, could not find sequence number ranges " +

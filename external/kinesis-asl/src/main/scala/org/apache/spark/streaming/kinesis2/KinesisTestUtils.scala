@@ -21,21 +21,22 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import scala.util.{Failure, Random, Success, Try}
+
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.regions.RegionUtils
-import org.apache.spark.internal.Logging
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider
 import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.DeleteTableRequest
 import software.amazon.awssdk.services.kinesis.KinesisClient
-import software.amazon.awssdk.services.kinesis.model.{CreateStreamRequest, DeleteStreamRequest, DescribeStreamRequest, MergeShardsRequest, PutRecordRequest, ResourceNotFoundException, Shard, SplitShardRequest, StreamDescription}
+import software.amazon.awssdk.services.kinesis.model._
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-import scala.util.{Failure, Random, Success, Try}
+import org.apache.spark.internal.Logging
 
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data.
@@ -58,12 +59,14 @@ private[kinesis2] class KinesisTestUtils(streamShardCount: Int = 2) extends Logg
 
   protected lazy val kinesisClient = {
     // val client = new AmazonKinesisClient(KinesisTestUtils.getAWSCredentials())
-    val client = KinesisClient.builder.region(Region.of(regionName)).credentialsProvider(KinesisTestUtils.getAWSCredentials()).endpointOverride(endpointUrl).build
+    val client = KinesisClient.builder.region(Region.of(regionName))
+      .credentialsProvider(KinesisTestUtils.getAWSCredentials()).endpointOverride(endpointUrl).build
     client
   }
 
   private lazy val dynamoDB = {
-    val dynamoDBClient = DynamoDbClient.builder().region(Region.of(regionName)).credentialsProvider(KinesisTestUtils.getAWSCredentials()).endpointOverride(endpointUrl).build
+    val dynamoDBClient = DynamoDbClient.builder().region(Region.of(regionName))
+      .credentialsProvider(KinesisTestUtils.getAWSCredentials()).endpointOverride(endpointUrl).build
     dynamoDBClient
   }
 
@@ -166,7 +169,8 @@ private[kinesis2] class KinesisTestUtils(streamShardCount: Int = 2) extends Logg
 
   private def describeStream(streamNameToDescribe: String): Option[StreamDescription] = {
     try {
-      val describeStreamRequest = DescribeStreamRequest.builder().streamName(streamNameToDescribe).build()
+      val describeStreamRequest = DescribeStreamRequest.builder()
+        .streamName(streamNameToDescribe).build()
       val desc = kinesisClient.describeStream(describeStreamRequest).streamDescription()
       Some(desc)
     } catch {
@@ -227,7 +231,8 @@ private[kinesis2] object KinesisTestUtils {
            |Kinesis tests that actually send data has been enabled by setting the environment
            |variable $envVarNameForEnablingTests to 1. This will create Kinesis Streams and
            |DynamoDB tables in AWS. Please be aware that this may incur some AWS costs.
-           |By default, the tests use the endpoint URL $defaultEndpointUrl to create Kinesis streams.
+           |By default, the tests use the endpoint URL $defaultEndpointUrl to create Kinesis
+           |streams.
            |To change this endpoint URL to a different region, you can set the environment variable
            |$endVarNameForEndpoint to the desired endpoint URL
            |(e.g. $endVarNameForEndpoint="https://kinesis.us-west-2.amazonaws.com").
@@ -277,8 +282,7 @@ private[kinesis2] trait KinesisDataGenerator {
   def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]]
 }
 
-private[kinesis2] class SimpleDataGenerator(
-                                             client: KinesisClient) extends KinesisDataGenerator {
+private[kinesis2] class SimpleDataGenerator(client: KinesisClient) extends KinesisDataGenerator {
   override def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]] = {
     val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
     data.foreach { num =>
@@ -296,7 +300,6 @@ private[kinesis2] class SimpleDataGenerator(
         new ArrayBuffer[(Int, String)]())
       sentSeqNumbers += ((num, seqNumber))
     }
-
     shardIdToSeqNumbers.toMap
   }
 }
