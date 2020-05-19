@@ -3079,18 +3079,16 @@ class Analyzer(
           && child.dataType.isInstanceOf[DecimalType] =>
           assert(walkedTypePath.nonEmpty,
             "object DecimalType should only be used inside ExpressionEncoder")
-          // SPARK-31750: for the case where data type is explicitly known, e.g, spark.read
-          // .parquet("/tmp/file").as[BigDecimal], we will have UpCast(child, Decimal(38, 18)),
-          // where child's data type can be, e.g. Decimal(38, 0). In this kind of case, we
-          // actually should not do cast otherwise it will cause precision lost. Thus, we should
-          // eliminate the UpCast here to avoid precision lost.
+
+          // SPARK-31750: if we want to upcast to the general decimal type, and the `child` is
+          // already decimal type, we can remove the `Upcast` and accept any precision/scale.
+          // This can happen for cases like `spark.read.parquet("/tmp/file").as[BigDecimal]`.
           child
 
-        case u @ UpCast(child, _, _)
+        case UpCast(child, target: AtomicType, _)
             if SQLConf.get.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
-              u.dataType.isInstanceOf[AtomicType] &&
               child.dataType == StringType =>
-          Cast(child, u.dataType.asNullable)
+          Cast(child, target.asNullable)
 
         case u @ UpCast(child, _, walkedTypePath) if !Cast.canUpCast(child.dataType, u.dataType) =>
           fail(child, u.dataType, walkedTypePath)
