@@ -402,6 +402,92 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
 }
 
 @ExpressionDescription(
+  usage = "_FUNC_(date) - Returns timestamp from seconds.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000);
+       "2008-12-25 07:30:00.0"
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class SecondsToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: SQLTimestamp = MICROS_PER_SECOND
+
+  override def prettyName: String = "timestamp_seconds"
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns timestamp from milliseconds.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000000);
+       "2008-12-25 07:30:00.0"
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class MilliSecondsToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: SQLTimestamp = MICROS_PER_MILLIS
+
+  override def prettyName: String = "timestamp_milliseconds"
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns timestamp from microseconds.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000000000);
+       "2008-12-25 07:30:00.0"
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class MicroSecondsToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: SQLTimestamp = 1L
+
+  override def prettyName: String = "timestamp_microseconds"
+}
+
+abstract class NumberToTimestampBase extends UnaryExpression
+  with ImplicitCastInputTypes{
+
+  protected def upScaleFactor: Long
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType, IntegerType)
+
+  override def dataType: DataType = TimestampType
+
+  override def eval(input: InternalRow): Any = {
+    val t = child.eval(input)
+    if (t == null) {
+      null
+    } else {
+      child.dataType match {
+        case IntegerType =>
+          Math.multiplyExact(t.asInstanceOf[Int].toLong, upScaleFactor)
+        case LongType =>
+          Math.multiplyExact(t.asInstanceOf[Long], upScaleFactor)
+      }
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.dataType match {
+      case IntegerType =>
+        defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
+          s"${ev.value.asInstanceOf[Integer].toLong}, ${upScaleFactor})")
+      case LongType =>
+        defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
+          s"${ev.value.asInstanceOf[Long]}, ${upScaleFactor})")
+    }
+  }
+}
+
+@ExpressionDescription(
   usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
   examples = """
     Examples:
