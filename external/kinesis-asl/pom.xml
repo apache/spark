@@ -58,6 +58,12 @@
       <artifactId>amazon-kinesis-client</artifactId>
       <version>${aws.kinesis.client.version}</version>
     </dependency>
+    <!-- https://mvnrepository.com/artifact/software.amazon.kinesis/amazon-kinesis-client -->
+    <dependency>
+      <groupId>software.amazon.kinesis</groupId>
+      <artifactId>amazon-kinesis-client</artifactId>
+    <version>${aws.kinesis2.client.version}</version>
+    </dependency>
     <dependency>
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-sts</artifactId>
