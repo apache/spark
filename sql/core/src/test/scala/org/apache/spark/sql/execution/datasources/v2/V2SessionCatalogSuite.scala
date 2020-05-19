@@ -866,7 +866,6 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val catalog = newCatalog()
 
     val sessionCatalog = sqlContext.sessionState.catalog
-    spark.sessionState.conf.warehousePath
     val expectedPath =
       new Path(spark.sessionState.conf.warehousePath,
         sessionCatalog.getDefaultDBPath(testNs(0)).toString).toString
