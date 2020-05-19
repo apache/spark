@@ -1736,7 +1736,8 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
  * Cast the child expression to the target data type, but will throw error if the cast might
  * truncate, e.g. long -> int, timestamp -> data.
  *
- * Note UpCast will be eliminated if the child's dataType is already DecimalType.
+ * Note that UpCast will be eliminated if the child's dataType is already DecimalType and
+ * target is also DecimalType.
  */
 case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
