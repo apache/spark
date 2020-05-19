@@ -26,6 +26,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.util.SecurityUtils
 
+/**
+ * Some of the secure connection providers modify global JVM security configuration.
+ * In order to avoid race the modification must be synchronized with this.
+ */
+private[connection] object SecurityConfigurationLock
+
 private[jdbc] abstract class SecureConnectionProvider(driver: Driver, options: JDBCOptions)
     extends BasicConnectionProvider(driver, options) with Logging {
   override def getConnection(): Connection = {
@@ -40,7 +46,8 @@ private[jdbc] abstract class SecureConnectionProvider(driver: Driver, options: J
 
   /**
    * Sets database specific authentication configuration when needed. If configuration already set
-   * then later calls must be no op.
+   * then later calls must be no op. When the global JVM security configuration changed then the
+   * related code parts must be synchronized properly.
    */
   def setAuthenticationConfigIfNeeded(): Unit
 

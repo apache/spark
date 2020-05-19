@@ -21,10 +21,13 @@ import java.io.File
 
 import scala.util.Random
 
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark._
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 
-class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
+class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
   def initLocalClusterSparkContext(numWorker: Int = 4): Unit = {
     val conf = new SparkConf()
@@ -36,7 +39,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(conf)
   }
 
-  test("global sync by barrier() call") {
+  // TODO (SPARK-31730): re-enable it
+  ignore("global sync by barrier() call") {
     initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
@@ -92,10 +96,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     val error = intercept[SparkException] {
       rdd2.collect()
     }.getMessage
-    assert(
-      error.contains("does not match the current synchronized requestMethod") ||
-      error.contains("not properly killed")
-    )
+    assert(error.contains("Different barrier sync types found"))
   }
 
   test("successively sync with allGather and barrier") {
@@ -128,7 +129,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(times2.max - times2.min <= 1000)
   }
 
-  test("support multiple barrier() call within a single task") {
+  // TODO (SPARK-31730): re-enable it
+  ignore("support multiple barrier() call within a single task") {
     initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
@@ -224,12 +226,14 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
   def testBarrierTaskKilled(interruptOnKill: Boolean): Unit = {
     withTempDir { dir =>
+      val runningFlagFile = "barrier.task.running"
       val killedFlagFile = "barrier.task.killed"
       val rdd = sc.makeRDD(Seq(0, 1), 2)
       val rdd2 = rdd.barrier().mapPartitions { it =>
         val context = BarrierTaskContext.get()
         if (context.partitionId() == 0) {
           try {
+            new File(dir, runningFlagFile).createNewFile()
             context.barrier()
           } catch {
             case _: TaskKilledException =>
@@ -248,8 +252,10 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
           if (partitionId == 0) {
             new Thread {
               override def run: Unit = {
-                Thread.sleep(1000)
-                sc.killTaskAttempt(taskStart.taskInfo.taskId, interruptThread = interruptOnKill)
+                eventually(timeout(10.seconds)) {
+                  assert(new File(dir, runningFlagFile).exists())
+                  sc.killTaskAttempt(taskStart.taskInfo.taskId, interruptThread = interruptOnKill)
+                }
               }
             }.start()
           }

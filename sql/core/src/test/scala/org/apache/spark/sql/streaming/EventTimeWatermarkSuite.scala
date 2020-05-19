@@ -602,6 +602,22 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // Check the eventTime metadata is kept in the top level alias.
     assert(aliasWindow.logicalPlan.output.exists(
       _.metadata.contains(EventTimeWatermark.delayKey)))
+
+    val windowedAggregation = aliasWindow
+      .groupBy('aliasWindow)
+      .agg(count("*") as 'count)
+      .select($"aliasWindow".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11, 12, 13, 14, 15),
+      CheckNewAnswer(),
+      AddData(inputData, 25), // Advance watermark to 15 seconds
+      CheckNewAnswer((10, 5)),
+      assertNumStateRows(2),
+      AddData(inputData, 10), // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      assertNumStateRows(2)
+    )
   }
 
   test("test no-data flag") {
