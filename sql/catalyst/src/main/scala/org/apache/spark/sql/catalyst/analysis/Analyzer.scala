@@ -3079,8 +3079,9 @@ class Analyzer(
 
         case UpCast(child, target, walkedTypePath)
           if child.dataType.isInstanceOf[DecimalType]
-            && target == DecimalType
-            && walkedTypePath.nonEmpty =>
+            && target == DecimalType =>
+          assert(walkedTypePath.nonEmpty,
+            "object DecimalType should only be used inside ExpressionEncoder")
           // SPARK-31750: for the case where data type is explicitly known, e.g, spark.read
           // .parquet("/tmp/file").as[BigDecimal], we will have UpCast(child, Decimal(38, 18)),
           // where child's data type can be, e.g. Decimal(38, 0). In this kind of case, we
