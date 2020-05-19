@@ -80,9 +80,8 @@ object HiveResult {
   def toHiveString(a: (Any, DataType), nested: Boolean = false): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
-    case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
-    case (ld: LocalDate, DateType) =>
-      dateFormatter.format(DateTimeUtils.localDateToDays(ld))
+    case (d: Date, DateType) => dateFormatter.format(d)
+    case (ld: LocalDate, DateType) => dateFormatter.format(ld)
     case (t: Timestamp, TimestampType) => timestampFormatter.format(t)
     case (i: Instant, TimestampType) => timestampFormatter.format(i)
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
