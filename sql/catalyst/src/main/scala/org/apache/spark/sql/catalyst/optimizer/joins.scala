@@ -234,8 +234,12 @@ trait JoinSelectionHelper {
     } else {
       canBroadcastBySize(right, conf) && !hintToNotBroadcastRight(hint)
     }
-    getBuildSide(canBuildLeft(joinType) && buildLeft, canBuildRight(joinType) && buildRight,
-      left, right)
+    getBuildSide(
+      canBuildLeft(joinType) && buildLeft,
+      canBuildRight(joinType) && buildRight,
+      left,
+      right
+    )
   }
 
   def getShuffleHashJoinBuildSide(
@@ -255,9 +259,12 @@ trait JoinSelectionHelper {
     } else {
       canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
     }
-
-    getBuildSide(canBuildLeft(joinType) && buildLeft, canBuildRight(joinType) && buildRight,
-      left, right)
+    getBuildSide(
+      canBuildLeft(joinType) && buildLeft,
+      canBuildRight(joinType) && buildRight,
+      left,
+      right
+    )
   }
 
   def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
