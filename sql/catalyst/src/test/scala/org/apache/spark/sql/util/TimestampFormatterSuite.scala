@@ -25,7 +25,8 @@ import org.scalatest.Matchers
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, LegacyDateFormats, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CET, PST, UTC}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -129,8 +130,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("case insensitive parsing of am and pm") {
     val formatter = TimestampFormatter("yyyy MMM dd hh:mm:ss a", ZoneOffset.UTC)
     val micros = formatter.parse("2009 Mar 20 11:30:01 am")
-    assert(micros === TimeUnit.SECONDS.toMicros(
-      LocalDateTime.of(2009, 3, 20, 11, 30, 1).toEpochSecond(ZoneOffset.UTC)))
+    assert(micros === date(2009, 3, 20, 11, 30, 1))
   }
 
   test("format fraction of second") {
@@ -260,8 +260,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
 
   test("SPARK-30958: parse timestamp with negative year") {
     val formatter1 = TimestampFormatter("yyyy-MM-dd HH:mm:ss", ZoneOffset.UTC, true)
-    assert(formatter1.parse("-1234-02-22 02:22:22") === instantToMicros(
-      LocalDateTime.of(-1234, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
+    assert(formatter1.parse("-1234-02-22 02:22:22") === date(-1234, 2, 22, 2, 22, 22))
 
     def assertParsingError(f: => Unit): Unit = {
       intercept[Exception](f) match {
@@ -277,10 +276,8 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     assertParsingError(formatter2.parse("BC -1234-02-22 02:22:22"))
     assertParsingError(formatter2.parse("AC 0000-02-22 02:22:22"))
 
-    assert(formatter2.parse("BC 1234-02-22 02:22:22") === instantToMicros(
-      LocalDateTime.of(-1233, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
-    assert(formatter2.parse("AD 1234-02-22 02:22:22") === instantToMicros(
-      LocalDateTime.of(1234, 2, 22, 2, 22, 22).toInstant(ZoneOffset.UTC)))
+    assert(formatter2.parse("BC 1234-02-22 02:22:22") === date(-1233, 2, 22, 2, 22, 22))
+    assert(formatter2.parse("AD 1234-02-22 02:22:22") === date(1234, 2, 22, 2, 22, 22))
   }
 
   test("SPARK-31557: rebasing in legacy formatters/parsers") {
@@ -302,13 +299,11 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
                   .atZone(zoneId)
                   .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
 
-                assert(formatter.format(
-                  LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
+                val micros = date(1000, 1, 1, 1, 2, 3)
+                assert(formatter.format(Instant.ofEpochSecond(micros / MICROS_PER_SECOND)) ===
                   "1000-01-01 01:02:03")
-                assert(formatter.format(instantToMicros(
-                  LocalDateTime.of(1000, 1, 1, 1, 2, 3)
-                    .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
-                assert(formatter.format(java.sql.Timestamp.valueOf("1000-01-01 01:02:03")) ===
+                assert(formatter.format(micros) === "1000-01-01 01:02:03")
+                assert(formatter.format(new java.sql.Timestamp(micros / MICROS_PER_MILLIS)) ===
                   "1000-01-01 01:02:03")
               }
             }
@@ -321,19 +316,17 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("parsing hour with various patterns") {
     def createFormatter(pattern: String): TimestampFormatter = {
       // Use `SIMPLE_DATE_FORMAT`, so that the legacy parser also fails with invalid value range.
-      TimestampFormatter(pattern, ZoneOffset.UTC, LegacyDateFormats.SIMPLE_DATE_FORMAT, false)
+      TimestampFormatter(pattern, UTC, LegacyDateFormats.SIMPLE_DATE_FORMAT, false)
     }
 
     withClue("HH") {
       val formatter = createFormatter("yyyy-MM-dd HH")
 
       val micros1 = formatter.parse("2009-12-12 00")
-      assert(micros1 === TimeUnit.SECONDS.toMicros(
-        LocalDateTime.of(2009, 12, 12, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+      assert(micros1 === date(2009, 12, 12))
 
       val micros2 = formatter.parse("2009-12-12 15")
-      assert(micros2 === TimeUnit.SECONDS.toMicros(
-        LocalDateTime.of(2009, 12, 12, 15, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+      assert(micros2 === date(2009, 12, 12, 15))
 
       intercept[DateTimeException](formatter.parse("2009-12-12 24"))
     }
@@ -344,29 +337,24 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       intercept[DateTimeException](formatter.parse("2009-12-12 00"))
 
       val micros1 = formatter.parse("2009-12-12 15")
-      assert(micros1 === TimeUnit.SECONDS.toMicros(
-        LocalDateTime.of(2009, 12, 12, 15, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+      assert(micros1 === date(2009, 12, 12, 15))
 
       val micros2 = formatter.parse("2009-12-12 24")
-      assert(micros2 === TimeUnit.SECONDS.toMicros(
-        LocalDateTime.of(2009, 12, 12, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+      assert(micros2 === date(2009, 12, 12))
     }
 
     withClue("KK") {
       val formatter = createFormatter("yyyy-MM-dd KK a")
 
       val micros1 = formatter.parse("2009-12-12 00 am")
-      assert(micros1 === TimeUnit.SECONDS.toMicros(
-        LocalDateTime.of(2009, 12, 12, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+      assert(micros1 === date(2009, 12, 12))
 
       // For `KK`, "12:00:00 am" is the same as "00:00:00 pm".
       val micros2 = formatter.parse("2009-12-12 12 am")
-      assert(micros2 === TimeUnit.SECONDS.toMicros(
-        LocalDateTime.of(2009, 12, 12, 12, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+      assert(micros2 === date(2009, 12, 12, 12))
 
       val micros3 = formatter.parse("2009-12-12 00 pm")
-      assert(micros3 === TimeUnit.SECONDS.toMicros(
-        LocalDateTime.of(2009, 12, 12, 12, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+      assert(micros3 === date(2009, 12, 12, 12))
 
       intercept[DateTimeException](formatter.parse("2009-12-12 12 pm"))
     }
@@ -377,35 +365,34 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       intercept[DateTimeException](formatter.parse("2009-12-12 00 am"))
 
       val micros1 = formatter.parse("2009-12-12 12 am")
-      assert(micros1 === TimeUnit.SECONDS.toMicros(
-        LocalDateTime.of(2009, 12, 12, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+      assert(micros1 === date(2009, 12, 12))
 
       intercept[DateTimeException](formatter.parse("2009-12-12 00 pm"))
 
       val micros2 = formatter.parse("2009-12-12 12 pm")
-      assert(micros2 === TimeUnit.SECONDS.toMicros(
-        LocalDateTime.of(2009, 12, 12, 12, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+      assert(micros2 === date(2009, 12, 12, 12))
     }
   }
 
   test("missing date fields") {
-    val formatter = TimestampFormatter("HH:mm:ss", ZoneOffset.UTC)
-    val micros = formatter.parse("11:30:01")
-    assert(micros === TimeUnit.SECONDS.toMicros(
-      LocalDateTime.of(1970, 1, 1, 11, 30, 1).toEpochSecond(ZoneOffset.UTC)))
+    // by default we don't allow missing year field.
+    intercept[SparkUpgradeException](TimestampFormatter("HH:mm:ss", UTC).parse("11:30:01"))
+    withSQLConf(SQLConf.LEGACY_ALLOW_MISSING_YEAR_DURING_PARSING.key -> "true") {
+      val formatter = TimestampFormatter("HH:mm:ss", UTC)
+      val micros = formatter.parse("11:30:01")
+      assert(micros === date(1970, 1, 1, 11, 30, 1))
+    }
   }
 
   test("missing am/pm field") {
-    val formatter = TimestampFormatter("yyyy hh:mm:ss", ZoneOffset.UTC)
+    val formatter = TimestampFormatter("yyyy hh:mm:ss", UTC)
     val micros = formatter.parse("2009 11:30:01")
-    assert(micros === TimeUnit.SECONDS.toMicros(
-      LocalDateTime.of(2009, 1, 1, 11, 30, 1).toEpochSecond(ZoneOffset.UTC)))
+    assert(micros === date(2009, 1, 1, 11, 30, 1))
   }
 
   test("missing time fields") {
-    val formatter = TimestampFormatter("yyyy HH", ZoneOffset.UTC)
+    val formatter = TimestampFormatter("yyyy HH", UTC)
     val micros = formatter.parse("2009 11")
-    assert(micros === TimeUnit.SECONDS.toMicros(
-      LocalDateTime.of(2009, 1, 1, 11, 0, 0).toEpochSecond(ZoneOffset.UTC)))
+    assert(micros === date(2009, 1, 1, 11))
   }
 }

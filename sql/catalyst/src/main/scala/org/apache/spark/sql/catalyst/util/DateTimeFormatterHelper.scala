@@ -39,10 +39,20 @@ trait DateTimeFormatterHelper {
     }
   }
 
-  protected def toLocalDate(temporalAccessor: TemporalAccessor): LocalDate = {
-    val year = getOrDefault(temporalAccessor, ChronoField.YEAR, 1970)
-    val month = getOrDefault(temporalAccessor, ChronoField.MONTH_OF_YEAR, 1)
-    val day = getOrDefault(temporalAccessor, ChronoField.DAY_OF_MONTH, 1)
+  protected def toLocalDate(accessor: TemporalAccessor, allowMissingYear: Boolean): LocalDate = {
+    val year = if (accessor.isSupported(ChronoField.YEAR)) {
+      accessor.get(ChronoField.YEAR)
+    } else if (allowMissingYear) {
+      // To keep backward compatibility with Spark 2.x, we pick 1970 as the default value of year.
+      1970
+    } else {
+      throw new SparkUpgradeException("3.0",
+        "Year must be given in the date/timestamp string to be parsed. You can set " +
+          SQLConf.LEGACY_ALLOW_MISSING_YEAR_DURING_PARSING.key + " to true, to pick 1970 as " +
+          "the default value of year.", null)
+    }
+    val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
+    val day = getOrDefault(accessor, ChronoField.DAY_OF_MONTH, 1)
     LocalDate.of(year, month, day)
   }
 
@@ -50,11 +60,12 @@ trait DateTimeFormatterHelper {
   // if they does not exist in the parsed object.
   protected def toZonedDateTime(
       temporalAccessor: TemporalAccessor,
-      zoneId: ZoneId): ZonedDateTime = {
+      zoneId: ZoneId,
+      allowMissingYear: Boolean): ZonedDateTime = {
     val hour = if (temporalAccessor.isSupported(ChronoField.HOUR_OF_DAY)) {
       temporalAccessor.get(ChronoField.HOUR_OF_DAY)
     } else if (temporalAccessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
-      // When we reach here, is mean am/pm is not specified. Here we assume it's am.
+      // When we reach here, it means am/pm is not specified. Here we assume it's am.
       temporalAccessor.get(ChronoField.HOUR_OF_AMPM)
     } else {
       0
@@ -63,7 +74,7 @@ trait DateTimeFormatterHelper {
     val second = getOrDefault(temporalAccessor, ChronoField.SECOND_OF_MINUTE, 0)
     val nanoSecond = getOrDefault(temporalAccessor, ChronoField.NANO_OF_SECOND, 0)
     val localTime = LocalTime.of(hour, minute, second, nanoSecond)
-    val localDate = toLocalDate(temporalAccessor)
+    val localDate = toLocalDate(temporalAccessor, allowMissingYear)
     ZonedDateTime.of(localDate, localTime, zoneId)
   }
 

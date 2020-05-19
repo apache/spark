@@ -325,7 +325,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45") ==
         date(2020, 1, 12, 12, 3, 45, 0))
       assert(parser.makeConverter("t", DateType).apply("2020-1-12") ==
-        days(2020, 1, 12, 0, 0, 0))
+        days(2020, 1, 12))
       // The legacy format allows arbitrary length of second fraction.
       assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45.1") ==
         date(2020, 1, 12, 12, 3, 45, 100000))
@@ -333,22 +333,22 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
         date(2020, 1, 12, 12, 3, 45, 123400))
       // The legacy format allow date string to end with T or space, with arbitrary string
       assert(parser.makeConverter("t", DateType).apply("2020-1-12T") ==
-        days(2020, 1, 12, 0, 0, 0))
+        days(2020, 1, 12))
       assert(parser.makeConverter("t", DateType).apply("2020-1-12Txyz") ==
-        days(2020, 1, 12, 0, 0, 0))
+        days(2020, 1, 12))
       assert(parser.makeConverter("t", DateType).apply("2020-1-12 ") ==
-        days(2020, 1, 12, 0, 0, 0))
+        days(2020, 1, 12))
       assert(parser.makeConverter("t", DateType).apply("2020-1-12 xyz") ==
-        days(2020, 1, 12, 0, 0, 0))
+        days(2020, 1, 12))
       // The legacy format ignores the "GMT" from the string
       assert(parser.makeConverter("t", TimestampType).apply("2020-1-12 12:3:45GMT") ==
         date(2020, 1, 12, 12, 3, 45, 0))
       assert(parser.makeConverter("t", TimestampType).apply("GMT2020-1-12 12:3:45") ==
         date(2020, 1, 12, 12, 3, 45, 0))
       assert(parser.makeConverter("t", DateType).apply("2020-1-12GMT") ==
-        days(2020, 1, 12, 0, 0, 0))
+        days(2020, 1, 12))
       assert(parser.makeConverter("t", DateType).apply("GMT2020-1-12") ==
-        days(2020, 1, 12, 0, 0, 0))
+        days(2020, 1, 12))
     }
 
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")

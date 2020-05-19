@@ -128,3 +128,8 @@ select to_timestamp("16", "dd");
 select to_date("16", "dd");
 select to_timestamp("2019 40", "yyyy mm");
 select to_timestamp("2019 10:10:10", "yyyy hh:mm:ss");
+
+-- missing year should be allowed with legacy config enabled.
+SET spark.sql.legacy.allowMissingYearDuringParsing=true;
+select to_timestamp("16", "dd");
+select to_date("16", "dd");

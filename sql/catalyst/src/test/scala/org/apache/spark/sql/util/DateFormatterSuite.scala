@@ -22,6 +22,7 @@ import java.time.{DateTimeException, LocalDate, ZoneOffset}
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -120,11 +121,11 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   test("parsing date without explicit day") {
     val formatter = DateFormatter("yyyy MMM", ZoneOffset.UTC)
     val daysSinceEpoch = formatter.parse("2018 Dec")
-    assert(daysSinceEpoch === LocalDate.of(2018, 12, 1).toEpochDay)
+    assert(daysSinceEpoch === days(2018, 12, 1))
   }
 
   test("formatting negative years with default pattern") {
-    val epochDays = LocalDate.of(-99, 1, 1).toEpochDay.toInt
+    val epochDays = days(-99, 1, 1)
     assert(DateFormatter(ZoneOffset.UTC).format(epochDays) === "-0099-01-01")
   }
 
@@ -143,7 +144,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-30958: parse date with negative year") {
     val formatter1 = DateFormatter("yyyy-MM-dd", ZoneOffset.UTC)
-    assert(formatter1.parse("-1234-02-22") === localDateToDays(LocalDate.of(-1234, 2, 22)))
+    assert(formatter1.parse("-1234-02-22") === days(-1234, 2, 22))
 
     def assertParsingError(f: => Unit): Unit = {
       intercept[Exception](f) match {
@@ -159,8 +160,8 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
     assertParsingError(formatter2.parse("BC -1234-02-22"))
     assertParsingError(formatter2.parse("AD 0000-02-22"))
 
-    assert(formatter2.parse("BC 1234-02-22") === localDateToDays(LocalDate.of(-1233, 2, 22)))
-    assert(formatter2.parse("AD 1234-02-22") === localDateToDays(LocalDate.of(1234, 2, 22)))
+    assert(formatter2.parse("BC 1234-02-22") === days(-1233, 2, 22))
+    assert(formatter2.parse("AD 1234-02-22") === days(1234, 2, 22))
   }
 
   test("SPARK-31557: rebasing in legacy formatters/parsers") {
@@ -184,8 +185,12 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("missing date fields") {
-    val formatter = DateFormatter("HH", ZoneOffset.UTC)
-    val daysSinceEpoch = formatter.parse("20")
-    assert(daysSinceEpoch === LocalDate.of(1970, 1, 1).toEpochDay)
+    // by default we don't allow missing year field.
+    intercept[SparkUpgradeException](DateFormatter("HH", ZoneOffset.UTC).parse("20"))
+    withSQLConf(SQLConf.LEGACY_ALLOW_MISSING_YEAR_DURING_PARSING.key -> "true") {
+      val formatter = DateFormatter("HH", ZoneOffset.UTC)
+      val daysSinceEpoch = formatter.parse("20")
+      assert(daysSinceEpoch === days(1970, 1, 1))
+    }
   }
 }

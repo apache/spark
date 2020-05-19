@@ -2586,6 +2586,15 @@ object SQLConf {
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
 
+  val LEGACY_ALLOW_MISSING_YEAR_DURING_PARSING =
+    buildConf("spark.sql.legacy.allowMissingYearDuringParsing")
+      .internal()
+      .doc("When true, DateFormatter/TimestampFormatter allows parsing date/timestamp string " +
+        "without the year field, and pick 1970 as the default value.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
