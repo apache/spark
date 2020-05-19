@@ -27,7 +27,7 @@ class ResourceProfile(object):
     Resource profile to associate with an RDD. A :class:`pyspark.resource.ResourceProfile`
     allows the user to specify executor and task requirements for an RDD that will get
     applied during a stage. This allows the user to change the resource requirements between
-    stages. This is meant to be immutable so user doesn't change it after building.
+    stages. This is meant to be immutable so user cannot change it after building.
 
     .. versionadded:: 3.1.0
     """

@@ -175,7 +175,7 @@ class TaskResourceRequest(object):
     A task resource request. This is used in conjuntion with the
     :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
     needed for an RDD that will be applied at the stage level. The amount is specified
-    as a Double to allow for saying you want more then 1 task per resource. Valid values
+    as a Double to allow for saying you want more than 1 task per resource. Valid values
     are less than or equal to 0.5 or whole numbers.
     Use :class:`pyspark.resource.TaskResourceRequests` class as a convenience API.
 
