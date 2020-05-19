@@ -67,42 +67,42 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
   def insertOverwriteDynamic(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT OVERWRITE DYNAMIC") { _ =>
       sql(s"INSERT OVERWRITE TABLE $table SELECT CAST(id AS INT) AS a," +
-        s" CAST(id % 10 AS INT) AS b, CAST(id % 100 AS INT) AS c FROM $tempView DISTRIBUTE BY a")
+        s" CAST(id % 10 AS INT) AS b, CAST(id % 100 AS INT) AS c FROM $tempView")
     }
   }
 
   def insertOverwriteHybrid(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT OVERWRITE HYBRID") { _ =>
       sql(s"INSERT OVERWRITE TABLE $table partition(b=1, c) SELECT CAST(id AS INT) AS a," +
-        s" CAST(id % 10 AS INT) AS c FROM $tempView DISTRIBUTE BY a")
+        s" CAST(id % 10 AS INT) AS c FROM $tempView")
     }
   }
 
   def insertOverwriteStatic(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT OVERWRITE STATIC") { _ =>
       sql(s"INSERT OVERWRITE TABLE $table partition(b=1, c=10) SELECT CAST(id AS INT) AS a" +
-        s" FROM $tempView DISTRIBUTE BY a")
+        s" FROM $tempView")
     }
   }
 
   def insertIntoDynamic(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT INTO DYNAMIC") { _ =>
       sql(s"INSERT INTO TABLE $table SELECT CAST(id AS INT) AS a," +
-        s" CAST(id % 10 AS INT) AS b, CAST(id % 100 AS INT) AS c FROM $tempView DISTRIBUTE BY a")
+        s" CAST(id % 10 AS INT) AS b, CAST(id % 100 AS INT) AS c FROM $tempView")
     }
   }
 
   def insertIntoHybrid(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT INTO HYBRID") { _ =>
       sql(s"INSERT INTO TABLE $table partition(b=1, c) SELECT CAST(id AS INT) AS a," +
-        s" CAST(id % 10 AS INT) AS c FROM $tempView DISTRIBUTE BY a")
+        s" CAST(id % 10 AS INT) AS c FROM $tempView")
     }
   }
 
   def insertIntoStatic(table: String, benchmark: Benchmark): Unit = {
     benchmark.addCase("INSERT INTO STATIC") { _ =>
       sql(s"INSERT INTO TABLE $table partition(b=1, c=10) SELECT CAST(id AS INT) AS a" +
-        s" FROM $tempView DISTRIBUTE BY a")
+        s" FROM $tempView")
     }
   }
 
