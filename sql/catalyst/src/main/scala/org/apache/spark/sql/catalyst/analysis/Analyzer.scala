@@ -3071,15 +3071,12 @@ class Analyzer(
       case p => p transformExpressions {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
-        case u @ UpCast(child, _, _)
-            if SQLConf.get.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
-              u.dataType.isInstanceOf[AtomicType] &&
-              child.dataType == StringType =>
-          Cast(child, u.dataType.asNullable)
+        case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
+          throw new AnalysisException(
+            s"UpCast only support DecimalType as AbstractDataType yet, but got: $target")
 
-        case UpCast(child, target, walkedTypePath)
-          if child.dataType.isInstanceOf[DecimalType]
-            && target == DecimalType =>
+        case UpCast(child, target, walkedTypePath) if target == DecimalType
+          && child.dataType.isInstanceOf[DecimalType] =>
           assert(walkedTypePath.nonEmpty,
             "object DecimalType should only be used inside ExpressionEncoder")
           // SPARK-31750: for the case where data type is explicitly known, e.g, spark.read
@@ -3088,6 +3085,12 @@ class Analyzer(
           // actually should not do cast otherwise it will cause precision lost. Thus, we should
           // eliminate the UpCast here to avoid precision lost.
           child
+
+        case u @ UpCast(child, _, _)
+            if SQLConf.get.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
+              u.dataType.isInstanceOf[AtomicType] &&
+              child.dataType == StringType =>
+          Cast(child, u.dataType.asNullable)
 
         case u @ UpCast(child, _, walkedTypePath) if !Cast.canUpCast(child.dataType, u.dataType) =>
           fail(child, u.dataType, walkedTypePath)
