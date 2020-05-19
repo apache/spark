@@ -108,7 +108,7 @@ private[spark] class Executor(
       .setNameFormat("Executor task launch worker-%d")
       .setThreadFactory((r: Runnable) => new UninterruptibleThread(r, "unused"))
       .build()
-    ThreadUtils.newCachedThreadPool(threadFactory)
+    Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
   private val executorSource = new ExecutorSource(threadPool, executorId)
   // Pool used for threads that supervise task killing / cancellation
@@ -326,7 +326,7 @@ private[spark] class Executor(
       .filter(_._1.startsWith("mdc.")).map { item =>
         val key = item._1.substring(4)
         (key, item._2)
-      }.toMap
+      }.toSeq
 
     /** If specified, this task has been killed and this option contains the reason. */
     @volatile private var reasonIfKilled: Option[String] = None
@@ -402,7 +402,7 @@ private[spark] class Executor(
 
     override def run(): Unit = {
 
-      setMDCForTask(taskDescription.name, mdcProperties)
+      setMDCForTask(taskName, mdcProperties)
 
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
@@ -702,7 +702,7 @@ private[spark] class Executor(
     }
   }
 
-  private def setMDCForTask(taskName: String, mdc: scala.collection.Map[String, String]): Unit = {
+  private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
     MDC.put("taskName", taskName)
 
     mdc.foreach { case (key, value) =>
