@@ -2442,7 +2442,7 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-31750: eliminate UpCast if child's dataType is DecimalType") {
     withTempPath { f =>
-      sql("select cast(11111111111111111111111111111111111111 as decimal(38, 0)) as d")
+      sql("select cast(1 as decimal(38, 0)) as d")
         .write.mode("overwrite")
         .parquet(f.getAbsolutePath)
 
