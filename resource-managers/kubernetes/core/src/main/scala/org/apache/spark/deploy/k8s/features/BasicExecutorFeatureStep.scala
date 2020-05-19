@@ -50,8 +50,16 @@ private[spark] class BasicExecutorFeatureStep(
     kubernetesConf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT),
     CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
   private val executorMemoryMiB = kubernetesConf.get(EXECUTOR_MEMORY)
+  private val executorOffHeapMiB = kubernetesConf.getOption("spark.memory.offHeap.size")
+    .getOrElse("0")
   private val executorMemoryString = kubernetesConf.get(
     EXECUTOR_MEMORY.key, EXECUTOR_MEMORY.defaultValueString)
+  private val executorMemoryFactor = kubernetesConf
+    .sparkConf.getDouble("spark.executor.memory.factor", 1f)
+  private val executorCoresFactor = kubernetesConf
+    .sparkConf.getDouble("spark.executor.cores.factor", 1f)
+  private val executorMemoryLimitFactor = kubernetesConf
+    .sparkConf.getDouble("spark.executor.memory.limit.factor", 1f)
 
   private val memoryOverheadMiB = kubernetesConf
     .get(EXECUTOR_MEMORY_OVERHEAD)
@@ -59,7 +67,7 @@ private[spark] class BasicExecutorFeatureStep(
       (kubernetesConf.get(MEMORY_OVERHEAD_FACTOR) * executorMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
-  private val executorMemoryTotal =
+  private var executorMemoryTotal =
     if (kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)) {
       executorMemoryWithOverhead +
         kubernetesConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
@@ -67,13 +75,17 @@ private[spark] class BasicExecutorFeatureStep(
       executorMemoryWithOverhead
     }
 
+  executorMemoryTotal += Utils.memoryStringToMb(executorOffHeapMiB)
+  executorMemoryTotal = (executorMemoryTotal.toDouble * executorMemoryFactor).toLong
+  private val executorTotalMemoryLimit = (executorMemoryTotal * executorMemoryLimitFactor).toInt
   private val executorCores = kubernetesConf.sparkConf.get(EXECUTOR_CORES)
-  private val executorCoresRequest =
+  private var executorCoresRequest =
     if (kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
-      kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
+      kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get.toDouble
     } else {
-      executorCores.toString
+      executorCores.toDouble
     }
+  executorCoresRequest *= executorCoresFactor
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
   override def configurePod(pod: SparkPod): SparkPod = {
@@ -91,8 +103,11 @@ private[spark] class BasicExecutorFeatureStep(
     val executorMemoryQuantity = new QuantityBuilder(false)
       .withAmount(s"${executorMemoryTotal}Mi")
       .build()
+    val executorMemoryLimit = new QuantityBuilder(false)
+      .withAmount(s"${executorTotalMemoryLimit}Mi")
+      .build()
     val executorCpuQuantity = new QuantityBuilder(false)
-      .withAmount(executorCoresRequest)
+      .withAmount(executorCoresRequest.toString)
       .build()
 
     val executorResourceQuantities =
@@ -170,7 +185,7 @@ private[spark] class BasicExecutorFeatureStep(
       .withImagePullPolicy(kubernetesConf.imagePullPolicy)
       .editOrNewResources()
         .addToRequests("memory", executorMemoryQuantity)
-        .addToLimits("memory", executorMemoryQuantity)
+        .addToLimits("memory", executorMemoryLimit)
         .addToRequests("cpu", executorCpuQuantity)
         .addToLimits(executorResourceQuantities.asJava)
         .endResources()
@@ -184,7 +199,7 @@ private[spark] class BasicExecutorFeatureStep(
       .build()
     val containerWithLimitCores = executorLimitCores.map { limitCores =>
       val executorCpuLimitQuantity = new QuantityBuilder(false)
-        .withAmount(limitCores)
+        .withAmount((limitCores.toDouble * executorCoresFactor).toString)
         .build()
       new ContainerBuilder(executorContainer)
         .editResources()
