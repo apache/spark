@@ -3077,19 +3077,15 @@ class Analyzer(
               child.dataType == StringType =>
           Cast(child, u.dataType.asNullable)
 
-        case u @ UpCast(child, _, walkedTypePath)
+        case UpCast(child, target, walkedTypePath)
           if child.dataType.isInstanceOf[DecimalType]
-            && u.dataType.isInstanceOf[DecimalType]
+            && target == DecimalType
             && walkedTypePath.nonEmpty =>
-          // SPARK-31750: there are two cases: 1. for local BigDecimal collection,
-          // e.g. Seq(BigDecimal(12.34), BigDecimal(1)).toDF("a"), we will have
-          // UpCast(child, Decimal(38, 18)) where child's data type is always Decimal(38, 18).
-          // 2. for other cases where data type is explicitly known, e.g, spark.read
-          // .parquet("/tmp/file").as[BigDecimal]. We will have UpCast(child, Decimal(38, 18)),
-          // where child's data type can be, e.g. Decimal(38, 0). In this case, we actually
-          // should not do cast otherwise there will be precision lost.
-          // Thus, we eliminate the UpCast here to avoid precision lost for case 2 and do
-          // no hurt for case 1.
+          // SPARK-31750: for the case where data type is explicitly known, e.g, spark.read
+          // .parquet("/tmp/file").as[BigDecimal], we will have UpCast(child, Decimal(38, 18)),
+          // where child's data type can be, e.g. Decimal(38, 0). In this kind of case, we
+          // actually should not do cast otherwise it will cause precision lost. Thus, we should
+          // eliminate the UpCast here to avoid precision lost.
           child
 
         case u @ UpCast(child, _, walkedTypePath) if !Cast.canUpCast(child.dataType, u.dataType) =>
