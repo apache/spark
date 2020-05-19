@@ -250,7 +250,7 @@ class EncoderResolutionSuite extends PlanTest {
   test("SPARK-31750: eliminate UpCast if child's dataType is DecimalType") {
     val encoder = ExpressionEncoder[Seq[BigDecimal]]
     val attr = Seq(AttributeReference("a", ArrayType(DecimalType(38, 0)))())
-    // previously, it will fail because Decimal(38, 0) can not be casted to Decimal(38, 18)
+    // Before SPARK-31750, it will fail because Decimal(38, 0) can not be casted to Decimal(38, 18)
     testFromRow(encoder, attr, InternalRow(ArrayData.toArrayData(Array(Decimal(1.0)))))
   }
 
