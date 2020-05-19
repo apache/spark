@@ -22,6 +22,7 @@ license: |
 Spark SQL is Apache Spark's module for working with structured data. This guide is a reference for Structured Query Language (SQL) and includes syntax, semantics, keywords, and examples for common SQL usage. It contains information for the following topics:
 
  * [Data Types](sql-ref-datatypes.html)
+   * [Interval](sql-ref-datatype-interval.html)
  * [Identifiers](sql-ref-identifier.html)
  * [Literals](sql-ref-literals.html)
  * [Null Semanitics](sql-ref-null-semantics.html)
