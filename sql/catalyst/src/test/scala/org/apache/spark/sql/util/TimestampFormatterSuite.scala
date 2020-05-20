@@ -57,27 +57,31 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("format timestamps using time zones") {
     val microsSinceEpoch = 1543745472001234L
     val expectedTimestamp = Map(
-      "UTC" -> "2018-12-02T10:11:12.001234",
-      PST.getId -> "2018-12-02T02:11:12.001234",
-      CET.getId -> "2018-12-02T11:11:12.001234",
-      "Africa/Dakar" -> "2018-12-02T10:11:12.001234",
-      "America/Los_Angeles" -> "2018-12-02T02:11:12.001234",
-      "Antarctica/Vostok" -> "2018-12-02T16:11:12.001234",
-      "Asia/Hong_Kong" -> "2018-12-02T18:11:12.001234",
-      "Europe/Amsterdam" -> "2018-12-02T11:11:12.001234")
+      "UTC" -> "2018-12-02 10:11:12.001234",
+      PST.getId -> "2018-12-02 02:11:12.001234",
+      CET.getId -> "2018-12-02 11:11:12.001234",
+      "Africa/Dakar" -> "2018-12-02 10:11:12.001234",
+      "America/Los_Angeles" -> "2018-12-02 02:11:12.001234",
+      "Antarctica/Vostok" -> "2018-12-02 16:11:12.001234",
+      "Asia/Hong_Kong" -> "2018-12-02 18:11:12.001234",
+      "Europe/Amsterdam" -> "2018-12-02 11:11:12.001234")
     DateTimeTestUtils.outstandingTimezonesIds.foreach { zoneId =>
-      val formatter = TimestampFormatter(
-        "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-        DateTimeUtils.getZoneId(zoneId),
-        // Test only FAST_DATE_FORMAT because other legacy formats don't support formatting
-        // in microsecond precision.
-        LegacyDateFormats.FAST_DATE_FORMAT,
-        needVarLengthSecondFraction = false)
-      val timestamp = formatter.format(microsSinceEpoch)
-      assert(timestamp === expectedTimestamp(zoneId))
-      assert(formatter.format(microsToInstant(microsSinceEpoch)) === expectedTimestamp(zoneId))
-      DateTimeTestUtils.withDefaultTimeZone(getZoneId(zoneId)) {
-        assert(formatter.format(toJavaTimestamp(microsSinceEpoch)) === expectedTimestamp(zoneId))
+      Seq(
+        TimestampFormatter(
+          "yyyy-MM-dd HH:mm:ss.SSSSSS",
+          getZoneId(zoneId),
+          // Test only FAST_DATE_FORMAT because other legacy formats don't support formatting
+          // in microsecond precision.
+          LegacyDateFormats.FAST_DATE_FORMAT,
+          needVarLengthSecondFraction = false),
+        TimestampFormatter.getFractionFormatter(getZoneId(zoneId))).foreach { formatter =>
+        val timestamp = formatter.format(microsSinceEpoch)
+        assert(timestamp === expectedTimestamp(zoneId))
+        assert(formatter.format(microsToInstant(microsSinceEpoch)) === expectedTimestamp(zoneId))
+        // Set the default time zone because toJavaTimestamp() depends on it.
+        DateTimeTestUtils.withDefaultTimeZone(getZoneId(zoneId)) {
+          assert(formatter.format(toJavaTimestamp(microsSinceEpoch)) === expectedTimestamp(zoneId))
+        }
       }
     }
   }
