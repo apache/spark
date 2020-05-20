@@ -3514,13 +3514,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Timestamp.valueOf("1931-01-07 00:29:59.876877"), null))
 
     intercept[ArithmeticException](
-      sql("select TIMESTAMP_SECONDS(1230219000123123)," +
-        "TIMESTAMP_SECONDS(-1230219000123123),TIMESTAMP_SECONDS(null)").show
+      sql("select TIMESTAMP_SECONDS(1230219000123123)").show
     )
 
     intercept[ArithmeticException](
-      sql("select TIMESTAMP_MILLISECONDS(92233720368547758)," +
-        "TIMESTAMP_MILLISECONDS(-92233720368547758),TIMESTAMP_MILLISECONDS(null)").show
+      sql("select TIMESTAMP_SECONDS(-1230219000123123)").show
+    )
+
+    intercept[ArithmeticException](
+      sql("select TIMESTAMP_MILLISECONDS(92233720368547758)").show
+    )
+
+    intercept[ArithmeticException](
+      sql("select TIMESTAMP_MILLISECONDS(-92233720368547758)").show
     )
 
   }
