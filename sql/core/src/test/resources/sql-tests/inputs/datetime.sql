@@ -122,3 +122,13 @@ select to_timestamp("2019-10-06T10:11:12'12", "yyyy-MM-dd'T'HH:mm:ss''SSSS"); --
 select to_timestamp("2019-10-06T10:11:12'", "yyyy-MM-dd'T'HH:mm:ss''"); -- tail
 select to_timestamp("'2019-10-06T10:11:12", "''yyyy-MM-dd'T'HH:mm:ss"); -- head
 select to_timestamp("P2019-10-06T10:11:12", "'P'yyyy-MM-dd'T'HH:mm:ss"); -- head but as single quote
+
+-- Unsupported narrow text style
+select date_format(date '2020-05-23', 'GGGGG');
+select date_format(date '2020-05-23', 'MMMMM');
+select date_format(date '2020-05-23', 'LLLLL');
+select date_format(date '2020-05-23', 'EEEEE');
+select date_format(date '2020-05-23', 'uuuuu');
+select date_format(date '2020-05-23', 'QQQQQ');
+select date_format(date '2020-05-23', 'qqqqq');
+

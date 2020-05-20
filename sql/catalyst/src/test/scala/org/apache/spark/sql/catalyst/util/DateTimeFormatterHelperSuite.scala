@@ -40,6 +40,16 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
       val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
       assert(e.getMessage === s"Illegal pattern character: $l")
     }
+    unsupportedNarrowTextStyle.foreach { style =>
+      val e1 = intercept[IllegalArgumentException] {
+        convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}")
+      }
+      assert(e1.getMessage === s"Too many pattern letters: ${style.head}")
+      val e2 = intercept[IllegalArgumentException] {
+        convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}")
+      }
+      assert(e2.getMessage === s"Too many pattern letters: ${style.head}")
+    }
     assert(convertIncompatiblePattern("yyyy-MM-dd uuuu") === "uuuu-MM-dd eeee")
     assert(convertIncompatiblePattern("yyyy-MM-dd EEEE") === "uuuu-MM-dd EEEE")
     assert(convertIncompatiblePattern("yyyy-MM-dd'e'HH:mm:ss") === "uuuu-MM-dd'e'HH:mm:ss")

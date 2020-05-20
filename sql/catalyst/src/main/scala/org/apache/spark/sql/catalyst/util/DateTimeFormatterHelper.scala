@@ -163,6 +163,8 @@ private object DateTimeFormatterHelper {
   }
 
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
+  final val unsupportedNarrowTextStyle =
+    Set("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu", "QQQQQ", "qqqqq")
 
   /**
    * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
@@ -183,6 +185,9 @@ private object DateTimeFormatterHelper {
         if (index % 2 == 0) {
           for (c <- patternPart if unsupportedLetters.contains(c)) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
+          }
+          for (style <- unsupportedNarrowTextStyle if patternPart.contains(style)) {
+            throw new IllegalArgumentException(s"Too many pattern letters: ${style.head}")
           }
           // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
           // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
