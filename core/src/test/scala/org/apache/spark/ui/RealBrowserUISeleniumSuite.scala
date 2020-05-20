@@ -38,12 +38,19 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
   implicit var webDriver: WebDriver
   private val driverPropPrefix = "spark.test."
 
-  assume(
-    sys.props(driverPropPrefix + driverProp) !== null,
-    "System property " + driverPropPrefix + driverProp +
-      " should be set to the corresponding driver path.")
+  override def beforeAll() {
+    super.beforeAll()
+    assume(
+      sys.props(driverPropPrefix + driverProp) !== null,
+      "System property " + driverPropPrefix + driverProp +
+        " should be set to the corresponding driver path.")
+    sys.props(driverProp) = sys.props(driverPropPrefix + driverProp)
+  }
 
-  sys.props(driverProp) = sys.props(driverPropPrefix + driverProp)
+  override def afterAll(): Unit = {
+    sys.props.remove(driverProp)
+    super.afterAll()
+  }
 
   test("SPARK-31534: text for tooltip should be escaped") {
     withSpark(newSparkContext()) { sc =>
