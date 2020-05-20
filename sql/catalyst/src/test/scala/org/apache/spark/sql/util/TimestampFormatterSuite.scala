@@ -78,10 +78,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
         val timestamp = formatter.format(microsSinceEpoch)
         assert(timestamp === expectedTimestamp(zoneId))
         assert(formatter.format(microsToInstant(microsSinceEpoch)) === expectedTimestamp(zoneId))
-        // Set the default time zone because toJavaTimestamp() depends on it.
-        DateTimeTestUtils.withDefaultTimeZone(getZoneId(zoneId)) {
-          assert(formatter.format(toJavaTimestamp(microsSinceEpoch)) === expectedTimestamp(zoneId))
-        }
+        assert(formatter.format(toJavaTimestamp(microsSinceEpoch)) === expectedTimestamp(zoneId))
       }
     }
   }
