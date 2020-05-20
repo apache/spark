@@ -195,7 +195,7 @@ class LegacyFastTimestampFormatter(
   }
 
   override def format(ts: Timestamp): String = {
-    fastDateFormat.format(ts)
+    format(fromJavaTimestamp(ts))
   }
 
   override def format(instant: Instant): String = {
