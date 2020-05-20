@@ -23,7 +23,7 @@
 #
 #   SPARK_CONF_DIR  Alternate conf dir. Default is ${SPARK_HOME}/conf.
 #   SPARK_LOG_DIR   Where log files are stored. ${SPARK_HOME}/logs by default.
-#   SPARK_LOG_MAX_FILES Max log files of Spark daemons can rotate to, at least 5.
+#   SPARK_LOG_MAX_FILES Max log files of Spark daemons can rotate to. Default is 5.
 #   SPARK_MASTER    host:path where spark code should be rsync'd from
 #   SPARK_PID_DIR   The pid files are stored. /tmp by default.
 #   SPARK_IDENT_STRING   A string representing this instance of spark. $USER by default
@@ -76,10 +76,13 @@ spark_rotate_log ()
 {
     log=$1;
 
-    if [[ ${SPARK_LOG_MAX_FILES} -gt 5 ]] 2>/dev/null; then
+    if [[ -z ${SPARK_LOG_MAX_FILES} ]] ; then
+      num=5
+    elif [[ ${SPARK_LOG_MAX_FILES} -gt 0 ]]; then
       num=${SPARK_LOG_MAX_FILES}
     else
-      num=5
+      echo "Error: SPARK_LOG_MAX_FILES must be a positive number, but got ${SPARK_LOG_MAX_FILES}"
+      exit -1
     fi
 
     if [ -f "$log" ]; then # rotate logs
