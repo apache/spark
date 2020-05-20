@@ -153,7 +153,7 @@ object SparkPlanGraph {
  * @param name the name of this SparkPlan node
  * @param metrics metrics that this SparkPlan node will track
  */
-class SparkPlanGraphNode(
+private[ui] class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
@@ -193,7 +193,7 @@ class SparkPlanGraphNode(
 /**
  * Represent a tree of SparkPlan for WholeStageCodegen.
  */
-class SparkPlanGraphCluster(
+private[ui] class SparkPlanGraphCluster(
     id: Long,
     name: String,
     desc: String,
@@ -229,7 +229,7 @@ class SparkPlanGraphCluster(
  * Represent an edge in the SparkPlan tree. `fromId` is the child node id, and `toId` is the parent
  * node id.
  */
-case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
+private[ui] case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
 
   def makeDotEdge: String = s"""  $fromId->$toId;\n"""
 }
