@@ -111,10 +111,26 @@ class Iso8601TimestampFormatter(
  */
 class FractionTimestampFormatter(zoneId: ZoneId)
   extends Iso8601TimestampFormatter(
-    "", zoneId, TimestampFormatter.defaultLocale, needVarLengthSecondFraction = false) {
+    TimestampFormatter.defaultPattern,
+    zoneId,
+    TimestampFormatter.defaultLocale,
+    needVarLengthSecondFraction = false) {
 
   @transient
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
+
+  // Converts Timestamp to string according to Hive TimestampWritable convention.
+  // The code is borrowed from Spark 2.4 DateTimeUtils.timestampToString
+  override def format(ts: Timestamp): String = {
+    val timestampString = ts.toString
+    val formatted = legacyFormatter.format(ts)
+
+    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
+      formatted + timestampString.substring(19)
+    } else {
+      formatted
+    }
+  }
 }
 
 /**
