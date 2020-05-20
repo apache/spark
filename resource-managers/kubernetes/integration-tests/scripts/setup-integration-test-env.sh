@@ -25,6 +25,7 @@ IMAGE_REPO="docker.io/kubespark"
 IMAGE_TAG="N/A"
 JAVA_IMAGE_TAG="8-jre-slim"
 SPARK_TGZ="N/A"
+MVN="$TEST_ROOT_DIR/build/mvn"
 
 # Parse arguments
 while (( "$#" )); do
@@ -84,7 +85,11 @@ fi
 # If there is a specific Spark image skip building and extraction/copy
 if [[ $IMAGE_TAG == "N/A" ]];
 then
-  IMAGE_TAG=$(uuidgen);
+  VERSION=$("$MVN" help:evaluate -Dexpression=project.version \
+    | grep -v "INFO"\
+    | grep -v "WARNING"\
+    | tail -n 1)
+  IMAGE_TAG=${VERSION}_$(uuidgen)
   cd $SPARK_INPUT_DIR
 
   # OpenJDK base-image tag (e.g. 8-jre-slim, 11-jre-slim)
