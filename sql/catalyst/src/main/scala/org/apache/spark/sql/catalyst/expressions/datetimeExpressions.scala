@@ -425,7 +425,7 @@ abstract class NumberToTimestampBase extends UnaryExpression
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000);
-       "2008-12-25 07:30:00"
+       2008-12-25 07:30:00
   """,
   group = "datetime_funcs",
   since = "3.1.0")
@@ -443,7 +443,7 @@ case class SecondsToTimestamp(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000123);
-       "2008-12-25 07:30:00.123"
+       2008-12-25 07:30:00.123
   """,
   group = "datetime_funcs",
   since = "3.1.0")
@@ -461,7 +461,7 @@ case class MilliSecondsToTimestamp(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000123123);
-       "2008-12-25 07:30:00.123123"
+       2008-12-25 07:30:00.123123
   """,
   group = "datetime_funcs",
   since = "3.1.0")
