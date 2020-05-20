@@ -76,7 +76,7 @@ spark_rotate_log ()
 {
     log=$1;
 
-    if [[ -z ${SPARK_LOG_MAX_FILES} ]] ; then
+    if [[ -z ${SPARK_LOG_MAX_FILES} ]]; then
       num=5
     elif [[ ${SPARK_LOG_MAX_FILES} -gt 0 ]]; then
       num=${SPARK_LOG_MAX_FILES}
