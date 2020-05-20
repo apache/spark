@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time._
 import java.time.chrono.IsoChronology
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
-import java.time.temporal.{ChronoField, TemporalAccessor}
+import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.Locale
 
 import com.google.common.cache.CacheBuilder
@@ -40,6 +40,10 @@ trait DateTimeFormatterHelper {
   }
 
   protected def toLocalDate(accessor: TemporalAccessor, allowMissingYear: Boolean): LocalDate = {
+    val localDate = accessor.query(TemporalQueries.localDate())
+    // If all the date fields are specified, return the local date directly.
+    if (localDate != null) return localDate
+
     val year = if (accessor.isSupported(ChronoField.YEAR)) {
       accessor.get(ChronoField.YEAR)
     } else if (allowMissingYear) {
@@ -56,25 +60,32 @@ trait DateTimeFormatterHelper {
     LocalDate.of(year, month, day)
   }
 
+  private def toLocalTime(accessor: TemporalAccessor): LocalTime = {
+    val localTime = accessor.query(TemporalQueries.localTime())
+    // If all the time fields are specified, return the local time directly.
+    if (localTime != null) return localTime
+    val hour = if (accessor.isSupported(ChronoField.HOUR_OF_DAY)) {
+      accessor.get(ChronoField.HOUR_OF_DAY)
+    } else if (accessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
+      // When we reach here, it means am/pm is not specified. Here we assume it's am.
+      accessor.get(ChronoField.HOUR_OF_AMPM)
+    } else {
+      0
+    }
+    val minute = getOrDefault(accessor, ChronoField.MINUTE_OF_HOUR, 0)
+    val second = getOrDefault(accessor, ChronoField.SECOND_OF_MINUTE, 0)
+    val nanoSecond = getOrDefault(accessor, ChronoField.NANO_OF_SECOND, 0)
+    LocalTime.of(hour, minute, second, nanoSecond)
+  }
+
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
   // if they does not exist in the parsed object.
   protected def toZonedDateTime(
       temporalAccessor: TemporalAccessor,
       zoneId: ZoneId,
       allowMissingYear: Boolean): ZonedDateTime = {
-    val hour = if (temporalAccessor.isSupported(ChronoField.HOUR_OF_DAY)) {
-      temporalAccessor.get(ChronoField.HOUR_OF_DAY)
-    } else if (temporalAccessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
-      // When we reach here, it means am/pm is not specified. Here we assume it's am.
-      temporalAccessor.get(ChronoField.HOUR_OF_AMPM)
-    } else {
-      0
-    }
-    val minute = getOrDefault(temporalAccessor, ChronoField.MINUTE_OF_HOUR, 0)
-    val second = getOrDefault(temporalAccessor, ChronoField.SECOND_OF_MINUTE, 0)
-    val nanoSecond = getOrDefault(temporalAccessor, ChronoField.NANO_OF_SECOND, 0)
-    val localTime = LocalTime.of(hour, minute, second, nanoSecond)
     val localDate = toLocalDate(temporalAccessor, allowMissingYear)
+    val localTime = toLocalTime(temporalAccessor)
     ZonedDateTime.of(localDate, localTime, zoneId)
   }
 
@@ -108,12 +119,12 @@ trait DateTimeFormatterHelper {
     case e: DateTimeException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
       try {
         legacyParseFunc(s)
-        throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
-          s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
-          s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
       } catch {
         case _: Throwable => throw e
       }
+      throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
+        s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
+        s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
   }
 }
 
