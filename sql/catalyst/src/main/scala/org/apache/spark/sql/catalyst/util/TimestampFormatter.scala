@@ -119,8 +119,9 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   @transient
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
 
-  // Converts Timestamp to string according to Hive TimestampWritable convention.
-  // The code is borrowed from Spark 2.4 DateTimeUtils.timestampToString
+  // The new formatter will omit the trailing 0 in the timestamp string, but the legacy formatter
+  // can't. Here we borrow the code from Spark 2.4 DateTimeUtils.timestampToString to omit the
+  // trailing 0 for the legacy formatter as well.
   override def format(ts: Timestamp): String = {
     val timestampString = ts.toString
     val formatted = legacyFormatter.format(ts)
