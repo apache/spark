@@ -141,24 +141,27 @@ private[thriftserver] class HiveThriftServer2Listener(
       case None => logWarning(s"onSessionClosed called with unknown session id: ${e.sessionId}")
     }
 
-  private def onOperationStart(e: SparkListenerThriftServerOperationStart): Unit =
+  private def onOperationStart(e: SparkListenerThriftServerOperationStart): Unit = {
+    val executionData = getOrCreateExecution(
+      e.id,
+      e.statement,
+      e.sessionId,
+      e.startTime,
+      e.userName)
+
+    executionData.state = ExecutionState.STARTED
+    executionList.put(e.id, executionData)
+    executionData.groupId = e.groupId
+    updateLiveStore(executionData)
+
     Option(sessionList.get(e.sessionId)) match {
       case Some(sessionData) =>
-        val info = getOrCreateExecution(
-          e.id,
-          e.statement,
-          e.sessionId,
-          e.startTime,
-          e.userName)
-
-        info.state = ExecutionState.STARTED
-        executionList.put(e.id, info)
         sessionData.totalExecution += 1
-        executionList.get(e.id).groupId = e.groupId
-        updateLiveStore(executionList.get(e.id))
         updateLiveStore(sessionData)
-      case None => logWarning(s"onOperationStart called with unknown session id: ${e.sessionId}")
+      case None => logWarning(s"onOperationStart called with unknown session id: ${e.sessionId}." +
+        s"Regardless, the operation has been registered.")
     }
+  }
 
   private def onOperationParsed(e: SparkListenerThriftServerOperationParsed): Unit =
     Option(executionList.get(e.id)) match {
