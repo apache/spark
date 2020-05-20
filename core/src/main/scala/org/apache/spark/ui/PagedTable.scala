@@ -335,7 +335,7 @@ private[spark] trait PagedTable[T] {
    */
   def isSortColumnValid(
       headerInfo: Seq[(String, Boolean, Option[String])],
-      sortColumn: String): Any = {
+      sortColumn: String): Unit = {
     if (!headerInfo.filter(_._2).map(_._1).contains(sortColumn)) {
       throw new IllegalArgumentException(s"Unknown column: $sortColumn")
     }
@@ -393,7 +393,7 @@ private[spark] trait PagedTable[T] {
       }
     }
     <thead>
-      {row}
+      <tr>{row}</tr>
     </thead>
   }
 }

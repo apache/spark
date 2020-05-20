@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.xml._
 
@@ -521,7 +520,7 @@ private[ui] class JobPagedTable(
   }
 
   override def headers: Seq[Node] = {
-    // Information for each header: title, cssClass, and sortable
+    // Information for each header: title, sortable, tooltip
     val jobHeadersAndCssClasses: Seq[(String, Boolean, Option[String])] =
       Seq(
         (jobIdTitle, true, None),

@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.thriftserver.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.xml.Node
 
 import org.apache.spark.internal.Logging

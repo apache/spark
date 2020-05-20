@@ -22,8 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Calendar
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
-import scala.xml.{Node, Unparsed}
+import scala.xml.Node
 
 import org.apache.commons.text.StringEscapeUtils
 

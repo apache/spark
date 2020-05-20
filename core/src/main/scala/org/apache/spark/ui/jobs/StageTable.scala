@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.xml._
 
 import org.apache.commons.text.StringEscapeUtils

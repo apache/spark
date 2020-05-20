@@ -21,9 +21,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.xml.{Node, NodeSeq, Unparsed}
+import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
@@ -246,7 +245,7 @@ private[ui] class ExecutionPagedTable(
   }
 
   override def headers: Seq[Node] = {
-    // Information for each header: title, sortable
+    // Information for each header: title, sortable, tooltip
     val executionHeadersAndCssClasses: Seq[(String, Boolean, Option[String])] =
       Seq(
         ("ID", true, None),
