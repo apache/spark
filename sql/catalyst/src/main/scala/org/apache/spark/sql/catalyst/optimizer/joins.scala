@@ -252,12 +252,12 @@ trait JoinSelectionHelper {
     val buildLeft = if (onlyLookingAtHint) {
       hintToShuffleHashJoinLeft(hint)
     } else {
-      canBuildLocalHashMapBySize(left, conf) && muchSmaller(right, left)
+      canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
     }
     val buildRight = if (onlyLookingAtHint) {
       hintToShuffleHashJoinRight(hint)
     } else {
-      canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
+      canBuildLocalHashMapBySize(right, conf) && muchSmaller(right, left)
     }
     getBuildSide(
       canBuildLeft(joinType) && buildLeft,
