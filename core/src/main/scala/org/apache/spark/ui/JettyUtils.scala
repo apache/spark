@@ -502,7 +502,7 @@ private[spark] case class ServerInfo(
       case pool: QueuedThreadPool =>
         // Workaround for SPARK-30385 to avoid Jetty's acceptor thread shrink.
         // As of Jetty 9.4.21, the implementation of
-        // QueuedThreadPoolExecutor#setIdleTimeout is changed and IllegalStateException
+        // QueuedThreadPool#setIdleTimeout is changed and IllegalStateException
         // will be thrown if we try to set idle timeout after the server has started.
         // But this workaround works for Jetty 9.4.28 by ignoring the exception.
         Try(pool.setIdleTimeout(0))
