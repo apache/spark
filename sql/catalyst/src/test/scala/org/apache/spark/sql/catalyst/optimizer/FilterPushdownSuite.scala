@@ -1334,4 +1334,24 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("inner join: rewrite to conjunctive normal form avoid genereting too many predicates") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, condition = Some(("x.b".attr === "y.b".attr)
+        && ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5))
+        || (("y.a".attr > 2) && ("y.c".attr < 1)))))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.subquery('x)
+    val right = testRelation.where('c <= 5 || ('a > 2 && 'c < 1)).subquery('y)
+    val correctAnswer = left.join(right, condition = Some("x.b".attr === "y.b".attr
+      && ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5))
+      || (("y.a".attr > 2) && ("y.c".attr < 1))))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }

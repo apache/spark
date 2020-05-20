@@ -20,10 +20,12 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -1380,6 +1382,14 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHelper {
 
+  // Used to group same side expressions to avoid generating too many duplicate predicates.
+  private case class SameSide(exps: Seq[Expression]) extends CodegenFallback {
+    override def children: Seq[Expression] = exps
+    override def nullable: Boolean = true
+    override def dataType: DataType = throw new UnsupportedOperationException
+    override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  }
+
   /**
    * Rewrite pattern:
    * 1. (a && b) || c --> (a || c) && (b || c)
@@ -1408,8 +1418,43 @@ object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHel
     }
   }
 
-  private def maybeWithFilter(joinCondition: Seq[Expression], plan: LogicalPlan) = {
-    (joinCondition.reduceLeftOption(And).reduceLeftOption(And), plan) match {
+  /**
+   * Split And expression by single side references. For example,
+   *   t1.a > 1 and t1.a < 10 and t2.a < 10 -->
+   *     SameSide(t1.a > 1, t1.a < 10) and SameSide(t2.a < 10)
+   */
+  private def splitAndExp(and: And, outputSet: AttributeSet) = {
+    val (leftSide, rightSide) =
+      splitConjunctivePredicates(and).partition(_.references.subsetOf(outputSet))
+    Seq(SameSide(leftSide), SameSide(rightSide)).filter(_.exps.nonEmpty).reduceLeft(And)
+  }
+
+  private def splitCondition(condition: Expression, outputSet: AttributeSet): Expression = {
+    condition.transformUp {
+      case Or(a: And, b: And) =>
+        Or(splitAndExp(a, outputSet), splitAndExp(b, outputSet))
+      case Or(a: And, b) =>
+        Or(splitAndExp(a, outputSet), b)
+      case Or(a, b: And) =>
+        Or(a, splitAndExp(b, outputSet))
+    }
+  }
+
+  // Restore expressions from SameSide.
+  private def restoreExps(condition: Expression): Expression = {
+    condition match {
+      case SameSide(exps) =>
+        exps.reduceLeft(And)
+      case Or(a, b) =>
+        Or(restoreExps(a), restoreExps(b))
+      case And(a, b) =>
+        And(restoreExps(a), restoreExps(b))
+      case other => other
+    }
+  }
+
+  private def maybeWithFilter(joinCondition: Option[Expression], plan: LogicalPlan) = {
+    (joinCondition, plan) match {
       case (Some(condition), filter: Filter) if condition.semanticEquals(filter.condition) =>
         plan
       case (Some(condition), _) =>
@@ -1424,15 +1469,18 @@ object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHel
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     case j @ Join(left, right, joinType, Some(joinCondition), hint) =>
 
-      val pushDownCandidates = splitConjunctivePredicates(rewriteToCNF(joinCondition))
-        .filter(_.deterministic)
+      val pushDownCandidates =
+        splitConjunctivePredicates(rewriteToCNF(splitCondition(joinCondition, left.outputSet)))
+          .filter(_.deterministic)
       val (leftEvaluateCondition, rest) =
         pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
       val (rightEvaluateCondition, _) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-      val newLeft = maybeWithFilter(leftEvaluateCondition, left)
-      val newRight = maybeWithFilter(rightEvaluateCondition, right)
+      val newLeft =
+        maybeWithFilter(leftEvaluateCondition.reduceLeftOption(And).map(restoreExps), left)
+      val newRight =
+        maybeWithFilter(rightEvaluateCondition.reduceLeftOption(And).map(restoreExps), right)
 
       joinType match {
         case _: InnerLike | LeftSemi =>
