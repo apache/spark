@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.util
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture}
 import java.util.concurrent.locks.ReentrantLock
@@ -31,6 +32,99 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.spark.SparkException
 
 private[spark] object ThreadUtils {
+
+  object MDCAwareThreadPoolExecutor {
+    def newCachedThreadPool(threadFactory: ThreadFactory): ThreadPoolExecutor = {
+      // The values needs to be synced with `Executors.newCachedThreadPool`
+      new MDCAwareThreadPoolExecutor(
+        0,
+        Integer.MAX_VALUE,
+        60L,
+        TimeUnit.SECONDS,
+        new SynchronousQueue[Runnable],
+        threadFactory)
+    }
+
+    def newFixedThreadPool(nThreads: Int, threadFactory: ThreadFactory): ThreadPoolExecutor = {
+      // The values needs to be synced with `Executors.newFixedThreadPool`
+      new MDCAwareThreadPoolExecutor(
+        nThreads,
+        nThreads,
+        0L,
+        TimeUnit.MILLISECONDS,
+        new LinkedBlockingQueue[Runnable],
+        threadFactory)
+    }
+
+    /**
+     * This method differ from the `java.util.concurrent.Executors#newSingleThreadExecutor` in
+     * 2 ways:
+     *   1. It use `org.apache.spark.util.ThreadUtils.MDCAwareThreadPoolExecutor`
+     *   as underline `java.util.concurrent.ExecutorService`
+     *   2. It does not use the
+     *   `java.util.concurrent.Executors#FinalizableDelegatedExecutorService` from JDK
+     */
+    def newSingleThreadExecutor(threadFactory: ThreadFactory): ExecutorService = {
+      // The values needs to be synced with `Executors.newSingleThreadExecutor`
+      Executors.unconfigurableExecutorService(
+        new MDCAwareThreadPoolExecutor(
+          1,
+          1,
+          0L,
+          TimeUnit.MILLISECONDS,
+          new LinkedBlockingQueue[Runnable],
+          threadFactory)
+        )
+    }
+
+  }
+
+  class MDCAwareRunnable(proxy: Runnable) extends Runnable {
+    val callerThreadMDC: util.Map[String, String] = getMDCMap
+
+    @inline
+    private def getMDCMap: util.Map[String, String] = {
+      org.slf4j.MDC.getCopyOfContextMap match {
+        case null => new util.HashMap[String, String]()
+        case m => m
+      }
+    }
+
+    override def run(): Unit = {
+      val threadMDC = getMDCMap
+      org.slf4j.MDC.setContextMap(callerThreadMDC)
+      try {
+        proxy.run()
+      } finally {
+        org.slf4j.MDC.setContextMap(threadMDC)
+      }
+    }
+  }
+
+  class MDCAwareScheduledThreadPoolExecutor(
+      corePoolSize: Int,
+      threadFactory: ThreadFactory)
+    extends ScheduledThreadPoolExecutor(corePoolSize, threadFactory) {
+
+    override def execute(runnable: Runnable) {
+      super.execute(new MDCAwareRunnable(runnable))
+    }
+  }
+
+  class MDCAwareThreadPoolExecutor(
+      corePoolSize: Int,
+      maximumPoolSize: Int,
+      keepAliveTime: Long,
+      unit: TimeUnit,
+      workQueue: BlockingQueue[Runnable],
+      threadFactory: ThreadFactory)
+    extends ThreadPoolExecutor(corePoolSize, maximumPoolSize,
+      keepAliveTime, unit, workQueue, threadFactory) {
+
+    override def execute(runnable: Runnable) {
+      super.execute(new MDCAwareRunnable(runnable))
+    }
+  }
 
   private val sameThreadExecutionContext =
     ExecutionContext.fromExecutorService(sameThreadExecutorService())
@@ -130,7 +224,15 @@ private[spark] object ThreadUtils {
    */
   def newDaemonCachedThreadPool(prefix: String): ThreadPoolExecutor = {
     val threadFactory = namedThreadFactory(prefix)
-    Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
+    MDCAwareThreadPoolExecutor.newCachedThreadPool(threadFactory)
+  }
+
+  /**
+   * Wrapper over newCachedThreadPool. Thread names are formatted as prefix-ID, where ID is a
+   * unique, sequentially assigned integer.
+   */
+  def newCachedThreadPool(threadFactory: ThreadFactory): ThreadPoolExecutor = {
+    MDCAwareThreadPoolExecutor.newCachedThreadPool(threadFactory)
   }
 
   /**
@@ -140,7 +242,7 @@ private[spark] object ThreadUtils {
   def newDaemonCachedThreadPool(
       prefix: String, maxThreadNumber: Int, keepAliveSeconds: Int = 60): ThreadPoolExecutor = {
     val threadFactory = namedThreadFactory(prefix)
-    val threadPool = new ThreadPoolExecutor(
+    val threadPool = new MDCAwareThreadPoolExecutor(
       maxThreadNumber, // corePoolSize: the max number of threads to create before queuing the tasks
       maxThreadNumber, // maximumPoolSize: because we use LinkedBlockingDeque, this one is not used
       keepAliveSeconds,
@@ -165,7 +267,7 @@ private[spark] object ThreadUtils {
    */
   def newDaemonSingleThreadExecutor(threadName: String): ExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
-    Executors.newSingleThreadExecutor(threadFactory)
+    MDCAwareThreadPoolExecutor.newSingleThreadExecutor(threadFactory)
   }
 
   /**
@@ -173,7 +275,7 @@ private[spark] object ThreadUtils {
    */
   def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
-    val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
+    val executor = new MDCAwareScheduledThreadPoolExecutor(1, threadFactory)
     // By default, a cancelled task is not automatically removed from the work queue until its delay
     // elapses. We have to enable it manually.
     executor.setRemoveOnCancelPolicy(true)
@@ -189,7 +291,7 @@ private[spark] object ThreadUtils {
       .setDaemon(true)
       .setNameFormat(s"$threadNamePrefix-%d")
       .build()
-    val executor = new ScheduledThreadPoolExecutor(numThreads, threadFactory)
+    val executor = new MDCAwareScheduledThreadPoolExecutor(numThreads, threadFactory)
     // By default, a cancelled task is not automatically removed from the work queue until its delay
     // elapses. We have to enable it manually.
     executor.setRemoveOnCancelPolicy(true)
