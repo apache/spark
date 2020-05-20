@@ -68,9 +68,17 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     DateTimeTestUtils.outstandingTimezonesIds.foreach { zoneId =>
       val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-        DateTimeUtils.getZoneId(zoneId))
+        DateTimeUtils.getZoneId(zoneId),
+        // Test only FAST_DATE_FORMAT because other legacy formats don't support formatting
+        // in microsecond precision.
+        LegacyDateFormats.FAST_DATE_FORMAT,
+        needVarLengthSecondFraction = false)
       val timestamp = formatter.format(microsSinceEpoch)
       assert(timestamp === expectedTimestamp(zoneId))
+      assert(formatter.format(microsToInstant(microsSinceEpoch)) === expectedTimestamp(zoneId))
+      DateTimeTestUtils.withDefaultTimeZone(getZoneId(zoneId)) {
+        assert(formatter.format(toJavaTimestamp(microsSinceEpoch)) === expectedTimestamp(zoneId))
+      }
     }
   }
 
@@ -126,11 +134,18 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
 
   test("format fraction of second") {
     val formatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
-    assert(formatter.format(0) === "1970-01-01 00:00:00")
-    assert(formatter.format(1) === "1970-01-01 00:00:00.000001")
-    assert(formatter.format(1000) === "1970-01-01 00:00:00.001")
-    assert(formatter.format(900000) === "1970-01-01 00:00:00.9")
-    assert(formatter.format(1000000) === "1970-01-01 00:00:01")
+    Seq(
+      0 -> "1970-01-01 00:00:00",
+      1 -> "1970-01-01 00:00:00.000001",
+      1000 -> "1970-01-01 00:00:00.001",
+      900000 -> "1970-01-01 00:00:00.9",
+      1000000 -> "1970-01-01 00:00:01").foreach { case (micros, tsStr) =>
+      assert(formatter.format(micros) === tsStr)
+      assert(formatter.format(microsToInstant(micros)) === tsStr)
+      DateTimeTestUtils.withDefaultTimeZone(ZoneOffset.UTC) {
+        assert(formatter.format(toJavaTimestamp(micros)) === tsStr)
+      }
+    }
   }
 
   test("formatting negative years with default pattern") {
