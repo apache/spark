@@ -939,17 +939,10 @@ object SparkSession extends Logging {
         options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
         setDefaultSession(session)
         setActiveSession(session)
-        registerSessionListenerOnContext(sparkContext)
+        registerContextListener(sparkContext)
       }
 
       return session
-    }
-
-    private def registerSessionListenerOnContext(sparkContext: SparkContext): Unit = {
-      if (!SparkSession.sessionListenerRegistered.get()) {
-        sparkContext.addSparkListener(_sessionListener)
-        SparkSession.sessionListenerRegistered.set(true)
-      }
     }
 
     private def applyModifiableSettings(session: SparkSession): Unit = {
@@ -1061,15 +1054,20 @@ object SparkSession extends Logging {
   ////////////////////////////////////////////////////////////////////////////////////////
   // Private methods from now on
   ////////////////////////////////////////////////////////////////////////////////////////
-  /** Default listener on SparkContext  */
-  private val _sessionListener: SparkListener = new SparkListener {
-    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-      defaultSession.set(null)
+
+  private val listenerRegistered: AtomicBoolean = new AtomicBoolean(false)
+
+  /** Register the AppEnd listener onto the Context  */
+  private def registerContextListener(sparkContext: SparkContext): Unit = {
+    if (!SparkSession.listenerRegistered.get()) {
+      sparkContext.addSparkListener(new SparkListener {
+        override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+          defaultSession.set(null)
+        }
+      })
+      SparkSession.listenerRegistered.set(true)
     }
   }
-
-  /** Whether the app end listener has been registered on the context */
-  private val sessionListenerRegistered: AtomicBoolean = new AtomicBoolean(false)
 
   /** The active SparkSession for the current thread. */
   private val activeThreadSession = new InheritableThreadLocal[SparkSession]
@@ -1086,8 +1084,6 @@ object SparkSession extends Logging {
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
     }
   }
-
-  private[spark] def isSessionListenerRegistered: Boolean = sessionListenerRegistered.get
 
   private def assertOnDriver(): Unit = {
     if (Utils.isTesting && TaskContext.get != null) {
