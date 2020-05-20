@@ -415,8 +415,11 @@ abstract class NumberToTimestampBase extends UnaryExpression
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
-      s"${ev.value}, $upScaleFactor)")
+    if (upScaleFactor == 1) {
+      defineCodeGen(ctx, ev, c => c)
+    } else {
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, $upScaleFactor)")
+    }
   }
 }
 
