@@ -54,7 +54,7 @@ from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
-from pyspark.resourceinformation import ResourceInformation
+from pyspark.resource import ResourceInformation
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.status import *
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
