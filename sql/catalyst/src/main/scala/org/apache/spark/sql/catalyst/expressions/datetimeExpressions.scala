@@ -803,6 +803,7 @@ abstract class ToTimestamp
         legacyFormat = SIMPLE_DATE_FORMAT,
         needVarLengthSecondFraction = true)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 

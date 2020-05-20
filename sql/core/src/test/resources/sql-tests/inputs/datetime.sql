@@ -131,4 +131,9 @@ select date_format(date '2020-05-23', 'EEEEE');
 select date_format(date '2020-05-23', 'uuuuu');
 select date_format(date '2020-05-23', 'QQQQQ');
 select date_format(date '2020-05-23', 'qqqqq');
-
+select to_timestamp('2019-10-06 A', 'yyyy-MM-dd GGGGG');
+select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEEE');
+select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
+select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
+select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
+select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
