@@ -455,7 +455,7 @@ case class MicroSecondsToTimestamp(child: Expression)
 }
 
 abstract class NumberToTimestampBase extends UnaryExpression
-  with ImplicitCastInputTypes{
+  with ImplicitCastInputTypes {
 
   protected def upScaleFactor: Long
 
@@ -464,18 +464,12 @@ abstract class NumberToTimestampBase extends UnaryExpression
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(input: Any): Any = {
-    child.dataType match {
-      case LongType =>
-        Math.multiplyExact(input.asInstanceOf[Long], upScaleFactor)
-    }
+    Math.multiplyExact(input.asInstanceOf[Long], upScaleFactor)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    child.dataType match {
-      case LongType =>
-        defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
-          s"${ev.value.asInstanceOf[Long]}, ${upScaleFactor})")
-    }
+    defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
+          s"${ev.value}, ${upScaleFactor})")
   }
 }
 
