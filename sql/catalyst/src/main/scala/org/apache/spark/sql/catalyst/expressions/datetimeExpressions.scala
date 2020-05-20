@@ -402,11 +402,11 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns timestamp from seconds.",
+  usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000);
-       "2008-12-25 07:30:00.0"
+       "2008-12-25 07:30:00"
   """,
   group = "datetime_funcs",
   since = "3.1.0")
@@ -419,11 +419,12 @@ case class SecondsToTimestamp(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns timestamp from milliseconds.",
+  usage = "_FUNC_(milliseconds) - " +
+    "Creates timestamp from the number of milliseconds since UTC epoch.",
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000000);
-       "2008-12-25 07:30:00.0"
+       "2008-12-25 07:30:00"
   """,
   group = "datetime_funcs",
   since = "3.1.0")
@@ -436,11 +437,12 @@ case class MilliSecondsToTimestamp(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns timestamp from microseconds.",
+  usage = "_FUNC_(microseconds) - " +
+    "Creates timestamp from the number of microseconds since UTC epoch.",
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000000000);
-       "2008-12-25 07:30:00.0"
+       "2008-12-25 07:30:00"
   """,
   group = "datetime_funcs",
   since = "3.1.0")
@@ -457,29 +459,19 @@ abstract class NumberToTimestampBase extends UnaryExpression
 
   protected def upScaleFactor: Long
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(LongType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
 
   override def dataType: DataType = TimestampType
 
-  override def eval(input: InternalRow): Any = {
-    val t = child.eval(input)
-    if (t == null) {
-      null
-    } else {
-      child.dataType match {
-        case IntegerType =>
-          Math.multiplyExact(t.asInstanceOf[Int].toLong, upScaleFactor)
-        case LongType =>
-          Math.multiplyExact(t.asInstanceOf[Long], upScaleFactor)
-      }
+  override def nullSafeEval(input: Any): Any = {
+    child.dataType match {
+      case LongType =>
+        Math.multiplyExact(input.asInstanceOf[Long], upScaleFactor)
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
-      case IntegerType =>
-        defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
-          s"${ev.value.asInstanceOf[Integer].toLong}, ${upScaleFactor})")
       case LongType =>
         defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
           s"${ev.value.asInstanceOf[Long]}, ${upScaleFactor})")

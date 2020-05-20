@@ -3,6 +3,30 @@
 
 
 -- !query
+select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null)
+-- !query schema
+struct<timestamp_seconds(CAST(1230219000 AS BIGINT)):timestamp,timestamp_seconds(CAST(-1230219000 AS BIGINT)):timestamp,timestamp_seconds(CAST(NULL AS BIGINT)):timestamp>
+-- !query output
+2008-12-25 07:30:00	1931-01-07 00:30:00	NULL
+
+
+-- !query
+select TIMESTAMP_MILLISECONDS(1230219000000),TIMESTAMP_MILLISECONDS(-1230219000000),TIMESTAMP_MILLISECONDS(null)
+-- !query schema
+struct<timestamp_milliseconds(1230219000000):timestamp,timestamp_milliseconds(-1230219000000):timestamp,timestamp_milliseconds(CAST(NULL AS BIGINT)):timestamp>
+-- !query output
+2008-12-25 07:30:00	1931-01-07 00:30:00	NULL
+
+
+-- !query
+select TIMESTAMP_MICROSECONDS(1230219000000000),TIMESTAMP_MICROSECONDS(-1230219000000000),TIMESTAMP_MICROSECONDS(null)
+-- !query schema
+struct<timestamp_microseconds(1230219000000000):timestamp,timestamp_microseconds(-1230219000000000):timestamp,timestamp_microseconds(CAST(NULL AS BIGINT)):timestamp>
+-- !query output
+2008-12-25 07:30:00	1931-01-07 00:30:00	NULL
+
+
+-- !query
 select current_date = current_date(), current_timestamp = current_timestamp()
 -- !query schema
 struct<(current_date() = current_date()):boolean,(current_timestamp() = current_timestamp()):boolean>
