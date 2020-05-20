@@ -3495,24 +3495,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(df4.schema.head.name === "randn(1)")
     checkIfSeedExistsInExplain(df2)
   }
-
-  test("SPARK-31710: " +
-    "TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS to timestamp transfer") {
-    val df1 = sql("select TIMESTAMP_SECONDS(1230219000)," +
-      "TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null)")
-    checkAnswer(df1, Row(Timestamp.valueOf("2008-12-25 07:30:00"),
-      Timestamp.valueOf("1931-01-07 00:30:00"), null))
-
-    val df2 = sql("select TIMESTAMP_MILLISECONDS(1230219000000)," +
-      "TIMESTAMP_MILLISECONDS(-1230219000000),TIMESTAMP_MILLISECONDS(null)")
-    checkAnswer(df2, Row(Timestamp.valueOf("2008-12-25 07:30:00"),
-      Timestamp.valueOf("1931-01-07 00:30:00"), null))
-
-    val df3 = sql("select TIMESTAMP_MICROSECONDS(1230219000000000)," +
-      "TIMESTAMP_MICROSECONDS(-1230219000000000),TIMESTAMP_MICROSECONDS(null)")
-    checkAnswer(df3, Row(Timestamp.valueOf("2008-12-25 07:30:00"),
-      Timestamp.valueOf("1931-01-07 00:30:00"), null))
-  }
 }
 
 case class Foo(bar: Option[String])

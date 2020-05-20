@@ -401,6 +401,25 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
   }
 }
 
+abstract class NumberToTimestampBase extends UnaryExpression
+  with ImplicitCastInputTypes {
+
+  protected def upScaleFactor: Long
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullSafeEval(input: Any): Any = {
+    Math.multiplyExact(input.asInstanceOf[Long], upScaleFactor)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
+      s"${ev.value}, ${upScaleFactor})")
+  }
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
   examples = """
@@ -452,25 +471,6 @@ case class MicroSecondsToTimestamp(child: Expression)
   override def upScaleFactor: SQLTimestamp = 1L
 
   override def prettyName: String = "timestamp_microseconds"
-}
-
-abstract class NumberToTimestampBase extends UnaryExpression
-  with ImplicitCastInputTypes {
-
-  protected def upScaleFactor: Long
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
-
-  override def dataType: DataType = TimestampType
-
-  override def nullSafeEval(input: Any): Any = {
-    Math.multiplyExact(input.asInstanceOf[Long], upScaleFactor)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
-          s"${ev.value}, ${upScaleFactor})")
-  }
 }
 
 @ExpressionDescription(
