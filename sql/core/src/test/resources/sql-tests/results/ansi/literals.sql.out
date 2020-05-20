@@ -2,43 +2,43 @@
 -- Number of queries: 50
 
 
--- !query 0
+-- !query
 select null, Null, nUll
--- !query 0 schema
+-- !query schema
 struct<NULL:null,NULL:null,NULL:null>
--- !query 0 output
+-- !query output
 NULL	NULL	NULL
 
 
--- !query 1
+-- !query
 select true, tRue, false, fALse
--- !query 1 schema
+-- !query schema
 struct<true:boolean,true:boolean,false:boolean,false:boolean>
--- !query 1 output
+-- !query output
 true	true	false	false
 
 
--- !query 2
+-- !query
 select 1Y
--- !query 2 schema
+-- !query schema
 struct<1:tinyint>
--- !query 2 output
+-- !query output
 1
 
 
--- !query 3
+-- !query
 select 127Y, -128Y
--- !query 3 schema
+-- !query schema
 struct<127:tinyint,-128:tinyint>
--- !query 3 output
+-- !query output
 127	-128
 
 
--- !query 4
+-- !query
 select 128Y
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 Numeric literal 128 does not fit in range [-128, 127] for type tinyint(line 1, pos 7)
@@ -48,27 +48,27 @@ select 128Y
 -------^^^
 
 
--- !query 5
+-- !query
 select 1S
--- !query 5 schema
+-- !query schema
 struct<1:smallint>
--- !query 5 output
+-- !query output
 1
 
 
--- !query 6
+-- !query
 select 32767S, -32768S
--- !query 6 schema
+-- !query schema
 struct<32767:smallint,-32768:smallint>
--- !query 6 output
+-- !query output
 32767	-32768
 
 
--- !query 7
+-- !query
 select 32768S
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 Numeric literal 32768 does not fit in range [-32768, 32767] for type smallint(line 1, pos 7)
@@ -78,27 +78,27 @@ select 32768S
 -------^^^
 
 
--- !query 8
+-- !query
 select 1L, 2147483648L
--- !query 8 schema
+-- !query schema
 struct<1:bigint,2147483648:bigint>
--- !query 8 output
+-- !query output
 1	2147483648
 
 
--- !query 9
+-- !query
 select 9223372036854775807L, -9223372036854775808L
--- !query 9 schema
+-- !query schema
 struct<9223372036854775807:bigint,-9223372036854775808:bigint>
--- !query 9 output
+-- !query output
 9223372036854775807	-9223372036854775808
 
 
--- !query 10
+-- !query
 select 9223372036854775808L
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 Numeric literal 9223372036854775808 does not fit in range [-9223372036854775808, 9223372036854775807] for type bigint(line 1, pos 7)
@@ -108,43 +108,43 @@ select 9223372036854775808L
 -------^^^
 
 
--- !query 11
+-- !query
 select 1, -1
--- !query 11 schema
+-- !query schema
 struct<1:int,-1:int>
--- !query 11 output
+-- !query output
 1	-1
 
 
--- !query 12
+-- !query
 select 2147483647, -2147483648
--- !query 12 schema
+-- !query schema
 struct<2147483647:int,-2147483648:int>
--- !query 12 output
+-- !query output
 2147483647	-2147483648
 
 
--- !query 13
+-- !query
 select 9223372036854775807, -9223372036854775808
--- !query 13 schema
+-- !query schema
 struct<9223372036854775807:bigint,-9223372036854775808:bigint>
--- !query 13 output
+-- !query output
 9223372036854775807	-9223372036854775808
 
 
--- !query 14
+-- !query
 select 9223372036854775808, -9223372036854775809
--- !query 14 schema
+-- !query schema
 struct<9223372036854775808:decimal(19,0),-9223372036854775809:decimal(19,0)>
--- !query 14 output
+-- !query output
 9223372036854775808	-9223372036854775809
 
 
--- !query 15
+-- !query
 select 1234567890123456789012345678901234567890
--- !query 15 schema
+-- !query schema
 struct<>
--- !query 15 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 decimal can only support precision up to 38
@@ -152,11 +152,11 @@ decimal can only support precision up to 38
 select 1234567890123456789012345678901234567890
 
 
--- !query 16
+-- !query
 select 1234567890123456789012345678901234567890.0
--- !query 16 schema
+-- !query schema
 struct<>
--- !query 16 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 decimal can only support precision up to 38
@@ -164,27 +164,27 @@ decimal can only support precision up to 38
 select 1234567890123456789012345678901234567890.0
 
 
--- !query 17
+-- !query
 select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5, .9e+2, 0.9e+2, 900e-1, 9.e+1
--- !query 17 schema
+-- !query schema
 struct<1.0:double,1.2:double,1.0E10:double,150000.0:double,0.1:double,0.1:double,10000.0:double,90.0:double,90.0:double,90.0:double,90.0:double>
--- !query 17 output
+-- !query output
 1.0	1.2	1.0E10	150000.0	0.1	0.1	10000.0	90.0	90.0	90.0	90.0
 
 
--- !query 18
+-- !query
 select -1D, -1.2D, -1e10, -1.5e5, -.10D, -0.10D, -.1e5
--- !query 18 schema
+-- !query schema
 struct<-1.0:double,-1.2:double,-1.0E10:double,-150000.0:double,-0.1:double,-0.1:double,-10000.0:double>
--- !query 18 output
+-- !query output
 -1.0	-1.2	-1.0E10	-150000.0	-0.1	-0.1	-10000.0
 
 
--- !query 19
+-- !query
 select .e3
--- !query 19 schema
+-- !query schema
 struct<>
--- !query 19 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 no viable alternative at input 'select .'(line 1, pos 7)
@@ -194,11 +194,11 @@ select .e3
 -------^^^
 
 
--- !query 20
+-- !query
 select 1E309, -1E309
--- !query 20 schema
+-- !query schema
 struct<>
--- !query 20 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 Numeric literal 1E309 does not fit in range [-1.7976931348623157E+308, 1.7976931348623157E+308] for type double(line 1, pos 7)
@@ -208,93 +208,93 @@ select 1E309, -1E309
 -------^^^
 
 
--- !query 21
+-- !query
 select 0.3, -0.8, .5, -.18, 0.1111, .1111
--- !query 21 schema
+-- !query schema
 struct<0.3:decimal(1,1),-0.8:decimal(1,1),0.5:decimal(1,1),-0.18:decimal(2,2),0.1111:decimal(4,4),0.1111:decimal(4,4)>
--- !query 21 output
+-- !query output
 0.3	-0.8	0.5	-0.18	0.1111	0.1111
 
 
--- !query 22
+-- !query
 select 123456789012345678901234567890123456789e10d, 123456789012345678901234567890123456789.1e10d
--- !query 22 schema
+-- !query schema
 struct<1.2345678901234568E48:double,1.2345678901234568E48:double>
--- !query 22 output
+-- !query output
 1.2345678901234568E48	1.2345678901234568E48
 
 
--- !query 23
+-- !query
 select "Hello Peter!", 'hello lee!'
--- !query 23 schema
+-- !query schema
 struct<Hello Peter!:string,hello lee!:string>
--- !query 23 output
+-- !query output
 Hello Peter!	hello lee!
 
 
--- !query 24
+-- !query
 select 'hello' 'world', 'hello' " " 'lee'
--- !query 24 schema
+-- !query schema
 struct<helloworld:string,hello lee:string>
--- !query 24 output
+-- !query output
 helloworld	hello lee
 
 
--- !query 25
+-- !query
 select "hello 'peter'"
--- !query 25 schema
+-- !query schema
 struct<hello 'peter':string>
--- !query 25 output
+-- !query output
 hello 'peter'
 
 
--- !query 26
+-- !query
 select 'pattern%', 'no-pattern\%', 'pattern\\%', 'pattern\\\%'
--- !query 26 schema
+-- !query schema
 struct<pattern%:string,no-pattern\%:string,pattern\%:string,pattern\\%:string>
--- !query 26 output
+-- !query output
 pattern%	no-pattern\%	pattern\%	pattern\\%
 
 
--- !query 27
+-- !query
 select '\'', '"', '\n', '\r', '\t', 'Z'
--- !query 27 schema
+-- !query schema
 struct<':string,":string,
 :string,:string,	:string,Z:string>
--- !query 27 output
+-- !query output
 '	"	
 				Z
 
 
--- !query 28
+-- !query
 select '\110\145\154\154\157\041'
--- !query 28 schema
+-- !query schema
 struct<Hello!:string>
--- !query 28 output
+-- !query output
 Hello!
 
 
--- !query 29
+-- !query
 select '\u0057\u006F\u0072\u006C\u0064\u0020\u003A\u0029'
--- !query 29 schema
+-- !query schema
 struct<World :):string>
--- !query 29 output
+-- !query output
 World :)
 
 
--- !query 30
+-- !query
 select dAte '2016-03-12'
--- !query 30 schema
+-- !query schema
 struct<DATE '2016-03-12':date>
--- !query 30 output
+-- !query output
 2016-03-12
 
 
--- !query 31
+-- !query
 select date 'mar 11 2016'
--- !query 31 schema
+-- !query schema
 struct<>
--- !query 31 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 Cannot parse the DATE value: mar 11 2016(line 1, pos 7)
@@ -304,19 +304,19 @@ select date 'mar 11 2016'
 -------^^^
 
 
--- !query 32
+-- !query
 select tImEstAmp '2016-03-11 20:54:00.000'
--- !query 32 schema
+-- !query schema
 struct<TIMESTAMP '2016-03-11 20:54:00':timestamp>
--- !query 32 output
+-- !query output
 2016-03-11 20:54:00
 
 
--- !query 33
+-- !query
 select timestamp '2016-33-11 20:54:00.000'
--- !query 33 schema
+-- !query schema
 struct<>
--- !query 33 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 Cannot parse the TIMESTAMP value: 2016-33-11 20:54:00.000(line 1, pos 7)
@@ -326,11 +326,11 @@ select timestamp '2016-33-11 20:54:00.000'
 -------^^^
 
 
--- !query 34
+-- !query
 select GEO '(10,-6)'
--- !query 34 schema
+-- !query schema
 struct<>
--- !query 34 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 Literals of type 'GEO' are currently not supported.(line 1, pos 7)
@@ -340,19 +340,19 @@ select GEO '(10,-6)'
 -------^^^
 
 
--- !query 35
+-- !query
 select 90912830918230182310293801923652346786BD, 123.0E-28BD, 123.08BD
--- !query 35 schema
+-- !query schema
 struct<90912830918230182310293801923652346786:decimal(38,0),1.230E-26:decimal(29,29),123.08:decimal(5,2)>
--- !query 35 output
+-- !query output
 90912830918230182310293801923652346786	0.00000000000000000000000001230	123.08
 
 
--- !query 36
+-- !query
 select 1.20E-38BD
--- !query 36 schema
+-- !query schema
 struct<>
--- !query 36 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 decimal can only support precision up to 38(line 1, pos 7)
@@ -362,19 +362,19 @@ select 1.20E-38BD
 -------^^^
 
 
--- !query 37
+-- !query
 select x'2379ACFe'
--- !query 37 schema
+-- !query schema
 struct<X'2379ACFE':binary>
--- !query 37 output
+-- !query output
 #y��
 
 
--- !query 38
+-- !query
 select X'XuZ'
--- !query 38 schema
+-- !query schema
 struct<>
--- !query 38 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 contains illegal character for hexBinary: 0XuZ(line 1, pos 7)
@@ -384,98 +384,98 @@ select X'XuZ'
 -------^^^
 
 
--- !query 39
+-- !query
 SELECT 3.14, -3.14, 3.14e8, 3.14e-8, -3.14e8, -3.14e-8, 3.14e+8, 3.14E8, 3.14E-8
--- !query 39 schema
+-- !query schema
 struct<3.14:decimal(3,2),-3.14:decimal(3,2),3.14E8:double,3.14E-8:double,-3.14E8:double,-3.14E-8:double,3.14E8:double,3.14E8:double,3.14E-8:double>
--- !query 39 output
+-- !query output
 3.14	-3.14	3.14E8	3.14E-8	-3.14E8	-3.14E-8	3.14E8	3.14E8	3.14E-8
 
 
--- !query 40
+-- !query
 select +date '1999-01-01'
--- !query 40 schema
+-- !query schema
 struct<>
--- !query 40 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(+ DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
 
 
--- !query 41
+-- !query
 select +timestamp '1999-01-01'
--- !query 41 schema
+-- !query schema
 struct<>
--- !query 41 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(+ TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
 
 
--- !query 42
+-- !query
 select +interval '1 day'
--- !query 42 schema
+-- !query schema
 struct<(+ INTERVAL '1 days'):interval>
--- !query 42 output
+-- !query output
 1 days
 
 
--- !query 43
+-- !query
 select +map(1, 2)
--- !query 43 schema
+-- !query schema
 struct<>
--- !query 43 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(+ map(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval) type, however, 'map(1, 2)' is of map<int,int> type.; line 1 pos 7
 
 
--- !query 44
+-- !query
 select +array(1,2)
--- !query 44 schema
+-- !query schema
 struct<>
--- !query 44 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(+ array(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval) type, however, 'array(1, 2)' is of array<int> type.; line 1 pos 7
 
 
--- !query 45
+-- !query
 select +named_struct('a', 1, 'b', 'spark')
--- !query 45 schema
+-- !query schema
 struct<>
--- !query 45 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(+ named_struct('a', 1, 'b', 'spark'))' due to data type mismatch: argument 1 requires (numeric or interval) type, however, 'named_struct('a', 1, 'b', 'spark')' is of struct<a:int,b:string> type.; line 1 pos 7
 
 
--- !query 46
+-- !query
 select +X'1'
--- !query 46 schema
+-- !query schema
 struct<>
--- !query 46 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(+ X'01')' due to data type mismatch: argument 1 requires (numeric or interval) type, however, 'X'01'' is of binary type.; line 1 pos 7
 
 
--- !query 47
+-- !query
 select -date '1999-01-01'
--- !query 47 schema
+-- !query schema
 struct<>
--- !query 47 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(- DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
 
 
--- !query 48
+-- !query
 select -timestamp '1999-01-01'
--- !query 48 schema
+-- !query schema
 struct<>
--- !query 48 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(- TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
 
 
--- !query 49
+-- !query
 select -x'2379ACFe'
--- !query 49 schema
+-- !query schema
 struct<>
--- !query 49 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(- X'2379ACFE')' due to data type mismatch: argument 1 requires (numeric or interval) type, however, 'X'2379ACFE'' is of binary type.; line 1 pos 7

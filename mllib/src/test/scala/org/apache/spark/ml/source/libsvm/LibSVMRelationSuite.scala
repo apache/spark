@@ -19,11 +19,11 @@ package org.apache.spark.ml.source.libsvm
 
 import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
-import java.util.List
 
 import com.google.common.io.Files
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -73,6 +73,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(row1.getDouble(0) == 1.0)
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === v.size)
   }
 
   test("select as dense vector") {
@@ -85,6 +86,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(row1.getDouble(0) == 1.0)
     val v = row1.getAs[DenseVector](1)
     assert(v == Vectors.dense(1.0, 0.0, 2.0, 0.0, 3.0, 0.0))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === v.size)
   }
 
   test("illegal vector types") {
@@ -101,12 +103,14 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val row1 = df.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === v.size)
   }
 
   test("case insensitive option") {
     val df = spark.read.option("NuMfEaTuReS", "100").format("libsvm").load(path)
     assert(df.first().getAs[SparseVector](1) ==
       Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === 100)
   }
 
   test("write libsvm data and read it again") {
@@ -120,6 +124,8 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val row1 = df2.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === v.size)
+    assert(AttributeGroup.fromStructField(df2.schema("features")).size === v.size)
   }
 
   test("write libsvm data failed due to invalid schema") {
@@ -148,6 +154,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val row1 = df2.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(3, Seq((0, 2.0), (1, 3.0))))
+    assert(AttributeGroup.fromStructField(df2.schema("features")).size === v.size)
   }
 
   test("select features from libsvm relation") {

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.net.URI
-import java.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
@@ -112,31 +111,11 @@ class CatalogManagerSuite extends SparkFunSuite {
   }
 }
 
-class DummyCatalog extends SupportsNamespaces {
-  override def defaultNamespace(): Array[String] = Array("a", "b")
-
-  override def listNamespaces(): Array[Array[String]] = {
-    throw new UnsupportedOperationException
-  }
-  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
-    throw new UnsupportedOperationException
-  }
-  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
-    throw new UnsupportedOperationException
-  }
-  override def createNamespace(
-      namespace: Array[String], metadata: util.Map[String, String]): Unit = {
-    throw new UnsupportedOperationException
-  }
-  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {
-    throw new UnsupportedOperationException
-  }
-  override def dropNamespace(namespace: Array[String]): Boolean = {
-    throw new UnsupportedOperationException
-  }
+class DummyCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = name
   }
   private var _name: String = null
   override def name(): String = _name
+  override def defaultNamespace(): Array[String] = Array("a", "b")
 }

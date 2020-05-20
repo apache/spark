@@ -69,7 +69,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
       // extra layers of escaping in order to embed this in a Javascript string literal.
       val escapedName = Utility.escape(name)
-      val jsEscapedName = StringEscapeUtils.escapeEcmaScript(escapedName)
+      val jsEscapedNameForTooltip = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedName))
+      val jsEscapedNameForLabel = StringEscapeUtils.escapeEcmaScript(escapedName)
       s"""
          |{
          |  'className': 'stage job-timeline-object ${status}',
@@ -78,7 +79,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
          |  'end': new Date(${completionTime}),
          |  'content': '<div class="job-timeline-content" data-toggle="tooltip"' +
          |   'data-placement="top" data-html="true"' +
-         |   'data-title="${jsEscapedName} (Stage ${stageId}.${attemptId})<br>' +
+         |   'data-title="${jsEscapedNameForTooltip} (Stage ${stageId}.${attemptId})<br>' +
          |   'Status: ${status.toUpperCase(Locale.ROOT)}<br>' +
          |   'Submitted: ${UIUtils.formatDate(submissionTime)}' +
          |   '${
@@ -88,7 +89,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
                    ""
                  }
               }">' +
-         |    '${jsEscapedName} (Stage ${stageId}.${attemptId})</div>',
+         |    '${jsEscapedNameForLabel} (Stage ${stageId}.${attemptId})</div>',
          |}
        """.stripMargin
     }
@@ -309,10 +310,18 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     val summary: NodeSeq =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           <li>
             <Strong>Status:</Strong>
             {jobData.status}
+          </li>
+          <li>
+            <Strong>Submitted:</Strong>
+            {JobDataUtil.getFormattedSubmissionTime(jobData)}
+          </li>
+          <li>
+            <Strong>Duration:</Strong>
+            {JobDataUtil.getFormattedDuration(jobData)}
           </li>
           {
             if (sqlExecutionId.isDefined) {

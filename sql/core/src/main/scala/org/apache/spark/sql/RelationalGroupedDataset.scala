@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StructType, TypeCollection}
+import org.apache.spark.sql.types.{NumericType, StructType}
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -88,20 +88,20 @@ class RelationalGroupedDataset protected[sql](
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
-  private[this] def aggregateNumericOrIntervalColumns(
-      colNames: String*)(f: Expression => AggregateFunction): DataFrame = {
+  private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
+    : DataFrame = {
 
     val columnExprs = if (colNames.isEmpty) {
-      // No columns specified. Use all numeric calculation supported columns.
-      df.numericCalculationSupportedColumns
+      // No columns specified. Use all numeric columns.
+      df.numericColumns
     } else {
-      // Make sure all specified columns are numeric calculation supported columns.
+      // Make sure all specified columns are numeric.
       colNames.map { colName =>
         val namedExpr = df.resolve(colName)
-        if (!TypeCollection.NumericAndInterval.acceptsType(namedExpr.dataType)) {
+        if (!namedExpr.dataType.isInstanceOf[NumericType]) {
           throw new AnalysisException(
-            s""""$colName" is not a numeric or calendar interval column. """ +
-            "Aggregation function can only be applied on a numeric or calendar interval column.")
+            s""""$colName" is not a numeric column. """ +
+            "Aggregation function can only be applied on a numeric column.")
         }
         namedExpr
       }
@@ -269,8 +269,7 @@ class RelationalGroupedDataset protected[sql](
   def count(): DataFrame = toDF(Seq(Alias(Count(Literal(1)).toAggregateExpression(), "count")()))
 
   /**
-   * Compute the average value for each numeric or calender interval columns for each group. This
-   * is an alias for `avg`.
+   * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
    * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the average values for them.
    *
@@ -278,11 +277,11 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
-    aggregateNumericOrIntervalColumns(colNames : _*)(Average)
+    aggregateNumericColumns(colNames : _*)(Average)
   }
 
   /**
-   * Compute the max value for each numeric calender interval columns for each group.
+   * Compute the max value for each numeric columns for each group.
    * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the max values for them.
    *
@@ -290,11 +289,11 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def max(colNames: String*): DataFrame = {
-    aggregateNumericOrIntervalColumns(colNames : _*)(Max)
+    aggregateNumericColumns(colNames : _*)(Max)
   }
 
   /**
-   * Compute the mean value for each numeric calender interval columns for each group.
+   * Compute the mean value for each numeric columns for each group.
    * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the mean values for them.
    *
@@ -302,11 +301,11 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    aggregateNumericOrIntervalColumns(colNames : _*)(Average)
+    aggregateNumericColumns(colNames : _*)(Average)
   }
 
   /**
-   * Compute the min value for each numeric calender interval column for each group.
+   * Compute the min value for each numeric column for each group.
    * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the min values for them.
    *
@@ -314,11 +313,11 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
-    aggregateNumericOrIntervalColumns(colNames : _*)(Min)
+    aggregateNumericColumns(colNames : _*)(Min)
   }
 
   /**
-   * Compute the sum for each numeric calender interval columns for each group.
+   * Compute the sum for each numeric columns for each group.
    * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the sum for them.
    *
@@ -326,7 +325,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
-    aggregateNumericOrIntervalColumns(colNames : _*)(Sum)
+    aggregateNumericColumns(colNames : _*)(Sum)
   }
 
   /**

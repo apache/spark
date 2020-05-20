@@ -2,81 +2,81 @@
 -- Number of queries: 10
 
 
--- !query 0
+-- !query
 select x'00' < x'0f'
--- !query 0 schema
+-- !query schema
 struct<(X'00' < X'0F'):boolean>
--- !query 0 output
+-- !query output
 true
 
 
--- !query 1
+-- !query
 select x'00' < x'ff'
--- !query 1 schema
+-- !query schema
 struct<(X'00' < X'FF'):boolean>
--- !query 1 output
+-- !query output
 true
 
 
--- !query 2
+-- !query
 select '1 ' = 1Y
--- !query 2 schema
+-- !query schema
 struct<(CAST(1  AS TINYINT) = 1):boolean>
--- !query 2 output
+-- !query output
 true
 
 
--- !query 3
+-- !query
 select '\t1 ' = 1Y
--- !query 3 schema
+-- !query schema
 struct<(CAST(	1  AS TINYINT) = 1):boolean>
--- !query 3 output
+-- !query output
 true
 
 
--- !query 4
+-- !query
 select '1 ' = 1S
--- !query 4 schema
+-- !query schema
 struct<(CAST(1  AS SMALLINT) = 1):boolean>
--- !query 4 output
+-- !query output
 true
 
 
--- !query 5
+-- !query
 select '1 ' = 1
--- !query 5 schema
+-- !query schema
 struct<(CAST(1  AS INT) = 1):boolean>
--- !query 5 output
+-- !query output
 true
 
 
--- !query 6
+-- !query
 select ' 1' = 1L
--- !query 6 schema
+-- !query schema
 struct<(CAST( 1 AS BIGINT) = 1):boolean>
--- !query 6 output
+-- !query output
 true
 
 
--- !query 7
+-- !query
 select ' 1' = cast(1.0 as float)
--- !query 7 schema
+-- !query schema
 struct<(CAST( 1 AS FLOAT) = CAST(1.0 AS FLOAT)):boolean>
--- !query 7 output
+-- !query output
 true
 
 
--- !query 8
+-- !query
 select ' 1.0 ' = 1.0D
--- !query 8 schema
+-- !query schema
 struct<(CAST( 1.0  AS DOUBLE) = 1.0):boolean>
--- !query 8 output
+-- !query output
 true
 
 
--- !query 9
+-- !query
 select ' 1.0 ' = 1.0BD
--- !query 9 schema
+-- !query schema
 struct<(CAST( 1.0  AS DOUBLE) = CAST(1.0 AS DOUBLE)):boolean>
--- !query 9 output
+-- !query output
 true

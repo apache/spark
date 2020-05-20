@@ -162,7 +162,8 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
     Examples:
       > SELECT _FUNC_(0);
        0
-  """)
+  """,
+  since = "3.0.0")
 case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
@@ -170,6 +171,8 @@ case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsI
   override def dataType: DataType = IntegerType
 
   override def toString: String = s"bit_count($child)"
+
+  override def prettyName: String = "bit_count"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
     case BooleanType => defineCodeGen(ctx, ev, c => s"if ($c) 1 else 0")
@@ -183,6 +186,4 @@ case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsI
     case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
     case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
   }
-
-  override def sql: String = s"bit_count(${child.sql})"
 }

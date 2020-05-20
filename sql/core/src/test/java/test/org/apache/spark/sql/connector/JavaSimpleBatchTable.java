@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
@@ -34,7 +35,7 @@ abstract class JavaSimpleBatchTable implements Table, SupportsRead {
 
   @Override
   public StructType schema() {
-    return new StructType().add("i", "int").add("j", "int");
+    return TestingV2Source.schema();
   }
 
   @Override

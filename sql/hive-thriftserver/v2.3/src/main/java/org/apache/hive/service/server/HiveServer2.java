@@ -30,8 +30,6 @@ import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.hive.common.JvmPauseMonitor;
-import org.apache.hadoop.hive.common.LogUtils;
-import org.apache.hadoop.hive.common.LogUtils.LogInitializationException;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hive.common.util.HiveStringUtils;
 import org.apache.hive.service.CompositeService;
@@ -158,25 +156,13 @@ public class HiveServer2 extends CompositeService {
 
   public static void main(String[] args) {
     HiveConf.setLoadHiveServer2Config(true);
-    try {
-      ServerOptionsProcessor oproc = new ServerOptionsProcessor("hiveserver2");
-      ServerOptionsProcessorResponse oprocResponse = oproc.parse(args);
+    ServerOptionsProcessor oproc = new ServerOptionsProcessor("hiveserver2");
+    ServerOptionsProcessorResponse oprocResponse = oproc.parse(args);
 
-      // NOTE: It is critical to do this here so that log4j is reinitialized
-      // before any of the other core hive classes are loaded
-      String initLog4jMessage = LogUtils.initHiveLog4j();
-      LOG.debug(initLog4jMessage);
-      HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG);
+    HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG);
 
-      // Log debug message from "oproc" after log4j initialize properly
-      LOG.debug(oproc.getDebugMessage().toString());
-
-      // Call the executor which will execute the appropriate command based on the parsed options
-      oprocResponse.getServerOptionsExecutor().execute();
-    } catch (LogInitializationException e) {
-      LOG.error("Error initializing log: " + e.getMessage(), e);
-      System.exit(-1);
-    }
+    // Call the executor which will execute the appropriate command based on the parsed options
+    oprocResponse.getServerOptionsExecutor().execute();
   }
 
   /**

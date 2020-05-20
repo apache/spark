@@ -120,3 +120,8 @@ SELECT cate, sum(val) OVER (w)
 FROM testData
 WHERE val is not null
 WINDOW w AS (PARTITION BY cate ORDER BY val);
+
+-- with filter predicate
+SELECT val, cate,
+count(val) FILTER (WHERE val > 1) OVER(PARTITION BY cate)
+FROM testData ORDER BY cate, val;

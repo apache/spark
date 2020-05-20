@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
@@ -33,8 +33,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * by calling the built-in session catalog directly. This is created for convenience, so that users
  * only need to override some methods where they want to apply custom logic. For example, they can
  * override {@code createTable}, do something else before calling {@code super.createTable}.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   private CatalogPlugin delegate;
@@ -50,6 +52,11 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   @Override
   public final void initialize(String name, CaseInsensitiveStringMap options) {}
+
+  @Override
+  public String[] defaultNamespace() {
+    return delegate.defaultNamespace();
+  }
 
   @Override
   public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
@@ -97,11 +104,6 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
       Identifier oldIdent,
       Identifier newIdent) throws NoSuchTableException, TableAlreadyExistsException {
     asTableCatalog().renameTable(oldIdent, newIdent);
-  }
-
-  @Override
-  public String[] defaultNamespace() {
-    return asNamespaceCatalog().defaultNamespace();
   }
 
   @Override

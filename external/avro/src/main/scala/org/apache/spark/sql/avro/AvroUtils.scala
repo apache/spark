@@ -31,6 +31,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.avro.AvroOptions.ignoreExtensionKey
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -42,12 +43,12 @@ object AvroUtils extends Logging {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val conf = spark.sessionState.newHadoopConf()
-    if (options.contains("ignoreExtension")) {
-      logWarning(s"Option ${AvroOptions.ignoreExtensionKey} is deprecated. Please use the " +
-        "general data source option pathGlobFilter for filtering file names.")
-    }
     val parsedOptions = new AvroOptions(options, conf)
 
+    if (parsedOptions.parameters.contains(ignoreExtensionKey)) {
+      logWarning(s"Option $ignoreExtensionKey is deprecated. Please use the " +
+        "general data source option pathGlobFilter for filtering file names.")
+    }
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
       .map(new Schema.Parser().parse)

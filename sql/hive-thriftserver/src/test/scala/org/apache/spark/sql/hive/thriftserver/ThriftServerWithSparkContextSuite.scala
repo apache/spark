@@ -17,44 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.{DriverManager, Statement}
-
-import scala.util.{Random, Try}
-
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.SharedSparkSession
-
-class ThriftServerWithSparkContextSuite extends QueryTest with SharedSparkSession {
-
-  private var hiveServer2: HiveThriftServer2 = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    // Chooses a random port between 10000 and 19999
-    var listeningPort = 10000 + Random.nextInt(10000)
-
-    // Retries up to 3 times with different port numbers if the server fails to start
-    (1 to 3).foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
-      started.orElse {
-        listeningPort += 1
-        Try(startThriftServer(listeningPort, attempt))
-      }
-    }.recover {
-      case cause: Throwable =>
-        throw cause
-    }.get
-    logInfo("HiveThriftServer2 started successfully")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      hiveServer2.stop()
-    } finally {
-      super.afterAll()
-    }
-  }
+class ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("SPARK-29911: Uncache cached tables when session closed") {
     val cacheManager = spark.sharedState.cacheManager
@@ -76,29 +39,6 @@ class ThriftServerWithSparkContextSuite extends QueryTest with SharedSparkSessio
         statement.execute(s"UNCACHE TABLE IF EXISTS $globalTempDB.globalTempTbl")
       }
       assert(cacheManager.isEmpty)
-    }
-  }
-
-  private def startThriftServer(port: Int, attempt: Int): Unit = {
-    logInfo(s"Trying to start HiveThriftServer2: port=$port, attempt=$attempt")
-    val sqlContext = spark.newSession().sqlContext
-    sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, port.toString)
-    hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
-  }
-
-  private def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
-    val user = System.getProperty("user.name")
-
-    val serverPort = hiveServer2.getHiveConf.get(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname)
-    val connections =
-      fs.map { _ => DriverManager.getConnection(s"jdbc:hive2://localhost:$serverPort", user, "") }
-    val statements = connections.map(_.createStatement())
-
-    try {
-      statements.zip(fs).foreach { case (s, f) => f(s) }
-    } finally {
-      statements.foreach(_.close())
-      connections.foreach(_.close())
     }
   }
 }

@@ -31,6 +31,8 @@ import org.apache.spark.annotation.Evolving;
  * for normal data sources, or {@link org.apache.spark.sql.vectorized.ColumnarBatch} for columnar
  * data sources(whose {@link PartitionReaderFactory#supportColumnarReads(InputPartition)}
  * returns true).
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface PartitionReader<T> extends Closeable {

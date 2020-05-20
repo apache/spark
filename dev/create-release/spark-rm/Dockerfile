@@ -20,7 +20,7 @@
 # Includes:
 # * Java 8
 # * Ivy
-# * Python/PyPandoc (2.7.15/3.6.7)
+# * Python (2.7.15/3.6.7)
 # * R-base/R-base-dev (3.6.1)
 # * Ruby 2.3 build utilities
 
@@ -33,8 +33,8 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
-ARG BASE_PIP_PKGS="setuptools wheel"
-ARG PIP_PKGS="pyopenssl pypandoc numpy sphinx"
+ARG PIP_PKGS="sphinx==2.3.1 mkdocs==1.0.4 numpy==1.18.1"
+ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 
 # Install extra needed repos and refresh.
 # - CRAN repo
@@ -62,12 +62,11 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   curl -sL https://deb.nodesource.com/setup_11.x | bash && \
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
-  $APT_INSTALL libpython3-dev python3-pip && \
+  $APT_INSTALL libpython3-dev python3-pip python3-setuptools && \
   # Change default python version to python3.
   update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
   update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \
   update-alternatives --set python /usr/bin/python3.6 && \
-  pip3 install $BASE_PIP_PKGS && \
   pip3 install $PIP_PKGS && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
@@ -76,10 +75,8 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
   Rscript -e "devtools::install_github('jimhester/lintr')" && \
   # Install tools needed to build the documentation.
-  $APT_INSTALL ruby2.3 ruby2.3-dev mkdocs && \
-  gem install jekyll --no-rdoc --no-ri -v 3.8.6 && \
-  gem install jekyll-redirect-from && \
-  gem install rouge
+  $APT_INSTALL ruby2.5 ruby2.5-dev && \
+  gem install --no-document $GEM_PKGS
 
 WORKDIR /opt/spark-rm/output
 

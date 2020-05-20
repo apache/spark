@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -16,14 +16,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
 import glob
 import os
 import sys
 from setuptools import setup
 from shutil import copyfile, copytree, rmtree
 
-if sys.version_info < (3, 6):
-    print("Python versions prior to 3.6 are not supported for pip installed PySpark.",
+if sys.version_info < (2, 7):
+    print("Python versions prior to 2.7 are not supported for pip installed PySpark.",
           file=sys.stderr)
     sys.exit(-1)
 
@@ -153,21 +154,15 @@ try:
     # will search for SPARK_HOME with Python.
     scripts.append("pyspark/find_spark_home.py")
 
-    # Parse the README markdown file into rst for PyPI
-    long_description = "!!!!! missing pandoc do not upload to PyPI !!!!"
-    try:
-        import pypandoc
-        long_description = pypandoc.convert('README.md', 'rst')
-    except ImportError:
-        print("Could not import pypandoc - required to package PySpark", file=sys.stderr)
-    except OSError:
-        print("Could not convert - pandoc is not installed", file=sys.stderr)
+    with open('README.md') as f:
+        long_description = f.read()
 
     setup(
         name='pyspark',
         version=VERSION,
         description='Apache Spark Python API',
         long_description=long_description,
+        long_description_content_type="text/markdown",
         author='Spark Developers',
         author_email='dev@spark.apache.org',
         url='https://github.com/apache/spark/tree/master/python',
@@ -179,6 +174,8 @@ try:
                   'pyspark.ml.linalg',
                   'pyspark.ml.param',
                   'pyspark.sql',
+                  'pyspark.sql.avro',
+                  'pyspark.sql.pandas',
                   'pyspark.streaming',
                   'pyspark.bin',
                   'pyspark.sbin',
@@ -187,6 +184,7 @@ try:
                   'pyspark.python.lib',
                   'pyspark.data',
                   'pyspark.licenses',
+                  'pyspark.resource',
                   'pyspark.examples.src.main.python'],
         include_package_data=True,
         package_dir={
@@ -210,8 +208,7 @@ try:
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
-        install_requires=['py4j==0.10.8.1'],
-        setup_requires=['pypandoc'],
+        install_requires=['py4j==0.10.9'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],

@@ -21,6 +21,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 /**
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
@@ -40,12 +41,17 @@ case class MapType(
   /** No-arg constructor for kryo. */
   def this() = this(null, null, false)
 
-  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(s"$prefix-- key: ${keyType.typeName}\n")
-    DataType.buildFormattedString(keyType, s"$prefix    |", builder)
-    builder.append(s"$prefix-- value: ${valueType.typeName} " +
-      s"(valueContainsNull = $valueContainsNull)\n")
-    DataType.buildFormattedString(valueType, s"$prefix    |", builder)
+  private[sql] def buildFormattedString(
+      prefix: String,
+      stringConcat: StringConcat,
+      maxDepth: Int = Int.MaxValue): Unit = {
+    if (maxDepth > 0) {
+      stringConcat.append(s"$prefix-- key: ${keyType.typeName}\n")
+      DataType.buildFormattedString(keyType, s"$prefix    |", stringConcat, maxDepth)
+      stringConcat.append(s"$prefix-- value: ${valueType.typeName} " +
+        s"(valueContainsNull = $valueContainsNull)\n")
+      DataType.buildFormattedString(valueType, s"$prefix    |", stringConcat, maxDepth)
+    }
   }
 
   override private[sql] def jsonValue: JValue =

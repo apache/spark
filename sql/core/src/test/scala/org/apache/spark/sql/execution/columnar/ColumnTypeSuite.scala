@@ -78,7 +78,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     checkActualSize(ARRAY_TYPE, Array[Any](1), 4 + 8 + 8 + 8)
     checkActualSize(MAP_TYPE, Map(1 -> "a"), 4 + (8 + 8 + 8 + 8) + (8 + 8 + 8 + 8))
     checkActualSize(STRUCT_TYPE, Row("hello"), 28)
-    checkActualSize(CALENDAR_INTERVAL, CalendarInterval.MAX_VALUE, 4 + 4 + 8)
+    checkActualSize(CALENDAR_INTERVAL, new CalendarInterval(0, 0, 0), 4 + 4 + 8)
   }
 
   testNativeColumnType(BOOLEAN)

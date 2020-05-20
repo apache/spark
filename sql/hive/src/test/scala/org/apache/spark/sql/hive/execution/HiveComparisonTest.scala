@@ -24,7 +24,7 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Dataset
@@ -46,8 +46,7 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  * See the documentation of public vals in this class for information on how test execution can be
  * configured using system properties.
  */
-abstract class HiveComparisonTest
-  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
+abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
 
   override protected val enableAutoThreadAudit = false
 
@@ -346,8 +345,7 @@ abstract class HiveComparisonTest
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
           def getResult(): Seq[String] = {
-            SQLExecution.withNewExecutionId(
-              query.sparkSession, query)(hiveResultString(query.executedPlan))
+            SQLExecution.withNewExecutionId(query)(hiveResultString(query.executedPlan))
           }
           try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>
@@ -376,7 +374,7 @@ abstract class HiveComparisonTest
                 (!hiveQuery.logical.isInstanceOf[ShowFunctionsStatement]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeFunctionStatement]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeTableStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeRelation]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeColumnStatement]) &&
                 preparedHive != catalyst) {
 

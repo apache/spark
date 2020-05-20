@@ -75,99 +75,10 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }.head
   }
 
-  private def withCreateTableStatement(sql: String)(prediction: CreateTableStatement => Unit)
-    : Unit = {
-    val statement = parser.parsePlan(sql).asInstanceOf[CreateTableStatement]
-    prediction(statement)
-  }
-
   test("alter database - property values must be set") {
     assertUnsupported(
       sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
-  }
-
-  test("create function") {
-    val sql1 =
-      """
-       |CREATE TEMPORARY FUNCTION helloworld as
-       |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-       |JAR '/path/to/jar2'
-     """.stripMargin
-    val sql2 =
-      """
-        |CREATE FUNCTION hello.world as
-        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
-        |FILE '/path/to/file'
-      """.stripMargin
-    val sql3 =
-      """
-        |CREATE OR REPLACE TEMPORARY FUNCTION helloworld3 as
-        |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-        |JAR '/path/to/jar2'
-      """.stripMargin
-    val sql4 =
-      """
-        |CREATE OR REPLACE FUNCTION hello.world1 as
-        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
-        |FILE '/path/to/file'
-      """.stripMargin
-    val sql5 =
-      """
-        |CREATE FUNCTION IF NOT EXISTS hello.world2 as
-        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
-        |FILE '/path/to/file'
-      """.stripMargin
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
-    val parsed4 = parser.parsePlan(sql4)
-    val parsed5 = parser.parsePlan(sql5)
-    val expected1 = CreateFunctionCommand(
-      None,
-      "helloworld",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
-        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
-      isTemp = true, ignoreIfExists = false, replace = false)
-    val expected2 = CreateFunctionCommand(
-      Some("hello"),
-      "world",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
-        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false, ignoreIfExists = false, replace = false)
-    val expected3 = CreateFunctionCommand(
-      None,
-      "helloworld3",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
-        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
-      isTemp = true, ignoreIfExists = false, replace = true)
-    val expected4 = CreateFunctionCommand(
-      Some("hello"),
-      "world1",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
-        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false, ignoreIfExists = false, replace = true)
-    val expected5 = CreateFunctionCommand(
-      Some("hello"),
-      "world2",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
-        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false, ignoreIfExists = true, replace = false)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-    comparePlans(parsed5, expected5)
   }
 
   test("create hive table - table file format") {
@@ -504,7 +415,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       assert(desc.comment == Some("This is the staging page view table"))
       // TODO will be SQLText
       assert(desc.viewText.isEmpty)
-      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewCatalogAndNamespace.isEmpty)
       assert(desc.viewQueryColumnNames.isEmpty)
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
@@ -556,7 +467,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       // TODO will be SQLText
       assert(desc.comment == Some("This is the staging page view table"))
       assert(desc.viewText.isEmpty)
-      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewCatalogAndNamespace.isEmpty)
       assert(desc.viewQueryColumnNames.isEmpty)
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.storage.properties == Map())
@@ -569,17 +480,21 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("Test CTAS #3") {
     val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
-    val statement = parser.parsePlan(s3).asInstanceOf[CreateTableAsSelectStatement]
-    assert(statement.tableName(0) == "page_view")
-    assert(statement.asSelect == parser.parsePlan("SELECT * FROM src"))
-    assert(statement.partitioning.isEmpty)
-    assert(statement.bucketSpec.isEmpty)
-    assert(statement.properties.isEmpty)
-    assert(statement.provider == conf.defaultDataSourceName)
-    assert(statement.options.isEmpty)
-    assert(statement.location.isEmpty)
-    assert(statement.comment.isEmpty)
-    assert(!statement.ifNotExists)
+    val (desc, exists) = extractTableDesc(s3)
+    assert(exists == false)
+    assert(desc.identifier.database == None)
+    assert(desc.identifier.table == "page_view")
+    assert(desc.tableType == CatalogTableType.MANAGED)
+    assert(desc.storage.locationUri == None)
+    assert(desc.schema.isEmpty)
+    assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewQueryColumnNames.isEmpty)
+    assert(desc.storage.properties == Map())
+    assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(desc.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    assert(desc.properties == Map())
   }
 
   test("Test CTAS #4") {
@@ -609,7 +524,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewCatalogAndNamespace.isEmpty)
     assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
@@ -739,60 +654,67 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create table - basic") {
     val query = "CREATE TABLE my_table (id int, name string)"
-    withCreateTableStatement(query) { state =>
-      assert(state.tableName(0) == "my_table")
-      assert(state.tableSchema == new StructType().add("id", "int").add("name", "string"))
-      assert(state.partitioning.isEmpty)
-      assert(state.bucketSpec.isEmpty)
-      assert(state.properties.isEmpty)
-      assert(state.provider == conf.defaultDataSourceName)
-      assert(state.options.isEmpty)
-      assert(state.location.isEmpty)
-      assert(state.comment.isEmpty)
-      assert(!state.ifNotExists)
-    }
+    val (desc, allowExisting) = extractTableDesc(query)
+    assert(!allowExisting)
+    assert(desc.identifier.database.isEmpty)
+    assert(desc.identifier.table == "my_table")
+    assert(desc.tableType == CatalogTableType.MANAGED)
+    assert(desc.schema == new StructType().add("id", "int").add("name", "string"))
+    assert(desc.partitionColumnNames.isEmpty)
+    assert(desc.bucketSpec.isEmpty)
+    assert(desc.viewText.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
+    assert(desc.storage.locationUri.isEmpty)
+    assert(desc.storage.inputFormat ==
+      Some("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(desc.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    assert(desc.storage.properties.isEmpty)
+    assert(desc.properties.isEmpty)
+    assert(desc.comment.isEmpty)
   }
 
   test("create table - with database name") {
     val query = "CREATE TABLE dbx.my_table (id int, name string)"
-    withCreateTableStatement(query) { state =>
-      assert(state.tableName(0) == "dbx")
-      assert(state.tableName(1) == "my_table")
-    }
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.identifier.database == Some("dbx"))
+    assert(desc.identifier.table == "my_table")
   }
 
   test("create table - temporary") {
     val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
     val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("CREATE TEMPORARY TABLE without a provider is not allowed."))
+    assert(e.message.contains("CREATE TEMPORARY TABLE is not supported yet"))
   }
 
   test("create table - external") {
     val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
-    val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("Operation not allowed: CREATE EXTERNAL TABLE ..."))
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.tableType == CatalogTableType.EXTERNAL)
+    assert(desc.storage.locationUri == Some(new URI("/path/to/nowhere")))
   }
 
   test("create table - if not exists") {
     val query = "CREATE TABLE IF NOT EXISTS tab1 (id int, name string)"
-    withCreateTableStatement(query) { state =>
-      assert(state.ifNotExists)
-    }
+    val (_, allowExisting) = extractTableDesc(query)
+    assert(allowExisting)
   }
 
   test("create table - comment") {
     val query = "CREATE TABLE my_table (id int, name string) COMMENT 'its hot as hell below'"
-    withCreateTableStatement(query) { state =>
-      assert(state.comment == Some("its hot as hell below"))
-    }
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.comment == Some("its hot as hell below"))
   }
 
   test("create table - partitioned columns") {
-    val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (id)"
-    withCreateTableStatement(query) { state =>
-      val transform = IdentityTransform(FieldReference(Seq("id")))
-      assert(state.partitioning == Seq(transform))
-    }
+    val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (month int)"
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.schema == new StructType()
+      .add("id", "int")
+      .add("name", "string")
+      .add("month", "int"))
+    assert(desc.partitionColumnNames == Seq("month"))
   }
 
   test("create table - clustered by") {
@@ -808,22 +730,20 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
        """
 
     val query1 = s"$baseQuery INTO $numBuckets BUCKETS"
-    withCreateTableStatement(query1) { state =>
-      assert(state.bucketSpec.isDefined)
-      val bucketSpec = state.bucketSpec.get
-      assert(bucketSpec.numBuckets == numBuckets)
-      assert(bucketSpec.bucketColumnNames.head.equals(bucketedColumn))
-      assert(bucketSpec.sortColumnNames.isEmpty)
-    }
+    val (desc1, _) = extractTableDesc(query1)
+    assert(desc1.bucketSpec.isDefined)
+    val bucketSpec1 = desc1.bucketSpec.get
+    assert(bucketSpec1.numBuckets == numBuckets)
+    assert(bucketSpec1.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec1.sortColumnNames.isEmpty)
 
     val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS"
-    withCreateTableStatement(query2) { state =>
-      assert(state.bucketSpec.isDefined)
-      val bucketSpec = state.bucketSpec.get
-      assert(bucketSpec.numBuckets == numBuckets)
-      assert(bucketSpec.bucketColumnNames.head.equals(bucketedColumn))
-      assert(bucketSpec.sortColumnNames.head.equals(sortColumn))
-    }
+    val (desc2, _) = extractTableDesc(query2)
+    assert(desc2.bucketSpec.isDefined)
+    val bucketSpec2 = desc2.bucketSpec.get
+    assert(bucketSpec2.numBuckets == numBuckets)
+    assert(bucketSpec2.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec2.sortColumnNames.head.equals(sortColumn))
   }
 
   test("create table(hive) - skewed by") {
@@ -893,9 +813,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create table - properties") {
     val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
-    withCreateTableStatement(query) { state =>
-      assert(state.properties == Map("k1" -> "v1", "k2" -> "v2"))
-    }
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
   }
 
   test("create table(hive) - everything!") {
@@ -921,7 +840,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.partitionColumnNames == Seq("month"))
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewCatalogAndNamespace.isEmpty)
     assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.locationUri == Some(new URI("/path/to/mercury")))
     assert(desc.storage.inputFormat == Some("winput"))

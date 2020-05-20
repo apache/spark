@@ -33,11 +33,10 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
@@ -53,18 +52,13 @@ class MemorySink extends Table with SupportsWrite with Logging {
     Set(TableCapability.STREAMING_WRITE).asJava
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
       private var needTruncate: Boolean = false
-      private var inputSchema: StructType = _
+      private val inputSchema: StructType = info.schema()
 
       override def truncate(): WriteBuilder = {
         this.needTruncate = true
-        this
-      }
-
-      override def withInputDataSchema(schema: StructType): WriteBuilder = {
-        this.inputSchema = schema
         this
       }
 
@@ -178,10 +172,10 @@ class MemoryDataWriter(partition: Int, schema: StructType)
 
   private val data = mutable.Buffer[Row]()
 
-  private val encoder = RowEncoder(schema).resolveAndBind()
+  private val fromRow = RowEncoder(schema).resolveAndBind().createDeserializer()
 
   override def write(row: InternalRow): Unit = {
-    data.append(encoder.fromRow(row))
+    data.append(fromRow(row))
   }
 
   override def commit(): MemoryWriterCommitMessage = {

@@ -85,6 +85,7 @@ class StateOperatorProgress private[sql](
  *                case of retries after a failure a given batchId my be executed more than once.
  *                Similarly, when there is no data to be processed, the batchId will not be
  *                incremented.
+ * @param batchDuration The process duration of each batch.
  * @param durationMs The amount of time taken to perform various operations in milliseconds.
  * @param eventTime Statistics of event time seen in this batch. It may contain the following keys:
  *                 {{{
@@ -105,6 +106,7 @@ class StreamingQueryProgress private[sql](
   val name: String,
   val timestamp: String,
   val batchId: Long,
+  val batchDuration: Long,
   val durationMs: ju.Map[String, JLong],
   val eventTime: ju.Map[String, String],
   val stateOperators: Array[StateOperatorProgress],

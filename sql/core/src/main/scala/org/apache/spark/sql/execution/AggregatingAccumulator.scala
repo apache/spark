@@ -230,14 +230,14 @@ object AggregatingAccumulator {
     val typedImperatives = mutable.Buffer.empty[TypedImperativeAggregate[_]]
     val inputAttributeSeq: AttributeSeq = inputAttributes
     val resultExpressions = functions.map(_.transform {
-      case AggregateExpression(agg: DeclarativeAggregate, _, _, _) =>
+      case AggregateExpression(agg: DeclarativeAggregate, _, _, _, _) =>
         aggBufferAttributes ++= agg.aggBufferAttributes
         inputAggBufferAttributes ++= agg.inputAggBufferAttributes
         initialValues ++= agg.initialValues
         updateExpressions ++= agg.updateExpressions
         mergeExpressions ++= agg.mergeExpressions
         agg.evaluateExpression
-      case AggregateExpression(agg: ImperativeAggregate, _, _, _) =>
+      case AggregateExpression(agg: ImperativeAggregate, _, _, _, _) =>
         val imperative = BindReferences.bindReference(agg
           .withNewMutableAggBufferOffset(aggBufferAttributes.size)
           .withNewInputAggBufferOffset(inputAggBufferAttributes.size),

@@ -2,3587 +2,3587 @@
 -- Number of queries: 577
 
 
--- !query 0
+-- !query
 CREATE TABLE num_data (id int, val decimal(38,10)) USING parquet
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 CREATE TABLE num_exp_add (id1 int, id2 int, expected decimal(38,10)) USING parquet
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 CREATE TABLE num_exp_sub (id1 int, id2 int, expected decimal(38,10)) USING parquet
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 CREATE TABLE num_exp_div (id1 int, id2 int, expected decimal(38,10)) USING parquet
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 CREATE TABLE num_exp_mul (id1 int, id2 int, expected decimal(38,10)) USING parquet
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 CREATE TABLE num_exp_sqrt (id int, expected decimal(38,10)) USING parquet
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 CREATE TABLE num_exp_ln (id int, expected decimal(38,10)) USING parquet
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 CREATE TABLE num_exp_log10 (id int, expected decimal(38,10)) USING parquet
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 CREATE TABLE num_exp_power_10_ln (id int, expected decimal(38,10)) USING parquet
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 
 
 
--- !query 9
+-- !query
 CREATE TABLE num_result (id1 int, id2 int, result decimal(38,10)) USING parquet
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 
 
 
--- !query 10
+-- !query
 INSERT INTO num_exp_add VALUES (0,0,0)
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 
 
 
--- !query 11
+-- !query
 INSERT INTO num_exp_sub VALUES (0,0,0)
--- !query 11 schema
+-- !query schema
 struct<>
--- !query 11 output
+-- !query output
 
 
 
--- !query 12
+-- !query
 INSERT INTO num_exp_mul VALUES (0,0,0)
--- !query 12 schema
+-- !query schema
 struct<>
--- !query 12 output
+-- !query output
 
 
 
--- !query 13
+-- !query
 INSERT INTO num_exp_div VALUES (0,0,double('NaN'))
--- !query 13 schema
+-- !query schema
 struct<>
--- !query 13 output
+-- !query output
 
 
 
--- !query 14
+-- !query
 INSERT INTO num_exp_add VALUES (0,1,0)
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 
 
 
--- !query 15
+-- !query
 INSERT INTO num_exp_sub VALUES (0,1,0)
--- !query 15 schema
+-- !query schema
 struct<>
--- !query 15 output
+-- !query output
 
 
 
--- !query 16
+-- !query
 INSERT INTO num_exp_mul VALUES (0,1,0)
--- !query 16 schema
+-- !query schema
 struct<>
--- !query 16 output
+-- !query output
 
 
 
--- !query 17
+-- !query
 INSERT INTO num_exp_div VALUES (0,1,double('NaN'))
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 
 
 
--- !query 18
+-- !query
 INSERT INTO num_exp_add VALUES (0,2,-34338492.215397047)
--- !query 18 schema
+-- !query schema
 struct<>
--- !query 18 output
+-- !query output
 
 
 
--- !query 19
+-- !query
 INSERT INTO num_exp_sub VALUES (0,2,34338492.215397047)
--- !query 19 schema
+-- !query schema
 struct<>
--- !query 19 output
+-- !query output
 
 
 
--- !query 20
+-- !query
 INSERT INTO num_exp_mul VALUES (0,2,0)
--- !query 20 schema
+-- !query schema
 struct<>
--- !query 20 output
+-- !query output
 
 
 
--- !query 21
+-- !query
 INSERT INTO num_exp_div VALUES (0,2,0)
--- !query 21 schema
+-- !query schema
 struct<>
--- !query 21 output
+-- !query output
 
 
 
--- !query 22
+-- !query
 INSERT INTO num_exp_add VALUES (0,3,4.31)
--- !query 22 schema
+-- !query schema
 struct<>
--- !query 22 output
+-- !query output
 
 
 
--- !query 23
+-- !query
 INSERT INTO num_exp_sub VALUES (0,3,-4.31)
--- !query 23 schema
+-- !query schema
 struct<>
--- !query 23 output
+-- !query output
 
 
 
--- !query 24
+-- !query
 INSERT INTO num_exp_mul VALUES (0,3,0)
--- !query 24 schema
+-- !query schema
 struct<>
--- !query 24 output
+-- !query output
 
 
 
--- !query 25
+-- !query
 INSERT INTO num_exp_div VALUES (0,3,0)
--- !query 25 schema
+-- !query schema
 struct<>
--- !query 25 output
+-- !query output
 
 
 
--- !query 26
+-- !query
 INSERT INTO num_exp_add VALUES (0,4,7799461.4119)
--- !query 26 schema
+-- !query schema
 struct<>
--- !query 26 output
+-- !query output
 
 
 
--- !query 27
+-- !query
 INSERT INTO num_exp_sub VALUES (0,4,-7799461.4119)
--- !query 27 schema
+-- !query schema
 struct<>
--- !query 27 output
+-- !query output
 
 
 
--- !query 28
+-- !query
 INSERT INTO num_exp_mul VALUES (0,4,0)
--- !query 28 schema
+-- !query schema
 struct<>
--- !query 28 output
+-- !query output
 
 
 
--- !query 29
+-- !query
 INSERT INTO num_exp_div VALUES (0,4,0)
--- !query 29 schema
+-- !query schema
 struct<>
--- !query 29 output
+-- !query output
 
 
 
--- !query 30
+-- !query
 INSERT INTO num_exp_add VALUES (0,5,16397.038491)
--- !query 30 schema
+-- !query schema
 struct<>
--- !query 30 output
+-- !query output
 
 
 
--- !query 31
+-- !query
 INSERT INTO num_exp_sub VALUES (0,5,-16397.038491)
--- !query 31 schema
+-- !query schema
 struct<>
--- !query 31 output
+-- !query output
 
 
 
--- !query 32
+-- !query
 INSERT INTO num_exp_mul VALUES (0,5,0)
--- !query 32 schema
+-- !query schema
 struct<>
--- !query 32 output
+-- !query output
 
 
 
--- !query 33
+-- !query
 INSERT INTO num_exp_div VALUES (0,5,0)
--- !query 33 schema
+-- !query schema
 struct<>
--- !query 33 output
+-- !query output
 
 
 
--- !query 34
+-- !query
 INSERT INTO num_exp_add VALUES (0,6,93901.57763026)
--- !query 34 schema
+-- !query schema
 struct<>
--- !query 34 output
+-- !query output
 
 
 
--- !query 35
+-- !query
 INSERT INTO num_exp_sub VALUES (0,6,-93901.57763026)
--- !query 35 schema
+-- !query schema
 struct<>
--- !query 35 output
+-- !query output
 
 
 
--- !query 36
+-- !query
 INSERT INTO num_exp_mul VALUES (0,6,0)
--- !query 36 schema
+-- !query schema
 struct<>
--- !query 36 output
+-- !query output
 
 
 
--- !query 37
+-- !query
 INSERT INTO num_exp_div VALUES (0,6,0)
--- !query 37 schema
+-- !query schema
 struct<>
--- !query 37 output
+-- !query output
 
 
 
--- !query 38
+-- !query
 INSERT INTO num_exp_add VALUES (0,7,-83028485)
--- !query 38 schema
+-- !query schema
 struct<>
--- !query 38 output
+-- !query output
 
 
 
--- !query 39
+-- !query
 INSERT INTO num_exp_sub VALUES (0,7,83028485)
--- !query 39 schema
+-- !query schema
 struct<>
--- !query 39 output
+-- !query output
 
 
 
--- !query 40
+-- !query
 INSERT INTO num_exp_mul VALUES (0,7,0)
--- !query 40 schema
+-- !query schema
 struct<>
--- !query 40 output
+-- !query output
 
 
 
--- !query 41
+-- !query
 INSERT INTO num_exp_div VALUES (0,7,0)
--- !query 41 schema
+-- !query schema
 struct<>
--- !query 41 output
+-- !query output
 
 
 
--- !query 42
+-- !query
 INSERT INTO num_exp_add VALUES (0,8,74881)
--- !query 42 schema
+-- !query schema
 struct<>
--- !query 42 output
+-- !query output
 
 
 
--- !query 43
+-- !query
 INSERT INTO num_exp_sub VALUES (0,8,-74881)
--- !query 43 schema
+-- !query schema
 struct<>
--- !query 43 output
+-- !query output
 
 
 
--- !query 44
+-- !query
 INSERT INTO num_exp_mul VALUES (0,8,0)
--- !query 44 schema
+-- !query schema
 struct<>
--- !query 44 output
+-- !query output
 
 
 
--- !query 45
+-- !query
 INSERT INTO num_exp_div VALUES (0,8,0)
--- !query 45 schema
+-- !query schema
 struct<>
--- !query 45 output
+-- !query output
 
 
 
--- !query 46
+-- !query
 INSERT INTO num_exp_add VALUES (0,9,-24926804.045047420)
--- !query 46 schema
+-- !query schema
 struct<>
--- !query 46 output
+-- !query output
 
 
 
--- !query 47
+-- !query
 INSERT INTO num_exp_sub VALUES (0,9,24926804.045047420)
--- !query 47 schema
+-- !query schema
 struct<>
--- !query 47 output
+-- !query output
 
 
 
--- !query 48
+-- !query
 INSERT INTO num_exp_mul VALUES (0,9,0)
--- !query 48 schema
+-- !query schema
 struct<>
--- !query 48 output
+-- !query output
 
 
 
--- !query 49
+-- !query
 INSERT INTO num_exp_div VALUES (0,9,0)
--- !query 49 schema
+-- !query schema
 struct<>
--- !query 49 output
+-- !query output
 
 
 
--- !query 50
+-- !query
 INSERT INTO num_exp_add VALUES (1,0,0)
--- !query 50 schema
+-- !query schema
 struct<>
--- !query 50 output
+-- !query output
 
 
 
--- !query 51
+-- !query
 INSERT INTO num_exp_sub VALUES (1,0,0)
--- !query 51 schema
+-- !query schema
 struct<>
--- !query 51 output
+-- !query output
 
 
 
--- !query 52
+-- !query
 INSERT INTO num_exp_mul VALUES (1,0,0)
--- !query 52 schema
+-- !query schema
 struct<>
--- !query 52 output
+-- !query output
 
 
 
--- !query 53
+-- !query
 INSERT INTO num_exp_div VALUES (1,0,double('NaN'))
--- !query 53 schema
+-- !query schema
 struct<>
--- !query 53 output
+-- !query output
 
 
 
--- !query 54
+-- !query
 INSERT INTO num_exp_add VALUES (1,1,0)
--- !query 54 schema
+-- !query schema
 struct<>
--- !query 54 output
+-- !query output
 
 
 
--- !query 55
+-- !query
 INSERT INTO num_exp_sub VALUES (1,1,0)
--- !query 55 schema
+-- !query schema
 struct<>
--- !query 55 output
+-- !query output
 
 
 
--- !query 56
+-- !query
 INSERT INTO num_exp_mul VALUES (1,1,0)
--- !query 56 schema
+-- !query schema
 struct<>
--- !query 56 output
+-- !query output
 
 
 
--- !query 57
+-- !query
 INSERT INTO num_exp_div VALUES (1,1,double('NaN'))
--- !query 57 schema
+-- !query schema
 struct<>
--- !query 57 output
+-- !query output
 
 
 
--- !query 58
+-- !query
 INSERT INTO num_exp_add VALUES (1,2,-34338492.215397047)
--- !query 58 schema
+-- !query schema
 struct<>
--- !query 58 output
+-- !query output
 
 
 
--- !query 59
+-- !query
 INSERT INTO num_exp_sub VALUES (1,2,34338492.215397047)
--- !query 59 schema
+-- !query schema
 struct<>
--- !query 59 output
+-- !query output
 
 
 
--- !query 60
+-- !query
 INSERT INTO num_exp_mul VALUES (1,2,0)
--- !query 60 schema
+-- !query schema
 struct<>
--- !query 60 output
+-- !query output
 
 
 
--- !query 61
+-- !query
 INSERT INTO num_exp_div VALUES (1,2,0)
--- !query 61 schema
+-- !query schema
 struct<>
--- !query 61 output
+-- !query output
 
 
 
--- !query 62
+-- !query
 INSERT INTO num_exp_add VALUES (1,3,4.31)
--- !query 62 schema
+-- !query schema
 struct<>
--- !query 62 output
+-- !query output
 
 
 
--- !query 63
+-- !query
 INSERT INTO num_exp_sub VALUES (1,3,-4.31)
--- !query 63 schema
+-- !query schema
 struct<>
--- !query 63 output
+-- !query output
 
 
 
--- !query 64
+-- !query
 INSERT INTO num_exp_mul VALUES (1,3,0)
--- !query 64 schema
+-- !query schema
 struct<>
--- !query 64 output
+-- !query output
 
 
 
--- !query 65
+-- !query
 INSERT INTO num_exp_div VALUES (1,3,0)
--- !query 65 schema
+-- !query schema
 struct<>
--- !query 65 output
+-- !query output
 
 
 
--- !query 66
+-- !query
 INSERT INTO num_exp_add VALUES (1,4,7799461.4119)
--- !query 66 schema
+-- !query schema
 struct<>
--- !query 66 output
+-- !query output
 
 
 
--- !query 67
+-- !query
 INSERT INTO num_exp_sub VALUES (1,4,-7799461.4119)
--- !query 67 schema
+-- !query schema
 struct<>
--- !query 67 output
+-- !query output
 
 
 
--- !query 68
+-- !query
 INSERT INTO num_exp_mul VALUES (1,4,0)
--- !query 68 schema
+-- !query schema
 struct<>
--- !query 68 output
+-- !query output
 
 
 
--- !query 69
+-- !query
 INSERT INTO num_exp_div VALUES (1,4,0)
--- !query 69 schema
+-- !query schema
 struct<>
--- !query 69 output
+-- !query output
 
 
 
--- !query 70
+-- !query
 INSERT INTO num_exp_add VALUES (1,5,16397.038491)
--- !query 70 schema
+-- !query schema
 struct<>
--- !query 70 output
+-- !query output
 
 
 
--- !query 71
+-- !query
 INSERT INTO num_exp_sub VALUES (1,5,-16397.038491)
--- !query 71 schema
+-- !query schema
 struct<>
--- !query 71 output
+-- !query output
 
 
 
--- !query 72
+-- !query
 INSERT INTO num_exp_mul VALUES (1,5,0)
--- !query 72 schema
+-- !query schema
 struct<>
--- !query 72 output
+-- !query output
 
 
 
--- !query 73
+-- !query
 INSERT INTO num_exp_div VALUES (1,5,0)
--- !query 73 schema
+-- !query schema
 struct<>
--- !query 73 output
+-- !query output
 
 
 
--- !query 74
+-- !query
 INSERT INTO num_exp_add VALUES (1,6,93901.57763026)
--- !query 74 schema
+-- !query schema
 struct<>
--- !query 74 output
+-- !query output
 
 
 
--- !query 75
+-- !query
 INSERT INTO num_exp_sub VALUES (1,6,-93901.57763026)
--- !query 75 schema
+-- !query schema
 struct<>
--- !query 75 output
+-- !query output
 
 
 
--- !query 76
+-- !query
 INSERT INTO num_exp_mul VALUES (1,6,0)
--- !query 76 schema
+-- !query schema
 struct<>
--- !query 76 output
+-- !query output
 
 
 
--- !query 77
+-- !query
 INSERT INTO num_exp_div VALUES (1,6,0)
--- !query 77 schema
+-- !query schema
 struct<>
--- !query 77 output
+-- !query output
 
 
 
--- !query 78
+-- !query
 INSERT INTO num_exp_add VALUES (1,7,-83028485)
--- !query 78 schema
+-- !query schema
 struct<>
--- !query 78 output
+-- !query output
 
 
 
--- !query 79
+-- !query
 INSERT INTO num_exp_sub VALUES (1,7,83028485)
--- !query 79 schema
+-- !query schema
 struct<>
--- !query 79 output
+-- !query output
 
 
 
--- !query 80
+-- !query
 INSERT INTO num_exp_mul VALUES (1,7,0)
--- !query 80 schema
+-- !query schema
 struct<>
--- !query 80 output
+-- !query output
 
 
 
--- !query 81
+-- !query
 INSERT INTO num_exp_div VALUES (1,7,0)
--- !query 81 schema
+-- !query schema
 struct<>
--- !query 81 output
+-- !query output
 
 
 
--- !query 82
+-- !query
 INSERT INTO num_exp_add VALUES (1,8,74881)
--- !query 82 schema
+-- !query schema
 struct<>
--- !query 82 output
+-- !query output
 
 
 
--- !query 83
+-- !query
 INSERT INTO num_exp_sub VALUES (1,8,-74881)
--- !query 83 schema
+-- !query schema
 struct<>
--- !query 83 output
+-- !query output
 
 
 
--- !query 84
+-- !query
 INSERT INTO num_exp_mul VALUES (1,8,0)
--- !query 84 schema
+-- !query schema
 struct<>
--- !query 84 output
+-- !query output
 
 
 
--- !query 85
+-- !query
 INSERT INTO num_exp_div VALUES (1,8,0)
--- !query 85 schema
+-- !query schema
 struct<>
--- !query 85 output
+-- !query output
 
 
 
--- !query 86
+-- !query
 INSERT INTO num_exp_add VALUES (1,9,-24926804.045047420)
--- !query 86 schema
+-- !query schema
 struct<>
--- !query 86 output
+-- !query output
 
 
 
--- !query 87
+-- !query
 INSERT INTO num_exp_sub VALUES (1,9,24926804.045047420)
--- !query 87 schema
+-- !query schema
 struct<>
--- !query 87 output
+-- !query output
 
 
 
--- !query 88
+-- !query
 INSERT INTO num_exp_mul VALUES (1,9,0)
--- !query 88 schema
+-- !query schema
 struct<>
--- !query 88 output
+-- !query output
 
 
 
--- !query 89
+-- !query
 INSERT INTO num_exp_div VALUES (1,9,0)
--- !query 89 schema
+-- !query schema
 struct<>
--- !query 89 output
+-- !query output
 
 
 
--- !query 90
+-- !query
 INSERT INTO num_exp_add VALUES (2,0,-34338492.215397047)
--- !query 90 schema
+-- !query schema
 struct<>
--- !query 90 output
+-- !query output
 
 
 
--- !query 91
+-- !query
 INSERT INTO num_exp_sub VALUES (2,0,-34338492.215397047)
--- !query 91 schema
+-- !query schema
 struct<>
--- !query 91 output
+-- !query output
 
 
 
--- !query 92
+-- !query
 INSERT INTO num_exp_mul VALUES (2,0,0)
--- !query 92 schema
+-- !query schema
 struct<>
--- !query 92 output
+-- !query output
 
 
 
--- !query 93
+-- !query
 INSERT INTO num_exp_div VALUES (2,0,double('NaN'))
--- !query 93 schema
+-- !query schema
 struct<>
--- !query 93 output
+-- !query output
 
 
 
--- !query 94
+-- !query
 INSERT INTO num_exp_add VALUES (2,1,-34338492.215397047)
--- !query 94 schema
+-- !query schema
 struct<>
--- !query 94 output
+-- !query output
 
 
 
--- !query 95
+-- !query
 INSERT INTO num_exp_sub VALUES (2,1,-34338492.215397047)
--- !query 95 schema
+-- !query schema
 struct<>
--- !query 95 output
+-- !query output
 
 
 
--- !query 96
+-- !query
 INSERT INTO num_exp_mul VALUES (2,1,0)
--- !query 96 schema
+-- !query schema
 struct<>
--- !query 96 output
+-- !query output
 
 
 
--- !query 97
+-- !query
 INSERT INTO num_exp_div VALUES (2,1,double('NaN'))
--- !query 97 schema
+-- !query schema
 struct<>
--- !query 97 output
+-- !query output
 
 
 
--- !query 98
+-- !query
 INSERT INTO num_exp_add VALUES (2,2,-68676984.430794094)
--- !query 98 schema
+-- !query schema
 struct<>
--- !query 98 output
+-- !query output
 
 
 
--- !query 99
+-- !query
 INSERT INTO num_exp_sub VALUES (2,2,0)
--- !query 99 schema
+-- !query schema
 struct<>
--- !query 99 output
+-- !query output
 
 
 
--- !query 100
+-- !query
 INSERT INTO num_exp_mul VALUES (2,2,1179132047626883.596862135856320209)
--- !query 100 schema
+-- !query schema
 struct<>
--- !query 100 output
+-- !query output
 
 
 
--- !query 101
+-- !query
 INSERT INTO num_exp_div VALUES (2,2,1.00000000000000000000)
--- !query 101 schema
+-- !query schema
 struct<>
--- !query 101 output
+-- !query output
 
 
 
--- !query 102
+-- !query
 INSERT INTO num_exp_add VALUES (2,3,-34338487.905397047)
--- !query 102 schema
+-- !query schema
 struct<>
--- !query 102 output
+-- !query output
 
 
 
--- !query 103
+-- !query
 INSERT INTO num_exp_sub VALUES (2,3,-34338496.525397047)
--- !query 103 schema
+-- !query schema
 struct<>
--- !query 103 output
+-- !query output
 
 
 
--- !query 104
+-- !query
 INSERT INTO num_exp_mul VALUES (2,3,-147998901.44836127257)
--- !query 104 schema
+-- !query schema
 struct<>
--- !query 104 output
+-- !query output
 
 
 
--- !query 105
+-- !query
 INSERT INTO num_exp_div VALUES (2,3,-7967167.56737750510440835266)
--- !query 105 schema
+-- !query schema
 struct<>
--- !query 105 output
+-- !query output
 
 
 
--- !query 106
+-- !query
 INSERT INTO num_exp_add VALUES (2,4,-26539030.803497047)
--- !query 106 schema
+-- !query schema
 struct<>
--- !query 106 output
+-- !query output
 
 
 
--- !query 107
+-- !query
 INSERT INTO num_exp_sub VALUES (2,4,-42137953.627297047)
--- !query 107 schema
+-- !query schema
 struct<>
--- !query 107 output
+-- !query output
 
 
 
--- !query 108
+-- !query
 INSERT INTO num_exp_mul VALUES (2,4,-267821744976817.8111137106593)
--- !query 108 schema
+-- !query schema
 struct<>
--- !query 108 output
+-- !query output
 
 
 
--- !query 109
+-- !query
 INSERT INTO num_exp_div VALUES (2,4,-4.40267480046830116685)
--- !query 109 schema
+-- !query schema
 struct<>
--- !query 109 output
+-- !query output
 
 
 
--- !query 110
+-- !query
 INSERT INTO num_exp_add VALUES (2,5,-34322095.176906047)
--- !query 110 schema
+-- !query schema
 struct<>
--- !query 110 output
+-- !query output
 
 
 
--- !query 111
+-- !query
 INSERT INTO num_exp_sub VALUES (2,5,-34354889.253888047)
--- !query 111 schema
+-- !query schema
 struct<>
--- !query 111 output
+-- !query output
 
 
 
--- !query 112
+-- !query
 INSERT INTO num_exp_mul VALUES (2,5,-563049578578.769242506736077)
--- !query 112 schema
+-- !query schema
 struct<>
--- !query 112 output
+-- !query output
 
 
 
--- !query 113
+-- !query
 INSERT INTO num_exp_div VALUES (2,5,-2094.18866914563535496429)
--- !query 113 schema
+-- !query schema
 struct<>
--- !query 113 output
+-- !query output
 
 
 
--- !query 114
+-- !query
 INSERT INTO num_exp_add VALUES (2,6,-34244590.637766787)
--- !query 114 schema
+-- !query schema
 struct<>
--- !query 114 output
+-- !query output
 
 
 
--- !query 115
+-- !query
 INSERT INTO num_exp_sub VALUES (2,6,-34432393.793027307)
--- !query 115 schema
+-- !query schema
 struct<>
--- !query 115 output
+-- !query output
 
 
 
--- !query 116
+-- !query
 INSERT INTO num_exp_mul VALUES (2,6,-3224438592470.18449811926184222)
--- !query 116 schema
+-- !query schema
 struct<>
--- !query 116 output
+-- !query output
 
 
 
--- !query 117
+-- !query
 INSERT INTO num_exp_div VALUES (2,6,-365.68599891479766440940)
--- !query 117 schema
+-- !query schema
 struct<>
--- !query 117 output
+-- !query output
 
 
 
--- !query 118
+-- !query
 INSERT INTO num_exp_add VALUES (2,7,-117366977.215397047)
--- !query 118 schema
+-- !query schema
 struct<>
--- !query 118 output
+-- !query output
 
 
 
--- !query 119
+-- !query
 INSERT INTO num_exp_sub VALUES (2,7,48689992.784602953)
--- !query 119 schema
+-- !query schema
 struct<>
--- !query 119 output
+-- !query output
 
 
 
--- !query 120
+-- !query
 INSERT INTO num_exp_mul VALUES (2,7,2851072985828710.485883795)
--- !query 120 schema
+-- !query schema
 struct<>
--- !query 120 output
+-- !query output
 
 
 
--- !query 121
+-- !query
 INSERT INTO num_exp_div VALUES (2,7,.41357483778485235518)
--- !query 121 schema
+-- !query schema
 struct<>
--- !query 121 output
+-- !query output
 
 
 
--- !query 122
+-- !query
 INSERT INTO num_exp_add VALUES (2,8,-34263611.215397047)
--- !query 122 schema
+-- !query schema
 struct<>
--- !query 122 output
+-- !query output
 
 
 
--- !query 123
+-- !query
 INSERT INTO num_exp_sub VALUES (2,8,-34413373.215397047)
--- !query 123 schema
+-- !query schema
 struct<>
--- !query 123 output
+-- !query output
 
 
 
--- !query 124
+-- !query
 INSERT INTO num_exp_mul VALUES (2,8,-2571300635581.146276407)
--- !query 124 schema
+-- !query schema
 struct<>
--- !query 124 output
+-- !query output
 
 
 
--- !query 125
+-- !query
 INSERT INTO num_exp_div VALUES (2,8,-458.57416721727870888476)
--- !query 125 schema
+-- !query schema
 struct<>
--- !query 125 output
+-- !query output
 
 
 
--- !query 126
+-- !query
 INSERT INTO num_exp_add VALUES (2,9,-59265296.260444467)
--- !query 126 schema
+-- !query schema
 struct<>
--- !query 126 output
+-- !query output
 
 
 
--- !query 127
+-- !query
 INSERT INTO num_exp_sub VALUES (2,9,-9411688.170349627)
--- !query 127 schema
+-- !query schema
 struct<>
--- !query 127 output
+-- !query output
 
 
 
--- !query 128
+-- !query
 INSERT INTO num_exp_mul VALUES (2,9,855948866655588.453741509242968740)
--- !query 128 schema
+-- !query schema
 struct<>
--- !query 128 output
+-- !query output
 
 
 
--- !query 129
+-- !query
 INSERT INTO num_exp_div VALUES (2,9,1.37757299946438931811)
--- !query 129 schema
+-- !query schema
 struct<>
--- !query 129 output
+-- !query output
 
 
 
--- !query 130
+-- !query
 INSERT INTO num_exp_add VALUES (3,0,4.31)
--- !query 130 schema
+-- !query schema
 struct<>
--- !query 130 output
+-- !query output
 
 
 
--- !query 131
+-- !query
 INSERT INTO num_exp_sub VALUES (3,0,4.31)
--- !query 131 schema
+-- !query schema
 struct<>
--- !query 131 output
+-- !query output
 
 
 
--- !query 132
+-- !query
 INSERT INTO num_exp_mul VALUES (3,0,0)
--- !query 132 schema
+-- !query schema
 struct<>
--- !query 132 output
+-- !query output
 
 
 
--- !query 133
+-- !query
 INSERT INTO num_exp_div VALUES (3,0,double('NaN'))
--- !query 133 schema
+-- !query schema
 struct<>
--- !query 133 output
+-- !query output
 
 
 
--- !query 134
+-- !query
 INSERT INTO num_exp_add VALUES (3,1,4.31)
--- !query 134 schema
+-- !query schema
 struct<>
--- !query 134 output
+-- !query output
 
 
 
--- !query 135
+-- !query
 INSERT INTO num_exp_sub VALUES (3,1,4.31)
--- !query 135 schema
+-- !query schema
 struct<>
--- !query 135 output
+-- !query output
 
 
 
--- !query 136
+-- !query
 INSERT INTO num_exp_mul VALUES (3,1,0)
--- !query 136 schema
+-- !query schema
 struct<>
--- !query 136 output
+-- !query output
 
 
 
--- !query 137
+-- !query
 INSERT INTO num_exp_div VALUES (3,1,double('NaN'))
--- !query 137 schema
+-- !query schema
 struct<>
--- !query 137 output
+-- !query output
 
 
 
--- !query 138
+-- !query
 INSERT INTO num_exp_add VALUES (3,2,-34338487.905397047)
--- !query 138 schema
+-- !query schema
 struct<>
--- !query 138 output
+-- !query output
 
 
 
--- !query 139
+-- !query
 INSERT INTO num_exp_sub VALUES (3,2,34338496.525397047)
--- !query 139 schema
+-- !query schema
 struct<>
--- !query 139 output
+-- !query output
 
 
 
--- !query 140
+-- !query
 INSERT INTO num_exp_mul VALUES (3,2,-147998901.44836127257)
--- !query 140 schema
+-- !query schema
 struct<>
--- !query 140 output
+-- !query output
 
 
 
--- !query 141
+-- !query
 INSERT INTO num_exp_div VALUES (3,2,-.00000012551512084352)
--- !query 141 schema
+-- !query schema
 struct<>
--- !query 141 output
+-- !query output
 
 
 
--- !query 142
+-- !query
 INSERT INTO num_exp_add VALUES (3,3,8.62)
--- !query 142 schema
+-- !query schema
 struct<>
--- !query 142 output
+-- !query output
 
 
 
--- !query 143
+-- !query
 INSERT INTO num_exp_sub VALUES (3,3,0)
--- !query 143 schema
+-- !query schema
 struct<>
--- !query 143 output
+-- !query output
 
 
 
--- !query 144
+-- !query
 INSERT INTO num_exp_mul VALUES (3,3,18.5761)
--- !query 144 schema
+-- !query schema
 struct<>
--- !query 144 output
+-- !query output
 
 
 
--- !query 145
+-- !query
 INSERT INTO num_exp_div VALUES (3,3,1.00000000000000000000)
--- !query 145 schema
+-- !query schema
 struct<>
--- !query 145 output
+-- !query output
 
 
 
--- !query 146
+-- !query
 INSERT INTO num_exp_add VALUES (3,4,7799465.7219)
--- !query 146 schema
+-- !query schema
 struct<>
--- !query 146 output
+-- !query output
 
 
 
--- !query 147
+-- !query
 INSERT INTO num_exp_sub VALUES (3,4,-7799457.1019)
--- !query 147 schema
+-- !query schema
 struct<>
--- !query 147 output
+-- !query output
 
 
 
--- !query 148
+-- !query
 INSERT INTO num_exp_mul VALUES (3,4,33615678.685289)
--- !query 148 schema
+-- !query schema
 struct<>
--- !query 148 output
+-- !query output
 
 
 
--- !query 149
+-- !query
 INSERT INTO num_exp_div VALUES (3,4,.00000055260225961552)
--- !query 149 schema
+-- !query schema
 struct<>
--- !query 149 output
+-- !query output
 
 
 
--- !query 150
+-- !query
 INSERT INTO num_exp_add VALUES (3,5,16401.348491)
--- !query 150 schema
+-- !query schema
 struct<>
--- !query 150 output
+-- !query output
 
 
 
--- !query 151
+-- !query
 INSERT INTO num_exp_sub VALUES (3,5,-16392.728491)
--- !query 151 schema
+-- !query schema
 struct<>
--- !query 151 output
+-- !query output
 
 
 
--- !query 152
+-- !query
 INSERT INTO num_exp_mul VALUES (3,5,70671.23589621)
--- !query 152 schema
+-- !query schema
 struct<>
--- !query 152 output
+-- !query output
 
 
 
--- !query 153
+-- !query
 INSERT INTO num_exp_div VALUES (3,5,.00026285234387695504)
--- !query 153 schema
+-- !query schema
 struct<>
--- !query 153 output
+-- !query output
 
 
 
--- !query 154
+-- !query
 INSERT INTO num_exp_add VALUES (3,6,93905.88763026)
--- !query 154 schema
+-- !query schema
 struct<>
--- !query 154 output
+-- !query output
 
 
 
--- !query 155
+-- !query
 INSERT INTO num_exp_sub VALUES (3,6,-93897.26763026)
--- !query 155 schema
+-- !query schema
 struct<>
--- !query 155 output
+-- !query output
 
 
 
--- !query 156
+-- !query
 INSERT INTO num_exp_mul VALUES (3,6,404715.7995864206)
--- !query 156 schema
+-- !query schema
 struct<>
--- !query 156 output
+-- !query output
 
 
 
--- !query 157
+-- !query
 INSERT INTO num_exp_div VALUES (3,6,.00004589912234457595)
--- !query 157 schema
+-- !query schema
 struct<>
--- !query 157 output
+-- !query output
 
 
 
--- !query 158
+-- !query
 INSERT INTO num_exp_add VALUES (3,7,-83028480.69)
--- !query 158 schema
+-- !query schema
 struct<>
--- !query 158 output
+-- !query output
 
 
 
--- !query 159
+-- !query
 INSERT INTO num_exp_sub VALUES (3,7,83028489.31)
--- !query 159 schema
+-- !query schema
 struct<>
--- !query 159 output
+-- !query output
 
 
 
--- !query 160
+-- !query
 INSERT INTO num_exp_mul VALUES (3,7,-357852770.35)
--- !query 160 schema
+-- !query schema
 struct<>
--- !query 160 output
+-- !query output
 
 
 
--- !query 161
+-- !query
 INSERT INTO num_exp_div VALUES (3,7,-.00000005190989574240)
--- !query 161 schema
+-- !query schema
 struct<>
--- !query 161 output
+-- !query output
 
 
 
--- !query 162
+-- !query
 INSERT INTO num_exp_add VALUES (3,8,74885.31)
--- !query 162 schema
+-- !query schema
 struct<>
--- !query 162 output
+-- !query output
 
 
 
--- !query 163
+-- !query
 INSERT INTO num_exp_sub VALUES (3,8,-74876.69)
--- !query 163 schema
+-- !query schema
 struct<>
--- !query 163 output
+-- !query output
 
 
 
--- !query 164
+-- !query
 INSERT INTO num_exp_mul VALUES (3,8,322737.11)
--- !query 164 schema
+-- !query schema
 struct<>
--- !query 164 output
+-- !query output
 
 
 
--- !query 165
+-- !query
 INSERT INTO num_exp_div VALUES (3,8,.00005755799201399553)
--- !query 165 schema
+-- !query schema
 struct<>
--- !query 165 output
+-- !query output
 
 
 
--- !query 166
+-- !query
 INSERT INTO num_exp_add VALUES (3,9,-24926799.735047420)
--- !query 166 schema
+-- !query schema
 struct<>
--- !query 166 output
+-- !query output
 
 
 
--- !query 167
+-- !query
 INSERT INTO num_exp_sub VALUES (3,9,24926808.355047420)
--- !query 167 schema
+-- !query schema
 struct<>
--- !query 167 output
+-- !query output
 
 
 
--- !query 168
+-- !query
 INSERT INTO num_exp_mul VALUES (3,9,-107434525.43415438020)
--- !query 168 schema
+-- !query schema
 struct<>
--- !query 168 output
+-- !query output
 
 
 
--- !query 169
+-- !query
 INSERT INTO num_exp_div VALUES (3,9,-.00000017290624149854)
--- !query 169 schema
+-- !query schema
 struct<>
--- !query 169 output
+-- !query output
 
 
 
--- !query 170
+-- !query
 INSERT INTO num_exp_add VALUES (4,0,7799461.4119)
--- !query 170 schema
+-- !query schema
 struct<>
--- !query 170 output
+-- !query output
 
 
 
--- !query 171
+-- !query
 INSERT INTO num_exp_sub VALUES (4,0,7799461.4119)
--- !query 171 schema
+-- !query schema
 struct<>
--- !query 171 output
+-- !query output
 
 
 
--- !query 172
+-- !query
 INSERT INTO num_exp_mul VALUES (4,0,0)
--- !query 172 schema
+-- !query schema
 struct<>
--- !query 172 output
+-- !query output
 
 
 
--- !query 173
+-- !query
 INSERT INTO num_exp_div VALUES (4,0,double('NaN'))
--- !query 173 schema
+-- !query schema
 struct<>
--- !query 173 output
+-- !query output
 
 
 
--- !query 174
+-- !query
 INSERT INTO num_exp_add VALUES (4,1,7799461.4119)
--- !query 174 schema
+-- !query schema
 struct<>
--- !query 174 output
+-- !query output
 
 
 
--- !query 175
+-- !query
 INSERT INTO num_exp_sub VALUES (4,1,7799461.4119)
--- !query 175 schema
+-- !query schema
 struct<>
--- !query 175 output
+-- !query output
 
 
 
--- !query 176
+-- !query
 INSERT INTO num_exp_mul VALUES (4,1,0)
--- !query 176 schema
+-- !query schema
 struct<>
--- !query 176 output
+-- !query output
 
 
 
--- !query 177
+-- !query
 INSERT INTO num_exp_div VALUES (4,1,double('NaN'))
--- !query 177 schema
+-- !query schema
 struct<>
--- !query 177 output
+-- !query output
 
 
 
--- !query 178
+-- !query
 INSERT INTO num_exp_add VALUES (4,2,-26539030.803497047)
--- !query 178 schema
+-- !query schema
 struct<>
--- !query 178 output
+-- !query output
 
 
 
--- !query 179
+-- !query
 INSERT INTO num_exp_sub VALUES (4,2,42137953.627297047)
--- !query 179 schema
+-- !query schema
 struct<>
--- !query 179 output
+-- !query output
 
 
 
--- !query 180
+-- !query
 INSERT INTO num_exp_mul VALUES (4,2,-267821744976817.8111137106593)
--- !query 180 schema
+-- !query schema
 struct<>
--- !query 180 output
+-- !query output
 
 
 
--- !query 181
+-- !query
 INSERT INTO num_exp_div VALUES (4,2,-.22713465002993920385)
--- !query 181 schema
+-- !query schema
 struct<>
--- !query 181 output
+-- !query output
 
 
 
--- !query 182
+-- !query
 INSERT INTO num_exp_add VALUES (4,3,7799465.7219)
--- !query 182 schema
+-- !query schema
 struct<>
--- !query 182 output
+-- !query output
 
 
 
--- !query 183
+-- !query
 INSERT INTO num_exp_sub VALUES (4,3,7799457.1019)
--- !query 183 schema
+-- !query schema
 struct<>
--- !query 183 output
+-- !query output
 
 
 
--- !query 184
+-- !query
 INSERT INTO num_exp_mul VALUES (4,3,33615678.685289)
--- !query 184 schema
+-- !query schema
 struct<>
--- !query 184 output
+-- !query output
 
 
 
--- !query 185
+-- !query
 INSERT INTO num_exp_div VALUES (4,3,1809619.81714617169373549883)
--- !query 185 schema
+-- !query schema
 struct<>
--- !query 185 output
+-- !query output
 
 
 
--- !query 186
+-- !query
 INSERT INTO num_exp_add VALUES (4,4,15598922.8238)
--- !query 186 schema
+-- !query schema
 struct<>
--- !query 186 output
+-- !query output
 
 
 
--- !query 187
+-- !query
 INSERT INTO num_exp_sub VALUES (4,4,0)
--- !query 187 schema
+-- !query schema
 struct<>
--- !query 187 output
+-- !query output
 
 
 
--- !query 188
+-- !query
 INSERT INTO num_exp_mul VALUES (4,4,60831598315717.14146161)
--- !query 188 schema
+-- !query schema
 struct<>
--- !query 188 output
+-- !query output
 
 
 
--- !query 189
+-- !query
 INSERT INTO num_exp_div VALUES (4,4,1.00000000000000000000)
--- !query 189 schema
+-- !query schema
 struct<>
--- !query 189 output
+-- !query output
 
 
 
--- !query 190
+-- !query
 INSERT INTO num_exp_add VALUES (4,5,7815858.450391)
--- !query 190 schema
+-- !query schema
 struct<>
--- !query 190 output
+-- !query output
 
 
 
--- !query 191
+-- !query
 INSERT INTO num_exp_sub VALUES (4,5,7783064.373409)
--- !query 191 schema
+-- !query schema
 struct<>
--- !query 191 output
+-- !query output
 
 
 
--- !query 192
+-- !query
 INSERT INTO num_exp_mul VALUES (4,5,127888068979.9935054429)
--- !query 192 schema
+-- !query schema
 struct<>
--- !query 192 output
+-- !query output
 
 
 
--- !query 193
+-- !query
 INSERT INTO num_exp_div VALUES (4,5,475.66281046305802686061)
--- !query 193 schema
+-- !query schema
 struct<>
--- !query 193 output
+-- !query output
 
 
 
--- !query 194
+-- !query
 INSERT INTO num_exp_add VALUES (4,6,7893362.98953026)
--- !query 194 schema
+-- !query schema
 struct<>
--- !query 194 output
+-- !query output
 
 
 
--- !query 195
+-- !query
 INSERT INTO num_exp_sub VALUES (4,6,7705559.83426974)
--- !query 195 schema
+-- !query schema
 struct<>
--- !query 195 output
+-- !query output
 
 
 
--- !query 196
+-- !query
 INSERT INTO num_exp_mul VALUES (4,6,732381731243.745115764094)
--- !query 196 schema
+-- !query schema
 struct<>
--- !query 196 output
+-- !query output
 
 
 
--- !query 197
+-- !query
 INSERT INTO num_exp_div VALUES (4,6,83.05996138436129499606)
--- !query 197 schema
+-- !query schema
 struct<>
--- !query 197 output
+-- !query output
 
 
 
--- !query 198
+-- !query
 INSERT INTO num_exp_add VALUES (4,7,-75229023.5881)
--- !query 198 schema
+-- !query schema
 struct<>
--- !query 198 output
+-- !query output
 
 
 
--- !query 199
+-- !query
 INSERT INTO num_exp_sub VALUES (4,7,90827946.4119)
--- !query 199 schema
+-- !query schema
 struct<>
--- !query 199 output
+-- !query output
 
 
 
--- !query 200
+-- !query
 INSERT INTO num_exp_mul VALUES (4,7,-647577464846017.9715)
--- !query 200 schema
+-- !query schema
 struct<>
--- !query 200 output
+-- !query output
 
 
 
--- !query 201
+-- !query
 INSERT INTO num_exp_div VALUES (4,7,-.09393717604145131637)
--- !query 201 schema
+-- !query schema
 struct<>
--- !query 201 output
+-- !query output
 
 
 
--- !query 202
+-- !query
 INSERT INTO num_exp_add VALUES (4,8,7874342.4119)
--- !query 202 schema
+-- !query schema
 struct<>
--- !query 202 output
+-- !query output
 
 
 
--- !query 203
+-- !query
 INSERT INTO num_exp_sub VALUES (4,8,7724580.4119)
--- !query 203 schema
+-- !query schema
 struct<>
--- !query 203 output
+-- !query output
 
 
 
--- !query 204
+-- !query
 INSERT INTO num_exp_mul VALUES (4,8,584031469984.4839)
--- !query 204 schema
+-- !query schema
 struct<>
--- !query 204 output
+-- !query output
 
 
 
--- !query 205
+-- !query
 INSERT INTO num_exp_div VALUES (4,8,104.15808298366741897143)
--- !query 205 schema
+-- !query schema
 struct<>
--- !query 205 output
+-- !query output
 
 
 
--- !query 206
+-- !query
 INSERT INTO num_exp_add VALUES (4,9,-17127342.633147420)
--- !query 206 schema
+-- !query schema
 struct<>
--- !query 206 output
+-- !query output
 
 
 
--- !query 207
+-- !query
 INSERT INTO num_exp_sub VALUES (4,9,32726265.456947420)
--- !query 207 schema
+-- !query schema
 struct<>
--- !query 207 output
+-- !query output
 
 
 
--- !query 208
+-- !query
 INSERT INTO num_exp_mul VALUES (4,9,-194415646271340.1815956522980)
--- !query 208 schema
+-- !query schema
 struct<>
--- !query 208 output
+-- !query output
 
 
 
--- !query 209
+-- !query
 INSERT INTO num_exp_div VALUES (4,9,-.31289456112403769409)
--- !query 209 schema
+-- !query schema
 struct<>
--- !query 209 output
+-- !query output
 
 
 
--- !query 210
+-- !query
 INSERT INTO num_exp_add VALUES (5,0,16397.038491)
--- !query 210 schema
+-- !query schema
 struct<>
--- !query 210 output
+-- !query output
 
 
 
--- !query 211
+-- !query
 INSERT INTO num_exp_sub VALUES (5,0,16397.038491)
--- !query 211 schema
+-- !query schema
 struct<>
--- !query 211 output
+-- !query output
 
 
 
--- !query 212
+-- !query
 INSERT INTO num_exp_mul VALUES (5,0,0)
--- !query 212 schema
+-- !query schema
 struct<>
--- !query 212 output
+-- !query output
 
 
 
--- !query 213
+-- !query
 INSERT INTO num_exp_div VALUES (5,0,double('NaN'))
--- !query 213 schema
+-- !query schema
 struct<>
--- !query 213 output
+-- !query output
 
 
 
--- !query 214
+-- !query
 INSERT INTO num_exp_add VALUES (5,1,16397.038491)
--- !query 214 schema
+-- !query schema
 struct<>
--- !query 214 output
+-- !query output
 
 
 
--- !query 215
+-- !query
 INSERT INTO num_exp_sub VALUES (5,1,16397.038491)
--- !query 215 schema
+-- !query schema
 struct<>
--- !query 215 output
+-- !query output
 
 
 
--- !query 216
+-- !query
 INSERT INTO num_exp_mul VALUES (5,1,0)
--- !query 216 schema
+-- !query schema
 struct<>
--- !query 216 output
+-- !query output
 
 
 
--- !query 217
+-- !query
 INSERT INTO num_exp_div VALUES (5,1,double('NaN'))
--- !query 217 schema
+-- !query schema
 struct<>
--- !query 217 output
+-- !query output
 
 
 
--- !query 218
+-- !query
 INSERT INTO num_exp_add VALUES (5,2,-34322095.176906047)
--- !query 218 schema
+-- !query schema
 struct<>
--- !query 218 output
+-- !query output
 
 
 
--- !query 219
+-- !query
 INSERT INTO num_exp_sub VALUES (5,2,34354889.253888047)
--- !query 219 schema
+-- !query schema
 struct<>
--- !query 219 output
+-- !query output
 
 
 
--- !query 220
+-- !query
 INSERT INTO num_exp_mul VALUES (5,2,-563049578578.769242506736077)
--- !query 220 schema
+-- !query schema
 struct<>
--- !query 220 output
+-- !query output
 
 
 
--- !query 221
+-- !query
 INSERT INTO num_exp_div VALUES (5,2,-.00047751189505192446)
--- !query 221 schema
+-- !query schema
 struct<>
--- !query 221 output
+-- !query output
 
 
 
--- !query 222
+-- !query
 INSERT INTO num_exp_add VALUES (5,3,16401.348491)
--- !query 222 schema
+-- !query schema
 struct<>
--- !query 222 output
+-- !query output
 
 
 
--- !query 223
+-- !query
 INSERT INTO num_exp_sub VALUES (5,3,16392.728491)
--- !query 223 schema
+-- !query schema
 struct<>
--- !query 223 output
+-- !query output
 
 
 
--- !query 224
+-- !query
 INSERT INTO num_exp_mul VALUES (5,3,70671.23589621)
--- !query 224 schema
+-- !query schema
 struct<>
--- !query 224 output
+-- !query output
 
 
 
--- !query 225
+-- !query
 INSERT INTO num_exp_div VALUES (5,3,3804.41728329466357308584)
--- !query 225 schema
+-- !query schema
 struct<>
--- !query 225 output
+-- !query output
 
 
 
--- !query 226
+-- !query
 INSERT INTO num_exp_add VALUES (5,4,7815858.450391)
--- !query 226 schema
+-- !query schema
 struct<>
--- !query 226 output
+-- !query output
 
 
 
--- !query 227
+-- !query
 INSERT INTO num_exp_sub VALUES (5,4,-7783064.373409)
--- !query 227 schema
+-- !query schema
 struct<>
--- !query 227 output
+-- !query output
 
 
 
--- !query 228
+-- !query
 INSERT INTO num_exp_mul VALUES (5,4,127888068979.9935054429)
--- !query 228 schema
+-- !query schema
 struct<>
--- !query 228 output
+-- !query output
 
 
 
--- !query 229
+-- !query
 INSERT INTO num_exp_div VALUES (5,4,.00210232958726897192)
--- !query 229 schema
+-- !query schema
 struct<>
--- !query 229 output
+-- !query output
 
 
 
--- !query 230
+-- !query
 INSERT INTO num_exp_add VALUES (5,5,32794.076982)
--- !query 230 schema
+-- !query schema
 struct<>
--- !query 230 output
+-- !query output
 
 
 
--- !query 231
+-- !query
 INSERT INTO num_exp_sub VALUES (5,5,0)
--- !query 231 schema
+-- !query schema
 struct<>
--- !query 231 output
+-- !query output
 
 
 
--- !query 232
+-- !query
 INSERT INTO num_exp_mul VALUES (5,5,268862871.275335557081)
--- !query 232 schema
+-- !query schema
 struct<>
--- !query 232 output
+-- !query output
 
 
 
--- !query 233
+-- !query
 INSERT INTO num_exp_div VALUES (5,5,1.00000000000000000000)
--- !query 233 schema
+-- !query schema
 struct<>
--- !query 233 output
+-- !query output
 
 
 
--- !query 234
+-- !query
 INSERT INTO num_exp_add VALUES (5,6,110298.61612126)
--- !query 234 schema
+-- !query schema
 struct<>
--- !query 234 output
+-- !query output
 
 
 
--- !query 235
+-- !query
 INSERT INTO num_exp_sub VALUES (5,6,-77504.53913926)
--- !query 235 schema
+-- !query schema
 struct<>
--- !query 235 output
+-- !query output
 
 
 
--- !query 236
+-- !query
 INSERT INTO num_exp_mul VALUES (5,6,1539707782.76899778633766)
--- !query 236 schema
+-- !query schema
 struct<>
--- !query 236 output
+-- !query output
 
 
 
--- !query 237
+-- !query
 INSERT INTO num_exp_div VALUES (5,6,.17461941433576102689)
--- !query 237 schema
+-- !query schema
 struct<>
--- !query 237 output
+-- !query output
 
 
 
--- !query 238
+-- !query
 INSERT INTO num_exp_add VALUES (5,7,-83012087.961509)
--- !query 238 schema
+-- !query schema
 struct<>
--- !query 238 output
+-- !query output
 
 
 
--- !query 239
+-- !query
 INSERT INTO num_exp_sub VALUES (5,7,83044882.038491)
--- !query 239 schema
+-- !query schema
 struct<>
--- !query 239 output
+-- !query output
 
 
 
--- !query 240
+-- !query
 INSERT INTO num_exp_mul VALUES (5,7,-1361421264394.416135)
--- !query 240 schema
+-- !query schema
 struct<>
--- !query 240 output
+-- !query output
 
 
 
--- !query 241
+-- !query
 INSERT INTO num_exp_div VALUES (5,7,-.00019748690453643710)
--- !query 241 schema
+-- !query schema
 struct<>
--- !query 241 output
+-- !query output
 
 
 
--- !query 242
+-- !query
 INSERT INTO num_exp_add VALUES (5,8,91278.038491)
--- !query 242 schema
+-- !query schema
 struct<>
--- !query 242 output
+-- !query output
 
 
 
--- !query 243
+-- !query
 INSERT INTO num_exp_sub VALUES (5,8,-58483.961509)
--- !query 243 schema
+-- !query schema
 struct<>
--- !query 243 output
+-- !query output
 
 
 
--- !query 244
+-- !query
 INSERT INTO num_exp_mul VALUES (5,8,1227826639.244571)
--- !query 244 schema
+-- !query schema
 struct<>
--- !query 244 output
+-- !query output
 
 
 
--- !query 245
+-- !query
 INSERT INTO num_exp_div VALUES (5,8,.21897461960978085228)
--- !query 245 schema
+-- !query schema
 struct<>
--- !query 245 output
+-- !query output
 
 
 
--- !query 246
+-- !query
 INSERT INTO num_exp_add VALUES (5,9,-24910407.006556420)
--- !query 246 schema
+-- !query schema
 struct<>
--- !query 246 output
+-- !query output
 
 
 
--- !query 247
+-- !query
 INSERT INTO num_exp_sub VALUES (5,9,24943201.083538420)
--- !query 247 schema
+-- !query schema
 struct<>
--- !query 247 output
+-- !query output
 
 
 
--- !query 248
+-- !query
 INSERT INTO num_exp_mul VALUES (5,9,-408725765384.257043660243220)
--- !query 248 schema
+-- !query schema
 struct<>
--- !query 248 output
+-- !query output
 
 
 
--- !query 249
+-- !query
 INSERT INTO num_exp_div VALUES (5,9,-.00065780749354660427)
--- !query 249 schema
+-- !query schema
 struct<>
--- !query 249 output
+-- !query output
 
 
 
--- !query 250
+-- !query
 INSERT INTO num_exp_add VALUES (6,0,93901.57763026)
--- !query 250 schema
+-- !query schema
 struct<>
--- !query 250 output
+-- !query output
 
 
 
--- !query 251
+-- !query
 INSERT INTO num_exp_sub VALUES (6,0,93901.57763026)
--- !query 251 schema
+-- !query schema
 struct<>
--- !query 251 output
+-- !query output
 
 
 
--- !query 252
+-- !query
 INSERT INTO num_exp_mul VALUES (6,0,0)
--- !query 252 schema
+-- !query schema
 struct<>
--- !query 252 output
+-- !query output
 
 
 
--- !query 253
+-- !query
 INSERT INTO num_exp_div VALUES (6,0,double('NaN'))
--- !query 253 schema
+-- !query schema
 struct<>
--- !query 253 output
+-- !query output
 
 
 
--- !query 254
+-- !query
 INSERT INTO num_exp_add VALUES (6,1,93901.57763026)
--- !query 254 schema
+-- !query schema
 struct<>
--- !query 254 output
+-- !query output
 
 
 
--- !query 255
+-- !query
 INSERT INTO num_exp_sub VALUES (6,1,93901.57763026)
--- !query 255 schema
+-- !query schema
 struct<>
--- !query 255 output
+-- !query output
 
 
 
--- !query 256
+-- !query
 INSERT INTO num_exp_mul VALUES (6,1,0)
--- !query 256 schema
+-- !query schema
 struct<>
--- !query 256 output
+-- !query output
 
 
 
--- !query 257
+-- !query
 INSERT INTO num_exp_div VALUES (6,1,double('NaN'))
--- !query 257 schema
+-- !query schema
 struct<>
--- !query 257 output
+-- !query output
 
 
 
--- !query 258
+-- !query
 INSERT INTO num_exp_add VALUES (6,2,-34244590.637766787)
--- !query 258 schema
+-- !query schema
 struct<>
--- !query 258 output
+-- !query output
 
 
 
--- !query 259
+-- !query
 INSERT INTO num_exp_sub VALUES (6,2,34432393.793027307)
--- !query 259 schema
+-- !query schema
 struct<>
--- !query 259 output
+-- !query output
 
 
 
--- !query 260
+-- !query
 INSERT INTO num_exp_mul VALUES (6,2,-3224438592470.18449811926184222)
--- !query 260 schema
+-- !query schema
 struct<>
--- !query 260 output
+-- !query output
 
 
 
--- !query 261
+-- !query
 INSERT INTO num_exp_div VALUES (6,2,-.00273458651128995823)
--- !query 261 schema
+-- !query schema
 struct<>
--- !query 261 output
+-- !query output
 
 
 
--- !query 262
+-- !query
 INSERT INTO num_exp_add VALUES (6,3,93905.88763026)
--- !query 262 schema
+-- !query schema
 struct<>
--- !query 262 output
+-- !query output
 
 
 
--- !query 263
+-- !query
 INSERT INTO num_exp_sub VALUES (6,3,93897.26763026)
--- !query 263 schema
+-- !query schema
 struct<>
--- !query 263 output
+-- !query output
 
 
 
--- !query 264
+-- !query
 INSERT INTO num_exp_mul VALUES (6,3,404715.7995864206)
--- !query 264 schema
+-- !query schema
 struct<>
--- !query 264 output
+-- !query output
 
 
 
--- !query 265
+-- !query
 INSERT INTO num_exp_div VALUES (6,3,21786.90896293735498839907)
--- !query 265 schema
+-- !query schema
 struct<>
--- !query 265 output
+-- !query output
 
 
 
--- !query 266
+-- !query
 INSERT INTO num_exp_add VALUES (6,4,7893362.98953026)
--- !query 266 schema
+-- !query schema
 struct<>
--- !query 266 output
+-- !query output
 
 
 
--- !query 267
+-- !query
 INSERT INTO num_exp_sub VALUES (6,4,-7705559.83426974)
--- !query 267 schema
+-- !query schema
 struct<>
--- !query 267 output
+-- !query output
 
 
 
--- !query 268
+-- !query
 INSERT INTO num_exp_mul VALUES (6,4,732381731243.745115764094)
--- !query 268 schema
+-- !query schema
 struct<>
--- !query 268 output
+-- !query output
 
 
 
--- !query 269
+-- !query
 INSERT INTO num_exp_div VALUES (6,4,.01203949512295682469)
--- !query 269 schema
+-- !query schema
 struct<>
--- !query 269 output
+-- !query output
 
 
 
--- !query 270
+-- !query
 INSERT INTO num_exp_add VALUES (6,5,110298.61612126)
--- !query 270 schema
+-- !query schema
 struct<>
--- !query 270 output
+-- !query output
 
 
 
--- !query 271
+-- !query
 INSERT INTO num_exp_sub VALUES (6,5,77504.53913926)
--- !query 271 schema
+-- !query schema
 struct<>
--- !query 271 output
+-- !query output
 
 
 
--- !query 272
+-- !query
 INSERT INTO num_exp_mul VALUES (6,5,1539707782.76899778633766)
--- !query 272 schema
+-- !query schema
 struct<>
--- !query 272 output
+-- !query output
 
 
 
--- !query 273
+-- !query
 INSERT INTO num_exp_div VALUES (6,5,5.72674008674192359679)
--- !query 273 schema
+-- !query schema
 struct<>
--- !query 273 output
+-- !query output
 
 
 
--- !query 274
+-- !query
 INSERT INTO num_exp_add VALUES (6,6,187803.15526052)
--- !query 274 schema
+-- !query schema
 struct<>
--- !query 274 output
+-- !query output
 
 
 
--- !query 275
+-- !query
 INSERT INTO num_exp_sub VALUES (6,6,0)
--- !query 275 schema
+-- !query schema
 struct<>
--- !query 275 output
+-- !query output
 
 
 
--- !query 276
+-- !query
 INSERT INTO num_exp_mul VALUES (6,6,8817506281.4517452372676676)
--- !query 276 schema
+-- !query schema
 struct<>
--- !query 276 output
+-- !query output
 
 
 
--- !query 277
+-- !query
 INSERT INTO num_exp_div VALUES (6,6,1.00000000000000000000)
--- !query 277 schema
+-- !query schema
 struct<>
--- !query 277 output
+-- !query output
 
 
 
--- !query 278
+-- !query
 INSERT INTO num_exp_add VALUES (6,7,-82934583.42236974)
--- !query 278 schema
+-- !query schema
 struct<>
--- !query 278 output
+-- !query output
 
 
 
--- !query 279
+-- !query
 INSERT INTO num_exp_sub VALUES (6,7,83122386.57763026)
--- !query 279 schema
+-- !query schema
 struct<>
--- !query 279 output
+-- !query output
 
 
 
--- !query 280
+-- !query
 INSERT INTO num_exp_mul VALUES (6,7,-7796505729750.37795610)
--- !query 280 schema
+-- !query schema
 struct<>
--- !query 280 output
+-- !query output
 
 
 
--- !query 281
+-- !query
 INSERT INTO num_exp_div VALUES (6,7,-.00113095617281538980)
--- !query 281 schema
+-- !query schema
 struct<>
--- !query 281 output
+-- !query output
 
 
 
--- !query 282
+-- !query
 INSERT INTO num_exp_add VALUES (6,8,168782.57763026)
--- !query 282 schema
+-- !query schema
 struct<>
--- !query 282 output
+-- !query output
 
 
 
--- !query 283
+-- !query
 INSERT INTO num_exp_sub VALUES (6,8,19020.57763026)
--- !query 283 schema
+-- !query schema
 struct<>
--- !query 283 output
+-- !query output
 
 
 
--- !query 284
+-- !query
 INSERT INTO num_exp_mul VALUES (6,8,7031444034.53149906)
--- !query 284 schema
+-- !query schema
 struct<>
--- !query 284 output
+-- !query output
 
 
 
--- !query 285
+-- !query
 INSERT INTO num_exp_div VALUES (6,8,1.25401073209839612184)
--- !query 285 schema
+-- !query schema
 struct<>
--- !query 285 output
+-- !query output
 
 
 
--- !query 286
+-- !query
 INSERT INTO num_exp_add VALUES (6,9,-24832902.467417160)
--- !query 286 schema
+-- !query schema
 struct<>
--- !query 286 output
+-- !query output
 
 
 
--- !query 287
+-- !query
 INSERT INTO num_exp_sub VALUES (6,9,25020705.622677680)
--- !query 287 schema
+-- !query schema
 struct<>
--- !query 287 output
+-- !query output
 
 
 
--- !query 288
+-- !query
 INSERT INTO num_exp_mul VALUES (6,9,-2340666225110.29929521292692920)
--- !query 288 schema
+-- !query schema
 struct<>
--- !query 288 output
+-- !query output
 
 
 
--- !query 289
+-- !query
 INSERT INTO num_exp_div VALUES (6,9,-.00376709254265256789)
--- !query 289 schema
+-- !query schema
 struct<>
--- !query 289 output
+-- !query output
 
 
 
--- !query 290
+-- !query
 INSERT INTO num_exp_add VALUES (7,0,-83028485)
--- !query 290 schema
+-- !query schema
 struct<>
--- !query 290 output
+-- !query output
 
 
 
--- !query 291
+-- !query
 INSERT INTO num_exp_sub VALUES (7,0,-83028485)
--- !query 291 schema
+-- !query schema
 struct<>
--- !query 291 output
+-- !query output
 
 
 
--- !query 292
+-- !query
 INSERT INTO num_exp_mul VALUES (7,0,0)
--- !query 292 schema
+-- !query schema
 struct<>
--- !query 292 output
+-- !query output
 
 
 
--- !query 293
+-- !query
 INSERT INTO num_exp_div VALUES (7,0,double('NaN'))
--- !query 293 schema
+-- !query schema
 struct<>
--- !query 293 output
+-- !query output
 
 
 
--- !query 294
+-- !query
 INSERT INTO num_exp_add VALUES (7,1,-83028485)
--- !query 294 schema
+-- !query schema
 struct<>
--- !query 294 output
+-- !query output
 
 
 
--- !query 295
+-- !query
 INSERT INTO num_exp_sub VALUES (7,1,-83028485)
--- !query 295 schema
+-- !query schema
 struct<>
--- !query 295 output
+-- !query output
 
 
 
--- !query 296
+-- !query
 INSERT INTO num_exp_mul VALUES (7,1,0)
--- !query 296 schema
+-- !query schema
 struct<>
--- !query 296 output
+-- !query output
 
 
 
--- !query 297
+-- !query
 INSERT INTO num_exp_div VALUES (7,1,double('NaN'))
--- !query 297 schema
+-- !query schema
 struct<>
--- !query 297 output
+-- !query output
 
 
 
--- !query 298
+-- !query
 INSERT INTO num_exp_add VALUES (7,2,-117366977.215397047)
--- !query 298 schema
+-- !query schema
 struct<>
--- !query 298 output
+-- !query output
 
 
 
--- !query 299
+-- !query
 INSERT INTO num_exp_sub VALUES (7,2,-48689992.784602953)
--- !query 299 schema
+-- !query schema
 struct<>
--- !query 299 output
+-- !query output
 
 
 
--- !query 300
+-- !query
 INSERT INTO num_exp_mul VALUES (7,2,2851072985828710.485883795)
--- !query 300 schema
+-- !query schema
 struct<>
--- !query 300 output
+-- !query output
 
 
 
--- !query 301
+-- !query
 INSERT INTO num_exp_div VALUES (7,2,2.41794207151503385700)
--- !query 301 schema
+-- !query schema
 struct<>
--- !query 301 output
+-- !query output
 
 
 
--- !query 302
+-- !query
 INSERT INTO num_exp_add VALUES (7,3,-83028480.69)
--- !query 302 schema
+-- !query schema
 struct<>
--- !query 302 output
+-- !query output
 
 
 
--- !query 303
+-- !query
 INSERT INTO num_exp_sub VALUES (7,3,-83028489.31)
--- !query 303 schema
+-- !query schema
 struct<>
--- !query 303 output
+-- !query output
 
 
 
--- !query 304
+-- !query
 INSERT INTO num_exp_mul VALUES (7,3,-357852770.35)
--- !query 304 schema
+-- !query schema
 struct<>
--- !query 304 output
+-- !query output
 
 
 
--- !query 305
+-- !query
 INSERT INTO num_exp_div VALUES (7,3,-19264149.65197215777262180974)
--- !query 305 schema
+-- !query schema
 struct<>
--- !query 305 output
+-- !query output
 
 
 
--- !query 306
+-- !query
 INSERT INTO num_exp_add VALUES (7,4,-75229023.5881)
--- !query 306 schema
+-- !query schema
 struct<>
--- !query 306 output
+-- !query output
 
 
 
--- !query 307
+-- !query
 INSERT INTO num_exp_sub VALUES (7,4,-90827946.4119)
--- !query 307 schema
+-- !query schema
 struct<>
--- !query 307 output
+-- !query output
 
 
 
--- !query 308
+-- !query
 INSERT INTO num_exp_mul VALUES (7,4,-647577464846017.9715)
--- !query 308 schema
+-- !query schema
 struct<>
--- !query 308 output
+-- !query output
 
 
 
--- !query 309
+-- !query
 INSERT INTO num_exp_div VALUES (7,4,-10.64541262725136247686)
--- !query 309 schema
+-- !query schema
 struct<>
--- !query 309 output
+-- !query output
 
 
 
--- !query 310
+-- !query
 INSERT INTO num_exp_add VALUES (7,5,-83012087.961509)
--- !query 310 schema
+-- !query schema
 struct<>
--- !query 310 output
+-- !query output
 
 
 
--- !query 311
+-- !query
 INSERT INTO num_exp_sub VALUES (7,5,-83044882.038491)
--- !query 311 schema
+-- !query schema
 struct<>
--- !query 311 output
+-- !query output
 
 
 
--- !query 312
+-- !query
 INSERT INTO num_exp_mul VALUES (7,5,-1361421264394.416135)
--- !query 312 schema
+-- !query schema
 struct<>
--- !query 312 output
+-- !query output
 
 
 
--- !query 313
+-- !query
 INSERT INTO num_exp_div VALUES (7,5,-5063.62688881730941836574)
--- !query 313 schema
+-- !query schema
 struct<>
--- !query 313 output
+-- !query output
 
 
 
--- !query 314
+-- !query
 INSERT INTO num_exp_add VALUES (7,6,-82934583.42236974)
--- !query 314 schema
+-- !query schema
 struct<>
--- !query 314 output
+-- !query output
 
 
 
--- !query 315
+-- !query
 INSERT INTO num_exp_sub VALUES (7,6,-83122386.57763026)
--- !query 315 schema
+-- !query schema
 struct<>
--- !query 315 output
+-- !query output
 
 
 
--- !query 316
+-- !query
 INSERT INTO num_exp_mul VALUES (7,6,-7796505729750.37795610)
--- !query 316 schema
+-- !query schema
 struct<>
--- !query 316 output
+-- !query output
 
 
 
--- !query 317
+-- !query
 INSERT INTO num_exp_div VALUES (7,6,-884.20756174009028770294)
--- !query 317 schema
+-- !query schema
 struct<>
--- !query 317 output
+-- !query output
 
 
 
--- !query 318
+-- !query
 INSERT INTO num_exp_add VALUES (7,7,-166056970)
--- !query 318 schema
+-- !query schema
 struct<>
--- !query 318 output
+-- !query output
 
 
 
--- !query 319
+-- !query
 INSERT INTO num_exp_sub VALUES (7,7,0)
--- !query 319 schema
+-- !query schema
 struct<>
--- !query 319 output
+-- !query output
 
 
 
--- !query 320
+-- !query
 INSERT INTO num_exp_mul VALUES (7,7,6893729321395225)
--- !query 320 schema
+-- !query schema
 struct<>
--- !query 320 output
+-- !query output
 
 
 
--- !query 321
+-- !query
 INSERT INTO num_exp_div VALUES (7,7,1.00000000000000000000)
--- !query 321 schema
+-- !query schema
 struct<>
--- !query 321 output
+-- !query output
 
 
 
--- !query 322
+-- !query
 INSERT INTO num_exp_add VALUES (7,8,-82953604)
--- !query 322 schema
+-- !query schema
 struct<>
--- !query 322 output
+-- !query output
 
 
 
--- !query 323
+-- !query
 INSERT INTO num_exp_sub VALUES (7,8,-83103366)
--- !query 323 schema
+-- !query schema
 struct<>
--- !query 323 output
+-- !query output
 
 
 
--- !query 324
+-- !query
 INSERT INTO num_exp_mul VALUES (7,8,-6217255985285)
--- !query 324 schema
+-- !query schema
 struct<>
--- !query 324 output
+-- !query output
 
 
 
--- !query 325
+-- !query
 INSERT INTO num_exp_div VALUES (7,8,-1108.80577182462841041118)
--- !query 325 schema
+-- !query schema
 struct<>
--- !query 325 output
+-- !query output
 
 
 
--- !query 326
+-- !query
 INSERT INTO num_exp_add VALUES (7,9,-107955289.045047420)
--- !query 326 schema
+-- !query schema
 struct<>
--- !query 326 output
+-- !query output
 
 
 
--- !query 327
+-- !query
 INSERT INTO num_exp_sub VALUES (7,9,-58101680.954952580)
--- !query 327 schema
+-- !query schema
 struct<>
--- !query 327 output
+-- !query output
 
 
 
--- !query 328
+-- !query
 INSERT INTO num_exp_mul VALUES (7,9,2069634775752159.035758700)
--- !query 328 schema
+-- !query schema
 struct<>
--- !query 328 output
+-- !query output
 
 
 
--- !query 329
+-- !query
 INSERT INTO num_exp_div VALUES (7,9,3.33089171198810413382)
--- !query 329 schema
+-- !query schema
 struct<>
--- !query 329 output
+-- !query output
 
 
 
--- !query 330
+-- !query
 INSERT INTO num_exp_add VALUES (8,0,74881)
--- !query 330 schema
+-- !query schema
 struct<>
--- !query 330 output
+-- !query output
 
 
 
--- !query 331
+-- !query
 INSERT INTO num_exp_sub VALUES (8,0,74881)
--- !query 331 schema
+-- !query schema
 struct<>
--- !query 331 output
+-- !query output
 
 
 
--- !query 332
+-- !query
 INSERT INTO num_exp_mul VALUES (8,0,0)
--- !query 332 schema
+-- !query schema
 struct<>
--- !query 332 output
+-- !query output
 
 
 
--- !query 333
+-- !query
 INSERT INTO num_exp_div VALUES (8,0,double('NaN'))
--- !query 333 schema
+-- !query schema
 struct<>
--- !query 333 output
+-- !query output
 
 
 
--- !query 334
+-- !query
 INSERT INTO num_exp_add VALUES (8,1,74881)
--- !query 334 schema
+-- !query schema
 struct<>
--- !query 334 output
+-- !query output
 
 
 
--- !query 335
+-- !query
 INSERT INTO num_exp_sub VALUES (8,1,74881)
--- !query 335 schema
+-- !query schema
 struct<>
--- !query 335 output
+-- !query output
 
 
 
--- !query 336
+-- !query
 INSERT INTO num_exp_mul VALUES (8,1,0)
--- !query 336 schema
+-- !query schema
 struct<>
--- !query 336 output
+-- !query output
 
 
 
--- !query 337
+-- !query
 INSERT INTO num_exp_div VALUES (8,1,double('NaN'))
--- !query 337 schema
+-- !query schema
 struct<>
--- !query 337 output
+-- !query output
 
 
 
--- !query 338
+-- !query
 INSERT INTO num_exp_add VALUES (8,2,-34263611.215397047)
--- !query 338 schema
+-- !query schema
 struct<>
--- !query 338 output
+-- !query output
 
 
 
--- !query 339
+-- !query
 INSERT INTO num_exp_sub VALUES (8,2,34413373.215397047)
--- !query 339 schema
+-- !query schema
 struct<>
--- !query 339 output
+-- !query output
 
 
 
--- !query 340
+-- !query
 INSERT INTO num_exp_mul VALUES (8,2,-2571300635581.146276407)
--- !query 340 schema
+-- !query schema
 struct<>
--- !query 340 output
+-- !query output
 
 
 
--- !query 341
+-- !query
 INSERT INTO num_exp_div VALUES (8,2,-.00218067233500788615)
--- !query 341 schema
+-- !query schema
 struct<>
--- !query 341 output
+-- !query output
 
 
 
--- !query 342
+-- !query
 INSERT INTO num_exp_add VALUES (8,3,74885.31)
--- !query 342 schema
+-- !query schema
 struct<>
--- !query 342 output
+-- !query output
 
 
 
--- !query 343
+-- !query
 INSERT INTO num_exp_sub VALUES (8,3,74876.69)
--- !query 343 schema
+-- !query schema
 struct<>
--- !query 343 output
+-- !query output
 
 
 
--- !query 344
+-- !query
 INSERT INTO num_exp_mul VALUES (8,3,322737.11)
--- !query 344 schema
+-- !query schema
 struct<>
--- !query 344 output
+-- !query output
 
 
 
--- !query 345
+-- !query
 INSERT INTO num_exp_div VALUES (8,3,17373.78190255220417633410)
--- !query 345 schema
+-- !query schema
 struct<>
--- !query 345 output
+-- !query output
 
 
 
--- !query 346
+-- !query
 INSERT INTO num_exp_add VALUES (8,4,7874342.4119)
--- !query 346 schema
+-- !query schema
 struct<>
--- !query 346 output
+-- !query output
 
 
 
--- !query 347
+-- !query
 INSERT INTO num_exp_sub VALUES (8,4,-7724580.4119)
--- !query 347 schema
+-- !query schema
 struct<>
--- !query 347 output
+-- !query output
 
 
 
--- !query 348
+-- !query
 INSERT INTO num_exp_mul VALUES (8,4,584031469984.4839)
--- !query 348 schema
+-- !query schema
 struct<>
--- !query 348 output
+-- !query output
 
 
 
--- !query 349
+-- !query
 INSERT INTO num_exp_div VALUES (8,4,.00960079113741758956)
--- !query 349 schema
+-- !query schema
 struct<>
--- !query 349 output
+-- !query output
 
 
 
--- !query 350
+-- !query
 INSERT INTO num_exp_add VALUES (8,5,91278.038491)
--- !query 350 schema
+-- !query schema
 struct<>
--- !query 350 output
+-- !query output
 
 
 
--- !query 351
+-- !query
 INSERT INTO num_exp_sub VALUES (8,5,58483.961509)
--- !query 351 schema
+-- !query schema
 struct<>
--- !query 351 output
+-- !query output
 
 
 
--- !query 352
+-- !query
 INSERT INTO num_exp_mul VALUES (8,5,1227826639.244571)
--- !query 352 schema
+-- !query schema
 struct<>
--- !query 352 output
+-- !query output
 
 
 
--- !query 353
+-- !query
 INSERT INTO num_exp_div VALUES (8,5,4.56673929509287019456)
--- !query 353 schema
+-- !query schema
 struct<>
--- !query 353 output
+-- !query output
 
 
 
--- !query 354
+-- !query
 INSERT INTO num_exp_add VALUES (8,6,168782.57763026)
--- !query 354 schema
+-- !query schema
 struct<>
--- !query 354 output
+-- !query output
 
 
 
--- !query 355
+-- !query
 INSERT INTO num_exp_sub VALUES (8,6,-19020.57763026)
--- !query 355 schema
+-- !query schema
 struct<>
--- !query 355 output
+-- !query output
 
 
 
--- !query 356
+-- !query
 INSERT INTO num_exp_mul VALUES (8,6,7031444034.53149906)
--- !query 356 schema
+-- !query schema
 struct<>
--- !query 356 output
+-- !query output
 
 
 
--- !query 357
+-- !query
 INSERT INTO num_exp_div VALUES (8,6,.79744134113322314424)
--- !query 357 schema
+-- !query schema
 struct<>
--- !query 357 output
+-- !query output
 
 
 
--- !query 358
+-- !query
 INSERT INTO num_exp_add VALUES (8,7,-82953604)
--- !query 358 schema
+-- !query schema
 struct<>
--- !query 358 output
+-- !query output
 
 
 
--- !query 359
+-- !query
 INSERT INTO num_exp_sub VALUES (8,7,83103366)
--- !query 359 schema
+-- !query schema
 struct<>
--- !query 359 output
+-- !query output
 
 
 
--- !query 360
+-- !query
 INSERT INTO num_exp_mul VALUES (8,7,-6217255985285)
--- !query 360 schema
+-- !query schema
 struct<>
--- !query 360 output
+-- !query output
 
 
 
--- !query 361
+-- !query
 INSERT INTO num_exp_div VALUES (8,7,-.00090187120721280172)
--- !query 361 schema
+-- !query schema
 struct<>
--- !query 361 output
+-- !query output
 
 
 
--- !query 362
+-- !query
 INSERT INTO num_exp_add VALUES (8,8,149762)
--- !query 362 schema
+-- !query schema
 struct<>
--- !query 362 output
+-- !query output
 
 
 
--- !query 363
+-- !query
 INSERT INTO num_exp_sub VALUES (8,8,0)
--- !query 363 schema
+-- !query schema
 struct<>
--- !query 363 output
+-- !query output
 
 
 
--- !query 364
+-- !query
 INSERT INTO num_exp_mul VALUES (8,8,5607164161)
--- !query 364 schema
+-- !query schema
 struct<>
--- !query 364 output
+-- !query output
 
 
 
--- !query 365
+-- !query
 INSERT INTO num_exp_div VALUES (8,8,1.00000000000000000000)
--- !query 365 schema
+-- !query schema
 struct<>
--- !query 365 output
+-- !query output
 
 
 
--- !query 366
+-- !query
 INSERT INTO num_exp_add VALUES (8,9,-24851923.045047420)
--- !query 366 schema
+-- !query schema
 struct<>
--- !query 366 output
+-- !query output
 
 
 
--- !query 367
+-- !query
 INSERT INTO num_exp_sub VALUES (8,9,25001685.045047420)
--- !query 367 schema
+-- !query schema
 struct<>
--- !query 367 output
+-- !query output
 
 
 
--- !query 368
+-- !query
 INSERT INTO num_exp_mul VALUES (8,9,-1866544013697.195857020)
--- !query 368 schema
+-- !query schema
 struct<>
--- !query 368 output
+-- !query output
 
 
 
--- !query 369
+-- !query
 INSERT INTO num_exp_div VALUES (8,9,-.00300403532938582735)
--- !query 369 schema
+-- !query schema
 struct<>
--- !query 369 output
+-- !query output
 
 
 
--- !query 370
+-- !query
 INSERT INTO num_exp_add VALUES (9,0,-24926804.045047420)
--- !query 370 schema
+-- !query schema
 struct<>
--- !query 370 output
+-- !query output
 
 
 
--- !query 371
+-- !query
 INSERT INTO num_exp_sub VALUES (9,0,-24926804.045047420)
--- !query 371 schema
+-- !query schema
 struct<>
--- !query 371 output
+-- !query output
 
 
 
--- !query 372
+-- !query
 INSERT INTO num_exp_mul VALUES (9,0,0)
--- !query 372 schema
+-- !query schema
 struct<>
--- !query 372 output
+-- !query output
 
 
 
--- !query 373
+-- !query
 INSERT INTO num_exp_div VALUES (9,0,double('NaN'))
--- !query 373 schema
+-- !query schema
 struct<>
--- !query 373 output
+-- !query output
 
 
 
--- !query 374
+-- !query
 INSERT INTO num_exp_add VALUES (9,1,-24926804.045047420)
--- !query 374 schema
+-- !query schema
 struct<>
--- !query 374 output
+-- !query output
 
 
 
--- !query 375
+-- !query
 INSERT INTO num_exp_sub VALUES (9,1,-24926804.045047420)
--- !query 375 schema
+-- !query schema
 struct<>
--- !query 375 output
+-- !query output
 
 
 
--- !query 376
+-- !query
 INSERT INTO num_exp_mul VALUES (9,1,0)
--- !query 376 schema
+-- !query schema
 struct<>
--- !query 376 output
+-- !query output
 
 
 
--- !query 377
+-- !query
 INSERT INTO num_exp_div VALUES (9,1,double('NaN'))
--- !query 377 schema
+-- !query schema
 struct<>
--- !query 377 output
+-- !query output
 
 
 
--- !query 378
+-- !query
 INSERT INTO num_exp_add VALUES (9,2,-59265296.260444467)
--- !query 378 schema
+-- !query schema
 struct<>
--- !query 378 output
+-- !query output
 
 
 
--- !query 379
+-- !query
 INSERT INTO num_exp_sub VALUES (9,2,9411688.170349627)
--- !query 379 schema
+-- !query schema
 struct<>
--- !query 379 output
+-- !query output
 
 
 
--- !query 380
+-- !query
 INSERT INTO num_exp_mul VALUES (9,2,855948866655588.453741509242968740)
--- !query 380 schema
+-- !query schema
 struct<>
--- !query 380 output
+-- !query output
 
 
 
--- !query 381
+-- !query
 INSERT INTO num_exp_div VALUES (9,2,.72591434384152961526)
--- !query 381 schema
+-- !query schema
 struct<>
--- !query 381 output
+-- !query output
 
 
 
--- !query 382
+-- !query
 INSERT INTO num_exp_add VALUES (9,3,-24926799.735047420)
--- !query 382 schema
+-- !query schema
 struct<>
--- !query 382 output
+-- !query output
 
 
 
--- !query 383
+-- !query
 INSERT INTO num_exp_sub VALUES (9,3,-24926808.355047420)
--- !query 383 schema
+-- !query schema
 struct<>
--- !query 383 output
+-- !query output
 
 
 
--- !query 384
+-- !query
 INSERT INTO num_exp_mul VALUES (9,3,-107434525.43415438020)
--- !query 384 schema
+-- !query schema
 struct<>
--- !query 384 output
+-- !query output
 
 
 
--- !query 385
+-- !query
 INSERT INTO num_exp_div VALUES (9,3,-5783481.21694835730858468677)
--- !query 385 schema
+-- !query schema
 struct<>
--- !query 385 output
+-- !query output
 
 
 
--- !query 386
+-- !query
 INSERT INTO num_exp_add VALUES (9,4,-17127342.633147420)
--- !query 386 schema
+-- !query schema
 struct<>
--- !query 386 output
+-- !query output
 
 
 
--- !query 387
+-- !query
 INSERT INTO num_exp_sub VALUES (9,4,-32726265.456947420)
--- !query 387 schema
+-- !query schema
 struct<>
--- !query 387 output
+-- !query output
 
 
 
--- !query 388
+-- !query
 INSERT INTO num_exp_mul VALUES (9,4,-194415646271340.1815956522980)
--- !query 388 schema
+-- !query schema
 struct<>
--- !query 388 output
+-- !query output
 
 
 
--- !query 389
+-- !query
 INSERT INTO num_exp_div VALUES (9,4,-3.19596478892958416484)
--- !query 389 schema
+-- !query schema
 struct<>
--- !query 389 output
+-- !query output
 
 
 
--- !query 390
+-- !query
 INSERT INTO num_exp_add VALUES (9,5,-24910407.006556420)
--- !query 390 schema
+-- !query schema
 struct<>
--- !query 390 output
+-- !query output
 
 
 
--- !query 391
+-- !query
 INSERT INTO num_exp_sub VALUES (9,5,-24943201.083538420)
--- !query 391 schema
+-- !query schema
 struct<>
--- !query 391 output
+-- !query output
 
 
 
--- !query 392
+-- !query
 INSERT INTO num_exp_mul VALUES (9,5,-408725765384.257043660243220)
--- !query 392 schema
+-- !query schema
 struct<>
--- !query 392 output
+-- !query output
 
 
 
--- !query 393
+-- !query
 INSERT INTO num_exp_div VALUES (9,5,-1520.20159364322004505807)
--- !query 393 schema
+-- !query schema
 struct<>
--- !query 393 output
+-- !query output
 
 
 
--- !query 394
+-- !query
 INSERT INTO num_exp_add VALUES (9,6,-24832902.467417160)
--- !query 394 schema
+-- !query schema
 struct<>
--- !query 394 output
+-- !query output
 
 
 
--- !query 395
+-- !query
 INSERT INTO num_exp_sub VALUES (9,6,-25020705.622677680)
--- !query 395 schema
+-- !query schema
 struct<>
--- !query 395 output
+-- !query output
 
 
 
--- !query 396
+-- !query
 INSERT INTO num_exp_mul VALUES (9,6,-2340666225110.29929521292692920)
--- !query 396 schema
+-- !query schema
 struct<>
--- !query 396 output
+-- !query output
 
 
 
--- !query 397
+-- !query
 INSERT INTO num_exp_div VALUES (9,6,-265.45671195426965751280)
--- !query 397 schema
+-- !query schema
 struct<>
--- !query 397 output
+-- !query output
 
 
 
--- !query 398
+-- !query
 INSERT INTO num_exp_add VALUES (9,7,-107955289.045047420)
--- !query 398 schema
+-- !query schema
 struct<>
--- !query 398 output
+-- !query output
 
 
 
--- !query 399
+-- !query
 INSERT INTO num_exp_sub VALUES (9,7,58101680.954952580)
--- !query 399 schema
+-- !query schema
 struct<>
--- !query 399 output
+-- !query output
 
 
 
--- !query 400
+-- !query
 INSERT INTO num_exp_mul VALUES (9,7,2069634775752159.035758700)
--- !query 400 schema
+-- !query schema
 struct<>
--- !query 400 output
+-- !query output
 
 
 
--- !query 401
+-- !query
 INSERT INTO num_exp_div VALUES (9,7,.30021990699995814689)
--- !query 401 schema
+-- !query schema
 struct<>
--- !query 401 output
+-- !query output
 
 
 
--- !query 402
+-- !query
 INSERT INTO num_exp_add VALUES (9,8,-24851923.045047420)
--- !query 402 schema
+-- !query schema
 struct<>
--- !query 402 output
+-- !query output
 
 
 
--- !query 403
+-- !query
 INSERT INTO num_exp_sub VALUES (9,8,-25001685.045047420)
--- !query 403 schema
+-- !query schema
 struct<>
--- !query 403 output
+-- !query output
 
 
 
--- !query 404
+-- !query
 INSERT INTO num_exp_mul VALUES (9,8,-1866544013697.195857020)
--- !query 404 schema
+-- !query schema
 struct<>
--- !query 404 output
+-- !query output
 
 
 
--- !query 405
+-- !query
 INSERT INTO num_exp_div VALUES (9,8,-332.88556569820675471748)
--- !query 405 schema
+-- !query schema
 struct<>
--- !query 405 output
+-- !query output
 
 
 
--- !query 406
+-- !query
 INSERT INTO num_exp_add VALUES (9,9,-49853608.090094840)
--- !query 406 schema
+-- !query schema
 struct<>
--- !query 406 output
+-- !query output
 
 
 
--- !query 407
+-- !query
 INSERT INTO num_exp_sub VALUES (9,9,0)
--- !query 407 schema
+-- !query schema
 struct<>
--- !query 407 output
+-- !query output
 
 
 
--- !query 408
+-- !query
 INSERT INTO num_exp_mul VALUES (9,9,621345559900192.420120630048656400)
--- !query 408 schema
+-- !query schema
 struct<>
--- !query 408 output
+-- !query output
 
 
 
--- !query 409
+-- !query
 INSERT INTO num_exp_div VALUES (9,9,1.00000000000000000000)
--- !query 409 schema
+-- !query schema
 struct<>
--- !query 409 output
+-- !query output
 
 
 
--- !query 410
+-- !query
 INSERT INTO num_exp_sqrt VALUES (0,0)
--- !query 410 schema
+-- !query schema
 struct<>
--- !query 410 output
+-- !query output
 
 
 
--- !query 411
+-- !query
 INSERT INTO num_exp_sqrt VALUES (1,0)
--- !query 411 schema
+-- !query schema
 struct<>
--- !query 411 output
+-- !query output
 
 
 
--- !query 412
+-- !query
 INSERT INTO num_exp_sqrt VALUES (2,5859.90547836712524903505)
--- !query 412 schema
+-- !query schema
 struct<>
--- !query 412 output
+-- !query output
 
 
 
--- !query 413
+-- !query
 INSERT INTO num_exp_sqrt VALUES (3,2.07605394920266944396)
--- !query 413 schema
+-- !query schema
 struct<>
--- !query 413 output
+-- !query output
 
 
 
--- !query 414
+-- !query
 INSERT INTO num_exp_sqrt VALUES (4,2792.75158435189147418923)
--- !query 414 schema
+-- !query schema
 struct<>
--- !query 414 output
+-- !query output
 
 
 
--- !query 415
+-- !query
 INSERT INTO num_exp_sqrt VALUES (5,128.05092147657509145473)
--- !query 415 schema
+-- !query schema
 struct<>
--- !query 415 output
+-- !query output
 
 
 
--- !query 416
+-- !query
 INSERT INTO num_exp_sqrt VALUES (6,306.43364311096782703406)
--- !query 416 schema
+-- !query schema
 struct<>
--- !query 416 output
+-- !query output
 
 
 
--- !query 417
+-- !query
 INSERT INTO num_exp_sqrt VALUES (7,9111.99676251039939975230)
--- !query 417 schema
+-- !query schema
 struct<>
--- !query 417 output
+-- !query output
 
 
 
--- !query 418
+-- !query
 INSERT INTO num_exp_sqrt VALUES (8,273.64392922189960397542)
--- !query 418 schema
+-- !query schema
 struct<>
--- !query 418 output
+-- !query output
 
 
 
--- !query 419
+-- !query
 INSERT INTO num_exp_sqrt VALUES (9,4992.67503899937593364766)
--- !query 419 schema
+-- !query schema
 struct<>
--- !query 419 output
+-- !query output
 
 
 
--- !query 420
+-- !query
 INSERT INTO num_exp_ln VALUES (0,double('NaN'))
--- !query 420 schema
+-- !query schema
 struct<>
--- !query 420 output
+-- !query output
 
 
 
--- !query 421
+-- !query
 INSERT INTO num_exp_ln VALUES (1,double('NaN'))
--- !query 421 schema
+-- !query schema
 struct<>
--- !query 421 output
+-- !query output
 
 
 
--- !query 422
+-- !query
 INSERT INTO num_exp_ln VALUES (2,17.35177750493897715514)
--- !query 422 schema
+-- !query schema
 struct<>
--- !query 422 output
+-- !query output
 
 
 
--- !query 423
+-- !query
 INSERT INTO num_exp_ln VALUES (3,1.46093790411565641971)
--- !query 423 schema
+-- !query schema
 struct<>
--- !query 423 output
+-- !query output
 
 
 
--- !query 424
+-- !query
 INSERT INTO num_exp_ln VALUES (4,15.86956523951936572464)
--- !query 424 schema
+-- !query schema
 struct<>
--- !query 424 output
+-- !query output
 
 
 
--- !query 425
+-- !query
 INSERT INTO num_exp_ln VALUES (5,9.70485601768871834038)
--- !query 425 schema
+-- !query schema
 struct<>
--- !query 425 output
+-- !query output
 
 
 
--- !query 426
+-- !query
 INSERT INTO num_exp_ln VALUES (6,11.45000246622944403127)
--- !query 426 schema
+-- !query schema
 struct<>
--- !query 426 output
+-- !query output
 
 
 
--- !query 427
+-- !query
 INSERT INTO num_exp_ln VALUES (7,18.23469429965478772991)
--- !query 427 schema
+-- !query schema
 struct<>
--- !query 427 output
+-- !query output
 
 
 
--- !query 428
+-- !query
 INSERT INTO num_exp_ln VALUES (8,11.22365546576315513668)
--- !query 428 schema
+-- !query schema
 struct<>
--- !query 428 output
+-- !query output
 
 
 
--- !query 429
+-- !query
 INSERT INTO num_exp_ln VALUES (9,17.03145425013166006962)
--- !query 429 schema
+-- !query schema
 struct<>
--- !query 429 output
+-- !query output
 
 
 
--- !query 430
+-- !query
 INSERT INTO num_exp_log10 VALUES (0,double('NaN'))
--- !query 430 schema
+-- !query schema
 struct<>
--- !query 430 output
+-- !query output
 
 
 
--- !query 431
+-- !query
 INSERT INTO num_exp_log10 VALUES (1,double('NaN'))
--- !query 431 schema
+-- !query schema
 struct<>
--- !query 431 output
+-- !query output
 
 
 
--- !query 432
+-- !query
 INSERT INTO num_exp_log10 VALUES (2,7.53578122160797276459)
--- !query 432 schema
+-- !query schema
 struct<>
--- !query 432 output
+-- !query output
 
 
 
--- !query 433
+-- !query
 INSERT INTO num_exp_log10 VALUES (3,.63447727016073160075)
--- !query 433 schema
+-- !query schema
 struct<>
--- !query 433 output
+-- !query output
 
 
 
--- !query 434
+-- !query
 INSERT INTO num_exp_log10 VALUES (4,6.89206461372691743345)
--- !query 434 schema
+-- !query schema
 struct<>
--- !query 434 output
+-- !query output
 
 
 
--- !query 435
+-- !query
 INSERT INTO num_exp_log10 VALUES (5,4.21476541614777768626)
--- !query 435 schema
+-- !query schema
 struct<>
--- !query 435 output
+-- !query output
 
 
 
--- !query 436
+-- !query
 INSERT INTO num_exp_log10 VALUES (6,4.97267288886207207671)
--- !query 436 schema
+-- !query schema
 struct<>
--- !query 436 output
+-- !query output
 
 
 
--- !query 437
+-- !query
 INSERT INTO num_exp_log10 VALUES (7,7.91922711353275546914)
--- !query 437 schema
+-- !query schema
 struct<>
--- !query 437 output
+-- !query output
 
 
 
--- !query 438
+-- !query
 INSERT INTO num_exp_log10 VALUES (8,4.87437163556421004138)
--- !query 438 schema
+-- !query schema
 struct<>
--- !query 438 output
+-- !query output
 
 
 
--- !query 439
+-- !query
 INSERT INTO num_exp_log10 VALUES (9,7.39666659961986567059)
--- !query 439 schema
+-- !query schema
 struct<>
--- !query 439 output
+-- !query output
 
 
 
--- !query 440
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (0,double('NaN'))
--- !query 440 schema
+-- !query schema
 struct<>
--- !query 440 output
+-- !query output
 
 
 
--- !query 441
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (1,double('NaN'))
--- !query 441 schema
+-- !query schema
 struct<>
--- !query 441 output
+-- !query output
 
 
 
--- !query 442
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (2,224790267919917955.13261618583642653184)
--- !query 442 schema
+-- !query schema
 struct<>
--- !query 442 output
+-- !query output
 
 
 
--- !query 443
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (3,28.90266599445155957393)
--- !query 443 schema
+-- !query schema
 struct<>
--- !query 443 output
+-- !query output
 
 
 
--- !query 444
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (4,7405685069594999.07733999469386277636)
--- !query 444 schema
+-- !query schema
 struct<>
--- !query 444 output
+-- !query output
 
 
 
--- !query 445
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (5,5068226527.32127265408584640098)
--- !query 445 schema
+-- !query schema
 struct<>
--- !query 445 output
+-- !query output
 
 
 
--- !query 446
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (6,281839893606.99372343357047819067)
--- !query 446 schema
+-- !query schema
 struct<>
--- !query 446 output
+-- !query output
 
 
 
--- !query 447
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (7,1716699575118597095.42330819910640247627)
--- !query 447 schema
+-- !query schema
 struct<>
--- !query 447 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 decimal can only support precision up to 38
@@ -3590,107 +3590,107 @@ decimal can only support precision up to 38
 INSERT INTO num_exp_power_10_ln VALUES (7,1716699575118597095.42330819910640247627)
 
 
--- !query 448
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (8,167361463828.07491320069016125952)
--- !query 448 schema
+-- !query schema
 struct<>
--- !query 448 output
+-- !query output
 
 
 
--- !query 449
+-- !query
 INSERT INTO num_exp_power_10_ln VALUES (9,107511333880052007.04141124673540337457)
--- !query 449 schema
+-- !query schema
 struct<>
--- !query 449 output
+-- !query output
 
 
 
--- !query 450
+-- !query
 INSERT INTO num_data VALUES (0, 0)
--- !query 450 schema
+-- !query schema
 struct<>
--- !query 450 output
+-- !query output
 
 
 
--- !query 451
+-- !query
 INSERT INTO num_data VALUES (1, 0)
--- !query 451 schema
+-- !query schema
 struct<>
--- !query 451 output
+-- !query output
 
 
 
--- !query 452
+-- !query
 INSERT INTO num_data VALUES (2, -34338492.215397047)
--- !query 452 schema
+-- !query schema
 struct<>
--- !query 452 output
+-- !query output
 
 
 
--- !query 453
+-- !query
 INSERT INTO num_data VALUES (3, 4.31)
--- !query 453 schema
+-- !query schema
 struct<>
--- !query 453 output
+-- !query output
 
 
 
--- !query 454
+-- !query
 INSERT INTO num_data VALUES (4, 7799461.4119)
--- !query 454 schema
+-- !query schema
 struct<>
--- !query 454 output
+-- !query output
 
 
 
--- !query 455
+-- !query
 INSERT INTO num_data VALUES (5, 16397.038491)
--- !query 455 schema
+-- !query schema
 struct<>
--- !query 455 output
+-- !query output
 
 
 
--- !query 456
+-- !query
 INSERT INTO num_data VALUES (6, 93901.57763026)
--- !query 456 schema
+-- !query schema
 struct<>
--- !query 456 output
+-- !query output
 
 
 
--- !query 457
+-- !query
 INSERT INTO num_data VALUES (7, -83028485)
--- !query 457 schema
+-- !query schema
 struct<>
--- !query 457 output
+-- !query output
 
 
 
--- !query 458
+-- !query
 INSERT INTO num_data VALUES (8, 74881)
--- !query 458 schema
+-- !query schema
 struct<>
--- !query 458 output
+-- !query output
 
 
 
--- !query 459
+-- !query
 INSERT INTO num_data VALUES (9, -24926804.045047420)
--- !query 459 schema
+-- !query schema
 struct<>
--- !query 459 output
+-- !query output
 
 
 
--- !query 460
+-- !query
 SELECT * FROM num_data
--- !query 460 schema
+-- !query schema
 struct<id:int,val:decimal(38,10)>
--- !query 460 output
+-- !query output
 0	0.0000000000
 1	0.0000000000
 2	-34338492.2153970470
@@ -3703,172 +3703,172 @@ struct<id:int,val:decimal(38,10)>
 9	-24926804.0450474200
 
 
--- !query 461
+-- !query
 TRUNCATE TABLE num_result
--- !query 461 schema
+-- !query schema
 struct<>
--- !query 461 output
+-- !query output
 
 
 
--- !query 462
+-- !query
 INSERT INTO num_result SELECT t1.id, t2.id, t1.val + t2.val
     FROM num_data t1, num_data t2
--- !query 462 schema
+-- !query schema
 struct<>
--- !query 462 output
+-- !query output
 
 
 
--- !query 463
+-- !query
 SELECT t1.id1, t1.id2, t1.result, t2.expected
     FROM num_result t1, num_exp_add t2
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != t2.expected
--- !query 463 schema
+-- !query schema
 struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 463 output
+-- !query output
 
 
 
--- !query 464
+-- !query
 TRUNCATE TABLE num_result
--- !query 464 schema
+-- !query schema
 struct<>
--- !query 464 output
+-- !query output
 
 
 
--- !query 465
+-- !query
 INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val + t2.val, 10)
     FROM num_data t1, num_data t2
--- !query 465 schema
+-- !query schema
 struct<>
--- !query 465 output
+-- !query output
 
 
 
--- !query 466
+-- !query
 SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 10) as expected
     FROM num_result t1, num_exp_add t2
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 10)
--- !query 466 schema
+-- !query schema
 struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 466 output
+-- !query output
 
 
 
--- !query 467
+-- !query
 TRUNCATE TABLE num_result
--- !query 467 schema
+-- !query schema
 struct<>
--- !query 467 output
+-- !query output
 
 
 
--- !query 468
+-- !query
 INSERT INTO num_result SELECT t1.id, t2.id, t1.val - t2.val
     FROM num_data t1, num_data t2
--- !query 468 schema
+-- !query schema
 struct<>
--- !query 468 output
+-- !query output
 
 
 
--- !query 469
+-- !query
 SELECT t1.id1, t1.id2, t1.result, t2.expected
     FROM num_result t1, num_exp_sub t2
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != t2.expected
--- !query 469 schema
+-- !query schema
 struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 469 output
+-- !query output
 
 
 
--- !query 470
+-- !query
 TRUNCATE TABLE num_result
--- !query 470 schema
+-- !query schema
 struct<>
--- !query 470 output
+-- !query output
 
 
 
--- !query 471
+-- !query
 INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val - t2.val, 40)
     FROM num_data t1, num_data t2
--- !query 471 schema
+-- !query schema
 struct<>
--- !query 471 output
+-- !query output
 
 
 
--- !query 472
+-- !query
 SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 40)
     FROM num_result t1, num_exp_sub t2
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 40)
--- !query 472 schema
+-- !query schema
 struct<id1:int,id2:int,result:decimal(38,10),round(expected, 40):decimal(38,10)>
--- !query 472 output
+-- !query output
 
 
 
--- !query 473
+-- !query
 TRUNCATE TABLE num_result
--- !query 473 schema
+-- !query schema
 struct<>
--- !query 473 output
+-- !query output
 
 
 
--- !query 474
+-- !query
 INSERT INTO num_result SELECT t1.id, t2.id, t1.val, t2.val, t1.val * t2.val
     FROM num_data t1, num_data t2
--- !query 474 schema
+-- !query schema
 struct<>
--- !query 474 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 `default`.`num_result` requires that the data to be inserted have the same number of columns as the target table: target table has 3 column(s) but the inserted data has 5 column(s), including 0 partition column(s) having constant value(s).;
 
 
--- !query 475
+-- !query
 SELECT t1.id1, t1.id2, t1.result, t2.expected
     FROM num_result t1, num_exp_mul t2
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != t2.expected
--- !query 475 schema
+-- !query schema
 struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 475 output
+-- !query output
 
 
 
--- !query 476
+-- !query
 TRUNCATE TABLE num_result
--- !query 476 schema
+-- !query schema
 struct<>
--- !query 476 output
+-- !query output
 
 
 
--- !query 477
+-- !query
 INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val * t2.val, 30)
     FROM num_data t1, num_data t2
--- !query 477 schema
+-- !query schema
 struct<>
--- !query 477 output
+-- !query output
 
 
 
--- !query 478
+-- !query
 SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 30) as expected
     FROM num_result t1, num_exp_mul t2
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 30)
--- !query 478 schema
+-- !query schema
 struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 478 output
+-- !query output
 2	2	1179132047626883.5968620000	1179132047626883.5968621359
 2	3	-147998901.4483610000	-147998901.4483612726
 2	4	-267821744976817.8111140000	-267821744976817.8111137107
@@ -3916,32 +3916,32 @@ struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 9	9	621345559900192.4201210000	621345559900192.4201206300
 
 
--- !query 479
+-- !query
 TRUNCATE TABLE num_result
--- !query 479 schema
+-- !query schema
 struct<>
--- !query 479 output
+-- !query output
 
 
 
--- !query 480
+-- !query
 INSERT INTO num_result SELECT t1.id, t2.id, t1.val / t2.val
     FROM num_data t1, num_data t2
     WHERE t2.val != '0.0'
--- !query 480 schema
+-- !query schema
 struct<>
--- !query 480 output
+-- !query output
 
 
 
--- !query 481
+-- !query
 SELECT t1.id1, t1.id2, t1.result, t2.expected
     FROM num_result t1, num_exp_div t2
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != t2.expected
--- !query 481 schema
+-- !query schema
 struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 481 output
+-- !query output
 2	3	-7967167.5673780000	-7967167.5673775051
 2	4	-4.4026750000	-4.4026748005
 2	5	-2094.1886690000	-2094.1886691456
@@ -4000,32 +4000,32 @@ struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 9	8	-332.8855660000	-332.8855656982
 
 
--- !query 482
+-- !query
 TRUNCATE TABLE num_result
--- !query 482 schema
+-- !query schema
 struct<>
--- !query 482 output
+-- !query output
 
 
 
--- !query 483
+-- !query
 INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val / t2.val, 80)
     FROM num_data t1, num_data t2
     WHERE t2.val != '0.0'
--- !query 483 schema
+-- !query schema
 struct<>
--- !query 483 output
+-- !query output
 
 
 
--- !query 484
+-- !query
 SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 80) as expected
     FROM num_result t1, num_exp_div t2
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 80)
--- !query 484 schema
+-- !query schema
 struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 484 output
+-- !query output
 2	3	-7967167.5673780000	-7967167.5673775051
 2	4	-4.4026750000	-4.4026748005
 2	5	-2094.1886690000	-2094.1886691456
@@ -4084,118 +4084,118 @@ struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 9	8	-332.8855660000	-332.8855656982
 
 
--- !query 485
+-- !query
 TRUNCATE TABLE num_result
--- !query 485 schema
+-- !query schema
 struct<>
--- !query 485 output
+-- !query output
 
 
 
--- !query 486
+-- !query
 INSERT INTO num_result SELECT id, 0, SQRT(ABS(val))
     FROM num_data
--- !query 486 schema
+-- !query schema
 struct<>
--- !query 486 output
+-- !query output
 
 
 
--- !query 487
+-- !query
 SELECT t1.id1, t1.result, t2.expected
     FROM num_result t1, num_exp_sqrt t2
     WHERE t1.id1 = t2.id
     AND t1.result != t2.expected
--- !query 487 schema
+-- !query schema
 struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 487 output
+-- !query output
 
 
 
--- !query 488
+-- !query
 TRUNCATE TABLE num_result
--- !query 488 schema
+-- !query schema
 struct<>
--- !query 488 output
+-- !query output
 
 
 
--- !query 489
+-- !query
 INSERT INTO num_result SELECT id, 0, LN(ABS(val))
     FROM num_data
     WHERE val != '0.0'
--- !query 489 schema
+-- !query schema
 struct<>
--- !query 489 output
+-- !query output
 
 
 
--- !query 490
+-- !query
 SELECT t1.id1, t1.result, t2.expected
     FROM num_result t1, num_exp_ln t2
     WHERE t1.id1 = t2.id
     AND t1.result != t2.expected
--- !query 490 schema
+-- !query schema
 struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 490 output
+-- !query output
 
 
 
--- !query 491
+-- !query
 TRUNCATE TABLE num_result
--- !query 491 schema
+-- !query schema
 struct<>
--- !query 491 output
+-- !query output
 
 
 
--- !query 492
+-- !query
 INSERT INTO num_result SELECT id, 0, LOG(cast('10' as decimal(38, 18)), ABS(val))
     FROM num_data
     WHERE val != '0.0'
--- !query 492 schema
+-- !query schema
 struct<>
--- !query 492 output
+-- !query output
 
 
 
--- !query 493
+-- !query
 SELECT t1.id1, t1.result, t2.expected
     FROM num_result t1, num_exp_log10 t2
     WHERE t1.id1 = t2.id
     AND t1.result != t2.expected
--- !query 493 schema
+-- !query schema
 struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 493 output
+-- !query output
 
 
 
--- !query 494
+-- !query
 TRUNCATE TABLE num_result
--- !query 494 schema
+-- !query schema
 struct<>
--- !query 494 output
+-- !query output
 
 
 
--- !query 495
+-- !query
 INSERT INTO num_result SELECT id, 0, POWER(cast('10' as decimal(38, 18)), LN(ABS(round(val,200))))
     FROM num_data
     WHERE val != '0.0'
--- !query 495 schema
+-- !query schema
 struct<>
--- !query 495 output
+-- !query output
 
 
 
--- !query 496
+-- !query
 SELECT t1.id1, t1.result, t2.expected
     FROM num_result t1, num_exp_power_10_ln t2
     WHERE t1.id1 = t2.id
     AND t1.result != t2.expected
--- !query 496 schema
+-- !query schema
 struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
--- !query 496 output
+-- !query output
 2	224790267919917440.0000000000	224790267919917955.1326161858
 4	7405685069595001.0000000000	7405685069594999.0773399947
 5	5068226527.3212630000	5068226527.3212726541
@@ -4204,75 +4204,75 @@ struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
 9	107511333880051872.0000000000	107511333880052007.0414112467
 
 
--- !query 497
+-- !query
 SELECT AVG(val) FROM num_data
--- !query 497 schema
+-- !query schema
 struct<avg(val):decimal(38,14)>
--- !query 497 output
+-- !query output
 -13430913.59224232070000
 
 
--- !query 498
+-- !query
 CREATE TABLE fract_only (id int, val decimal(4,4)) USING parquet
--- !query 498 schema
+-- !query schema
 struct<>
--- !query 498 output
+-- !query output
 
 
 
--- !query 499
+-- !query
 INSERT INTO fract_only VALUES (1, 0.0)
--- !query 499 schema
+-- !query schema
 struct<>
--- !query 499 output
+-- !query output
 
 
 
--- !query 500
+-- !query
 INSERT INTO fract_only VALUES (2, 0.1)
--- !query 500 schema
+-- !query schema
 struct<>
--- !query 500 output
+-- !query output
 
 
 
--- !query 501
+-- !query
 INSERT INTO fract_only VALUES (4, -0.9999)
--- !query 501 schema
+-- !query schema
 struct<>
--- !query 501 output
+-- !query output
 
 
 
--- !query 502
+-- !query
 INSERT INTO fract_only VALUES (5, 0.99994)
--- !query 502 schema
+-- !query schema
 struct<>
--- !query 502 output
+-- !query output
 
 
 
--- !query 503
+-- !query
 INSERT INTO fract_only VALUES (7, 0.00001)
--- !query 503 schema
+-- !query schema
 struct<>
--- !query 503 output
+-- !query output
 
 
 
--- !query 504
+-- !query
 INSERT INTO fract_only VALUES (8, 0.00017)
--- !query 504 schema
+-- !query schema
 struct<>
--- !query 504 output
+-- !query output
 
 
 
--- !query 505
+-- !query
 SELECT * FROM fract_only
--- !query 505 schema
+-- !query schema
 struct<id:int,val:decimal(4,4)>
--- !query 505 output
+-- !query output
 1	0.0000
 2	0.1000
 4	-0.9999
@@ -4281,131 +4281,131 @@ struct<id:int,val:decimal(4,4)>
 8	0.0002
 
 
--- !query 506
+-- !query
 DROP TABLE fract_only
--- !query 506 schema
+-- !query schema
 struct<>
--- !query 506 output
+-- !query output
 
 
 
--- !query 507
+-- !query
 SELECT decimal(double('NaN'))
--- !query 507 schema
+-- !query schema
 struct<CAST(CAST(NaN AS DOUBLE) AS DECIMAL(10,0)):decimal(10,0)>
--- !query 507 output
+-- !query output
 NULL
 
 
--- !query 508
+-- !query
 SELECT decimal(double('Infinity'))
--- !query 508 schema
+-- !query schema
 struct<CAST(CAST(Infinity AS DOUBLE) AS DECIMAL(10,0)):decimal(10,0)>
--- !query 508 output
+-- !query output
 NULL
 
 
--- !query 509
+-- !query
 SELECT decimal(double('-Infinity'))
--- !query 509 schema
+-- !query schema
 struct<CAST(CAST(-Infinity AS DOUBLE) AS DECIMAL(10,0)):decimal(10,0)>
--- !query 509 output
+-- !query output
 NULL
 
 
--- !query 510
+-- !query
 SELECT decimal(float('NaN'))
--- !query 510 schema
+-- !query schema
 struct<CAST(CAST(NaN AS FLOAT) AS DECIMAL(10,0)):decimal(10,0)>
--- !query 510 output
+-- !query output
 NULL
 
 
--- !query 511
+-- !query
 SELECT decimal(float('Infinity'))
--- !query 511 schema
+-- !query schema
 struct<CAST(CAST(Infinity AS FLOAT) AS DECIMAL(10,0)):decimal(10,0)>
--- !query 511 output
+-- !query output
 NULL
 
 
--- !query 512
+-- !query
 SELECT decimal(float('-Infinity'))
--- !query 512 schema
+-- !query schema
 struct<CAST(CAST(-Infinity AS FLOAT) AS DECIMAL(10,0)):decimal(10,0)>
--- !query 512 output
+-- !query output
 NULL
 
 
--- !query 513
+-- !query
 CREATE TABLE ceil_floor_round (a decimal(38, 18)) USING parquet
--- !query 513 schema
+-- !query schema
 struct<>
--- !query 513 output
+-- !query output
 
 
 
--- !query 514
+-- !query
 INSERT INTO ceil_floor_round VALUES (-5.5)
--- !query 514 schema
+-- !query schema
 struct<>
--- !query 514 output
+-- !query output
 
 
 
--- !query 515
+-- !query
 INSERT INTO ceil_floor_round VALUES (-5.499999)
--- !query 515 schema
+-- !query schema
 struct<>
--- !query 515 output
+-- !query output
 
 
 
--- !query 516
+-- !query
 INSERT INTO ceil_floor_round VALUES (9.5)
--- !query 516 schema
+-- !query schema
 struct<>
--- !query 516 output
+-- !query output
 
 
 
--- !query 517
+-- !query
 INSERT INTO ceil_floor_round VALUES (9.4999999)
--- !query 517 schema
+-- !query schema
 struct<>
--- !query 517 output
+-- !query output
 
 
 
--- !query 518
+-- !query
 INSERT INTO ceil_floor_round VALUES (0.0)
--- !query 518 schema
+-- !query schema
 struct<>
--- !query 518 output
+-- !query output
 
 
 
--- !query 519
+-- !query
 INSERT INTO ceil_floor_round VALUES (0.0000001)
--- !query 519 schema
+-- !query schema
 struct<>
--- !query 519 output
+-- !query output
 
 
 
--- !query 520
+-- !query
 INSERT INTO ceil_floor_round VALUES (-0.000001)
--- !query 520 schema
+-- !query schema
 struct<>
--- !query 520 output
+-- !query output
 
 
 
--- !query 521
+-- !query
 SELECT a, ceil(a), ceiling(a), floor(a), round(a) FROM ceil_floor_round
--- !query 521 schema
-struct<a:decimal(38,18),CEIL(a):decimal(21,0),CEIL(a):decimal(21,0),FLOOR(a):decimal(21,0),round(a, 0):decimal(38,0)>
--- !query 521 output
+-- !query schema
+struct<a:decimal(38,18),CEIL(a):decimal(21,0),ceiling(a):decimal(21,0),FLOOR(a):decimal(21,0),round(a, 0):decimal(38,0)>
+-- !query output
 -0.000001000000000000	0	0	-1	0
 -5.499999000000000000	-5	-5	-6	-5
 -5.500000000000000000	-5	-5	-6	-6
@@ -4415,67 +4415,67 @@ struct<a:decimal(38,18),CEIL(a):decimal(21,0),CEIL(a):decimal(21,0),FLOOR(a):dec
 9.500000000000000000	10	10	9	10
 
 
--- !query 522
+-- !query
 DROP TABLE ceil_floor_round
--- !query 522 schema
+-- !query schema
 struct<>
--- !query 522 output
+-- !query output
 
 
 
--- !query 523
+-- !query
 CREATE TABLE num_input_test (n1 decimal(38, 18)) USING parquet
--- !query 523 schema
+-- !query schema
 struct<>
--- !query 523 output
+-- !query output
 
 
 
--- !query 524
+-- !query
 INSERT INTO num_input_test VALUES (double(trim(' 123')))
--- !query 524 schema
+-- !query schema
 struct<>
--- !query 524 output
+-- !query output
 
 
 
--- !query 525
+-- !query
 INSERT INTO num_input_test VALUES (double(trim('   3245874    ')))
--- !query 525 schema
+-- !query schema
 struct<>
--- !query 525 output
+-- !query output
 
 
 
--- !query 526
+-- !query
 INSERT INTO num_input_test VALUES (double(trim('  -93853')))
--- !query 526 schema
+-- !query schema
 struct<>
--- !query 526 output
+-- !query output
 
 
 
--- !query 527
+-- !query
 INSERT INTO num_input_test VALUES (555.50)
--- !query 527 schema
+-- !query schema
 struct<>
--- !query 527 output
+-- !query output
 
 
 
--- !query 528
+-- !query
 INSERT INTO num_input_test VALUES (-555.50)
--- !query 528 schema
+-- !query schema
 struct<>
--- !query 528 output
+-- !query output
 
 
 
--- !query 529
+-- !query
 SELECT * FROM num_input_test
--- !query 529 schema
+-- !query schema
 struct<n1:decimal(38,18)>
--- !query 529 output
+-- !query output
 -555.500000000000000000
 -93853.000000000000000000
 123.000000000000000000
@@ -4483,385 +4483,385 @@ struct<n1:decimal(38,18)>
 555.500000000000000000
 
 
--- !query 530
+-- !query
 select cast(999999999999999999999 as decimal(38, 0))/1000000000000000000000
--- !query 530 schema
+-- !query schema
 struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) / CAST(1000000000000000000000 AS DECIMAL(38,0))):decimal(38,6)>
--- !query 530 output
+-- !query output
 1.000000
 
 
--- !query 531
+-- !query
 select div(cast(999999999999999999999 as decimal(38, 0)),1000000000000000000000)
--- !query 531 schema
-struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div CAST(1000000000000000000000 AS DECIMAL(38,0))):decimal(38,0)>
--- !query 531 output
+-- !query schema
+struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div CAST(1000000000000000000000 AS DECIMAL(38,0))):bigint>
+-- !query output
 0
 
 
--- !query 532
+-- !query
 select mod(cast(999999999999999999999 as decimal(38, 0)),1000000000000000000000)
--- !query 532 schema
+-- !query schema
 struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) % CAST(1000000000000000000000 AS DECIMAL(38,0))):decimal(22,0)>
--- !query 532 output
+-- !query output
 999999999999999999999
 
 
--- !query 533
+-- !query
 select div(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
--- !query 533 schema
-struct<(CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div CAST(1000000000000000000000 AS DECIMAL(38,0))):decimal(38,0)>
--- !query 533 output
+-- !query schema
+struct<(CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div CAST(1000000000000000000000 AS DECIMAL(38,0))):bigint>
+-- !query output
 -9
 
 
--- !query 534
+-- !query
 select mod(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
--- !query 534 schema
+-- !query schema
 struct<(CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) % CAST(1000000000000000000000 AS DECIMAL(38,0))):decimal(22,0)>
--- !query 534 output
+-- !query output
 -999999999999999999999
 
 
--- !query 535
+-- !query
 select div(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)*1000000000000000000000 + mod(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
--- !query 535 schema
-struct<(CAST((CAST((CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div CAST(1000000000000000000000 AS DECIMAL(38,0))) AS DECIMAL(38,0)) * CAST(1000000000000000000000 AS DECIMAL(38,0))) AS DECIMAL(38,0)) + CAST((CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) % CAST(1000000000000000000000 AS DECIMAL(38,0))) AS DECIMAL(38,0))):decimal(38,0)>
--- !query 535 output
+-- !query schema
+struct<(CAST((CAST(CAST((CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div CAST(1000000000000000000000 AS DECIMAL(38,0))) AS DECIMAL(20,0)) AS DECIMAL(22,0)) * CAST(1000000000000000000000 AS DECIMAL(22,0))) AS DECIMAL(38,0)) + CAST((CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) % CAST(1000000000000000000000 AS DECIMAL(38,0))) AS DECIMAL(38,0))):decimal(38,0)>
+-- !query output
 -9999999999999999999999
 
 
--- !query 536
+-- !query
 select mod (70.0,70)
--- !query 536 schema
+-- !query schema
 struct<(CAST(70.0 AS DECIMAL(3,1)) % CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(3,1))):decimal(3,1)>
--- !query 536 output
+-- !query output
 0.0
 
 
--- !query 537
+-- !query
 select div (70.0,70)
--- !query 537 schema
-struct<(CAST(70.0 AS DECIMAL(3,1)) div CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(3,1))):decimal(2,0)>
--- !query 537 output
+-- !query schema
+struct<(CAST(70.0 AS DECIMAL(3,1)) div CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(3,1))):bigint>
+-- !query output
 1
 
 
--- !query 538
+-- !query
 select 70.0 / 70
--- !query 538 schema
+-- !query schema
 struct<(CAST(70.0 AS DECIMAL(3,1)) / CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(3,1))):decimal(8,6)>
--- !query 538 output
+-- !query output
 1.000000
 
 
--- !query 539
+-- !query
 select 12345678901234567890 % 123
--- !query 539 schema
+-- !query schema
 struct<(CAST(12345678901234567890 AS DECIMAL(20,0)) % CAST(CAST(123 AS DECIMAL(3,0)) AS DECIMAL(20,0))):decimal(3,0)>
--- !query 539 output
+-- !query output
 78
 
 
--- !query 540
+-- !query
 select exp(0.0)
--- !query 540 schema
+-- !query schema
 struct<EXP(CAST(0.0 AS DOUBLE)):double>
--- !query 540 output
+-- !query output
 1.0
 
 
--- !query 541
+-- !query
 select exp(1.0)
--- !query 541 schema
+-- !query schema
 struct<EXP(CAST(1.0 AS DOUBLE)):double>
--- !query 541 output
+-- !query output
 2.7182818284590455
 
 
--- !query 542
+-- !query
 select exp(32.999)
--- !query 542 schema
+-- !query schema
 struct<EXP(CAST(32.999 AS DOUBLE)):double>
--- !query 542 output
+-- !query output
 2.1442904349215556E14
 
 
--- !query 543
+-- !query
 select exp(-32.999)
--- !query 543 schema
+-- !query schema
 struct<EXP(CAST(-32.999 AS DOUBLE)):double>
--- !query 543 output
+-- !query output
 4.663547361468238E-15
 
 
--- !query 544
+-- !query
 select exp(123.456)
--- !query 544 schema
+-- !query schema
 struct<EXP(CAST(123.456 AS DOUBLE)):double>
--- !query 544 output
+-- !query output
 4.132944352778106E53
 
 
--- !query 545
+-- !query
 select exp(-123.456)
--- !query 545 schema
+-- !query schema
 struct<EXP(CAST(-123.456 AS DOUBLE)):double>
--- !query 545 output
+-- !query output
 2.4195825412645934E-54
 
 
--- !query 546
+-- !query
 select exp(1234.5678)
--- !query 546 schema
+-- !query schema
 struct<EXP(CAST(1234.5678 AS DOUBLE)):double>
--- !query 546 output
+-- !query output
 Infinity
 
 
--- !query 547
+-- !query
 select * from range(cast(0.0 as decimal(38, 18)), cast(4.0 as decimal(38, 18)))
--- !query 547 schema
+-- !query schema
 struct<id:bigint>
--- !query 547 output
+-- !query output
 0
 1
 2
 3
 
 
--- !query 548
+-- !query
 select * from range(cast(0.1 as decimal(38, 18)), cast(4.0 as decimal(38, 18)), cast(1.3 as decimal(38, 18)))
--- !query 548 schema
+-- !query schema
 struct<id:bigint>
--- !query 548 output
+-- !query output
 0
 1
 2
 3
 
 
--- !query 549
+-- !query
 select * from range(cast(4.0 as decimal(38, 18)), cast(-1.5 as decimal(38, 18)), cast(-2.2 as decimal(38, 18)))
--- !query 549 schema
+-- !query schema
 struct<id:bigint>
--- !query 549 output
+-- !query output
 0
 2
 4
 
 
--- !query 550
+-- !query
 select ln(1.2345678e-28)
--- !query 550 schema
+-- !query schema
 struct<LOG(1.2345678E-28):double>
--- !query 550 output
+-- !query output
 -64.26166165451762
 
 
--- !query 551
+-- !query
 select ln(0.0456789)
--- !query 551 schema
+-- !query schema
 struct<LOG(CAST(0.0456789 AS DOUBLE)):double>
--- !query 551 output
+-- !query output
 -3.0861187944847437
 
 
--- !query 552
+-- !query
 select ln(0.99949452)
--- !query 552 schema
+-- !query schema
 struct<LOG(CAST(0.99949452 AS DOUBLE)):double>
--- !query 552 output
+-- !query output
 -5.056077980832118E-4
 
 
--- !query 553
+-- !query
 select ln(1.00049687395)
--- !query 553 schema
+-- !query schema
 struct<LOG(CAST(1.00049687395 AS DOUBLE)):double>
--- !query 553 output
+-- !query output
 4.967505490136803E-4
 
 
--- !query 554
+-- !query
 select ln(1234.567890123456789)
--- !query 554 schema
+-- !query schema
 struct<LOG(CAST(1234.567890123456789 AS DOUBLE)):double>
--- !query 554 output
+-- !query output
 7.11847630129779
 
 
--- !query 555
+-- !query
 select ln(5.80397490724e5)
--- !query 555 schema
+-- !query schema
 struct<LOG(580397.490724):double>
--- !query 555 output
+-- !query output
 13.271468476626518
 
 
--- !query 556
+-- !query
 select ln(9.342536355e34)
--- !query 556 schema
+-- !query schema
 struct<LOG(9.342536355E34):double>
--- !query 556 output
+-- !query output
 80.52247093552418
 
 
--- !query 557
+-- !query
 select log(3.4634998359873254962349856073435545)
--- !query 557 schema
+-- !query schema
 struct<LOG(E(), CAST(3.4634998359873254962349856073435545 AS DOUBLE)):double>
--- !query 557 output
+-- !query output
 1.2422795911259166
 
 
--- !query 558
+-- !query
 select log(9.999999999999999999)
--- !query 558 schema
+-- !query schema
 struct<LOG(E(), CAST(9.999999999999999999 AS DOUBLE)):double>
--- !query 558 output
+-- !query output
 2.302585092994046
 
 
--- !query 559
+-- !query
 select log(10.00000000000000000)
--- !query 559 schema
+-- !query schema
 struct<LOG(E(), CAST(10.00000000000000000 AS DOUBLE)):double>
--- !query 559 output
+-- !query output
 2.302585092994046
 
 
--- !query 560
+-- !query
 select log(10.00000000000000001)
--- !query 560 schema
+-- !query schema
 struct<LOG(E(), CAST(10.00000000000000001 AS DOUBLE)):double>
--- !query 560 output
+-- !query output
 2.302585092994046
 
 
--- !query 561
+-- !query
 select log(590489.45235237)
--- !query 561 schema
+-- !query schema
 struct<LOG(E(), CAST(590489.45235237 AS DOUBLE)):double>
--- !query 561 output
+-- !query output
 13.288707052228641
 
 
--- !query 562
+-- !query
 select log(0.99923, 4.58934e34)
--- !query 562 schema
+-- !query schema
 struct<LOG(CAST(0.99923 AS DOUBLE), 4.58934E34):double>
--- !query 562 output
+-- !query output
 -103611.55579543479
 
 
--- !query 563
+-- !query
 select log(1.000016, 8.452010e18)
--- !query 563 schema
+-- !query schema
 struct<LOG(CAST(1.000016 AS DOUBLE), 8.45201E18):double>
--- !query 563 output
+-- !query output
 2723830.287707013
 
 
--- !query 564
+-- !query
 SELECT SUM(decimal(9999)) FROM range(1, 100001)
--- !query 564 schema
+-- !query schema
 struct<sum(CAST(9999 AS DECIMAL(10,0))):decimal(20,0)>
--- !query 564 output
+-- !query output
 999900000
 
 
--- !query 565
+-- !query
 SELECT SUM(decimal(-9999)) FROM range(1, 100001)
--- !query 565 schema
+-- !query schema
 struct<sum(CAST(-9999 AS DECIMAL(10,0))):decimal(20,0)>
--- !query 565 output
+-- !query output
 -999900000
 
 
--- !query 566
+-- !query
 DROP TABLE num_data
--- !query 566 schema
+-- !query schema
 struct<>
--- !query 566 output
+-- !query output
 
 
 
--- !query 567
+-- !query
 DROP TABLE num_exp_add
--- !query 567 schema
+-- !query schema
 struct<>
--- !query 567 output
+-- !query output
 
 
 
--- !query 568
+-- !query
 DROP TABLE num_exp_sub
--- !query 568 schema
+-- !query schema
 struct<>
--- !query 568 output
+-- !query output
 
 
 
--- !query 569
+-- !query
 DROP TABLE num_exp_div
--- !query 569 schema
+-- !query schema
 struct<>
--- !query 569 output
+-- !query output
 
 
 
--- !query 570
+-- !query
 DROP TABLE num_exp_mul
--- !query 570 schema
+-- !query schema
 struct<>
--- !query 570 output
+-- !query output
 
 
 
--- !query 571
+-- !query
 DROP TABLE num_exp_sqrt
--- !query 571 schema
+-- !query schema
 struct<>
--- !query 571 output
+-- !query output
 
 
 
--- !query 572
+-- !query
 DROP TABLE num_exp_ln
--- !query 572 schema
+-- !query schema
 struct<>
--- !query 572 output
+-- !query output
 
 
 
--- !query 573
+-- !query
 DROP TABLE num_exp_log10
--- !query 573 schema
+-- !query schema
 struct<>
--- !query 573 output
+-- !query output
 
 
 
--- !query 574
+-- !query
 DROP TABLE num_exp_power_10_ln
--- !query 574 schema
+-- !query schema
 struct<>
--- !query 574 output
+-- !query output
 
 
 
--- !query 575
+-- !query
 DROP TABLE num_result
--- !query 575 schema
+-- !query schema
 struct<>
--- !query 575 output
+-- !query output
 
 
 
--- !query 576
+-- !query
 DROP TABLE num_input_test
--- !query 576 schema
+-- !query schema
 struct<>
--- !query 576 output
+-- !query output
 

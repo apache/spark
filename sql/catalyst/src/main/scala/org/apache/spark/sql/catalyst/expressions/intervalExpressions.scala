@@ -19,11 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -46,20 +45,8 @@ abstract class ExtractIntervalPart(
   }
 }
 
-case class ExtractIntervalMillenniums(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getMillenniums, "getMillenniums")
-
-case class ExtractIntervalCenturies(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getCenturies, "getCenturies")
-
-case class ExtractIntervalDecades(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getDecades, "getDecades")
-
 case class ExtractIntervalYears(child: Expression)
   extends ExtractIntervalPart(child, IntegerType, getYears, "getYears")
-
-case class ExtractIntervalQuarters(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getQuarters, "getQuarters")
 
 case class ExtractIntervalMonths(child: Expression)
   extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths")
@@ -76,50 +63,31 @@ case class ExtractIntervalMinutes(child: Expression)
 case class ExtractIntervalSeconds(child: Expression)
   extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
 
-case class ExtractIntervalMilliseconds(child: Expression)
-  extends ExtractIntervalPart(child, DecimalType(8, 3), getMilliseconds, "getMilliseconds")
-
-case class ExtractIntervalMicroseconds(child: Expression)
-  extends ExtractIntervalPart(child, LongType, getMicroseconds, "getMicroseconds")
-
-// Number of seconds in 10000 years is 315576000001 (30 days per one month)
-// which is 12 digits + 6 digits for the fractional part of seconds.
-case class ExtractIntervalEpoch(child: Expression)
-  extends ExtractIntervalPart(child, DecimalType(18, 6), getEpoch, "getEpoch")
-
 object ExtractIntervalPart {
 
   def parseExtractField(
       extractField: String,
       source: Expression,
       errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => ExtractIntervalMillenniums(source)
-    case "CENTURY" | "CENTURIES" | "C" | "CENT" => ExtractIntervalCenturies(source)
-    case "DECADE" | "DECADES" | "DEC" | "DECS" => ExtractIntervalDecades(source)
     case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => ExtractIntervalYears(source)
-    case "QUARTER" | "QTR" => ExtractIntervalQuarters(source)
     case "MONTH" | "MON" | "MONS" | "MONTHS" => ExtractIntervalMonths(source)
     case "DAY" | "D" | "DAYS" => ExtractIntervalDays(source)
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => ExtractIntervalHours(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => ExtractIntervalMinutes(source)
     case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => ExtractIntervalSeconds(source)
-    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-      ExtractIntervalMilliseconds(source)
-    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
-      ExtractIntervalMicroseconds(source)
-    case "EPOCH" => ExtractIntervalEpoch(source)
     case _ => errorHandleFunc
   }
 }
 
 abstract class IntervalNumOperation(
     interval: Expression,
-    num: Expression,
-    operation: (CalendarInterval, Double) => CalendarInterval,
-    operationName: String)
+    num: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
+
+  protected val operation: (CalendarInterval, Double) => CalendarInterval
+  protected def operationName: String
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DoubleType)
   override def dataType: DataType = CalendarIntervalType
@@ -127,34 +95,40 @@ abstract class IntervalNumOperation(
   override def nullable: Boolean = true
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    try {
-      operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
-    } catch {
-      case _: java.lang.ArithmeticException => null
-    }
+    operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (interval, num) => {
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"""
-        try {
-          ${ev.value} = $iu.$operationName($interval, $num);
-        } catch (java.lang.ArithmeticException e) {
-          ${ev.isNull} = true;
-        }
-      """
-    })
+    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (interval, num) => s"$iu.$operationName($interval, $num)")
   }
 
-  override def prettyName: String = operationName + "_interval"
+  override def prettyName: String = operationName.stripSuffix("Exact") + "_interval"
 }
 
-case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, multiply, "multiply")
+case class MultiplyInterval(
+    interval: Expression,
+    num: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+  extends IntervalNumOperation(interval, num) {
 
-case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, divide, "divide")
+  override protected val operation: (CalendarInterval, Double) => CalendarInterval =
+    if (checkOverflow) multiplyExact else multiply
+
+  override protected def operationName: String = if (checkOverflow) "multiplyExact" else "multiply"
+}
+
+case class DivideInterval(
+    interval: Expression,
+    num: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+  extends IntervalNumOperation(interval, num) {
+
+  override protected val operation: (CalendarInterval, Double) => CalendarInterval =
+    if (checkOverflow) divideExact else divide
+
+  override protected def operationName: String = if (checkOverflow) "divideExact" else "divide"
+}
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -259,69 +233,3 @@ case class MakeInterval(
 
   override def prettyName: String = "make_interval"
 }
-
-abstract class IntervalJustifyLike(
-    child: Expression,
-    justify: CalendarInterval => CalendarInterval,
-    justifyFuncName: String) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-
-  override def dataType: DataType = CalendarIntervalType
-
-  override def nullSafeEval(input: Any): Any = {
-    try {
-      justify(input.asInstanceOf[CalendarInterval])
-    } catch {
-      case NonFatal(_) => null
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, child => {
-      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      s"""
-         |try {
-         |  ${ev.value} = $iu.$justifyFuncName($child);
-         |} catch (java.lang.ArithmeticException e) {
-         |  ${ev.isNull} = true;
-         |}
-         |""".stripMargin
-    })
-  }
-
-  override def prettyName: String = justifyFuncName
-}
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Adjust interval so 30-day time periods are represented as months",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(interval '1 month -59 day 25 hour');
-       -29 days 25 hours
-  """,
-  since = "3.0.0")
-case class JustifyDays(child: Expression)
-  extends IntervalJustifyLike(child, justifyDays, "justifyDays")
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Adjust interval so 24-hour time periods are represented as days",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(interval '1 month -59 day 25 hour');
-       1 months -57 days -23 hours
-  """,
-  since = "3.0.0")
-case class JustifyHours(child: Expression)
-  extends IntervalJustifyLike(child, justifyHours, "justifyHours")
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Adjust interval using justifyHours and justifyDays, with additional" +
-    " sign adjustments",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(interval '1 month -59 day 25 hour');
-       -27 days -23 hours
-  """,
-  since = "3.0.0")
-case class JustifyInterval(child: Expression)
-  extends IntervalJustifyLike(child, justifyInterval, "justifyInterval")

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
@@ -232,9 +233,6 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
  *  - array:              The `result` starts with seed, then use `result` as seed, recursively
  *                        calculate hash value for each element, and assign the element hash value
  *                        to `result`.
- *  - map:                The `result` starts with seed, then use `result` as seed, recursively
- *                        calculate hash value for each key-value, and assign the key-value hash
- *                        value to `result`.
  *  - struct:             The `result` starts with seed, then use `result` as seed, recursively
  *                        calculate hash value for each field, and assign the field hash value to
  *                        `result`.
@@ -249,10 +247,21 @@ abstract class HashExpression[E] extends Expression {
 
   override def nullable: Boolean = false
 
+  private def hasMapType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[MapType])
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least one argument")
+    } else if (children.exists(child => hasMapType(child.dataType)) &&
+        !SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE)) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName cannot contain elements of MapType. In Spark, same maps " +
+          "may have different hashcode, thus hash expressions are prohibited on MapType elements." +
+          s" To restore previous behavior set ${SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE.key} " +
+          "to true.")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -282,6 +291,7 @@ abstract class HashExpression[E] extends Expression {
     }
 
     val hashResultType = CodeGenerator.javaType(dataType)
+    val typedSeed = if (dataType.sameType(LongType)) s"${seed}L" else s"$seed"
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",
@@ -296,7 +306,7 @@ abstract class HashExpression[E] extends Expression {
 
     ev.copy(code =
       code"""
-         |$hashResultType ${ev.value} = $seed;
+         |$hashResultType ${ev.value} = $typedSeed;
          |$codes
        """.stripMargin)
   }
@@ -600,7 +610,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
        5602566077635097486
-  """)
+  """,
+  since = "3.0.0")
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
   def this(arguments: Seq[Expression]) = this(arguments, 42L)
 

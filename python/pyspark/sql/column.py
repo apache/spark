@@ -17,10 +17,13 @@
 
 import sys
 import json
+import warnings
 
 if sys.version >= '3':
     basestring = str
     long = int
+
+from py4j.java_gateway import is_instance_of
 
 from pyspark import copy_func, since
 from pyspark.context import SparkContext
@@ -296,12 +299,14 @@ class Column(object):
         +----+------+
         |   1| value|
         +----+------+
-
-        .. versionchanged:: 3.0
-           If `key` is a `Column` object, the indexing operator should be used instead.
-           For example, `map_col.getItem(col('id'))` should be replaced with `map_col[col('id')]`.
         """
-        return _bin_op("getItem")(self, key)
+        if isinstance(key, Column):
+            warnings.warn(
+                "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[key]` or `column.key` syntax "
+                "instead.",
+                DeprecationWarning)
+        return self[key]
 
     @since(1.3)
     def getField(self, name):
@@ -323,12 +328,18 @@ class Column(object):
         |  1|
         +---+
         """
+        if isinstance(name, Column):
+            warnings.warn(
+                "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[name]` or `column.name` syntax "
+                "instead.",
+                DeprecationWarning)
         return self[name]
 
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)
-        return self.getField(item)
+        return self[item]
 
     def __getitem__(self, k):
         if isinstance(k, slice):
@@ -540,7 +551,8 @@ class Column(object):
 
         :param alias: strings of desired column names (collects all positional arguments passed)
         :param metadata: a dict of information to be stored in ``metadata`` attribute of the
-            corresponding :class: `StructField` (optional, keyword only argument)
+            corresponding :class:`StructField <pyspark.sql.types.StructField>` (optional, keyword
+            only argument)
 
         .. versionchanged:: 2.2
            Added optional ``metadata`` argument.
@@ -669,8 +681,9 @@ class Column(object):
         >>> window = Window.partitionBy("name").orderBy("age") \
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         >>> from pyspark.sql.functions import rank, min
+        >>> from pyspark.sql.functions import desc
         >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).show()
+                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
         +---+-----+----+---+
         |age| name|rank|min|
         +---+-----+----+---+

@@ -30,13 +30,14 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class JoinSuite extends QueryTest with SharedSparkSession {
+class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private def attachCleanupResourceChecker(plan: SparkPlan): Unit = {
@@ -400,94 +401,96 @@ class JoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
-    upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+    withTempView("`left`", "`right`") {
+      upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
+      upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
 
-    val left = UnresolvedRelation(TableIdentifier("left"))
-    val right = UnresolvedRelation(TableIdentifier("right"))
+      val left = UnresolvedRelation(TableIdentifier("left"))
+      val right = UnresolvedRelation(TableIdentifier("right"))
 
-    checkAnswer(
-      left.join(right, $"left.N" === $"right.N", "full"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", null, null) ::
-        Row(3, "C", 3, "C") ::
-        Row(4, "D", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
+      checkAnswer(
+        left.join(right, $"left.N" === $"right.N", "full"),
+        Row(1, "A", null, null) ::
+          Row(2, "B", null, null) ::
+          Row(3, "C", 3, "C") ::
+          Row(4, "D", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
 
-    checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"left.N" =!= 3), "full"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", null, null) ::
-        Row(3, "C", null, null) ::
-        Row(null, null, 3, "C") ::
-        Row(4, "D", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
+      checkAnswer(
+        left.join(right, ($"left.N" === $"right.N") && ($"left.N" =!= 3), "full"),
+        Row(1, "A", null, null) ::
+          Row(2, "B", null, null) ::
+          Row(3, "C", null, null) ::
+          Row(null, null, 3, "C") ::
+          Row(4, "D", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
 
-    checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", null, null) ::
-        Row(3, "C", null, null) ::
-        Row(null, null, 3, "C") ::
-        Row(4, "D", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
+      checkAnswer(
+        left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
+        Row(1, "A", null, null) ::
+          Row(2, "B", null, null) ::
+          Row(3, "C", null, null) ::
+          Row(null, null, 3, "C") ::
+          Row(4, "D", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
 
-    // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
-    // operator.
-    checkAnswer(
-      sql(
-        """
-        |SELECT l.a, count(*)
-        |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-        |GROUP BY l.a
-      """.
-          stripMargin),
-      Row(null, 10))
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.N, count(*)
+      // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
+      // operator.
+      checkAnswer(
+        sql(
+          """
+          |SELECT l.a, count(*)
           |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY r.N
-        """.stripMargin),
-      Row
+          |GROUP BY l.a
+        """.
+            stripMargin),
+        Row(null, 10))
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT r.N, count(*)
+            |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+            |GROUP BY r.N
+          """.stripMargin),
+        Row
         (1, 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) ::
-        Row(null, 4) :: Nil)
+          Row(2, 1) ::
+          Row(3, 1) ::
+          Row(4, 1) ::
+          Row(5, 1) ::
+          Row(6, 1) ::
+          Row(null, 4) :: Nil)
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT l.N, count(*)
+      checkAnswer(
+        sql(
+          """
+            |SELECT l.N, count(*)
+            |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+            |GROUP BY l.N
+          """.stripMargin),
+        Row(1
+          , 1) ::
+          Row(2, 1) ::
+          Row(3, 1) ::
+          Row(4, 1) ::
+          Row(5, 1) ::
+          Row(6, 1) ::
+          Row(null, 4) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+          |SELECT r.a, count(*)
           |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY l.N
-        """.stripMargin),
-      Row(1
-        , 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) ::
-        Row(null, 4) :: Nil)
-
-    checkAnswer(
-      sql(
-        """
-        |SELECT r.a, count(*)
-        |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-        |GROUP BY r.a
-      """.
-          stripMargin),
-      Row(null, 10))
+          |GROUP BY r.a
+        """.
+            stripMargin),
+        Row(null, 10))
+    }
   }
 
   test("broadcasted existence join operator selection") {
@@ -613,63 +616,65 @@ class JoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("cross join detection") {
-    testData.createOrReplaceTempView("A")
-    testData.createOrReplaceTempView("B")
-    testData2.createOrReplaceTempView("C")
-    testData3.createOrReplaceTempView("D")
-    upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
-    val cartesianQueries = Seq(
-      /** The following should error out since there is no explicit cross join */
-      "SELECT * FROM testData inner join testData2",
-      "SELECT * FROM testData left outer join testData2",
-      "SELECT * FROM testData right outer join testData2",
-      "SELECT * FROM testData full outer join testData2",
-      "SELECT * FROM testData, testData2",
-      "SELECT * FROM testData, testData2 where testData.key = 1 and testData2.a = 22",
-      /** The following should fail because after reordering there are cartesian products */
-      "select * from (A join B on (A.key = B.key)) join D on (A.key=D.a) join C",
-      "select * from ((A join B on (A.key = B.key)) join C) join D on (A.key = D.a)",
-      /** Cartesian product involving C, which is not involved in a CROSS join */
-      "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
+    withTempView("A", "B", "C", "D") {
+      testData.createOrReplaceTempView("A")
+      testData.createOrReplaceTempView("B")
+      testData2.createOrReplaceTempView("C")
+      testData3.createOrReplaceTempView("D")
+      upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+      val cartesianQueries = Seq(
+        /** The following should error out since there is no explicit cross join */
+        "SELECT * FROM testData inner join testData2",
+        "SELECT * FROM testData left outer join testData2",
+        "SELECT * FROM testData right outer join testData2",
+        "SELECT * FROM testData full outer join testData2",
+        "SELECT * FROM testData, testData2",
+        "SELECT * FROM testData, testData2 where testData.key = 1 and testData2.a = 22",
+        /** The following should fail because after reordering there are cartesian products */
+        "select * from (A join B on (A.key = B.key)) join D on (A.key=D.a) join C",
+        "select * from ((A join B on (A.key = B.key)) join C) join D on (A.key = D.a)",
+        /** Cartesian product involving C, which is not involved in a CROSS join */
+        "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
 
-    def checkCartesianDetection(query: String): Unit = {
-      val e = intercept[Exception] {
-        checkAnswer(sql(query), Nil);
+      def checkCartesianDetection(query: String): Unit = {
+        val e = intercept[Exception] {
+          checkAnswer(sql(query), Nil);
+        }
+        assert(e.getMessage.contains("Detected implicit cartesian product"))
       }
-      assert(e.getMessage.contains("Detected implicit cartesian product"))
-    }
 
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
-      cartesianQueries.foreach(checkCartesianDetection)
-    }
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+        cartesianQueries.foreach(checkCartesianDetection)
+      }
 
-    // Check that left_semi, left_anti, existence joins without conditions do not throw
-    // an exception if cross joins are disabled
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
-      checkAnswer(
-        sql("SELECT * FROM testData3 LEFT SEMI JOIN testData2"),
-        Row(1, null) :: Row (2, 2) :: Nil)
-      checkAnswer(
-        sql("SELECT * FROM testData3 LEFT ANTI JOIN testData2"),
-        Nil)
-      checkAnswer(
-        sql(
-          """
-            |SELECT a FROM testData3
-            |WHERE
-            |  EXISTS (SELECT * FROM testData)
-            |OR
-            |  EXISTS (SELECT * FROM testData2)""".stripMargin),
-        Row(1) :: Row(2) :: Nil)
-      checkAnswer(
-        sql(
-          """
-            |SELECT key FROM testData
-            |WHERE
-            |  key IN (SELECT a FROM testData2)
-            |OR
-            |  key IN (SELECT a FROM testData3)""".stripMargin),
-        Row(1) :: Row(2) :: Row(3) :: Nil)
+      // Check that left_semi, left_anti, existence joins without conditions do not throw
+      // an exception if cross joins are disabled
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+        checkAnswer(
+          sql("SELECT * FROM testData3 LEFT SEMI JOIN testData2"),
+          Row(1, null) :: Row (2, 2) :: Nil)
+        checkAnswer(
+          sql("SELECT * FROM testData3 LEFT ANTI JOIN testData2"),
+          Nil)
+        checkAnswer(
+          sql(
+            """
+              |SELECT a FROM testData3
+              |WHERE
+              |  EXISTS (SELECT * FROM testData)
+              |OR
+              |  EXISTS (SELECT * FROM testData2)""".stripMargin),
+          Row(1) :: Row(2) :: Nil)
+        checkAnswer(
+          sql(
+            """
+              |SELECT key FROM testData
+              |WHERE
+              |  key IN (SELECT a FROM testData2)
+              |OR
+              |  key IN (SELECT a FROM testData3)""".stripMargin),
+          Row(1) :: Row(2) :: Row(3) :: Nil)
+      }
     }
   }
 
@@ -842,7 +847,7 @@ class JoinSuite extends QueryTest with SharedSparkSession {
         case j: SortMergeJoinExec => j
       }
       val executed = df.queryExecution.executedPlan
-      val executedJoins = executed.collect {
+      val executedJoins = collect(executed) {
         case j: SortMergeJoinExec => j
       }
       // This only applies to the above tested queries, in which a child SortMergeJoin always
@@ -1026,12 +1031,12 @@ class JoinSuite extends QueryTest with SharedSparkSession {
     val right = Seq((1, 2), (3, 4)).toDF("c", "d")
     val df = left.join(right, pythonTestUDF(left("a")) === pythonTestUDF(right.col("c")))
 
-    val joinNode = df.queryExecution.executedPlan.find(_.isInstanceOf[BroadcastHashJoinExec])
+    val joinNode = find(df.queryExecution.executedPlan)(_.isInstanceOf[BroadcastHashJoinExec])
     assert(joinNode.isDefined)
 
     // There are two PythonUDFs which use attribute from left and right of join, individually.
     // So two PythonUDFs should be evaluated before the join operator, at left and right side.
-    val pythonEvals = joinNode.get.collect {
+    val pythonEvals = collect(joinNode.get) {
       case p: BatchEvalPythonExec => p
     }
     assert(pythonEvals.size == 2)
@@ -1055,7 +1060,7 @@ class JoinSuite extends QueryTest with SharedSparkSession {
     assert(filterInAnalysis.isDefined)
 
     // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
-    val filterExec = df.queryExecution.executedPlan.find(_.isInstanceOf[FilterExec])
+    val filterExec = find(df.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
     assert(filterExec.isEmpty)
 
     checkAnswer(df, Row(1, 2, 1, 2) :: Nil)

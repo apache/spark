@@ -120,7 +120,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
  * Note that NaN values are ignored in the computation of medians and ranges.
  */
 @Since("3.0.0")
-class RobustScaler (override val uid: String)
+class RobustScaler @Since("3.0.0") (@Since("3.0.0") override val uid: String)
   extends Estimator[RobustScalerModel] with RobustScalerParams with DefaultParamsWritable {
 
   import RobustScaler._
@@ -186,7 +186,7 @@ class RobustScaler (override val uid: String)
 object RobustScaler extends DefaultParamsReadable[RobustScaler] {
 
   // compute QuantileSummaries for each feature
-  private[spark] def computeSummaries(
+  private[ml] def computeSummaries(
       vectors: RDD[Vector],
       numFeatures: Int,
       relativeError: Double): RDD[(Int, QuantileSummaries)] = {
@@ -197,10 +197,7 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
             new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
           while (iter.hasNext) {
             val vec = iter.next
-            Iterator.range(0, numFeatures).foreach { i =>
-              val v = vec(i)
-              if (!v.isNaN) summaries(i) = summaries(i).insert(v)
-            }
+            vec.foreach { (i, v) => if (!v.isNaN) summaries(i) = summaries(i).insert(v) }
           }
           Iterator.tabulate(numFeatures)(i => (i, summaries(i).compress))
         } else Iterator.empty
@@ -232,9 +229,9 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
  */
 @Since("3.0.0")
 class RobustScalerModel private[ml] (
-    override val uid: String,
-    val range: Vector,
-    val median: Vector)
+    @Since("3.0.0") override val uid: String,
+    @Since("3.0.0") val range: Vector,
+    @Since("3.0.0") val median: Vector)
   extends Model[RobustScalerModel] with RobustScalerParams with MLWritable {
 
   import RobustScalerModel._

@@ -104,10 +104,13 @@ object NestedColumnAliasing {
   /**
    * Return two maps in order to replace nested fields to aliases.
    *
+   * If `exclusiveAttrs` is given, any nested field accessors of these attributes
+   * won't be considered in nested fields aliasing.
+   *
    * 1. ExtractValue -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
-  def getAliasSubMap(exprList: Seq[Expression])
+  def getAliasSubMap(exprList: Seq[Expression], exclusiveAttrs: Seq[Attribute] = Seq.empty)
     : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = {
     val (nestedFieldReferences, otherRootReferences) =
       exprList.flatMap(collectRootReferenceAndExtractValue).partition {
@@ -115,8 +118,9 @@ object NestedColumnAliasing {
         case _ => false
       }
 
+    val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
     val aliasSub = nestedFieldReferences.asInstanceOf[Seq[ExtractValue]]
-      .filter(!_.references.subsetOf(AttributeSet(otherRootReferences)))
+      .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head)
       .flatMap { case (attr, nestedFields: Seq[ExtractValue]) =>
         // Each expression can contain multiple nested fields.
@@ -129,7 +133,9 @@ object NestedColumnAliasing {
         // If all nested fields of `attr` are used, we don't need to introduce new aliases.
         // By default, ColumnPruning rule uses `attr` already.
         if (nestedFieldToAlias.nonEmpty &&
-            nestedFieldToAlias.length < totalFieldNum(attr.dataType)) {
+            nestedFieldToAlias
+              .map { case (nestedField, _) => totalFieldNum(nestedField.dataType) }
+              .sum < totalFieldNum(attr.dataType)) {
           Some(attr.exprId -> nestedFieldToAlias)
         } else {
           None
@@ -154,6 +160,59 @@ object NestedColumnAliasing {
     case ArrayType(elementType, _) => totalFieldNum(elementType)
     case MapType(keyType, valueType, _) => totalFieldNum(keyType) + totalFieldNum(valueType)
     case _ => 1 // UDT and others
+  }
+}
+
+/**
+ * This prunes unnessary nested columns from `Generate` and optional `Project` on top
+ * of it.
+ */
+object GeneratorNestedColumnAliasing {
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    // Either `nestedPruningOnExpressions` or `nestedSchemaPruningEnabled` is enabled, we
+    // need to prune nested columns through Project and under Generate. The difference is
+    // when `nestedSchemaPruningEnabled` is on, nested columns will be pruned further at
+    // file format readers if it is supported.
+    case Project(projectList, g: Generate) if (SQLConf.get.nestedPruningOnExpressions ||
+        SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
+      // On top on `Generate`, a `Project` that might have nested column accessors.
+      // We try to get alias maps for both project list and generator's children expressions.
+      val exprsToPrune = projectList ++ g.generator.children
+      NestedColumnAliasing.getAliasSubMap(exprsToPrune, g.qualifiedGeneratorOutput).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          val newChild = pruneGenerate(g, nestedFieldToAlias, attrToAliases)
+          Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
+      }
+
+    case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
+        canPruneGenerator(g.generator) =>
+      // If any child output is required by higher projection, we cannot prune on it even we
+      // only use part of nested column of it. A required child output means it is referred
+      // as a whole or partially by higher projection, pruning it here will cause unresolved
+      // query plan.
+      NestedColumnAliasing.getAliasSubMap(
+        g.generator.children, g.requiredChildOutput).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          pruneGenerate(g, nestedFieldToAlias, attrToAliases)
+      }
+
+    case _ =>
+      None
+  }
+
+  private def pruneGenerate(
+      g: Generate,
+      nestedFieldToAlias: Map[ExtractValue, Alias],
+      attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
+    val newGenerator = g.generator.transform {
+      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
+        nestedFieldToAlias(f).toAttribute
+    }.asInstanceOf[Generator]
+
+    // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
+    val newGenerate = g.copy(generator = newGenerator)
+
+    NestedColumnAliasing.replaceChildrenWithAliases(newGenerate, attrToAliases)
   }
 
   /**

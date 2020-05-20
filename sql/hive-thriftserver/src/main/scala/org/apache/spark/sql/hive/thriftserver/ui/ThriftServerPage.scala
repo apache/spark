@@ -59,7 +59,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   /** Generate basic stats of the thrift server program */
   private def generateBasicStats(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime.getTime
-    <ul class ="unstyled">
+    <ul class ="list-unstyled">
       <li>
         <strong>Started at: </strong> {formatDate(startTime)}
       </li>
@@ -229,7 +229,7 @@ private[ui] class SqlStatsPagedTable(
   override def tableId: String = sqlStatsTableTag
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
+    "table table-bordered table-sm table-striped " +
       "table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {
@@ -375,21 +375,7 @@ private[ui] class SqlStatsPagedTable(
       } else {
         errorMessage
       })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        + details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>
-            {errorMessage}
-          </pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = detailsUINode(isMultiline, errorMessage)
     <td>
       {errorSummary}{details}
     </td>
@@ -418,7 +404,7 @@ private[ui] class SessionStatsPagedTable(
   override def tableId: String = sessionStatsTableTag
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
+    "table table-bordered table-sm table-striped " +
       "table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {

@@ -274,8 +274,8 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
 
             val orcPartitionedTable = TableIdentifier("dummy_orc_partitioned", Some("default"))
             if (conversion == "true") {
-              // if converted, it's cached as a datasource table.
-              checkCached(orcPartitionedTable)
+              // if converted, we refresh the cached relation.
+              assert(getCachedDataSourceTable(orcPartitionedTable) === null)
             } else {
               // otherwise, not cached.
               assert(getCachedDataSourceTable(orcPartitionedTable) === null)

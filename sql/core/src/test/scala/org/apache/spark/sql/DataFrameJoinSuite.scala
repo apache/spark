@@ -17,15 +17,22 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Filter, HintInfo, Join, JoinHint, LogicalPlan, Project}
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
+class DataFrameJoinSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("join - join using") {
@@ -150,7 +157,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
       spark.range(10e10.toLong)
         .join(spark.range(10e10.toLong).hint("broadcast"), "id")
         .queryExecution.executedPlan
-    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size == 1)
+    assert(collect(plan2) { case p: BroadcastHashJoinExec => p }.size == 1)
   }
 
   test("join - outer join conversion") {
@@ -315,6 +322,98 @@ class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
             .map(_.identifier.identifier)
 
           assert(joinOrder === Seq("r2", "r1", "r3", "r0"))
+        }
+      }
+    }
+  }
+
+  test("Supports multi-part names for broadcast hint resolution") {
+    val (table1Name, table2Name) = ("t1", "t2")
+
+    withTempDatabase { dbName =>
+      withTable(table1Name, table2Name) {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          spark.range(50).write.saveAsTable(s"$dbName.$table1Name")
+          spark.range(100).write.saveAsTable(s"$dbName.$table2Name")
+
+          def checkIfHintApplied(df: DataFrame): Unit = {
+            val sparkPlan = df.queryExecution.executedPlan
+            val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
+            assert(broadcastHashJoins.size == 1)
+            val broadcastExchanges = broadcastHashJoins.head.collect {
+              case p: BroadcastExchangeExec => p
+            }
+            assert(broadcastExchanges.size == 1)
+            val tables = broadcastExchanges.head.collect {
+              case FileSourceScanExec(_, _, _, _, _, _, Some(tableIdent)) => tableIdent
+            }
+            assert(tables.size == 1)
+            assert(tables.head === TableIdentifier(table1Name, Some(dbName)))
+          }
+
+          def checkIfHintNotApplied(df: DataFrame): Unit = {
+            val sparkPlan = df.queryExecution.executedPlan
+            val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
+            assert(broadcastHashJoins.isEmpty)
+          }
+
+          def sqlTemplate(tableName: String, hintTableName: String): DataFrame = {
+            sql(s"SELECT /*+ BROADCASTJOIN($hintTableName) */ * " +
+              s"FROM $tableName, $dbName.$table2Name " +
+              s"WHERE $tableName.id = $table2Name.id")
+          }
+
+          def dfTemplate(tableName: String, hintTableName: String): DataFrame = {
+            spark.table(tableName).join(spark.table(s"$dbName.$table2Name"), "id")
+              .hint("broadcast", hintTableName)
+          }
+
+          sql(s"USE $dbName")
+
+          checkIfHintApplied(sqlTemplate(table1Name, table1Name))
+          checkIfHintApplied(sqlTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name"))
+          checkIfHintApplied(sqlTemplate(s"$dbName.$table1Name", table1Name))
+          checkIfHintNotApplied(sqlTemplate(table1Name, s"$dbName.$table1Name"))
+
+          checkIfHintApplied(dfTemplate(table1Name, table1Name))
+          checkIfHintApplied(dfTemplate(s"$dbName.$table1Name", s"$dbName.$table1Name"))
+          checkIfHintApplied(dfTemplate(s"$dbName.$table1Name", table1Name))
+          checkIfHintApplied(dfTemplate(table1Name, s"$dbName.$table1Name"))
+          checkIfHintApplied(dfTemplate(table1Name,
+            s"${CatalogManager.SESSION_CATALOG_NAME}.$dbName.$table1Name"))
+
+          withView("tv") {
+            sql(s"CREATE VIEW tv AS SELECT * FROM $dbName.$table1Name")
+            checkIfHintApplied(sqlTemplate("tv", "tv"))
+            checkIfHintNotApplied(sqlTemplate("tv", s"$dbName.tv"))
+
+            checkIfHintApplied(dfTemplate("tv", "tv"))
+            checkIfHintApplied(dfTemplate("tv", s"$dbName.tv"))
+          }
+        }
+      }
+    }
+  }
+
+  test("The same table name exists in two databases for broadcast hint resolution") {
+    val (db1Name, db2Name) = ("db1", "db2")
+
+    withDatabase(db1Name, db2Name) {
+      withTable("t") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          sql(s"CREATE DATABASE $db1Name")
+          sql(s"CREATE DATABASE $db2Name")
+          spark.range(1).write.saveAsTable(s"$db1Name.t")
+          spark.range(1).write.saveAsTable(s"$db2Name.t")
+
+          // Checks if a broadcast hint applied in both sides
+          val statement = s"SELECT /*+ BROADCASTJOIN(t) */ * FROM $db1Name.t, $db2Name.t " +
+            s"WHERE $db1Name.t.id = $db2Name.t.id"
+          sql(statement).queryExecution.optimizedPlan match {
+            case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST))),
+              Some(HintInfo(Some(BROADCAST))))) =>
+            case _ => fail("broadcast hint not found in both tables")
+          }
         }
       }
     }

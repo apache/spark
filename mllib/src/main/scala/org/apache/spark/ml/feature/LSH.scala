@@ -25,6 +25,7 @@ import org.apache.spark.ml.param.{IntParam, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -97,7 +98,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(hashFunction(_: Vector), DataTypes.createArrayType(new VectorUDT))
+    val transformUDF = udf(hashFunction(_: Vector))
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
@@ -112,9 +113,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       numNearestNeighbors: Int,
       singleProbe: Boolean,
       distCol: String): Dataset[_] = {
-    val count = dataset.count()
-    require(numNearestNeighbors > 0 && numNearestNeighbors <= count, "The number of" +
-      " nearest neighbors cannot be less than 1 or greater than the number of elements in dataset")
+    require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
     // Get Hash Value of the key
     val keyHash = hashFunction(key)
     val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
@@ -129,35 +128,50 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       }
 
       // In the origin dataset, find the hash value that hash the same bucket with the key
-      val sameBucketWithKeyUDF = udf((x: Seq[Vector]) =>
-        sameBucket(x, keyHash), DataTypes.BooleanType)
+      val sameBucketWithKeyUDF = udf((x: Seq[Vector]) => sameBucket(x, keyHash))
 
       modelDataset.filter(sameBucketWithKeyUDF(col($(outputCol))))
     } else {
       // In the origin dataset, find the hash value that is closest to the key
       // Limit the use of hashDist since it's controversial
-      val hashDistUDF = udf((x: Seq[Vector]) => hashDistance(x, keyHash), DataTypes.DoubleType)
+      val hashDistUDF = udf((x: Seq[Vector]) => hashDistance(x, keyHash))
       val hashDistCol = hashDistUDF(col($(outputCol)))
+      val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
+
+      val relativeError = 0.05
+      val (summary, count) = modelDatasetWithDist.select(distCol)
+        .rdd
+        .mapPartitions { iter =>
+          if (iter.hasNext) {
+            var s = new QuantileSummaries(
+              QuantileSummaries.defaultCompressThreshold, relativeError)
+            var c = 0L
+            while (iter.hasNext) {
+              val Row(dist: Double) = iter.next
+              s = s.insert(dist)
+              c += 1
+            }
+            Iterator.single((s.compress, c))
+          } else Iterator.empty
+        }.treeReduce { case ((s1, c1), (s2, c2)) => (s1.merge(s2), c1 + c2) }
 
       // Compute threshold to get around k elements.
       // To guarantee to have enough neighbors in one pass, we need (p - err) * N >= M
       // so we pick quantile p = M / N + err
       // M: the number of nearest neighbors; N: the number of elements in dataset
-      val relativeError = 0.05
       val approxQuantile = numNearestNeighbors.toDouble / count + relativeError
-      val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
+
       if (approxQuantile >= 1) {
         modelDatasetWithDist
       } else {
-        val hashThreshold = modelDatasetWithDist.stat
-          .approxQuantile(distCol, Array(approxQuantile), relativeError)
+        val hashThreshold = summary.query(approxQuantile).get
         // Filter the dataset where the hash value is less than the threshold.
-        modelDatasetWithDist.filter(hashDistCol <= hashThreshold(0))
+        modelDatasetWithDist.filter(hashDistCol <= hashThreshold)
       }
     }
 
     // Get the top k nearest neighbor by their distance to the key
-    val keyDistUDF = udf((x: Vector) => keyDistance(x, key), DataTypes.DoubleType)
+    val keyDistUDF = udf((x: Vector) => keyDistance(x, key))
     val modelSubsetWithDistCol = modelSubset.withColumn(distCol, keyDistUDF(col($(inputCol))))
     modelSubsetWithDistCol.sort(distCol).limit(numNearestNeighbors)
   }
@@ -275,7 +289,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       .drop(explodeCols: _*).distinct()
 
     // Add a new column to store the distance of the two rows.
-    val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y))
     val joinedDatasetWithDist = joinedDataset.select(col("*"),
       distUDF(col(s"$leftColName.${$(inputCol)}"), col(s"$rightColName.${$(inputCol)}")).as(distCol)
     )
@@ -334,7 +348,7 @@ private[ml] abstract class LSH[T <: LSHModel[T]]
 
   override def fit(dataset: Dataset[_]): T = {
     transformSchema(dataset.schema, logging = true)
-    val inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
+    val inputDim = MetadataUtils.getNumFeatures(dataset, $(inputCol))
     val model = createRawLSHModel(inputDim).setParent(this)
     copyValues(model)
   }

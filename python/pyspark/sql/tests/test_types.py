@@ -204,10 +204,14 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(df.columns, ['b'])
 
     def test_negative_decimal(self):
-        df = self.spark.createDataFrame([(1, ), (11, )], ["value"])
-        ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
-        actual = list(map(lambda r: int(r.value), ret))
-        self.assertEqual(actual, [0, 10])
+        try:
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true")
+            df = self.spark.createDataFrame([(1, ), (11, )], ["value"])
+            ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
+            actual = list(map(lambda r: int(r.value), ret))
+            self.assertEqual(actual, [0, 10])
+        finally:
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false")
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
@@ -967,6 +971,19 @@ class DataTypeVerificationTests(unittest.TestCase):
             msg = "verify_type(%s, %s, nullable=False) == %s" % (obj, data_type, exp)
             with self.assertRaises(exp, msg=msg):
                 _make_type_verifier(data_type, nullable=False)(obj)
+
+    @unittest.skipIf(sys.version_info[:2] < (3, 6), "Create Row without sorting fields")
+    def test_row_without_field_sorting(self):
+        sorting_enabled_tmp = Row._row_field_sorting_enabled
+        Row._row_field_sorting_enabled = False
+
+        r = Row(b=1, a=2)
+        TestRow = Row("b", "a")
+        expected = TestRow(1, 2)
+
+        self.assertEqual(r, expected)
+        self.assertEqual(repr(r), "Row(b=1, a=2)")
+        Row._row_field_sorting_enabled = sorting_enabled_tmp
 
 
 if __name__ == "__main__":

@@ -215,12 +215,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
     val optimized = Optimize.execute(query)
 
-    val expected = nestedRelation
-      .select(GetStructField('a, 0, Some("b")))
-      .limit(5)
-      .analyze
-
-    comparePlans(optimized, expected)
+    comparePlans(optimized, query)
   }
 
   test("nested field pruning for getting struct field in array of struct") {
@@ -263,6 +258,86 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val expected = contact
       .select(field1, field2)
       .limit(5)
+      .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("Nested field pruning for Project and Generate") {
+    val query = contact
+      .generate(Explode('friends.getField("first")), outputNames = Seq("explode"))
+      .select('explode, 'friends.getField("middle"))
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+
+    val expected = contact
+      .select(
+        'friends.getField("middle").as(aliases(0)),
+        'friends.getField("first").as(aliases(1)))
+      .generate(Explode($"${aliases(1)}"),
+        unrequiredChildIndex = Seq(1),
+        outputNames = Seq("explode"))
+      .select('explode, $"${aliases(0)}".as("friends.middle"))
+      .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("Nested field pruning for Generate") {
+    val query = contact
+      .generate(Explode('friends.getField("first")), outputNames = Seq("explode"))
+      .select('explode)
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+
+    val expected = contact
+      .select('friends.getField("first").as(aliases(0)))
+      .generate(Explode($"${aliases(0)}"),
+        unrequiredChildIndex = Seq(0),
+        outputNames = Seq("explode"))
+      .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("Nested field pruning for Project and Generate: not prune on generator output") {
+    val companies = LocalRelation(
+      'id.int,
+      'employers.array(employer))
+
+    val query = companies
+      .generate(Explode('employers.getField("company")), outputNames = Seq("company"))
+      .select('company.getField("name"))
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+
+    val expected = companies
+      .select('employers.getField("company").as(aliases(0)))
+      .generate(Explode($"${aliases(0)}"),
+        unrequiredChildIndex = Seq(0),
+        outputNames = Seq("company"))
+      .select('company.getField("name").as("company.name"))
+      .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("Nested field pruning for Generate: not prune on required child output") {
+    val query = contact
+      .generate(
+        Explode('friends.getField("first")),
+        outputNames = Seq("explode"))
+      .select('explode, 'friends)
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val expected = contact
+      .select('friends)
+      .generate(Explode('friends.getField("first")),
+        outputNames = Seq("explode"))
+      .select('explode, 'friends)
       .analyze
     comparePlans(optimized, expected)
   }

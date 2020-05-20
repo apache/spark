@@ -21,17 +21,48 @@ import java.util
 import java.util.Collections
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.AlterTable
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, HIVE_TYPE_STRING, HiveStringType, MapType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  /**
+   * The list of reserved table properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER TABLE ... SET TBLPROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val TABLE_RESERVED_PROPERTIES =
+    Seq(TableCatalog.PROP_COMMENT,
+      TableCatalog.PROP_LOCATION,
+      TableCatalog.PROP_PROVIDER,
+      TableCatalog.PROP_OWNER)
+
+  /**
+   * The list of reserved namespace properties, which can not be removed or changed directly by
+   * the syntax:
+   * {{
+   *   ALTER NAMESPACE ... SET PROPERTIES ...
+   * }}
+   *
+   * They need specific syntax to modify
+   */
+  val NAMESPACE_RESERVED_PROPERTIES =
+    Seq(SupportsNamespaces.PROP_COMMENT,
+      SupportsNamespaces.PROP_LOCATION,
+      SupportsNamespaces.PROP_OWNER)
 
   /**
    * Apply properties changes to a map and return the result.
@@ -126,11 +157,12 @@ private[sql] object CatalogV2Util {
 
         case update: UpdateColumnType =>
           replace(schema, update.fieldNames, field => {
-            if (!update.isNullable && field.nullable) {
-              throw new IllegalArgumentException(
-                s"Cannot change optional column to required: $field.name")
-            }
-            Some(StructField(field.name, update.newDataType, update.isNullable, field.metadata))
+            Some(field.copy(dataType = update.newDataType))
+          })
+
+        case update: UpdateColumnNullability =>
+          replace(schema, update.fieldNames, field => {
+            Some(field.copy(nullable = update.nullable))
           })
 
         case update: UpdateColumnComment =>
@@ -256,7 +288,7 @@ private[sql] object CatalogV2Util {
     }
 
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
-    loadTable(catalog, ident).map(DataSourceV2Relation.create)
+    loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
@@ -268,41 +300,15 @@ private[sql] object CatalogV2Util {
       options: Map[String, String],
       location: Option[String],
       comment: Option[String],
-      provider: String): Map[String, String] = {
-    if (options.contains("path") && location.isDefined) {
-      throw new AnalysisException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-          "you can only specify one of them.")
-    }
+      provider: Option[String]): Map[String, String] = {
+    properties ++ options ++
+      provider.map(TableCatalog.PROP_PROVIDER -> _) ++
+      comment.map(TableCatalog.PROP_COMMENT -> _) ++
+      location.map(TableCatalog.PROP_LOCATION -> _)
+  }
 
-    if ((options.contains(TableCatalog.PROP_COMMENT)
-      || properties.contains(TableCatalog.PROP_COMMENT)) && comment.isDefined) {
-      throw new AnalysisException(
-        s"COMMENT and option/property '${TableCatalog.PROP_COMMENT}' " +
-          s"are both used to set the table comment, you can only specify one of them.")
-    }
-
-    if (options.contains(TableCatalog.PROP_PROVIDER)
-      || properties.contains(TableCatalog.PROP_PROVIDER)) {
-      throw new AnalysisException(
-        "USING and option/property 'provider' are both used to set the provider implementation, " +
-          "you can only specify one of them.")
-    }
-
-    val filteredOptions = options.filterKeys(_ != "path")
-
-    // create table properties from TBLPROPERTIES and OPTIONS clauses
-    val tableProperties = new mutable.HashMap[String, String]()
-    tableProperties ++= properties
-    tableProperties ++= filteredOptions
-
-    // convert USING, LOCATION, and COMMENT clauses to table properties
-    tableProperties += (TableCatalog.PROP_PROVIDER -> provider)
-    comment.map(text => tableProperties += (TableCatalog.PROP_COMMENT -> text))
-    location.orElse(options.get("path")).map(
-      loc => tableProperties += (TableCatalog.PROP_LOCATION -> loc))
-
-    tableProperties.toMap
+  def withDefaultOwnership(properties: Map[String, String]): Map[String, String] = {
+    properties ++ Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
   }
 
   def createAlterTable(
@@ -314,5 +320,30 @@ private[sql] object CatalogV2Util {
     val ident = tableName.asIdentifier
     val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
     AlterTable(tableCatalog, ident, unresolved, changes)
+  }
+
+  def getTableProviderCatalog(
+      provider: SupportsCatalogOptions,
+      catalogManager: CatalogManager,
+      options: CaseInsensitiveStringMap): TableCatalog = {
+    Option(provider.extractCatalog(options))
+      .map(catalogManager.catalog)
+      .getOrElse(catalogManager.v2SessionCatalog)
+      .asTableCatalog
+  }
+
+  def failCharType(dt: DataType): Unit = {
+    if (HiveStringType.containsCharType(dt)) {
+      throw new AnalysisException(
+        "Cannot use CHAR type in non-Hive-Serde tables, please use STRING type instead.")
+    }
+  }
+
+  def assertNoCharTypeInSchema(schema: StructType): Unit = {
+    schema.foreach { f =>
+      if (f.metadata.contains(HIVE_TYPE_STRING)) {
+        failCharType(CatalystSqlParser.parseRawDataType(f.metadata.getString(HIVE_TYPE_STRING)))
+      }
+    }
   }
 }

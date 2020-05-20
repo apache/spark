@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.IMetaStoreClient
+import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
@@ -89,6 +90,12 @@ private[client] sealed abstract class Shim {
   def alterTable(hive: Hive, tableName: String, table: Table): Unit
 
   def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit
+
+  def getTablesByType(
+      hive: Hive,
+      dbName: String,
+      pattern: String,
+      tableType: TableType): Seq[String]
 
   def createPartitions(
       hive: Hive,
@@ -156,10 +163,6 @@ private[client] sealed abstract class Shim {
   def getDatabaseOwnerName(db: Database): String
 
   def setDatabaseOwnerName(db: Database, owner: String): Unit
-
-  def getDatabaseOwnerType(db: Database): String
-
-  def setDatabaseOwnerType(db: Database, ownerType: String): Unit
 
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
@@ -367,6 +370,15 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000L
   }
 
+  override def getTablesByType(
+      hive: Hive,
+      dbName: String,
+      pattern: String,
+      tableType: TableType): Seq[String] = {
+    throw new UnsupportedOperationException("Hive 2.2 and lower versions don't support " +
+      "getTablesByType. Please use Hive 2.3 or higher version.")
+  }
+
   override def loadPartition(
       hive: Hive,
       loadPath: Path,
@@ -467,10 +479,6 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getDatabaseOwnerName(db: Database): String = ""
 
   override def setDatabaseOwnerName(db: Database, owner: String): Unit = {}
-
-  override def getDatabaseOwnerType(db: Database): String = ""
-
-  override def setDatabaseOwnerType(db: Database, ownerType: String): Unit = {}
 }
 
 private[client] class Shim_v0_13 extends Shim_v0_12 {
@@ -518,17 +526,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       classOf[Database],
       "setOwnerName",
       classOf[String])
-
-  private lazy val getDatabaseOwnerTypeMethod =
-    findMethod(
-      classOf[Database],
-      "getOwnerType")
-
-  private lazy val setDatabaseOwnerTypeMethod =
-    findMethod(
-      classOf[Database],
-      "setOwnerType",
-      classOf[PrincipalType])
 
   override def setCurrentSessionState(state: SessionState): Unit =
     setCurrentSessionStateMethod.invoke(null, state)
@@ -854,15 +851,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
   override def setDatabaseOwnerName(db: Database, owner: String): Unit = {
     setDatabaseOwnerNameMethod.invoke(db, owner)
-  }
-
-  override def getDatabaseOwnerType(db: Database): String = {
-    Option(getDatabaseOwnerTypeMethod.invoke(db))
-      .map(_.asInstanceOf[PrincipalType].name()).getOrElse("")
-  }
-
-  override def setDatabaseOwnerType(db: Database, ownerType: String): Unit = {
-    setDatabaseOwnerTypeMethod.invoke(db, PrincipalType.valueOf(ownerType))
   }
 }
 
@@ -1248,7 +1236,24 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
 
 private[client] class Shim_v2_2 extends Shim_v2_1
 
-private[client] class Shim_v2_3 extends Shim_v2_1
+private[client] class Shim_v2_3 extends Shim_v2_1 {
+  private lazy val getTablesByTypeMethod =
+    findMethod(
+      classOf[Hive],
+      "getTablesByType",
+      classOf[String],
+      classOf[String],
+      classOf[TableType])
+
+  override def getTablesByType(
+      hive: Hive,
+      dbName: String,
+      pattern: String,
+      tableType: TableType): Seq[String] = {
+    getTablesByTypeMethod.invoke(hive, dbName, pattern, tableType)
+      .asInstanceOf[JList[String]].asScala
+  }
+}
 
 private[client] class Shim_v3_0 extends Shim_v2_3 {
   // Spark supports only non-ACID operations

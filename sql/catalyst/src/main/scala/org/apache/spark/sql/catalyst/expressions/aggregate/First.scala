@@ -43,6 +43,11 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(col, true) FROM VALUES (NULL), (5), (20) AS tab(col);
        5
   """,
+  note = """
+    The function is non-deterministic because its results depends on the order of the rows
+    which may be non-deterministic after a shuffle.
+  """,
+  group = "agg_funcs",
   since = "2.0.0")
 case class First(child: Expression, ignoreNullsExpr: Expression)
   extends DeclarativeAggregate with ExpectsInputTypes {
@@ -112,8 +117,6 @@ case class First(child: Expression, ignoreNullsExpr: Expression)
   }
 
   override lazy val evaluateExpression: AttributeReference = first
-
-  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("first")
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 }

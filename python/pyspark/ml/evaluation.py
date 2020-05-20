@@ -110,7 +110,8 @@ class JavaEvaluator(JavaParams, Evaluator):
 class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol, HasWeightCol,
                                     JavaMLReadable, JavaMLWritable):
     """
-    Evaluator for binary classification, which expects two input columns: rawPrediction and label.
+    Evaluator for binary classification, which expects input columns rawPrediction, label
+    and an optional weight column.
     The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
     1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
 
@@ -409,9 +410,9 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|accuracy|weightedPrecision|weightedRecall|weightedTruePositiveRate|"
-                       "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel|"
-                       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel|"
+                       "(f1|accuracy|weightedPrecision|weightedRecall|weightedTruePositiveRate| "
+                       "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel| "
+                       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel| "
                        "logLoss|hammingLoss)",
                        typeConverter=TypeConverters.toString)
     metricLabel = Param(Params._dummy(), "metricLabel",

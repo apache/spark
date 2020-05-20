@@ -233,7 +233,7 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         getVectorLengthsFromFirstRow(dataset.na.drop(missingColumns), missingColumns)
       case (true, VectorAssembler.KEEP_INVALID) => throw new RuntimeException(
         s"""Can not infer column lengths with handleInvalid = "keep". Consider using VectorSizeHint
-           |to add metadata for columns: ${columns.mkString("[", ", ", "]")}."""
+           |to add metadata for columns: ${missingColumns.mkString("[", ", ", "]")}."""
           .stripMargin.replaceAll("\n", " "))
       case (_, _) => Map.empty
     }
@@ -271,11 +271,9 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         inputColumnIndex += 1
         featureIndex += 1
       case vec: Vector =>
-        vec.foreachActive { case (i, v) =>
-          if (v != 0.0) {
-            indices += featureIndex + i
-            values += v
-          }
+        vec.foreachNonZero { case (i, v) =>
+          indices += featureIndex + i
+          values += v
         }
         inputColumnIndex += 1
         featureIndex += vec.size
@@ -290,7 +288,7 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
           featureIndex += length
         } else {
           throw new SparkException(
-            s"""Encountered null while assembling a row with handleInvalid = "keep". Consider
+            s"""Encountered null while assembling a row with handleInvalid = "error". Consider
                |removing nulls from dataset or using handleInvalid = "keep" or "skip"."""
               .stripMargin)
         }

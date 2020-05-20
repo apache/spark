@@ -362,6 +362,13 @@ pyspark_sql = Module(
         "pyspark.sql.udf",
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
+        "pyspark.sql.pandas.conversion",
+        "pyspark.sql.pandas.map_ops",
+        "pyspark.sql.pandas.group_ops",
+        "pyspark.sql.pandas.types",
+        "pyspark.sql.pandas.serializers",
+        "pyspark.sql.pandas.typehints",
+        "pyspark.sql.pandas.utils",
         # unittests
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",
@@ -372,11 +379,13 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_datasources",
         "pyspark.sql.tests.test_functions",
         "pyspark.sql.tests.test_group",
+        "pyspark.sql.tests.test_pandas_cogrouped_map",
+        "pyspark.sql.tests.test_pandas_grouped_map",
+        "pyspark.sql.tests.test_pandas_map",
         "pyspark.sql.tests.test_pandas_udf",
-        "pyspark.sql.tests.test_pandas_udf_cogrouped_map",
         "pyspark.sql.tests.test_pandas_udf_grouped_agg",
-        "pyspark.sql.tests.test_pandas_udf_grouped_map",
         "pyspark.sql.tests.test_pandas_udf_scalar",
+        "pyspark.sql.tests.test_pandas_udf_typehints",
         "pyspark.sql.tests.test_pandas_udf_window",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
@@ -385,6 +394,21 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_utils",
+    ]
+)
+
+
+pyspark_resource = Module(
+    name="pyspark-resource",
+    dependencies=[
+        pyspark_core
+    ],
+    source_file_regexes=[
+        "python/pyspark/resource"
+    ],
+    python_test_goals=[
+        # unittests
+        "pyspark.resource.tests.test_resources",
     ]
 )
 
@@ -460,6 +484,7 @@ pyspark_ml = Module(
         "pyspark.ml.evaluation",
         "pyspark.ml.feature",
         "pyspark.ml.fpm",
+        "pyspark.ml.functions",
         "pyspark.ml.image",
         "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",

@@ -21,7 +21,6 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -45,10 +44,9 @@ object IntervalBenchmark extends SqlBasedBenchmark {
       spark
         .range(0, cardinality, 1, 1)
         .select(exprs: _*)
-        .write
-        .format("noop")
-        .mode(Overwrite)
-        .save()
+        .queryExecution
+        .toRdd
+        .foreach(_ => ())
     }
   }
 

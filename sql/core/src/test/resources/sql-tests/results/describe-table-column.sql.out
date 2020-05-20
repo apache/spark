@@ -2,29 +2,29 @@
 -- Number of queries: 28
 
 
--- !query 0
+-- !query
 CREATE TEMPORARY VIEW desc_col_temp_view (key int COMMENT 'column_comment') USING PARQUET
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 DESC desc_col_temp_view key
--- !query 1 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 1 output
+-- !query output
 col_name	key
 data_type	int
 comment	column_comment
 
 
--- !query 2
+-- !query
 DESC EXTENDED desc_col_temp_view key
--- !query 2 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 2 output
+-- !query output
 col_name	key
 data_type	int
 comment	column_comment
@@ -37,11 +37,11 @@ max_col_len	NULL
 histogram	NULL
 
 
--- !query 3
+-- !query
 DESC FORMATTED desc_col_temp_view key
--- !query 3 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 3 output
+-- !query output
 col_name	key
 data_type	int
 comment	column_comment
@@ -54,11 +54,11 @@ max_col_len	NULL
 histogram	NULL
 
 
--- !query 4
+-- !query
 DESC FORMATTED desc_col_temp_view desc_col_temp_view.key
--- !query 4 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 4 output
+-- !query output
 col_name	key
 data_type	int
 comment	column_comment
@@ -71,46 +71,46 @@ max_col_len	NULL
 histogram	NULL
 
 
--- !query 5
+-- !query
 DESC desc_col_temp_view key1
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Column key1 does not exist;
 
 
--- !query 6
+-- !query
 CREATE TABLE desc_col_table (key int COMMENT 'column_comment') USING PARQUET
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 ANALYZE TABLE desc_col_table COMPUTE STATISTICS FOR COLUMNS key
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 DESC desc_col_table key
--- !query 8 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 8 output
+-- !query output
 col_name	key
 data_type	int
 comment	column_comment
 
 
--- !query 9
+-- !query
 DESC EXTENDED desc_col_table key
--- !query 9 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 9 output
+-- !query output
 col_name	key
 data_type	int
 comment	column_comment
@@ -123,11 +123,11 @@ max_col_len	4
 histogram	NULL
 
 
--- !query 10
+-- !query
 DESC FORMATTED desc_col_table key
--- !query 10 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 10 output
+-- !query output
 col_name	key
 data_type	int
 comment	column_comment
@@ -140,19 +140,19 @@ max_col_len	4
 histogram	NULL
 
 
--- !query 11
+-- !query
 CREATE TABLE desc_complex_col_table (`a.b` int, col struct<x:int, y:string>) USING PARQUET
--- !query 11 schema
+-- !query schema
 struct<>
--- !query 11 output
+-- !query output
 
 
 
--- !query 12
+-- !query
 DESC FORMATTED desc_complex_col_table `a.b`
--- !query 12 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 12 output
+-- !query output
 col_name	a.b
 data_type	int
 comment	NULL
@@ -165,11 +165,11 @@ max_col_len	NULL
 histogram	NULL
 
 
--- !query 13
+-- !query
 DESC FORMATTED desc_complex_col_table col
--- !query 13 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 13 output
+-- !query output
 col_name	col
 data_type	struct<x:int,y:string>
 comment	NULL
@@ -182,52 +182,52 @@ max_col_len	NULL
 histogram	NULL
 
 
--- !query 14
+-- !query
 DESC FORMATTED desc_complex_col_table col.x
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 DESC TABLE COLUMN command does not support nested data types: col.x;
 
 
--- !query 15
+-- !query
 SET spark.sql.statistics.histogram.enabled=true
--- !query 15 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 15 output
+-- !query output
 spark.sql.statistics.histogram.enabled	true
 
 
--- !query 16
+-- !query
 SET spark.sql.statistics.histogram.numBins=2
--- !query 16 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 16 output
+-- !query output
 spark.sql.statistics.histogram.numBins	2
 
 
--- !query 17
+-- !query
 INSERT INTO desc_col_table values 1, 2, 3, 4
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 
 
 
--- !query 18
+-- !query
 ANALYZE TABLE desc_col_table COMPUTE STATISTICS FOR COLUMNS key
--- !query 18 schema
+-- !query schema
 struct<>
--- !query 18 output
+-- !query output
 
 
 
--- !query 19
+-- !query
 DESC EXTENDED desc_col_table key
--- !query 19 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 19 output
+-- !query output
 col_name	key
 data_type	int
 comment	column_comment
@@ -242,59 +242,59 @@ bin_0	lower_bound: 1.0, upper_bound: 2.0, distinct_count: 2
 bin_1	lower_bound: 2.0, upper_bound: 4.0, distinct_count: 2
 
 
--- !query 20
+-- !query
 DROP VIEW desc_col_temp_view
--- !query 20 schema
+-- !query schema
 struct<>
--- !query 20 output
+-- !query output
 
 
 
--- !query 21
+-- !query
 DROP TABLE desc_col_table
--- !query 21 schema
+-- !query schema
 struct<>
--- !query 21 output
+-- !query output
 
 
 
--- !query 22
+-- !query
 DROP TABLE desc_complex_col_table
--- !query 22 schema
+-- !query schema
 struct<>
--- !query 22 output
+-- !query output
 
 
 
--- !query 23
-CREATE TABLE customer(CName STRING)
--- !query 23 schema
+-- !query
+CREATE TABLE customer(CName STRING) USING PARQUET
+-- !query schema
 struct<>
--- !query 23 output
+-- !query output
 
 
 
--- !query 24
+-- !query
 INSERT INTO customer VALUES('Maria')
--- !query 24 schema
+-- !query schema
 struct<>
--- !query 24 output
+-- !query output
 
 
 
--- !query 25
+-- !query
 ANALYZE TABLE customer COMPUTE STATISTICS FOR COLUMNS cname
--- !query 25 schema
+-- !query schema
 struct<>
--- !query 25 output
+-- !query output
 
 
 
--- !query 26
+-- !query
 DESC EXTENDED customer cname
--- !query 26 schema
+-- !query schema
 struct<info_name:string,info_value:string>
--- !query 26 output
+-- !query output
 col_name	cname
 data_type	string
 comment	NULL
@@ -307,9 +307,9 @@ max_col_len	5
 histogram	NULL
 
 
--- !query 27
+-- !query
 DROP TABLE customer
--- !query 27 schema
+-- !query schema
 struct<>
--- !query 27 output
+-- !query output
 

@@ -2,155 +2,159 @@
 -- Number of queries: 43
 
 
--- !query 0
+-- !query
 CREATE TABLE FLOAT4_TBL (f1  float) USING parquet
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 INSERT INTO FLOAT4_TBL VALUES (float('    0.0'))
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 INSERT INTO FLOAT4_TBL VALUES (float('1004.30   '))
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 INSERT INTO FLOAT4_TBL VALUES (float('     -34.84    '))
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 INSERT INTO FLOAT4_TBL VALUES (float('1.2345678901234e+20'))
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 INSERT INTO FLOAT4_TBL VALUES (float('1.2345678901234e-20'))
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 SELECT float('NaN')
--- !query 6 schema
+-- !query schema
 struct<CAST(NaN AS FLOAT):float>
--- !query 6 output
+-- !query output
 NaN
 
 
--- !query 7
+-- !query
 SELECT float('nan')
--- !query 7 schema
+-- !query schema
 struct<CAST(nan AS FLOAT):float>
--- !query 7 output
+-- !query output
 NaN
 
 
--- !query 8
+-- !query
 SELECT float('   NAN  ')
--- !query 8 schema
+-- !query schema
 struct<CAST(   NAN   AS FLOAT):float>
--- !query 8 output
+-- !query output
 NaN
 
 
--- !query 9
+-- !query
 SELECT float('infinity')
--- !query 9 schema
+-- !query schema
 struct<CAST(infinity AS FLOAT):float>
--- !query 9 output
+-- !query output
 Infinity
 
 
--- !query 10
+-- !query
 SELECT float('          -INFINiTY   ')
--- !query 10 schema
+-- !query schema
 struct<CAST(          -INFINiTY    AS FLOAT):float>
--- !query 10 output
+-- !query output
 -Infinity
 
 
--- !query 11
+-- !query
 SELECT float('N A N')
--- !query 11 schema
-struct<CAST(N A N AS FLOAT):float>
--- !query 11 output
-NULL
+-- !query schema
+struct<>
+-- !query output
+java.lang.NumberFormatException
+invalid input syntax for type numeric: N A N
 
 
--- !query 12
+-- !query
 SELECT float('NaN x')
--- !query 12 schema
-struct<CAST(NaN x AS FLOAT):float>
--- !query 12 output
-NULL
+-- !query schema
+struct<>
+-- !query output
+java.lang.NumberFormatException
+invalid input syntax for type numeric: NaN x
 
 
--- !query 13
+-- !query
 SELECT float(' INFINITY    x')
--- !query 13 schema
-struct<CAST( INFINITY    x AS FLOAT):float>
--- !query 13 output
-NULL
+-- !query schema
+struct<>
+-- !query output
+java.lang.NumberFormatException
+invalid input syntax for type numeric:  INFINITY    x
 
 
--- !query 14
+-- !query
 SELECT float('Infinity') + 100.0
--- !query 14 schema
+-- !query schema
 struct<(CAST(CAST(Infinity AS FLOAT) AS DOUBLE) + CAST(100.0 AS DOUBLE)):double>
--- !query 14 output
+-- !query output
 Infinity
 
 
--- !query 15
+-- !query
 SELECT float('Infinity') / float('Infinity')
--- !query 15 schema
+-- !query schema
 struct<(CAST(CAST(Infinity AS FLOAT) AS DOUBLE) / CAST(CAST(Infinity AS FLOAT) AS DOUBLE)):double>
--- !query 15 output
+-- !query output
 NaN
 
 
--- !query 16
+-- !query
 SELECT float('nan') / float('nan')
--- !query 16 schema
+-- !query schema
 struct<(CAST(CAST(nan AS FLOAT) AS DOUBLE) / CAST(CAST(nan AS FLOAT) AS DOUBLE)):double>
--- !query 16 output
+-- !query output
 NaN
 
 
--- !query 17
+-- !query
 SELECT float(decimal('nan'))
--- !query 17 schema
-struct<CAST(CAST(nan AS DECIMAL(10,0)) AS FLOAT):float>
--- !query 17 output
-NULL
+-- !query schema
+struct<>
+-- !query output
+java.lang.NumberFormatException
+invalid input syntax for type numeric: nan
 
 
--- !query 18
+-- !query
 SELECT '' AS five, * FROM FLOAT4_TBL
--- !query 18 schema
+-- !query schema
 struct<five:string,f1:float>
--- !query 18 output
+-- !query output
 	-34.84
 	0.0
 	1.2345679E-20
@@ -158,116 +162,116 @@ struct<five:string,f1:float>
 	1004.3
 
 
--- !query 19
+-- !query
 SELECT '' AS four, f.* FROM FLOAT4_TBL f WHERE f.f1 <> '1004.3'
--- !query 19 schema
+-- !query schema
 struct<four:string,f1:float>
--- !query 19 output
+-- !query output
 	-34.84
 	0.0
 	1.2345679E-20
 	1.2345679E20
 
 
--- !query 20
+-- !query
 SELECT '' AS one, f.* FROM FLOAT4_TBL f WHERE f.f1 = '1004.3'
--- !query 20 schema
+-- !query schema
 struct<one:string,f1:float>
--- !query 20 output
+-- !query output
 	1004.3
 
 
--- !query 21
+-- !query
 SELECT '' AS three, f.* FROM FLOAT4_TBL f WHERE '1004.3' > f.f1
--- !query 21 schema
+-- !query schema
 struct<three:string,f1:float>
--- !query 21 output
+-- !query output
 	-34.84
 	0.0
 	1.2345679E-20
 
 
--- !query 22
+-- !query
 SELECT '' AS three, f.* FROM FLOAT4_TBL f WHERE  f.f1 < '1004.3'
--- !query 22 schema
+-- !query schema
 struct<three:string,f1:float>
--- !query 22 output
+-- !query output
 	-34.84
 	0.0
 	1.2345679E-20
 
 
--- !query 23
+-- !query
 SELECT '' AS four, f.* FROM FLOAT4_TBL f WHERE '1004.3' >= f.f1
--- !query 23 schema
+-- !query schema
 struct<four:string,f1:float>
--- !query 23 output
+-- !query output
 	-34.84
 	0.0
 	1.2345679E-20
 	1004.3
 
 
--- !query 24
+-- !query
 SELECT '' AS four, f.* FROM FLOAT4_TBL f WHERE  f.f1 <= '1004.3'
--- !query 24 schema
+-- !query schema
 struct<four:string,f1:float>
--- !query 24 output
+-- !query output
 	-34.84
 	0.0
 	1.2345679E-20
 	1004.3
 
 
--- !query 25
+-- !query
 SELECT '' AS three, f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
--- !query 25 schema
+-- !query schema
 struct<three:string,f1:float,x:double>
--- !query 25 output
+-- !query output
 	1.2345679E-20	-1.2345678720289608E-19
 	1.2345679E20	-1.2345678955701443E21
 	1004.3	-10042.999877929688
 
 
--- !query 26
+-- !query
 SELECT '' AS three, f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
--- !query 26 schema
+-- !query schema
 struct<three:string,f1:float,x:double>
--- !query 26 output
+-- !query output
 	1.2345679E-20	-10.0
 	1.2345679E20	1.2345678955701443E20
 	1004.3	994.2999877929688
 
 
--- !query 27
+-- !query
 SELECT '' AS three, f.f1, f.f1 / '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
--- !query 27 schema
+-- !query schema
 struct<three:string,f1:float,x:double>
--- !query 27 output
+-- !query output
 	1.2345679E-20	-1.2345678720289608E-21
 	1.2345679E20	-1.2345678955701443E19
 	1004.3	-100.42999877929688
 
 
--- !query 28
+-- !query
 SELECT '' AS three, f.f1, f.f1 - '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
--- !query 28 schema
+-- !query schema
 struct<three:string,f1:float,x:double>
--- !query 28 output
+-- !query output
 	1.2345679E-20	10.0
 	1.2345679E20	1.2345678955701443E20
 	1004.3	1014.2999877929688
 
 
--- !query 29
+-- !query
 SELECT '' AS five, * FROM FLOAT4_TBL
--- !query 29 schema
+-- !query schema
 struct<five:string,f1:float>
--- !query 29 output
+-- !query output
 	-34.84
 	0.0
 	1.2345679E-20
@@ -275,107 +279,108 @@ struct<five:string,f1:float>
 	1004.3
 
 
--- !query 30
+-- !query
 SELECT smallint(float('32767.4'))
--- !query 30 schema
+-- !query schema
 struct<CAST(CAST(32767.4 AS FLOAT) AS SMALLINT):smallint>
--- !query 30 output
+-- !query output
 32767
 
 
--- !query 31
+-- !query
 SELECT smallint(float('32767.6'))
--- !query 31 schema
+-- !query schema
 struct<CAST(CAST(32767.6 AS FLOAT) AS SMALLINT):smallint>
--- !query 31 output
+-- !query output
 32767
 
 
--- !query 32
+-- !query
 SELECT smallint(float('-32768.4'))
--- !query 32 schema
+-- !query schema
 struct<CAST(CAST(-32768.4 AS FLOAT) AS SMALLINT):smallint>
--- !query 32 output
+-- !query output
 -32768
 
 
--- !query 33
+-- !query
 SELECT smallint(float('-32768.6'))
--- !query 33 schema
+-- !query schema
 struct<CAST(CAST(-32768.6 AS FLOAT) AS SMALLINT):smallint>
--- !query 33 output
+-- !query output
 -32768
 
 
--- !query 34
+-- !query
 SELECT int(float('2147483520'))
--- !query 34 schema
+-- !query schema
 struct<CAST(CAST(2147483520 AS FLOAT) AS INT):int>
--- !query 34 output
+-- !query output
 2147483520
 
 
--- !query 35
+-- !query
 SELECT int(float('2147483647'))
--- !query 35 schema
-struct<CAST(CAST(2147483647 AS FLOAT) AS INT):int>
--- !query 35 output
-2147483647
+-- !query schema
+struct<>
+-- !query output
+java.lang.ArithmeticException
+Casting 2.14748365E9 to int causes overflow
 
 
--- !query 36
+-- !query
 SELECT int(float('-2147483648.5'))
--- !query 36 schema
+-- !query schema
 struct<CAST(CAST(-2147483648.5 AS FLOAT) AS INT):int>
--- !query 36 output
+-- !query output
 -2147483648
 
 
--- !query 37
+-- !query
 SELECT int(float('-2147483900'))
--- !query 37 schema
+-- !query schema
 struct<>
--- !query 37 output
+-- !query output
 java.lang.ArithmeticException
 Casting -2.1474839E9 to int causes overflow
 
 
--- !query 38
+-- !query
 SELECT bigint(float('9223369837831520256'))
--- !query 38 schema
+-- !query schema
 struct<CAST(CAST(9223369837831520256 AS FLOAT) AS BIGINT):bigint>
--- !query 38 output
+-- !query output
 9223369837831520256
 
 
--- !query 39
+-- !query
 SELECT bigint(float('9223372036854775807'))
--- !query 39 schema
+-- !query schema
 struct<CAST(CAST(9223372036854775807 AS FLOAT) AS BIGINT):bigint>
--- !query 39 output
+-- !query output
 9223372036854775807
 
 
--- !query 40
+-- !query
 SELECT bigint(float('-9223372036854775808.5'))
--- !query 40 schema
+-- !query schema
 struct<CAST(CAST(-9223372036854775808.5 AS FLOAT) AS BIGINT):bigint>
--- !query 40 output
+-- !query output
 -9223372036854775808
 
 
--- !query 41
+-- !query
 SELECT bigint(float('-9223380000000000000'))
--- !query 41 schema
+-- !query schema
 struct<>
--- !query 41 output
+-- !query output
 java.lang.ArithmeticException
 Casting -9.22338E18 to int causes overflow
 
 
--- !query 42
+-- !query
 DROP TABLE FLOAT4_TBL
--- !query 42 schema
+-- !query schema
 struct<>
--- !query 42 output
+-- !query output
 

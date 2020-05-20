@@ -31,8 +31,8 @@ import warnings
 
 from pyspark import copy_func, since, _NoValue
 from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket, \
-    ignore_unicode_prefix, PythonEvalType
-from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
+    ignore_unicode_prefix
+from pyspark.serializers import BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -40,14 +40,14 @@ from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.streaming import DataStreamWriter
-from pyspark.sql.types import IntegralType
 from pyspark.sql.types import *
-from pyspark.util import _exception_message
+from pyspark.sql.pandas.conversion import PandasConversionMixin
+from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
-class DataFrame(object):
+class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     """A distributed collection of data grouped into named columns.
 
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
@@ -121,6 +121,25 @@ class DataFrame(object):
         """
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
+
+    @since(1.3)
+    def registerTempTable(self, name):
+        """Registers this DataFrame as a temporary table using the given name.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+
+        >>> df.registerTempTable("people")
+        >>> df2 = spark.sql("select * from people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
+        True
+        >>> spark.catalog.dropTempView("people")
+
+        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
+        """
+        warnings.warn(
+            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
+        self._jdf.createOrReplaceTempView(name)
 
     @since(2.0)
     def createTempView(self, name):
@@ -284,7 +303,8 @@ class DataFrame(object):
         == Physical Plan ==
         * Scan ExistingRDD (1)
         (1) Scan ExistingRDD [codegen id : 1]
-        Output: [age#0, name#1]
+        Output [2]: [age#0, name#1]
+        ...
 
         .. versionchanged:: 3.0.0
            Added optional argument `mode` to specify the expected output format of plans.
@@ -604,6 +624,22 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         return self.limit(num).collect()
+
+    @ignore_unicode_prefix
+    @since(3.0)
+    def tail(self, num):
+        """
+        Returns the last ``num`` rows as a :class:`list` of :class:`Row`.
+
+        Running tail requires moving data into the application's driver process, and doing so with
+        a very large ``num`` can crash the driver process with OutOfMemoryError.
+
+        >>> df.tail(1)
+        [Row(age=5, name=u'Bob')]
+        """
+        with SCCallSiteSync(self._sc):
+            sock_info = self._jdf.tailToPython(num)
+        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
 
     @since(1.3)
     def foreach(self, f):
@@ -1016,7 +1052,8 @@ class DataFrame(object):
         >>> df_as1 = df.alias("df_as1")
         >>> df_as2 = df.alias("df_as2")
         >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
-        >>> joined_df.select("df_as1.name", "df_as2.name", "df_as2.age").collect()
+        >>> joined_df.select("df_as1.name", "df_as2.name", "df_as2.age") \
+                .sort(desc("df_as1.name")).collect()
         [Row(name=u'Bob', name=u'Bob', age=5), Row(name=u'Alice', name=u'Alice', age=2)]
         """
         assert isinstance(alias, basestring), "alias should be a string"
@@ -1057,11 +1094,12 @@ class DataFrame(object):
             ``anti``, ``leftanti`` and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
+        >>> from pyspark.sql.functions import desc
+        >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height) \
+                .sort(desc("name")).collect()
+        [Row(name=u'Bob', height=85), Row(name=u'Alice', height=None), Row(name=None, height=80)]
 
-        >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
-        [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
-
-        >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
+        >>> df.join(df2, 'name', 'outer').select('name', 'height').sort(desc("name")).collect()
         [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
 
         >>> cond = [df.name == df3.name, df.age == df3.age]
@@ -2100,7 +2138,7 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     def toDF(self, *cols):
-        """Returns a new class:`DataFrame` that with new specified column names
+        """Returns a new :class:`DataFrame` that with new specified column names
 
         :param cols: list of new column names (string)
 
@@ -2112,9 +2150,9 @@ class DataFrame(object):
 
     @since(3.0)
     def transform(self, func):
-        """Returns a new class:`DataFrame`. Concise syntax for chaining custom transformations.
+        """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
-        :param func: a function that takes and returns a class:`DataFrame`.
+        :param func: a function that takes and returns a :class:`DataFrame`.
 
         >>> from pyspark.sql.functions import col
         >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
@@ -2135,197 +2173,62 @@ class DataFrame(object):
                                               "should have been DataFrame." % type(result)
         return result
 
-    @since(1.3)
-    def toPandas(self):
+    @since(3.1)
+    def sameSemantics(self, other):
         """
-        Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
+        Returns `True` when the logical query plans inside both :class:`DataFrame`\\s are equal and
+        therefore return same results.
 
-        This is only available if Pandas is installed and available.
+        .. note:: The equality comparison here is simplified by tolerating the cosmetic differences
+            such as attribute names.
 
-        .. note:: This method should only be used if the resulting Pandas's :class:`DataFrame` is
-            expected to be small, as all the data is loaded into the driver's memory.
+        .. note:: This API can compare both :class:`DataFrame`\\s very fast but can still return
+            `False` on the :class:`DataFrame` that return the same results, for instance, from
+            different plans. Such false negative semantic can be useful when caching as an example.
 
-        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+        .. note:: DeveloperApi
 
-        >>> df.toPandas()  # doctest: +SKIP
-           age   name
-        0    2  Alice
-        1    5    Bob
+        >>> df1 = spark.range(10)
+        >>> df2 = spark.range(10)
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col1", df2.id * 2))
+        True
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col1", df2.id + 2))
+        False
+        >>> df1.withColumn("col1", df1.id * 2).sameSemantics(df2.withColumn("col0", df2.id * 2))
+        True
         """
-        from pyspark.sql.utils import require_minimum_pandas_version
-        require_minimum_pandas_version()
+        if not isinstance(other, DataFrame):
+            raise ValueError("other parameter should be of DataFrame; however, got %s"
+                             % type(other))
+        return self._jdf.sameSemantics(other._jdf)
 
-        import numpy as np
-        import pandas as pd
-
-        if self.sql_ctx._conf.pandasRespectSessionTimeZone():
-            timezone = self.sql_ctx._conf.sessionLocalTimeZone()
-        else:
-            timezone = None
-
-        if self.sql_ctx._conf.arrowPySparkEnabled():
-            use_arrow = True
-            try:
-                from pyspark.sql.types import to_arrow_schema
-                from pyspark.sql.utils import require_minimum_pyarrow_version
-
-                require_minimum_pyarrow_version()
-                to_arrow_schema(self.schema)
-            except Exception as e:
-
-                if self.sql_ctx._conf.arrowPySparkFallbackEnabled():
-                    msg = (
-                        "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
-                        "failed by the reason below:\n  %s\n"
-                        "Attempting non-optimization as "
-                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
-                        "true." % _exception_message(e))
-                    warnings.warn(msg)
-                    use_arrow = False
-                else:
-                    msg = (
-                        "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
-                        "reached the error below and will not continue because automatic fallback "
-                        "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
-                        "false.\n  %s" % _exception_message(e))
-                    warnings.warn(msg)
-                    raise
-
-            # Try to use Arrow optimization when the schema is supported and the required version
-            # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
-            if use_arrow:
-                try:
-                    from pyspark.sql.types import _check_dataframe_localize_timestamps
-                    import pyarrow
-                    batches = self._collectAsArrow()
-                    if len(batches) > 0:
-                        table = pyarrow.Table.from_batches(batches)
-                        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
-                        # values, but we should use datetime.date to match the behavior with when
-                        # Arrow optimization is disabled.
-                        pdf = table.to_pandas(date_as_object=True)
-                        return _check_dataframe_localize_timestamps(pdf, timezone)
-                    else:
-                        return pd.DataFrame.from_records([], columns=self.columns)
-                except Exception as e:
-                    # We might have to allow fallback here as well but multiple Spark jobs can
-                    # be executed. So, simply fail in this case for now.
-                    msg = (
-                        "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
-                        "reached the error below and can not continue. Note that "
-                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' does not have an "
-                        "effect on failures in the middle of "
-                        "computation.\n  %s" % _exception_message(e))
-                    warnings.warn(msg)
-                    raise
-
-        # Below is toPandas without Arrow optimization.
-        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
-
-        dtype = {}
-        for field in self.schema:
-            pandas_type = _to_corrected_pandas_type(field.dataType)
-            # SPARK-21766: if an integer field is nullable and has null values, it can be
-            # inferred by pandas as float column. Once we convert the column with NaN back
-            # to integer type e.g., np.int16, we will hit exception. So we use the inferred
-            # float type, not the corrected type from the schema in this case.
-            if pandas_type is not None and \
-                not(isinstance(field.dataType, IntegralType) and field.nullable and
-                    pdf[field.name].isnull().any()):
-                dtype[field.name] = pandas_type
-            # Ensure we fall back to nullable numpy types, even when whole column is null:
-            if isinstance(field.dataType, IntegralType) and pdf[field.name].isnull().any():
-                dtype[field.name] = np.float64
-            if isinstance(field.dataType, BooleanType) and pdf[field.name].isnull().any():
-                dtype[field.name] = np.object
-
-        for f, t in dtype.items():
-            pdf[f] = pdf[f].astype(t, copy=False)
-
-        if timezone is None:
-            return pdf
-        else:
-            from pyspark.sql.types import _check_series_convert_timestamps_local_tz
-            for field in self.schema:
-                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                if isinstance(field.dataType, TimestampType):
-                    pdf[field.name] = \
-                        _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
-            return pdf
-
-    def mapInPandas(self, udf):
+    @since(3.1)
+    def semanticHash(self):
         """
-        Maps an iterator of batches in the current :class:`DataFrame` using a Pandas user-defined
-        function and returns the result as a :class:`DataFrame`.
+        Returns a hash code of the logical query plan against this :class:`DataFrame`.
 
-        The user-defined function should take an iterator of `pandas.DataFrame`\\s and return
-        another iterator of `pandas.DataFrame`\\s. All columns are passed
-        together as an iterator of `pandas.DataFrame`\\s to the user-defined function and the
-        returned iterator of `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
-        Each `pandas.DataFrame` size can be controlled by
-        `spark.sql.execution.arrow.maxRecordsPerBatch`.
-        Its schema must match the returnType of the Pandas user-defined function.
+        .. note:: Unlike the standard hash code, the hash is calculated against the query plan
+            simplified by tolerating the cosmetic differences such as attribute names.
 
-        :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
+        .. note:: DeveloperApi
 
-        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-        >>> df = spark.createDataFrame([(1, 21), (2, 30)],
-        ...                            ("id", "age"))  # doctest: +SKIP
-        >>> @pandas_udf(df.schema, PandasUDFType.MAP_ITER)  # doctest: +SKIP
-        ... def filter_func(batch_iter):
-        ...     for pdf in batch_iter:
-        ...         yield pdf[pdf.id == 1]
-        >>> df.mapInPandas(filter_func).show()  # doctest: +SKIP
-        +---+---+
-        | id|age|
-        +---+---+
-        |  1| 21|
-        +---+---+
-
-        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
-
+        >>> spark.range(10).selectExpr("id as col0").semanticHash()  # doctest: +SKIP
+        1855039936
+        >>> spark.range(10).selectExpr("id as col1").semanticHash()  # doctest: +SKIP
+        1855039936
         """
-        # Columns are special because hasattr always return True
-        if isinstance(udf, Column) or not hasattr(udf, 'func') \
-                or udf.evalType != PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "MAP_ITER.")
+        return self._jdf.semanticHash()
 
-        udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
-        return DataFrame(jdf, self.sql_ctx)
+    where = copy_func(
+        filter,
+        sinceversion=1.3,
+        doc=":func:`where` is an alias for :func:`filter`.")
 
-    def _collectAsArrow(self):
-        """
-        Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
-        and available on driver and worker Python environments.
-
-        .. note:: Experimental.
-        """
-        with SCCallSiteSync(self._sc) as css:
-            port, auth_secret, jsocket_auth_server = self._jdf.collectAsArrowToPython()
-
-        # Collect list of un-ordered batches where last element is a list of correct order indices
-        try:
-            results = list(_load_from_socket((port, auth_secret), ArrowCollectSerializer()))
-        finally:
-            # Join serving thread and raise any exceptions from collectAsArrowToPython
-            jsocket_auth_server.getResult()
-
-        # Separate RecordBatches from batch order indices in results
-        batches = results[:-1]
-        batch_order = results[-1]
-
-        # Re-order the batch list using the correct order
-        return [batches[i] for i in batch_order]
-
-    ##########################################################################################
-    # Pandas compatibility
-    ##########################################################################################
-
+    # Two aliases below were added for pandas compatibility many years ago.
+    # There are too many differences compared to pandas and we cannot just
+    # make it "compatible" by adding aliases. Therefore, we stop adding such
+    # aliases as of Spark 3.0. Two methods below remain just
+    # for legacy users currently.
     groupby = copy_func(
         groupBy,
         sinceversion=1.4,
@@ -2336,44 +2239,12 @@ class DataFrame(object):
         sinceversion=1.4,
         doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.")
 
-    where = copy_func(
-        filter,
-        sinceversion=1.3,
-        doc=":func:`where` is an alias for :func:`filter`.")
-
 
 def _to_scala_map(sc, jm):
     """
     Convert a dict into a JVM Map.
     """
     return sc._jvm.PythonUtils.toScalaMap(jm)
-
-
-def _to_corrected_pandas_type(dt):
-    """
-    When converting Spark SQL records to Pandas :class:`DataFrame`, the inferred data type may be
-    wrong. This method gets the corrected data type for Pandas if that type may be inferred
-    uncorrectly.
-    """
-    import numpy as np
-    if type(dt) == ByteType:
-        return np.int8
-    elif type(dt) == ShortType:
-        return np.int16
-    elif type(dt) == IntegerType:
-        return np.int32
-    elif type(dt) == LongType:
-        return np.int64
-    elif type(dt) == FloatType:
-        return np.float32
-    elif type(dt) == DoubleType:
-        return np.float64
-    elif type(dt) == BooleanType:
-        return np.bool
-    elif type(dt) == TimestampType:
-        return np.datetime64
-    else:
-        return None
 
 
 class DataFrameNaFunctions(object):

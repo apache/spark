@@ -274,6 +274,11 @@ private[hive] class SparkExecuteStatementOperation(
       val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
       Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
+      // Always set the session state classloader to `executionHiveClassLoader` even for sync mode
+      if (!runInBackground) {
+        parentSession.getSessionState.getConf.setClassLoader(executionHiveClassLoader)
+      }
+
       sqlContext.sparkContext.setJobGroup(statementId, statement)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -295,7 +300,7 @@ private[hive] class SparkExecuteStatementOperation(
           resultList.get.iterator
         }
       }
-      dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
+      dataTypes = result.schema.fields.map(_.dataType)
     } catch {
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.

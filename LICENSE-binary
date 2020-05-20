@@ -469,6 +469,7 @@ xmlenc:xmlenc
 net.sf.py4j:py4j
 org.jpmml:pmml-model
 org.jpmml:pmml-schema
+org.threeten:threeten-extra
 
 python/lib/py4j-*-src.zip
 python/pyspark/cloudpickle.py

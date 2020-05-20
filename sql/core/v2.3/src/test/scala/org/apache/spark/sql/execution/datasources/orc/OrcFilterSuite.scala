@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.orc.{OrcScan, OrcTable}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -44,6 +46,11 @@ import org.apache.spark.sql.types._
  */
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
   protected def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,
@@ -54,12 +61,11 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters,
-          DataSourceV2ScanRelation(_, OrcScan(_, _, _, _, _, _, _, pushedFilters), _)) =>
+      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        assert(pushedFilters.nonEmpty, "No filter is pushed down")
-        val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pushedFilters")
+        assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
+        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
+        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for ${o.pushedFilters}")
         checker(maybeFilter.get)
 
       case _ =>
@@ -294,26 +300,33 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
   }
 
   test("filter pushdown - date") {
-    val dates = Seq("2017-08-18", "2017-08-19", "2017-08-20", "2017-08-21").map { day =>
+    val input = Seq("2017-08-18", "2017-08-19", "2017-08-20", "2017-08-21").map { day =>
       Date.valueOf(day)
     }
-    withOrcDataFrame(dates.map(Tuple1(_))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    withOrcFile(input.map(Tuple1(_))) { path =>
+      Seq(false, true).foreach { java8Api =>
+        withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+          readFile(path) { implicit df =>
+            val dates = input.map(Literal(_))
+            checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" === dates(0), PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> dates(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+            checkFilterPredicate($"_1" === dates(0), PredicateLeaf.Operator.EQUALS)
+            checkFilterPredicate($"_1" <=> dates(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate($"_1" < dates(1), PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > dates(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= dates(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= dates(3), PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate($"_1" < dates(1), PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate($"_1" > dates(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+            checkFilterPredicate($"_1" <= dates(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+            checkFilterPredicate($"_1" >= dates(3), PredicateLeaf.Operator.LESS_THAN)
 
-      checkFilterPredicate(Literal(dates(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(dates(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(dates(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(dates(2)) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(dates(0)) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(dates(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate(dates(0) === $"_1", PredicateLeaf.Operator.EQUALS)
+            checkFilterPredicate(dates(0) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+            checkFilterPredicate(dates(1) > $"_1", PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate(dates(2) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
+            checkFilterPredicate(dates(0) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
+            checkFilterPredicate(dates(3) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+          }
+        }
+      }
     }
   }
 

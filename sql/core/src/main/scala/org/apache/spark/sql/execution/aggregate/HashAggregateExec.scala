@@ -53,7 +53,9 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with BlockingOperatorWithCodegen {
+  extends BaseAggregateExec
+    with BlockingOperatorWithCodegen
+    with AliasAwareOutputPartitioning {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -75,7 +77,7 @@ case class HashAggregateExec(
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
 
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
@@ -127,7 +129,7 @@ case class HashAggregateExec(
             resultExpressions,
             (expressions, inputSchema) =>
               MutableProjection.create(expressions, inputSchema),
-            child.output,
+            inputAttributes,
             iter,
             testFallbackStartsAt,
             numOutputRows,
@@ -152,8 +154,10 @@ case class HashAggregateExec(
   override def usedInputs: AttributeSet = inputSet
 
   override def supportCodegen: Boolean = {
-    // ImperativeAggregate is not supported right now
-    !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
+    // ImperativeAggregate and filter predicate are not supported right now
+    // TODO: SPARK-30027 Support codegen for filter exprs in HashAggregateExec
+    !(aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) ||
+        aggregateExpressions.exists(_.filter.isDefined))
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -330,7 +334,7 @@ case class HashAggregateExec(
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ child.output
+    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ inputAttributes
     // To individually generate code for each aggregate function, an element in `updateExprs` holds
     // all the expressions for the buffer of an aggregation function.
     val updateExprs = aggregateExpressions.map { e =>
@@ -365,10 +369,10 @@ case class HashAggregateExec(
          """.stripMargin
       }
       code"""
-         |// do aggregate for ${aggNames(i)}
-         |// evaluate aggregate function
+         |${ctx.registerComment(s"do aggregate for ${aggNames(i)}")}
+         |${ctx.registerComment("evaluate aggregate function")}
          |${evaluateVariables(bufferEvalsForOneFunc)}
-         |// update aggregation buffers
+         |${ctx.registerComment("update aggregation buffers")}
          |${updates.mkString("\n").trim}
        """.stripMargin
     }
@@ -927,7 +931,7 @@ case class HashAggregateExec(
       }
     }
 
-    val inputAttr = aggregateBufferAttributes ++ child.output
+    val inputAttr = aggregateBufferAttributes ++ inputAttributes
     // Here we set `currentVars(0)` to `currentVars(numBufferSlots)` to null, so that when
     // generating code for buffer columns, we use `INPUT_ROW`(will be the buffer row), while
     // generating input columns, we use `currentVars`.
@@ -973,9 +977,9 @@ case class HashAggregateExec(
           CodeGenerator.updateColumn(unsafeRowBuffer, dt, bufferOffset + j, ev, nullable)
         }
         code"""
-           |// evaluate aggregate function for ${aggNames(i)}
+           |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
            |${evaluateVariables(rowBufferEvalsForOneFunc)}
-           |// update unsafe row buffer
+           |${ctx.registerComment("update unsafe row buffer")}
            |${updateRowBuffers.mkString("\n").trim}
          """.stripMargin
       }
@@ -1028,9 +1032,9 @@ case class HashAggregateExec(
                 isVectorized = true)
             }
             code"""
-               |// evaluate aggregate function for ${aggNames(i)}
+               |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
                |${evaluateVariables(fastRowEvalsForOneFunc)}
-               |// update fast row
+               |${ctx.registerComment("update fast row")}
                |${updateRowBuffer.mkString("\n").trim}
              """.stripMargin
           }

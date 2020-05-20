@@ -29,6 +29,7 @@ except ImportError:
 
 from py4j.protocol import Py4JJavaError
 
+from pyspark import SparkConf, SparkContext
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
 
 if sys.version_info[0] >= 3:
@@ -180,10 +181,14 @@ class WorkerReuseTest(PySparkTestCase):
     not has_resource_module,
     "Memory limit feature in Python worker is dependent on "
     "Python's 'resource' module; however, not found.")
-class WorkerMemoryTest(PySparkTestCase):
+class WorkerMemoryTest(unittest.TestCase):
+
+    def setUp(self):
+        class_name = self.__class__.__name__
+        conf = SparkConf().set("spark.executor.pyspark.memory", "2g")
+        self.sc = SparkContext('local[4]', class_name, conf=conf)
 
     def test_memory_limit(self):
-        self.sc._conf.set("spark.executor.pyspark.memory", "1m")
         rdd = self.sc.parallelize(xrange(1), 1)
 
         def getrlimit():
@@ -194,9 +199,11 @@ class WorkerMemoryTest(PySparkTestCase):
         self.assertTrue(len(actual) == 1)
         self.assertTrue(len(actual[0]) == 2)
         [(soft_limit, hard_limit)] = actual
-        self.assertEqual(soft_limit, 1024 * 1024)
-        self.assertEqual(hard_limit, 1024 * 1024)
+        self.assertEqual(soft_limit, 2 * 1024 * 1024 * 1024)
+        self.assertEqual(hard_limit, 2 * 1024 * 1024 * 1024)
 
+    def tearDown(self):
+        self.sc.stop()
 
 if __name__ == "__main__":
     import unittest

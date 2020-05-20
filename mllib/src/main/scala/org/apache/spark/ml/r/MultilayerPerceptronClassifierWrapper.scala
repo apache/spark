@@ -40,7 +40,7 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
     pipeline.stages(1).asInstanceOf[MultilayerPerceptronClassificationModel]
 
   lazy val weights: Array[Double] = mlpModel.weights.toArray
-  lazy val layers: Array[Int] = mlpModel.layers
+  lazy val layers: Array[Int] = mlpModel.getLayers
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)

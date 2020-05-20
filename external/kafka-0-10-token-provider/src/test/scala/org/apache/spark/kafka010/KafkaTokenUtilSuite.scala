@@ -233,46 +233,61 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(jaasParams.contains(tokenPassword1))
   }
 
-  test("isConnectorUsingCurrentToken without security should return true") {
-    val kafkaParams = Map[String, Object]().asJava
+  test("needTokenUpdate without security credentials enabled should return false") {
+    sparkConf.set(s"spark.security.credentials.kafka.enabled", "false")
+    val kafkaParams = getKafkaParams(addJaasConfig = true, Some("custom_jaas_config"))
 
-    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
+    assert(!KafkaTokenUtil.needTokenUpdate(sparkConf, kafkaParams, None))
   }
 
-  test("isConnectorUsingCurrentToken with same token should return true") {
-    setSparkEnv(
-      Map(
-        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
-      )
-    )
+  test("needTokenUpdate without cluster config should return false") {
+    val kafkaParams = getKafkaParams(addJaasConfig = true, Some("custom_jaas_config"))
+
+    assert(!KafkaTokenUtil.needTokenUpdate(sparkConf, kafkaParams, None))
+  }
+
+  test("needTokenUpdate without jaas config should return false") {
+    setSparkEnv(Map.empty)
+    val kafkaParams = getKafkaParams(addJaasConfig = false)
+
+    assert(!KafkaTokenUtil.needTokenUpdate(SparkEnv.get.conf, kafkaParams, None))
+  }
+
+  test("needTokenUpdate with same token should return false") {
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
-    val kafkaParams = getKafkaParams()
-    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
+    val kafkaParams = getKafkaParams(addJaasConfig = true)
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
-    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, clusterConfig))
+    assert(!KafkaTokenUtil.needTokenUpdate(sparkConf, kafkaParams, clusterConfig))
   }
 
-  test("isConnectorUsingCurrentToken with different token should return false") {
-    setSparkEnv(
-      Map(
-        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
-      )
-    )
+  test("needTokenUpdate with different token should return true") {
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
-    val kafkaParams = getKafkaParams()
+    val kafkaParams = getKafkaParams(addJaasConfig = true)
     addTokenToUGI(tokenService1, tokenId2, tokenPassword2)
-    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
-    assert(!KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, clusterConfig))
+    assert(KafkaTokenUtil.needTokenUpdate(sparkConf, kafkaParams, clusterConfig))
   }
 
-  private def getKafkaParams(): ju.Map[String, Object] = {
-    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
-    Map[String, Object](
-      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers,
-      SaslConfigs.SASL_JAAS_CONFIG -> KafkaTokenUtil.getTokenJaasParams(clusterConf)
-    ).asJava
+  private def getKafkaParams(
+      addJaasConfig: Boolean,
+      jaasConfig: Option[String] = None): ju.Map[String, Object] = {
+    var params = Map[String, Object](
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
+    )
+    if (addJaasConfig) {
+      params ++= Map[String, Object](
+        SaslConfigs.SASL_JAAS_CONFIG -> jaasConfig.getOrElse {
+          val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
+          KafkaTokenUtil.getTokenJaasParams(clusterConf)
+        }
+      )
+    }
+    params.asJava
   }
 }

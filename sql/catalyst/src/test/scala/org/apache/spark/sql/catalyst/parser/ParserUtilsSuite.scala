@@ -151,7 +151,7 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   test("string") {
     assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
-    assert(string(createDbContext.comment) == "database_comment")
+    assert(string(createDbContext.commentSpec().get(0).STRING()) == "database_comment")
 
     assert(string(createDbContext.locationSpec.asScala.head.STRING) == "/home/user/db")
   }

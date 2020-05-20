@@ -70,7 +70,9 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val driverCustomEnvs = conf.environment.toSeq
+    val driverCustomEnvs = (Seq(
+      (ENV_APPLICATION_ID, conf.appId)
+    ) ++ conf.environment)
       .map { env =>
         new EnvVarBuilder()
           .withName(env._1)
@@ -78,14 +80,10 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
           .build()
       }
 
-    val driverCpuQuantity = new QuantityBuilder(false)
-      .withAmount(driverCoresRequest)
-      .build()
-    val driverMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${driverMemoryWithOverheadMiB}Mi")
-      .build()
+    val driverCpuQuantity = new Quantity(driverCoresRequest)
+    val driverMemoryQuantity = new Quantity(s"${driverMemoryWithOverheadMiB}Mi")
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
-      ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
+      ("cpu", new Quantity(limitCores))
     }
 
     val driverResourceQuantities =
@@ -156,7 +154,6 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     val additionalProps = mutable.Map(
       KUBERNETES_DRIVER_POD_NAME.key -> driverPodName,
       "spark.app.id" -> conf.appId,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> conf.resourceNamePrefix,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
     // try upload local, resolvable files to a hadoop compatible file system

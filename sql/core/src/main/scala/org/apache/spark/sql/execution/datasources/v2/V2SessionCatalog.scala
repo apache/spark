@@ -39,7 +39,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   extends TableCatalog with SupportsNamespaces {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
   import V2SessionCatalog._
 
   override val defaultNamespace: Array[String] = Array("default")
@@ -124,9 +124,13 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
+    val comment = properties.get(TableCatalog.PROP_COMMENT)
+    val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
 
     try {
-      catalog.alterTable(catalogTable.copy(properties = properties, schema = schema))
+      catalog.alterTable(
+        catalogTable
+          .copy(properties = properties, schema = schema, owner = owner, comment = comment))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
@@ -163,14 +167,15 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   }
 
   implicit class TableIdentifierHelper(ident: Identifier) {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+
     def asTableIdentifier: TableIdentifier = {
       ident.namespace match {
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
-        case Array() =>
-          TableIdentifier(ident.name, Some(catalog.getCurrentDatabase))
         case _ =>
-          throw new NoSuchTableException(ident)
+          throw new NoSuchTableException(
+            s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
       }
     }
   }
@@ -228,7 +233,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
         // validate that this catalog's reserved properties are not removed
         changes.foreach {
           case remove: RemoveProperty
-            if SupportsNamespaces.RESERVED_PROPERTIES.contains(remove.property) =>
+            if CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.contains(remove.property) =>
             throw new UnsupportedOperationException(
               s"Cannot remove reserved property: ${remove.property}")
           case _ =>
@@ -297,7 +302,8 @@ private[sql] object V2SessionCatalog {
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
           .getOrElse(throw new IllegalArgumentException("Missing database location")),
-      properties = metadata.asScala.toMap -- SupportsNamespaces.RESERVED_PROPERTIES.asScala)
+      properties = metadata.asScala.toMap --
+        Seq(SupportsNamespaces.PROP_COMMENT, SupportsNamespaces.PROP_LOCATION))
   }
 
   private implicit class CatalogDatabaseHelper(catalogDatabase: CatalogDatabase) {

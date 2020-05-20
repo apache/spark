@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.time.ZoneOffset
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
@@ -118,12 +119,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       ).map { s => java.sql.Timestamp.valueOf(s) }
       import testImplicits._
       // match the column names of the file from impala
-      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-        SQLConf.ParquetOutputTimestampType.INT96.toString) {
-        val df = spark.createDataset(ts).toDF().repartition(1)
-          .withColumnRenamed("value", "ts")
-        df.write.parquet(tableDir.getAbsolutePath)
-      }
+      val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
+      df.write.parquet(tableDir.getAbsolutePath)
       FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { int96TimestampConversion =>
@@ -145,8 +142,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               impalaFileData.map { ts =>
                 DateTimeUtils.toJavaTimestamp(DateTimeUtils.convertTz(
                   DateTimeUtils.fromJavaTimestamp(ts),
-                  DateTimeUtils.TimeZoneUTC,
-                  DateTimeUtils.getTimeZone(conf.sessionLocalTimeZone)))
+                  ZoneOffset.UTC,
+                  DateTimeUtils.getZoneId(conf.sessionLocalTimeZone)))
               }
             }
             val fullExpectations = (ts ++ impalaExpectations).map(_.toString).sorted.toArray
