@@ -134,7 +134,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   }
 
   test("format fraction of second") {
-    val formatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
+    val formatter = TimestampFormatter.getFractionFormatter(UTC)
     Seq(
       0 -> "1970-01-01 00:00:00",
       1 -> "1970-01-01 00:00:00.000001",
@@ -143,18 +143,21 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       1000000 -> "1970-01-01 00:00:01").foreach { case (micros, tsStr) =>
       assert(formatter.format(micros) === tsStr)
       assert(formatter.format(microsToInstant(micros)) === tsStr)
-      DateTimeTestUtils.withDefaultTimeZone(ZoneOffset.UTC) {
+      DateTimeTestUtils.withDefaultTimeZone(UTC) {
         assert(formatter.format(toJavaTimestamp(micros)) === tsStr)
       }
     }
   }
 
   test("formatting negative years with default pattern") {
-    val instant = LocalDateTime.of(-99, 1, 1, 0, 0, 0)
-      .atZone(ZoneOffset.UTC)
-      .toInstant
+    val instant = LocalDateTime.of(-99, 1, 1, 0, 0, 0).atZone(UTC).toInstant
     val micros = DateTimeUtils.instantToMicros(instant)
-    assert(TimestampFormatter(ZoneOffset.UTC).format(micros) === "-0099-01-01 00:00:00")
+    assert(TimestampFormatter(UTC).format(micros) === "-0099-01-01 00:00:00")
+    assert(TimestampFormatter(UTC).format(instant) === "-0099-01-01 00:00:00")
+    DateTimeTestUtils.withDefaultTimeZone(UTC) { // toJavaTimestamp depends on the default time zone
+      assert(TimestampFormatter("yyyy-MM-dd HH:mm:SS G", UTC).format(toJavaTimestamp(micros))
+        === "0100-01-01 00:00:00 BC")
+    }
   }
 
   test("special timestamp values") {
@@ -282,24 +285,31 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
 
   test("SPARK-31557: rebasing in legacy formatters/parsers") {
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> LegacyBehaviorPolicy.LEGACY.toString) {
-      LegacyDateFormats.values.foreach { legacyFormat =>
-        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zoneId.getId) {
-            DateTimeTestUtils.withDefaultTimeZone(zoneId) {
-              withClue(s"${zoneId.getId} legacyFormat = $legacyFormat") {
-                val formatter = TimestampFormatter(
+      DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zoneId.getId) {
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            withClue(s"zoneId = ${zoneId.getId}") {
+              val formatters = LegacyDateFormats.values.map { legacyFormat =>
+                TimestampFormatter(
                   TimestampFormatter.defaultPattern,
                   zoneId,
                   TimestampFormatter.defaultLocale,
                   legacyFormat,
                   needVarLengthSecondFraction = false)
+              }.toSeq :+  TimestampFormatter.getFractionFormatter(zoneId)
+              formatters.foreach { formatter =>
                 assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
                   .atZone(zoneId)
                   .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
 
+                assert(formatter.format(
+                  LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
+                  "1000-01-01 01:02:03")
                 assert(formatter.format(instantToMicros(
                   LocalDateTime.of(1000, 1, 1, 1, 2, 3)
                     .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
+                assert(formatter.format(java.sql.Timestamp.valueOf("1000-01-01 01:02:03")) ===
+                  "1000-01-01 01:02:03")
               }
             }
           }
