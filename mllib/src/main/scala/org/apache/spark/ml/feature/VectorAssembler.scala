@@ -233,7 +233,7 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         getVectorLengthsFromFirstRow(dataset.na.drop(missingColumns), missingColumns)
       case (true, VectorAssembler.KEEP_INVALID) => throw new RuntimeException(
         s"""Can not infer column lengths with handleInvalid = "keep". Consider using VectorSizeHint
-           |to add metadata for columns: ${columns.mkString("[", ", ", "]")}."""
+           |to add metadata for columns: ${missingColumns.mkString("[", ", ", "]")}."""
           .stripMargin.replaceAll("\n", " "))
       case (_, _) => Map.empty
     }

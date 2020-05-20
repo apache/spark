@@ -52,7 +52,7 @@ class AdaptiveQueryExecSuite
         event match {
           case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
             if (sparkPlanInfo.simpleString.startsWith(
-              "AdaptiveSparkPlan(isFinalPlan=true)")) {
+              "AdaptiveSparkPlan isFinalPlan=true")) {
               finalPlanCnt += 1
             }
           case _ => // ignore other events
@@ -63,20 +63,23 @@ class AdaptiveQueryExecSuite
 
     val dfAdaptive = sql(query)
     val planBefore = dfAdaptive.queryExecution.executedPlan
-    assert(planBefore.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=false)"))
+    assert(planBefore.toString.startsWith("AdaptiveSparkPlan isFinalPlan=false"))
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = sql(query)
       QueryTest.sameRows(result.toSeq, df.collect().toSeq)
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
-    assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
+    assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
+    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
 
     spark.sparkContext.listenerBus.waitUntilEmpty()
-    assert(finalPlanCnt == 1)
+    // AQE will post `SparkListenerSQLAdaptiveExecutionUpdate` twice in case of subqueries that
+    // exist out of query stages.
+    val expectedFinalPlanCnt = adaptivePlan.find(_.subqueries.nonEmpty).map(_ => 2).getOrElse(1)
+    assert(finalPlanCnt == expectedFinalPlanCnt)
     spark.sparkContext.removeSparkListener(listener)
 
-    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
     val exchanges = adaptivePlan.collect {
       case e: Exchange => e
     }
@@ -891,6 +894,7 @@ class AdaptiveQueryExecSuite
           assert(!reader.hasCoalescedPartition) // 0-size partitions are ignored.
           assert(reader.metrics.contains("numSkewedPartitions"))
           assert(reader.metrics("numSkewedPartitions").value > 0)
+          assert(reader.metrics("numSkewedSplits").value > 0)
         }
       }
     }
@@ -939,9 +943,11 @@ class AdaptiveQueryExecSuite
   test("SPARK-30953: InsertAdaptiveSparkPlan should apply AQE on child plan of write commands") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
-      val plan = sql("CREATE TABLE t1 AS SELECT 1 col").queryExecution.executedPlan
-      assert(plan.isInstanceOf[DataWritingCommandExec])
-      assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+      withTable("t1") {
+        val plan = sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").queryExecution.executedPlan
+        assert(plan.isInstanceOf[DataWritingCommandExec])
+        assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+      }
     }
   }
 
@@ -978,6 +984,33 @@ class AdaptiveQueryExecSuite
         df.collect()
       } finally {
         spark.experimental.extraStrategies = Nil
+      }
+    }
+  }
+
+  test("SPARK-31658: SQL UI should show write commands") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      withTable("t1") {
+        var checkDone = false
+        val listener = new SparkListener {
+          override def onOtherEvent(event: SparkListenerEvent): Unit = {
+            event match {
+              case SparkListenerSQLAdaptiveExecutionUpdate(_, _, planInfo) =>
+                assert(planInfo.nodeName == "Execute CreateDataSourceTableAsSelectCommand")
+                checkDone = true
+              case _ => // ignore other events
+            }
+          }
+        }
+        spark.sparkContext.addSparkListener(listener)
+        try {
+          sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").collect()
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          assert(checkDone)
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
+        }
       }
     }
   }

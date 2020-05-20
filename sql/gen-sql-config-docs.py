@@ -17,6 +17,7 @@
 
 import os
 import re
+
 from collections import namedtuple
 from textwrap import dedent
 
@@ -30,7 +31,11 @@ SQLConfEntry = namedtuple(
     "SQLConfEntry", ["name", "default", "description", "version"])
 
 
-def get_public_sql_configs(jvm):
+def get_sql_configs(jvm, group):
+    if group == "static":
+        config_set = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listStaticSQLConfigs()
+    else:
+        config_set = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listRuntimeSQLConfigs()
     sql_configs = [
         SQLConfEntry(
             name=_sql_config._1(),
@@ -38,7 +43,7 @@ def get_public_sql_configs(jvm):
             description=_sql_config._3(),
             version=_sql_config._4()
         )
-        for _sql_config in jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listSQLConfigs()
+        for _sql_config in config_set
     ]
     return sql_configs
 
@@ -76,7 +81,11 @@ def generate_sql_configs_table_html(sql_configs, path):
             """
         ))
         for config in sorted(sql_configs, key=lambda x: x.name):
-            if config.default == "<undefined>":
+            if config.name == "spark.sql.session.timeZone":
+                default = "(value of local timezone)"
+            elif config.name == "spark.sql.warehouse.dir":
+                default = "(value of <code>$PWD/spark-warehouse</code>)"
+            elif config.default == "<undefined>":
                 default = "(none)"
             elif config.default.startswith("<value of "):
                 referenced_config_name = value_reference_pattern.match(config.default).group(1)
@@ -115,10 +124,12 @@ def generate_sql_configs_table_html(sql_configs, path):
 
 if __name__ == "__main__":
     jvm = launch_gateway().jvm
-    sql_configs = get_public_sql_configs(jvm)
+    docs_root_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs")
 
-    spark_root_dir = os.path.dirname(os.path.dirname(__file__))
-    sql_configs_table_path = os.path.join(
-        spark_root_dir, "docs/generated-sql-configuration-table.html")
+    sql_configs = get_sql_configs(jvm, "runtime")
+    sql_configs_table_path = os.path.join(docs_root_dir, "generated-runtime-sql-config-table.html")
+    generate_sql_configs_table_html(sql_configs, path=sql_configs_table_path)
 
+    sql_configs = get_sql_configs(jvm, "static")
+    sql_configs_table_path = os.path.join(docs_root_dir, "generated-static-sql-config-table.html")
     generate_sql_configs_table_html(sql_configs, path=sql_configs_table_path)

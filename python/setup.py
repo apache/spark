@@ -184,6 +184,7 @@ try:
                   'pyspark.python.lib',
                   'pyspark.data',
                   'pyspark.licenses',
+                  'pyspark.resource',
                   'pyspark.examples.src.main.python'],
         include_package_data=True,
         package_dir={

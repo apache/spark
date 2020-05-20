@@ -39,7 +39,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * A test suite for the `spark-sql` CLI tool.
  */
-class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach with Logging {
+class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
@@ -62,12 +62,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     }
   }
 
-  override def afterEach(): Unit = {
-    // Only running `runCliWithin` in a single test case will share the same temporary
-    // Hive metastore
-    Utils.deleteRecursively(metastorePath)
-  }
-
   /**
    * Run a CLI operation and expect all the queries and expected answers to be returned.
    *
@@ -77,6 +71,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
    *                       is taken as an immediate error condition. That is: if a line containing
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
+   * @param maybeWarehouse an option for warehouse path, which will be set via
+   *                       `hive.metastore.warehouse.dir`.
+   * @param useExternalHiveFile whether to load the hive-site.xml from `src/test/noclasspath` or
+   *                            not, disabled by default
+   * @param metastore which path the embedded derby database for metastore locates. Use the the
+   *                  global `metastorePath` by default
    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
@@ -84,12 +84,29 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       extraArgs: Seq[String] = Seq.empty,
       errorResponses: Seq[String] = Seq("Error:"),
       maybeWarehouse: Option[File] = Some(warehousePath),
-      useExternalHiveFile: Boolean = false)(
+      useExternalHiveFile: Boolean = false,
+      metastore: File = metastorePath)(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
-    val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
     // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
-    val queriesString = queries.map(_ + "\n").mkString
+    val queriesString = queriesAndExpectedAnswers.map(_._1 + "\n").mkString
+    // spark-sql echoes the queries on STDOUT, expect first an echo of the query, then the answer.
+    val expectedAnswers = queriesAndExpectedAnswers.flatMap {
+      case (query, answer) =>
+        if (query == "") {
+          // empty query means a command launched with -e
+          Seq(answer)
+        } else {
+          // spark-sql echoes the submitted queries
+          val queryEcho = query.split("\n").toList match {
+            case firstLine :: tail =>
+              s"spark-sql> $firstLine" :: tail.map(l => s"         > $l")
+          }
+          // longer lines sometimes get split in the output,
+          // match the first 60 characters of each query line
+          queryEcho.map(_.take(60)) :+ answer
+        }
+    }
 
     val extraHive = if (useExternalHiveFile) {
       s"--driver-class-path ${System.getProperty("user.dir")}/src/test/noclasspath"
@@ -100,7 +117,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       maybeWarehouse.map(dir => s"--hiveconf ${ConfVars.METASTOREWAREHOUSE}=$dir").getOrElse("")
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
-      val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
+      val jdbcUrl = s"jdbc:derby:;databaseName=$metastore;create=true"
       s"""$cliScript
          |  --master local
          |  --driver-java-options -Dderby.system.durability=test
@@ -122,10 +139,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
       // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
       // add a timestamp to provide more diagnosis information.
-      buffer += s"${new Timestamp(new Date().getTime)} - $source> $line"
+      val newLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
+      log.info(newLine)
+      buffer += newLine
 
       // If we haven't found all expected answers and another expected answer comes up...
       if (next < expectedAnswers.size && line.contains(expectedAnswers(next))) {
+        log.info(s"$source> found expected output line $next: '${expectedAnswers(next)}'")
         next += 1
         // If all expected answers have been found...
         if (next == expectedAnswers.size) {
@@ -153,6 +173,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
 
     try {
       ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeout)
+      log.info("Found all expected output.")
     } catch { case cause: Throwable =>
       val message =
         s"""
@@ -161,8 +182,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
            |=======================
            |Spark SQL CLI command line: ${command.mkString(" ")}
            |Exception: $cause
-           |Executed query $next "${queries(next)}",
-           |But failed to capture expected output "${expectedAnswers(next)}" within $timeout.
+           |Failed to capture next expected output "${expectedAnswers(next)}" within $timeout.
            |
            |${buffer.mkString("\n")}
            |===========================
@@ -172,14 +192,29 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       logError(message, cause)
       fail(message, cause)
     } finally {
-      process.destroy()
+      if (!process.waitFor(1, MINUTES)) {
+        try {
+          fail("spark-sql did not exit gracefully.")
+        } finally {
+          process.destroy()
+        }
+      }
     }
   }
 
   test("load warehouse dir from hive-site.xml") {
-    runCliWithin(1.minute, maybeWarehouse = None, useExternalHiveFile = true)(
-      "desc database default;" -> "hive_one",
-      "set spark.sql.warehouse.dir;" -> "hive_one")
+    val metastore = Utils.createTempDir()
+    metastore.delete()
+    try {
+      runCliWithin(1.minute,
+        maybeWarehouse = None,
+        useExternalHiveFile = true,
+        metastore = metastore)(
+        "desc database default;" -> "hive_one",
+        "set spark.sql.warehouse.dir;" -> "hive_one")
+    } finally {
+      Utils.deleteRecursively(metastore)
+    }
   }
 
   test("load warehouse dir from --hiveconf") {
@@ -193,35 +228,47 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
 
   test("load warehouse dir from --conf spark(.hadoop).hive.*") {
     // override conf from hive-site.xml
-    runCliWithin(
-      2.minute,
-      extraArgs = Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
-      maybeWarehouse = None,
-      useExternalHiveFile = true)(
-      "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
-      "create database cliTestDb;" -> "",
-      "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
-      "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
+    val metastore = Utils.createTempDir()
+    metastore.delete()
+    try {
+      runCliWithin(2.minute,
+        extraArgs =
+          Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
+        maybeWarehouse = None,
+        useExternalHiveFile = true,
+        metastore = metastore)(
+        "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
+        "create database cliTestDb;" -> "",
+        "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
+        "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
 
-    // override conf from --hiveconf too
-    runCliWithin(
-      2.minute,
-      extraArgs = Seq("--conf", s"spark.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"))(
-      "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
-      "create database cliTestDb;" -> "",
-      "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
-      "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
+      // override conf from --hiveconf too
+      runCliWithin(2.minute,
+        extraArgs = Seq("--conf", s"spark.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
+        metastore = metastore)(
+        "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
+        "create database cliTestDb;" -> "",
+        "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
+        "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
+    } finally {
+      Utils.deleteRecursively(metastore)
+    }
   }
 
   test("load warehouse dir from spark.sql.warehouse.dir") {
     // spark.sql.warehouse.dir overrides all hive ones
-    runCliWithin(
-      2.minute,
-      extraArgs =
-        Seq("--conf",
-          s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}1",
-          "--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=${sparkWareHouseDir}2"))(
-      "desc database default;" -> sparkWareHouseDir.getAbsolutePath.concat("1"))
+    val metastore = Utils.createTempDir()
+    metastore.delete()
+    try {
+      runCliWithin(2.minute,
+        extraArgs = Seq(
+            "--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}1",
+            "--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=${sparkWareHouseDir}2"),
+        metastore = metastore)(
+        "desc database default;" -> sparkWareHouseDir.getAbsolutePath.concat("1"))
+    } finally {
+      Utils.deleteRecursively(metastore)
+    }
   }
 
   test("Simple commands") {
@@ -233,7 +280,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
         -> "",
       "SHOW TABLES;"
         -> "hive_test",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE hive_test;"
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
+         |OVERWRITE INTO TABLE hive_test;""".stripMargin
         -> "",
       "CACHE TABLE hive_test;"
         -> "",
@@ -250,18 +298,18 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
 
   test("Single command with --database") {
     runCliWithin(2.minute)(
-      "CREATE DATABASE hive_test_db;"
+      "CREATE DATABASE hive_db_test;"
         -> "",
-      "USE hive_test_db;"
+      "USE hive_db_test;"
         -> "",
-      "CREATE TABLE hive_test(key INT, val STRING);"
+      "CREATE TABLE hive_table_test(key INT, val STRING);"
         -> "",
       "SHOW TABLES;"
-        -> "hive_test"
+        -> "hive_table_test"
     )
 
-    runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
-      "" -> "hive_test"
+    runCliWithin(2.minute, Seq("--database", "hive_db_test", "-e", "SHOW TABLES;"))(
+      "" -> "hive_table_test"
     )
   }
 
@@ -273,12 +321,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
 
     runCliWithin(3.minute, Seq("--jars", s"$jarFile"))(
       """CREATE TABLE t1(key string, val string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
-      """.stripMargin
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
         -> "",
       "CREATE TABLE sourceTable (key INT, val STRING) USING hive;"
         -> "",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
+         |OVERWRITE INTO TABLE sourceTable;""".stripMargin
         -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
@@ -299,12 +347,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       3.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
       """CREATE TABLE addJarWithHiveAux(key string, val string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
-      """.stripMargin
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
         -> "",
       "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING) USING hive;"
         -> "",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithHiveAux;"
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
+         |OVERWRITE INTO TABLE sourceTableForWithHiveAux;""".stripMargin
         -> "",
       "INSERT INTO TABLE addJarWithHiveAux SELECT key, val FROM sourceTableForWithHiveAux;"
         -> "",
@@ -419,12 +467,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       3.minute)(
       s"ADD JAR ${hiveContribJar};" -> "",
       """CREATE TABLE addJarWithSQL(key string, val string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
-      """.stripMargin
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
         -> "",
       "CREATE TABLE sourceTableForWithSQL(key INT, val STRING) USING hive;"
         -> "",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithSQL;"
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
+         |OVERWRITE INTO TABLE sourceTableForWithSQL;""".stripMargin
         -> "",
       "INSERT INTO TABLE addJarWithSQL SELECT key, val FROM sourceTableForWithSQL;"
         -> "",
@@ -460,18 +508,47 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     )
   }
 
+  test("SPARK-31102 spark-sql fails to parse when contains comment") {
+    runCliWithin(1.minute)(
+      """SELECT concat('test', 'comment'),
+        |    -- someone's comment here
+        | 2;""".stripMargin -> "testcomment"
+    )
+  }
+
   test("SPARK-30049 Should not complain for quotes in commented with multi-lines") {
     runCliWithin(1.minute)(
-      """SELECT concat('test', 'comment') -- someone's comment here \\
-        | comment continues here with single ' quote \\
-        | extra ' \\
+      """SELECT concat('test', 'comment') -- someone's comment here \
+        | comment continues here with single ' quote \
+        | extra ' \
         |;""".stripMargin -> "testcomment"
     )
+  }
+
+  test("SPARK-31595 Should allow unescaped quote mark in quoted string") {
     runCliWithin(1.minute)(
-      """SELECT concat('test', 'comment') -- someone's comment here \\
-        |   comment continues here with single ' quote \\
-        |   extra ' \\
-        |   ;""".stripMargin -> "testcomment"
+      "SELECT '\"legal string a';select 1 + 234;".stripMargin -> "235"
     )
+    runCliWithin(1.minute)(
+      "SELECT \"legal 'string b\";select 22222 + 1;".stripMargin -> "22223"
+    )
+  }
+
+  test("AnalysisException with root cause will be printStacktrace") {
+    // If it is not in silent mode, will print the stacktrace
+    runCliWithin(
+      1.minute,
+      extraArgs = Seq("--hiveconf", "hive.session.silent=false",
+        "-e", "select date_sub(date'2011-11-11', '1.2');"),
+      errorResponses = Seq("NumberFormatException"))(
+      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."),
+      ("", "NumberFormatException: invalid input syntax for type numeric: 1.2"))
+    // If it is in silent mode, will print the error message only
+    runCliWithin(
+      1.minute,
+      extraArgs = Seq("--conf", "spark.hive.session.silent=true",
+        "-e", "select date_sub(date'2011-11-11', '1.2');"),
+      errorResponses = Seq("AnalysisException"))(
+      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."))
   }
 }

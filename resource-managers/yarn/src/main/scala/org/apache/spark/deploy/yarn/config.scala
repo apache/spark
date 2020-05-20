@@ -70,6 +70,15 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val POPULATE_HADOOP_CLASSPATH = ConfigBuilder("spark.yarn.populateHadoopClasspath")
+    .doc("Whether to populate Hadoop classpath from `yarn.application.classpath` and " +
+      "`mapreduce.application.classpath` Note that if this is set to `false`, it requires " +
+      "a `with-Hadoop` Spark distribution that bundles Hadoop runtime or user has to provide " +
+      "a Hadoop installation separately.")
+    .version("2.4.6")
+    .booleanConf
+    .createWithDefault(true)
+
   private[spark] val GATEWAY_ROOT_PATH = ConfigBuilder("spark.yarn.config.gatewayPath")
     .doc("Root of configuration paths that is present on gateway nodes, and will be replaced " +
       "with the corresponding path in cluster machines.")
@@ -101,6 +110,14 @@ package object config {
       .version("2.2.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val APPLICATION_TYPE = ConfigBuilder("spark.yarn.applicationType")
+    .doc("Type of this application," +
+      "it allows user to specify a more specific type for the application, such as SPARK," +
+      "SPARK-SQL, SPARK-STREAMING, SPARK-MLLIB and SPARK-GRAPH")
+    .version("3.1.0")
+    .stringConf
+    .createWithDefault("SPARK")
 
   /* File distribution. */
 

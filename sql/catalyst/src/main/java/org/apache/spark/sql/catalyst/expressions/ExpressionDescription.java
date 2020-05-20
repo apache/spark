@@ -79,8 +79,8 @@ import java.lang.annotation.RetentionPolicy;
  * </code>
  * </pre>
  *
- *  We can refer the function name by `_FUNC_`, in `usage()`, `arguments()` and `examples()` as
- *  it is registered in `FunctionRegistry`.
+ *  We can refer the function name by `_FUNC_`, in `usage()`, `arguments()`, `examples()` and
+ *  `note()` as it is registered in `FunctionRegistry`.
  *
  *  Note that, if `extended()` is defined, `arguments()`, `examples()`, `note()`, `group()`,
  *  `since()` and `deprecated()` should be not defined together. `extended()` exists
@@ -103,6 +103,12 @@ public @interface ExpressionDescription {
     String arguments() default "";
     String examples() default "";
     String note() default "";
+    /**
+     * Valid group names are almost the same with one defined as `groupname` in
+     * `sql/functions.scala`. But, `collection_funcs` is split into fine-grained three groups:
+     * `array_funcs`, `map_funcs`, and `json_funcs`. See `ExpressionInfo` for the
+     * detailed group names.
+     */
     String group() default "";
     String since() default "";
     String deprecated() default "";
