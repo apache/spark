@@ -416,7 +416,7 @@ abstract class NumberToTimestampBase extends UnaryExpression
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, _ => s"java.lang.Math.multiplyExact(" +
-      s"${ev.value}, ${upScaleFactor})")
+      s"${ev.value}, $upScaleFactor)")
   }
 }
 
@@ -432,7 +432,7 @@ abstract class NumberToTimestampBase extends UnaryExpression
 case class SecondsToTimestamp(child: Expression)
   extends NumberToTimestampBase {
 
-  override def upScaleFactor: SQLTimestamp = MICROS_PER_SECOND
+  override def upScaleFactor: Long = MICROS_PER_SECOND
 
   override def prettyName: String = "timestamp_seconds"
 }
@@ -442,15 +442,15 @@ case class SecondsToTimestamp(child: Expression)
     "Creates timestamp from the number of milliseconds since UTC epoch.",
   examples = """
     Examples:
-      > SELECT _FUNC_(1230219000000);
-       "2008-12-25 07:30:00"
+      > SELECT _FUNC_(1230219000123);
+       "2008-12-25 07:30:00.123"
   """,
   group = "datetime_funcs",
   since = "3.1.0")
 case class MilliSecondsToTimestamp(child: Expression)
   extends NumberToTimestampBase {
 
-  override def upScaleFactor: SQLTimestamp = MICROS_PER_MILLIS
+  override def upScaleFactor: Long = MICROS_PER_MILLIS
 
   override def prettyName: String = "timestamp_milliseconds"
 }
@@ -460,15 +460,15 @@ case class MilliSecondsToTimestamp(child: Expression)
     "Creates timestamp from the number of microseconds since UTC epoch.",
   examples = """
     Examples:
-      > SELECT _FUNC_(1230219000000000);
-       "2008-12-25 07:30:00"
+      > SELECT _FUNC_(1230219000123123);
+       "2008-12-25 07:30:00.123123"
   """,
   group = "datetime_funcs",
   since = "3.1.0")
 case class MicroSecondsToTimestamp(child: Expression)
   extends NumberToTimestampBase {
 
-  override def upScaleFactor: SQLTimestamp = 1L
+  override def upScaleFactor: Long = 1L
 
   override def prettyName: String = "timestamp_microseconds"
 }
