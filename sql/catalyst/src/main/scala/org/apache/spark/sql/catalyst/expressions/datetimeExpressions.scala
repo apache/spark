@@ -402,16 +402,16 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
 }
 
 abstract class NumberToTimestampBase extends UnaryExpression
-  with ImplicitCastInputTypes {
+  with ExpectsInputTypes {
 
   protected def upScaleFactor: Long
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
 
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(input: Any): Any = {
-    Math.multiplyExact(input.asInstanceOf[Long], upScaleFactor)
+    Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
