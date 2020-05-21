@@ -21,9 +21,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.xml.{Node, Unparsed}
+import scala.xml.Node
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -88,23 +87,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       tableTag: String): Seq[Node] = {
 
     val isActive = if (tableTag.contains("active")) true else false
-    val parameterOtherTable = request.getParameterMap.asScala
-      .filterNot(_._1.startsWith(tableTag))
-      .map { case (name, vals) =>
-        name + "=" + vals(0)
-      }
-
-    val parameterPage = request.getParameter(s"$tableTag.page")
-    val parameterSortColumn = request.getParameter(s"$tableTag.sort")
-    val parameterSortDesc = request.getParameter(s"$tableTag.desc")
-    val parameterPageSize = request.getParameter(s"$tableTag.pageSize")
-
-    val page = Option(parameterPage).map(_.toInt).getOrElse(1)
-    val sortColumn = Option(parameterSortColumn).map { sortColumn =>
-      SparkUIUtils.decodeURLParameter(sortColumn)
-    }.getOrElse("Start Time")
-    val sortDesc = Option(parameterSortDesc).map(_.toBoolean).getOrElse(sortColumn == "Start Time")
-    val pageSize = Option(parameterPageSize).map(_.toInt).getOrElse(100)
+    val page = Option(request.getParameter(s"$tableTag.page")).map(_.toInt).getOrElse(1)
 
     try {
       new StreamingQueryPagedTable(
@@ -112,11 +95,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
         parent,
         data,
         tableTag,
-        pageSize,
-        sortColumn,
-        sortDesc,
         isActive,
-        parameterOtherTable,
         SparkUIUtils.prependBaseUri(request, parent.basePath),
         "StreamingQuery"
       ).table(page)
@@ -137,15 +116,12 @@ class StreamingQueryPagedTable(
     parent: StreamingQueryTab,
     data: Seq[StreamingQueryUIData],
     tableTag: String,
-    pageSize: Int,
-    sortColumn: String,
-    sortDesc: Boolean,
     isActive: Boolean,
-    parameterOtherTable: Iterable[String],
     basePath: String,
     subPath: String) extends PagedTable[StructuredStreamingRow] {
 
-  private val parameterPath = s"$basePath/$subPath/?${parameterOtherTable.mkString("&")}"
+  private val (sortColumn, sortDesc, pageSize) = getTableParameters(request, tableTag, "Start Time")
+  private val parameterPath = s"$basePath/$subPath/?${getParameterOtherTable(request, tableTag)}"
   private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
 
   override def tableId: String = s"$tableTag-table"
@@ -173,75 +149,27 @@ class StreamingQueryPagedTable(
     new StreamingQueryDataSource(data, sortColumn, sortDesc, pageSize, isActive)
 
   override def headers: Seq[Node] = {
-    val headerAndCss: Seq[(String, Boolean)] = {
+    val headerAndCss: Seq[(String, Boolean, Option[String])] = {
       Seq(
-        ("Name", true),
-        ("Status", false),
-        ("ID", true),
-        ("Run ID", true),
-        ("Start Time", true),
-        ("Duration", false),
-        ("Avg Input /sec", false),
-        ("Avg Process /sec", false),
-        ("Lastest Batch", true)) ++ {
+        ("Name", true, None),
+        ("Status", false, None),
+        ("ID", true, None),
+        ("Run ID", true, None),
+        ("Start Time", true, None),
+        ("Duration", true, None),
+        ("Avg Input /sec", true, None),
+        ("Avg Process /sec", true, None),
+        ("Latest Batch", true, None)) ++ {
         if (!isActive) {
-          Seq(("Error", false))
+          Seq(("Error", false, None))
         } else {
           Nil
         }
       }
     }
+    isSortColumnValid(headerAndCss, sortColumn)
 
-    val sortableColumnHeaders = headerAndCss.filter {
-      case (_, sortable) => sortable
-    }.map { case (title, _) => title }
-
-    // sort column must be one of sortable columns of the table
-    require(sortableColumnHeaders.contains(sortColumn),
-      s"Sorting is not allowed on this column: $sortColumn")
-
-    val headerRow: Seq[Node] = {
-      headerAndCss.map { case (header, sortable) =>
-        if (header == sortColumn) {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$tableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$tableTag.desc=${!sortDesc}" +
-              s"&$tableTag.pageSize=$pageSize" +
-              s"#$tableTag")
-          val arrow = if (sortDesc) "&#x25BE;" else "&#x25B4;"
-
-          <th>
-            <a href={headerLink}>
-              <span>
-                {header}&nbsp;{Unparsed(arrow)}
-              </span>
-            </a>
-          </th>
-        } else {
-          if (sortable) {
-            val headerLink = Unparsed(
-              parameterPath +
-                s"&$tableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-                s"&$tableTag.pageSize=$pageSize" +
-                s"#$tableTag")
-
-            <th>
-              <a href={headerLink}>
-                {header}
-              </a>
-            </th>
-          } else {
-            <th>
-              {header}
-            </th>
-          }
-        }
-      }
-    }
-    <thead>
-      {headerRow}
-    </thead>
+    headerRow(headerAndCss, sortDesc, pageSize, sortColumn, parameterPath, tableTag, tableTag)
   }
 
   override def row(query: StructuredStreamingRow): Seq[Node] = {
@@ -322,7 +250,7 @@ class StreamingQueryDataSource(uiData: Seq[StreamingQueryUIData], sortColumn: St
       case "Duration" => Ordering.by(_.duration)
       case "Avg Input /sec" => Ordering.by(_.avgInput)
       case "Avg Process /sec" => Ordering.by(_.avgProcess)
-      case "Lastest Batch" => Ordering.by(_.streamingUIData.lastProgress.batchId)
+      case "Latest Batch" => Ordering.by(_.streamingUIData.lastProgress.batchId)
       case unknownColumn => throw new IllegalArgumentException(s"Unknown Column: $unknownColumn")
     }
     if (desc) {
