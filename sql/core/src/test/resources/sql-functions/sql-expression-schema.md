@@ -175,8 +175,8 @@
 | org.apache.spark.sql.catalyst.expressions.MapValues | map_values | SELECT map_values(map(1, 'a', 2, 'b')) | struct<map_values(map(1, a, 2, b)):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.MapZipWith | map_zip_with | SELECT map_zip_with(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2)) | struct<map_zip_with(map(1, a, 2, b), map(1, x, 2, y), lambdafunction(concat(namedlambdavariable(), namedlambdavariable()), namedlambdavariable(), namedlambdavariable(), namedlambdavariable())):map<int,string>> |
 | org.apache.spark.sql.catalyst.expressions.Md5 | md5 | SELECT md5('Spark') | struct<md5(CAST(Spark AS BINARY)):string> |
-| org.apache.spark.sql.catalyst.expressions.MicrosToTimestamp | timestamp_microseconds | SELECT timestamp_microseconds(1230219000123123) | struct<timestamp_microseconds(1230219000123123):timestamp> |
-| org.apache.spark.sql.catalyst.expressions.MillisToTimestamp | timestamp_milliseconds | SELECT timestamp_milliseconds(1230219000123) | struct<timestamp_milliseconds(1230219000123):timestamp> |
+| org.apache.spark.sql.catalyst.expressions.MicrosToTimestamp | timestamp_micros | SELECT timestamp_micros(1230219000123123) | struct<timestamp_micros(1230219000123123):timestamp> |
+| org.apache.spark.sql.catalyst.expressions.MillisToTimestamp | timestamp_millis | SELECT timestamp_millis(1230219000123) | struct<timestamp_millis(1230219000123):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.Minute | minute | SELECT minute('2009-07-30 12:58:59') | struct<minute(CAST(2009-07-30 12:58:59 AS TIMESTAMP)):int> |
 | org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID | monotonically_increasing_id | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Month | month | SELECT month('2016-07-30') | struct<month(CAST(2016-07-30 AS DATE)):int> |

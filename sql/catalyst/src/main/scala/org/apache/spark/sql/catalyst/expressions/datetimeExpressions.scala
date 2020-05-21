@@ -456,7 +456,7 @@ case class MillisToTimestamp(child: Expression)
 
   override def upScaleFactor: Long = MICROS_PER_MILLIS
 
-  override def prettyName: String = "timestamp_milliseconds"
+  override def prettyName: String = "timestamp_millis"
 }
 
 // scalastyle:off line.size.limit
@@ -475,7 +475,7 @@ case class MicrosToTimestamp(child: Expression)
 
   override def upScaleFactor: Long = 1L
 
-  override def prettyName: String = "timestamp_microseconds"
+  override def prettyName: String = "timestamp_micros"
 }
 
 @ExpressionDescription(
