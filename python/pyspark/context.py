@@ -25,6 +25,7 @@ from threading import RLock
 from tempfile import NamedTemporaryFile
 
 from py4j.protocol import Py4JError
+from py4j.java_gateway import is_instance_of
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -864,8 +865,20 @@ class SparkContext(object):
         first_jrdd_deserializer = rdds[0]._jrdd_deserializer
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
             rdds = [x._reserialize() for x in rdds]
-        cls = SparkContext._jvm.org.apache.spark.api.java.JavaRDD
-        jrdds = SparkContext._gateway.new_array(cls, len(rdds))
+        gw = SparkContext._gateway
+        jvm = SparkContext._jvm
+        jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
+        pair_jrdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
+        double_jrdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
+        if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):
+            cls = jrdd_cls
+        elif is_instance_of(gw, rdds[0]._jrdd, pair_jrdd_cls):
+            cls = pair_jrdd_cls
+        elif is_instance_of(gw, rdds[0]._jrdd, double_jrdd_cls):
+            cls = double_jrdd_cls
+        else:
+            raise TypeError("Unsupported java rdd class %s", rdds[0]._jrdd)
+        jrdds = gw.new_array(cls, len(rdds))
         for i in range(0, len(rdds)):
             jrdds[i] = rdds[i]._jrdd
         return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
