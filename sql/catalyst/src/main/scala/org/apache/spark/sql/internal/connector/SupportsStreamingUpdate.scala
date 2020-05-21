@@ -14,29 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api.v1.sql
 
-import java.util.Date
+package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.sql.execution.ui.SparkPlanGraphEdge
+import org.apache.spark.sql.connector.write.WriteBuilder
 
-class ExecutionData private[spark] (
-    val id: Long,
-    val status: String,
-    val description: String,
-    val planDescription: String,
-    val submissionTime: Date,
-    val duration: Long,
-    val runningJobIds: Seq[Int],
-    val successJobIds: Seq[Int],
-    val failedJobIds: Seq[Int],
-    val nodes: Seq[Node],
-    val edges: Seq[SparkPlanGraphEdge])
-
-case class Node private[spark](
-    nodeId: Long,
-    nodeName: String,
-    wholeStageCodegenId: Option[Long] = None,
-    metrics: Seq[Metric])
-
-case class Metric private[spark] (name: String, value: String)
+// An internal `WriteBuilder` mixin to support UPDATE streaming output mode.
+// TODO: design an official API for streaming output mode UPDATE.
+trait SupportsStreamingUpdate extends WriteBuilder {
+  def update(): WriteBuilder
+}
