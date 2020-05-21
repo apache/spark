@@ -650,11 +650,7 @@ public class HiveSessionImpl implements HiveSession {
       acquire(true);
       // Iterate through the opHandles and close their operations
       for (OperationHandle opHandle : opHandleSet) {
-        try {
-          operationManager.closeOperation(opHandle);
-        } catch (Exception e) {
-          LOG.warn("Exception is thrown closing operation " + opHandle, e);
-        }
+        operationManager.closeOperation(opHandle);
       }
       opHandleSet.clear();
       // Cleanup session log directory.
@@ -692,15 +688,11 @@ public class HiveSessionImpl implements HiveSession {
     File[] fileAry = new File(lScratchDir).listFiles(
             (dir, name) -> name.startsWith(sessionID) && name.endsWith(".pipeout"));
 
-    if (fileAry == null) {
-      LOG.error("Unable to access pipeout files in " + lScratchDir);
-    } else {
-      for (File file : fileAry) {
-        try {
-          FileUtils.forceDelete(file);
-        } catch (Exception e) {
-          LOG.error("Failed to cleanup pipeout file: " + file, e);
-        }
+    for (File file : fileAry) {
+      try {
+        FileUtils.forceDelete(file);
+      } catch (Exception e) {
+        LOG.error("Failed to cleanup pipeout file: " + file, e);
       }
     }
   }
