@@ -122,6 +122,7 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
         vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata),
         lit(1.0).as(weightColName))
     } else {
+      require(dataset.filter(dataset($(weightCol)) <= 0).count() == 0, "weight must be positive")
       dataset.select(col($(predictionCol)),
         vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata),
         col(weightColName).cast(DoubleType))
