@@ -246,19 +246,6 @@ private[spark] class IndexShuffleBlockResolver(
             out.close()
           }
 
-          if (indexFile.exists()) {
-            indexFile.delete()
-          }
-          if (dataFile.exists()) {
-            dataFile.delete()
-          }
-          if (!indexTmp.renameTo(indexFile)) {
-            throw new IOException("fail to rename file " + indexTmp + " to " + indexFile)
-          }
-          if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
-            throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
-          }
-
           if (digestEnable) {
             digestFile = getDigestFile(shuffleId, mapId)
             digestTmp = Utils.tempFileWith(digestFile)
@@ -270,12 +257,25 @@ private[spark] class IndexShuffleBlockResolver(
             } {
               out.close()
             }
-            if (digestFile.exists()) {
-              digestFile.delete()
-            }
-            if (!digestTmp.renameTo(digestFile)) {
-              throw new IOException("fail to rename file " + digestTmp + " to " + digestFile)
-            }
+          }
+
+          if (indexFile.exists()) {
+            indexFile.delete()
+          }
+          if (digestEnable && digestFile.exists()) {
+            digestFile.delete()
+          }
+          if (dataFile.exists()) {
+            dataFile.delete()
+          }
+          if (!indexTmp.renameTo(indexFile)) {
+            throw new IOException("fail to rename file " + indexTmp + " to " + indexFile)
+          }
+          if (digestEnable && !digestTmp.renameTo(digestFile)) {
+            throw new IOException("fail to rename file " + digestTmp + " to " + digestFile)
+          }
+          if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
+            throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
           }
         }
       }
