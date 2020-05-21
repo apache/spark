@@ -30,7 +30,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
-import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexDigestBlockId, ShuffleIndexBlockId}
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
