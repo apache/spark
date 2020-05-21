@@ -440,9 +440,9 @@ case class SecondsToTimestamp(child: Expression)
   override def prettyName: String = "timestamp_seconds"
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(milliseconds) - " +
-    "Creates timestamp from the number of milliseconds since UTC epoch.",
+  usage = "_FUNC_(milliseconds) - Creates timestamp from the number of milliseconds since UTC epoch.",
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000123);
@@ -450,6 +450,7 @@ case class SecondsToTimestamp(child: Expression)
   """,
   group = "datetime_funcs",
   since = "3.1.0")
+// scalastyle:on line.size.limit
 case class MilliSecondsToTimestamp(child: Expression)
   extends NumberToTimestampBase {
 
@@ -458,9 +459,9 @@ case class MilliSecondsToTimestamp(child: Expression)
   override def prettyName: String = "timestamp_milliseconds"
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(microseconds) - " +
-    "Creates timestamp from the number of microseconds since UTC epoch.",
+  usage = "_FUNC_(microseconds) - Creates timestamp from the number of microseconds since UTC epoch.",
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000123123);
@@ -468,6 +469,7 @@ case class MilliSecondsToTimestamp(child: Expression)
   """,
   group = "datetime_funcs",
   since = "3.1.0")
+// scalastyle:on line.size.limit
 case class MicroSecondsToTimestamp(child: Expression)
   extends NumberToTimestampBase {
 
