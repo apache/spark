@@ -50,6 +50,6 @@ public class LocalDiskSingleSpillMapOutputWriter
     File outputFile = blockResolver.getDataFile(shuffleId, mapId);
     File tempFile = Utils.tempFileWith(outputFile);
     Files.move(mapSpillFile.toPath(), tempFile.toPath());
-    blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tempFile);
+    blockResolver.writeIndexDigestFileAndCommit(shuffleId, mapId, partitionLengths, tempFile);
   }
 }

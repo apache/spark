@@ -74,7 +74,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
+    resolver.writeIndexDigestFileAndCommit(shuffleId, mapId, lengths, dataTmp)
 
     val indexFile = new File(tempDir.getAbsolutePath, idxName)
     val dataFile = resolver.getDataFile(shuffleId, mapId)
@@ -94,7 +94,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out2.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
+    resolver.writeIndexDigestFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
 
     assert(indexFile.length() === (lengths.length + 1) * 8)
     assert(lengths2.toSeq === lengths.toSeq)
@@ -133,7 +133,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out3.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths3, dataTmp3)
+    resolver.writeIndexDigestFileAndCommit(shuffleId, mapId, lengths3, dataTmp3)
     assert(indexFile.length() === (lengths3.length + 1) * 8)
     assert(lengths3.toSeq != lengths.toSeq)
     assert(dataFile.exists())
@@ -172,7 +172,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
       out.close()
     }
     val digest = DigestUtils.getDigest(new ByteArrayInputStream(new Array[Byte](10)))
-    resolver.writeIndexFileAndCommit(1, 2, lengths, dataTmp)
+    resolver.writeIndexDigestFileAndCommit(1, 2, lengths, dataTmp)
     val managedBuffer = resolver.getBlockData(ShuffleBlockId(1, 2, 0))
     assert(managedBuffer.isInstanceOf[DigestFileSegmentManagedBuffer])
     assert(managedBuffer.asInstanceOf[DigestFileSegmentManagedBuffer].getDigest == digest)

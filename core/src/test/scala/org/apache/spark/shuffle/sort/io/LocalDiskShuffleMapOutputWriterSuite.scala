@@ -74,7 +74,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       .set("spark.app.id", "example.spark.app")
       .set("spark.shuffle.unsafe.file.output.buffer", "16k")
     when(blockResolver.getDataFile(anyInt, anyLong)).thenReturn(mergedOutputFile)
-    when(blockResolver.writeIndexFileAndCommit(
+    when(blockResolver.writeIndexDigestFileAndCommit(
       anyInt, anyLong, any(classOf[Array[Long]]), any(classOf[File])))
       .thenAnswer { invocationOnMock =>
         partitionSizesInMergedFile = invocationOnMock.getArguments()(2).asInstanceOf[Array[Long]]

@@ -535,6 +535,7 @@ class CleanerTester(
     blockManager.master.getMatchingBlockIds( _ match {
       case ShuffleBlockId(`shuffleId`, _, _) => true
       case ShuffleIndexBlockId(`shuffleId`, _, _) => true
+      case ShuffleIndexDigestBlockId(`shuffleId`, _, _) => true
       case _ => false
     }, askSlaves = true)
   }

@@ -112,7 +112,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
-    blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
+    blockResolver.writeIndexDigestFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
     return partitionLengths;
   }
 
