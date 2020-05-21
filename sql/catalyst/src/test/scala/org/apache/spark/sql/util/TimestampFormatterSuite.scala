@@ -57,20 +57,29 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("format timestamps using time zones") {
     val microsSinceEpoch = 1543745472001234L
     val expectedTimestamp = Map(
-      "UTC" -> "2018-12-02T10:11:12.001234",
-      PST.getId -> "2018-12-02T02:11:12.001234",
-      CET.getId -> "2018-12-02T11:11:12.001234",
-      "Africa/Dakar" -> "2018-12-02T10:11:12.001234",
-      "America/Los_Angeles" -> "2018-12-02T02:11:12.001234",
-      "Antarctica/Vostok" -> "2018-12-02T16:11:12.001234",
-      "Asia/Hong_Kong" -> "2018-12-02T18:11:12.001234",
-      "Europe/Amsterdam" -> "2018-12-02T11:11:12.001234")
+      "UTC" -> "2018-12-02 10:11:12.001234",
+      PST.getId -> "2018-12-02 02:11:12.001234",
+      CET.getId -> "2018-12-02 11:11:12.001234",
+      "Africa/Dakar" -> "2018-12-02 10:11:12.001234",
+      "America/Los_Angeles" -> "2018-12-02 02:11:12.001234",
+      "Antarctica/Vostok" -> "2018-12-02 16:11:12.001234",
+      "Asia/Hong_Kong" -> "2018-12-02 18:11:12.001234",
+      "Europe/Amsterdam" -> "2018-12-02 11:11:12.001234")
     DateTimeTestUtils.outstandingTimezonesIds.foreach { zoneId =>
-      val formatter = TimestampFormatter(
-        "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-        DateTimeUtils.getZoneId(zoneId))
-      val timestamp = formatter.format(microsSinceEpoch)
-      assert(timestamp === expectedTimestamp(zoneId))
+      Seq(
+        TimestampFormatter(
+          "yyyy-MM-dd HH:mm:ss.SSSSSS",
+          getZoneId(zoneId),
+          // Test only FAST_DATE_FORMAT because other legacy formats don't support formatting
+          // in microsecond precision.
+          LegacyDateFormats.FAST_DATE_FORMAT,
+          needVarLengthSecondFraction = false),
+        TimestampFormatter.getFractionFormatter(getZoneId(zoneId))).foreach { formatter =>
+        val timestamp = formatter.format(microsSinceEpoch)
+        assert(timestamp === expectedTimestamp(zoneId))
+        assert(formatter.format(microsToInstant(microsSinceEpoch)) === expectedTimestamp(zoneId))
+        assert(formatter.format(toJavaTimestamp(microsSinceEpoch)) === expectedTimestamp(zoneId))
+      }
     }
   }
 
@@ -125,20 +134,30 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   }
 
   test("format fraction of second") {
-    val formatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
-    assert(formatter.format(0) === "1970-01-01 00:00:00")
-    assert(formatter.format(1) === "1970-01-01 00:00:00.000001")
-    assert(formatter.format(1000) === "1970-01-01 00:00:00.001")
-    assert(formatter.format(900000) === "1970-01-01 00:00:00.9")
-    assert(formatter.format(1000000) === "1970-01-01 00:00:01")
+    val formatter = TimestampFormatter.getFractionFormatter(UTC)
+    Seq(
+      0 -> "1970-01-01 00:00:00",
+      1 -> "1970-01-01 00:00:00.000001",
+      1000 -> "1970-01-01 00:00:00.001",
+      900000 -> "1970-01-01 00:00:00.9",
+      1000000 -> "1970-01-01 00:00:01").foreach { case (micros, tsStr) =>
+      assert(formatter.format(micros) === tsStr)
+      assert(formatter.format(microsToInstant(micros)) === tsStr)
+      DateTimeTestUtils.withDefaultTimeZone(UTC) {
+        assert(formatter.format(toJavaTimestamp(micros)) === tsStr)
+      }
+    }
   }
 
   test("formatting negative years with default pattern") {
-    val instant = LocalDateTime.of(-99, 1, 1, 0, 0, 0)
-      .atZone(ZoneOffset.UTC)
-      .toInstant
+    val instant = LocalDateTime.of(-99, 1, 1, 0, 0, 0).atZone(UTC).toInstant
     val micros = DateTimeUtils.instantToMicros(instant)
-    assert(TimestampFormatter(ZoneOffset.UTC).format(micros) === "-0099-01-01 00:00:00")
+    assert(TimestampFormatter(UTC).format(micros) === "-0099-01-01 00:00:00")
+    assert(TimestampFormatter(UTC).format(instant) === "-0099-01-01 00:00:00")
+    DateTimeTestUtils.withDefaultTimeZone(UTC) { // toJavaTimestamp depends on the default time zone
+      assert(TimestampFormatter("yyyy-MM-dd HH:mm:SS G", UTC).format(toJavaTimestamp(micros))
+        === "0100-01-01 00:00:00 BC")
+    }
   }
 
   test("special timestamp values") {
@@ -266,24 +285,31 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
 
   test("SPARK-31557: rebasing in legacy formatters/parsers") {
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> LegacyBehaviorPolicy.LEGACY.toString) {
-      LegacyDateFormats.values.foreach { legacyFormat =>
-        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zoneId.getId) {
-            DateTimeTestUtils.withDefaultTimeZone(zoneId) {
-              withClue(s"${zoneId.getId} legacyFormat = $legacyFormat") {
-                val formatter = TimestampFormatter(
+      DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zoneId.getId) {
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            withClue(s"zoneId = ${zoneId.getId}") {
+              val formatters = LegacyDateFormats.values.map { legacyFormat =>
+                TimestampFormatter(
                   TimestampFormatter.defaultPattern,
                   zoneId,
                   TimestampFormatter.defaultLocale,
                   legacyFormat,
                   needVarLengthSecondFraction = false)
+              }.toSeq :+  TimestampFormatter.getFractionFormatter(zoneId)
+              formatters.foreach { formatter =>
                 assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
                   .atZone(zoneId)
                   .toLocalDateTime === LocalDateTime.of(1000, 1, 1, 1, 2, 3))
 
+                assert(formatter.format(
+                  LocalDateTime.of(1000, 1, 1, 1, 2, 3).atZone(zoneId).toInstant) ===
+                  "1000-01-01 01:02:03")
                 assert(formatter.format(instantToMicros(
                   LocalDateTime.of(1000, 1, 1, 1, 2, 3)
                     .atZone(zoneId).toInstant)) === "1000-01-01 01:02:03")
+                assert(formatter.format(java.sql.Timestamp.valueOf("1000-01-01 01:02:03")) ===
+                  "1000-01-01 01:02:03")
               }
             }
           }
