@@ -652,7 +652,7 @@ select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuee')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'e'
+Illegal pattern character: e
 
 
 -- !query
@@ -661,7 +661,7 @@ select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'c'
+Illegal pattern character: c
 
 
 -- !query
@@ -755,7 +755,7 @@ select date_format(date '2020-05-23', 'QQQQQ')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'Q'
+Too many pattern letters: Q
 
 
 -- !query
@@ -764,7 +764,7 @@ select date_format(date '2020-05-23', 'qqqqq')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'q'
+Too many pattern letters: q
 
 
 -- !query

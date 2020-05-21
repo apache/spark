@@ -91,9 +91,9 @@ trait DateTimeFormatterHelper {
   // will throw IllegalArgumentException. If the pattern can be recognized by the legacy formatter
   // it will raise SparkUpgradeException to tell users to restore the previous behavior via LEGACY
   // policy or follow our guide to correct their pattern.
-  protected def checkLegacyFormatter[T1, T2](
+  protected def checkLegacyFormatter(
       pattern: String,
-      block: T1 => T2): PartialFunction[Throwable, DateTimeFormatter] = {
+      block: => Unit): PartialFunction[Throwable, DateTimeFormatter] = {
     case e: IllegalArgumentException =>
       try {
         block

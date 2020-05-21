@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
   def format(days: Int): String
+  def initialize(): Unit = {}
 }
 
 class Iso8601DateFormatter(
@@ -44,7 +45,7 @@ class Iso8601DateFormatter(
   private lazy val formatter: DateTimeFormatter = {
     try {
       getOrCreateFormatter(pattern, locale)
-    } catch checkLegacyFormatter(pattern, legacyFormatter.format(0))
+    } catch checkLegacyFormatter(pattern, legacyFormatter.initialize)
   }
 
   @transient
@@ -85,6 +86,7 @@ class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDat
   private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
   override def parseToDate(s: String): Date = fdf.parse(s)
   override def formatDate(d: Date): String = fdf.format(d)
+  override def initialize(): Unit = fdf
 }
 
 class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
@@ -92,6 +94,8 @@ class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyD
   private lazy val sdf = new SimpleDateFormat(pattern, locale)
   override def parseToDate(s: String): Date = sdf.parse(s)
   override def formatDate(d: Date): String = sdf.format(d)
+  override def initialize(): Unit = sdf
+
 }
 
 object DateFormatter {

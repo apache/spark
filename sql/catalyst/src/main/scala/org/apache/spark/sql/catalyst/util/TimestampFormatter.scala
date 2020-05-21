@@ -51,6 +51,7 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeException])
   def parse(s: String): Long
   def format(us: Long): String
+  def initialize(): Unit = {}
 }
 
 class Iso8601TimestampFormatter(
@@ -65,7 +66,7 @@ class Iso8601TimestampFormatter(
   protected lazy val formatter: DateTimeFormatter = {
     try {
       getOrCreateFormatter(pattern, locale, needVarLengthSecondFraction)
-    } catch checkLegacyFormatter(pattern, legacyFormatter.format(0))
+    } catch checkLegacyFormatter(pattern, legacyFormatter.initialize)
   }
 
   @transient
@@ -170,6 +171,8 @@ class LegacyFastTimestampFormatter(
     cal.setMicros(Math.floorMod(julianMicros, MICROS_PER_SECOND))
     fastDateFormat.format(cal)
   }
+
+  override def initialize(): Unit = fastDateFormat
 }
 
 class LegacySimpleTimestampFormatter(
@@ -191,6 +194,8 @@ class LegacySimpleTimestampFormatter(
   override def format(us: Long): String = {
     sdf.format(toJavaTimestamp(us))
   }
+
+  override def initialize(): Unit = sdf
 }
 
 object LegacyDateFormats extends Enumeration {
