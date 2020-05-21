@@ -123,7 +123,7 @@
                 <argument>${spark.kubernetes.test.sparkTgz}</argument>
 
                 <argument>--test-exclude-tags</argument>
-                <argument>${test.exclude.tags}</argument>
+                <argument>"${test.exclude.tags}"</argument>
               </arguments>
             </configuration>
           </execution>
