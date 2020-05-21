@@ -61,6 +61,7 @@ abstract class SchemaPruningSuite
 
   val employer = Employer(0, Company("abc", "123 Business Street"))
   val employerWithNullCompany = Employer(1, null)
+  val employerWithNullCompany2 = Employer(2, null)
 
   val contacts =
     Contact(0, janeDoe, "123 Main Street", 1, friends = Array(susanSmith),
@@ -71,7 +72,8 @@ abstract class SchemaPruningSuite
 
   val departments =
     Department(0, "Engineering", 0, employer) ::
-    Department(1, "Marketing", 1, employerWithNullCompany) :: Nil
+    Department(1, "Marketing", 1, employerWithNullCompany) ::
+    Department(2, "Operation", 4, employerWithNullCompany2) :: Nil
 
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
@@ -413,6 +415,25 @@ abstract class SchemaPruningSuite
       "struct<employer:struct<id:int,company:struct<name:string,address:string>>>",
       "struct<employer:struct<id:int,company:struct<name:string,address:string>>>")
     checkAnswer(query3, Row("abc") :: Row(null) :: Nil)
+  }
+
+  testSchemaPruning("select one deep nested complex field after outer join") {
+    val query1 = sql("select departments.contactId, contacts.name.middle from departments " +
+      "left outer join contacts on departments.contactId = contacts.id")
+    checkScan(query1,
+      "struct<contactId:int>",
+      "struct<id:int,name:struct<middle:string>>")
+    checkAnswer(query1, Row(0, "X.") :: Row(1, "Y.") :: Row(4, null) :: Nil)
+
+    val query2 = sql("select contacts.name.first, departments.employer.company.name " +
+      "from contacts right outer join departments on contacts.id = departments.contactId")
+    checkScan(query2,
+      "struct<id:int,name:struct<first:string>>",
+      "struct<contactId:int,employer:struct<company:struct<name:string>>>")
+    checkAnswer(query2,
+      Row("Jane", "abc") ::
+        Row("John", null) ::
+        Row(null, null) :: Nil)
   }
 
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {
