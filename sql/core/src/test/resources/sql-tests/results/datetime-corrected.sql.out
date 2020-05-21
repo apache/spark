@@ -754,8 +754,8 @@ select date_format(date '2020-05-23', 'QQQQQ')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'QQQQQ' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+java.lang.IllegalArgumentException
+Too many pattern letters: Q
 
 
 -- !query
@@ -763,8 +763,8 @@ select date_format(date '2020-05-23', 'qqqqq')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'qqqqq' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+java.lang.IllegalArgumentException
+Too many pattern letters: q
 
 
 -- !query
@@ -773,7 +773,7 @@ select to_timestamp('2019-10-06 A', 'yyyy-MM-dd GGGGG')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'GGGGG' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'yyyy-MM-dd GGGGG' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -782,7 +782,7 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'EEEEE' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd MM yyyy EEEEEE' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -791,7 +791,7 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'EEEEE' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd MM yyyy EEEEE' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -800,7 +800,7 @@ select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'EEEEE' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd MM yyyy EEEEE' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -809,7 +809,7 @@ select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampF
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'MMMMM' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd/MMMMM/yyyy' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -818,4 +818,4 @@ select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'MMMMM' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd/MMMMM/yyyy' pattern in the new parser. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html

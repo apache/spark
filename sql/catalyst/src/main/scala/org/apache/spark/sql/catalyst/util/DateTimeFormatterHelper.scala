@@ -187,12 +187,7 @@ private object DateTimeFormatterHelper {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
           }
           for (style <- unsupportedNarrowTextStyle if patternPart.contains(style)) {
-            val e = new IllegalArgumentException(s"Too many pattern letters: ${style.head}")
-            throw new SparkUpgradeException("3.0", s"Fail to recognize '$style' pattern in the" +
-              s" new parser. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to" +
-              s" restore the behavior before Spark 3.0." +
-              s" 2) You can form a valid datetime pattern with the guide from" +
-              s" https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html", e)
+            throw new IllegalArgumentException(s"Too many pattern letters: ${style.head}")
           }
           // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
           // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
