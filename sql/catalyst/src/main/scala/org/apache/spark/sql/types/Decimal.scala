@@ -651,9 +651,4 @@ object Decimal {
     override def quot(x: Decimal, y: Decimal): Decimal = x quot y
     override def rem(x: Decimal, y: Decimal): Decimal = x % y
   }
-
-
-  def throwArithmeticException(msg: String): Decimal = {
-    throw new ArithmeticException(msg)
-  }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, EmptyBlock, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -146,22 +146,53 @@ case class CheckOverflow(
   override def sql: String = child.sql
 }
 
-case class OverflowException(dtype: DataType, msg: String) extends LeafExpression {
+// A variant `CheckOverflow`, which treats null as overflow. This is necessary in `Sum`.
+case class CheckOverflowInSum(
+    child: Expression,
+    dataType: DecimalType,
+    nullOnOverflow: Boolean) extends UnaryExpression {
 
-  override def dataType: DataType = dtype
+  override def nullable: Boolean = true
 
-  override def nullable: Boolean = false
-
-  def eval(input: InternalRow): Any = {
-    Decimal.throwArithmeticException(msg)
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      if (nullOnOverflow) null else throw new ArithmeticException("Overflow in sum of decimals.")
+    } else {
+      input.asInstanceOf[Decimal].toPrecision(
+        dataType.precision,
+        dataType.scale,
+        Decimal.ROUND_HALF_UP,
+        nullOnOverflow)
+    }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.copy(code = code"""
-      |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      |${ev.value} = Decimal.throwArithmeticException("${msg}");
-      |""", isNull = FalseLiteral)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val nullHandling = if (nullOnOverflow) {
+      ""
+    } else {
+      s"""
+         |throw new ArithmeticException("Overflow in sum of decimals.");
+         |""".stripMargin
+    }
+    val code = code"""
+       |${childGen.code}
+       |boolean ${ev.isNull} = ${childGen.isNull};
+       |Decimal ${ev.value} = null;
+       |if (${childGen.isNull}) {
+       |  $nullHandling
+       |} else {
+       |  ${ev.value} = ${childGen.value}.toPrecision(
+       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow);
+       |  ${ev.isNull} = ${ev.value} == null;
+       |}
+       |""".stripMargin
+
+    ev.copy(code = code)
   }
 
-  override def toString: String = "OverflowException"
+  override def toString: String = s"CheckOverflowInSum($child, $dataType, $nullOnOverflow)"
+
+  override def sql: String = child.sql
 }

@@ -62,18 +62,18 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
-  private lazy val isEmptyOrNulls = AttributeReference("isEmptyOrNulls", BooleanType, false)()
+  private lazy val isEmpty = AttributeReference("isEmpty", BooleanType, nullable = false)()
 
   private lazy val zero = Literal.default(sumDataType)
 
   override lazy val aggBufferAttributes = resultType match {
-    case _: DecimalType => sum :: isEmptyOrNulls :: Nil
+    case _: DecimalType => sum :: isEmpty :: Nil
     case _ => sum :: Nil
   }
 
   override lazy val initialValues: Seq[Expression] = resultType match {
-    case _: DecimalType => Seq(zero, Literal.create(true, BooleanType))
-    case other => Seq(Literal.create(null, other))
+    case _: DecimalType => Seq(Literal(null, resultType), Literal(true, BooleanType))
+    case _ => Seq(Literal(null, resultType))
   }
 
   /**
@@ -97,29 +97,18 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
    */
   override lazy val updateExpressions: Seq[Expression] = {
     if (child.nullable) {
+      val updateSumExpr = coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
       resultType match {
-        case d: DecimalType =>
-          Seq(
-            /* sum */
-            If(IsNull(sum), sum,
-              If(IsNotNull(child.cast(sumDataType)),
-                CheckOverflow(sum + child.cast(sumDataType), d, true), sum)),
-            /* isEmptyOrNulls */
-            If(isEmptyOrNulls, IsNull(child.cast(sumDataType)), isEmptyOrNulls)
-          )
-        case _ =>
-          Seq(coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum))
+        case _: DecimalType =>
+          Seq(updateSumExpr, isEmpty && child.isNull)
+        case _ => Seq(updateSumExpr)
       }
     } else {
+      val updateSumExpr = coalesce(sum, zero) + child.cast(sumDataType)
       resultType match {
-        case d: DecimalType =>
-          Seq(
-            /* sum */
-            If(IsNull(sum), sum, CheckOverflow(sum + child.cast(sumDataType), d, true)),
-            /* isEmptyOrNulls */
-            false
-          )
-        case _ => Seq(coalesce(sum, zero) + child.cast(sumDataType))
+        case _: DecimalType =>
+          Seq(updateSumExpr, Literal(false, BooleanType))
+        case _ => Seq(updateSumExpr)
       }
     }
   }
@@ -138,19 +127,15 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
    * If the value from bufferLeft and bufferRight are both true, then this will be true.
    */
   override lazy val mergeExpressions: Seq[Expression] = {
+    val mergeSumExpr = coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
     resultType match {
-      case d: DecimalType =>
+      case _: DecimalType =>
+        val inputOverflow = !isEmpty.right && sum.right.isNull
+        val bufferOverflow = !isEmpty.left && sum.left.isNull
         Seq(
-          /* sum = */
-          If(And(IsNull(sum.left), EqualTo(isEmptyOrNulls.left, false)) ||
-            And(IsNull(sum.right), EqualTo(isEmptyOrNulls.right, false)),
-              Literal.create(null, resultType),
-              CheckOverflow(sum.left + sum.right, d, true)),
-          /* isEmptyOrNulls = */
-          And(isEmptyOrNulls.left, isEmptyOrNulls.right)
-          )
-      case _ =>
-        Seq(coalesce(coalesce(sum.left, zero) + sum.right, sum.left))
+          If(inputOverflow || bufferOverflow, Literal.create(null, sumDataType), mergeSumExpr),
+          isEmpty.left && isEmpty.right)
+      case _ => Seq(mergeSumExpr)
     }
   }
 
@@ -163,11 +148,8 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
    */
   override lazy val evaluateExpression: Expression = resultType match {
     case d: DecimalType =>
-      If(EqualTo(isEmptyOrNulls, true),
-        Literal.create(null, sumDataType),
-        If(And(SQLConf.get.ansiEnabled, IsNull(sum)),
-          OverflowException(resultType, "Arithmetic Operation overflow"), sum))
+      If(isEmpty, Literal.create(null, sumDataType),
+        CheckOverflowInSum(sum, d, !SQLConf.get.ansiEnabled))
     case _ => sum
   }
-
 }

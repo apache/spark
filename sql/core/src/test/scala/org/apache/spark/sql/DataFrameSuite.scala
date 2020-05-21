@@ -192,6 +192,28 @@ class DataFrameSuite extends QueryTest
       structDf.select(xxhash64($"a", $"record.*")))
   }
 
+  private def assertDecimalSumOverflow(
+      df: DataFrame, ansiEnabled: Boolean, expectedAnswer: Row): Unit = {
+    if (!ansiEnabled) {
+      try {
+        checkAnswer(df, expectedAnswer)
+      } catch {
+        case e: SparkException if e.getCause.isInstanceOf[ArithmeticException] =>
+          // This is an existing bug that we can write overflowed decimal to UnsafeRow but fail
+          // to read it.
+          assert(e.getCause.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
+      }
+    } else {
+      val e = intercept[SparkException] {
+        df.collect
+      }
+      assert(e.getCause.isInstanceOf[ArithmeticException])
+      assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
+        e.getCause.getMessage.contains("Overflow in sum of decimals") ||
+        e.getCause.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
+    }
+  }
+
   test("SPARK-28224: Aggregate sum big decimal overflow") {
     val largeDecimals = spark.sparkContext.parallelize(
       DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
@@ -200,24 +222,12 @@ class DataFrameSuite extends QueryTest
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
-        checkAnsi(structDf, ansiEnabled, Row(null))
+        assertDecimalSumOverflow(structDf, ansiEnabled, Row(null))
       }
     }
   }
 
-  private def checkAnsi(df: DataFrame, ansiEnabled: Boolean, expectedAnswer: Row ): Unit = {
-    if (!ansiEnabled) {
-    checkAnswer(df, expectedAnswer)
-    } else {
-      val e = intercept[SparkException] {
-        df.collect()
-      }
-      assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
-      assert(e.getCause.getMessage.contains("Arithmetic Operation overflow"))
-    }
-  }
-
-  test("test sum on null decimal values") {
+  test("SPARK-28067: sum of null decimal values") {
     Seq("true", "false").foreach { wholeStageEnabled =>
       withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
         Seq("true", "false").foreach { ansiEnabled =>
@@ -254,26 +264,27 @@ class DataFrameSuite extends QueryTest
               join(df, "intNum").agg(sum("decNum"))
 
             val expectedAnswer = Row(null)
-            checkAnsi(df2, ansiEnabled, expectedAnswer)
+            assertDecimalSumOverflow(df2, ansiEnabled, expectedAnswer)
 
             val decStr = "1" + "0" * 19
             val d1 = spark.range(0, 12, 1, 1)
             val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
-            checkAnsi(d2, ansiEnabled, expectedAnswer)
+            assertDecimalSumOverflow(d2, ansiEnabled, expectedAnswer)
 
             val d3 = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
             val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
-            checkAnsi(d4, ansiEnabled, expectedAnswer)
+            assertDecimalSumOverflow(d4, ansiEnabled, expectedAnswer)
 
             val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
               lit(1).as("key")).groupBy("key").agg(sum($"d").alias("sumd")).select($"sumd")
-            checkAnsi(d5, ansiEnabled, expectedAnswer)
+            assertDecimalSumOverflow(d5, ansiEnabled, expectedAnswer)
 
             val nullsDf = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
 
             val largeDecimals = Seq(BigDecimal("1"* 20 + ".123"), BigDecimal("9"* 20 + ".123")).
               toDF("d")
-            checkAnsi(nullsDf.union(largeDecimals).agg(sum($"d")), ansiEnabled, expectedAnswer)
+            assertDecimalSumOverflow(
+              nullsDf.union(largeDecimals).agg(sum($"d")), ansiEnabled, expectedAnswer)
 
             val df3 = Seq(
               (BigDecimal("10000000000000000000"), 1),
@@ -293,7 +304,7 @@ class DataFrameSuite extends QueryTest
             val df6 = df3.union(df4).union(df5)
             val df7 = df6.groupBy("intNum").agg(sum("decNum"), countDistinct("decNum")).
               filter("intNum == 1")
-            checkAnsi(df7, ansiEnabled, Row(1, null, 2))
+            assertDecimalSumOverflow(df7, ansiEnabled, Row(1, null, 2))
           }
         }
       }
