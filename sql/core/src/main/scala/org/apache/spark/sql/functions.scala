@@ -1693,7 +1693,7 @@ object functions {
 
   /**
    * Returns the greatest value of the list of values, skipping null values.
-   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   * This function takes at least 2 parameters. It will return null if all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1703,7 +1703,7 @@ object functions {
 
   /**
    * Returns the greatest value of the list of column names, skipping null values.
-   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   * This function takes at least 2 parameters. It will return null if all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1797,7 +1797,7 @@ object functions {
 
   /**
    * Returns the least value of the list of values, skipping null values.
-   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   * This function takes at least 2 parameters. It will return null if all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0
@@ -1807,7 +1807,7 @@ object functions {
 
   /**
    * Returns the least value of the list of column names, skipping null values.
-   * This function takes at least 2 parameters. It will return null iff all parameters are null.
+   * This function takes at least 2 parameters. It will return null if all parameters are null.
    *
    * @group normal_funcs
    * @since 1.5.0

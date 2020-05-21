@@ -698,7 +698,7 @@ def struct(*cols):
 def greatest(*cols):
     """
     Returns the greatest value of the list of column names, skipping null values.
-    This function takes at least 2 parameters. It will return null iff all parameters are null.
+    This function takes at least 2 parameters. It will return null if all parameters are null.
 
     >>> df = spark.createDataFrame([(1, 4, 3)], ['a', 'b', 'c'])
     >>> df.select(greatest(df.a, df.b, df.c).alias("greatest")).collect()
@@ -714,7 +714,7 @@ def greatest(*cols):
 def least(*cols):
     """
     Returns the least value of the list of column names, skipping null values.
-    This function takes at least 2 parameters. It will return null iff all parameters are null.
+    This function takes at least 2 parameters. It will return null if all parameters are null.
 
     >>> df = spark.createDataFrame([(1, 4, 3)], ['a', 'b', 'c'])
     >>> df.select(least(df.a, df.b, df.c).alias("least")).collect()
