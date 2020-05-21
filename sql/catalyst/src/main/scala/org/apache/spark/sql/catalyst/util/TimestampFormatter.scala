@@ -68,10 +68,6 @@ class Iso8601TimestampFormatter(
     getOrCreateFormatter(pattern, locale, needVarLengthSecondFraction)
 
   @transient
-  private val allowMissingYear =
-    SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_MISSING_YEAR_DURING_PARSING)
-
-  @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
     pattern, zoneId, locale, legacyFormat)
 
@@ -82,7 +78,7 @@ class Iso8601TimestampFormatter(
         val parsed = formatter.parse(s)
         val parsedZoneId = parsed.query(TemporalQueries.zone())
         val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
-        val zonedDateTime = toZonedDateTime(parsed, timeZoneId, allowMissingYear)
+        val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
         val epochSeconds = zonedDateTime.toEpochSecond
         val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 

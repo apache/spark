@@ -39,22 +39,15 @@ trait DateTimeFormatterHelper {
     }
   }
 
-  protected def toLocalDate(accessor: TemporalAccessor, allowMissingYear: Boolean): LocalDate = {
+  protected def toLocalDate(accessor: TemporalAccessor): LocalDate = {
     val localDate = accessor.query(TemporalQueries.localDate())
     // If all the date fields are specified, return the local date directly.
     if (localDate != null) return localDate
 
-    val year = if (accessor.isSupported(ChronoField.YEAR)) {
-      accessor.get(ChronoField.YEAR)
-    } else if (allowMissingYear) {
-      // To keep backward compatibility with Spark 2.x, we pick 1970 as the default value of year.
-      1970
-    } else {
-      throw new SparkUpgradeException("3.0",
-        "Year must be given in the date/timestamp string to be parsed. You can set " +
-          SQLConf.LEGACY_ALLOW_MISSING_YEAR_DURING_PARSING.key + " to true, to pick 1970 as " +
-          "the default value of year.", null)
-    }
+    // Users may want to parse only a few datetime fields from a string and extract these fields
+    // later, and we should provide default values for missing fields.
+    // To be compatible with Spark 2.4, we pick 1970 as the default value of year.
+    val year = getOrDefault(accessor, ChronoField.YEAR, 1970)
     val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
     val day = getOrDefault(accessor, ChronoField.DAY_OF_MONTH, 1)
     LocalDate.of(year, month, day)
@@ -64,6 +57,7 @@ trait DateTimeFormatterHelper {
     val localTime = accessor.query(TemporalQueries.localTime())
     // If all the time fields are specified, return the local time directly.
     if (localTime != null) return localTime
+
     val hour = if (accessor.isSupported(ChronoField.HOUR_OF_DAY)) {
       accessor.get(ChronoField.HOUR_OF_DAY)
     } else if (accessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
@@ -80,12 +74,9 @@ trait DateTimeFormatterHelper {
 
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
   // if they does not exist in the parsed object.
-  protected def toZonedDateTime(
-      temporalAccessor: TemporalAccessor,
-      zoneId: ZoneId,
-      allowMissingYear: Boolean): ZonedDateTime = {
-    val localDate = toLocalDate(temporalAccessor, allowMissingYear)
-    val localTime = toLocalTime(temporalAccessor)
+  protected def toZonedDateTime(accessor: TemporalAccessor, zoneId: ZoneId): ZonedDateTime = {
+    val localDate = toLocalDate(accessor)
+    val localTime = toLocalTime(accessor)
     ZonedDateTime.of(localDate, localTime, zoneId)
   }
 

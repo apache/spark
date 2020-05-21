@@ -125,11 +125,8 @@ select to_timestamp("P2019-10-06T10:11:12", "'P'yyyy-MM-dd'T'HH:mm:ss"); -- head
 
 -- missing fields
 select to_timestamp("16", "dd");
+select to_timestamp("02-29", "MM-dd");
 select to_date("16", "dd");
+select to_date("02-29", "MM-dd");
 select to_timestamp("2019 40", "yyyy mm");
 select to_timestamp("2019 10:10:10", "yyyy hh:mm:ss");
-
--- missing year should be allowed with legacy config enabled.
-SET spark.sql.legacy.allowMissingYearDuringParsing=true;
-select to_timestamp("16", "dd");
-select to_date("16", "dd");

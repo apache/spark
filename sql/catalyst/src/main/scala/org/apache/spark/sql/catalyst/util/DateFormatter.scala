@@ -46,10 +46,6 @@ class Iso8601DateFormatter(
   private lazy val formatter = getOrCreateFormatter(pattern, locale)
 
   @transient
-  private val allowMissingYear =
-    SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_MISSING_YEAR_DURING_PARSING)
-
-  @transient
   private lazy val legacyFormatter = DateFormatter.getLegacyFormatter(
     pattern, zoneId, locale, legacyFormat)
 
@@ -57,7 +53,7 @@ class Iso8601DateFormatter(
     val specialDate = convertSpecialDate(s.trim, zoneId)
     specialDate.getOrElse {
       try {
-        val localDate = toLocalDate(formatter.parse(s), allowMissingYear)
+        val localDate = toLocalDate(formatter.parse(s))
         localDateToDays(localDate)
       } catch checkDiffResult(s, legacyFormatter.parse)
     }
