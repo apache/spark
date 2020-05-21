@@ -42,10 +42,23 @@ object MimaExcludes {
     // [SPARK-31127] Implement abstract Selector
     // org.apache.spark.ml.feature.ChiSqSelectorModel type hierarchy change
     // before: class ChiSqSelector extends Estimator with ChiSqSelectorParams
-    // after: class ChiSqSelector extends PSelector
+    // after: class ChiSqSelector extends Selector
     // false positive, no binary incompatibility
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelector")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelector"),
+
+    // [SPARK-31781] Move param k (number of clusters) to shared params
+    // before change: def getK: Int = $(k)
+    // after change: final def getK: Int = $(k)
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.clustering.LDA.getK"),
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.clustering.LDAModel.getK"),
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.clustering.GaussianMixtureModel.getK"),
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.clustering.BisectingKMeansModel.getK"),
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.clustering.KMeansModel.getK"),
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.clustering.BisectingKMeans.getK"),
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.clustering.GaussianMixture.getK"),
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.clustering.KMeans.getK"),
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.clustering.PowerIterationClustering.getK")
   )
 
   // Exclude rules for 3.0.x
