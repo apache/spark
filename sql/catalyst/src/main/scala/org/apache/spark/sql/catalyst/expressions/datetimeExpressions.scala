@@ -451,7 +451,7 @@ case class SecondsToTimestamp(child: Expression)
   group = "datetime_funcs",
   since = "3.1.0")
 // scalastyle:on line.size.limit
-case class MilliSecondsToTimestamp(child: Expression)
+case class MillisToTimestamp(child: Expression)
   extends NumberToTimestampBase {
 
   override def upScaleFactor: Long = MICROS_PER_MILLIS
@@ -470,7 +470,7 @@ case class MilliSecondsToTimestamp(child: Expression)
   group = "datetime_funcs",
   since = "3.1.0")
 // scalastyle:on line.size.limit
-case class MicroSecondsToTimestamp(child: Expression)
+case class MicrosToTimestamp(child: Expression)
   extends NumberToTimestampBase {
 
   override def upScaleFactor: Long = 1L
