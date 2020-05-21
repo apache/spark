@@ -1059,13 +1059,13 @@ object SparkSession extends Logging {
 
   /** Register the AppEnd listener onto the Context  */
   private def registerContextListener(sparkContext: SparkContext): Unit = {
-    if (!SparkSession.listenerRegistered.get()) {
+    if (!listenerRegistered.get()) {
       sparkContext.addSparkListener(new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
           defaultSession.set(null)
         }
       })
-      SparkSession.listenerRegistered.set(true)
+      listenerRegistered.set(true)
     }
   }
 
