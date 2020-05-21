@@ -562,4 +562,20 @@ trait HasBlockSize extends Params {
   /** @group expertGetParam */
   final def getBlockSize: Int = $(blockSize)
 }
+
+/**
+ * Trait for shared param k. This trait may be changed or
+ * removed between minor versions.
+ */
+trait HasK extends Params {
+
+  /**
+   * Param for The number of clusters to create. Must be (&gt; 1). Note that it is possible for fewer than k clusters to be returned.
+   * @group param
+   */
+  final val k: IntParam = new IntParam(this, "k", "The number of clusters to create. Must be (> 1). Note that it is possible for fewer than k clusters to be returned", ParamValidators.gt(1))
+
+  /** @group getParam */
+  final def getK: Int = $(k)
+}
 // scalastyle:on

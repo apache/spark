@@ -42,21 +42,8 @@ import org.apache.spark.util.VersionUtils.majorVersion
  * Common params for KMeans and KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasTol with HasDistanceMeasure with HasWeightCol {
-
-  /**
-   * The number of clusters to create (k). Must be &gt; 1. Note that it is possible for fewer than
-   * k clusters to be returned, for example, if there are fewer than k distinct points to cluster.
-   * Default: 2.
-   * @group param
-   */
-  @Since("1.5.0")
-  final val k = new IntParam(this, "k", "The number of clusters to create. " +
-    "Must be > 1.", ParamValidators.gt(1))
-
-  /** @group getParam */
-  @Since("1.5.0")
-  def getK: Int = $(k)
+  with HasSeed with HasPredictionCol with HasTol with HasDistanceMeasure with HasWeightCol
+  with HasK {
 
   /**
    * Param for the initialization algorithm. This can be either "random" to choose random points as

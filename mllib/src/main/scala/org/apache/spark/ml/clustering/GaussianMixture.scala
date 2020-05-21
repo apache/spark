@@ -43,20 +43,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter with HasFeaturesCol
   with HasSeed with HasPredictionCol with HasWeightCol with HasProbabilityCol with HasTol
-  with HasAggregationDepth with HasBlockSize {
-
-  /**
-   * Number of independent Gaussians in the mixture model. Must be greater than 1. Default: 2.
-   *
-   * @group param
-   */
-  @Since("2.0.0")
-  final val k = new IntParam(this, "k", "Number of independent Gaussians in the mixture model. " +
-    "Must be > 1.", ParamValidators.gt(1))
-
-  /** @group getParam */
-  @Since("2.0.0")
-  def getK: Int = $(k)
+  with HasAggregationDepth with HasBlockSize with HasK{
 
   /**
    * Validates and transforms the input schema.

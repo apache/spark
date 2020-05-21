@@ -42,20 +42,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
   with HasFeaturesCol with HasSeed with HasPredictionCol with HasDistanceMeasure
-  with HasWeightCol {
-
-  /**
-   * The desired number of leaf clusters. Must be &gt; 1. Default: 4.
-   * The actual number could be smaller if there are no divisible leaf clusters.
-   * @group param
-   */
-  @Since("2.0.0")
-  final val k = new IntParam(this, "k", "The desired number of leaf clusters. " +
-    "Must be > 1.", ParamValidators.gt(1))
-
-  /** @group getParam */
-  @Since("2.0.0")
-  def getK: Int = $(k)
+  with HasWeightCol with HasK {
 
   /**
    * The minimum number of points (if greater than or equal to 1.0) or the minimum proportion

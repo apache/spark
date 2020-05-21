@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
@@ -52,20 +52,7 @@ import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
-  with HasSeed with HasCheckpointInterval {
-
-  /**
-   * Param for the number of topics (clusters) to infer. Must be &gt; 1. Default: 10.
-   *
-   * @group param
-   */
-  @Since("1.6.0")
-  final val k = new IntParam(this, "k", "The number of topics (clusters) to infer. " +
-    "Must be > 1.", ParamValidators.gt(1))
-
-  /** @group getParam */
-  @Since("1.6.0")
-  def getK: Int = $(k)
+  with HasSeed with HasCheckpointInterval with HasK {
 
   /**
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'

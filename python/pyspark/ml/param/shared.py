@@ -597,3 +597,20 @@ class HasBlockSize(Params):
         Gets the value of blockSize or its default value.
         """
         return self.getOrDefault(self.blockSize)
+
+
+class HasK(Params):
+    """
+    Mixin for param k: The number of clusters to create. Must be > 1. Note that it is possible for fewer than k clusters to be returned.
+    """
+
+    k = Param(Params._dummy(), "k", "The number of clusters to create. Must be > 1. Note that it is possible for fewer than k clusters to be returned.", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasK, self).__init__()
+
+    def getK(self):
+        """
+        Gets the value of k or its default value.
+        """
+        return self.getOrDefault(self.k)

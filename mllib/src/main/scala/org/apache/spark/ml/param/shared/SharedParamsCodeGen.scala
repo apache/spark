@@ -108,7 +108,10 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Int]("blockSize", "block size for stacking input data in matrices. Data is " +
         "stacked within partitions. If block size is more than remaining data in a partition " +
         "then it is adjusted to the size of this data.",
-        isValid = "ParamValidators.gt(0)", isExpertParam = true)
+        isValid = "ParamValidators.gt(0)", isExpertParam = true),
+      ParamDesc[Int]("k", "The number of clusters to create. Must be (> 1). Note that it is" +
+        " possible for fewer than k clusters to be returned",
+        isValid = "ParamValidators.gt(1)")
     )
 
     val code = genSharedParams(params)

@@ -99,22 +99,12 @@ class ClusteringSummary(JavaWrapper):
 @inherit_doc
 class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
                              HasProbabilityCol, HasTol, HasAggregationDepth, HasWeightCol,
-                             HasBlockSize):
+                             HasBlockSize, HasK):
     """
     Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
 
     .. versionadded:: 3.0.0
     """
-
-    k = Param(Params._dummy(), "k", "Number of independent Gaussians in the mixture model. " +
-              "Must be > 1.", typeConverter=TypeConverters.toInt)
-
-    @since("2.0.0")
-    def getK(self):
-        """
-        Gets the value of `k`
-        """
-        return self.getOrDefault(self.k)
 
 
 class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable,
@@ -483,15 +473,13 @@ class KMeansSummary(ClusteringSummary):
 
 @inherit_doc
 class _KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol,
-                    HasDistanceMeasure, HasWeightCol):
+                    HasDistanceMeasure, HasWeightCol, HasK):
     """
     Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
 
     .. versionadded:: 3.0.0
     """
 
-    k = Param(Params._dummy(), "k", "The number of clusters to create. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
     initMode = Param(Params._dummy(), "initMode",
                      "The initialization algorithm. This can be either \"random\" to " +
                      "choose random points as initial cluster centers, or \"k-means||\" " +
@@ -499,13 +487,6 @@ class _KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTo
                      typeConverter=TypeConverters.toString)
     initSteps = Param(Params._dummy(), "initSteps", "The number of steps for k-means|| " +
                       "initialization mode. Must be > 0.", typeConverter=TypeConverters.toInt)
-
-    @since("1.5.0")
-    def getK(self):
-        """
-        Gets the value of `k`
-        """
-        return self.getOrDefault(self.k)
 
     @since("1.5.0")
     def getInitMode(self):
@@ -740,26 +721,17 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
 
 @inherit_doc
 class _BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                             HasDistanceMeasure, HasWeightCol):
+                             HasDistanceMeasure, HasWeightCol, HasK):
     """
     Params for :py:class:`BisectingKMeans` and :py:class:`BisectingKMeansModel`.
 
     .. versionadded:: 3.0.0
     """
 
-    k = Param(Params._dummy(), "k", "The desired number of leaf clusters. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
     minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
                                     "The minimum number of points (if >= 1.0) or the minimum " +
                                     "proportion of points (if < 1.0) of a divisible cluster.",
                                     typeConverter=TypeConverters.toFloat)
-
-    @since("2.0.0")
-    def getK(self):
-        """
-        Gets the value of `k` or its default value.
-        """
-        return self.getOrDefault(self.k)
 
     @since("2.0.0")
     def getMinDivisibleClusterSize(self):
@@ -1016,15 +988,13 @@ class BisectingKMeansSummary(ClusteringSummary):
 
 
 @inherit_doc
-class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
+class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval, HasK):
     """
     Params for :py:class:`LDA` and :py:class:`LDAModel`.
 
     .. versionadded:: 3.0.0
     """
 
-    k = Param(Params._dummy(), "k", "The number of topics (clusters) to infer. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
     optimizer = Param(Params._dummy(), "optimizer",
                       "Optimizer or inference algorithm used to estimate the LDA model.  "
                       "Supported: online, em", typeConverter=TypeConverters.toString)
@@ -1062,13 +1032,6 @@ class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
                                " deleted. Deleting the checkpoint can cause failures if a data"
                                " partition is lost, so set this bit with care.",
                                TypeConverters.toBoolean)
-
-    @since("2.0.0")
-    def getK(self):
-        """
-        Gets the value of :py:attr:`k` or its default value.
-        """
-        return self.getOrDefault(self.k)
 
     @since("2.0.0")
     def getOptimizer(self):
@@ -1565,16 +1528,13 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
+class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol, HasK):
     """
     Params for :py:class:`PowerIterationClustering`.
 
     .. versionadded:: 3.0.0
     """
 
-    k = Param(Params._dummy(), "k",
-              "The number of clusters to create. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
     initMode = Param(Params._dummy(), "initMode",
                      "The initialization algorithm. This can be either " +
                      "'random' to use a random vector as vertex properties, or 'degree' to use " +
@@ -1587,13 +1547,6 @@ class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
     dstCol = Param(Params._dummy(), "dstCol",
                    "Name of the input column for destination vertex IDs.",
                    typeConverter=TypeConverters.toString)
-
-    @since("2.4.0")
-    def getK(self):
-        """
-        Gets the value of :py:attr:`k` or its default value.
-        """
-        return self.getOrDefault(self.k)
 
     @since("2.4.0")
     def getInitMode(self):

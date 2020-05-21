@@ -31,19 +31,7 @@ import org.apache.spark.sql.types._
  * Common params for PowerIterationClustering
  */
 private[clustering] trait PowerIterationClusteringParams extends Params with HasMaxIter
-  with HasWeightCol {
-
-  /**
-   * The number of clusters to create (k). Must be &gt; 1. Default: 2.
-   * @group param
-   */
-  @Since("2.4.0")
-  final val k = new IntParam(this, "k", "The number of clusters to create. " +
-    "Must be > 1.", ParamValidators.gt(1))
-
-  /** @group getParam */
-  @Since("2.4.0")
-  def getK: Int = $(k)
+  with HasWeightCol with HasK {
 
   /**
    * Param for the initialization algorithm. This can be either "random" to use a random vector
