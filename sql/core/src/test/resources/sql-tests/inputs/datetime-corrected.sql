@@ -1,2 +1,0 @@
---SET spark.sql.legacy.timeParserPolicy=CORRECTED
---IMPORT datetime.sql

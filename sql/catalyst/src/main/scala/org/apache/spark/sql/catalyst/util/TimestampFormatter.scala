@@ -26,11 +26,8 @@ import java.time.temporal.TemporalQueries
 import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit.SECONDS
 
-import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
@@ -63,23 +60,12 @@ class Iso8601TimestampFormatter(
     legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
     needVarLengthSecondFraction: Boolean)
   extends TimestampFormatter with DateTimeFormatterHelper {
+
   @transient
   protected lazy val formatter: DateTimeFormatter = {
     try {
       getOrCreateFormatter(pattern, locale, needVarLengthSecondFraction)
-    } catch {
-      case e: IllegalArgumentException =>
-        try {
-          legacyFormatter
-        } catch {
-          case NonFatal(_) => throw e
-        }
-        throw new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
-          s" new parser. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to" +
-          s" restore the behavior before Spark 3.0." +
-          s" 2) You can form a valid datetime pattern with the guide from" +
-          s" https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html", e)
-    }
+    } catch checkLegacyFormatter(pattern, legacyFormatter.format(0))
   }
 
   @transient
@@ -161,7 +147,7 @@ class LegacyFastTimestampFormatter(
     zoneId: ZoneId,
     locale: Locale) extends TimestampFormatter {
 
-  @transient private val fastDateFormat =
+  @transient private lazy val fastDateFormat =
     FastDateFormat.getInstance(pattern, TimeZone.getTimeZone(zoneId), locale)
   @transient private lazy val cal = new MicrosCalendar(
     fastDateFormat.getTimeZone,
@@ -191,7 +177,7 @@ class LegacySimpleTimestampFormatter(
     zoneId: ZoneId,
     locale: Locale,
     lenient: Boolean = true) extends TimestampFormatter {
-  @transient private val sdf = {
+  @transient private lazy val sdf = {
     val formatter = new SimpleDateFormat(pattern, locale)
     formatter.setTimeZone(TimeZone.getTimeZone(zoneId))
     formatter.setLenient(lenient)

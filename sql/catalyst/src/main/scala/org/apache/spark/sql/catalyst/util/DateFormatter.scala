@@ -19,13 +19,11 @@ package org.apache.spark.sql.catalyst.util
 
 import java.text.SimpleDateFormat
 import java.time.{LocalDate, ZoneId}
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale}
-
-import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
@@ -43,22 +41,10 @@ class Iso8601DateFormatter(
   extends DateFormatter with DateTimeFormatterHelper {
 
   @transient
-  private lazy val formatter = {
+  private lazy val formatter: DateTimeFormatter = {
     try {
       getOrCreateFormatter(pattern, locale)
-    } catch {
-      case e: IllegalArgumentException =>
-        try {
-          legacyFormatter
-        } catch {
-          case NonFatal(_) => throw e
-        }
-        throw new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
-          s" new parser. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to" +
-          s" restore the behavior before Spark 3.0." +
-          s" 2) You can form a valid datetime pattern with the guide from" +
-          s" https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html", e)
-    }
+    } catch checkLegacyFormatter(pattern, legacyFormatter.format(0))
   }
 
   @transient
@@ -96,14 +82,14 @@ trait LegacyDateFormatter extends DateFormatter {
 
 class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
   @transient
-  private val fdf = FastDateFormat.getInstance(pattern, locale)
+  private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
   override def parseToDate(s: String): Date = fdf.parse(s)
   override def formatDate(d: Date): String = fdf.format(d)
 }
 
 class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
   @transient
-  private val sdf = new SimpleDateFormat(pattern, locale)
+  private lazy val sdf = new SimpleDateFormat(pattern, locale)
   override def parseToDate(s: String): Date = sdf.parse(s)
   override def formatDate(d: Date): String = sdf.format(d)
 }

@@ -291,4 +291,15 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       }
     }
   }
+
+  test("explicitly forbidden datetime patterns") {
+    // not support by the legacy one too
+    Seq("QQQQQ", "qqqqq", "A", "c", "e", "n", "N", "p").foreach { pattern =>
+      intercept[IllegalArgumentException](TimestampFormatter(pattern, ZoneOffset.UTC).format(0))
+    }
+    // supported by the legacy one, then we will suggest users with
+    Seq("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu").foreach { pattern =>
+      intercept[SparkUpgradeException](TimestampFormatter(pattern, ZoneOffset.UTC).format(0))
+    }
+  }
 }

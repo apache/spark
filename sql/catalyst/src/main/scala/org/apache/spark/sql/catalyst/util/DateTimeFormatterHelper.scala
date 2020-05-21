@@ -86,6 +86,25 @@ trait DateTimeFormatterHelper {
         throw e
       }
   }
+
+  // When the new DateTimeFormatter failed to initialize because of invalid datetime pattern, it
+  // will throw IllegalArgumentException. If the pattern can be recognized by the legacy formatter
+  // it will raise SparkUpgradeException to tell users to restore the previous behavior via LEGACY
+  // policy or follow our guide to correct their pattern.
+  protected def checkLegacyFormatter[T1, T2](
+      pattern: String,
+      block: T1 => T2): PartialFunction[Throwable, DateTimeFormatter] = {
+    case e: IllegalArgumentException =>
+      try {
+        block
+      } catch {
+        case _: Throwable => throw e
+      }
+      throw new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
+        s" new parser. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to" +
+        s" restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with" +
+        s" the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html", e)
+  }
 }
 
 private object DateTimeFormatterHelper {
