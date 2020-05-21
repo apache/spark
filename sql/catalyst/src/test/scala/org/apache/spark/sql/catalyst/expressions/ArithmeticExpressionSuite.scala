@@ -505,4 +505,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(e6, 0.toByte)
     }
   }
+
+  test("SPARK-31761: test integer overflow for (Divide) integral type ") {
+    checkEvaluation(IntegralDivide(Literal(Integer.MIN_VALUE), Literal(-1)), Integer
+      .MIN_VALUE.toLong * -1)
+  }
 }
