@@ -339,6 +339,7 @@ private[spark] class IndexShuffleBlockResolver(
           DigestUtils.getDigest(getDataFile(shuffleId, mapId, dirs), startOffset,
             endOffset - startOffset)
         }
+
         new DigestFileSegmentManagedBuffer(
           transportConf,
           getDataFile(shuffleId, mapId, dirs),

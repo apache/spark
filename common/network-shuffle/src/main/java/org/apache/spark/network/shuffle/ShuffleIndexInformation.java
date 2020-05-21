@@ -44,10 +44,9 @@ public class ShuffleIndexInformation {
     try (DataInputStream dis = new DataInputStream(Files.newInputStream(indexFile.toPath()))) {
       dis.readFully(offsetsBuffer.array());
     }
-    /**
-     * This logic is from IndexShuffleBlockResolver, and the block id format is from
-     * ShuffleIndexDigestBlockId.
-     */
+
+    // This logic is from IndexShuffleBlockResolver, and the digest file name is from
+    // ShuffleIndexDigestBlockId.
     File digestFile = new File(indexFile.getAbsolutePath() + ".digest");
     if (digestFile.exists()) {
       hasDigest = true;
