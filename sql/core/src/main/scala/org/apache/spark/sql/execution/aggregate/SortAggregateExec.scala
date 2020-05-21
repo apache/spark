@@ -88,7 +88,7 @@ case class SortAggregateExec(
         val outputIter = new SortBasedAggregationIterator(
           partIndex,
           groupingExpressions,
-          child.output,
+          inputAttributes,
           iter,
           aggregateExpressions,
           aggregateAttributes,

@@ -629,7 +629,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case p: Predicate => p
       case e => Cast(e, BooleanType)
     }
-    Filter(predicate, plan)
+    UnresolvedHaving(predicate, plan)
   }
 
   /**
@@ -1373,7 +1373,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Add a predicate to the given expression. Supported expressions are:
    * - (NOT) BETWEEN
    * - (NOT) IN
-   * - (NOT) LIKE
+   * - (NOT) LIKE (ANY | SOME | ALL)
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
    * - IS (NOT) (TRUE | FALSE | UNKNOWN)
@@ -1391,6 +1391,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case other => Seq(other)
     }
 
+    def getLikeQuantifierExprs(expressions: java.util.List[ExpressionContext]): Seq[Expression] = {
+      if (expressions.isEmpty) {
+        throw new ParseException("Expected something between '(' and ')'.", ctx)
+      } else {
+        expressions.asScala.map(expression).map(p => invertIfNotDefined(new Like(e, p)))
+      }
+    }
+
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1403,14 +1411,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
-        val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
-          if (str.length != 1) {
-            throw new ParseException("Invalid escape string." +
-              "Escape string must contains only one character.", ctx)
-          }
-          str.charAt(0)
-        }.getOrElse('\\')
-        invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
+        Option(ctx.quantifier).map(_.getType) match {
+          case Some(SqlBaseParser.ANY) | Some(SqlBaseParser.SOME) =>
+            getLikeQuantifierExprs(ctx.expression).reduceLeft(Or)
+          case Some(SqlBaseParser.ALL) =>
+            getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
+          case _ =>
+            val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
+              if (str.length != 1) {
+                throw new ParseException("Invalid escape string." +
+                  "Escape string must contain only one character.", ctx)
+              }
+              str.charAt(0)
+            }.getOrElse('\\')
+            invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
+        }
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
       case SqlBaseParser.NULL if ctx.NOT != null =>
@@ -1550,7 +1565,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
     val arguments = Seq(Literal(ctx.field.getText), expression(ctx.source))
-    UnresolvedFunction("date_part", arguments, isDistinct = false)
+    UnresolvedFunction("extract", arguments, isDistinct = false)
   }
 
   /**
@@ -3553,7 +3568,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitShowTblProperties(
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
-      UnresolvedTable(visitMultipartIdentifier(ctx.table)),
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.table)),
       Option(ctx.key).map(visitTablePropertyKey))
   }
 

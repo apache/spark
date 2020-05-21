@@ -75,10 +75,10 @@ trait DataSourceScanExec extends LeafExecNode {
     }
 
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
-     """.stripMargin
+       |""".stripMargin
   }
 
   /**
@@ -326,7 +326,10 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private lazy val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
+  private lazy val pushedDownFilters = {
+    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
+    dataFilters.flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+  }
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -377,10 +380,10 @@ case class FileSourceScanExec(
     }
 
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
-     """.stripMargin
+       |""".stripMargin
   }
 
   lazy val inputRDD: RDD[InternalRow] = {

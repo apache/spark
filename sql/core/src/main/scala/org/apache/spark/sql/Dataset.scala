@@ -2965,9 +2965,8 @@ class Dataset[T] private[sql](
    */
   def toLocalIterator(): java.util.Iterator[T] = {
     withAction("toLocalIterator", queryExecution) { plan =>
-      // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
-      val enc = resolvedEnc.copy()
-      plan.executeToIterator().map(enc.fromRow).asJava
+      val fromRow = resolvedEnc.createDeserializer()
+      plan.executeToIterator().map(fromRow).asJava
     }
   }
 
@@ -3387,9 +3386,10 @@ class Dataset[T] private[sql](
         new JSONOptions(Map.empty[String, String], sessionLocalTimeZone))
 
       new Iterator[String] {
+        private val toRow = exprEnc.createSerializer()
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          gen.write(exprEnc.toRow(iter.next()))
+          gen.write(toRow(iter.next()))
           gen.flush()
 
           val json = writer.toString
@@ -3649,9 +3649,8 @@ class Dataset[T] private[sql](
    * Collect all elements from a spark plan.
    */
   private def collectFromPlan(plan: SparkPlan): Array[T] = {
-    // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
-    val enc = resolvedEnc.copy()
-    plan.executeCollect().map(enc.fromRow)
+    val fromRow = resolvedEnc.createDeserializer()
+    plan.executeCollect().map(fromRow)
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {

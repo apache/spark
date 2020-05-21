@@ -82,17 +82,30 @@ class QueryExecution(
     sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
   }
 
-  lazy val sparkPlan: SparkPlan = executePhase(QueryPlanningTracker.PLANNING) {
-    // Clone the logical plan here, in case the planner rules change the states of the logical plan.
-    QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
+  private def assertOptimized(): Unit = optimizedPlan
+
+  lazy val sparkPlan: SparkPlan = {
+    // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
+    // the planning phase
+    assertOptimized()
+    executePhase(QueryPlanningTracker.PLANNING) {
+      // Clone the logical plan here, in case the planner rules change the states of the logical
+      // plan.
+      QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
+    }
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = executePhase(QueryPlanningTracker.PLANNING) {
-    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-    // optimizing and planning.
-    QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+  lazy val executedPlan: SparkPlan = {
+    // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
+    // that the optimization time is not counted as part of the planning phase.
+    assertOptimized()
+    executePhase(QueryPlanningTracker.PLANNING) {
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+    }
   }
 
   /**
@@ -112,7 +125,8 @@ class QueryExecution(
   def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
-    QueryExecution.preparations(sparkSession)
+    QueryExecution.preparations(sparkSession,
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))))
   }
 
   private def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
@@ -274,18 +288,15 @@ object QueryExecution {
    * are correct, insert whole stage code gen, and try to reduce the work done by reusing exchanges
    * and subqueries.
    */
-  private[execution] def preparations(sparkSession: SparkSession): Seq[Rule[SparkPlan]] = {
-
-    val sparkSessionWithAqeOff = getOrCloneSessionWithAqeOff(sparkSession)
-
+  private[execution] def preparations(
+      sparkSession: SparkSession,
+      adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None): Seq[Rule[SparkPlan]] = {
+    // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
+    // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
+    adaptiveExecutionRule.toSeq ++
     Seq(
-      // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
-      // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
-      InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession)),
-      // If the following rules apply, it means the main query is not AQE-ed, so we make sure the
-      // subqueries are not AQE-ed either.
-      PlanDynamicPruningFilters(sparkSessionWithAqeOff),
-      PlanSubqueries(sparkSessionWithAqeOff),
+      PlanDynamicPruningFilters(sparkSession),
+      PlanSubqueries(sparkSession),
       EnsureRequirements(sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
         sparkSession.sessionState.columnarRules),
@@ -333,19 +344,5 @@ object QueryExecution {
   def prepareExecutedPlan(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
     val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone())
     prepareExecutedPlan(spark, sparkPlan)
-  }
-
-  /**
-   * Returns a cloned [[SparkSession]] with adaptive execution disabled, or the original
-   * [[SparkSession]] if its adaptive execution is already disabled.
-   */
-  def getOrCloneSessionWithAqeOff[T](session: SparkSession): SparkSession = {
-    if (!session.sessionState.conf.adaptiveExecutionEnabled) {
-      session
-    } else {
-      val newSession = session.cloneSession()
-      newSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
-      newSession
-    }
   }
 }

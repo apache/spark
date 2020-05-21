@@ -437,7 +437,7 @@ struct<abs(-3.13):decimal(3,2),abs(CAST(-2.19 AS DOUBLE)):double>
 -- !query
 select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11)
 -- !query schema
-struct<(+ CAST(-1.11 AS DOUBLE)):double,(+ -1.11):decimal(3,2),(- CAST(-1.11 AS DOUBLE)):double,(- -1.11):decimal(3,2)>
+struct<(+ CAST(-1.11 AS DOUBLE)):double,(+ -1.11):decimal(3,2),negative(CAST(-1.11 AS DOUBLE)):double,negative(-1.11):decimal(3,2)>
 -- !query output
 -1.11	-1.11	1.11	1.11
 

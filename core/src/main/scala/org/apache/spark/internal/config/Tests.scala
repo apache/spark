@@ -79,6 +79,7 @@ private[spark] object Tests {
   // on the host.
   val SKIP_VALIDATE_CORES_TESTING =
     ConfigBuilder("spark.testing.skipValidateCores")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 

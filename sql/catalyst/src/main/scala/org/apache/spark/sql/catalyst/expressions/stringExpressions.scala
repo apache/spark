@@ -683,11 +683,22 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 
 trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
+  protected def srcStr: Expression
+  protected def trimStr: Option[Expression]
+  protected def direction: String
+
+  override def children: Seq[Expression] = srcStr +: trimStr.toSeq
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def sql: String = if (trimStr.isDefined) {
+    s"TRIM($direction ${trimStr.get.sql} FROM ${srcStr.sql})"
+  } else {
+    super.sql
+  }
 }
 
 object StringTrim {
@@ -769,11 +780,8 @@ case class StringTrim(
 
   override def prettyName: String = "trim"
 
-  override def children: Seq[Expression] = if (trimStr.isDefined) {
-    srcStr :: trimStr.get :: Nil
-  } else {
-    srcStr :: Nil
-  }
+  override protected def direction: String = "BOTH"
+
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
     if (srcString == null) {
@@ -865,11 +873,7 @@ case class StringTrimLeft(
 
   override def prettyName: String = "ltrim"
 
-  override def children: Seq[Expression] = if (trimStr.isDefined) {
-    srcStr :: trimStr.get :: Nil
-  } else {
-    srcStr :: Nil
-  }
+  override protected def direction: String = "LEADING"
 
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
@@ -964,11 +968,7 @@ case class StringTrimRight(
 
   override def prettyName: String = "rtrim"
 
-  override def children: Seq[Expression] = if (trimStr.isDefined) {
-    srcStr :: trimStr.get :: Nil
-  } else {
-    srcStr :: Nil
-  }
+  override protected def direction: String = "TRAILING"
 
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
@@ -1619,7 +1619,11 @@ case class StringSpace(child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.",
+  usage = """
+    _FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
+
+    _FUNC_(str FROM pos[ FOR len]]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 5);
@@ -1627,6 +1631,12 @@ case class StringSpace(child: Expression)
       > SELECT _FUNC_('Spark SQL', -3);
        SQL
       > SELECT _FUNC_('Spark SQL', 5, 1);
+       k
+      > SELECT _FUNC_('Spark SQL' FROM 5);
+       k SQL
+      > SELECT _FUNC_('Spark SQL' FROM -3);
+       SQL
+      > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
        k
   """,
   since = "1.5.0")
@@ -1685,7 +1695,7 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(str, len)
 }
 
 /**
@@ -1707,7 +1717,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(str, len)
 }
 
 /**

@@ -118,7 +118,8 @@ private[this] object SharedFactory {
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
-  """)
+  """,
+  group = "json_funcs")
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -341,7 +342,8 @@ case class GetJsonObject(json: Expression, path: Expression)
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
        1	2
-  """)
+  """,
+  group = "json_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
@@ -509,6 +511,7 @@ case class JsonTuple(children: Seq[Expression])
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
   """,
+  group = "json_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
 case class JsonToStructs(
@@ -628,6 +631,7 @@ case class JsonToStructs(
       > SELECT _FUNC_(array((map('a', 1))));
        [{"a":1}]
   """,
+  group = "json_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
 case class StructsToJson(
@@ -737,6 +741,7 @@ case class StructsToJson(
       > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
        array<struct<col:bigint>>
   """,
+  group = "json_funcs",
   since = "2.4.0")
 case class SchemaOfJson(
     child: Expression,
@@ -817,6 +822,7 @@ case class SchemaOfJson(
       > SELECT _FUNC_('[1,2');
         NULL
   """,
+  group = "json_funcs",
   since = "3.1.0"
 )
 case class LengthOfJsonArray(child: Expression) extends UnaryExpression
@@ -879,13 +885,14 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
   """,
   examples = """
     Examples:
-      > Select _FUNC_('{}');
+      > SELECT _FUNC_('{}');
         []
-      > Select _FUNC_('{"key": "value"}');
+      > SELECT _FUNC_('{"key": "value"}');
         ["key"]
-      > Select _FUNC_('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
+      > SELECT _FUNC_('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
         ["f1","f2"]
   """,
+  group = "json_funcs",
   since = "3.1.0"
 )
 case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback

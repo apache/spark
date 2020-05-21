@@ -173,8 +173,8 @@ function renderDagViz(forJob) {
   });
 
   metadataContainer().selectAll(".barrier-rdd").each(function() {
-    var rddId = d3.select(this).text().trim()
-    var clusterId = VizConstants.clusterPrefix + rddId
+    var rddId = d3.select(this).text().trim();
+    var clusterId = VizConstants.clusterPrefix + rddId;
     svg.selectAll("g." + clusterId).classed("barrier", true)
   });
 
@@ -282,11 +282,7 @@ function renderDagVizForJob(svgContainer) {
 
 /* Render the dot file as an SVG in the given container. */
 function renderDot(dot, container, forJob) {
-  var escaped_dot = dot
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"");
-  var g = graphlibDot.read(escaped_dot);
+  var g = graphlibDot.read(dot);
   var renderer = new dagreD3.render();
   preprocessGraphLayout(g, forJob);
   renderer(container, g);
@@ -498,18 +494,11 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 
-/*
- * Replace `/n` with `<br/>`
- */
-function replaceLineBreak(str) {
-    return str.replace("\\n", "<br/>");
-}
-
 /* (Job page only) Helper function to add tooltips for RDDs. */
 function addTooltipsForRDDs(svgContainer) {
   svgContainer.selectAll("g.node").each(function() {
     var node = d3.select(this);
-    var tooltipText = replaceLineBreak(node.attr("name"));
+    var tooltipText = node.attr("name");
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")

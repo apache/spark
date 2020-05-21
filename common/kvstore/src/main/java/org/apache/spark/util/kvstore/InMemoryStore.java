@@ -293,7 +293,7 @@ public class InMemoryStore implements KVStore {
     private void deleteParentIndex(Object key) {
       if (hasNaturalParentIndex) {
         for (NaturalKeys v : parentToChildrenMap.values()) {
-          if (v.remove(asKey(key))) {
+          if (v.remove(asKey(key)) != null) {
             // `v` can be empty after removing the natural key and we can remove it from
             // `parentToChildrenMap`. However, `parentToChildrenMap` is a ConcurrentMap and such
             // checking and deleting can be slow.
