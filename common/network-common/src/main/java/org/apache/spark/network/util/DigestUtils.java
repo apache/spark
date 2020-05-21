@@ -17,8 +17,10 @@
 
 package org.apache.spark.network.util;
 
-import java.io.*;
-import java.nio.ByteBuffer;
+import java.io.File;
+import java.io.InputStream;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.zip.CRC32;
@@ -27,43 +29,43 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class DigestUtils {
-    private static final Logger LOG = LoggerFactory.getLogger(DigestUtils.class);
-    private static final int STREAM_BUFFER_LENGTH = 8192;
-    private static final int DIGEST_LENGTH = 8;
+  private static final Logger LOG = LoggerFactory.getLogger(DigestUtils.class);
+  private static final int STREAM_BUFFER_LENGTH = 8192;
+  private static final int DIGEST_LENGTH = 8;
 
-    public static int getDigestLength() {
-       return DIGEST_LENGTH;
-    }
+  public static int getDigestLength() {
+    return DIGEST_LENGTH;
+  }
 
-    public static long getDigest(InputStream data) throws IOException {
-        CRC32 crc32 = new CRC32();
-        byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
-        int len;
-        while ((len = data.read(buffer)) >= 0) {
-            crc32.update(buffer, 0, len);
-        }
-        return crc32.getValue();
+  public static long getDigest(InputStream data) throws IOException {
+    CRC32 crc32 = new CRC32();
+    byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
+    int len;
+    while ((len = data.read(buffer)) >= 0) {
+      crc32.update(buffer, 0, len);
     }
+    return crc32.getValue();
+  }
 
-    public static long getDigest(File file, long offset, long length) {
-        if (length <= 0) {
-            return -1L;
-        }
-        try (RandomAccessFile rf = new RandomAccessFile(file, "r")) {
-            MappedByteBuffer data = rf.getChannel().map(FileChannel.MapMode.READ_ONLY, offset,
-              length);
-            CRC32 crc32 = new CRC32();
-            byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
-            int len;
-            while ((len = Math.min(STREAM_BUFFER_LENGTH, data.remaining())) > 0) {
-                data.get(buffer, 0, len);
-                crc32.update(buffer, 0, len);
-            }
-            return crc32.getValue();
-        } catch (IOException e) {
-            LOG.error(String.format("Exception while computing digest for file segment: " +
-              "%s(offset:%d, length:%d)", file.getName(), offset, length ));
-            return -1L;
-        }
+  public static long getDigest(File file, long offset, long length) {
+    if (length <= 0) {
+      return -1L;
     }
+    try (RandomAccessFile rf = new RandomAccessFile(file, "r")) {
+      MappedByteBuffer data = rf.getChannel().map(FileChannel.MapMode.READ_ONLY, offset,
+        length);
+      CRC32 crc32 = new CRC32();
+      byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
+      int len;
+      while ((len = Math.min(STREAM_BUFFER_LENGTH, data.remaining())) > 0) {
+        data.get(buffer, 0, len);
+        crc32.update(buffer, 0, len);
+      }
+      return crc32.getValue();
+    } catch (IOException e) {
+      LOG.error(String.format("Exception while computing digest for file segment: " +
+        "%s(offset:%d, length:%d)", file.getName(), offset, length ));
+      return -1L;
+    }
+  }
 }

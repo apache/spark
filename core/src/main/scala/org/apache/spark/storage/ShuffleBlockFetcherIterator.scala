@@ -642,7 +642,7 @@ final class ShuffleBlockFetcherIterator(
                   throwFetchFailedException(blockId, mapIndex, address, e)
               }
               failedOnDigestCheck = digest != digestToCheck
-              if (!failedOnDigestCheck) {
+              if (failedOnDigestCheck) {
                 buf.release()
                 val e = new CheckDigestFailedException(s"The digest to check $digestToCheck " +
                 s"of $blockId is not equal with origin $digest")
