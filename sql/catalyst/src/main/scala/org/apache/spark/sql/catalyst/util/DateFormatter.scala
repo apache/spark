@@ -29,7 +29,10 @@ import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
+
   def format(days: Int): String
+  def format(date: Date): String
+  def format(localDate: LocalDate): String
 }
 
 class Iso8601DateFormatter(
@@ -56,22 +59,32 @@ class Iso8601DateFormatter(
     }
   }
 
+  override def format(localDate: LocalDate): String = {
+    localDate.format(formatter)
+  }
+
   override def format(days: Int): String = {
-    LocalDate.ofEpochDay(days).format(formatter)
+    format(LocalDate.ofEpochDay(days))
+  }
+
+  override def format(date: Date): String = {
+    legacyFormatter.format(date)
   }
 }
 
 trait LegacyDateFormatter extends DateFormatter {
   def parseToDate(s: String): Date
-  def formatDate(d: Date): String
 
   override def parse(s: String): Int = {
     fromJavaDate(new java.sql.Date(parseToDate(s).getTime))
   }
 
   override def format(days: Int): String = {
-    val date = DateTimeUtils.toJavaDate(days)
-    formatDate(date)
+    format(DateTimeUtils.toJavaDate(days))
+  }
+
+  override def format(localDate: LocalDate): String = {
+    format(localDateToDays(localDate))
   }
 }
 
@@ -79,14 +92,14 @@ class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDat
   @transient
   private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
   override def parseToDate(s: String): Date = fdf.parse(s)
-  override def formatDate(d: Date): String = fdf.format(d)
+  override def format(d: Date): String = fdf.format(d)
 }
 
 class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
   @transient
   private lazy val sdf = new SimpleDateFormat(pattern, locale)
   override def parseToDate(s: String): Date = sdf.parse(s)
-  override def formatDate(d: Date): String = sdf.format(d)
+  override def format(d: Date): String = sdf.format(d)
 }
 
 object DateFormatter {

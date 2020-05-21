@@ -82,17 +82,30 @@ class QueryExecution(
     sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
   }
 
-  lazy val sparkPlan: SparkPlan = executePhase(QueryPlanningTracker.PLANNING) {
-    // Clone the logical plan here, in case the planner rules change the states of the logical plan.
-    QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
+  private def assertOptimized(): Unit = optimizedPlan
+
+  lazy val sparkPlan: SparkPlan = {
+    // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
+    // the planning phase
+    assertOptimized()
+    executePhase(QueryPlanningTracker.PLANNING) {
+      // Clone the logical plan here, in case the planner rules change the states of the logical
+      // plan.
+      QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
+    }
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = executePhase(QueryPlanningTracker.PLANNING) {
-    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-    // optimizing and planning.
-    QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+  lazy val executedPlan: SparkPlan = {
+    // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
+    // that the optimization time is not counted as part of the planning phase.
+    assertOptimized()
+    executePhase(QueryPlanningTracker.PLANNING) {
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+    }
   }
 
   /**

@@ -314,7 +314,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     all (directSiteRelativeLinks) should not startWith (knoxBaseUrl)
   }
 
-  test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
+  // TODO (SPARK-31723): re-enable it
+  ignore("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
     val page = new HistoryPage(server)
     val request = mock[HttpServletRequest]
