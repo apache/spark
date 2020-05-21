@@ -191,9 +191,9 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("missing year field with invalid date") {
-    // Use `SIMPLE_DATE_FORMAT`, so that the legacy parser also fails with invalid date.
-    val formatter = DateFormatter(
-      "MM-dd", UTC, DateFormatter.defaultLocale, LegacyDateFormats.SIMPLE_DATE_FORMAT)
-    intercept[DateTimeException](formatter.parse("02-29"))
+    val formatter = DateFormatter("MM-dd", UTC)
+    // The date parser in 2.4 accepts 1970-02-29 and turn it into 1970-03-01, so we should get a
+    // SparkUpgradeException here.
+    intercept[SparkUpgradeException](formatter.parse("02-29"))
   }
 }
