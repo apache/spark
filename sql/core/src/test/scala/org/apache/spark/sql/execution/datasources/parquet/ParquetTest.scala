@@ -163,35 +163,10 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
     Thread.currentThread().getContextClassLoader.getResource(name).toString
   }
 
-  def withParquetReaderFlags[T](vectorizedOSS: Boolean)
-    (code: => T): T = {
-    val sqlConfs = Seq(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedOSS.toString)
-    var ret = null.asInstanceOf[T]
-    withSQLConf(sqlConfs: _*) { ret = code }
-    ret
-  }
-
-  def withParquetReader[T](reader: String)(code: => T): T = reader match {
-    case "parquet-mr" => withParquetReaderFlags(false)(code)
-    case "vectorized-oss" => withParquetReaderFlags(true)(code)
-    case unknown =>
-      // scalastyle:off throwerror
-      throw new NotImplementedError(s"Unsupported Parquet reader '$unknown'.")
-      // scalastyle:on throwerror
-  }
-
-  def withParquetReaders(readers: String*)(code: => Unit): Unit = for (reader <- readers) {
-    // scalastyle:off
-    println(s"with $reader reader")
-    // scalastyle:on
-    withParquetReader(reader)(code)
-  }
-
-  def withOssParquetReaders(code: => Unit): Unit = {
-    withParquetReaders("parquet-mr", "vectorized-oss")(code)
-  }
-
   def withAllParquetReaders(code: => Unit): Unit = {
-    withOssParquetReaders(code)
+    // test the row-based reader
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")(code)
+    // test the vectorized reader
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
   }
 }
