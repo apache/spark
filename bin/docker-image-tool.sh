@@ -193,12 +193,12 @@ function build {
       -t $(image_ref spark-py) \
       -f "$PYDOCKERFILE" .)
       if [ $? -ne 0 ]; then
-	error "Failed to build PySpark Docker image, please refer to Docker build output for details."
+        error "Failed to build PySpark Docker image, please refer to Docker build output for details."
       fi
       if [ "${CROSS_BUILD}" != "false" ]; then
-	(cd $(img_ctx_dir pyspark) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-	  -t $(image_ref spark-py) \
-	  -f "$PYDOCKERFILE" .)
+        (cd $(img_ctx_dir pyspark) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+          -t $(image_ref spark-py) \
+          -f "$PYDOCKERFILE" .)
       fi
   fi
 
@@ -211,8 +211,8 @@ function build {
     fi
     if [ "${CROSS_BUILD}" != "false" ]; then
       (cd $(img_ctx_dir sparkr) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-	-t $(image_ref spark-r) \
-	-f "$RDOCKERFILE" .)
+        -t $(image_ref spark-r) \
+        -f "$RDOCKERFILE" .)
     fi
   fi
 }
@@ -230,24 +230,24 @@ Builds or pushes the built-in Spark Docker image.
 
 Commands:
   build       Build image. Requires a repository address to be provided if the image will be
-	      pushed to a different registry.
+              pushed to a different registry.
   push        Push a pre-built image to a registry. Requires a repository address to be provided.
 
 Options:
   -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
   -p file               (Optional) Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
-			Skips building PySpark docker image if not specified.
+                        Skips building PySpark docker image if not specified.
   -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
-			Skips building SparkR docker image if not specified.
+                        Skips building SparkR docker image if not specified.
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
   -n                    Build docker image with --no-cache
   -u uid                UID to use in the USER directive to set the user the main Spark process runs as inside the
-			resulting container
+                        resulting container
   -X                    Use docker buildx to cross build. Automatically pushes.
   -b arg                Build arg to build or push the image. For multiple build args, this option needs to
-			be used separately for each build arg.
+                        be used separately for each build arg.
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
 There is no need to push the images into minikube in that case, they'll be automatically
