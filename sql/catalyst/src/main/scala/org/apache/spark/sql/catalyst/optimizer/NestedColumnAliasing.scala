@@ -37,8 +37,8 @@ object NestedColumnAliasing {
       getAliasSubMap(projectList)
 
     case plan if SQLConf.get.nestedSchemaPruningEnabled && canPruneOn(plan) =>
-      val exprsToPrune = plan.expressions
-      getAliasSubMap(exprsToPrune, plan.producedAttributes.toSeq)
+      val exprCandidatesToPrune = plan.expressions
+      getAliasSubMap(exprCandidatesToPrune, plan.producedAttributes.toSeq)
 
     case _ => None
   }
@@ -55,6 +55,7 @@ object NestedColumnAliasing {
         getNewProjectList(projectList, nestedFieldToAlias),
         replaceChildrenWithAliases(child, nestedFieldToAlias, attrToAliases))
 
+    // The operators reaching here was already guarded by `canPruneOn`.
     case other =>
       replaceChildrenWithAliases(other, nestedFieldToAlias, attrToAliases)
   }
