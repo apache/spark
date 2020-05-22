@@ -60,13 +60,15 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
       numExecutors = 2,
       timeout = 10000) // 10s
     val sleepyRdd = input.mapPartitions{ x =>
-      Thread.sleep(50)
+      Thread.sleep(5000) // 5s
       x
     }
     // Start the task.
     val asyncCount = sleepyRdd.countAsync()
     // Wait for the job to have started
     sem.acquire(1)
+    // Give it time to make it to the worker otherwise we'll block
+    Thread.sleep(2000) // 2s
     // Decommission all the executors, this should not halt the current task.
     // decom.sh message passing is tested manually.
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
