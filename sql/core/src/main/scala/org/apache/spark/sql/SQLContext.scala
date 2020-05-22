@@ -1056,7 +1056,7 @@ object SQLContext {
       attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     def createStructConverter(cls: Class[_], fieldTypes: Seq[DataType]): Any => InternalRow = {
       val methodConverters =
-        JavaTypeInference.getJavaBeanReadableProperties(cls).zip(fieldTypes)
+        JavaTypeInference.getJavaBeanReadableAndWritableProperties(cls).zip(fieldTypes)
           .map { case (property, fieldType) =>
             val method = property.getReadMethod
             method -> createConverter(method.getReturnType, fieldType)

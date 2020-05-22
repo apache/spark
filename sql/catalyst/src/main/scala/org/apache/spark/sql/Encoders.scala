@@ -149,6 +149,9 @@ object Encoders {
    *  - collection types: only array and java.util.List currently, map support is in progress
    *  - nested java bean.
    *
+   * Spark reads Java beans via property-based, which depends on getter/setter methods.
+   * The property is taken into account only when it has both getter and setter methods.
+   *
    * @since 1.6.0
    */
   def bean[T](beanClass: Class[T]): Encoder[T] = ExpressionEncoder.javaBean(beanClass)

@@ -378,6 +378,9 @@ class SparkSession private(
   /**
    * Applies a schema to an RDD of Java Beans.
    *
+   * Spark reads Java beans via property-based, which depends on getter/setter methods.
+   * The property is taken into account only when it has both getter and setter methods.
+   *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    * SELECT * queries will return the columns in an undefined order.
    *
@@ -396,6 +399,9 @@ class SparkSession private(
   /**
    * Applies a schema to an RDD of Java Beans.
    *
+   * Spark reads Java beans via property-based, which depends on getter/setter methods.
+   * The property is taken into account only when it has both getter and setter methods.
+   *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    * SELECT * queries will return the columns in an undefined order.
    *
@@ -407,6 +413,9 @@ class SparkSession private(
 
   /**
    * Applies a schema to a List of Java Beans.
+   *
+   * Spark reads Java beans via property-based, which depends on getter/setter methods.
+   * The property is taken into account only when it has both getter and setter methods.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.

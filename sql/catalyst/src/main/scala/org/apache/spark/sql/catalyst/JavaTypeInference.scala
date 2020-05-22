@@ -143,9 +143,7 @@ object JavaTypeInference {
               s"of class $other")
         }
 
-        // TODO: we should only collect properties that have getter and setter. However, some tests
-        // pass in scala case class as java bean class which doesn't have getter and setter.
-        val properties = getJavaBeanReadableProperties(other)
+        val properties = getJavaBeanReadableAndWritableProperties(other)
         val fields = properties.map { property =>
           val returnType = typeToken.method(property.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
@@ -157,16 +155,11 @@ object JavaTypeInference {
     }
   }
 
-  def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
+  def getJavaBeanReadableAndWritableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
     val beanInfo = Introspector.getBeanInfo(beanClass)
     beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
       .filterNot(_.getName == "declaringClass")
-      .filter(_.getReadMethod != null)
-  }
-
-  private def getJavaBeanReadableAndWritableProperties(
-      beanClass: Class[_]): Array[PropertyDescriptor] = {
-    getJavaBeanReadableProperties(beanClass).filter(_.getWriteMethod != null)
+      .filter { pd => pd.getReadMethod != null && pd.getWriteMethod != null }
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {
