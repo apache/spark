@@ -29,7 +29,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansBlocksImpl, KMeansModel => MLlibKMeansModel}
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
@@ -355,21 +355,8 @@ class KMeans @Since("1.5.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
-
     transformSchema(dataset.schema, logging = true)
-    instr.logPipelineStage(this)
-    instr.logDataset(dataset)
-    instr.logParams(this, featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
-      maxIter, seed, tol, weightCol, blockSize)
 
-    if ($(blockSize) == 1) {
-      trainOnRows(dataset)
-    } else {
-      trainOnBlocks(dataset)
-    }
-  }
-
-  private def trainOnRows(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
       col($(weightCol)).cast(DoubleType)
@@ -377,77 +364,75 @@ class KMeans @Since("1.5.0") (
       lit(1.0)
     }
 
-    val instances: RDD[(OldVector, Double)] = dataset
+    val instances: RDD[(Vector, Double)] = dataset
       .select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd.map {
-      case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight)
+      case Row(point: Vector, weight: Double) => (point, weight)
     }
 
     if (handlePersistence) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    val algo = new MLlibKMeans()
-      .setK($(k))
-      .setInitializationMode($(initMode))
-      .setInitializationSteps($(initSteps))
-      .setMaxIterations($(maxIter))
-      .setSeed($(seed))
-      .setEpsilon($(tol))
-      .setDistanceMeasure($(distanceMeasure))
-    val parentModel = algo.runWithWeight(instances, Option(instr))
-    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
+      maxIter, seed, tol, weightCol, blockSize)
+
+    val model = if ($(blockSize) == 1) {
+      trainOnRows(instances)
+    } else {
+      trainOnBlocks(instances)
+    }
+
     val summary = new KMeansSummary(
       model.transform(dataset),
       $(predictionCol),
       $(featuresCol),
       $(k),
-      parentModel.numIter,
-      parentModel.trainingCost)
-
+      model.parentModel.numIter,
+      model.parentModel.trainingCost)
     model.setSummary(Some(summary))
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
+
+    instr.logNamedValue("clusterSizes", model.summary.clusterSizes)
     if (handlePersistence) {
       instances.unpersist()
     }
     model
   }
 
-  private def trainOnBlocks(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
-    } else {
-      lit(1.0)
-    }
+  private def trainOnRows(instances: RDD[(Vector, Double)]): KMeansModel =
+    instrumented { instr =>
+      val oldVectorInstances = instances.map {
+        case (point: Vector, weight: Double) => (OldVectors.fromML(point), weight)
+      }
+      val algo = new MLlibKMeans()
+        .setK($(k))
+        .setInitializationMode($(initMode))
+        .setInitializationSteps($(initSteps))
+        .setMaxIterations($(maxIter))
+        .setSeed($(seed))
+        .setEpsilon($(tol))
+        .setDistanceMeasure($(distanceMeasure))
+      val parentModel = algo.runWithWeight(oldVectorInstances, Option(instr))
+      val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+      model
+  }
 
-    val instances: RDD[Instance] = dataset
-      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd.map {
-      case Row(point: Vector, weight: Double) => Instance(0.0, weight, point)
-    }
+  private def trainOnBlocks(instances: RDD[(Vector, Double)]): KMeansModel =
+    instrumented { instr =>
+      val instanceRDD: RDD[Instance] = instances.map {
+        case (point: Vector, weight: Double) => Instance(0.0, weight, point)
+      }
 
-    val blocks = InstanceBlock.blokify(instances, $(blockSize))
-      .persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training dataset (blockSize=${$(blockSize)})")
+      val blocks = InstanceBlock.blokify(instanceRDD, $(blockSize))
+        .persist(StorageLevel.MEMORY_AND_DISK)
+        .setName(s"training dataset (blockSize=${$(blockSize)})")
 
-    val algo = new KMeansBlocksImpl($(k), $(maxIter), $(initMode),
-      $(initSteps), $(tol), $(seed), $(distanceMeasure))
+      val algo = new KMeansBlocksImpl($(k), $(maxIter), $(initMode),
+        $(initSteps), $(tol), $(seed), $(distanceMeasure))
 
-    val parentModel = algo.runWithWeight(blocks, Option(instr))
-
-    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
-    val summary = new KMeansSummary(
-      model.transform(dataset),
-      $(predictionCol),
-      $(featuresCol),
-      $(k),
-      parentModel.numIter,
-      parentModel.trainingCost)
-
-    model.setSummary(Some(summary))
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
-
-    blocks.unpersist()
-
-    model
+      val model = algo.runWithWeight(blocks, Option(instr))
+      model
   }
 
   @Since("1.5.0")

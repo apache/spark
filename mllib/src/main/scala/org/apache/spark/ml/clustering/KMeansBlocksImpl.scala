@@ -15,16 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.clustering
+package org.apache.spark.ml.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.InstanceBlock
+import org.apache.spark.ml.linalg.{DenseMatrix, Vector, Vectors}
+import org.apache.spark.ml.linalg.BLAS
+import org.apache.spark.ml.linalg.BLAS.axpy
 import org.apache.spark.ml.util.Instrumentation
-import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, Vector, Vectors}
-import org.apache.spark.mllib.linalg.BLAS.axpy
+import org.apache.spark.mllib.clustering.DistanceMeasure
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
