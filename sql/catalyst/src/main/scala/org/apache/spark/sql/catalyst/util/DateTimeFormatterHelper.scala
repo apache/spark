@@ -87,10 +87,18 @@ trait DateTimeFormatterHelper {
       }
   }
 
-  // When the new DateTimeFormatter failed to initialize because of invalid datetime pattern, it
-  // will throw IllegalArgumentException. If the pattern can be recognized by the legacy formatter
-  // it will raise SparkUpgradeException to tell users to restore the previous behavior via LEGACY
-  // policy or follow our guide to correct their pattern.
+  /**
+   * When the new DateTimeFormatter failed to initialize because of invalid datetime pattern, it
+   * will throw IllegalArgumentException. If the pattern can be recognized by the legacy formatter
+   * it will raise SparkUpgradeException to tell users to restore the previous behavior via LEGACY
+   * policy or follow our guide to correct their pattern. Otherwise, the original
+   * IllegalArgumentException will be thrown.
+   *
+   * @param pattern the date time pattern
+   * @param block a func to capture exception, identically which forces a legacy datetime formatter
+   *              to be initialized
+   */
+
   protected def checkLegacyFormatter(
       pattern: String,
       block: => Unit): PartialFunction[Throwable, DateTimeFormatter] = {
