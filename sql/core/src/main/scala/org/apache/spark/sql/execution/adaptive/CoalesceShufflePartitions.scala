@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.MapOutputStatistics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
@@ -54,14 +53,10 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
     if (!shuffleStages.forall(_.shuffle.canChangeNumPartitions)) {
       plan
     } else {
-      val shuffleMetrics = shuffleStages.map { stage =>
-        assert(stage.resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
-        stage.resultOption.get.asInstanceOf[MapOutputStatistics]
-      }
-
-      // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD has 0 partitions,
+      // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
-      val validMetrics = shuffleMetrics.filter(_ != null)
+      val validMetrics = shuffleStages.flatMap(_.mapStats)
+
       // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
       // in that case. For example when we union fully aggregated data (data is arranged to a single
       // partition) and a result of a SortMergeJoin (multiple partitions).
@@ -83,15 +78,11 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
           // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
           // number of output partitions.
           case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
-            CustomShuffleReaderExec(stage, partitionSpecs, COALESCED_SHUFFLE_READER_DESCRIPTION)
+            CustomShuffleReaderExec(stage, partitionSpecs)
         }
       } else {
         plan
       }
     }
   }
-}
-
-object CoalesceShufflePartitions {
-  val COALESCED_SHUFFLE_READER_DESCRIPTION = "coalesced"
 }

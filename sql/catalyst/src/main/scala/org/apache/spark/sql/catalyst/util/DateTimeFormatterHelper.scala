@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time._
 import java.time.chrono.IsoChronology
-import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, DateTimeParseException, ResolverStyle}
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.Locale
 
@@ -31,17 +31,52 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 trait DateTimeFormatterHelper {
+  private def getOrDefault(accessor: TemporalAccessor, field: ChronoField, default: Int): Int = {
+    if (accessor.isSupported(field)) {
+      accessor.get(field)
+    } else {
+      default
+    }
+  }
+
+  protected def toLocalDate(accessor: TemporalAccessor): LocalDate = {
+    val localDate = accessor.query(TemporalQueries.localDate())
+    // If all the date fields are specified, return the local date directly.
+    if (localDate != null) return localDate
+
+    // Users may want to parse only a few datetime fields from a string and extract these fields
+    // later, and we should provide default values for missing fields.
+    // To be compatible with Spark 2.4, we pick 1970 as the default value of year.
+    val year = getOrDefault(accessor, ChronoField.YEAR, 1970)
+    val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
+    val day = getOrDefault(accessor, ChronoField.DAY_OF_MONTH, 1)
+    LocalDate.of(year, month, day)
+  }
+
+  private def toLocalTime(accessor: TemporalAccessor): LocalTime = {
+    val localTime = accessor.query(TemporalQueries.localTime())
+    // If all the time fields are specified, return the local time directly.
+    if (localTime != null) return localTime
+
+    val hour = if (accessor.isSupported(ChronoField.HOUR_OF_DAY)) {
+      accessor.get(ChronoField.HOUR_OF_DAY)
+    } else if (accessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
+      // When we reach here, it means am/pm is not specified. Here we assume it's am.
+      accessor.get(ChronoField.HOUR_OF_AMPM)
+    } else {
+      0
+    }
+    val minute = getOrDefault(accessor, ChronoField.MINUTE_OF_HOUR, 0)
+    val second = getOrDefault(accessor, ChronoField.SECOND_OF_MINUTE, 0)
+    val nanoSecond = getOrDefault(accessor, ChronoField.NANO_OF_SECOND, 0)
+    LocalTime.of(hour, minute, second, nanoSecond)
+  }
+
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
   // if they does not exist in the parsed object.
-  protected def toZonedDateTime(
-      temporalAccessor: TemporalAccessor,
-      zoneId: ZoneId): ZonedDateTime = {
-    // Parsed input might not have time related part. In that case, time component is set to zeros.
-    val parsedLocalTime = temporalAccessor.query(TemporalQueries.localTime)
-    val localTime = if (parsedLocalTime == null) LocalTime.MIDNIGHT else parsedLocalTime
-    // Parsed input must have date component. At least, year must present in temporalAccessor.
-    val localDate = temporalAccessor.query(TemporalQueries.localDate)
-
+  protected def toZonedDateTime(accessor: TemporalAccessor, zoneId: ZoneId): ZonedDateTime = {
+    val localDate = toLocalDate(accessor)
+    val localTime = toLocalTime(accessor)
     ZonedDateTime.of(localDate, localTime, zoneId)
   }
 
@@ -55,7 +90,7 @@ trait DateTimeFormatterHelper {
       pattern: String,
       locale: Locale,
       needVarLengthSecondFraction: Boolean = false): DateTimeFormatter = {
-    val newPattern = DateTimeUtils.convertIncompatiblePattern(pattern)
+    val newPattern = convertIncompatiblePattern(pattern)
     val useVarLen = needVarLengthSecondFraction && newPattern.contains('S')
     val key = (newPattern, locale, useVarLen)
     var formatter = cache.getIfPresent(key)
@@ -72,19 +107,15 @@ trait DateTimeFormatterHelper {
   // DateTimeParseException will address by the caller side.
   protected def checkDiffResult[T](
       s: String, legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
-    case e: DateTimeParseException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
-      val res = try {
-        Some(legacyParseFunc(s))
+    case e: DateTimeException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
+      try {
+        legacyParseFunc(s)
       } catch {
-        case _: Throwable => None
+        case _: Throwable => throw e
       }
-      if (res.nonEmpty) {
-        throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
-          s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
-          s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
-      } else {
-        throw e
-      }
+      throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
+        s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
+        s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
   }
 }
 
@@ -101,10 +132,6 @@ private object DateTimeFormatterHelper {
 
   def toFormatter(builder: DateTimeFormatterBuilder, locale: Locale): DateTimeFormatter = {
     builder
-      .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
-      .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
-      .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
-      .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
       .withResolverStyle(ResolverStyle.STRICT)
@@ -117,6 +144,10 @@ private object DateTimeFormatterHelper {
       pattern: String): DateTimeFormatterBuilder = {
     val builder = createBuilder()
     pattern.split("'").zipWithIndex.foreach {
+      // Split string starting with the regex itself which is `'` here will produce an extra empty
+      // string at res(0). So when the first element here is empty string we do not need append `'`
+      // literal to the DateTimeFormatterBuilder.
+      case ("", idx) if idx != 0 => builder.appendLiteral("'")
       case (pattenPart, idx) if idx % 2 == 0 =>
         var rest = pattenPart
         while (rest.nonEmpty) {
@@ -156,5 +187,48 @@ private object DateTimeFormatterHelper {
       .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
       .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
     toFormatter(builder, TimestampFormatter.defaultLocale)
+  }
+
+  final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
+
+  /**
+   * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
+   * parsing/formatting datetime values. The pattern string is incompatible with the one defined
+   * by SimpleDateFormat in Spark 2.4 and earlier. This function converts all incompatible pattern
+   * for the new parser in Spark 3.0. See more details in SPARK-31030.
+   * @param pattern The input pattern.
+   * @return The pattern for new parser
+   */
+  def convertIncompatiblePattern(pattern: String): String = {
+    val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
+      case (patternPart, index) =>
+        // Text can be quoted using single quotes, we only check the non-quote parts.
+        index % 2 == 0 && patternPart.contains("G")
+    }
+    (pattern + " ").split("'").zipWithIndex.map {
+      case (patternPart, index) =>
+        if (index % 2 == 0) {
+          for (c <- patternPart if unsupportedLetters.contains(c)) {
+            throw new IllegalArgumentException(s"Illegal pattern character: $c")
+          }
+          // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
+          // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
+          // string. If parsable, return the result; otherwise, fall back to 'u', and then use the
+          // legacy SimpleDateFormat parser to parse. When it is successfully parsed, throw an
+          // exception and ask users to change the pattern strings or turn on the legacy mode;
+          // otherwise, return NULL as what Spark 2.4 does.
+          val res = patternPart.replace("u", "e")
+          // In DateTimeFormatter, 'u' supports negative years. We substitute 'y' to 'u' here for
+          // keeping the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'.
+          // We only do this substitution when there is no era designator found in the pattern.
+          if (!eraDesignatorContained) {
+            res.replace("y", "u")
+          } else {
+            res
+          }
+        } else {
+          patternPart
+        }
+    }.mkString("'").stripSuffix(" ")
   }
 }

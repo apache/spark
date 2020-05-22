@@ -261,6 +261,48 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         expected = df.groupby('id').agg(mean(df.v).alias('weighted_mean(v, 1.0)')).sort('id')
         assert_frame_equal(expected.toPandas(), actual.toPandas())
 
+    def test_ignore_type_hint_in_group_apply_in_pandas(self):
+        df = self.spark.range(10)
+        exec(
+            "def pandas_plus_one(v: pd.DataFrame) -> pd.DataFrame:\n"
+            "    return v + 1",
+            self.local)
+
+        pandas_plus_one = self.local["pandas_plus_one"]
+
+        actual = df.groupby('id').applyInPandas(pandas_plus_one, schema=df.schema).sort('id')
+        expected = df.selectExpr("id + 1 as id")
+        assert_frame_equal(expected.toPandas(), actual.toPandas())
+
+    def test_ignore_type_hint_in_cogroup_apply_in_pandas(self):
+        df = self.spark.range(10)
+        exec(
+            "def pandas_plus_one(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:\n"
+            "    return left + 1",
+            self.local)
+
+        pandas_plus_one = self.local["pandas_plus_one"]
+
+        actual = df.groupby('id').cogroup(
+            self.spark.range(10).groupby("id")
+        ).applyInPandas(pandas_plus_one, schema=df.schema).sort('id')
+        expected = df.selectExpr("id + 1 as id")
+        assert_frame_equal(expected.toPandas(), actual.toPandas())
+
+    def test_ignore_type_hint_in_map_in_pandas(self):
+        df = self.spark.range(10)
+        exec(
+            "from typing import Iterator\n"
+            "def pandas_plus_one(iter: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:\n"
+            "    return map(lambda v: v + 1, iter)",
+            self.local)
+
+        pandas_plus_one = self.local["pandas_plus_one"]
+
+        actual = df.mapInPandas(pandas_plus_one, schema=df.schema)
+        expected = df.selectExpr("id + 1 as id")
+        assert_frame_equal(expected.toPandas(), actual.toPandas())
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_udf_typehints import *

@@ -496,10 +496,16 @@ private[spark] case class ServerInfo(
   }
 
   def stop(): Unit = {
+    val threadPool = server.getThreadPool
+    threadPool match {
+      case pool: QueuedThreadPool =>
+        // Workaround for SPARK-30385 to avoid Jetty's acceptor thread shrink.
+        pool.setIdleTimeout(0)
+      case _ =>
+    }
     server.stop()
     // Stop the ThreadPool if it supports stop() method (through LifeCycle).
     // It is needed because stopping the Server won't stop the ThreadPool it uses.
-    val threadPool = server.getThreadPool
     if (threadPool != null && threadPool.isInstanceOf[LifeCycle]) {
       threadPool.asInstanceOf[LifeCycle].stop
     }

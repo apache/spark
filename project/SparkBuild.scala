@@ -221,7 +221,7 @@ object SparkBuild extends PomBuild {
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.15",
+    unidocGenjavadocVersion := "0.16",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -480,7 +480,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
-    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextSuite"
+    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextSuite",
+    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -624,7 +625,8 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % "14.0.1",
     dependencyOverrides += "commons-io" % "commons-io" % "2.4",
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
-    dependencyOverrides += "jline" % "jline" % "2.14.6")
+    dependencyOverrides += "jline" % "jline" % "2.14.6",
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.8.2")
 }
 
 /**

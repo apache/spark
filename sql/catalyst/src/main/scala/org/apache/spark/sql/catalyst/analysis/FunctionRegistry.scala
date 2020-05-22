@@ -253,7 +253,7 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Log]("ln"),
     expression[Remainder]("mod", true),
-    expression[UnaryMinus]("negative"),
+    expression[UnaryMinus]("negative", true),
     expression[Pi]("pi"),
     expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
@@ -404,7 +404,7 @@ object FunctionRegistry {
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
-    expression[CurrentTimestamp]("now", true),
+    expression[Now]("now"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ParseToTimestamp]("to_timestamp"),
@@ -423,6 +423,10 @@ object FunctionRegistry {
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
+    expression[Extract]("extract"),
+    expression[SecondsToTimestamp]("timestamp_seconds"),
+    expression[MillisToTimestamp]("timestamp_millis"),
+    expression[MicrosToTimestamp]("timestamp_micros"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -538,6 +542,8 @@ object FunctionRegistry {
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
     expression[SchemaOfJson]("schema_of_json"),
+    expression[LengthOfJsonArray]("json_array_length"),
+    expression[JsonObjectKeys]("json_object_keys"),
 
     // cast
     expression[Cast]("cast"),
@@ -652,7 +658,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
-      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "")
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "", "")
     (name, (expressionInfo, builder))
   }
 
@@ -672,6 +678,7 @@ object FunctionRegistry {
           df.arguments(),
           df.examples(),
           df.note(),
+          df.group(),
           df.since(),
           df.deprecated())
       } else {

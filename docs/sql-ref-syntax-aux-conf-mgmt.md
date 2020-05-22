@@ -19,5 +19,5 @@ license: |
   limitations under the License.
 ---
 
-* [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
-* [UNSET](sql-ref-syntax-aux-conf-mgmt-reset.html)
+ * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
+ * [UNSET](sql-ref-syntax-aux-conf-mgmt-reset.html)

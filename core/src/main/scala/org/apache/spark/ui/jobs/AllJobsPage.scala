@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.xml._
 
@@ -88,7 +87,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
       // extra layers of escaping in order to embed this in a Javascript string literal.
       val escapedDesc = Utility.escape(jobDescription)
-      val jsEscapedDesc = StringEscapeUtils.escapeEcmaScript(escapedDesc)
+      val jsEscapedDescForTooltip = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedDesc))
+      val jsEscapedDescForLabel = StringEscapeUtils.escapeEcmaScript(escapedDesc)
       val jobEventJsonAsStr =
         s"""
            |{
@@ -98,7 +98,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
            |  'end': new Date(${completionTime}),
            |  'content': '<div class="application-timeline-content"' +
            |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
-           |     'data-title="${jsEscapedDesc} (Job ${jobId})<br>' +
+           |     'data-title="${jsEscapedDescForTooltip} (Job ${jobId})<br>' +
            |     'Status: ${status}<br>' +
            |     'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |     '${
@@ -108,7 +108,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
                        ""
                      }
                   }">' +
-           |    '${jsEscapedDesc} (Job ${jobId})</div>'
+           |    '${jsEscapedDescForLabel} (Job ${jobId})</div>'
            |}
          """.stripMargin
       jobEventJsonAsStr
@@ -210,45 +210,24 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       jobTag: String,
       jobs: Seq[v1.JobData],
       killEnabled: Boolean): Seq[Node] = {
-    val parameterOtherTable = request.getParameterMap().asScala
-      .filterNot(_._1.startsWith(jobTag))
-      .map(para => para._1 + "=" + para._2(0))
 
     val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
     val jobIdTitle = if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"
-
-    val parameterJobPage = request.getParameter(jobTag + ".page")
-    val parameterJobSortColumn = request.getParameter(jobTag + ".sort")
-    val parameterJobSortDesc = request.getParameter(jobTag + ".desc")
-    val parameterJobPageSize = request.getParameter(jobTag + ".pageSize")
-
-    val jobPage = Option(parameterJobPage).map(_.toInt).getOrElse(1)
-    val jobSortColumn = Option(parameterJobSortColumn).map { sortColumn =>
-      UIUtils.decodeURLParameter(sortColumn)
-    }.getOrElse(jobIdTitle)
-    val jobSortDesc = Option(parameterJobSortDesc).map(_.toBoolean).getOrElse(
-      // New jobs should be shown above old jobs by default.
-      jobSortColumn == jobIdTitle
-    )
-    val jobPageSize = Option(parameterJobPageSize).map(_.toInt).getOrElse(100)
-
+    val jobPage = Option(request.getParameter(jobTag + ".page")).map(_.toInt).getOrElse(1)
     val currentTime = System.currentTimeMillis()
 
     try {
       new JobPagedTable(
+        request,
         store,
         jobs,
         tableHeaderId,
         jobTag,
         UIUtils.prependBaseUri(request, parent.basePath),
         "jobs", // subPath
-        parameterOtherTable,
         killEnabled,
         currentTime,
-        jobIdTitle,
-        pageSize = jobPageSize,
-        sortColumn = jobSortColumn,
-        desc = jobSortDesc
+        jobIdTitle
       ).table(jobPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -442,15 +421,10 @@ private[ui] class JobDataSource(
   }
 
   private def jobRow(jobData: v1.JobData): JobTableRowData = {
-    val duration: Option[Long] = {
-      jobData.submissionTime.map { start =>
-        val end = jobData.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
-        end - start.getTime()
-      }
-    }
-    val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
+    val duration: Option[Long] = JobDataUtil.getDuration(jobData)
+    val formattedDuration = JobDataUtil.getFormattedDuration(jobData)
     val submissionTime = jobData.submissionTime
-    val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
+    val formattedSubmissionTime = JobDataUtil.getFormattedSubmissionTime(jobData)
     val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store, jobData)
 
     val jobDescription =
@@ -497,21 +471,19 @@ private[ui] class JobDataSource(
 }
 
 private[ui] class JobPagedTable(
+    request: HttpServletRequest,
     store: AppStatusStore,
     data: Seq[v1.JobData],
     tableHeaderId: String,
     jobTag: String,
     basePath: String,
     subPath: String,
-    parameterOtherTable: Iterable[String],
     killEnabled: Boolean,
     currentTime: Long,
-    jobIdTitle: String,
-    pageSize: Int,
-    sortColumn: String,
-    desc: Boolean
+    jobIdTitle: String
   ) extends PagedTable[JobTableRowData] {
-  val parameterPath = basePath + s"/$subPath/?" + parameterOtherTable.mkString("&")
+  private val (sortColumn, desc, pageSize) = getTableParameters(request, jobTag, jobIdTitle)
+  private val parameterPath = basePath + s"/$subPath/?" + getParameterOtherTable(request, jobTag)
 
   override def tableId: String = jobTag + "-table"
 
@@ -548,90 +520,22 @@ private[ui] class JobPagedTable(
   }
 
   override def headers: Seq[Node] = {
-    // Information for each header: title, cssClass, and sortable
-    val jobHeadersAndCssClasses: Seq[(String, String, Boolean, Option[String])] =
+    // Information for each header: title, sortable, tooltip
+    val jobHeadersAndCssClasses: Seq[(String, Boolean, Option[String])] =
       Seq(
-        (jobIdTitle, "", true, None),
-        ("Description", "", true, None),
-        ("Submitted", "", true, None),
-        ("Duration", "", true, Some("Elapsed time since the job was submitted " +
+        (jobIdTitle, true, None),
+        ("Description", true, None),
+        ("Submitted", true, None),
+        ("Duration", true, Some("Elapsed time since the job was submitted " +
           "until execution completion of all its stages.")),
-        ("Stages: Succeeded/Total", "", false, None),
-        ("Tasks (for all stages): Succeeded/Total", "", false, None)
+        ("Stages: Succeeded/Total", false, None),
+        ("Tasks (for all stages): Succeeded/Total", false, None)
       )
 
-    if (!jobHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
-      throw new IllegalArgumentException(s"Unknown column: $sortColumn")
-    }
+    isSortColumnValid(jobHeadersAndCssClasses, sortColumn)
 
-    val headerRow: Seq[Node] = {
-      jobHeadersAndCssClasses.map { case (header, cssClass, sortable, tooltip) =>
-        if (header == sortColumn) {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$jobTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$jobTag.desc=${!desc}" +
-              s"&$jobTag.pageSize=$pageSize" +
-              s"#$tableHeaderId")
-          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-
-          <th class={cssClass}>
-            <a href={headerLink}>
-              {
-                if (tooltip.nonEmpty) {
-                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
-                    {header}&nbsp;{Unparsed(arrow)}
-                  </span>
-                } else {
-                  <span>
-                    {header}&nbsp;{Unparsed(arrow)}
-                  </span>
-                }
-              }
-            </a>
-          </th>
-        } else {
-          if (sortable) {
-            val headerLink = Unparsed(
-              parameterPath +
-                s"&$jobTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-                s"&$jobTag.pageSize=$pageSize" +
-                s"#$tableHeaderId")
-
-            <th class={cssClass}>
-              <a href={headerLink}>
-                {
-                  if (tooltip.nonEmpty) {
-                    <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
-                      {header}
-                    </span>
-                  } else {
-                    <span>
-                      {header}
-                    </span>
-                  }
-                }
-               </a>
-            </th>
-          } else {
-            <th class={cssClass}>
-              {
-                if (tooltip.nonEmpty) {
-                  <span data-toggle="tooltip" data-placement="top" title={tooltip.get}>
-                    {header}
-                  </span>
-                } else {
-                  <span>
-                    {header}
-                  </span>
-                }
-              }
-            </th>
-          }
-        }
-      }
-    }
-    <thead><tr>{headerRow}</tr></thead>
+    headerRow(jobHeadersAndCssClasses, desc, pageSize, sortColumn, parameterPath,
+      jobTag, tableHeaderId)
   }
 
   override def row(jobTableRow: JobTableRowData): Seq[Node] = {

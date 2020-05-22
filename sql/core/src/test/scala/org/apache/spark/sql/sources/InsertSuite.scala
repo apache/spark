@@ -524,15 +524,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("new partitions should be added to catalog after writing to catalog table") {
     val table = "partitioned_catalog_table"
+    val tempTable = "partitioned_catalog_temp_table"
     val numParts = 210
     withTable(table) {
-      val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
-      val tempTable = "partitioned_catalog_temp_table"
-      df.createOrReplaceTempView(tempTable)
-      sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
-      sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
-      val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
-      assert(partitions.size == numParts)
+      withTempView(tempTable) {
+        val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
+        df.createOrReplaceTempView(tempTable)
+        sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
+        sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
+        val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
+        assert(partitions.size == numParts)
+      }
     }
   }
 
@@ -846,16 +848,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-29174 Support LOCAL in INSERT OVERWRITE DIRECTORY to data source") {
     withTempPath { dir =>
       val path = dir.toURI.getPath
-      sql(s"""create table tab1 ( a int) location '$path'""")
+      sql(s"""create table tab1 ( a int) using parquet location '$path'""")
       sql("insert into tab1 values(1)")
       checkAnswer(sql("select * from tab1"), Seq(1).map(i => Row(i)))
-      sql("create table tab2 ( a int)")
+      sql("create table tab2 ( a int) using parquet")
       sql("insert into tab2 values(2)")
       checkAnswer(sql("select * from tab2"), Seq(2).map(i => Row(i)))
       sql(s"""insert overwrite local directory '$path' using parquet select * from tab2""")
       sql("refresh table tab1")
       checkAnswer(sql("select * from tab1"), Seq(2).map(i => Row(i)))
-      }
+    }
   }
 
   test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {

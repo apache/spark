@@ -635,12 +635,14 @@ class JDBCSuite extends QueryTest
   }
 
   test("test DATE types in cache") {
-    val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
-    spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
-      .cache().createOrReplaceTempView("mycached_date")
-    val cachedRows = sql("select * from mycached_date").collect()
-    assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
-    assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    withTempView("mycached_date") {
+      val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+      spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+        .cache().createOrReplaceTempView("mycached_date")
+      val cachedRows = sql("select * from mycached_date").collect()
+      assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+      assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    }
   }
 
   test("test types for null value") {
@@ -1698,5 +1700,19 @@ class JDBCSuite extends QueryTest
     assert(JdbcDialects.get("jdbc:Oracle://localhost/db") === OracleDialect)
     assert(JdbcDialects.get("jdbc:teradata://localhost/db") === TeradataDialect)
     assert(JdbcDialects.get("jdbc:Teradata://localhost/db") === TeradataDialect)
+  }
+
+  test("SQLContext.jdbc (deprecated)") {
+    val sqlContext = spark.sqlContext
+    var jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE")
+    checkAnswer(jdbcDF, Row("fred", 1) :: Row("mary", 2) :: Row ("joe 'foo' \"bar\"", 3) :: Nil)
+
+    jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3)
+    checkNumPartitions(jdbcDF, 3)
+    checkAnswer(jdbcDF, Row("fred", 1) :: Row("mary", 2) :: Row ("joe 'foo' \"bar\"", 3) :: Nil)
+
+    val parts = Array[String]("THEID = 2")
+    jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts)
+    checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
   }
 }

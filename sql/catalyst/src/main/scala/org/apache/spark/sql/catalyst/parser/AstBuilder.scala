@@ -104,6 +104,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
+  def parseRawDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
+    typedVisit[DataType](ctx.dataType())
+  }
+
   /* ********************************************************************************************
    * Plan parsing
    * ******************************************************************************************** */
@@ -625,7 +629,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case p: Predicate => p
       case e => Cast(e, BooleanType)
     }
-    Filter(predicate, plan)
+    UnresolvedHaving(predicate, plan)
   }
 
   /**
@@ -1369,7 +1373,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Add a predicate to the given expression. Supported expressions are:
    * - (NOT) BETWEEN
    * - (NOT) IN
-   * - (NOT) LIKE
+   * - (NOT) LIKE (ANY | SOME | ALL)
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
    * - IS (NOT) (TRUE | FALSE | UNKNOWN)
@@ -1387,6 +1391,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case other => Seq(other)
     }
 
+    def getLikeQuantifierExprs(expressions: java.util.List[ExpressionContext]): Seq[Expression] = {
+      if (expressions.isEmpty) {
+        throw new ParseException("Expected something between '(' and ')'.", ctx)
+      } else {
+        expressions.asScala.map(expression).map(p => invertIfNotDefined(new Like(e, p)))
+      }
+    }
+
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1399,14 +1411,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
-        val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
-          if (str.length != 1) {
-            throw new ParseException("Invalid escape string." +
-              "Escape string must contains only one character.", ctx)
-          }
-          str.charAt(0)
-        }.getOrElse('\\')
-        invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
+        Option(ctx.quantifier).map(_.getType) match {
+          case Some(SqlBaseParser.ANY) | Some(SqlBaseParser.SOME) =>
+            getLikeQuantifierExprs(ctx.expression).reduceLeft(Or)
+          case Some(SqlBaseParser.ALL) =>
+            getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
+          case _ =>
+            val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
+              if (str.length != 1) {
+                throw new ParseException("Invalid escape string." +
+                  "Escape string must contain only one character.", ctx)
+              }
+              str.charAt(0)
+            }.getOrElse('\\')
+            invertIfNotDefined(Like(e, expression(ctx.pattern), escapeChar))
+        }
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
       case SqlBaseParser.NULL if ctx.NOT != null =>
@@ -1545,12 +1564,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Extract expression.
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
-    val fieldStr = ctx.field.getText
-    val source = expression(ctx.source)
-    val extractField = DatePart.parseExtractField(fieldStr, source, {
-      throw new ParseException(s"Literals of type '$fieldStr' are currently not supported.", ctx)
-    })
-    new DatePart(Literal(fieldStr), expression(ctx.source), extractField)
+    val arguments = Seq(Literal(ctx.field.getText), expression(ctx.source))
+    UnresolvedFunction("extract", arguments, isDistinct = false)
   }
 
   /**
@@ -2779,7 +2794,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case Some(query) =>
         CreateTableAsSelectStatement(
           table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
-          ifNotExists = ifNotExists)
+          writeOptions = Map.empty, ifNotExists = ifNotExists)
 
       case None if temp =>
         // CREATE TEMPORARY TABLE ... USING ... is not supported by the catalyst parser.
@@ -2834,7 +2849,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
       case Some(query) =>
         ReplaceTableAsSelectStatement(table, query, partitioning, bucketSpec, properties,
-          provider, options, location, comment, orCreate = orCreate)
+          provider, options, location, comment, writeOptions = Map.empty, orCreate = orCreate)
 
       case _ =>
         ReplaceTableStatement(table, schema.getOrElse(new StructType), partitioning,
@@ -2895,6 +2910,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Option(ctx.ns).map(visitMultipartIdentifier),
       string(ctx.pattern),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+  }
+
+  /**
+   * Create a [[ShowViews]] command.
+   */
+  override def visitShowViews(ctx: ShowViewsContext): LogicalPlan = withOrigin(ctx) {
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowViews(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
+      Option(ctx.pattern).map(string))
   }
 
   override def visitColPosition(ctx: ColPositionContext): ColumnPosition = {
@@ -3543,7 +3568,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitShowTblProperties(
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
-      UnresolvedTable(visitMultipartIdentifier(ctx.table)),
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.table)),
       Option(ctx.key).map(visitTablePropertyKey))
   }
 

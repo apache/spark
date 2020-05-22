@@ -99,7 +99,7 @@ This page displays the details of a specific job identified by its job ID.
 The Stages tab displays a summary page that shows the current state of all stages of all jobs in
 the Spark application.
 
-At the beginning of the page is the summary with the count of all stages by status (active, pending, completed, sikipped, and failed)
+At the beginning of the page is the summary with the count of all stages by status (active, pending, completed, skipped, and failed)
 
 <p style="text-align: center;">
   <img src="img/AllStagesPageDetail1.png" title="Stages header" alt="Stages header" width="30%">
@@ -136,13 +136,14 @@ Summary metrics for all task are represented in a table and in a timeline.
 * **[Tasks deserialization time](configuration.html#compression-and-serialization)**
 * **Duration of tasks**.
 * **GC time** is the total JVM garbage collection time.
-* **Result serialization time** is the time spent serializing the task result on a executor before sending it back to the driver.
+* **Result serialization time** is the time spent serializing the task result on an executor before sending it back to the driver.
 * **Getting result time** is the time that the driver spends fetching task results from workers.
 * **Scheduler delay** is the time the task waits to be scheduled for execution.
 * **Peak execution memory** is the maximum memory used by the internal data structures created during shuffles, aggregations and joins.
 * **Shuffle Read Size / Records**. Total shuffle bytes read, includes both data read locally and data read from remote executors.
 * **Shuffle Read Blocked Time** is the time that tasks spent blocked waiting for shuffle data to be read from remote machines.
 * **Shuffle Remote Reads** is the total shuffle bytes read from remote executors.
+* **Shuffle Write Time** is the time that tasks spent writing shuffle data.
 * **Shuffle spill (memory)** is the size of the deserialized form of the shuffled data in memory.
 * **Shuffle spill (disk)** is the size of the serialized form of the data on disk.
 

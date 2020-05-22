@@ -17,123 +17,14 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable.ArrayBuilder
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml._
-import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.stat.{FValueTest, SelectionTestResult}
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.stat.FValueTest
 import org.apache.spark.ml.util._
-import org.apache.spark.sql._
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.{DataFrame, Dataset}
 
-
-/**
- * Params for [[FValueSelector]] and [[FValueSelectorModel]].
- */
-private[feature] trait FValueSelectorParams extends Params
-  with HasFeaturesCol with HasOutputCol with HasLabelCol {
-
-  /**
-   * Number of features that selector will select, ordered by ascending p-value. If the
-   * number of features is less than numTopFeatures, then this will select all features.
-   * Only applicable when selectorType = "numTopFeatures".
-   * The default value of numTopFeatures is 50.
-   *
-   * @group param
-   */
-  @Since("3.1.0")
-  final val numTopFeatures = new IntParam(this, "numTopFeatures",
-    "Number of features that selector will select, ordered by ascending p-value. If the" +
-      " number of features is < numTopFeatures, then this will select all features.",
-    ParamValidators.gtEq(1))
-  setDefault(numTopFeatures -> 50)
-
-  /** @group getParam */
-  @Since("3.1.0")
-  def getNumTopFeatures: Int = $(numTopFeatures)
-
-  /**
-   * Percentile of features that selector will select, ordered by ascending p-value.
-   * Only applicable when selectorType = "percentile".
-   * Default value is 0.1.
-   * @group param
-   */
-  @Since("3.1.0")
-  final val percentile = new DoubleParam(this, "percentile",
-    "Percentile of features that selector will select, ordered by ascending p-value.",
-    ParamValidators.inRange(0, 1))
-  setDefault(percentile -> 0.1)
-
-  /** @group getParam */
-  @Since("3.1.0")
-  def getPercentile: Double = $(percentile)
-
-  /**
-   * The lowest p-value for features to be kept.
-   * Only applicable when selectorType = "fpr".
-   * Default value is 0.05.
-   * @group param
-   */
-  @Since("3.1.0")
-  final val fpr = new DoubleParam(this, "fpr", "The lowest p-value for features to be kept.",
-    ParamValidators.inRange(0, 1))
-  setDefault(fpr -> 0.05)
-
-  /** @group getParam */
-  @Since("3.1.0")
-  def getFpr: Double = $(fpr)
-
-  /**
-   * The upper bound of the expected false discovery rate.
-   * Only applicable when selectorType = "fdr".
-   * Default value is 0.05.
-   * @group param
-   */
-  @Since("3.1.0")
-  final val fdr = new DoubleParam(this, "fdr",
-    "The upper bound of the expected false discovery rate.", ParamValidators.inRange(0, 1))
-  setDefault(fdr -> 0.05)
-
-  /** @group getParam */
-  def getFdr: Double = $(fdr)
-
-  /**
-   * The upper bound of the expected family-wise error rate.
-   * Only applicable when selectorType = "fwe".
-   * Default value is 0.05.
-   * @group param
-   */
-  @Since("3.1.0")
-  final val fwe = new DoubleParam(this, "fwe",
-    "The upper bound of the expected family-wise error rate.", ParamValidators.inRange(0, 1))
-  setDefault(fwe -> 0.05)
-
-  /** @group getParam */
-  def getFwe: Double = $(fwe)
-
-  /**
-   * The selector type.
-   * Supported options: "numTopFeatures" (default), "percentile", "fpr", "fdr", "fwe"
-   * @group param
-   */
-  @Since("3.1.0")
-  final val selectorType = new Param[String](this, "selectorType",
-    "The selector type. Supported options: numTopFeatures, percentile, fpr, fdr, fwe",
-    ParamValidators.inArray(Array("numTopFeatures", "percentile", "fpr", "fdr",
-      "fwe")))
-  setDefault(selectorType -> "numTopFeatures")
-
-  /** @group getParam */
-  @Since("3.1.0")
-  def getSelectorType: String = $(selectorType)
-}
 
 /**
  * F Value Regression feature selector, which selects continuous features to use for predicting a
@@ -154,103 +45,73 @@ private[feature] trait FValueSelectorParams extends Params
  * set to 50.
  */
 @Since("3.1.0")
-final class FValueSelector @Since("3.1.0") (override val uid: String)
-  extends Estimator[FValueSelectorModel] with FValueSelectorParams
-    with DefaultParamsWritable {
+final class FValueSelector @Since("3.1.0") (@Since("3.1.0") override val uid: String) extends
+  Selector[FValueSelectorModel] {
 
   @Since("3.1.0")
   def this() = this(Identifiable.randomUID("FValueSelector"))
 
   /** @group setParam */
   @Since("3.1.0")
-  def setNumTopFeatures(value: Int): this.type = set(numTopFeatures, value)
+  override def setNumTopFeatures(value: Int): this.type = super.setNumTopFeatures(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setPercentile(value: Double): this.type = set(percentile, value)
+  override def setPercentile(value: Double): this.type = super.setPercentile(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setFpr(value: Double): this.type = set(fpr, value)
+  override def setFpr(value: Double): this.type = super.setFpr(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setFdr(value: Double): this.type = set(fdr, value)
+  override def setFdr(value: Double): this.type = super.setFdr(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setFwe(value: Double): this.type = set(fwe, value)
+  override def setFwe(value: Double): this.type = super.setFwe(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setSelectorType(value: String): this.type = set(selectorType, value)
+  override def setSelectorType(value: String): this.type = super.setSelectorType(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+  override def setFeaturesCol(value: String): this.type = super.setFeaturesCol(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setOutputCol(value: String): this.type = set(outputCol, value)
+  override def setOutputCol(value: String): this.type = super.setOutputCol(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setLabelCol(value: String): this.type = set(labelCol, value)
+  override def setLabelCol(value: String): this.type = super.setLabelCol(value)
+
+  /**
+   * get the SelectionTestResult for every feature against the label
+   */
+  protected[this] override def getSelectionTestResult(df: DataFrame): DataFrame = {
+    FValueTest.test(df, getFeaturesCol, getLabelCol, true)
+  }
+
+  /**
+   * Create a new instance of concrete SelectorModel.
+   * @param indices The indices of the selected features
+   * @return A new SelectorModel instance
+   */
+  protected[this] def createSelectorModel(
+      uid: String,
+      indices: Array[Int]): FValueSelectorModel = {
+    new FValueSelectorModel(uid, indices)
+  }
 
   @Since("3.1.0")
   override def fit(dataset: Dataset[_]): FValueSelectorModel = {
-    transformSchema(dataset.schema, logging = true)
-
-    val testResult = FValueTest.testRegression(dataset, getFeaturesCol, getLabelCol)
-      .zipWithIndex
-    val features = $(selectorType) match {
-      case "numTopFeatures" =>
-        testResult
-          .sortBy { case (res, _) => res.pValue }
-          .take(getNumTopFeatures)
-      case "percentile" =>
-        testResult
-          .sortBy { case (res, _) => res.pValue }
-          .take((testResult.length * getPercentile).toInt)
-      case "fpr" =>
-        testResult
-          .filter { case (res, _) => res.pValue < getFpr }
-      case "fdr" =>
-        // This uses the Benjamini-Hochberg procedure.
-        // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
-        val tempRes = testResult
-          .sortBy { case (res, _) => res.pValue }
-        val selected = tempRes
-          .zipWithIndex
-          .filter { case ((res, _), index) =>
-            res.pValue <= getFdr * (index + 1) / testResult.length
-          }
-        if (selected.isEmpty) {
-          Array.empty[(SelectionTestResult, Int)]
-        } else {
-          val maxIndex = selected.map(_._2).max
-          tempRes.take(maxIndex + 1)
-        }
-      case "fwe" =>
-        testResult
-          .filter { case (res, _) => res.pValue < getFwe / testResult.length }
-      case errorType =>
-        throw new IllegalStateException(s"Unknown Selector Type: $errorType")
-    }
-    val indices = features.map { case (_, index) => index }
-    copyValues(new FValueSelectorModel(uid, indices.sorted)
-      .setParent(this))
+    super.fit(dataset)
   }
 
   @Since("3.1.0")
-  override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.checkNumericType(schema, $(labelCol))
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
-  }
-
-  @Since("3.1.0")
-  override def copy(extra: ParamMap): FValueSelector = defaultCopy(extra)
+  override def copy(extra: ParamMap): this.type = defaultCopy(extra)
 }
 
 @Since("3.1.0")
@@ -261,72 +122,21 @@ object FValueSelector extends DefaultParamsReadable[FValueSelector] {
 }
 
 /**
- * Model fitted by [[FValueSelector]].
+ * Model fitted by [[FValueSelector]]
  */
 @Since("3.1.0")
 class FValueSelectorModel private[ml](
-    override val uid: String,
-    val selectedFeatures: Array[Int])
-  extends Model[FValueSelectorModel] with FValueSelectorParams with MLWritable {
-
-  var prev = -1
-  selectedFeatures.foreach { i =>
-    require(prev < i, s"Index $i follows $prev and is not strictly increasing")
-    prev = i
-  }
+    @Since("3.1.0") override val uid: String,
+    @Since("3.1.0") override val selectedFeatures: Array[Int])
+  extends SelectorModel[FValueSelectorModel] (uid, selectedFeatures) {
 
   /** @group setParam */
   @Since("3.1.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+  override def setFeaturesCol(value: String): this.type = super.setFeaturesCol(value)
 
   /** @group setParam */
   @Since("3.1.0")
-  def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  @Since("3.1.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    val outputSchema = transformSchema(dataset.schema, logging = true)
-
-    val newSize = selectedFeatures.length
-    val func = { vector: Vector =>
-      vector match {
-        case SparseVector(_, indices, values) =>
-          val (newIndices, newValues) = compressSparse(indices, values)
-          Vectors.sparse(newSize, newIndices, newValues)
-        case DenseVector(values) =>
-          Vectors.dense(selectedFeatures.map(i => values(i)))
-        case other =>
-          throw new UnsupportedOperationException(
-            s"Only sparse and dense vectors are supported but got ${other.getClass}.")
-      }
-    }
-
-    val transformer = udf(func)
-    dataset.withColumn($(outputCol), transformer(col($(featuresCol))),
-      outputSchema($(outputCol)).metadata)
-  }
-
-  @Since("3.1.0")
-  override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    val newField = prepOutputField(schema)
-    SchemaUtils.appendColumn(schema, newField)
-  }
-
-  /**
-   * Prepare the output column field, including per-feature metadata.
-   */
-  private def prepOutputField(schema: StructType): StructField = {
-    val selector = selectedFeatures.toSet
-    val origAttrGroup = AttributeGroup.fromStructField(schema($(featuresCol)))
-    val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
-      origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
-    } else {
-      Array.fill[Attribute](selector.size)(NominalAttribute.defaultAttr)
-    }
-    val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
-    newAttributeGroup.toStructField()
-  }
+  override def setOutputCol(value: String): this.type = super.setOutputCol(value)
 
   @Since("3.1.0")
   override def copy(extra: ParamMap): FValueSelectorModel = {
@@ -336,41 +146,11 @@ class FValueSelectorModel private[ml](
   }
 
   @Since("3.1.0")
-  override def write: MLWriter = new FValueSelectorModel.
-  FValueSelectorModelWriter(this)
+  override def write: MLWriter = new FValueSelectorModel.FValueSelectorModelWriter(this)
 
   @Since("3.1.0")
   override def toString: String = {
     s"FValueSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
-  }
-
-  private[spark] def compressSparse(
-      indices: Array[Int],
-      values: Array[Double]): (Array[Int], Array[Double]) = {
-    val newValues = new ArrayBuilder.ofDouble
-    val newIndices = new ArrayBuilder.ofInt
-    var i = 0
-    var j = 0
-    var indicesIdx = 0
-    var filterIndicesIdx = 0
-    while (i < indices.length && j < selectedFeatures.length) {
-      indicesIdx = indices(i)
-      filterIndicesIdx = selectedFeatures(j)
-      if (indicesIdx == filterIndicesIdx) {
-        newIndices += j
-        newValues += values(i)
-        j += 1
-        i += 1
-      } else {
-        if (indicesIdx > filterIndicesIdx) {
-          j += 1
-        } else {
-          i += 1
-        }
-      }
-    }
-    // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
-    (newIndices.result(), newValues.result())
   }
 }
 
@@ -378,8 +158,7 @@ class FValueSelectorModel private[ml](
 object FValueSelectorModel extends MLReadable[FValueSelectorModel] {
 
   @Since("3.1.0")
-  override def read: MLReader[FValueSelectorModel] =
-    new FValueSelectorModelReader
+  override def read: MLReader[FValueSelectorModel] = new FValueSelectorModelReader
 
   @Since("3.1.0")
   override def load(path: String): FValueSelectorModel = super.load(path)
@@ -397,8 +176,7 @@ object FValueSelectorModel extends MLReadable[FValueSelectorModel] {
     }
   }
 
-  private class FValueSelectorModelReader extends
-    MLReader[FValueSelectorModel] {
+  private class FValueSelectorModelReader extends MLReader[FValueSelectorModel] {
 
     /** Checked against metadata when loading model */
     private val className = classOf[FValueSelectorModel].getName

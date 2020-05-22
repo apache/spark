@@ -70,13 +70,13 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
     execs.foreach(execId => sched.decommissionExecutor(execId))
-    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 2.seconds)
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 10.seconds)
     assert(asyncCountResult === 10)
     // Try and launch task after decommissioning, this should fail
     val postDecommissioned = input.map(x => x)
     val postDecomAsyncCount = postDecommissioned.countAsync()
     val thrown = intercept[java.util.concurrent.TimeoutException]{
-      val result = ThreadUtils.awaitResult(postDecomAsyncCount, 2.seconds)
+      val result = ThreadUtils.awaitResult(postDecomAsyncCount, 10.seconds)
     }
     assert(postDecomAsyncCount.isCompleted === false,
       "After exec decommission new task could not launch")

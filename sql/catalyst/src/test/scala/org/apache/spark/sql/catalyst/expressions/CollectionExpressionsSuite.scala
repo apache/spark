@@ -27,8 +27,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -845,20 +846,22 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("Sequence on DST boundaries") {
     val timeZone = TimeZone.getTimeZone("Europe/Prague")
-    val dstOffset = timeZone.getDSTSavings
 
-    def noDST(t: Timestamp): Timestamp = new Timestamp(t.getTime - dstOffset)
+    def ts(s: String, noDST: Boolean = false): Long = {
+      val offset = if (noDST) timeZone.getDSTSavings else 0
+      DateTimeUtils.millisToMicros(Timestamp.valueOf(s).getTime - offset)
+    }
 
-    DateTimeTestUtils.withDefaultTimeZone(timeZone) {
+    DateTimeTestUtils.withDefaultTimeZone(timeZone.toZoneId) {
       // Spring time change
       checkEvaluation(new Sequence(
         Literal(Timestamp.valueOf("2018-03-25 01:30:00")),
         Literal(Timestamp.valueOf("2018-03-25 03:30:00")),
         Literal(stringToInterval("interval 30 minutes"))),
         Seq(
-          Timestamp.valueOf("2018-03-25 01:30:00"),
-          Timestamp.valueOf("2018-03-25 03:00:00"),
-          Timestamp.valueOf("2018-03-25 03:30:00")))
+          ts("2018-03-25 01:30:00"),
+          ts("2018-03-25 03:00:00"),
+          ts("2018-03-25 03:30:00")))
 
       // Autumn time change
       checkEvaluation(new Sequence(
@@ -866,18 +869,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal(Timestamp.valueOf("2018-10-28 03:30:00")),
         Literal(stringToInterval("interval 30 minutes"))),
         Seq(
-          Timestamp.valueOf("2018-10-28 01:30:00"),
-          noDST(Timestamp.valueOf("2018-10-28 02:00:00")),
-          noDST(Timestamp.valueOf("2018-10-28 02:30:00")),
-          Timestamp.valueOf("2018-10-28 02:00:00"),
-          Timestamp.valueOf("2018-10-28 02:30:00"),
-          Timestamp.valueOf("2018-10-28 03:00:00"),
-          Timestamp.valueOf("2018-10-28 03:30:00")))
+          ts("2018-10-28 01:30:00"),
+          ts("2018-10-28 02:00:00", noDST = true),
+          ts("2018-10-28 02:30:00", noDST = true),
+          ts("2018-10-28 02:00:00"),
+          ts("2018-10-28 02:30:00"),
+          ts("2018-10-28 03:00:00"),
+          ts("2018-10-28 03:30:00")))
     }
   }
 
   test("Sequence of dates") {
-    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+    DateTimeTestUtils.withDefaultTimeZone(UTC) {
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2018-01-01")),
         Literal(Date.valueOf("2018-01-05")),

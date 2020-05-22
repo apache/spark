@@ -193,6 +193,26 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(rprof.taskResources("cpus").amount === 1, "Task resources should have cpu")
   }
 
+  test("test ResourceProfiles equal") {
+    val rprofBuilder = new ResourceProfileBuilder()
+    val taskReq = new TaskResourceRequests().resource("gpu", 1)
+    val eReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
+    rprofBuilder.require(taskReq).require(eReq)
+    val rprof = rprofBuilder.build
+
+    val rprofBuilder2 = new ResourceProfileBuilder()
+    val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
+    val eReq2 = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
+    rprofBuilder2.require(taskReq2).require(eReq2)
+    val rprof2 = rprofBuilder.build
+    rprof2.setResourceProfileId(rprof.id)
+
+    assert(rprof === rprof2, "resource profile equality not working")
+    rprof2.setResourceProfileId(rprof.id + 1)
+    assert(rprof.id != rprof2.id, "resource profiles should not have same id")
+    assert(rprof.resourcesEqual(rprof2), "resource profile resourcesEqual not working")
+  }
+
   test("Test ExecutorResourceRequests memory helpers") {
     val rprof = new ResourceProfileBuilder()
     val ereqs = new ExecutorResourceRequests()

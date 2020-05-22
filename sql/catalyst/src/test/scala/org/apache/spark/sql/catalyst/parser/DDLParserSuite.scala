@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1225,14 +1226,23 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SHOW TABLES"),
       ShowTables(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
+      parsePlan("SHOW TABLES '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW TABLES LIKE '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+    comparePlans(
       parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
       ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
       ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
-      parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
-      ShowTables(UnresolvedNamespace(Seq("tbl")), Some("*dog*")))
+      parsePlan("SHOW TABLES IN ns1 '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW TABLES IN ns1 LIKE '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
   }
 
   test("show table extended") {
@@ -1258,6 +1268,30 @@ class DDLParserSuite extends AnalysisTest {
         "PARTITION(ds='2008-04-09')"),
       ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
         Some(Map("ds" -> "2008-04-09"))))
+  }
+
+  test("show views") {
+    comparePlans(
+      parsePlan("SHOW VIEWS"),
+      ShowViews(UnresolvedNamespace(Seq.empty[String]), None))
+    comparePlans(
+      parsePlan("SHOW VIEWS '*test*'"),
+      ShowViews(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW VIEWS LIKE '*test*'"),
+      ShowViews(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW VIEWS FROM testcat.ns1.ns2.tbl"),
+      ShowViews(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW VIEWS IN testcat.ns1.ns2.tbl"),
+      ShowViews(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW VIEWS IN ns1 '*test*'"),
+      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW VIEWS IN ns1 LIKE '*test*'"),
+      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
   }
 
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
@@ -1525,7 +1559,7 @@ class DDLParserSuite extends AnalysisTest {
       AnalyzeColumnStatement(Seq("a", "b", "c"), None, allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      "mismatched input 'key' expecting <EOF>")
+      "mismatched input 'key' expecting {<EOF>, ';'}")
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL",
       "missing 'COLUMNS' at '<EOF>'")
   }
@@ -1976,11 +2010,11 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTableProperties(UnresolvedTable(Seq("a", "b", "c")), None))
+      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c")), None))
 
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
-      ShowTableProperties(UnresolvedTable(Seq("a", "b", "c")), Some("propKey1")))
+      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c")), Some("propKey1")))
   }
 
   test("DESCRIBE FUNCTION") {
@@ -2162,7 +2196,8 @@ class DDLParserSuite extends AnalysisTest {
       CommentOnTable(UnresolvedTable(Seq("a", "b", "c")), "xYz"))
   }
 
-  test("create table - without using") {
+  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
+  ignore("create table - without using") {
     val sql = "CREATE TABLE 1m.2g(a INT)"
     val expectedTableSpec = TableSpec(
       Seq("1m", "2g"),

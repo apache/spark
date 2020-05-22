@@ -77,7 +77,8 @@ object Cast {
         resolvableNullability(fn || forceNullable(fromType, toType), tn)
 
     case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
-      canCast(fromKey, toKey) && canCastMapKeyNullSafe(fromKey, toKey) &&
+      canCast(fromKey, toKey) &&
+        (!forceNullable(fromKey, toKey)) &&
         canCast(fromValue, toValue) &&
         resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
 
@@ -95,11 +96,6 @@ object Cast {
       true
 
     case _ => false
-  }
-
-  def canCastMapKeyNullSafe(fromType: DataType, toType: DataType): Boolean = {
-    // If the original map key type is NullType, it's OK as the map must be empty.
-    fromType == NullType || !forceNullable(fromType, toType)
   }
 
   /**
@@ -210,8 +206,13 @@ object Cast {
     case _ => false  // overflow
   }
 
+  /**
+   * Returns `true` if casting non-nullable values from `from` type to `to` type
+   * may return null. Note that the caller side should take care of input nullability
+   * first and only call this method if the input is not nullable.
+   */
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (NullType, _) => true
+    case (NullType, _) => false // empty array or map case
     case (_, _) if from == to => false
 
     case (StringType, BinaryType) => false
@@ -269,7 +270,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
+  override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
   protected def ansiEnabled: Boolean
 
@@ -278,7 +279,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
 
-  private[this] def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
+  def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
@@ -510,7 +511,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType if ansiEnabled =>
-      buildCast[Long](_, t => LongExactNumeric.toInt(timestampToLong(t)))
+      buildCast[Long](_, t => {
+        val longValue = timestampToLong(t)
+        if (longValue == longValue.toInt) {
+          longValue.toInt
+        } else {
+          throw new ArithmeticException(s"Casting $t to int causes overflow")
+        }
+      })
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
@@ -1707,6 +1715,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   """)
 case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
@@ -1723,6 +1732,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
  */
 case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
@@ -1732,8 +1742,16 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
 /**
  * Cast the child expression to the target data type, but will throw error if the cast might
  * truncate, e.g. long -> int, timestamp -> data.
+ *
+ * Note: `target` is `AbstractDataType`, so that we can put `object DecimalType`, which means
+ * we accept `DecimalType` with any valid precision/scale.
  */
-case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String] = Nil)
+case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
+
+  def dataType: DataType = target match {
+    case DecimalType => DecimalType.SYSTEM_DEFAULT
+    case _ => target.asInstanceOf[DataType]
+  }
 }

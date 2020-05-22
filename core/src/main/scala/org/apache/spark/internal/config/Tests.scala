@@ -73,4 +73,14 @@ private[spark] object Tests {
       .booleanConf
       .createWithDefault(false)
 
+  // This configuration is used for unit tests to allow skipping the task cpus to cores validation
+  // to allow emulating standalone mode behavior while running in local mode. Standalone mode
+  // by default doesn't specify a number of executor cores, it just uses all the ones available
+  // on the host.
+  val SKIP_VALIDATE_CORES_TESTING =
+    ConfigBuilder("spark.testing.skipValidateCores")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.sql.Timestamp
 import java.text.{ParseException, ParsePosition, SimpleDateFormat}
 import java.time._
 import java.time.format.{DateTimeFormatter, DateTimeParseException}
@@ -30,6 +31,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.types.Decimal
@@ -48,7 +50,10 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
   def parse(s: String): Long
+
   def format(us: Long): String
+  def format(ts: Timestamp): String
+  def format(instant: Instant): String
 }
 
 class Iso8601TimestampFormatter(
@@ -82,9 +87,17 @@ class Iso8601TimestampFormatter(
     }
   }
 
+  override def format(instant: Instant): String = {
+    formatter.withZone(zoneId).format(instant)
+  }
+
   override def format(us: Long): String = {
     val instant = DateTimeUtils.microsToInstant(us)
-    formatter.withZone(zoneId).format(instant)
+    format(instant)
+  }
+
+  override def format(ts: Timestamp): String = {
+    legacyFormatter.format(ts)
   }
 }
 
@@ -98,10 +111,27 @@ class Iso8601TimestampFormatter(
  */
 class FractionTimestampFormatter(zoneId: ZoneId)
   extends Iso8601TimestampFormatter(
-    "", zoneId, TimestampFormatter.defaultLocale, needVarLengthSecondFraction = false) {
+    TimestampFormatter.defaultPattern,
+    zoneId,
+    TimestampFormatter.defaultLocale,
+    needVarLengthSecondFraction = false) {
 
   @transient
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
+
+  // The new formatter will omit the trailing 0 in the timestamp string, but the legacy formatter
+  // can't. Here we borrow the code from Spark 2.4 DateTimeUtils.timestampToString to omit the
+  // trailing 0 for the legacy formatter as well.
+  override def format(ts: Timestamp): String = {
+    val timestampString = ts.toString
+    val formatted = legacyFormatter.format(ts)
+
+    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
+      formatted + timestampString.substring(19)
+    } else {
+      formatted
+    }
+  }
 }
 
 /**
@@ -147,20 +177,30 @@ class LegacyFastTimestampFormatter(
     fastDateFormat.getTimeZone,
     fastDateFormat.getPattern.count(_ == 'S'))
 
-  def parse(s: String): SQLTimestamp = {
+  override def parse(s: String): SQLTimestamp = {
     cal.clear() // Clear the calendar because it can be re-used many times
     if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
       throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
     }
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
-    Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
+    val julianMicros = Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
+    rebaseJulianToGregorianMicros(julianMicros)
   }
 
-  def format(timestamp: SQLTimestamp): String = {
-    cal.setTimeInMillis(Math.floorDiv(timestamp, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
-    cal.setMicros(Math.floorMod(timestamp, MICROS_PER_SECOND))
+  override def format(timestamp: SQLTimestamp): String = {
+    val julianMicros = rebaseGregorianToJulianMicros(timestamp)
+    cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
+    cal.setMicros(Math.floorMod(julianMicros, MICROS_PER_SECOND))
     fastDateFormat.format(cal)
+  }
+
+  override def format(ts: Timestamp): String = {
+    format(fromJavaTimestamp(ts))
+  }
+
+  override def format(instant: Instant): String = {
+    format(instantToMicros(instant))
   }
 }
 
@@ -177,12 +217,19 @@ class LegacySimpleTimestampFormatter(
   }
 
   override def parse(s: String): Long = {
-    millisToMicros(sdf.parse(s).getTime)
+    fromJavaTimestamp(new Timestamp(sdf.parse(s).getTime))
   }
 
   override def format(us: Long): String = {
-    val timestamp = DateTimeUtils.toJavaTimestamp(us)
-    sdf.format(timestamp)
+    sdf.format(toJavaTimestamp(us))
+  }
+
+  override def format(ts: Timestamp): String = {
+    sdf.format(ts)
+  }
+
+  override def format(instant: Instant): String = {
+    format(instantToMicros(instant))
   }
 }
 
