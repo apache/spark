@@ -961,4 +961,4 @@ Below are the scenarios in which Hive and Spark generate different results:
 * `SQRT(n)` If n < 0, Hive returns null, Spark SQL returns NaN.
 * `ACOS(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
 * `ASIN(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
-* `CAST(n,TIMESTAMPTYPE)` If n is Byte/Short/Int/Long data type, Hive treat n as milliseconds unit , while Spark SQL as seconds unit.
+* `CAST(n as timestamp)` If n is Byte/Short/Int/Long data type, Hive treat n as milliseconds unit , while Spark SQL as seconds unit.
