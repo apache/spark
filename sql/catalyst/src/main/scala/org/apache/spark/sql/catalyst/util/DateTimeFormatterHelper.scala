@@ -140,9 +140,10 @@ trait DateTimeFormatterHelper {
         case _: Throwable => throw e
       }
       throw new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
-        s" new parser. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to" +
-        s" restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with" +
-        s" the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html", e)
+        s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
+        s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
+        s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+        e)
   }
 }
 
