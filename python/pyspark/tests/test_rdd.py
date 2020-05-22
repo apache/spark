@@ -169,7 +169,7 @@ class RDDTests(ReusedPySparkTestCase):
         )
 
     def test_union_pair_rdd(self):
-       # Regression test for SPARK-31788
+        # Regression test for SPARK-31788
         rdd1 = self.sc.parallelize([1, 2])
         rdd2 = self.sc.parallelize([3, 4])
         pair_rdd = rdd1.zip(rdd2)
