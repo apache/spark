@@ -686,7 +686,7 @@ object TypeCoercion {
   }
 
   /**
-   * Since SPARK-16323 `IntegralDivide` always returns long-type value.
+   * The DIV operator always returns long-type value .
    * This rule cast the integral inputs to long type, to avoid overflow during calculation.
    */
   object IntegralDivision extends TypeCoercionRule {
