@@ -61,6 +61,7 @@ object TypeCoercion {
       IfCoercion ::
       StackCoercion ::
       Division ::
+      IntegralDivision ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
@@ -681,6 +682,24 @@ object TypeCoercion {
     private def isNumericOrNull(ex: Expression): Boolean = {
       // We need to handle null types in case a query contains null literals.
       ex.dataType.isInstanceOf[NumericType] || ex.dataType == NullType
+    }
+  }
+
+  /**
+   * From SPARK-16323 division operator returns Long.
+   * So need to add the rule to cast to Long if there operands are of Byte, Short and Integer
+   */
+  object IntegralDivision extends TypeCoercionRule {
+    override protected def coerceTypes(
+                                        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case e if !e.childrenResolved => e
+      case d@IntegralDivide(left, right) =>
+        IntegralDivide(castToLong(left), castToLong(right))
+    }
+
+    def castToLong(expr: Expression): Expression = expr.dataType match {
+      case _: ByteType | _: ShortType | _: IntegerType => Cast(expr, LongType)
+      case _ => expr
     }
   }
 

@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.math.Integral
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator.JAVA_LONG
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -340,19 +337,11 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"${eval2.value} == 0"
     }
-    val isIntegralDiv = this.isInstanceOf[IntegralDivide]
-    // From SPARK-16323 IntegralDivision returns Long data type
-    val javaType = if (isIntegralDiv) JAVA_LONG else CodeGenerator.javaType(dataType)
-    val operandJavaType = if (isIntegralDiv) operandsDataType match {
-      case _: IntegerType => JAVA_LONG
-      case other => CodeGenerator.javaType(other)
-    } else {
-      CodeGenerator.javaType(operandsDataType)
-    }
+    val javaType = CodeGenerator.javaType(dataType)
     val operation = if (operandsDataType.isInstanceOf[DecimalType]) {
       decimalToDataTypeCodeGen(s"${eval1.value}.$decimalMethod(${eval2.value})")
     } else {
-      s"($javaType)(((${operandJavaType})(${eval1.value})) $symbol ${eval2.value})"
+      s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
     if (!left.nullable && !right.nullable) {
       ev.copy(code = code"""
@@ -434,21 +423,13 @@ case class IntegralDivide(
 
   private lazy val div: (Any, Any) => Any = {
     val integral = left.dataType match {
-      // if it is of Integer type than cast it to Long
-      case _: IntegerType =>
-        implicitly[Integral[Long]].asInstanceOf[Integral[Any]]
       case i: IntegralType =>
         i.integral.asInstanceOf[Integral[Any]]
       case d: DecimalType =>
         d.asIntegral.asInstanceOf[Integral[Any]]
     }
     (x, y) => {
-      def convertToLong(data: Any): Any = data match {
-        case i: Integer => i.toLong
-        case other => other
-      }
-
-      val res = integral.quot(convertToLong(x), convertToLong(y))
+      val res = integral.quot(x, y)
       if (res == null) {
         null
       } else {
