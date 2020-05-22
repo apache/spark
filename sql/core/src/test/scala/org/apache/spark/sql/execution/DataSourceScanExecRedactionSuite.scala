@@ -116,6 +116,39 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       assert(isIncluded(df.queryExecution, "Location"))
     }
   }
+
+  test("FileSourceScanExec metadata should contain limited file paths") {
+    withTempPath { path =>
+      val dir = path.getCanonicalPath
+      val partitionCol = "partitionCol"
+      spark.range(10)
+        .select("id", "id")
+        .toDF("value", partitionCol)
+        .write
+        .partitionBy(partitionCol)
+        .orc(dir)
+      val paths = (0 to 9).map(i => dir + "/" + partitionCol + "=" + i)
+      val plan = spark
+        .read
+        .orc(paths: _*)
+        .queryExecution
+        .executedPlan
+      val location = plan collectFirst {
+        case f: FileSourceScanExec => f.metadata("Location")
+      }
+      assert(location.isDefined)
+      var found = false
+      for (index <- 1 to 10) {
+        val tempLocation = paths.slice(0, index).mkString("[", ", ", "]")
+        if (tempLocation.length >= 100 && !found) {
+          found = true
+          for (tempIndex <- 0 until index) {
+            assert(location.get.contains(paths(tempIndex)))
+          }
+        }
+      }
+    }
+  }
 }
 
 /**

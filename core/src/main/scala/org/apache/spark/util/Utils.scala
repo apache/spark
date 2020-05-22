@@ -2904,6 +2904,23 @@ private[spark] object Utils extends Logging {
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
   }
+
+  /**
+   * Convert a sequence of [[Path]] to a metadata string. When the length of metadata string
+   * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
+   */
+  def pathsToMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
+    var metadata = "["
+    var index: Int = 0
+    while (index < paths.length && metadata.length <= stopAppendingThreshold) {
+      if (index > 0) {
+        metadata += ", "
+      }
+      metadata += paths(index).toString
+      index += 1
+    }
+    metadata + "]"
+  }
 }
 
 private[util] object CallerContext extends Logging {
