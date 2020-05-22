@@ -120,6 +120,8 @@ The count of pattern letters determines the format.
     январь
     ```
 
+- AM/PM(a): This outputs the am-pm-of-day. Pattern letter count must be 1.
+
 - Zone ID(V): This outputs the display the time-zone ID. Pattern letter count must be 2.
 
 - Zone names(z): This outputs the display textual name of the time-zone ID. If the count of letters is one, two or three, then the short name is output. If the count of letters is four, then the full name is output. Five or more letters will fail.
