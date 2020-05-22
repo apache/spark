@@ -357,7 +357,6 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .analyze
     comparePlans(optimized1, expected1)
 
-
     val query2 = contact
       .distribute($"name.middle")(1)
       .select($"name.middle")
