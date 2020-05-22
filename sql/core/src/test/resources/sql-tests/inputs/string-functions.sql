@@ -50,6 +50,6 @@ SELECT trim(TRAILING 'xyz' FROM 'testxxzx');
 SELECT trim(TRAILING 'xyz' FROM 'xyztestxxzx');
 SELECT trim(TRAILING 'xy' FROM 'TURNERyxXxy');
 
--- Check lpad/rpad throw an exception for invalid length input
+-- Check lpad/rpad with invalid length parameter
 SELECT lpad('hi', 'invalid_length');
 SELECT rpad('hi', 'invalid_length');
