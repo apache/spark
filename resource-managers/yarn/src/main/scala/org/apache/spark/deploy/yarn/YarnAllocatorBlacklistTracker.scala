@@ -103,7 +103,16 @@ private[spark] class YarnAllocatorBlacklistTracker(
     refreshBlacklistedNodes()
   }
 
-  def isAllNodeBlacklisted: Boolean = currentBlacklistedYarnNodes.size >= numClusterNodes
+  def isAllNodeBlacklisted: Boolean = {
+    if (numClusterNodes <= 0) {
+      logWarn("There's no available nodes reported, please check Resource Manager.")
+      false
+    } else if (currentBlacklistedYarnNodes.size >= numClusterNodes) {
+      true
+    } else {
+      false
+    }
+  }
 
   private def refreshBlacklistedNodes(): Unit = {
     removeExpiredYarnBlacklistedNodes()
