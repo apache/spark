@@ -338,7 +338,7 @@ case class FileSourceScanExec(
     val location = relation.location
     val locationDesc =
       location.getClass.getSimpleName +
-        Utils.pathsToMetadata(location.rootPaths, maxMetadataValueLength)
+        Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,

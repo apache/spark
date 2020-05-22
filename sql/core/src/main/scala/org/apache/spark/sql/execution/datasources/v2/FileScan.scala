@@ -97,7 +97,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
     val maxMetadataValueLength = 100
     val locationDesc =
       fileIndex.getClass.getSimpleName +
-        Utils.pathsToMetadata(fileIndex.rootPaths, maxMetadataValueLength)
+        Utils.buildLocationMetadata(fileIndex.rootPaths, maxMetadataValueLength)
     val metadata: Map[String, String] = Map(
       "ReadSchema" -> readDataSchema.catalogString,
       "PartitionFilters" -> seqToString(partitionFilters),
