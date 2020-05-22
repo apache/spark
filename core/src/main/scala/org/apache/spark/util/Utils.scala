@@ -2912,7 +2912,7 @@ private[spark] object Utils extends Logging {
   def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
     val metadata = new StringBuilder("[")
     var index: Int = 0
-    while (index < paths.length && metadata.length <= stopAppendingThreshold) {
+    while (index < paths.length && metadata.length < stopAppendingThreshold) {
       if (index > 0) {
         metadata.append(", ")
       }
