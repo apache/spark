@@ -686,14 +686,14 @@ object TypeCoercion {
   }
 
   /**
-   * From SPARK-16323 division operator returns Long.
-   * So need to add the rule to cast to Long if there operands are of Byte, Short and Integer
+   * Since SPARK-16323 `IntegralDivide` always returns long-type value.
+   * This rule cast the integral inputs to long type, to avoid overflow during calculation.
    */
   object IntegralDivision extends TypeCoercionRule {
     override protected def coerceTypes(
-                                        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case e if !e.childrenResolved => e
-      case d@IntegralDivide(left, right) =>
+      case d @ IntegralDivide(left, right) =>
         IntegralDivide(castToLong(left), castToLong(right))
     }
 

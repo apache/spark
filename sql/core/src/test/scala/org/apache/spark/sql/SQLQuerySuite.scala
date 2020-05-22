@@ -3504,4 +3504,5 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(Row(Short.MinValue.toLong * -1)))
   }
 }
+
 case class Foo(bar: Option[String])
