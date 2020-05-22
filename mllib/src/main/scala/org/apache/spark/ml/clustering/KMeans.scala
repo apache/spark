@@ -547,7 +547,7 @@ class KMeans @Since("1.5.0") (
       logInfo(s"The cost is $cost.")
 
       val parentModel = new MLlibKMeansModel(centers.map(OldVectors.fromML(_)),
-        distanceMeasure, cost, iteration)
+        ${distanceMeasure}, cost, iteration)
 
       val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
       model
