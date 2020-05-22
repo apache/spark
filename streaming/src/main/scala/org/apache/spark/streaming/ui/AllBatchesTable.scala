@@ -19,27 +19,25 @@ package org.apache.spark.streaming.ui
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Unparsed}
+import scala.xml.Node
 
 import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils => SparkUIUtils}
 
 private[ui] class StreamingPagedTable(
+    request: HttpServletRequest,
     tableTag: String,
     batches: Seq[BatchUIData],
     basePath: String,
     subPath: String,
-    parameterOtherTable: Iterable[String],
-    pageSize: Int,
-    sortColumn: String,
-    desc: Boolean,
     isRunningTable: Boolean,
     isWaitingTable: Boolean,
     isCompletedTable: Boolean,
     batchInterval: Long) extends PagedTable[BatchUIData] {
 
-  private val parameterPath = s"$basePath/$subPath/?${parameterOtherTable.mkString("&")}"
-
+  private val(sortColumn, desc, pageSize) = getTableParameters(request, tableTag, "Batch Time")
+  private val parameterPath = s"$basePath/$subPath/?${getParameterOtherTable(request, tableTag)}"
   private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
 
   private val firstFailureReason: Option[String] =
@@ -103,6 +101,7 @@ private[ui] class StreamingPagedTable(
     // tuple containing tooltips for header fields
     val tooltips = ("Time taken by Streaming scheduler to submit jobs of a batch",
       "Time taken to process all jobs of a batch", "Total time taken to handle a batch")
+    // headers, sortable and tooltips
     val headersAndCssClasses: Seq[(String, Boolean, Option[String])] = {
       Seq(
         ("Batch Time", true, None),
@@ -126,59 +125,10 @@ private[ui] class StreamingPagedTable(
         }
       }
     }
+    // check if sort column is a valid sortable column
+    isSortColumnValid(headersAndCssClasses, sortColumn)
 
-    val sortableColumnHeader = headersAndCssClasses.filter {
-      case (_, sortable, _) => sortable
-    }.map { case (column, _, _) => column }
-
-    // verify that given column to sort is a valid sortable column
-    require(sortableColumnHeader.contains(sortColumn), s"Unknown Column: $sortColumn")
-
-    val headerRow: Seq[Node] = {
-      headersAndCssClasses.map { case (header, sortable, tooltip) =>
-        if (header == sortColumn) {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$tableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$tableTag.desc=${!desc}" +
-              s"&$tableTag.pageSize=$pageSize" +
-              s"#$tableTag")
-          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-
-          <th>
-            <a href={headerLink}>
-              <span data-toggle="tooltip" title={tooltip.getOrElse("")}>
-                {header}&nbsp;{Unparsed(arrow)}
-              </span>
-            </a>
-          </th>
-        } else {
-          if (sortable) {
-            val headerLink = Unparsed(
-              parameterPath +
-                s"&$tableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-                s"&$tableTag.pageSize=$pageSize" +
-                s"#$tableTag")
-
-            <th>
-              <a href={headerLink}>
-                <span data-toggle="tooltip" title={tooltip.getOrElse("")}>
-                  {header}
-                </span>
-              </a>
-            </th>
-          } else {
-            <th>
-              {header}
-            </th>
-          }
-        }
-      }
-    }
-
-    <thead>
-      {headerRow}
-    </thead>
+    headerRow(headersAndCssClasses, desc, pageSize, sortColumn, parameterPath, tableTag, tableTag)
   }
 
   override def row(batch: BatchUIData): Seq[Node] = {

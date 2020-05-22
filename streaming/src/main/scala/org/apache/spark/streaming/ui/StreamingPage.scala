@@ -20,7 +20,6 @@ package org.apache.spark.streaming.ui
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.xml.{Node, Unparsed}
 
@@ -438,12 +437,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private def streamingTable(request: HttpServletRequest, batches: Seq[BatchUIData],
       tableTag: String): Seq[Node] = {
     val interval: Long = listener.batchDuration
-
-    val parameterOtherTable = request.getParameterMap.asScala
-      .filterNot(_._1.contains(tableTag))
-      .map { case (name, vals) =>
-        name + "=" + vals(0)
-      }
+    val streamingPage = Option(request.getParameter(s"$tableTag.page")).map(_.toInt).getOrElse(1)
 
     val tableType = tableTag match {
       case "runningBatches" => (true, false, false)
@@ -451,30 +445,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
       case "completedBatches" => (false, false, true)
     }
 
-    val parameterPage = request.getParameter(s"$tableTag.page")
-    val parameterDesc = request.getParameter(s"$tableTag.desc")
-    val parameterSortColumn = request.getParameter(s"$tableTag.sort")
-    val parameterPageSize = request.getParameter(s"$tableTag.pageSize")
-
-    val streamingPage = Option(parameterPage).map(_.toInt).getOrElse(1)
-    val streamingSortColumn = Option(parameterSortColumn).map { sortColumn =>
-      SparkUIUtils.decodeURLParameter(sortColumn)
-    }.getOrElse("Batch Time")
-    val streamingDesc = Option(parameterDesc).map(_.toBoolean).getOrElse(
-      streamingSortColumn == "Batch Time"
-    )
-    val streamingPageSize = Option(parameterPageSize).map(_.toInt).getOrElse(100)
-
     try {
       new StreamingPagedTable(
+        request,
         tableTag,
         batches,
         SparkUIUtils.prependBaseUri(request, parent.basePath),
         "streaming",
-        parameterOtherTable,
-        streamingPageSize,
-        streamingSortColumn,
-        streamingDesc,
         tableType._1,
         tableType._2,
         tableType._3,
