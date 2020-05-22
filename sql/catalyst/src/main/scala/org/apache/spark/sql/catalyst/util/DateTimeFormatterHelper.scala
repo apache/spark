@@ -95,16 +95,16 @@ trait DateTimeFormatterHelper {
    * IllegalArgumentException will be thrown.
    *
    * @param pattern the date time pattern
-   * @param block a func to capture exception, identically which forces a legacy datetime formatter
-   *              to be initialized
+   * @param tryLegacyFormatter a func to capture exception, identically which forces a legacy
+   *                           datetime formatter to be initialized
    */
 
   protected def checkLegacyFormatter(
       pattern: String,
-      block: => Unit): PartialFunction[Throwable, DateTimeFormatter] = {
+      tryLegacyFormatter: => Unit): PartialFunction[Throwable, DateTimeFormatter] = {
     case e: IllegalArgumentException =>
       try {
-        block
+        tryLegacyFormatter
       } catch {
         case _: Throwable => throw e
       }
@@ -191,7 +191,7 @@ private object DateTimeFormatterHelper {
 
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
   final val unsupportedNarrowTextStyle =
-    Set("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu", "QQQQQ", "qqqqq")
+    Set("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu", "QQQQQ", "qqqqq", "uuuuu")
 
   /**
    * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for

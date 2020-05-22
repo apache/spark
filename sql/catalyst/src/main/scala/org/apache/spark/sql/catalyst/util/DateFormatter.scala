@@ -35,7 +35,7 @@ sealed trait DateFormatter extends Serializable {
   def format(date: Date): String
   def format(localDate: LocalDate): String
 
-  def initialize(): Unit = {}
+  def validatePatternString(): Unit
 }
 
 class Iso8601DateFormatter(
@@ -46,11 +46,7 @@ class Iso8601DateFormatter(
   extends DateFormatter with DateTimeFormatterHelper {
 
   @transient
-  private lazy val formatter: DateTimeFormatter = {
-    try {
-      getOrCreateFormatter(pattern, locale)
-    } catch checkLegacyFormatter(pattern, legacyFormatter.initialize)
-  }
+  private lazy val formatter = getOrCreateFormatter(pattern, locale)
 
   @transient
   private lazy val legacyFormatter = DateFormatter.getLegacyFormatter(
@@ -77,6 +73,12 @@ class Iso8601DateFormatter(
   override def format(date: Date): String = {
     legacyFormatter.format(date)
   }
+
+  override def validatePatternString(): Unit = {
+    try {
+      formatter
+    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+  }
 }
 
 trait LegacyDateFormatter extends DateFormatter {
@@ -100,7 +102,7 @@ class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDat
   private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
   override def parseToDate(s: String): Date = fdf.parse(s)
   override def format(d: Date): String = fdf.format(d)
-  override def initialize(): Unit = fdf
+  override def validatePatternString(): Unit = fdf
 }
 
 class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
@@ -108,7 +110,7 @@ class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyD
   private lazy val sdf = new SimpleDateFormat(pattern, locale)
   override def parseToDate(s: String): Date = sdf.parse(s)
   override def format(d: Date): String = sdf.format(d)
-  override def initialize(): Unit = sdf
+  override def validatePatternString(): Unit = sdf
 
 }
 
@@ -128,7 +130,9 @@ object DateFormatter {
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      new Iso8601DateFormatter(pattern, zoneId, locale, legacyFormat)
+      val df = new Iso8601DateFormatter(pattern, zoneId, locale, legacyFormat)
+      df.validatePatternString()
+      df
     }
   }
 

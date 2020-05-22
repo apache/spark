@@ -54,7 +54,7 @@ sealed trait TimestampFormatter extends Serializable {
   def format(us: Long): String
   def format(ts: Timestamp): String
   def format(instant: Instant): String
-  def initialize(): Unit = {}
+  def validatePatternString(): Unit
 }
 
 class Iso8601TimestampFormatter(
@@ -65,11 +65,8 @@ class Iso8601TimestampFormatter(
     needVarLengthSecondFraction: Boolean)
   extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
-  protected lazy val formatter: DateTimeFormatter = {
-    try {
-      getOrCreateFormatter(pattern, locale, needVarLengthSecondFraction)
-    } catch checkLegacyFormatter(pattern, legacyFormatter.initialize)
-  }
+  protected lazy val formatter: DateTimeFormatter =
+    getOrCreateFormatter(pattern, locale, needVarLengthSecondFraction)
 
   @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
@@ -102,6 +99,12 @@ class Iso8601TimestampFormatter(
 
   override def format(ts: Timestamp): String = {
     legacyFormatter.format(ts)
+  }
+
+  override def validatePatternString(): Unit = {
+    try {
+      formatter
+    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
   }
 }
 
@@ -207,7 +210,7 @@ class LegacyFastTimestampFormatter(
     format(instantToMicros(instant))
   }
 
-  override def initialize(): Unit = fastDateFormat
+  override def validatePatternString(): Unit = fastDateFormat
 }
 
 class LegacySimpleTimestampFormatter(
@@ -238,7 +241,7 @@ class LegacySimpleTimestampFormatter(
     format(instantToMicros(instant))
   }
 
-  override def initialize(): Unit = sdf
+  override def validatePatternString(): Unit = sdf
 }
 
 object LegacyDateFormats extends Enumeration {
@@ -263,8 +266,10 @@ object TimestampFormatter {
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      new Iso8601TimestampFormatter(
+      val tf = new Iso8601TimestampFormatter(
         pattern, zoneId, locale, legacyFormat, needVarLengthSecondFraction)
+      tf.validatePatternString()
+      tf
     }
   }
 
