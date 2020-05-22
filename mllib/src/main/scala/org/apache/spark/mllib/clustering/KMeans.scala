@@ -22,6 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.InstanceBlock
+import org.apache.spark.ml.linalg.{Vector => MLVector}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
@@ -349,6 +351,22 @@ class KMeans private (
     new KMeansModel(centers.map(_.vector), distanceMeasure, cost, iteration)
   }
 
+  def initBlocksRandom(data: RDD[InstanceBlock]): Array[MLVector] = {
+    val vectorWithNorms: RDD[VectorWithNorm] = data.flatMap(_.matrix.rowIter)
+      .map(Vectors.fromML(_)).map(new VectorWithNorm(_))
+
+    initRandom(vectorWithNorms).map(_.vector.asML)
+  }
+
+  def initBlocksKMeansParallel(rdd_matrix: RDD[InstanceBlock],
+    distanceMeasureInstance: DistanceMeasure): Array[MLVector] = {
+
+    val data: RDD[VectorWithNorm] = rdd_matrix.flatMap(_.matrix.rowIter)
+    .map(Vectors.fromML(_)).map(new VectorWithNorm(_))
+
+    initKMeansParallel(data, distanceMeasureInstance).map(_.vector.asML)
+  }
+
   /**
    * Initialize a set of cluster centers at random.
    */
@@ -517,7 +535,7 @@ object KMeans {
 /**
  * A vector with its norm for fast distance computation.
  */
-private[clustering] class VectorWithNorm(
+class VectorWithNorm(
     val vector: Vector,
     val norm: Double,
     val weight: Double = 1.0) extends Serializable {
