@@ -875,7 +875,7 @@ class SparkContext(object):
             else:
                 # zip could return JavaPairRDD hence we ensure `_jrdd`
                 # to be `JavaRDD` by wrapping it in a `map`
-                rdds[i] = rdds[i].map(lambda x: x)._jrdd
+                jrdds[i] = rdds[i].map(lambda x: x)._jrdd
         return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
