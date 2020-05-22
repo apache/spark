@@ -71,9 +71,10 @@ ab	abcd	ab	NULL
 -- !query
 select left(null, -2), left("abcd", -2), left("abcd", 0), left("abcd", 'a')
 -- !query schema
-struct<left(NULL, -2):string,left(abcd, -2):string,left(abcd, 0):string,left(abcd, a):string>
+struct<>
 -- !query output
-NULL			NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: a
 
 
 -- !query
@@ -87,9 +88,10 @@ cd	abcd	cd	NULL
 -- !query
 select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a')
 -- !query schema
-struct<right(NULL, -2):string,right(abcd, -2):string,right(abcd, 0):string,right(abcd, a):string>
+struct<>
 -- !query output
-NULL			NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: a
 
 
 -- !query
@@ -279,14 +281,16 @@ TURNERyxX
 -- !query
 SELECT lpad('hi', 'invalid_length')
 -- !query schema
-struct<lpad(hi, CAST(invalid_length AS INT),  ):string>
+struct<>
 -- !query output
-NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: invalid_length
 
 
 -- !query
 SELECT rpad('hi', 'invalid_length')
 -- !query schema
-struct<rpad(hi, CAST(invalid_length AS INT),  ):string>
+struct<>
 -- !query output
-NULL
+java.lang.NumberFormatException
+invalid input syntax for type numeric: invalid_length
