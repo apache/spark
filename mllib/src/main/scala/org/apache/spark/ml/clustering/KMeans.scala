@@ -17,26 +17,27 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg.{BLAS, DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.{Estimator, Model, PipelineStage}
-import org.apache.spark.mllib.clustering.{DistanceMeasure, VectorWithNorm, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
-import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.ml.util.Instrumentation.instrumented
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel, VectorWithNorm}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
-
-import scala.collection.mutable
 
 /**
  * Common params for KMeans and KMeansModel
