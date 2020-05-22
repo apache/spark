@@ -407,6 +407,20 @@ Here is the list of SQL metrics:
 
 </table>
 
+## Structured Streaming Tab
+When running Structured Streaming jobs in micro-batch mode, a Structured Streaming tab will be
+available on the Web UI. You can check the statistics of a running query or a completed query 
+via clicking a run id on the Streaming Query overview page.
+
+<p style="text-align: center;">
+  <img src="img/webui-structured-streaming-detail.png" title="Structured Streaming Query Statistics" alt="Structured Streaming Query Statistics">
+</p>
+
+The statistics page displays some useful metrics (e.g., how many records received per second and 
+the time used for different stages of a micro-batch execution) for insight into the status of your
+streaming queries. As an early-release version, the page is still under development and will be 
+improved in future releases.
+
 ## Streaming Tab
 The web UI includes a Streaming tab if the application uses Spark streaming. This tab displays
 scheduling delay and processing time for each micro-batch in the data stream, which can be useful
