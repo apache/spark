@@ -48,15 +48,25 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
 
 ### Data Retrieval Statements
 
- * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
- * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+ * [SELECT Statement](sql-ref-syntax-qry-select.html)
+   * [Common Table Expression](sql-ref-syntax-qry-select-cte.html)
+   * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+   * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+   * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+   * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+   * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
+   * [JOIN](sql-ref-syntax-qry-select-join.html)
+   * [Join Hints](sql-ref-syntax-qry-select-hints.html)
+   * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
+   * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+   * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+   * [Set Operators](sql-ref-syntax-qry-select-setops.html)
+   * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+   * [TABLESAMPLE](sql-ref-syntax-qry-sampling.html)
+   * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
+   * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+   * [Window Function](sql-ref-syntax-qry-window.html)
  * [EXPLAIN](sql-ref-syntax-qry-explain.html)
- * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
- * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
- * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
- * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
- * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
- * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
 
 ### Auxiliary Statements
 
