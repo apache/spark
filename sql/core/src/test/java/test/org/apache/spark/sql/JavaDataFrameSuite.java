@@ -141,26 +141,56 @@ public class JavaDataFrameSuite {
       return a;
     }
 
+    public void setA(double a) {
+      this.a = a;
+    }
+
     public Integer[] getB() {
       return b;
+    }
+
+    public void setB(Integer[] b) {
+      this.b = b;
     }
 
     public Map<String, int[]> getC() {
       return c;
     }
 
+    public void setC(Map<String, int[]> c) {
+      this.c = c;
+    }
+
     public List<String> getD() {
       return d;
     }
 
-    public BigInteger getE() { return e; }
+    public void setD(List<String> d) {
+      this.d = d;
+    }
+
+    public BigInteger getE() {
+      return e;
+    }
+
+    public void setE(BigInteger e) {
+      this.e = e;
+    }
 
     public NestedBean getF() {
       return f;
     }
 
+    public void setF(NestedBean f) {
+      this.f = f;
+    }
+
     public NestedBean getG() {
       return g;
+    }
+
+    public void setG(NestedBean g) {
+      this.g = g;
     }
 
     public static class NestedBean implements Serializable {
@@ -168,6 +198,10 @@ public class JavaDataFrameSuite {
 
       public int getA() {
         return a;
+      }
+
+      public void setA(int a) {
+        this.a = a;
       }
     }
   }
@@ -462,11 +496,32 @@ public class JavaDataFrameSuite {
     }
   }
 
+  public static class BeanWithoutSetter implements Serializable {
+    private String a;
+
+    public BeanWithoutSetter(String a) {
+      this.a = a;
+    }
+
+    public void getA(String a) {
+      this.a = a;
+    }
+  }
+
   @Test
   public void testBeanWithoutGetter() {
     BeanWithoutGetter bean = new BeanWithoutGetter();
     List<BeanWithoutGetter> data = Arrays.asList(bean);
     Dataset<Row> df = spark.createDataFrame(data, BeanWithoutGetter.class);
+    Assert.assertEquals(0, df.schema().length());
+    Assert.assertEquals(1, df.collectAsList().size());
+  }
+
+  @Test
+  public void testBeanWithoutSetter() {
+    BeanWithoutSetter bean = new BeanWithoutSetter("hello");
+    List<BeanWithoutSetter> data = Arrays.asList(bean);
+    Dataset<Row> df = spark.createDataFrame(data, BeanWithoutSetter.class);
     Assert.assertEquals(0, df.schema().length());
     Assert.assertEquals(1, df.collectAsList().size());
   }
