@@ -21,9 +21,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.xml.{Node, NodeSeq, Unparsed}
+import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
@@ -159,26 +158,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean): Seq[Node] = {
 
-    val parameterOtherTable = request.getParameterMap().asScala
-      .filterNot(_._1.startsWith(executionTag))
-      .map { case (name, vals) =>
-        name + "=" + vals(0)
-      }
-
-    val parameterExecutionPage = request.getParameter(s"$executionTag.page")
-    val parameterExecutionSortColumn = request.getParameter(s"$executionTag.sort")
-    val parameterExecutionSortDesc = request.getParameter(s"$executionTag.desc")
-    val parameterExecutionPageSize = request.getParameter(s"$executionTag.pageSize")
-
-    val executionPage = Option(parameterExecutionPage).map(_.toInt).getOrElse(1)
-    val executionSortColumn = Option(parameterExecutionSortColumn).map { sortColumn =>
-      UIUtils.decodeURLParameter(sortColumn)
-    }.getOrElse("ID")
-    val executionSortDesc = Option(parameterExecutionSortDesc).map(_.toBoolean).getOrElse(
-      // New executions should be shown above old executions by default.
-      executionSortColumn == "ID"
-    )
-    val executionPageSize = Option(parameterExecutionPageSize).map(_.toInt).getOrElse(100)
+    val executionPage =
+      Option(request.getParameter(s"$executionTag.page")).map(_.toInt).getOrElse(1)
 
     val tableHeaderId = executionTag // "running", "completed" or "failed"
 
@@ -191,11 +172,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         executionTag,
         UIUtils.prependBaseUri(request, parent.basePath),
         "SQL", // subPath
-        parameterOtherTable,
         currentTime,
-        pageSize = executionPageSize,
-        sortColumn = executionSortColumn,
-        desc = executionSortDesc,
         showRunningJobs,
         showSucceededJobs,
         showFailedJobs).table(executionPage)
@@ -219,14 +196,12 @@ private[ui] class ExecutionPagedTable(
     executionTag: String,
     basePath: String,
     subPath: String,
-    parameterOtherTable: Iterable[String],
     currentTime: Long,
-    pageSize: Int,
-    sortColumn: String,
-    desc: Boolean,
     showRunningJobs: Boolean,
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean) extends PagedTable[ExecutionTableRowData] {
+
+  private val (sortColumn, desc, pageSize) = getTableParameters(request, executionTag, "ID")
 
   override val dataSource = new ExecutionDataSource(
     request,
@@ -241,7 +216,8 @@ private[ui] class ExecutionPagedTable(
     showSucceededJobs,
     showFailedJobs)
 
-  private val parameterPath = s"$basePath/$subPath/?${parameterOtherTable.mkString("&")}"
+  private val parameterPath =
+    s"$basePath/$subPath/?${getParameterOtherTable(request, executionTag)}"
 
   override def tableId: String = s"$executionTag-table"
 
@@ -269,83 +245,32 @@ private[ui] class ExecutionPagedTable(
   }
 
   override def headers: Seq[Node] = {
-    // Information for each header: title, sortable
-    val executionHeadersAndCssClasses: Seq[(String, Boolean)] =
+    // Information for each header: title, sortable, tooltip
+    val executionHeadersAndCssClasses: Seq[(String, Boolean, Option[String])] =
       Seq(
-        ("ID", true),
-        ("Description", true),
-        ("Submitted", true),
-        ("Duration", true)) ++ {
+        ("ID", true, None),
+        ("Description", true, None),
+        ("Submitted", true, None),
+        ("Duration", true, Some("Time from query submission to completion (or if still executing," +
+          "time since submission)"))) ++ {
         if (showRunningJobs && showSucceededJobs && showFailedJobs) {
           Seq(
-            ("Running Job IDs", true),
-            ("Succeeded Job IDs", true),
-            ("Failed Job IDs", true))
+            ("Running Job IDs", true, None),
+            ("Succeeded Job IDs", true, None),
+            ("Failed Job IDs", true, None))
         } else if (showSucceededJobs && showFailedJobs) {
           Seq(
-            ("Succeeded Job IDs", true),
-            ("Failed Job IDs", true))
+            ("Succeeded Job IDs", true, None),
+            ("Failed Job IDs", true, None))
         } else {
-          Seq(("Job IDs", true))
+          Seq(("Job IDs", true, None))
         }
       }
 
-    val sortableColumnHeaders = executionHeadersAndCssClasses.filter {
-      case (_, sortable) => sortable
-    }.map { case (title, _) => title }
+    isSortColumnValid(executionHeadersAndCssClasses, sortColumn)
 
-    require(sortableColumnHeaders.contains(sortColumn), s"Unknown column: $sortColumn")
-
-    val headerRow: Seq[Node] = {
-      executionHeadersAndCssClasses.map { case (header, sortable) =>
-        if (header == sortColumn) {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$executionTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$executionTag.desc=${!desc}" +
-              s"&$executionTag.pageSize=$pageSize" +
-              s"#$tableHeaderId")
-          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-
-          <th>
-            <a href={headerLink}>
-              {header}<span>
-              &nbsp;{Unparsed(arrow)}
-            </span>
-            </a>
-          </th>
-        } else {
-          if (sortable) {
-            val headerLink = Unparsed(
-              parameterPath +
-                s"&$executionTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-                s"&$executionTag.pageSize=$pageSize" +
-                s"#$tableHeaderId")
-
-            <th>
-              <a href={headerLink}>
-                {if (header == "Duration") {
-                  <span data-toggle="tooltip" data-placement="top"
-                    title="Time from query submission to completion
-                    (or if still executing, time since submission)">
-                    {header}
-                  </span>
-                } else {
-                  {header}
-                }}
-              </a>
-            </th>
-          } else {
-            <th>
-              {header}
-            </th>
-          }
-        }
-      }
-    }
-    <thead>
-      {headerRow}
-    </thead>
+    headerRow(executionHeadersAndCssClasses, desc, pageSize, sortColumn, parameterPath,
+      executionTag, tableHeaderId)
   }
 
   override def row(executionTableRow: ExecutionTableRowData): Seq[Node] = {

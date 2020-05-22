@@ -45,5 +45,6 @@
     "name" : "my counter",
     "value" : "5050"
   } ],
-  "killedTasksSummary" : { }
+  "killedTasksSummary" : { },
+  "resourceProfileId" : 0
 } ]

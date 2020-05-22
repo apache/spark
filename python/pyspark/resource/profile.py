@@ -15,10 +15,61 @@
 # limitations under the License.
 #
 
-from pyspark.resource.executorrequests import ExecutorResourceRequest,\
-    ExecutorResourceRequests
-from pyspark.resource.resourceprofile import ResourceProfile
-from pyspark.resource.taskrequests import TaskResourceRequest, TaskResourceRequests
+from pyspark.resource.requests import TaskResourceRequest, TaskResourceRequests, \
+    ExecutorResourceRequests, ExecutorResourceRequest
+
+
+class ResourceProfile(object):
+
+    """
+    .. note:: Evolving
+
+    Resource profile to associate with an RDD. A :class:`pyspark.resource.ResourceProfile`
+    allows the user to specify executor and task requirements for an RDD that will get
+    applied during a stage. This allows the user to change the resource requirements between
+    stages. This is meant to be immutable so user cannot change it after building.
+
+    .. versionadded:: 3.1.0
+    """
+
+    def __init__(self, _java_resource_profile=None, _exec_req={}, _task_req={}):
+        if _java_resource_profile is not None:
+            self._java_resource_profile = _java_resource_profile
+        else:
+            self._java_resource_profile = None
+            self._executor_resource_requests = _exec_req
+            self._task_resource_requests = _task_req
+
+    @property
+    def id(self):
+        if self._java_resource_profile is not None:
+            return self._java_resource_profile.id()
+        else:
+            raise RuntimeError("SparkContext must be created to get the id, get the id "
+                               "after adding the ResourceProfile to an RDD")
+
+    @property
+    def taskResources(self):
+        if self._java_resource_profile is not None:
+            taskRes = self._java_resource_profile.taskResourcesJMap()
+            result = {}
+            for k, v in taskRes.items():
+                result[k] = TaskResourceRequest(v.resourceName(), v.amount())
+            return result
+        else:
+            return self._task_resource_requests
+
+    @property
+    def executorResources(self):
+        if self._java_resource_profile is not None:
+            execRes = self._java_resource_profile.executorResourcesJMap()
+            result = {}
+            for k, v in execRes.items():
+                result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
+                                                    v.discoveryScript(), v.vendor())
+            return result
+        else:
+            return self._executor_resource_requests
 
 
 class ResourceProfileBuilder(object):
