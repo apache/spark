@@ -127,26 +127,17 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
         .write
         .partitionBy(partitionCol)
         .orc(dir)
-      val paths = (0 to 9).map(i => dir + "/" + partitionCol + "=" + i)
-      val plan = spark
-        .read
-        .orc(paths: _*)
-        .queryExecution
-        .executedPlan
+      val paths = (0 to 9).map(i => s"$dir/$partitionCol=$i")
+      val plan = spark.read.orc(paths: _*).queryExecution.executedPlan
       val location = plan collectFirst {
         case f: FileSourceScanExec => f.metadata("Location")
       }
       assert(location.isDefined)
-      var found = false
-      for (index <- 1 to 10) {
-        val tempLocation = paths.slice(0, index).mkString("[", ", ", "]")
-        if (tempLocation.length >= 100 && !found) {
-          found = true
-          for (tempIndex <- 0 until index) {
-            assert(location.get.contains(paths(tempIndex)))
-          }
-        }
-      }
+      // The location metadata should at least contain one path
+      assert(location.get.contains(paths.head))
+      // If the temp path length is larger than 100, the metadata length should not exceed
+      // twice of the length; otherwise, the metadata length should be controlled within 200.
+      assert(location.get.length < Math.max(paths.head.length, 100) * 2)
     }
   }
 }
