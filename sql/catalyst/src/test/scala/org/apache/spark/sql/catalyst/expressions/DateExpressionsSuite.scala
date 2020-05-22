@@ -1147,17 +1147,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("[SPARK-31710][SQL] Adds TIMESTAMP_SECONDS, " +
-    "TIMESTAMP_MILLIS and TIMESTAMP_MICROS functions") {
-    checkEvaluation(SecondsToTimestamp(Literal(1230219000)), 1230219000000000L)
-    checkEvaluation(SecondsToTimestamp(Literal(-1230219000)), -1230219000000000L)
-    checkEvaluation(SecondsToTimestamp(Literal.create(null, IntegerType)), null)
-    checkEvaluation(MillisToTimestamp(Literal(1230219000123L)), 1230219000123000L)
-    checkEvaluation(MillisToTimestamp(Literal(-1230219000123L)), -1230219000123000L)
-    checkEvaluation(MillisToTimestamp(Literal.create(null, IntegerType)), null)
+  test("[SPARK-31710][SQL] Adds TIMESTAMP_SECONDS,...") {
+    checkEvaluation(SecondsToTimestamp(Literal(1230219000)), 1230219000L * MICROS_PER_SECOND)
+    checkEvaluation(SecondsToTimestamp(Literal(-1230219000)), -1230219000L * MICROS_PER_SECOND)
+    checkEvaluation(SecondsToTimestamp(Literal(null, IntegerType)), null)
+    checkEvaluation(MillisToTimestamp(Literal(1230219000123L)), 1230219000123L * MICROS_PER_MILLIS)
+    checkEvaluation(MillisToTimestamp(Literal(-1230219000123L)),
+      -1230219000123L * MICROS_PER_MILLIS)
+    checkEvaluation(MillisToTimestamp(Literal(null, IntegerType)), null)
     checkEvaluation(MicrosToTimestamp(Literal(1230219000123123L)), 1230219000123123L)
     checkEvaluation(MicrosToTimestamp(Literal(-1230219000123123L)), -1230219000123123L)
-    checkEvaluation(MicrosToTimestamp(Literal.create(null, IntegerType)), null)
+    checkEvaluation(MicrosToTimestamp(Literal(null, IntegerType)), null)
     checkExceptionInExpression[ArithmeticException](
       SecondsToTimestamp(Literal(1230219000123123L)), "long overflow")
     checkExceptionInExpression[ArithmeticException](
