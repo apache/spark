@@ -1146,4 +1146,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), "Fail to parse")
     }
   }
+
+  test("[SPARK-31710][SQL] Adds TIMESTAMP_SECONDS, " +
+    "TIMESTAMP_MILLIS and TIMESTAMP_MICROS functions") {
+    checkEvaluation(SecondsToTimestamp(Literal(1230219000)), 1230219000000000L)
+    checkEvaluation(SecondsToTimestamp(Literal(-1230219000)), -1230219000000000L)
+    checkEvaluation(SecondsToTimestamp(Literal.create(null, IntegerType)), null)
+    checkEvaluation(MillisToTimestamp(Literal(1230219000123L)), 1230219000123000L)
+    checkEvaluation(MillisToTimestamp(Literal(-1230219000123L)), -1230219000123000L)
+    checkEvaluation(MillisToTimestamp(Literal.create(null, IntegerType)), null)
+    checkEvaluation(MicrosToTimestamp(Literal(1230219000123123L)), 1230219000123123L)
+    checkEvaluation(MicrosToTimestamp(Literal(-1230219000123123L)), -1230219000123123L)
+    checkEvaluation(MicrosToTimestamp(Literal.create(null, IntegerType)), null)
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(1230219000123123L)), "long overflow")
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(-1230219000123123L)), "long overflow")
+    checkExceptionInExpression[ArithmeticException](
+      MillisToTimestamp(Literal(92233720368547758L)), "long overflow")
+    checkExceptionInExpression[ArithmeticException](
+      MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
+  }
 }

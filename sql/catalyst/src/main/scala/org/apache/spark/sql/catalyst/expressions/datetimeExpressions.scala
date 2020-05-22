@@ -418,7 +418,7 @@ abstract class NumberToTimestampBase extends UnaryExpression
     if (upScaleFactor == 1) {
       defineCodeGen(ctx, ev, c => c)
     } else {
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, $upScaleFactor)")
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)")
     }
   }
 }
