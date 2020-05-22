@@ -784,7 +784,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
-
         val jobDesc =
           driver.findElement(By.cssSelector("div[class='application-timeline-content']"))
         jobDesc.getAttribute("data-title") should include  ("collect at &lt;console&gt;:25")
