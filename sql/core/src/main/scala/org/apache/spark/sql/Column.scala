@@ -877,9 +877,8 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 3.1.0
    */
-  @scala.annotation.varargs
-  def withFields(cols: (String, Column)*): Column = withExpr {
-    WithFields(expr +: cols.flatMap { case (name, col) => Seq(Literal(name), col.expr) })
+  def withField(fieldName: String, fieldValue: Column): Column = withExpr {
+    WithField(expr :: Literal(fieldName) :: fieldValue.expr :: Nil)
   }
 
   /**
