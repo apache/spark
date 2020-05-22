@@ -119,7 +119,7 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
     }
   }
 
-  test("FileSourceScanExec metadata should contain limited file paths") {
+  test("SPARK-31793: FileSourceScanExec metadata should contain limited file paths") {
     withTempPath { path =>
       val dir = path.getCanonicalPath
       val partitionCol = "partitionCol"

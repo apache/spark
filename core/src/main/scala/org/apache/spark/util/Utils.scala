@@ -2906,7 +2906,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a sequence of [[Path]] to a metadata string. When the length of metadata string
+   * Convert a sequence of `Path`s to a metadata string. When the length of metadata string
    * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
    */
   def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
