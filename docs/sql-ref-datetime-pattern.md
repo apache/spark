@@ -26,130 +26,46 @@ There are several common scenarios for datetime usage in Spark:
 - Datetime functions related to convert `StringType` to/from `DateType` or `TimestampType`.
   For example, `unix_timestamp`, `date_format`, `to_unix_timestamp`, `from_unixtime`, `to_date`, `to_timestamp`, `from_utc_timestamp`, `to_utc_timestamp`, etc.
 
-The following tables define how the pattern letters be used for date and timestamp parsing and formatting in Spark.
+Spark uses pattern letters in the following table for date and timestamp parsing and formatting:
 
-## Date Fields
+|Symbol|Meaning|Presentation|Examples|
+|------|-------|------------|--------|
+|**G**|era|text|AD; Anno Domini|
+|**y**|year|year|2020; 20|
+|**D**|day-of-year|number(3)|189|
+|**M/L**|month-of-year|month|7; 07; Jul; July|
+|**d**|day-of-month|number(3)|28|
+|**Q/q**|quarter-of-year|number/text|3; 03; Q3; 3rd quarter|
+|**Y**|week-based-year|year|1996; 96|
+|**w**|week-of-week-based-year|number(2)|27|
+|**W**|week-of-month|number(1)|4|
+|**E**|day-of-week|text|Tue; Tuesday|
+|**u**|localized day-of-week|number/text|2; 02; Tue; Tuesday|
+|**F**|week-of-month|number(1)|3|
+|**a**|am-pm-of-day|am/pm|PM|
+|**h**|clock-hour-of-am-pm (1-12)|number(2)|12|
+|**K**|hour-of-am-pm (0-11)|number(2)|0|
+|**k**|clock-hour-of-day (1-24)|number(2)|0|
+|**H**|hour-of-day (0-23)|number(2)|0|
+|**m**|minute-of-hour|number(2)|30|
+|**s**|second-of-minute|number(2)|55|
+|**S**|fraction-of-second|fraction|978|
+|**V**|time-zone ID|zone-id|America/Los_Angeles; Z; -08:30|
+|**z**|time-zone name|zone-name|Pacific Standard Time; PST|
+|**O**|localized zone-offset|offset-O|GMT+8; GMT+08:00; UTC-08:00;|
+|**X**|zone-offset 'Z' for zero|offset-X|Z; -08; -0830; -08:30; -083015; -08:30:15;|
+|**x**|zone-offset|offset-x|+0000; -08; -0830; -08:30; -083015; -08:30:15;|
+|**Z**|zone-offset|offset-Z|+0000; -0800; -08:00;|
+|**'**|escape for text|delimiter| |
+|**''**|single quote|literal|'|
+|**[**|optional section start| | |
+|**]**|optional section end| | |
 
-Pattern letters to output a date:
+The count of pattern letters determines the format.
 
-|Pattern|Count|Meaning|Presentation|Examples|
-|---|---|---|---|---|
-|**G**|1|era|text|AD|
-|**GG**|2|era|text|AD|
-|**GGG**|3|era|text|AD|
-|**GGGG**|4|era|text|Anno Domini|
-|**y**|1|year|year|2020|
-|**yy**|2|year|year|20|
-|**yyy**|3|year|year|2020|
-|**y..y**|4..n|year|year|2020; 02020|
-|**Y**|1|week-based-year|year|1996|
-|**YY**|2|week-based-year|year|96|
-|**YYY**|3|week-based-year|year|1996|
-|**Y..Y**|4..n|week-based-year|year|1996; 01996|
-|**Q**|1|quarter-of-year|number/text|3|
-|**QQ**|2|quarter-of-year|number/text|03|
-|**QQQ**|3|quarter-of-year|number/text|Q3|
-|**QQQQ**|4|quarter-of-year|number/text|3rd quarter|
-|**M**|1|month-of-year|number/text|7|
-|**MM**|2|month-of-year|number/text|07|
-|**MMM**|3|month-of-year|number/text|Jul|
-|**MMMM**|4|month-of-year|number/text|July|
-|**L**|1|month-of-year|number/text|7|
-|**LL**|2|month-of-year|number/text|07|
-|**LLL**|3|month-of-year|number/text|Jul|
-|**LLLL**|4|month-of-year|number/text|July|
-|**w**|1|week-of-week-based-year|number|1; 27|
-|**ww**|1|week-of-week-based-year|number|01; 27|
-|**W**|1|week-of-month|number|4|
-|**D**|1|day-of-year|number|1; 189|
-|**DD**|1|day-of-year|number|01; 189|
-|**DDD**|1|day-of-year|number|001; 189|
-|**d**|1|day-of-month|number|1; 28|
-|**dd**|1|day-of-month|number|01; 28|
-|**E**|1|day-of-week|text|Tue|
-|**EE**|2|day-of-week|text|Tue|
-|**EEE**|3|day-of-week|text|Tue|
-|**EEEE**|4|day-of-week|text|Tuesday|
-|**u**|1|localized day-of-week|number/text|2|
-|**uu**|2|localized day-of-week|number/text|02|
-|**uuu**|3|localized day-of-week|number/text|Tue|
-|**uuuu**|4|localized day-of-week|number/text|Tuesday|
-|**F**|1|week-of-month|number|3|
+- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short form. Exactly 4 pattern letters will use the full form. Exactly 5 pattern letters will use the narrow form. 5 or more letters will fail.
 
-## Time Fields
-
-Pattern letters to output a time:
-
-|Pattern|Count|Meaning|Presentation|Examples|
-|---|---|---|---|---|
-|**a**|1|am-pm-of-day|text|PM|
-|**h**|1|clock-hour-of-am-pm (1-12)|number|1; 12|
-|**hh**|1|clock-hour-of-am-pm (1-12)|number|01; 12|
-|**K**|1|hour-of-am-pm (0-11)|number|1; 11|
-|**KK**|2|hour-of-am-pm (0-11)|number|01; 11|
-|**k**|1|clock-hour-of-day (1-24)|number|1; 23|
-|**kk**|2|clock-hour-of-day (1-24)|number|01; 23|
-|**H**|1|hour-of-day (0-23)|number|1; 23|
-|**HH**|1|hour-of-day (0-23)|number|01; 23|
-|**m**|1|minute-of-hour|number|1; 30|
-|**mm**|2|minute-of-hour|number|01; 30|
-|**s**|1|second-of-minute|number|55|
-|**ss**|2|second-of-minute|number|55|
-|**S**|1..9|fraction-of-second|fraction|978|
-
-## Zone ID
-
-Pattern letters to output Zone Id:
-
-|Pattern|Count|Meaning|Presentation|Examples|
-|---|---|---|---|---|
-|**VV**|2|time-zone ID|zone-id|America/Los_Angeles; Z; -08:30|
-|**z**|1|time-zone name|zone-name|PST|
-|**zz**|2|time-zone name|zone-name|PST|
-|**zzz**|3|time-zone name|zone-name|PST|
-|**zzzz**|4|time-zone name|zone-name|Pacific Standard Time|
-
-## Zone offset
-
-Pattern letters to output Zone Offset:
-
-|Pattern|Count|Meaning|Presentation|Examples|
-|---|---|---|---|---|
-|**O**|1|localized zone-offset|offset-O|GMT+8|
-|**OOOO**|4|localized zone-offset|offset-O|GMT+08:00|
-|**X**|1|zone-offset 'Z' for zero|offset-X|Z; -08|
-|**XX**|2|zone-offset 'Z' for zero|offset-X|Z; -0830|
-|**XXX**|3|zone-offset 'Z' for zero|offset-X|Z; -08:30|
-|**XXXX**|4|zone-offset 'Z' for zero|offset-X|Z; -083015|
-|**XXXXX**|5|zone-offset 'Z' for zero|offset-X|Z; -08:30:15|
-|**x**|1|zone-offset|offset-x|-08|
-|**xx**|2|zone-offset|offset-x|-0830|
-|**xxx**|3|zone-offset|offset-x|-08:30|
-|**xxxx**|4|zone-offset|offset-x|-083015|
-|**xxxxx**|5|zone-offset|offset-x|-08:30:15|
-|**Z**|1|zone-offset|offset-Z|-0800|
-|**ZZ**|2|zone-offset|offset-Z|-0800|
-|**ZZZ**|3|zone-offset|offset-Z|-0800|
-|**ZZZZ**|4|zone-offset|offset-Z|GMT-08:00|
-|**ZZZZZ**|5|zone-offset|offset-Z|-08:00|
-
-## Modifiers
-
-Pattern letters that modify the rest of the pattern:
-
-|Pattern|Count|Meaning|Presentation|Examples|
-|---|---|---|---|---|
-|**'**|1|escape for text|delimiter| |
-|**''**|1|single quote|literal|'|
-|**[**|1|optional section start| | |
-|**]**|1|optional section end| | |
-
-
-- Count: The count of pattern letters determines the format. `1..n` describes the range how many numbers the pattern can have up to, `n` means no limit.
-
-- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short form. Exactly 4 pattern letters will use the full form. 5 or more letters will fail.
-
-- Number: If the count of letters is one, then the value is output using the minimum number of digits and without padding. Otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary. The following pattern letters have constraints on the count of letters. Only one letter 'F' can be specified. Up to two letters of 'd', 'H', 'h', 'K', 'k', 'm', and 's' can be specified. Up to three letters of 'D' can be specified.
+- Number(n): the n here represents the maximum count of letters this type of datetime pattern can be used. If the count of letters is one, then the value is output using the minimum number of digits and without padding. Otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary.
 
 - Number/Text: If the count of pattern letters is 3 or greater, use the Text rules above. Otherwise use the Number rules above.
 
