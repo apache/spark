@@ -29,8 +29,12 @@ trait StateStoreMetricsTest extends StreamTest {
     lastCheckedRecentProgressIndex = -1
   }
 
-  def assertNumStateRows(total: Seq[Long], updated: Seq[Long]): AssertOnQuery =
-    AssertOnQuery(s"Check total state rows = $total, updated state rows = $updated") { q =>
+  def assertNumStateRows(
+      total: Seq[Long],
+      updated: Seq[Long],
+      lateInputs: Seq[Long]): AssertOnQuery =
+    AssertOnQuery(s"Check total state rows = $total, updated state rows = $updated" +
+      s", late inputs = $lateInputs") { q =>
       // This assumes that the streaming query will not make any progress while the eventually
       // is being executed.
       eventually(timeout(streamingTimeout)) {
@@ -60,13 +64,22 @@ trait StateStoreMetricsTest extends StreamTest {
         val numUpdatedRows = arraySum(allNumUpdatedRowsSinceLastCheck, numStateOperators)
         assert(numUpdatedRows === updated, s"incorrect updates rows, $debugString")
 
+        val numLateInputs = recentProgress.last.stateOperators.map(_.numLateInputs)
+        assert(numLateInputs === lateInputs, s"incorrect late inputs, $debugString")
+
         lastCheckedRecentProgressIndex = recentProgress.length - 1
       }
       true
     }
 
-  def assertNumStateRows(total: Long, updated: Long): AssertOnQuery =
-    assertNumStateRows(Seq(total), Seq(updated))
+  def assertNumStateRows(total: Seq[Long], updated: Seq[Long]): AssertOnQuery = {
+    assert(total.length === updated.length)
+    assertNumStateRows(total, updated, lateInputs = (0 until total.length).map(_ => 0L))
+  }
+
+  def assertNumStateRows(total: Long, updated: Long, lateInput: Long = 0): AssertOnQuery = {
+    assertNumStateRows(Seq(total), Seq(updated), Seq(lateInput))
+  }
 
   def arraySum(arraySeq: Seq[Array[Long]], arrayLength: Int): Seq[Long] = {
     if (arraySeq.isEmpty) return Seq.fill(arrayLength)(0L)
