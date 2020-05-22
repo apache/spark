@@ -42,7 +42,7 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 |**E**|day-of-week|text|Tue; Tuesday|
 |**u**|localized day-of-week|number/text|2; 02; Tue; Tuesday|
 |**F**|week-of-month|number(1)|3|
-|**a**|am-pm-of-day|am/pm|PM|
+|**a**|am-pm-of-day|am-pm|PM|
 |**h**|clock-hour-of-am-pm (1-12)|number(2)|12|
 |**K**|hour-of-am-pm (0-11)|number(2)|0|
 |**k**|clock-hour-of-day (1-24)|number(2)|0|
@@ -65,7 +65,7 @@ The count of pattern letters determines the format.
 
 - Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short form. Exactly 4 pattern letters will use the full form. Exactly 5 pattern letters will use the narrow form. 5 or more letters will fail.
 
-- Number(n): the n here represents the maximum count of letters this type of datetime pattern can be used. If the count of letters is one, then the value is output using the minimum number of digits and without padding. Otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary.
+- Number(n): The n here represents the maximum count of letters this type of datetime pattern can be used. If the count of letters is one, then the value is output using the minimum number of digits and without padding. Otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary.
 
 - Number/Text: If the count of pattern letters is 3 or greater, use the Text rules above. Otherwise use the Number rules above.
 
@@ -120,7 +120,7 @@ The count of pattern letters determines the format.
     январь
     ```
 
-- AM/PM(a): This outputs the am-pm-of-day. Pattern letter count must be 1.
+- am-pm: This outputs the am-pm-of-day. Pattern letter count must be 1.
 
 - Zone ID(V): This outputs the display the time-zone ID. Pattern letter count must be 2.
 

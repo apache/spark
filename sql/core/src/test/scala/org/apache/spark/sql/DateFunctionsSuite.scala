@@ -450,8 +450,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-hh-MM")),
       Seq(Row(null), Row(null), Row(null)))
-    val e = intercept[SparkException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
-    assert(e.getCause.isInstanceOf[SparkUpgradeException])
+    val e = intercept[SparkUpgradeException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
+    assert(e.getCause.isInstanceOf[IllegalArgumentException])
+    assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
     // february
     val x1 = "2016-02-29"
@@ -622,8 +623,10 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           checkAnswer(invalid,
             Seq(Row(null), Row(null), Row(null), Row(null)))
         } else {
-          val exception = intercept[SparkException](invalid.collect())
-          assert(exception.getCause.isInstanceOf[SparkUpgradeException])
+          val e = intercept[SparkUpgradeException](invalid.collect())
+          assert(e.getCause.isInstanceOf[IllegalArgumentException])
+          assert(
+            e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
         }
 
         // february
