@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.lang.{Long => JLong}
 import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.hadoop.fs.{FSDataInputStream, Path, RawLocalFileSystem}
@@ -262,7 +263,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
           def getCountForOpenOnMetadataFile(batchId: Long): Long = {
             val path = sinkLog.batchIdToPath(batchId).toUri.getPath
-            CountOpenLocalFileSystem.pathToNumOpenCalled.get(path).map(_.get()).getOrElse(0L)
+            CountOpenLocalFileSystem.pathToNumOpenCalled.getOrDefault(path, 0L)
           }
 
           CountOpenLocalFileSystem.resetCount()
@@ -337,15 +338,16 @@ class CountOpenLocalFileSystem extends RawLocalFileSystem {
 
   override def open(f: Path, bufferSize: Int): FSDataInputStream = {
     val path = f.toUri.getPath
-    val curVal = pathToNumOpenCalled.getOrElseUpdate(path, new AtomicLong(0))
-    curVal.incrementAndGet()
+    pathToNumOpenCalled.compute(path, (_, v) => {
+      if (v == null) 1L else v + 1
+    })
     super.open(f, bufferSize)
   }
 }
 
 object CountOpenLocalFileSystem {
   val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt)}fs"
-  val pathToNumOpenCalled = new mutable.HashMap[String, AtomicLong]
+  val pathToNumOpenCalled = new ConcurrentHashMap[String, JLong]
 
   def resetCount(): Unit = pathToNumOpenCalled.clear()
 }
