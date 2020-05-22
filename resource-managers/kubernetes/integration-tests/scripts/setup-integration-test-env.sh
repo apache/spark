@@ -26,6 +26,7 @@ IMAGE_TAG="N/A"
 JAVA_IMAGE_TAG="8-jre-slim"
 SPARK_TGZ="N/A"
 MVN="$TEST_ROOT_DIR/build/mvn"
+EXCLUDE_TAGS=""
 
 # Parse arguments
 while (( "$#" )); do
@@ -56,6 +57,10 @@ while (( "$#" )); do
       ;;
     --spark-tgz)
       SPARK_TGZ="$2"
+      shift
+      ;;
+    --test-exclude-tags)
+      EXCLUDE_TAGS="$2"
       shift
       ;;
     *)
@@ -99,7 +104,10 @@ then
   LANGUAGE_BINDING_BUILD_ARGS="-p $DOCKER_FILE_BASE_PATH/bindings/python/Dockerfile"
 
   # Build SparkR image
-  LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
+  tags=(${EXCLUDE_TAGS//,/ })
+  if [[ ! ${tags[@]} =~ "r" ]]; then
+    LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
+  fi
 
   # Unset SPARK_HOME to let the docker-image-tool script detect SPARK_HOME. Otherwise, it cannot
   # indicate the unpacked directory as its home. See SPARK-28550.

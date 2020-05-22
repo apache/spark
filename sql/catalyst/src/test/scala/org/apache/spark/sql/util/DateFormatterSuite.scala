@@ -22,7 +22,7 @@ import java.time.{DateTimeException, LocalDate, ZoneOffset}
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, localDateToDays}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
@@ -41,8 +41,11 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
         val formatter = DateFormatter(getZoneId(timeZone))
-        val date = formatter.format(17867)
-        assert(date === "2018-12-02")
+        val (days, expected) = (17867, "2018-12-02")
+        val date = formatter.format(days)
+        assert(date === expected)
+        assert(formatter.format(daysToLocalDate(days)) === expected)
+        assert(formatter.format(toJavaDate(days)) === expected)
       }
     }
   }
@@ -70,8 +73,9 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
                   DateFormatter.defaultLocale,
                   legacyFormat)
                 val days = formatter.parse(date)
-                val formatted = formatter.format(days)
-                assert(date === formatted)
+                assert(date === formatter.format(days))
+                assert(date === formatter.format(daysToLocalDate(days)))
+                assert(date === formatter.format(toJavaDate(days)))
               }
             }
           }
@@ -170,7 +174,9 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
               DateFormatter.defaultLocale,
               legacyFormat)
             assert(LocalDate.ofEpochDay(formatter.parse("1000-01-01")) === LocalDate.of(1000, 1, 1))
+            assert(formatter.format(LocalDate.of(1000, 1, 1)) === "1000-01-01")
             assert(formatter.format(localDateToDays(LocalDate.of(1000, 1, 1))) === "1000-01-01")
+            assert(formatter.format(java.sql.Date.valueOf("1000-01-01")) === "1000-01-01")
           }
         }
       }
