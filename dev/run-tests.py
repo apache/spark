@@ -33,6 +33,9 @@ from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd,
 from sparktestsupport.toposort import toposort_flatten
 import sparktestsupport.modules as modules
 
+always_excluded_tags = [
+    "org.apache.spark.tags.ChromeUITest"
+]
 
 # -------------------------------------------------------------------------------------------------
 # Functions for traversing module dependency graph
@@ -605,6 +608,8 @@ def main():
         excluded_tags = []
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
+
+    excluded_tags.extend(always_excluded_tags)
 
     # setup environment variables
     # note - the 'root' module doesn't collect environment variables for all modules. Because the
