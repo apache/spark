@@ -1311,6 +1311,13 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
+
+  test("SPARK-31710:fail casting from integral to timestamp by default") {
+    assert(!cast(2.toByte, TimestampType).resolved)
+    assert(!cast(10.toShort, TimestampType).resolved)
+    assert(!cast(3, TimestampType).resolved)
+    assert(!cast(10L, TimestampType).resolved)
+  }
 }
 
 /**
