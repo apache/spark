@@ -126,7 +126,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
       > SELECT _FUNC_();
        spark_catalog
   """,
-  since = "3.0.0")
+  since = "3.1.0")
 case class CurrentCatalog() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def foldable: Boolean = true
