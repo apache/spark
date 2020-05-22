@@ -54,6 +54,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
@@ -240,6 +241,9 @@ private[spark] class BlockManager(
   private var lastPeerFetchTimeNs = 0L
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
+
+  private var blockManagerDecommissioning: Boolean = false
+  private var decommissionManager: Option[BlockManagerDecommissionManager] = None
 
   // A DownloadFileManager used to track all the files of remote blocks which are above the
   // specified memory threshold. Files will be deleted automatically based on weak reference.
@@ -1551,18 +1555,22 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Called for pro-active replenishment of blocks lost due to executor failures
+   * Replicates a block to peer block managers based on existingReplicas and maxReplicas
    *
    * @param blockId blockId being replicate
    * @param existingReplicas existing block managers that have a replica
    * @param maxReplicas maximum replicas needed
+   * @param maxReplicationFailures number of replication failures to tolerate before
+   *                               giving up.
+   * @return whether block was successfully replicated or not
    */
   def replicateBlock(
       blockId: BlockId,
       existingReplicas: Set[BlockManagerId],
-      maxReplicas: Int): Unit = {
+      maxReplicas: Int,
+      maxReplicationFailures: Option[Int] = None): Boolean = {
     logInfo(s"Using $blockManagerId to pro-actively replicate $blockId")
-    blockInfoManager.lockForReading(blockId).foreach { info =>
+    blockInfoManager.lockForReading(blockId).forall { info =>
       val data = doGetLocalBytes(blockId, info)
       val storageLevel = StorageLevel(
         useDisk = info.level.useDisk,
@@ -1570,11 +1578,13 @@ private[spark] class BlockManager(
         useOffHeap = info.level.useOffHeap,
         deserialized = info.level.deserialized,
         replication = maxReplicas)
-      // we know we are called as a result of an executor removal, so we refresh peer cache
-      // this way, we won't try to replicate to a missing executor with a stale reference
+      // we know we are called as a result of an executor removal or because the current executor
+      // is getting decommissioned. so we refresh peer cache before trying replication, we won't
+      // try to replicate to a missing executor/another decommissioning executor
       getPeers(forceFetch = true)
       try {
-        replicate(blockId, data, storageLevel, info.classTag, existingReplicas)
+        replicate(
+          blockId, data, storageLevel, info.classTag, existingReplicas, maxReplicationFailures)
       } finally {
         logDebug(s"Releasing lock for $blockId")
         releaseLockAndDispose(blockId, data)
@@ -1591,9 +1601,11 @@ private[spark] class BlockManager(
       data: BlockData,
       level: StorageLevel,
       classTag: ClassTag[_],
-      existingReplicas: Set[BlockManagerId] = Set.empty): Unit = {
+      existingReplicas: Set[BlockManagerId] = Set.empty,
+      maxReplicationFailures: Option[Int] = None): Boolean = {
 
-    val maxReplicationFailures = conf.get(config.STORAGE_MAX_REPLICATION_FAILURE)
+    val maxReplicationFailureCount = maxReplicationFailures.getOrElse(
+      conf.get(config.STORAGE_MAX_REPLICATION_FAILURE))
     val tLevel = StorageLevel(
       useDisk = level.useDisk,
       useMemory = level.useMemory,
@@ -1617,7 +1629,7 @@ private[spark] class BlockManager(
       blockId,
       numPeersToReplicateTo)
 
-    while(numFailures <= maxReplicationFailures &&
+    while(numFailures <= maxReplicationFailureCount &&
       !peersForReplication.isEmpty &&
       peersReplicatedTo.size < numPeersToReplicateTo) {
       val peer = peersForReplication.head
@@ -1641,6 +1653,10 @@ private[spark] class BlockManager(
         peersForReplication = peersForReplication.tail
         peersReplicatedTo += peer
       } catch {
+        // Rethrow interrupt exception
+        case e: InterruptedException =>
+          throw e
+        // Everything else we may retry
         case NonFatal(e) =>
           logWarning(s"Failed to replicate $blockId to $peer, failure #$numFailures", e)
           peersFailedToReplicateTo += peer
@@ -1665,9 +1681,11 @@ private[spark] class BlockManager(
     if (peersReplicatedTo.size < numPeersToReplicateTo) {
       logWarning(s"Block $blockId replicated to only " +
         s"${peersReplicatedTo.size} peer(s) instead of $numPeersToReplicateTo peers")
+      return false
     }
 
     logDebug(s"block $blockId replicated to ${peersReplicatedTo.mkString(", ")}")
+    return true
   }
 
   /**
@@ -1761,6 +1779,60 @@ private[spark] class BlockManager(
     blocksToRemove.size
   }
 
+  def decommissionBlockManager(): Unit = {
+    if (!blockManagerDecommissioning) {
+      logInfo("Starting block manager decommissioning process")
+      blockManagerDecommissioning = true
+      decommissionManager = Some(new BlockManagerDecommissionManager(conf))
+      decommissionManager.foreach(_.start())
+    } else {
+      logDebug("Block manager already in decommissioning state")
+    }
+  }
+
+  /**
+   * Tries to offload all cached RDD blocks from this BlockManager to peer BlockManagers
+   * Visible for testing
+   */
+  def decommissionRddCacheBlocks(): Unit = {
+    val replicateBlocksInfo = master.getReplicateInfoForRDDBlocks(blockManagerId)
+
+    if (replicateBlocksInfo.nonEmpty) {
+      logInfo(s"Need to replicate ${replicateBlocksInfo.size} blocks " +
+        "for block manager decommissioning")
+    } else {
+      logWarning(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
+      return
+    }
+
+    // Maximum number of storage replication failure which replicateBlock can handle
+    val maxReplicationFailures = conf.get(
+      config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
+
+    // TODO: We can sort these blocks based on some policy (LRU/blockSize etc)
+    //   so that we end up prioritize them over each other
+    val blocksFailedReplication = replicateBlocksInfo.map {
+      case ReplicateBlock(blockId, existingReplicas, maxReplicas) =>
+        val replicatedSuccessfully = replicateBlock(
+          blockId,
+          existingReplicas.toSet,
+          maxReplicas,
+          maxReplicationFailures = Some(maxReplicationFailures))
+        if (replicatedSuccessfully) {
+          logInfo(s"Block $blockId offloaded successfully, Removing block now")
+          removeBlock(blockId)
+          logInfo(s"Block $blockId removed")
+        } else {
+          logWarning(s"Failed to offload block $blockId")
+        }
+        (blockId, replicatedSuccessfully)
+    }.filterNot(_._2).map(_._1)
+    if (blocksFailedReplication.nonEmpty) {
+      logWarning("Blocks failed replication in cache decommissioning " +
+        s"process: ${blocksFailedReplication.mkString(",")}")
+    }
+  }
+
   /**
    * Remove all blocks belonging to the given broadcast.
    */
@@ -1829,7 +1901,58 @@ private[spark] class BlockManager(
     data.dispose()
   }
 
+  /**
+   * Class to handle block manager decommissioning retries
+   * It creates a Thread to retry offloading all RDD cache blocks
+   */
+  private class BlockManagerDecommissionManager(conf: SparkConf) {
+    @volatile private var stopped = false
+    private val sleepInterval = conf.get(
+      config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
+
+    private val blockReplicationThread = new Thread {
+      override def run(): Unit = {
+        var failures = 0
+        while (blockManagerDecommissioning
+          && !stopped
+          && !Thread.interrupted()
+          && failures < 20) {
+          try {
+            logDebug("Attempting to replicate all cached RDD blocks")
+            decommissionRddCacheBlocks()
+            logInfo("Attempt to replicate all cached blocks done")
+            Thread.sleep(sleepInterval)
+          } catch {
+            case _: InterruptedException =>
+              logInfo("Interrupted during migration, will not refresh migrations.")
+              stopped = true
+            case NonFatal(e) =>
+              failures += 1
+              logError("Error occurred while trying to replicate cached RDD blocks" +
+                s" for block manager decommissioning (failure count: $failures)", e)
+          }
+        }
+      }
+    }
+    blockReplicationThread.setDaemon(true)
+    blockReplicationThread.setName("block-replication-thread")
+
+    def start(): Unit = {
+      logInfo("Starting block replication thread")
+      blockReplicationThread.start()
+    }
+
+    def stop(): Unit = {
+      if (!stopped) {
+        stopped = true
+        logInfo("Stopping block replication thread")
+        blockReplicationThread.interrupt()
+      }
+    }
+  }
+
   def stop(): Unit = {
+    decommissionManager.foreach(_.stop())
     blockTransferService.close()
     if (blockStoreClient ne blockTransferService) {
       // Closing should be idempotent, but maybe not for the NioBlockTransferService.

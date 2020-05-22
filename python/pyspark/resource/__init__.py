@@ -18,12 +18,13 @@
 """
 APIs to let users manipulate resource requirements.
 """
-from pyspark.resource.executorrequests import ExecutorResourceRequest, ExecutorResourceRequests
-from pyspark.resource.taskrequests import TaskResourceRequest, TaskResourceRequests
-from pyspark.resource.resourceprofilebuilder import ResourceProfileBuilder
-from pyspark.resource.resourceprofile import ResourceProfile
+from pyspark.resource.information import ResourceInformation
+from pyspark.resource.requests import TaskResourceRequest, TaskResourceRequests, \
+    ExecutorResourceRequest, ExecutorResourceRequests
+from pyspark.resource.profile import ResourceProfile, ResourceProfileBuilder
 
 __all__ = [
     "TaskResourceRequest", "TaskResourceRequests", "ExecutorResourceRequest",
-    "ExecutorResourceRequests", "ResourceProfile", "ResourceProfileBuilder",
+    "ExecutorResourceRequests", "ResourceProfile", "ResourceInformation",
+    "ResourceProfileBuilder",
 ]

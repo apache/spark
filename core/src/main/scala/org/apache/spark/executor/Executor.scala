@@ -34,6 +34,7 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.slf4j.MDC
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -320,7 +321,12 @@ private[spark] class Executor(
 
     val taskId = taskDescription.taskId
     val threadName = s"Executor task launch worker for task $taskId"
-    private val taskName = taskDescription.name
+    val taskName = taskDescription.name
+    val mdcProperties = taskDescription.properties.asScala
+      .filter(_._1.startsWith("mdc.")).map { item =>
+        val key = item._1.substring(4)
+        (key, item._2)
+      }.toSeq
 
     /** If specified, this task has been killed and this option contains the reason. */
     @volatile private var reasonIfKilled: Option[String] = None
@@ -395,6 +401,9 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
+
+      setMDCForTask(taskName, mdcProperties)
+
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
@@ -693,6 +702,14 @@ private[spark] class Executor(
     }
   }
 
+  private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
+    MDC.put("taskName", taskName)
+
+    mdc.foreach { case (key, value) =>
+      MDC.put(key, value)
+    }
+  }
+
   /**
    * Supervises the killing / cancellation of a task by sending the interrupted flag, optionally
    * sending a Thread.interrupt(), and monitoring the task until it finishes.
@@ -733,6 +750,9 @@ private[spark] class Executor(
     private[this] val takeThreadDump: Boolean = conf.get(TASK_REAPER_THREAD_DUMP)
 
     override def run(): Unit = {
+
+      setMDCForTask(taskRunner.taskName, taskRunner.mdcProperties)
+
       val startTimeNs = System.nanoTime()
       def elapsedTimeNs = System.nanoTime() - startTimeNs
       def timeoutExceeded(): Boolean = killTimeoutNs > 0 && elapsedTimeNs > killTimeoutNs

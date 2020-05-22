@@ -42,5 +42,6 @@
   "schedulingPool" : "default",
   "rddIds" : [ 3, 2 ],
   "accumulatorUpdates" : [ ],
-  "killedTasksSummary" : { }
+  "killedTasksSummary" : { },
+  "resourceProfileId" : 0
 } ]

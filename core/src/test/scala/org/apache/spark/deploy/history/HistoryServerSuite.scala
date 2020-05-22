@@ -171,6 +171,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors",
     "executor memory usage" -> "applications/app-20161116163331-0000/executors",
     "executor resource information" -> "applications/application_1555004656427_0144/executors",
+    "multiple resource profiles" -> "applications/application_1578436911597_0052/environment",
 
     "app environment" -> "applications/app-20161116163331-0000/environment",
 
