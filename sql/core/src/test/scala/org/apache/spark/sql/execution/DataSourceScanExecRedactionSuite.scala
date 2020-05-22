@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -127,7 +129,7 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
         .write
         .partitionBy(partitionCol)
         .orc(dir)
-      val paths = (0 to 9).map(i => s"$dir/$partitionCol=$i")
+      val paths = (0 to 9).map(i => new File(dir, s"$partitionCol=$i").getCanonicalPath)
       val plan = spark.read.orc(paths: _*).queryExecution.executedPlan
       val location = plan collectFirst {
         case f: FileSourceScanExec => f.metadata("Location")
