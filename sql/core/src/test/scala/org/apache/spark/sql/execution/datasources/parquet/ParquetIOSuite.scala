@@ -45,7 +45,7 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, SparkUpgradeExcept
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -880,6 +880,45 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       m.close()
 
       assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
+    }
+  }
+
+  test("...: generate test files for checking compatibility with Spark 2.4") {
+    val baseDir = "/Users/maximgekk/tmp/parquet_compat/"
+    val N = 8
+    def save(
+        in: Seq[(String, String)],
+        t: String,
+        subdir: String,
+        options: Map[String, String] = Map.empty): Unit = {
+      in.toDF("dict", "plain")
+        .select($"dict".cast(t), $"plain".cast(t))
+        .repartition(1)
+        .write
+        .mode("overwrite")
+        .options(options)
+        .parquet(baseDir + subdir)
+    }
+    DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId,
+        SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+        save((1 to N).map(i => ("1000-01-01", s"1000-01-$i")), "date", "dates")
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MILLIS") {
+          save(
+            (1 to N).map(i => ("1001-01-01 01:02:03.123", s"1001-01-$i 01:02:03.123")),
+            "timestamp",
+            "ts_millis")
+        }
+        val usTs = (1 to N).map(i => ("1001-01-01 01:02:03.123456", s"1001-01-$i 01:02:03.123456"))
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
+          save(usTs, "timestamp", "ts_micros")
+        }
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "INT96") {
+          save(usTs, "timestamp", "ts_int96_plain", Map("parquet.enable.dictionary" -> "false"))
+          save(usTs, "timestamp", "ts_int96_dict", Map("parquet.enable.dictionary" -> "true"))
+        }
+      }
     }
   }
 
