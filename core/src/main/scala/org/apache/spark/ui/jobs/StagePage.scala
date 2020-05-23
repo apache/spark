@@ -212,7 +212,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         stageData,
         UIUtils.prependBaseUri(request, parent.basePath) +
           s"/stages/stage/?id=${stageId}&attempt=${stageAttemptId}",
-        currentTime,
         pageSize = taskPageSize,
         sortColumn = taskSortColumn,
         desc = taskSortDesc,
