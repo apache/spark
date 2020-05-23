@@ -102,6 +102,7 @@ private[spark] class TaskSetManager(
     }
     numTasks <= slots
   }
+  val executorDecommissionKillInterval = conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -165,6 +166,7 @@ private[spark] class TaskSetManager(
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
   private[scheduler] val taskInfos = new HashMap[Long, TaskInfo]
+  private[scheduler] val tidToExecutorKillTimeMapping = new HashMap[Long, Long]
 
   // Use a MedianHeap to record durations of successful tasks so we know when to launch
   // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
@@ -933,6 +935,7 @@ private[spark] class TaskSetManager(
 
   /** If the given task ID is in the set of running tasks, removes it. */
   def removeRunningTask(tid: Long): Unit = {
+    tidToExecutorKillTimeMapping.remove(tid)
     if (runningTasksSet.remove(tid) && parent != null) {
       parent.decreaseRunningTasks(1)
     }
@@ -1042,7 +1045,19 @@ private[spark] class TaskSetManager(
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
       for (tid <- runningTasksSet) {
-        foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
+        var speculated = checkAndSubmitSpeculatableTask(tid, time, threshold)
+        if (!speculated && tidToExecutorKillTimeMapping.contains(tid)) {
+          // Check whether this task will finish before the exectorKillTime assuming
+          // it will take medianDuration overall. If this task cannot finish within
+          // executorKillInterval, then this task is a candidate for speculation
+          val taskEndTimeBasedOnMedianDuration = taskInfos(tid).launchTime + medianDuration
+          val canExceedDeadline = tidToExecutorKillTimeMapping(tid) <
+            taskEndTimeBasedOnMedianDuration
+          if (canExceedDeadline) {
+            speculated = checkAndSubmitSpeculatableTask(tid, time, 0)
+          }
+        }
+        foundTasks |= speculated
       }
     } else if (speculationTaskDurationThresOpt.isDefined && speculationTasksLessEqToSlots) {
       val time = clock.getTimeMillis()
@@ -1100,8 +1115,12 @@ private[spark] class TaskSetManager(
 
   def executorDecommission(execId: String): Unit = {
     recomputeLocality()
-    // Future consideration: if an executor is decommissioned it may make sense to add the current
-    // tasks to the spec exec queue.
+    if (executorDecommissionKillInterval.nonEmpty) {
+      val executorKillTime = clock.getTimeMillis() + executorDecommissionKillInterval.get
+      runningTasksSet.filter(taskInfos(_).executorId == execId).foreach { tid =>
+        tidToExecutorKillTimeMapping(tid) = executorKillTime
+      }
+    }
   }
 
   def recomputeLocality(): Unit = {

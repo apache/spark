@@ -1842,6 +1842,17 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
+    ConfigBuilder("spark.executor.decommission.killInterval")
+      .doc("Duration after which a decommissioned executor will be killed forcefully." +
+        "This config is useful for cloud environments where we know in advance when " +
+        "an executor is going to go down after decommissioning signal Ex- around 2 mins " +
+        "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
+        "used to decide what tasks running on decommission executors to speculate")
+      .version("3.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .version("2.0.0")
