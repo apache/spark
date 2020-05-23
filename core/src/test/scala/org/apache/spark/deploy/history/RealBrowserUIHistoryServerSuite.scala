@@ -22,7 +22,6 @@ import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.proxy.ProxyServlet
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.openqa.selenium.WebDriver
-import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatestplus.selenium.WebBrowser
 
@@ -49,7 +48,7 @@ abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
   private var server: HistoryServer = null
   private var port: Int = -1
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     assume(
       sys.props(driverPropPrefix + driverProp) !== null,
@@ -58,7 +57,7 @@ abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
     sys.props(driverProp) = sys.props(driverPropPrefix + driverProp)
   }
 
-  override def beforeEach {
+  override def beforeEach(): Unit = {
     super.beforeEach()
     if (server == null) {
       init()
@@ -126,8 +125,6 @@ abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
     contextHandler.setContextPath(uiRoot)
     contextHandler.addServlet(holder, "/")
     server.attachHandler(contextHandler)
-
-    implicit val webDriver: WebDriver = new HtmlUnitDriver(true)
 
     try {
       val url = s"http://localhost:$port"
