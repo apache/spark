@@ -56,15 +56,15 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   protected var appLocator: String = _
 
   // Default memory limit is 1024M + 384M (minimum overhead constant)
-  private val baseMemory = s"${1024 + 384}Mi"
+  private val baseMemory = s"${1024 + 384}"
   protected val memOverheadConstant = 0.8
-  private val standardNonJVMMemory = s"${(1024 + 0.4*1024).toInt}Mi"
+  private val standardNonJVMMemory = s"${(1024 + 0.4*1024).toInt}"
   protected val additionalMemory = 200
   // 209715200 is 200Mi
   protected val additionalMemoryInBytes = 209715200
-  private val extraDriverTotalMemory = s"${(1024 + memOverheadConstant*1024).toInt}Mi"
+  private val extraDriverTotalMemory = s"${(1024 + memOverheadConstant*1024).toInt}"
   private val extraExecTotalMemory =
-    s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}Mi"
+    s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}"
 
   override def beforeAll(): Unit = {
     // The scalatest-maven-plugin gives system properties that are referenced but not set null

@@ -63,14 +63,10 @@ private[spark] class BasicDriverFeatureStep(
           .build()
       }
 
-    val driverCpuQuantity = new QuantityBuilder(false)
-      .withAmount(driverCpuCores)
-      .build()
-    val driverMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${driverMemoryWithOverheadMiB}Mi")
-      .build()
+    val driverCpuQuantity = new Quantity(driverCpuCores)
+    val driverMemoryQuantity = new Quantity(s"${driverMemoryWithOverheadMiB}Mi")
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
-      ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
+      ("cpu", new Quantity(limitCores))
     }
 
     val driverPort = conf.sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT)
