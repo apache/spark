@@ -116,8 +116,7 @@ private[ui] class StagePagedTable(
   override def tableId: String = stageTag + "-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-sm table-striped " +
-      "table-head-clickable table-cell-width-limited"
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = stageTag + ".pageSize"
 
@@ -125,7 +124,9 @@ private[ui] class StagePagedTable(
 
   private val (sortColumn, desc, pageSize) = getTableParameters(request, stageTag, "Stage Id")
 
-  val parameterPath = UIUtils.prependBaseUri(request, basePath) + s"/$subPath/?" +
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+
+  private val parameterPath = UIUtils.prependBaseUri(request, basePath) + s"/$subPath/?" +
     getParameterOtherTable(request, stageTag)
 
   override val dataSource = new StageDataSource(
@@ -138,7 +139,6 @@ private[ui] class StagePagedTable(
   )
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$stageTag.sort=$encodedSortColumn" +
@@ -147,10 +147,8 @@ private[ui] class StagePagedTable(
       s"#$tableHeaderId"
   }
 
-  override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+  override def goButtonFormPath: String =
     s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc#$tableHeaderId"
-  }
 
   override def headers: Seq[Node] = {
     // stageHeadersAndCssClasses has three parts: header title, sortable and tooltip information.
@@ -311,15 +309,9 @@ private[ui] class StageDataSource(
   // table so that we can avoid creating duplicate contents during sorting the data
   private val data = stages.map(stageRow).sorted(ordering(sortColumn, desc))
 
-  private var _slicedStageIds: Set[Int] = _
-
   override def dataSize: Int = data.size
 
-  override def sliceData(from: Int, to: Int): Seq[StageTableRowData] = {
-    val r = data.slice(from, to)
-    _slicedStageIds = r.map(_.stageId).toSet
-    r
-  }
+  override def sliceData(from: Int, to: Int): Seq[StageTableRowData] = data.slice(from, to)
 
   private def stageRow(stageData: v1.StageData): StageTableRowData = {
     val formattedSubmissionTime = stageData.submissionTime match {
@@ -349,7 +341,6 @@ private[ui] class StageDataSource(
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
-
 
     new StageTableRowData(
       stageData,
