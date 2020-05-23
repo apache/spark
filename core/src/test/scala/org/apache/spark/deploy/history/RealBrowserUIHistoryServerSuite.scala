@@ -33,7 +33,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
- * Tests for HistoryServer with read web browsers.
+ * Tests for HistoryServer with real web browsers.
  */
 abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
   extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll
