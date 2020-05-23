@@ -287,7 +287,9 @@ class BisectingKMeans @Since("2.0.0") (
 
     val instances: RDD[(OldVector, Double)] = dataset
       .select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd.map {
-      case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight)
+      case Row(point: Vector, weight: Double) =>
+        require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
+        (OldVectors.fromML(point), weight)
     }
     if (handlePersistence) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)

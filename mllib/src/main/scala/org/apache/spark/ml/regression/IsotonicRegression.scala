@@ -91,6 +91,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
 
     dataset.select(col($(labelCol)).cast(DoubleType), f, w).rdd.map {
       case Row(label: Double, feature: Double, weight: Double) =>
+        require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
         (label, feature, weight)
     }
   }

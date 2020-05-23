@@ -79,6 +79,7 @@ private[ml] trait PredictorParams extends Params
 
     dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
       case Row(label: Double, weight: Double, features: Vector) =>
+        require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
         Instance(label, weight, features)
     }
   }

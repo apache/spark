@@ -202,12 +202,15 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w, p)
         .rdd.map {
         case Row(prediction: Double, label: Double, weight: Double, probability: Vector) =>
+          require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
           (prediction, label, weight, probability.toArray)
       }
     } else {
       dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w)
         .rdd.map {
-        case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
+        case Row(prediction: Double, label: Double, weight: Double) =>
+          require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
+          (prediction, label, weight)
       }
     }
 

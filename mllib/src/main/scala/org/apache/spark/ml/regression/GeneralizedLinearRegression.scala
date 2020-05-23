@@ -407,6 +407,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val instances: RDD[Instance] =
         dataset.select(col($(labelCol)), w, offset, col($(featuresCol))).rdd.map {
           case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
+            require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
             Instance(label - offset, weight, features)
         }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,

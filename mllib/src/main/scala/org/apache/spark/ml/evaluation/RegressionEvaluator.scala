@@ -125,6 +125,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
         if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
       .rdd
       .map { case Row(prediction: Double, label: Double, weight: Double) =>
+        require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
         (prediction, label, weight) }
     new RegressionMetrics(predictionAndLabelsWithWeights, $(throughOrigin))
   }
