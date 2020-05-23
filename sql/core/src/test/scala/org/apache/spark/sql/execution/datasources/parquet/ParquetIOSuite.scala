@@ -885,7 +885,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("...: generate test files for checking compatibility with Spark 2.4") {
-    val resourceDir = "/Users/maximgekk/tmp/parquet_compat/"
+    val resourceDir = "sql/core/src/test/resources/test-data"
     val version = "2_4_5"
     val N = 8
     def save(
