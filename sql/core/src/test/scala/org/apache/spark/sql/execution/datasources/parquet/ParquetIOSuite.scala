@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.util.Locale
@@ -884,39 +885,57 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("...: generate test files for checking compatibility with Spark 2.4") {
-    val baseDir = "/Users/maximgekk/tmp/parquet_compat/"
+    val resourceDir = "/Users/maximgekk/tmp/parquet_compat/"
+    val version = "2_4_5"
     val N = 8
     def save(
         in: Seq[(String, String)],
         t: String,
-        subdir: String,
+        dstFile: String,
         options: Map[String, String] = Map.empty): Unit = {
-      in.toDF("dict", "plain")
-        .select($"dict".cast(t), $"plain".cast(t))
-        .repartition(1)
-        .write
-        .mode("overwrite")
-        .options(options)
-        .parquet(baseDir + subdir)
+      withTempDir { dir =>
+        in.toDF("dict", "plain")
+          .select($"dict".cast(t), $"plain".cast(t))
+          .repartition(1)
+          .write
+          .mode("overwrite")
+          .options(options)
+          .parquet(dir.getCanonicalPath)
+        Files.copy(
+          dir.listFiles().filter(_.getName.endsWith(".snappy.parquet")).head.toPath,
+          Paths.get(resourceDir, dstFile),
+          StandardCopyOption.REPLACE_EXISTING)
+      }
     }
     DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
       withSQLConf(
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId,
         SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
-        save((1 to N).map(i => ("1000-01-01", s"1000-01-$i")), "date", "dates")
+        save(
+          (1 to N).map(i => ("1000-01-01", s"1000-01-$i")),
+          "date",
+          s"before_1582_date_v$version.snappy.parquet")
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MILLIS") {
           save(
             (1 to N).map(i => ("1001-01-01 01:02:03.123", s"1001-01-$i 01:02:03.123")),
             "timestamp",
-            "ts_millis")
+            s"before_1582_timestamp_millis_v$version.snappy.parquet")
         }
         val usTs = (1 to N).map(i => ("1001-01-01 01:02:03.123456", s"1001-01-$i 01:02:03.123456"))
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
-          save(usTs, "timestamp", "ts_micros")
+          save(usTs, "timestamp", s"before_1582_timestamp_micros_v$version.snappy.parquet")
         }
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "INT96") {
-          save(usTs, "timestamp", "ts_int96_plain", Map("parquet.enable.dictionary" -> "false"))
-          save(usTs, "timestamp", "ts_int96_dict", Map("parquet.enable.dictionary" -> "true"))
+          save(
+            usTs,
+            "timestamp",
+            s"before_1582_timestamp_int96_plain_v$version.snappy.parquet",
+            Map("parquet.enable.dictionary" -> "false"))
+          save(
+            usTs,
+            "timestamp",
+            s"before_1582_timestamp_int96_dict_v$version.snappy.parquet",
+            Map("parquet.enable.dictionary" -> "true"))
         }
       }
     }
