@@ -897,29 +897,27 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             result = df.withColumn('time', foo_udf(df.time))
             self.assertEquals(df.collect(), result.collect())
 
-    def test_createDateFrame_with_category_type(self):
+    def test_udf_category_type(self):
+
+        @pandas_udf('string')
+        def to_category_func(x):
+            return x.astype('category')
+
         pdf = pd.DataFrame({"A": [u"a", u"b", u"c", u"a"]})
-        pdf["B"] = pdf["A"].astype('category')
-        category_first_element = dict(enumerate(pdf['B'].cat.categories))[0]
+        df = self.spark.createDataFrame(pdf)
+        df = df.withColumn("B", to_category_func(df['A']))
+        result_spark = df.toPandas()
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
-            arrow_df = self.spark.createDataFrame(pdf)
-            arrow_type = arrow_df.dtypes[1][1]
-            result_arrow = arrow_df.collect()
-            arrow_first_category_element = result_arrow[0][1]
+        spark_type = df.dtypes[1][1]
+        # spark data frame and arrow execution mode enabled data frame type must match pandas
+        assert spark_type == 'string'
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-            df = self.spark.createDataFrame(pdf)
-            spark_type = df.dtypes[1][1]
-            result_spark = df.collect()
-            spark_first_category_element = result_spark[0][1]
+        # Check result value of column 'B' must be equal to column 'A'
+        for i in range(0, len(result_spark["A"])):
+            assert result_spark["A"][i] == result_spark["B"][i]
+            assert isinstance(result_spark["A"][i], str)
+            assert isinstance(result_spark["B"][i], str)
 
-        # ensure original category elements are string
-        assert isinstance(category_first_element, str)
-        # spark dataframe and arrow execution mode enabled dataframe type must match padnads
-        assert spark_type == arrow_type == 'string'
-        assert isinstance(arrow_first_category_element, str)
-        assert isinstance(spark_first_category_element, str)
 
     @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
     def test_type_annotation(self):

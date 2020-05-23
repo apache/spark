@@ -418,16 +418,28 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDateFrame_with_category_type(self):
         pdf = pd.DataFrame({"A": [u"a", u"b", u"c", u"a"]})
         pdf["B"] = pdf["A"].astype('category')
+        category_first_element = dict(enumerate(pdf['B'].cat.categories))[0]
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
             arrow_df = self.spark.createDataFrame(pdf)
+            arrow_type = arrow_df.dtypes[1][1]
             result_arrow = arrow_df.toPandas()
+            arrow_first_category_element = result_arrow["B"][0]
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             df = self.spark.createDataFrame(pdf)
+            spark_type = df.dtypes[1][1]
             result_spark = df.toPandas()
+            spark_first_category_element = result_spark["B"][0]
 
         assert_frame_equal(result_spark, result_arrow)
+
+        # ensure original category elements are string
+        assert isinstance(category_first_element, str)
+        # spark data frame and arrow execution mode enabled data frame type must match pandas
+        assert spark_type == arrow_type == 'string'
+        assert isinstance(arrow_first_category_element, str)
+        assert isinstance(spark_first_category_element, str)
 
 
 @unittest.skipIf(
