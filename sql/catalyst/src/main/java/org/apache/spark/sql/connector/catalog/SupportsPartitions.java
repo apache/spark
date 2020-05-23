@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector.catalog;
 import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 
 /**
  * Catalog methods for working with Partitions.
