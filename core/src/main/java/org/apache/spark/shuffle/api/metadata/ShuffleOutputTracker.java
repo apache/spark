@@ -46,7 +46,7 @@ public interface ShuffleOutputTracker {
    * persisted by this shuffle output tracker.
    */
   void registerMapOutput(
-      int shuffleId, int mapId, long mapTaskAttemptId, MapOutputMetadata mapOutputMetadata);
+      int shuffleId, int mapIndex, long mapId, MapOutputMetadata mapOutputMetadata);
 
   /**
    * Called when the given map output is discarded, and will not longer be used in future Spark

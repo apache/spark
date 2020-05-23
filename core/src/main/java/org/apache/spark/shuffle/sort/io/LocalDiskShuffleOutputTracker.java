@@ -40,7 +40,7 @@ public final class LocalDiskShuffleOutputTracker implements ShuffleOutputTracker
 
   @Override
   public void registerMapOutput(
-      int shuffleId, int mapId, long mapTaskAttemptId, MapOutputMetadata mapOutputMetadata) {
+      int shuffleId, int mapIndex, long mapId, MapOutputMetadata mapOutputMetadata) {
   }
 
   @Override
