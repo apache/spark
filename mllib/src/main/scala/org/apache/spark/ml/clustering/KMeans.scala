@@ -501,15 +501,33 @@ class KMeans @Since("1.5.0") (
               costAccum.add(cost)
 
             // sums points around best center
-            for ((row, index) <- block.matrix.rowIter.zipWithIndex) {
-              val bestCenter = bestCenters(index)
-              if (block.weights.nonEmpty) {
-                BLAS.axpy(block.weights(index), row, sums(bestCenter))
-              } else {
-                BLAS.axpy(1, row, sums(bestCenter))
+//            for ((row, index) <- block.matrix.rowIter.zipWithIndex) {
+//              val bestCenter = bestCenters(index)
+//              if (block.weights.nonEmpty) {
+//                BLAS.axpy(block.weights(index), row, sums(bestCenter))
+//              } else {
+//                BLAS.axpy(1, row, sums(bestCenter))
+//              }
+//              counts(bestCenter) += 1
+//            }
+
+            // sums points around best center, adding values directly without copying array
+            if (block.weights.nonEmpty) {
+              for (rowIndex <- 0 until block.matrix.numRows) {
+                val bestCenter = bestCenters(rowIndex)
+                for (i <- 0 until centers_dim)
+                  sums(bestCenter).toArray(i) += block.weights(rowIndex) + block.matrix(rowIndex, i)
+                counts(bestCenter) += 1
               }
-              counts(bestCenter) += 1
+            } else {
+              for (rowIndex <- 0 until block.matrix.numRows) {
+                val bestCenter = bestCenters(rowIndex)
+                for (i <- 0 until centers_dim)
+                  sums(bestCenter).toArray(i) += block.matrix(rowIndex, i)
+                counts(bestCenter) += 1
+              }
             }
+
 
             counts.indices.filter(counts(_) > 0).map(j => (j, (sums(j), counts(j)))).iterator
         }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
