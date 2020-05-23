@@ -43,37 +43,26 @@ class InMemoryPartitionCatalog extends InMemoryTableCatalog with SupportsPartiti
       ignoreIfExists: lang.Boolean = false): Unit = {
     assert(tableExists(ident))
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
-    val partitionKeys = table.partitioning.map(_.references().head.fieldNames().head)
-    checkPartitionKeysExists(partitionKeys, partitions.map(_.getPartitionSpec))
-    val newPartitions = partitions.map { partition =>
-      val partitionSpec = partition.getPartitionSpec
-      partitionKeys.filterNot(partitionSpec.keySet().contains)
-        .foreach { partitionKey => partitionSpec.put(partitionKey, "")}
-      partition.setPartitionSpec(partitionSpec)
-      partition
-    }
+    val tableSchema = table.schema.map(_.name)
+    checkPartitionKeysExists(tableSchema, partitions.map(_.getPartitionSpec))
     val tablePartitions =
       memoryTablePartitions.getOrDefault(ident, new mutable.HashSet[TablePartition]())
-    newPartitions.foreach(tablePartitions.add)
+    partitions.foreach(tablePartitions.add)
     memoryTablePartitions.put(ident, tablePartitions)
   }
 
   def dropPartitions(
       ident: Identifier,
       partitions: Array[util.Map[String, String]],
-      ignoreIfNotExists: lang.Boolean = false,
-      purge: lang.Boolean = false,
-      retainData: lang.Boolean = false): Unit = {
+      ignoreIfNotExists: lang.Boolean = false): Unit = {
     assert(tableExists(ident))
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
-    val partitionKeys = table.partitioning.map(_.references().head.fieldNames().head)
-    checkPartitionKeysExists(partitionKeys, partitions)
+    val tableSchema = table.schema.map(_.name)
+    checkPartitionKeysExists(tableSchema, partitions)
     if (memoryTablePartitions.containsKey(ident)) {
       val tablePartitions = memoryTablePartitions.get(ident)
       tablePartitions.filter { tablePartition =>
-        partitions.exists { partition =>
-          partition.asScala.toSet.subsetOf(tablePartition.getPartitionSpec.asScala.toSet)
-        }
+        partitions.contains(tablePartition.getPartitionSpec)
       }.foreach(tablePartitions.remove)
       memoryTablePartitions.put(ident, tablePartitions)
     }
@@ -81,22 +70,21 @@ class InMemoryPartitionCatalog extends InMemoryTableCatalog with SupportsPartiti
 
   def renamePartitions(
       ident: Identifier,
-      oldpartitions: Array[util.Map[String, String]],
+      oldPartitions: Array[util.Map[String, String]],
       newPartitions: Array[util.Map[String, String]]): Unit = {
     assert(tableExists(ident))
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
-    val partitionKeys = table.partitioning.map(_.references().head.fieldNames().head)
-    checkPartitionKeysExists(partitionKeys, oldpartitions)
-    checkPartitionKeysExists(partitionKeys, newPartitions)
+    val tableSchema = table.schema.map(_.name)
+    checkPartitionKeysExists(tableSchema, oldPartitions)
+    checkPartitionKeysExists(tableSchema, newPartitions)
     if (memoryTablePartitions.containsKey(ident)) {
       val tablePartitions = memoryTablePartitions.get(ident)
-      for (index <- oldpartitions.indices) {
+      for (oldPartition <- oldPartitions;
+          newPartition <- newPartitions) {
         tablePartitions.filter { tablePartition =>
-          oldpartitions(index).asScala.toSet.subsetOf(tablePartition.getPartitionSpec.asScala.toSet)
+          oldPartition == tablePartition.getPartitionSpec
         }.foreach { tablePartition =>
-          val newPartitionSpec = new util.HashMap[String, String](tablePartition.getPartitionSpec)
-          newPartitionSpec.putAll(newPartitions(index))
-          tablePartition.setPartitionSpec(newPartitionSpec)
+          tablePartition.setPartitionSpec(newPartition)
         }
       }
       memoryTablePartitions.put(ident, tablePartitions)
@@ -109,8 +97,8 @@ class InMemoryPartitionCatalog extends InMemoryTableCatalog with SupportsPartiti
     assert(tableExists(ident))
     assert(tableExists(ident))
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
-    val partitionKeys = table.partitioning.map(_.references().head.fieldNames().head)
-    checkPartitionKeysExists(partitionKeys, partitions.map(_.getPartitionSpec))
+    val tableSchema = table.schema.map(_.name)
+    checkPartitionKeysExists(tableSchema, partitions.map(_.getPartitionSpec))
     if (memoryTablePartitions.containsKey(ident)) {
       val tablePartitions = memoryTablePartitions.get(ident)
       partitions.foreach { partition =>
@@ -126,8 +114,8 @@ class InMemoryPartitionCatalog extends InMemoryTableCatalog with SupportsPartiti
       partition: util.Map[String, String]): TablePartition = {
     assert(tableExists(ident))
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
-    val partitionKeys = table.partitioning.map(_.references().head.fieldNames().head)
-    checkPartitionKeysExists(partitionKeys, Array(partition))
+    val tableSchema = table.schema.map(_.name)
+    checkPartitionKeysExists(tableSchema, Array(partition))
     memoryTablePartitions.getOrDefault(ident, mutable.HashSet.empty[TablePartition])
       .find(_.getPartitionSpec == partition)
       .getOrElse {
@@ -163,13 +151,13 @@ class InMemoryPartitionCatalog extends InMemoryTableCatalog with SupportsPartiti
   }
 
   private def checkPartitionKeysExists(
-      partitionKeys: Array[String],
+      tableSchema: Seq[String],
       partitions: Array[util.Map[String, String]]): Unit = {
     partitions.foreach { partition =>
-      val errorPartitionKeys = partition.keySet().asScala.filterNot(partitionKeys.contains)
+      val errorPartitionKeys = partition.keySet().asScala.filterNot(tableSchema.contains)
       if (errorPartitionKeys.nonEmpty) {
         throw new IllegalArgumentException(
-          s"Partition Keys not exists, table partitions: ${partitionKeys.mkString("{", ",", "}")}")
+          s"Partition Keys not exists, table schema: ${tableSchema.mkString("{", ",", "}")}")
       }
     }
   }
