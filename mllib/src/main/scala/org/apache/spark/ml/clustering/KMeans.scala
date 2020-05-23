@@ -434,8 +434,15 @@ class KMeans @Since("1.5.0") (
 
       val distanceMeasureInstance = DistanceMeasure.decodeFromString($(distanceMeasure))
 
+      // Use MLlibKMeans to initialize centers
       val mllibKMeans = new MLlibKMeans()
-
+        .setK($(k))
+        .setInitializationMode($(initMode))
+        .setInitializationSteps($(initSteps))
+        .setMaxIterations($(maxIter))
+        .setSeed($(seed))
+        .setEpsilon($(tol))
+        .setDistanceMeasure($(distanceMeasure))
       val centers = if (initMode == "random") {
         mllibKMeans.initBlocksRandom(blocks)
       } else {
