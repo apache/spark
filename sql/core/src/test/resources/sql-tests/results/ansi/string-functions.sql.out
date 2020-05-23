@@ -63,7 +63,7 @@ struct<locate(bar, foobarbar, 1):int,locate(CAST(NULL AS STRING), foobarbar, 1):
 -- !query
 select left("abcd", 2), left("abcd", 5), left("abcd", '2'), left("abcd", null)
 -- !query schema
-struct<left(abcd, 2):string,left(abcd, 5):string,left(abcd, 2):string,left(abcd, NULL):string>
+struct<left('abcd', 2):string,left('abcd', 5):string,left('abcd', '2'):string,left('abcd', NULL):string>
 -- !query output
 ab	abcd	ab	NULL
 
@@ -80,7 +80,7 @@ invalid input syntax for type numeric: a
 -- !query
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null)
 -- !query schema
-struct<right(abcd, 2):string,right(abcd, 5):string,right(abcd, 2):string,right(abcd, NULL):string>
+struct<right('abcd', 2):string,right('abcd', 5):string,right('abcd', '2'):string,right('abcd', NULL):string>
 -- !query output
 cd	abcd	cd	NULL
 
