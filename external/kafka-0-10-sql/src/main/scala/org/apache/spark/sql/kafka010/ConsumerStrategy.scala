@@ -21,10 +21,11 @@ import java.{util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaConfigUpdater
 
 /**
@@ -54,13 +55,22 @@ private[kafka010] sealed trait ConsumerStrategy {
  * Specify a fixed collection of partitions.
  */
 private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
-    extends ConsumerStrategy {
+    extends ConsumerStrategy with Logging {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
     val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    excludeGroupId(updatedKafkaParams)
     val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
     consumer.assign(ju.Arrays.asList(partitions: _*))
     consumer
+  }
+
+  private def excludeGroupId(kafkaParams: ju.Map[String, Object]): Unit = {
+    val groupIdConfig = ConsumerConfig.GROUP_ID_CONFIG
+    val removedGroupId = kafkaParams.remove(groupIdConfig)
+    if (removedGroupId != null) {
+      logDebug(s"Excluded from consumer params: $groupIdConfig -> $removedGroupId")
+    }
   }
 
   override def toString: String = s"Assign[${partitions.mkString(", ")}]"
