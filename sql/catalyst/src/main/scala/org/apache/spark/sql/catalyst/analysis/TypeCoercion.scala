@@ -686,18 +686,17 @@ object TypeCoercion {
   }
 
   /**
-   * The DIV operator always returns long-type value .
+   * The DIV operator always returns long-type value.
    * This rule cast the integral inputs to long type, to avoid overflow during calculation.
    */
   object IntegralDivision extends TypeCoercionRule {
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case e if !e.childrenResolved => e
       case d @ IntegralDivide(left, right) =>
-        IntegralDivide(castToLong(left), castToLong(right))
+        IntegralDivide(mayCastToLong(left), mayCastToLong(right))
     }
 
-    def castToLong(expr: Expression): Expression = expr.dataType match {
+    private def mayCastToLong(expr: Expression): Expression = expr.dataType match {
       case _: ByteType | _: ShortType | _: IntegerType => Cast(expr, LongType)
       case _ => expr
     }

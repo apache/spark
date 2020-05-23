@@ -3496,7 +3496,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkIfSeedExistsInExplain(df2)
   }
 
-  test("SPARK-31761: test byte, short, integer overflow for (Divide) integral type ") {
+  test("SPARK-31761: test byte, short, integer overflow for (Divide) integral type") {
     checkAnswer(sql("Select -2147483648 DIV -1"), Seq(Row(Integer.MIN_VALUE.toLong * -1)))
     checkAnswer(sql("select CAST(-128 as Byte) DIV CAST (-1 as Byte)"),
       Seq(Row(Byte.MinValue.toLong * -1)))
