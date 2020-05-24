@@ -876,7 +876,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  ignore("...: generate test files for checking compatibility with Spark 2.4") {
+  ignore("generate test files for checking compatibility with Spark 2.4") {
     val resourceDir = "sql/core/src/test/resources/test-data"
     val version = "2_4_5"
     val N = 8
@@ -936,99 +936,86 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
     val N = 8
     // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
-    def checkReadMixedFiles(
+    def checkReadMixedFiles[T](
         fileName: String,
-        dt: String,
-        rowFunc: Int => (String, String)): Unit = {
+        catalystType: String,
+        rowFunc: Int => (String, String),
+        toJavaType: String => T,
+        checkDefaultLegacyRead: String => Unit,
+        tsOutputType: String = "TIMESTAMP_MICROS"): Unit = {
       withTempPaths(2) { paths =>
         paths.foreach(_.delete())
         val path2_4 = getResourceParquetFilePath("test-data/" + fileName)
         val path3_0 = paths(0).getCanonicalPath
         val path3_0_rebase = paths(1).getCanonicalPath
-        if (dt == "date") {
-          val df = Seq.tabulate(N)(rowFunc)
-            .toDF("dict", "plain")
-            .select($"dict".cast("date"), $"plain".cast("date"))
+        val df = Seq.tabulate(N)(rowFunc).toDF("dict", "plain")
+          .select($"dict".cast(catalystType), $"plain".cast(catalystType))
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsOutputType) {
+          checkDefaultLegacyRead(path2_4)
           // By default we should fail to write ancient datetime values.
-          var e = intercept[SparkException](df.write.parquet(path3_0))
+          val e = intercept[SparkException](df.write.parquet(path3_0))
           assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
-          // By default we should fail to read ancient datetime values.
-          e = intercept[SparkException](spark.read.parquet(path2_4).collect())
-          assert(e.getCause.isInstanceOf[SparkUpgradeException])
-
           withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
             df.write.mode("overwrite").parquet(path3_0)
           }
           withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
             df.write.parquet(path3_0_rebase)
           }
-
-          // For Parquet files written by Spark 3.0, we know the writer info and don't need the
-          // config to guide the rebase behavior.
-          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key -> LEGACY.toString) {
-            checkAnswer(
-              spark.read.format("parquet").load(path2_4, path3_0, path3_0_rebase),
-              (0 until N).flatMap { i =>
-                val (dictS, plainS) = rowFunc(i)
-                Seq.tabulate(3) { _ =>
-                  Row(java.sql.Date.valueOf(dictS), java.sql.Date.valueOf(plainS))
-                }
-              })
-          }
-        } else {
-          val df = Seq.tabulate(N)(rowFunc)
-            .toDF("dict", "plain")
-            .select($"dict".cast("timestamp"), $"plain".cast("timestamp"))
-          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> dt) {
-            // By default we should fail to write ancient datetime values.
-            var e = intercept[SparkException](df.write.parquet(path3_0))
-            assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
-            // By default we should fail to read ancient datetime values.
-            e = intercept[SparkException](spark.read.parquet(path2_4).collect())
-            assert(e.getCause.isInstanceOf[SparkUpgradeException])
-
-            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
-              df.write.mode("overwrite").parquet(path3_0)
-            }
-            withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
-              df.write.parquet(path3_0_rebase)
-            }
-          }
-          // For Parquet files written by Spark 3.0, we know the writer info and don't need the
-          // config to guide the rebase behavior.
-          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key -> LEGACY.toString) {
-            checkAnswer(
-              spark.read.format("parquet").load(path2_4, path3_0, path3_0_rebase),
-              (0 until N).flatMap { i =>
-                val (dictS, plainS) = rowFunc(i)
-                Seq.tabulate(3) { _ =>
-                  Row(java.sql.Timestamp.valueOf(dictS), java.sql.Timestamp.valueOf(plainS))
-                }
-              })
-          }
+        }
+        // For Parquet files written by Spark 3.0, we know the writer info and don't need the
+        // config to guide the rebase behavior.
+        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key -> LEGACY.toString) {
+          checkAnswer(
+            spark.read.format("parquet").load(path2_4, path3_0, path3_0_rebase),
+            (0 until N).flatMap { i =>
+              val (dictS, plainS) = rowFunc(i)
+              Seq.tabulate(3) { _ =>
+                Row(toJavaType(dictS), toJavaType(plainS))
+              }
+            })
         }
       }
     }
-
-    Seq("2_4_5").foreach { version =>
+    def failInRead(path: String): Unit = {
+      val e = intercept[SparkException](spark.read.parquet(path).collect())
+      assert(e.getCause.isInstanceOf[SparkUpgradeException])
+    }
+    def successInRead(path: String): Unit = spark.read.parquet(path).collect()
+    Seq(
+      // By default we should fail to read ancient datetime values when parquet files don't
+      // contain Spark version.
+      "2_4_5" -> failInRead _,
+      "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
       withAllParquetReaders {
         checkReadMixedFiles(
           s"before_1582_date_v$version.snappy.parquet",
           "date",
-          (i: Int) => ("1001-01-01", s"1001-01-0${i + 1}"))
+          (i: Int) => ("1001-01-01", s"1001-01-0${i + 1}"),
+          java.sql.Date.valueOf,
+          checkDefaultRead)
         checkReadMixedFiles(
           s"before_1582_timestamp_micros_v$version.snappy.parquet",
-          "TIMESTAMP_MICROS",
-          (i: Int) => ("1001-01-01 01:02:03.123456", s"1001-01-0${i + 1} 01:02:03.123456"))
+          "timestamp",
+          (i: Int) => ("1001-01-01 01:02:03.123456", s"1001-01-0${i + 1} 01:02:03.123456"),
+          java.sql.Timestamp.valueOf,
+          checkDefaultRead)
         checkReadMixedFiles(
           s"before_1582_timestamp_millis_v$version.snappy.parquet",
-          "TIMESTAMP_MILLIS",
-          (i: Int) => ("1001-01-01 01:02:03.123", s"1001-01-0${i + 1} 01:02:03.123"))
-
+          "timestamp",
+          (i: Int) => ("1001-01-01 01:02:03.123", s"1001-01-0${i + 1} 01:02:03.123"),
+          java.sql.Timestamp.valueOf,
+          checkDefaultRead,
+          tsOutputType = "TIMESTAMP_MILLIS")
         // INT96 is a legacy timestamp format and we always rebase the seconds for it.
-        //        checkAnswer(readResourceParquetFile(
-        //          "test-data/before_1582_timestamp_int96_v2_4.snappy.parquet"),
-        //          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+        Seq("plain", "dict").foreach { enc =>
+          checkAnswer(readResourceParquetFile(
+            s"test-data/before_1582_timestamp_int96_${enc}_v$version.snappy.parquet"),
+            Seq.tabulate(N) { i =>
+              Row(
+                java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456"),
+                java.sql.Timestamp.valueOf(s"1001-01-0${i + 1} 01:02:03.123456"))
+            })
+        }
       }
     }
   }
