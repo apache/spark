@@ -246,6 +246,7 @@ Options:
   -u uid                UID to use in the USER directive to set the user the main Spark process runs as inside the
                         resulting container
   -X                    Use docker buildx to cross build. Automatically pushes.
+                        See https://docs.docker.com/buildx/working-with-buildx/ for steps to setup buildx.
   -b arg                Build arg to build or push the image. For multiple build args, this option needs to
                         be used separately for each build arg.
 
