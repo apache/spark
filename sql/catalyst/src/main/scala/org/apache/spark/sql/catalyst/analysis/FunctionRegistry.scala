@@ -424,6 +424,9 @@ object FunctionRegistry {
     expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
     expression[Extract]("extract"),
+    expression[SecondsToTimestamp]("timestamp_seconds"),
+    expression[MillisToTimestamp]("timestamp_millis"),
+    expression[MicrosToTimestamp]("timestamp_micros"),
 
     // collection functions
     expression[CreateArray]("array"),

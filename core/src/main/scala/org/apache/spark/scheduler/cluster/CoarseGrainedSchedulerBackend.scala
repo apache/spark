@@ -438,6 +438,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             logError(s"Unexpected error during decommissioning ${e.toString}", e)
         }
         logInfo(s"Finished decommissioning executor $executorId.")
+
+        if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+          try {
+            logInfo("Starting decommissioning block manager corresponding to " +
+              s"executor $executorId.")
+            scheduler.sc.env.blockManager.master.decommissionBlockManagers(Seq(executorId))
+          } catch {
+            case e: Exception =>
+              logError("Unexpected error during block manager " +
+                s"decommissioning for executor $executorId: ${e.toString}", e)
+          }
+          logInfo(s"Acknowledged decommissioning block manager corresponding to $executorId.")
+        }
       } else {
         logInfo(s"Skipping decommissioning of executor $executorId.")
       }
@@ -574,7 +587,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   private[spark] def decommissionExecutor(executorId: String): Unit = {
     if (driverEndpoint != null) {
-      logInfo("Propegating executor decommission to driver.")
+      logInfo("Propagating executor decommission to driver.")
       driverEndpoint.send(DecommissionExecutor(executorId))
     }
   }
@@ -658,7 +671,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
-   * @param resourceProfileToNumExecutors The total number of executors we'd like to have per
+   * @param resourceProfileIdToNumExecutors The total number of executors we'd like to have per
    *                                      ResourceProfile. The cluster manager shouldn't kill any
    *                                      running executor to reach this number, but, if all
    *                                      existing executors were to die, this is the number

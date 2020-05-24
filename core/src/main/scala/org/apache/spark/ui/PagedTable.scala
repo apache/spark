@@ -17,8 +17,9 @@
 
 package org.apache.spark.ui
 
-import java.net.URLDecoder
+import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
+import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
 import scala.xml.{Node, Unparsed}
@@ -297,4 +298,102 @@ private[spark] trait PagedTable[T] {
    * Returns the submission path for the "go to page #" form.
    */
   def goButtonFormPath: String
+
+  /**
+   * Returns parameters of other tables in the page.
+   */
+  def getParameterOtherTable(request: HttpServletRequest, tableTag: String): String = {
+    request.getParameterMap.asScala
+      .filterNot(_._1.startsWith(tableTag))
+      .map(parameter => parameter._1 + "=" + parameter._2(0))
+      .mkString("&")
+  }
+
+  /**
+   * Returns parameter of this table.
+   */
+  def getTableParameters(
+      request: HttpServletRequest,
+      tableTag: String,
+      defaultSortColumn: String): (String, Boolean, Int) = {
+    val parameterSortColumn = request.getParameter(s"$tableTag.sort")
+    val parameterSortDesc = request.getParameter(s"$tableTag.desc")
+    val parameterPageSize = request.getParameter(s"$tableTag.pageSize")
+    val sortColumn = Option(parameterSortColumn).map { sortColumn =>
+      UIUtils.decodeURLParameter(sortColumn)
+    }.getOrElse(defaultSortColumn)
+    val desc = Option(parameterSortDesc).map(_.toBoolean).getOrElse(
+      sortColumn == defaultSortColumn
+    )
+    val pageSize = Option(parameterPageSize).map(_.toInt).getOrElse(100)
+
+    (sortColumn, desc, pageSize)
+  }
+
+  /**
+   * Check if given sort column is valid or not. If invalid then an exception is thrown.
+   */
+  def isSortColumnValid(
+      headerInfo: Seq[(String, Boolean, Option[String])],
+      sortColumn: String): Unit = {
+    if (!headerInfo.filter(_._2).map(_._1).contains(sortColumn)) {
+      throw new IllegalArgumentException(s"Unknown column: $sortColumn")
+    }
+  }
+
+  def headerRow(
+      headerInfo: Seq[(String, Boolean, Option[String])],
+      desc: Boolean,
+      pageSize: Int,
+      sortColumn: String,
+      parameterPath: String,
+      tableTag: String,
+      headerId: String): Seq[Node] = {
+    val row: Seq[Node] = {
+      headerInfo.map { case (header, sortable, tooltip) =>
+        if (header == sortColumn) {
+          val headerLink = Unparsed(
+            parameterPath +
+              s"&$tableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
+              s"&$tableTag.desc=${!desc}" +
+              s"&$tableTag.pageSize=$pageSize" +
+              s"#$headerId")
+          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
+
+          <th>
+            <a href={headerLink}>
+              <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
+                {header}&nbsp;{Unparsed(arrow)}
+              </span>
+            </a>
+          </th>
+        } else {
+          if (sortable) {
+            val headerLink = Unparsed(
+              parameterPath +
+                s"&$tableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
+                s"&$tableTag.pageSize=$pageSize" +
+                s"#$headerId")
+
+            <th>
+              <a href={headerLink}>
+                <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
+                  {header}
+                </span>
+              </a>
+            </th>
+          } else {
+            <th>
+              <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
+                {header}
+              </span>
+            </th>
+          }
+        }
+      }
+    }
+    <thead>
+      <tr>{row}</tr>
+    </thead>
+  }
 }
