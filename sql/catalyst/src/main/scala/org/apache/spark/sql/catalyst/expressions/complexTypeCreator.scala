@@ -534,9 +534,9 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
        {"a":null,"b":null,"c":3}
       > SELECT _FUNC_(NAMED_STRUCT('a', 1, 'b', 2, 'b', 3), 'b', 100);
        {"a":1,"b":100,"b":100}
-      > SELECT _FUNC_(a, 'a.c', 3)) FROM (VALUES (NAMED_STRUCT('a', NAMED_STRUCT('a', 1, 'b', 2))) AS T(a));
+      > SELECT _FUNC_(a, 'a.c', 3) FROM (VALUES (NAMED_STRUCT('a', NAMED_STRUCT('a', 1, 'b', 2))) AS T(a));
        {"a":{"a":1,"b":2,"c":3}}
-       > SELECT _FUNC_(a, 'a.b.c', 1)) FROM (VALUES (NAMED_STRUCT()) AS T(a));
+      > SELECT _FUNC_(a, 'a.b.c', 1) FROM (VALUES (NAMED_STRUCT()) AS T(a));
        {"a":{"b":{"c":1}}}
   """)
 // scalastyle:on line.size.limit
