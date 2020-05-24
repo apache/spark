@@ -105,7 +105,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   def isAllNodeBlacklisted: Boolean = {
     if (numClusterNodes <= 0) {
-      logWarn("No available nodes reported, please check Resource Manager.")
+      logWarning("No available nodes reported, please check Resource Manager.")
       false
     } else {
       currentBlacklistedYarnNodes.size >= numClusterNodes
