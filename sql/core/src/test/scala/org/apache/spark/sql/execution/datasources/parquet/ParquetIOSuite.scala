@@ -912,16 +912,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId,
         SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
         save(
-          (1 to N).map(i => ("1000-01-01", s"1000-01-$i")),
+          (1 to N).map(i => ("1001-01-01", s"1001-01-0$i")),
           "date",
           s"before_1582_date_v$version.snappy.parquet")
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MILLIS") {
           save(
-            (1 to N).map(i => ("1001-01-01 01:02:03.123", s"1001-01-$i 01:02:03.123")),
+            (1 to N).map(i => ("1001-01-01 01:02:03.123", s"1001-01-0$i 01:02:03.123")),
             "timestamp",
             s"before_1582_timestamp_millis_v$version.snappy.parquet")
         }
-        val usTs = (1 to N).map(i => ("1001-01-01 01:02:03.123456", s"1001-01-$i 01:02:03.123456"))
+        val usTs = (1 to N).map(i => ("1001-01-01 01:02:03.123456", s"1001-01-0$i 01:02:03.123456"))
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
           save(usTs, "timestamp", s"before_1582_timestamp_micros_v$version.snappy.parquet")
         }
