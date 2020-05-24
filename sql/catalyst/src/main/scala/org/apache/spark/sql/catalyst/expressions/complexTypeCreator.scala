@@ -567,9 +567,9 @@ case class WithField(children: Seq[Expression]) extends Unevaluable {
       TypeCheckResult.TypeCheckFailure("Field name should not be null.")
     } else {
       val structType = structExpr.dataType.asInstanceOf[StructType]
-      val intermediateAttrs = attributes.dropRight(1)
-      intermediateAttrs.drop(1)
-        .scanLeft(intermediateAttrs.headOption.toSeq)((lastScan, attr) => lastScan :+ attr)
+      val intermediateAttributes :+ _ = attributes
+      intermediateAttributes
+        .scanLeft(Seq.empty[String])((lastScan, attr) => lastScan :+ attr).tail
         .flatMap(attrPath => structType.findNestedField(attrPath, resolver = resolver)
           .map(field => (attrPath, field._2.dataType)))
         .collectFirst { case (attrPath, dataType) if !dataType.isInstanceOf[StructType] =>
