@@ -2,7 +2,7 @@
 ## Summary
   - Number of queries: 336
   - Number of expressions that missing example: 34
-  - Expressions missing examples: and,string,tinyint,double,smallint,date,decimal,boolean,float,binary,bigint,int,timestamp,cume_dist,dense_rank,input_file_block_length,input_file_block_start,input_file_name,lag,lead,monotonically_increasing_id,ntile,struct,!,not,or,percent_rank,rank,row_number,spark_partition_id,version,window,positive,count_min_sketch
+  - Expressions missing examples: and,string,tinyint,double,smallint,date,decimal,boolean,float,binary,bigint,int,timestamp,struct,cume_dist,dense_rank,input_file_block_length,input_file_block_start,input_file_name,lag,lead,monotonically_increasing_id,ntile,!,not,or,percent_rank,rank,row_number,spark_partition_id,version,window,positive,count_min_sketch
 ## Schema of Built-in Functions
 | Class name | Function name or alias | Query example | Output schema |
 | ---------- | ---------------------- | ------------- | ------------- |
@@ -79,6 +79,7 @@
 | org.apache.spark.sql.catalyst.expressions.CreateArray | array | SELECT array(1, 2, 3) | struct<array(1, 2, 3):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.CreateMap | map | SELECT map(1.0, '2', 3.0, '4') | struct<map(1.0, 2, 3.0, 4):map<decimal(2,1),string>> |
 | org.apache.spark.sql.catalyst.expressions.CreateNamedStruct | named_struct | SELECT named_struct("a", 1, "b", 2, "c", 3) | struct<named_struct(a, 1, b, 2, c, 3):struct<a:int,b:int,c:int>> |
+| org.apache.spark.sql.catalyst.expressions.CreateStruct | struct | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.CsvToStructs | from_csv | SELECT from_csv('1, 0.8', 'a INT, b DOUBLE') | struct<from_csv(1, 0.8):struct<a:int,b:double>> |
 | org.apache.spark.sql.catalyst.expressions.Cube | cube | SELECT name, age, count(*) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY cube(name, age) | struct<name:string,age:int,count(1):bigint> |
 | org.apache.spark.sql.catalyst.expressions.CumeDist | cume_dist | N/A | N/A |
@@ -185,7 +186,6 @@
 | org.apache.spark.sql.catalyst.expressions.Murmur3Hash | hash | SELECT hash('Spark', array(123), 2) | struct<hash(Spark, array(123), 2):int> |
 | org.apache.spark.sql.catalyst.expressions.NTile | ntile | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.NaNvl | nanvl | SELECT nanvl(cast('NaN' as double), 123) | struct<nanvl(CAST(NaN AS DOUBLE), CAST(123 AS DOUBLE)):double> |
-| org.apache.spark.sql.catalyst.expressions.NamedStruct | struct | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.NextDay | next_day | SELECT next_day('2015-01-14', 'TU') | struct<next_day(CAST(2015-01-14 AS DATE), TU):date> |
 | org.apache.spark.sql.catalyst.expressions.Not | ! | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Not | not | N/A | N/A |
