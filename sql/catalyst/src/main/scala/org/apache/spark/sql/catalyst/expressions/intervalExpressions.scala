@@ -31,7 +31,7 @@ abstract class ExtractIntervalPart(
     val dataType: DataType,
     func: CalendarInterval => Any,
     funcName: String)
-  extends UnaryExpression with ExpectsInputTypes with Serializable {
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
 
@@ -82,7 +82,7 @@ object ExtractIntervalPart {
 abstract class IntervalNumOperation(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -160,7 +160,7 @@ case class MakeInterval(
     hours: Expression,
     mins: Expression,
     secs: Expression)
-  extends SeptenaryExpression with ImplicitCastInputTypes {
+  extends SeptenaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(
       years: Expression,

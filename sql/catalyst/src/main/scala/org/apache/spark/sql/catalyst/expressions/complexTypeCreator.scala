@@ -255,7 +255,7 @@ object CreateMap {
        {1.0:"2",3.0:"4"}
   """, since = "2.4.0")
 case class MapFromArrays(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
@@ -452,7 +452,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   since = "2.0.1")
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
-  extends TernaryExpression with ExpectsInputTypes {
+  extends TernaryExpression with ExpectsInputTypes with NullIntolerant {
 
   def this(child: Expression, pairDelim: Expression) = {
     this(child, pairDelim, Literal(":"))
