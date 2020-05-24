@@ -61,6 +61,7 @@ object TypeCoercion {
       IfCoercion ::
       StackCoercion ::
       Division ::
+      IntegralDivision ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
@@ -681,6 +682,23 @@ object TypeCoercion {
     private def isNumericOrNull(ex: Expression): Boolean = {
       // We need to handle null types in case a query contains null literals.
       ex.dataType.isInstanceOf[NumericType] || ex.dataType == NullType
+    }
+  }
+
+  /**
+   * The DIV operator always returns long-type value.
+   * This rule cast the integral inputs to long type, to avoid overflow during calculation.
+   */
+  object IntegralDivision extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case e if !e.childrenResolved => e
+      case d @ IntegralDivide(left, right) =>
+        IntegralDivide(mayCastToLong(left), mayCastToLong(right))
+    }
+
+    private def mayCastToLong(expr: Expression): Expression = expr.dataType match {
+      case _: ByteType | _: ShortType | _: IntegerType => Cast(expr, LongType)
+      case _ => expr
     }
   }
 
