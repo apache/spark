@@ -536,8 +536,6 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
        {"a":1,"b":100,"b":100}
       > SELECT _FUNC_(a, 'a.c', 3) FROM (VALUES (NAMED_STRUCT('a', NAMED_STRUCT('a', 1, 'b', 2))) AS T(a));
        {"a":{"a":1,"b":2,"c":3}}
-      > SELECT _FUNC_(a, 'a.b.c', 1) FROM (VALUES (NAMED_STRUCT()) AS T(a));
-       {"a":{"b":{"c":1}}}
   """)
 // scalastyle:on line.size.limit
 case class WithField(children: Seq[Expression]) extends Unevaluable {
@@ -570,11 +568,14 @@ case class WithField(children: Seq[Expression]) extends Unevaluable {
       val intermediateAttributes :+ _ = attributes
       intermediateAttributes
         .scanLeft(Seq.empty[String])((lastScan, attr) => lastScan :+ attr).tail
-        .flatMap(attrPath => structType.findNestedField(attrPath, resolver = resolver)
-          .map(field => (attrPath, field._2.dataType)))
-        .collectFirst { case (attrPath, dataType) if !dataType.isInstanceOf[StructType] =>
-          TypeCheckResult.TypeCheckFailure(s"Intermediate fields must be a $structTypeName. " +
-            s"${attrPath.mkString("`", ".", "`")} is ${dataType.typeName}.")
+        .map(x => (x.mkString("`", ".", "`"), structType.findNestedField(x, resolver = resolver)
+          .map(_._2.dataType)))
+        .collectFirst {
+          case (attrPath, Some(dataType)) if !dataType.isInstanceOf[StructType] =>
+            TypeCheckResult.TypeCheckFailure(s"Intermediate fields must be a $structTypeName. " +
+              s"$attrPath is ${dataType.typeName}.")
+          case (attrPath, None) => TypeCheckResult.TypeCheckFailure(
+            s"Intermediate struct field $attrPath does not exist.")
         }.getOrElse(TypeCheckResult.TypeCheckSuccess)
     }
   }
@@ -591,9 +592,9 @@ case class WithField(children: Seq[Expression]) extends Unevaluable {
   private def toCreateNamedStruct(struct: Expression, attributes: Seq[String]): Expression = {
     val attribute +: nextAttributes = attributes
     val existingNames = struct.dataType.asInstanceOf[StructType].fieldNames
-    val attributeAlreadyExists = existingNames.exists(resolver(_, attribute))
 
     if (nextAttributes.isEmpty) {
+      val attributeAlreadyExists = existingNames.exists(resolver(_, attribute))
       val newField = Seq(Literal(attribute), valExpr)
       CreateNamedStruct(existingNames.zipWithIndex.flatMap {
         case (name, _) if resolver(name, attribute) => newField
@@ -604,8 +605,7 @@ case class WithField(children: Seq[Expression]) extends Unevaluable {
         case (name, i) if resolver(name, attribute) => Seq(Literal(attribute),
           toCreateNamedStruct(GetStructField(struct, i, Some(attribute)), nextAttributes))
         case (name, i) => Seq(Literal(name), GetStructField(struct, i, Some(name)))
-      } ++ (if (attributeAlreadyExists) None else Seq(Literal(attribute), toCreateNamedStruct(
-        CreateNamedStruct(Seq.empty), nextAttributes))))
+      })
     }
   }
 }

@@ -127,6 +127,24 @@ cannot resolve 'with_field(struct_level_1.`a`, 1, 2)' due to data type mismatch:
 
 
 -- !query
+SELECT WITH_FIELD(a, 'x.b', 2) AS a FROM struct_level_2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+cannot resolve 'with_field(struct_level_2.`a`, 'x.b', 2)' due to data type mismatch: Intermediate struct field `x` does not exist.; line 1 pos 7
+
+
+-- !query
+SELECT WITH_FIELD(a, 'a.x.b', 2) AS a FROM struct_level_3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+cannot resolve 'with_field(struct_level_3.`a`, 'a.x.b', 2)' due to data type mismatch: Intermediate struct field `a.x` does not exist.; line 1 pos 7
+
+
+-- !query
 SELECT WITH_FIELD(a, 'b.a', 2) AS a FROM struct_level_1
 -- !query schema
 struct<>
@@ -189,22 +207,6 @@ SELECT WITH_FIELD(a, 'a.a.d', 4) AS a FROM struct_level_3
 struct<a:struct<a:struct<a:struct<a:int,b:int,c:int,d:int>>>>
 -- !query output
 {"a":{"a":{"a":1,"b":null,"c":3,"d":4}}}
-
-
--- !query
-SELECT WITH_FIELD(a, 'x.y', 4) AS a FROM struct_level_2
--- !query schema
-struct<a:struct<a:struct<a:int,b:int,c:int>,x:struct<y:int>>>
--- !query output
-{"a":{"a":1,"b":null,"c":3},"x":{"y":4}}
-
-
--- !query
-SELECT WITH_FIELD(a, 'x.y.z', 4) AS a FROM struct_level_3
--- !query schema
-struct<a:struct<a:struct<a:struct<a:int,b:int,c:int>>,x:struct<y:struct<z:int>>>>
--- !query output
-{"a":{"a":{"a":1,"b":null,"c":3}},"x":{"y":{"z":4}}}
 
 
 -- !query
@@ -298,9 +300,10 @@ struct<a:struct<a.b:struct<c.d:int,e.f:int,g.h:int>>>
 -- !query
 SELECT WITH_FIELD(a, 'a.b.e.f', 2) AS a FROM struct_with_dots_in_name_level_2
 -- !query schema
-struct<a:struct<a.b:struct<c.d:int,e.f:int,g.h:int>,a:struct<b:struct<e:struct<f:int>>>>>
+struct<>
 -- !query output
-{"a.b":{"c.d":1,"e.f":null,"g.h":3},"a":{"b":{"e":{"f":2}}}}
+org.apache.spark.sql.AnalysisException
+cannot resolve 'with_field(struct_with_dots_in_name_level_2.`a`, 'a.b.e.f', 2)' due to data type mismatch: Intermediate struct field `a` does not exist.; line 1 pos 7
 
 
 -- !query
@@ -386,14 +389,16 @@ spark.sql.caseSensitive	true
 -- !query
 SELECT WITH_FIELD(a, 'A.a', 2) AS a FROM mixed_case_struct_level_2
 -- !query schema
-struct<a:struct<a:struct<a:int,b:int>,B:struct<a:int,b:int>,A:struct<a:int>>>
+struct<>
 -- !query output
-{"a":{"a":1,"b":1},"B":{"a":1,"b":1},"A":{"a":2}}
+org.apache.spark.sql.AnalysisException
+cannot resolve 'with_field(mixed_case_struct_level_2.`a`, 'A.a', 2)' due to data type mismatch: Intermediate struct field `A` does not exist.; line 1 pos 7
 
 
 -- !query
 SELECT WITH_FIELD(a, 'b.a', 2) AS a FROM mixed_case_struct_level_2
 -- !query schema
-struct<a:struct<a:struct<a:int,b:int>,B:struct<a:int,b:int>,b:struct<a:int>>>
+struct<>
 -- !query output
-{"a":{"a":1,"b":1},"B":{"a":1,"b":1},"b":{"a":2}}
+org.apache.spark.sql.AnalysisException
+cannot resolve 'with_field(mixed_case_struct_level_2.`a`, 'b.a', 2)' due to data type mismatch: Intermediate struct field `b` does not exist.; line 1 pos 7

@@ -44,6 +44,10 @@ SELECT WITH_FIELD(a, NULL, 2) AS a FROM struct_level_1;
 -- Should throw an exception if fieldName is not a string
 SELECT WITH_FIELD(a, 1, 2) AS a FROM struct_level_1;
 
+-- Should throw an exception if any intermediate structs don't exist
+SELECT WITH_FIELD(a, 'x.b', 2) AS a FROM struct_level_2;
+SELECT WITH_FIELD(a, 'a.x.b', 2) AS a FROM struct_level_3;
+
 -- Should throw an exception if an intermediate field is not a struct
 SELECT WITH_FIELD(a, 'b.a', 2) AS a FROM struct_level_1;
 
@@ -65,12 +69,6 @@ SELECT WITH_FIELD(a, 'a.d', 4) AS a FROM struct_level_2;
 
 -- Should add field to deeply nested struct
 SELECT WITH_FIELD(a, 'a.a.d', 4) AS a FROM struct_level_3;
-
--- Should add intermediate structs and nested field
-SELECT WITH_FIELD(a, 'x.y', 4) AS a FROM struct_level_2;
-
--- Should add intermediate structs and deeply nested field
-SELECT WITH_FIELD(a, 'x.y.z', 4) AS a FROM struct_level_3;
 
 -- Should replace field in struct
 SELECT WITH_FIELD(a, 'b', 2) AS a FROM struct_level_1;
@@ -109,7 +107,7 @@ set spark.sql.caseSensitive=false;
 SELECT WITH_FIELD(a, 'A', 2) AS a FROM mixed_case_struct_level_1;
 SELECT WITH_FIELD(a, 'b', 2) AS a FROM mixed_case_struct_level_1;
 
--- Should add field in struct because casing is different
+-- Should add field to struct because casing is different
 set spark.sql.caseSensitive=true;
 SELECT WITH_FIELD(a, 'A', 2) AS a FROM mixed_case_struct_level_1;
 SELECT WITH_FIELD(a, 'b', 2) AS a FROM mixed_case_struct_level_1;
@@ -119,7 +117,7 @@ set spark.sql.caseSensitive=false;
 SELECT WITH_FIELD(a, 'A.a', 2) AS a FROM mixed_case_struct_level_2;
 SELECT WITH_FIELD(a, 'b.a', 2) AS a FROM mixed_case_struct_level_2;
 
--- Should add nested field to struct because casing is different
+-- Should throw an exception because casing is different
 set spark.sql.caseSensitive=true;
 SELECT WITH_FIELD(a, 'A.a', 2) AS a FROM mixed_case_struct_level_2;
 SELECT WITH_FIELD(a, 'b.a', 2) AS a FROM mixed_case_struct_level_2;

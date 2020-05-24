@@ -979,18 +979,28 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val testNamePrefix = "withField: "
 
     test(testNamePrefix +
-      "should throw error if called on a non-StructType column") {
+      "should throw an exception if called on a non-StructType column") {
       intercept[AnalysisException] {
         testData.withColumn("key", $"key".withField("a", lit(2)))
       }.getMessage should include("Only struct is allowed to appear at first position, got: " +
         "integer")
     }
 
-    test(testNamePrefix + "should throw error if given null fieldName") {
+    test(testNamePrefix + "should throw an exception if given null fieldName") {
       intercept[AnalysisException] {
         structLevel1.withColumn("a", $"a".withField(null, lit(2)))
       }.getMessage should include(s"Only foldable string expressions are allowed to appear at " +
         "second position.")
+    }
+
+    test(testNamePrefix + "should throw an exception if any intermediate structs don't exist") {
+      intercept[AnalysisException] {
+        structLevel2.withColumn("a", 'a.withField("x.b", lit(2)))
+      }.getMessage should include("Intermediate struct field `x` does not exist.")
+
+      intercept[AnalysisException] {
+        structLevel3.withColumn("a", 'a.withField("a.x.b", lit(2)))
+      }.getMessage should include("Intermediate struct field `a.x` does not exist.")
     }
 
     test(testNamePrefix + "should throw an exception if an intermediate field is not a struct") {
@@ -1084,44 +1094,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
                 StructField("b", IntegerType, nullable = true),
                 StructField("c", IntegerType, nullable = false),
                 StructField("d", IntegerType, nullable = false))),
-                nullable = false))),
-              nullable = false))),
-            nullable = false))))
-    }
-
-    test(testNamePrefix + "should add intermediate structs and nested field") {
-      checkAnswerCustom(
-        structLevel2.withColumn("a", 'a.withField("x.y", lit(4))),
-        Row(Row(Row(1, null, 3), Row(4))) :: Nil,
-        StructType(Seq(
-          StructField("a", StructType(Seq(
-            StructField("a", StructType(Seq(
-              StructField("a", IntegerType, nullable = false),
-              StructField("b", IntegerType, nullable = true),
-              StructField("c", IntegerType, nullable = false))),
-              nullable = false),
-            StructField("x", StructType(Seq(
-              StructField("y", IntegerType, nullable = false))),
-              nullable = false))),
-            nullable = false))))
-    }
-
-    test(testNamePrefix + "should add intermediate structs and deeply nested field") {
-      checkAnswerCustom(
-        structLevel3.withColumn("a", 'a.withField("x.y.z", lit(4))),
-        Row(Row(Row(Row(1, null, 3)), Row(Row(4)))) :: Nil,
-        StructType(Seq(
-          StructField("a", StructType(Seq(
-            StructField("a", StructType(Seq(
-              StructField("a", StructType(Seq(
-                StructField("a", IntegerType, nullable = false),
-                StructField("b", IntegerType, nullable = true),
-                StructField("c", IntegerType, nullable = false))),
-                nullable = false))),
-              nullable = false),
-            StructField("x", StructType(Seq(
-              StructField("y", StructType(Seq(
-                StructField("z", IntegerType, nullable = false))),
                 nullable = false))),
               nullable = false))),
             nullable = false))))
@@ -1280,24 +1252,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
               nullable = false))),
             nullable = false))))
 
-      checkAnswerCustom(
-        df.withColumn("a", 'a.withField("a.b.e.f", lit(2))),
-        Row(Row(Row(1, null, 3), Row(Row(Row(2))))) :: Nil,
-        StructType(Seq(
-          StructField("a", StructType(Seq(
-            StructField("a.b", StructType(Seq(
-              StructField("c.d", IntegerType, nullable = false),
-              StructField("e.f", IntegerType, nullable = true),
-              StructField("g.h", IntegerType, nullable = false))),
-              nullable = false),
-            StructField("a", StructType(Seq(
-              StructField("b", StructType(Seq(
-                StructField("e", StructType(Seq(
-                  StructField("f", IntegerType, nullable = false))),
-                  nullable = false))),
-                nullable = false))),
-              nullable = false))),
-            nullable = false))))
+      intercept[AnalysisException] {
+        df.withColumn("a", 'a.withField("a.b.e.f", lit(2)))
+      }.getMessage should include("Intermediate struct field `a` does not exist.")
     }
 
     lazy val mixedCaseStructLevel1: DataFrame = spark.createDataFrame(
@@ -1402,43 +1359,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       }
     }
 
-    test(testNamePrefix + "should add nested field to struct because casing is different") {
+    test(testNamePrefix + "should throw an exception because casing is different") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
-        checkAnswerCustom(
-          mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2))),
-          Row(Row(Row(1, 1), Row(1, 1), Row(2))) :: Nil,
-          StructType(Seq(
-            StructField("a", StructType(Seq(
-              StructField("a", StructType(Seq(
-                StructField("a", IntegerType, nullable = false),
-                StructField("b", IntegerType, nullable = false))),
-                nullable = false),
-              StructField("B", StructType(Seq(
-                StructField("a", IntegerType, nullable = false),
-                StructField("b", IntegerType, nullable = false))),
-                nullable = false),
-              StructField("A", StructType(Seq(
-                StructField("a", IntegerType, nullable = false))),
-                nullable = false))),
-              nullable = false))))
+        intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2)))
+        }.getMessage should include("Intermediate struct field `A` does not exist.")
 
-        checkAnswerCustom(
-          mixedCaseStructLevel2.withColumn("a", 'a.withField("b.a", lit(2))),
-          Row(Row(Row(1, 1), Row(1, 1), Row(2))) :: Nil,
-          StructType(Seq(
-            StructField("a", StructType(Seq(
-              StructField("a", StructType(Seq(
-                StructField("a", IntegerType, nullable = false),
-                StructField("b", IntegerType, nullable = false))),
-                nullable = false),
-              StructField("B", StructType(Seq(
-                StructField("a", IntegerType, nullable = false),
-                StructField("b", IntegerType, nullable = false))),
-                nullable = false),
-              StructField("b", StructType(Seq(
-                StructField("a", IntegerType, nullable = false))),
-                nullable = false))),
-              nullable = false))))
+        intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", 'a.withField("b.a", lit(2)))
+        }.getMessage should include("Intermediate struct field `b` does not exist.")
       }
     }
   }
