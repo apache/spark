@@ -138,6 +138,13 @@ case class AdaptiveSparkPlanExec(
     executedPlan.resetMetrics()
   }
 
+  private def getExecutionId: Option[Long] = {
+    // If the `QueryExecution` does not match the current execution ID, it means the execution ID
+    // belongs to another (parent) query, and we should not call update UI in this query.
+    Option(context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY))
+      .map(_.toLong).filter(SQLExecution.getQueryExecution(_) eq context.qe)
+  }
+
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (isFinalPlan) return currentPhysicalPlan
 
@@ -145,10 +152,7 @@ case class AdaptiveSparkPlanExec(
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
     // created in the middle of the execution.
     context.session.withActive {
-      // Subqueries do not have their own execution IDs and therefore rely on the main query to
-      // update UI.
-      val executionId = Option(context.session.sparkContext.getLocalProperty(
-        SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
+      val executionId = getExecutionId
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
@@ -229,31 +233,46 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
-      logOnLevel(s"Final plan: $currentPhysicalPlan")
       currentPhysicalPlan
     }
   }
 
+  // Use a lazy val to avoid this being called more than once.
+  @transient private lazy val finalPlanUpdate: Unit = {
+    // Subqueries that don't belong to any query stage of the main query will execute after the
+    // last UI update in `getFinalPhysicalPlan`, so we need to update UI here again to make sure
+    // the newly generated nodes of those subqueries are updated.
+    if (!isSubquery && currentPhysicalPlan.find(_.subqueries.nonEmpty).isDefined) {
+      getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
+    }
+    logOnLevel(s"Final plan: $currentPhysicalPlan")
+  }
+
   override def executeCollect(): Array[InternalRow] = {
-    getFinalPhysicalPlan().executeCollect()
+    val rdd = getFinalPhysicalPlan().executeCollect()
+    finalPlanUpdate
+    rdd
   }
 
   override def executeTake(n: Int): Array[InternalRow] = {
-    getFinalPhysicalPlan().executeTake(n)
+    val rdd = getFinalPhysicalPlan().executeTake(n)
+    finalPlanUpdate
+    rdd
   }
 
   override def executeTail(n: Int): Array[InternalRow] = {
-    getFinalPhysicalPlan().executeTail(n)
+    val rdd = getFinalPhysicalPlan().executeTail(n)
+    finalPlanUpdate
+    rdd
   }
 
   override def doExecute(): RDD[InternalRow] = {
-    getFinalPhysicalPlan().execute()
+    val rdd = getFinalPhysicalPlan().execute()
+    finalPlanUpdate
+    rdd
   }
 
-  override def verboseString(maxFields: Int): String = simpleString(maxFields)
-
-  override def simpleString(maxFields: Int): String =
-    s"AdaptiveSparkPlan(isFinalPlan=$isFinalPlan)"
+  protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")
 
   override def generateTreeString(
       depth: Int,
@@ -508,8 +527,8 @@ case class AdaptiveSparkPlanExec(
       val planDescriptionMode = ExplainMode.fromString(conf.uiExplainMode)
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
         executionId,
-        SQLExecution.getQueryExecution(executionId).explainString(planDescriptionMode),
-        SparkPlanInfo.fromSparkPlan(this)))
+        context.qe.explainString(planDescriptionMode),
+        SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
     }
   }
 
@@ -547,7 +566,7 @@ case class AdaptiveSparkPlanExec(
 }
 
 object AdaptiveSparkPlanExec {
-  private val executionContext = ExecutionContext.fromExecutorService(
+  private[adaptive] val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("QueryStageCreator", 16))
 
   /**
@@ -573,7 +592,7 @@ object AdaptiveSparkPlanExec {
 /**
  * The execution context shared between the main query and all sub-queries.
  */
-case class AdaptiveExecutionContext(session: SparkSession) {
+case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
 
   /**
    * The subquery-reuse map shared across the entire query.

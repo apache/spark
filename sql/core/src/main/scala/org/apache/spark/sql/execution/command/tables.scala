@@ -918,15 +918,20 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalogTable = sparkSession.sessionState.catalog.getTableMetadata(table)
-    propertyKey match {
-      case Some(p) =>
-        val propValue = catalogTable
-          .properties
-          .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
-        Seq(Row(propValue))
-      case None =>
-        catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
+    val catalog = sparkSession.sessionState.catalog
+    if (catalog.isTemporaryTable(table)) {
+      Seq.empty[Row]
+    } else {
+      val catalogTable = catalog.getTableMetadata(table)
+      propertyKey match {
+        case Some(p) =>
+          val propValue = catalogTable
+            .properties
+            .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
+          Seq(Row(propValue))
+        case None =>
+          catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
+      }
     }
   }
 }

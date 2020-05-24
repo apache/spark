@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
@@ -49,7 +50,8 @@ case class CustomShuffleReaderExec private(
     // If it is a local shuffle reader with one mapper per task, then the output partitioning is
     // the same as the plan before shuffle.
     // TODO this check is based on assumptions of callers' behavior but is sufficient for now.
-    if (partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]) &&
+    if (partitionSpecs.nonEmpty &&
+        partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]) &&
         partitionSpecs.map(_.asInstanceOf[PartialMapperPartitionSpec].mapIndex).toSet.size ==
           partitionSpecs.length) {
       child match {
@@ -98,7 +100,7 @@ case class CustomShuffleReaderExec private(
   }
 
   @transient private lazy val partitionDataSizes: Option[Seq[Long]] = {
-    if (!isLocalReader && shuffleStage.get.mapStats.isDefined) {
+    if (partitionSpecs.nonEmpty && !isLocalReader && shuffleStage.get.mapStats.isDefined) {
       val bytesByPartitionId = shuffleStage.get.mapStats.get.bytesByPartitionId
       Some(partitionSpecs.map {
         case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
@@ -120,12 +122,21 @@ case class CustomShuffleReaderExec private(
     driverAccumUpdates += (numPartitionsMetric.id -> partitionSpecs.length.toLong)
 
     if (hasSkewedPartition) {
-      val skewedMetric = metrics("numSkewedPartitions")
-      val numSkewedPartitions = partitionSpecs.collect {
-        case p: PartialReducerPartitionSpec => p.reducerIndex
-      }.distinct.length
-      skewedMetric.set(numSkewedPartitions)
-      driverAccumUpdates += (skewedMetric.id -> numSkewedPartitions.toLong)
+      val skewedSpecs = partitionSpecs.collect {
+        case p: PartialReducerPartitionSpec => p
+      }
+
+      val skewedPartitions = metrics("numSkewedPartitions")
+      val skewedSplits = metrics("numSkewedSplits")
+
+      val numSkewedPartitions = skewedSpecs.map(_.reducerIndex).distinct.length
+      val numSplits = skewedSpecs.length
+
+      skewedPartitions.set(numSkewedPartitions)
+      driverAccumUpdates += (skewedPartitions.id -> numSkewedPartitions)
+
+      skewedSplits.set(numSplits)
+      driverAccumUpdates += (skewedSplits.id -> numSplits)
     }
 
     partitionDataSizes.foreach { dataSizes =>
@@ -152,7 +163,9 @@ case class CustomShuffleReaderExec private(
       } ++ {
         if (hasSkewedPartition) {
           Map("numSkewedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of skewed partitions"))
+            SQLMetrics.createMetric(sparkContext, "number of skewed partitions"),
+            "numSkewedSplits" ->
+              SQLMetrics.createMetric(sparkContext, "number of skewed partition splits"))
         } else {
           Map.empty
         }

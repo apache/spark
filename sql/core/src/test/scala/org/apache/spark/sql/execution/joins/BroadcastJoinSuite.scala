@@ -24,7 +24,7 @@ import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
 import org.apache.spark.sql.catalyst.plans.logical.BROADCAST
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AdaptiveTestUtils, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.functions._
@@ -39,7 +39,8 @@ import org.apache.spark.sql.types.{LongType, ShortType}
  * unsafe map in [[org.apache.spark.sql.execution.joins.UnsafeHashedRelation]] is not triggered
  * without serializing the hashed relation, which does not happen in local mode.
  */
-class BroadcastJoinSuite extends QueryTest with SQLTestUtils with AdaptiveSparkPlanHelper {
+abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   protected var spark: SparkSession = null
@@ -206,24 +207,25 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
 
   test("broadcast hint in SQL") {
     import org.apache.spark.sql.catalyst.plans.logical.Join
+    withTempView("t", "u") {
+      spark.range(10).createOrReplaceTempView("t")
+      spark.range(10).createOrReplaceTempView("u")
 
-    spark.range(10).createOrReplaceTempView("t")
-    spark.range(10).createOrReplaceTempView("u")
+      for (name <- Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN")) {
+        val plan1 = sql(s"SELECT /*+ $name(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+          .optimizedPlan
+        val plan2 = sql(s"SELECT /*+ $name(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+          .optimizedPlan
+        val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+          .optimizedPlan
 
-    for (name <- Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN")) {
-      val plan1 = sql(s"SELECT /*+ $name(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-        .optimizedPlan
-      val plan2 = sql(s"SELECT /*+ $name(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-        .optimizedPlan
-      val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-        .optimizedPlan
-
-      assert(plan1.asInstanceOf[Join].hint.leftHint.get.strategy.contains(BROADCAST))
-      assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
-      assert(plan2.asInstanceOf[Join].hint.leftHint.isEmpty)
-      assert(plan2.asInstanceOf[Join].hint.rightHint.get.strategy.contains(BROADCAST))
-      assert(plan3.asInstanceOf[Join].hint.leftHint.isEmpty)
-      assert(plan3.asInstanceOf[Join].hint.rightHint.isEmpty)
+        assert(plan1.asInstanceOf[Join].hint.leftHint.get.strategy.contains(BROADCAST))
+        assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
+        assert(plan2.asInstanceOf[Join].hint.leftHint.isEmpty)
+        assert(plan2.asInstanceOf[Join].hint.rightHint.get.strategy.contains(BROADCAST))
+        assert(plan3.asInstanceOf[Join].hint.leftHint.isEmpty)
+        assert(plan3.asInstanceOf[Join].hint.rightHint.isEmpty)
+      }
     }
   }
 
@@ -398,4 +400,22 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils with AdaptiveSparkP
         }
     }
   }
+
+  test("Broadcast timeout") {
+    val timeout = 5
+    val slowUDF = udf({ x: Int => Thread.sleep(timeout * 10 * 1000); x })
+    val df1 = spark.range(10).select($"id" as 'a)
+    val df2 = spark.range(5).select(slowUDF($"id") as 'a)
+    val testDf = df1.join(broadcast(df2), "a")
+    withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> timeout.toString) {
+      val e = intercept[Exception] {
+        testDf.collect()
+      }
+      AdaptiveTestUtils.assertExceptionMessage(e, s"Could not execute broadcast in $timeout secs.")
+    }
+  }
 }
+
+class BroadcastJoinSuite extends BroadcastJoinSuiteBase with DisableAdaptiveExecutionSuite
+
+class BroadcastJoinSuiteAE extends BroadcastJoinSuiteBase with EnableAdaptiveExecutionSuite

@@ -22,7 +22,8 @@
   "executorLogs" : { },
   "blacklistedInStages" : [ ],
   "attributes" : { },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0
 }, {
   "id" : "3",
   "hostPort" : "172.22.0.111:64543",
@@ -50,7 +51,8 @@
   },
   "blacklistedInStages" : [ ],
   "attributes" : { },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0
 }, {
   "id" : "2",
   "hostPort" : "172.22.0.111:64539",
@@ -78,7 +80,8 @@
   },
   "blacklistedInStages" : [ ],
   "attributes" : { },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0
 }, {
   "id" : "1",
   "hostPort" : "172.22.0.111:64541",
@@ -106,7 +109,8 @@
   },
   "blacklistedInStages" : [ ],
   "attributes" : { },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0
 }, {
   "id" : "0",
   "hostPort" : "172.22.0.111:64540",
@@ -134,5 +138,6 @@
   },
   "blacklistedInStages" : [ ],
   "attributes" : { },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0
 } ]

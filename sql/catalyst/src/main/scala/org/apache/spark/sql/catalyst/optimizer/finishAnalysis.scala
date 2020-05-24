@@ -85,7 +85,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
             LocalDate.now(DateTimeUtils.getZoneId(timeZoneId)),
             DateType)
         })
-      case CurrentTimestamp() => currentTime
+      case CurrentTimestamp() | Now() => currentTime
     }
   }
 }

@@ -434,9 +434,10 @@ object SQLConf {
 
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
-      .doc("The minimum number of shuffle partitions after coalescing. If not set, the default " +
-        "value is the default parallelism of the Spark cluster. This configuration only " +
-        s"has an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+      .doc("The suggested (not guaranteed) minimum number of shuffle partitions after " +
+        "coalescing. If not set, the default value is the default parallelism of the " +
+        "Spark cluster. This configuration only has an effect when " +
+        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true.")
       .version("3.0.0")
       .intConf
@@ -620,7 +621,7 @@ object SQLConf {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
-    .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
+    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
     .doc("Sets the compression codec used when writing Parquet files. If either `compression` or " +
@@ -844,8 +845,10 @@ object SQLConf {
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
-      "distinct semantics. By default the optimization is disabled, since it may return " +
-      "incorrect results when the files are empty.")
+      "distinct semantics. By default the optimization is disabled, and deprecated as of Spark " +
+      "3.0 since it may return incorrect results when the files are empty, see also SPARK-26709." +
+      "It will be removed in the future releases. If you must use, use 'SparkSessionExtensions' " +
+      "instead to inject it as a custom rule.")
     .version("2.1.1")
     .booleanConf
     .createWithDefault(false)
@@ -2062,16 +2065,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val NESTED_PREDICATE_PUSHDOWN_ENABLED =
-    buildConf("spark.sql.optimizer.nestedPredicatePushdown.enabled")
+  val NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST =
+    buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources")
       .internal()
-      .doc("When true, Spark tries to push down predicates for nested columns and or names " +
-        "containing `dots` to data sources. Currently, Parquet implements both optimizations " +
-        "while ORC only supports predicates for names containing `dots`. The other data sources" +
-        "don't support this feature yet.")
+      .doc("A comma-separated list of data source short names or fully qualified data source " +
+        "implementation class names for which Spark tries to push down predicates for nested " +
+        "columns and/or names containing `dots` to data sources. This configuration is only " +
+        "effective with file-based data source in DSv1. Currently, Parquet implements " +
+        "both optimizations while ORC only supports predicates for names containing `dots`. The " +
+        "other data sources don't support this feature yet. So the default value is 'parquet,orc'.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(true)
+      .stringConf
+      .createWithDefault("parquet,orc")
 
   val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
@@ -2219,15 +2224,6 @@ object SQLConf {
       .doc("When set to true, negative scale of Decimal type is allowed. For example, " +
         "the type of number 1E10BD under legacy mode is DecimalType(2, -9), but is " +
         "Decimal(11, 0) in non legacy mode.")
-      .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED =
-    buildConf("spark.sql.legacy.createHiveTableByDefault.enabled")
-      .internal()
-      .doc("When set to true, CREATE TABLE syntax without a provider will use hive " +
-        s"instead of the value of ${DEFAULT_DATA_SOURCE_NAME.key}.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -2523,57 +2519,72 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.rebaseDateTimeInWrite.enabled")
+  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
       .internal()
-      .doc("When true, rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the hybrid calendar (Julian + Gregorian) in write. " +
-        "The rebasing is performed by converting micros/millis/days to " +
-        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
-        "timestamp in the target calendar, and getting the number of micros/millis/days " +
-        "since the epoch 1970-01-01 00:00:00Z.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_REBASE_DATETIME_IN_READ =
-    buildConf("spark.sql.legacy.parquet.rebaseDateTimeInRead.enabled")
+  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
       .internal()
-      .doc("When true, rebase dates/timestamps " +
-        "from the hybrid calendar to Proleptic Gregorian calendar in read. " +
-        "The rebasing is performed by converting micros/millis/days to " +
-        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
-        "timestamp in the target calendar, and getting the number of micros/millis/days " +
-        "since the epoch 1970-01-01 00:00:00Z.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_AVRO_REBASE_DATETIME_IN_WRITE =
-    buildConf("spark.sql.legacy.avro.rebaseDateTimeInWrite.enabled")
+  val LEGACY_AVRO_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInWrite")
       .internal()
-      .doc("When true, rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the hybrid calendar (Julian + Gregorian) in write. " +
-        "The rebasing is performed by converting micros/millis/days to " +
-        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
-        "timestamp in the target calendar, and getting the number of micros/millis/days " +
-        "since the epoch 1970-01-01 00:00:00Z.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the legacy hybrid (Julian + Gregorian) calendar when writing Avro files. " +
+        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_AVRO_REBASE_DATETIME_IN_READ =
-    buildConf("spark.sql.legacy.avro.rebaseDateTimeInRead.enabled")
+  val LEGACY_AVRO_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInRead")
       .internal()
-      .doc("When true, rebase dates/timestamps " +
-        "from the hybrid calendar to Proleptic Gregorian calendar in read. " +
-        "The rebasing is performed by converting micros/millis/days to " +
-        "a local date/timestamp in the source calendar, interpreting the resulted date/" +
-        "timestamp in the target calendar, and getting the number of micros/millis/days " +
-        "since the epoch 1970-01-01 00:00:00Z.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Avro files. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
+    buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
+      .internal()
+      .doc("Timeout for executor to wait for the termination of transformation script when EOF.")
+      .version("3.0.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ > 0, "The timeout value must be positive")
+      .createWithDefault(10L)
 
   val COALESCE_BUCKETS_IN_JOIN_ENABLED =
     buildConf("spark.sql.bucketing.coalesceBucketsInJoin.enabled")
@@ -2624,7 +2635,10 @@ object SQLConf {
       DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
         s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it."),
       DeprecatedConfig(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "3.0",
-        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it.")
+        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it."),
+      DeprecatedConfig(OPTIMIZER_METADATA_ONLY.key, "3.0",
+        "Avoid to depend on this optimization to prevent a potential correctness issue. " +
+          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -3122,8 +3136,6 @@ class SQLConf extends Serializable with Logging {
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
-  def nestedPredicatePushdownEnabled: Boolean = getConf(NESTED_PREDICATE_PUSHDOWN_ENABLED)
-
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
 
@@ -3157,9 +3169,6 @@ class SQLConf extends Serializable with Logging {
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
-  def createHiveTableByDefaultEnabled: Boolean =
-    getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
-
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
 
@@ -3180,10 +3189,6 @@ class SQLConf extends Serializable with Logging {
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
-
-  def parquetRebaseDateTimeInReadEnabled: Boolean = {
-    getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ)
-  }
 
   /** ********************** SQLConf functionality methods ************ */
 
