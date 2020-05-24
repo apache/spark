@@ -871,7 +871,7 @@ case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Op
 }
 
 abstract class ToTimestamp
-  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
+  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
 
   // The result of the conversion to timestamp is microseconds divided by this factor.
   // For example if the factor is 1000000, the result of the expression is in seconds.

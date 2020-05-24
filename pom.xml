@@ -885,8 +885,7 @@
       <dependency>
         <groupId>org.clapper</groupId>
         <artifactId>classutil_${scala.binary.version}</artifactId>
-        <version>1.5.0</version>
-        <scope>test</scope>
+        <version>1.5.1</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>

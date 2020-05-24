@@ -44,7 +44,6 @@
     <dependency>
       <groupId>org.clapper</groupId>
       <artifactId>classutil_${scala.binary.version}</artifactId>
-      <version>1.5.1</version>
     </dependency>
   </dependencies>
 

@@ -120,6 +120,7 @@
     <dependency>
       <groupId>org.clapper</groupId>
       <artifactId>classutil_${scala.binary.version}</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <build>

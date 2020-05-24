@@ -31,7 +31,6 @@ class NullIntolerantCheckerSuite extends SparkFunSuite {
   // Do not check these Expressions
   private val whiteList = List(
     classOf[IntegralDivide], classOf[Divide], classOf[Remainder], classOf[Pmod],
-    classOf[ToUnixTimestamp], classOf[GetTimestamp], classOf[UnixTimestamp],
     classOf[CheckOverflow], classOf[NormalizeNaNAndZero],
     classOf[InSet],
     classOf[PrintToStderr], classOf[CodegenFallbackExpression]).map(_.getName)
