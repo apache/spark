@@ -39,6 +39,8 @@ Note that support for Java 7, Python 2.6 and old Hadoop versions before 2.6.5 we
 Support for Scala 2.10 was removed as of 2.3.0. Support for Scala 2.11 is deprecated as of Spark 2.4.1
 and will be removed in Spark 3.0.
 
+For Java 8u251+, `HTTP2_DISABLE=true` and `spark.kubernetes.driverEnv.HTTP2_DISABLE=true` are required additionally for fabric8 `kubernetes-client` library to talk to Kubernetes clusters. This prevents `KubernetesClientException` when `kubernetes-client` library uses `okhttp` library internally.
+
 # Running the Examples and Shell
 
 Spark comes with several sample programs.  Scala, Java, Python and R examples are in the
