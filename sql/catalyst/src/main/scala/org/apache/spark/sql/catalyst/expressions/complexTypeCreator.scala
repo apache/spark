@@ -517,7 +517,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 }
 
 /**
- * Adds/replaces nested field in struct by name.
+ * Adds/replaces field in struct by name.
  *
  * @param children Seq(struct, name, val)
  */
@@ -539,7 +539,6 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   """)
 // scalastyle:on line.size.limit
 case class WithField(children: Seq[Expression]) extends Unevaluable {
-
   private lazy val Seq(structExpr, nestedAttributeExpr, valExpr) = children
   private lazy val nestedAttribute = nestedAttributeExpr.eval().toString
   private lazy val attributes = UnresolvedAttribute.parseAttributeName(nestedAttribute)
