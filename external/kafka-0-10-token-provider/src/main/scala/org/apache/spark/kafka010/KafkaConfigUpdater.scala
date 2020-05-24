@@ -45,6 +45,17 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
     this
   }
 
+  def remove(key: String): this.type = {
+    val removedValue = map.remove(key)
+    if (log.isDebugEnabled) {
+      val redactedRemovedValue = KafkaRedactionUtil
+        .redactParams(Seq(key -> removedValue))
+        .head._2
+      logDebug(s"$module: Removed $key: $redactedRemovedValue")
+    }
+    this
+  }
+
   def setIfUnset(key: String, value: Object): this.type = {
     if (!map.containsKey(key)) {
       map.put(key, value)
