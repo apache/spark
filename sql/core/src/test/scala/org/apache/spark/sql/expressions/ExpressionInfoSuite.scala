@@ -21,10 +21,12 @@ import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
+import org.apache.spark.sql.catalyst.expressions.{NonSQLExpression, _}
+import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
 
@@ -154,6 +156,76 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
           }
         }
       }
+    }
+  }
+
+  test("Check whether should extend NullIntolerant") {
+    // Only check expressions extended from these expressions
+    val parentExpressionNames = Seq(classOf[UnaryExpression], classOf[BinaryExpression],
+      classOf[TernaryExpression], classOf[QuaternaryExpression],
+      classOf[SeptenaryExpression]).map(_.getName)
+    // Do not check these expressions
+    val whiteList = Seq(
+      classOf[IntegralDivide], classOf[Divide], classOf[Remainder], classOf[Pmod],
+      classOf[CheckOverflow], classOf[NormalizeNaNAndZero], classOf[InSet],
+      classOf[PrintToStderr], classOf[CodegenFallbackExpression]).map(_.getName)
+
+    spark.sessionState.functionRegistry.listFunction()
+      .map(spark.sessionState.catalog.lookupFunctionInfo).map(_.getClassName)
+      .filterNot(c => whiteList.exists(_.equals(c))).foreach { className =>
+      if (needToCheckNullIntolerant(className)) {
+        val evalExist = checkIfEvalOverrode(className)
+        val nullIntolerantExist = checkIfNullIntolerantMixedIn(className)
+        if (evalExist && nullIntolerantExist) {
+          fail(s"$className should not extend ${classOf[NullIntolerant].getSimpleName}")
+        } else if (!evalExist && !nullIntolerantExist) {
+          fail(s"$className should extend ${classOf[NullIntolerant].getSimpleName}")
+        } else {
+          assert((!evalExist && nullIntolerantExist) || (evalExist && !nullIntolerantExist))
+        }
+      }
+    }
+
+    def needToCheckNullIntolerant(className: String): Boolean = {
+      var clazz: Class[_] = Utils.classForName(className)
+      val isNonSQLExpr =
+        clazz.getInterfaces.exists(_.getName.equals(classOf[NonSQLExpression].getName))
+      var checkNullIntolerant: Boolean = false
+      while (!checkNullIntolerant && clazz.getSuperclass != null) {
+        checkNullIntolerant = parentExpressionNames.exists(_.equals(clazz.getSuperclass.getName))
+        if (!checkNullIntolerant) {
+          clazz = clazz.getSuperclass
+        }
+      }
+      checkNullIntolerant && !isNonSQLExpr
+    }
+
+    def checkIfNullIntolerantMixedIn(className: String): Boolean = {
+      val nullIntolerantName = classOf[NullIntolerant].getName
+      var clazz: Class[_] = Utils.classForName(className)
+      var nullIntolerantMixedIn = false
+      while (!nullIntolerantMixedIn && !parentExpressionNames.exists(_.equals(clazz.getName))) {
+        nullIntolerantMixedIn = clazz.getInterfaces.exists(_.getName.equals(nullIntolerantName)) ||
+          clazz.getInterfaces.exists { i =>
+            Utils.classForName(i.getName).getInterfaces.exists(_.getName.equals(nullIntolerantName))
+          }
+        if (!nullIntolerantMixedIn) {
+          clazz = clazz.getSuperclass
+        }
+      }
+      nullIntolerantMixedIn
+    }
+
+    def checkIfEvalOverrode(className: String): Boolean = {
+      var clazz: Class[_] = Utils.classForName(className)
+      var evalOverrode: Boolean = false
+      while (!evalOverrode && !parentExpressionNames.exists(_.equals(clazz.getName))) {
+        evalOverrode = clazz.getDeclaredMethods.exists(_.getName.equals("eval"))
+        if (!evalOverrode) {
+          clazz = clazz.getSuperclass
+        }
+      }
+      evalOverrode
     }
   }
 }

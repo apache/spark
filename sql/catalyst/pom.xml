@@ -117,11 +117,6 @@
       <groupId>org.apache.arrow</groupId>
       <artifactId>arrow-vector</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.clapper</groupId>
-      <artifactId>classutil_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
