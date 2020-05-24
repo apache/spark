@@ -44,6 +44,33 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
     assert(updatedParams.get(testKey) === testValue)
   }
 
+  test("remove should remove existing key") {
+    val params = Map(
+      testKey -> testValue,
+      "k2" -> "v2"
+    )
+
+    val updatedParams = KafkaConfigUpdater(testModule, params)
+      .remove(testKey)
+      .build()
+
+    assert(updatedParams.size() === 1)
+    assert(!updatedParams.containsKey(testKey))
+  }
+
+  test("remove should not modify the map if the key is missing in the map") {
+    val params = Map(
+      testKey -> testValue
+    )
+
+    val updatedParams = KafkaConfigUpdater(testModule, params)
+      .remove("k2")
+      .build()
+
+    assert(updatedParams.size() === 1)
+    assert(updatedParams.get(testKey) === testValue)
+  }
+
   test("setIfUnset without existing key should set value") {
     val params = Map.empty[String, String]
 
