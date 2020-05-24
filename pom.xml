@@ -204,7 +204,7 @@
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
 
     <test.java.home>${java.home}</test.java.home>
-    <test.exclude.tags></test.exclude.tags>
+    <test.exclude.tags>org.apache.spark.tags.ChromeUITest</test.exclude.tags>
     <test.include.tags></test.include.tags>
 
     <!-- Package to use when relocating shaded classes. -->

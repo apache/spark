@@ -38,7 +38,7 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
   implicit var webDriver: WebDriver
   private val driverPropPrefix = "spark.test."
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     assume(
       sys.props(driverPropPrefix + driverProp) !== null,
