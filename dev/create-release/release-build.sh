@@ -388,7 +388,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "</server></servers></settings>" >> $tmp_settings
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_11_PROFILES $PUBLISH_PROFILES deploy
   #./dev/change-scala-version.sh 2.12
@@ -423,7 +423,7 @@ if [[ "$1" == "publish-release" ]]; then
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
 
