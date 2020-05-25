@@ -267,7 +267,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         // Test escaping of format
         GenerateUnsafeProjection.generate(
-          DateFormatClass(Literal(ts), Literal("\"quote"), JST_OPT) :: Nil)
+          DateFormatClass(Literal(ts), Literal("\""), JST_OPT) :: Nil)
 
         // SPARK-28072 The codegen path should work
         checkEvaluation(
