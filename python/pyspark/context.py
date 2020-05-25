@@ -25,6 +25,7 @@ from threading import RLock
 from tempfile import NamedTemporaryFile
 
 from py4j.protocol import Py4JError
+from py4j.java_gateway import is_instance_of
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -864,10 +865,17 @@ class SparkContext(object):
         first_jrdd_deserializer = rdds[0]._jrdd_deserializer
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
             rdds = [x._reserialize() for x in rdds]
+        gw = SparkContext._gateway
         cls = SparkContext._jvm.org.apache.spark.api.java.JavaRDD
-        jrdds = SparkContext._gateway.new_array(cls, len(rdds))
+        is_jrdd = is_instance_of(gw, rdds[0]._jrdd, cls)
+        jrdds = gw.new_array(cls, len(rdds))
         for i in range(0, len(rdds)):
-            jrdds[i] = rdds[i]._jrdd
+            if is_jrdd:
+                jrdds[i] = rdds[i]._jrdd
+            else:
+                # zip could return JavaPairRDD hence we ensure `_jrdd`
+                # to be `JavaRDD` by wrapping it in a `map`
+                jrdds[i] = rdds[i].map(lambda x: x)._jrdd
         return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
