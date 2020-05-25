@@ -62,7 +62,7 @@
 | org.apache.spark.sql.catalyst.expressions.Cast | binary | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | bigint | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | int | N/A | N/A |
-| org.apache.spark.sql.catalyst.expressions.Cast | timestamp | N/A | N/A |
+| org.apache.spark.sql.catalyst.expressions.Cast | timestamp | SELECT cast('2020-02-03 11:11:00,123' as timestamp) | struct<CAST('2020-02-03 11:11:00,123' AS TIMESTAMP):timestamp>  |
 | org.apache.spark.sql.catalyst.expressions.Cbrt | cbrt | SELECT cbrt(27.0) | struct<CBRT(CAST(27.0 AS DOUBLE)):double> |
 | org.apache.spark.sql.catalyst.expressions.Ceil | ceil | SELECT ceil(-0.1) | struct<CEIL(-0.1):decimal(1,0)> |
 | org.apache.spark.sql.catalyst.expressions.Ceil | ceiling | SELECT ceiling(-0.1) | struct<ceiling(-0.1):decimal(1,0)> |
