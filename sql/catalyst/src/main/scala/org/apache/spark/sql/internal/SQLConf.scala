@@ -2893,6 +2893,7 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
+
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
@@ -3175,7 +3176,6 @@ class SQLConf extends Serializable with Logging {
 
   def allowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_AllOW_CAST_NUMERIC_TO_TIMESTAMP)
-
 
   /** ********************** SQLConf functionality methods ************ */
 
