@@ -902,9 +902,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       }
     }
     DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
-      withSQLConf(
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId,
-        SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId) {
         save(
           (1 to N).map(i => ("1001-01-01", s"1001-01-0$i")),
           "date",
