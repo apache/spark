@@ -142,7 +142,8 @@ class QueryExecution(
     }
   }
 
-  private def simpleString(formatted: Boolean,
+  private def simpleString(
+      formatted: Boolean,
       maxFields: Int,
       append: String => Unit): Unit = {
     append("== Physical Plan ==\n")
@@ -289,22 +290,21 @@ class QueryExecution(
     /**
      * Dumps debug information about query execution into the specified file.
      *
+     * @param path path of the file the debug info is written to.
      * @param maxFields maximum number of fields converted to string representation.
      * @param explainMode the explain mode to be used to generate the string
      *                    representation of the plan.
      */
-    def toFile(path: String,
+    def toFile(
+        path: String,
         maxFields: Int = Int.MaxValue,
         explainMode: Option[String] = None): Unit = {
       val filePath = new Path(path)
       val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
-      val append = (s: String) => {
-        writer.write(s)
-      }
       try {
         val mode = explainMode.map(ExplainMode.fromString(_)).getOrElse(ExtendedMode)
-        explainString(mode, maxFields, append)
+        explainString(mode, maxFields, writer.write)
         if (mode != CodegenMode) {
           writer.write("\n== Whole Stage Codegen ==\n")
           org.apache.spark.sql.execution.debug.writeCodegen(writer.write, executedPlan)

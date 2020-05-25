@@ -54,20 +54,6 @@ class QueryExecutionSuite extends SharedSparkSession {
       ""))
   }
 
-  def checkDumpedPlansInFormattedMode(path: String, expected: Int): Unit = {
-    assert(Source.fromFile(path).getLines.toList
-      .takeWhile(_ != "== Whole Stage Codegen ==").map(_.replaceAll("#\\d+", "#x")) == List(
-      "== Physical Plan ==",
-      s"* Range (1)",
-      "",
-      "",
-      s"(1) Range [codegen id : 1]",
-      "Output [1]: [id#xL]",
-      s"Arguments: Range (0, $expected, step=1, splits=Some(2))",
-      "",
-      ""))
-  }
-
   test("dumping query execution info to a file") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath + "/plans.txt"
@@ -113,7 +99,17 @@ class QueryExecutionSuite extends SharedSparkSession {
       val path = dir.getCanonicalPath + "/plans.txt"
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path, explainMode = Option("formatted"))
-      checkDumpedPlansInFormattedMode(path, expected = 10)
+      assert(Source.fromFile(path).getLines.toList
+        .takeWhile(_ != "== Whole Stage Codegen ==").map(_.replaceAll("#\\d+", "#x")) == List(
+        "== Physical Plan ==",
+        s"* Range (1)",
+        "",
+        "",
+        s"(1) Range [codegen id : 1]",
+        "Output [1]: [id#xL]",
+        s"Arguments: Range (0, 10, step=1, splits=Some(2))",
+        "",
+        ""))
     }
   }
 
