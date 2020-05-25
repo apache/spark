@@ -17,14 +17,11 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol, HasWeightCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{Column, DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
@@ -125,17 +122,30 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
    */
   @Since("3.1.0")
   def getMetrics(dataset: Dataset[_]): ClusteringMetrics = {
-    SchemaUtils.validateVectorCompatibleColumn(dataset.schema, $(featuresCol))
-    SchemaUtils.checkNumericType(dataset.schema, $(predictionCol))
+    val schema = dataset.schema
+    SchemaUtils.validateVectorCompatibleColumn(schema, $(featuresCol))
+    SchemaUtils.checkNumericType(schema, $(predictionCol))
+    if (isDefined(weightCol)) {
+      SchemaUtils.checkNumericType(schema, $(weightCol))
+    }
+
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
 
     val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
-    val df = dataset.select(col($(predictionCol)),
-      vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata))
+    val df = if (!isDefined(weightCol) || $(weightCol).isEmpty) {
+      dataset.select(col($(predictionCol)),
+        vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata),
+        lit(1.0).as(weightColName))
+    } else {
+      dataset.select(col($(predictionCol)),
+        vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata),
+        col(weightColName).cast(DoubleType))
+    }
+
     val metrics = new ClusteringMetrics(df)
     metrics.setDistanceMeasure($(distanceMeasure))
     metrics
   }
-
 
   @Since("3.0.0")
   override def toString: String = {
