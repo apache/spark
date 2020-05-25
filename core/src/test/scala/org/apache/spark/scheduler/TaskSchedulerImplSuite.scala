@@ -203,7 +203,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       sc.conf.get(config.TASK_MAX_FAILURES),
       clock = clock) {
       override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
-        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock = clock)
       }
       override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
         // Don't shuffle the offers around for this test.  Instead, we'll just pass in all
