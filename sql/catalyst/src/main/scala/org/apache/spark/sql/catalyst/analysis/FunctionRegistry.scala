@@ -491,6 +491,7 @@ object FunctionRegistry {
     expression[InputFileBlockLength]("input_file_block_length"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
+    expression[CurrentCatalog]("current_catalog"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
