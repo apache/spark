@@ -918,6 +918,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           save(usTs, "timestamp", s"before_1582_timestamp_micros_v$version.snappy.parquet")
         }
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "INT96") {
+          // Comparing to other logical types, Parquet-MR chooses dictionary encoding for the
+          // INT96 logical type because it consumes less memory for small column cardinality.
+          // Huge parquet files doesn't make sense to place to the resource folder. That's why
+          // we explicitly set `parquet.enable.dictionary` and generate two files w/ and w/o
+          // dictionary encoding.
           save(
             usTs,
             "timestamp",
