@@ -54,6 +54,7 @@ sealed trait TimestampFormatter extends Serializable {
   def format(us: Long): String
   def format(ts: Timestamp): String
   def format(instant: Instant): String
+  def validatePatternString(): Unit
 }
 
 class Iso8601TimestampFormatter(
@@ -98,6 +99,12 @@ class Iso8601TimestampFormatter(
 
   override def format(ts: Timestamp): String = {
     legacyFormatter.format(ts)
+  }
+
+  override def validatePatternString(): Unit = {
+    try {
+      formatter
+    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
   }
 }
 
@@ -202,6 +209,8 @@ class LegacyFastTimestampFormatter(
   override def format(instant: Instant): String = {
     format(instantToMicros(instant))
   }
+
+  override def validatePatternString(): Unit = fastDateFormat
 }
 
 class LegacySimpleTimestampFormatter(
@@ -231,6 +240,8 @@ class LegacySimpleTimestampFormatter(
   override def format(instant: Instant): String = {
     format(instantToMicros(instant))
   }
+
+  override def validatePatternString(): Unit = sdf
 }
 
 object LegacyDateFormats extends Enumeration {
@@ -255,8 +266,10 @@ object TimestampFormatter {
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      new Iso8601TimestampFormatter(
+      val tf = new Iso8601TimestampFormatter(
         pattern, zoneId, locale, legacyFormat, needVarLengthSecondFraction)
+      tf.validatePatternString()
+      tf
     }
   }
 

@@ -20,4 +20,4 @@ license: |
 ---
 
  * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
- * [UNSET](sql-ref-syntax-aux-conf-mgmt-reset.html)
+ * [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)
