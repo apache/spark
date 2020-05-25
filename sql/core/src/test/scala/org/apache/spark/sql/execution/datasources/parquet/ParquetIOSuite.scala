@@ -876,7 +876,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  ignore("generate test files for checking compatibility with Spark 2.4") {
+  // It generates input files for the test below:
+  // "SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps"
+  ignore("SPARK-31806: generate test files for checking compatibility with Spark 2.4") {
     val resourceDir = "sql/core/src/test/resources/test-data"
     val version = "2_4_5"
     val N = 8
