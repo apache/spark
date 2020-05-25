@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim._
 import org.apache.spark.ml.param._
@@ -400,14 +401,14 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         "set to false. To fit a model with 0 features, fitIntercept must be set to true." )
 
     val w = if (!hasWeightCol) lit(1.0) else col($(weightCol))
-    val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
+    val offset = if (!hasOffsetCol) lit(0.0)
+      else checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
 
     val model = if (familyAndLink.family == Gaussian && familyAndLink.link == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val instances: RDD[Instance] =
         dataset.select(col($(labelCol)), w, offset, col($(featuresCol))).rdd.map {
           case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
-            require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
             Instance(label - offset, weight, features)
         }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,

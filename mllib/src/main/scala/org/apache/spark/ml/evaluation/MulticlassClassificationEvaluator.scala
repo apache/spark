@@ -18,6 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -186,7 +187,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     SchemaUtils.checkNumericType(schema, $(labelCol))
 
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
     } else {
       lit(1.0)
     }
@@ -202,15 +203,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w, p)
         .rdd.map {
         case Row(prediction: Double, label: Double, weight: Double, probability: Vector) =>
-          require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
           (prediction, label, weight, probability.toArray)
       }
     } else {
       dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w)
         .rdd.map {
-        case Row(prediction: Double, label: Double, weight: Double) =>
-          require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
-          (prediction, label, weight)
+        case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
       }
     }
 

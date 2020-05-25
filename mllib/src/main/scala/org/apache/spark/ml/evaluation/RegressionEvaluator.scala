@@ -18,6 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol, HasWeightCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
@@ -122,10 +123,10 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
     val predictionAndLabelsWithWeights = dataset
       .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType),
-        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
+        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0)
+        else checkNonNegativeWeight(col($(weightCol)).cast(DoubleType)))
       .rdd
       .map { case Row(prediction: Double, label: Double, weight: Double) =>
-        require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
         (prediction, label, weight) }
     new RegressionMetrics(predictionAndLabelsWithWeights, $(throughOrigin))
   }

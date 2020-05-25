@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -336,16 +337,14 @@ class KMeans @Since("1.5.0") (
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
     } else {
       lit(1.0)
     }
 
     val instances: RDD[(OldVector, Double)] = dataset
       .select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd.map {
-      case Row(point: Vector, weight: Double) =>
-        require (weight >= 0.0, "illegal weight value: " + weight + " weight must be >= 0.0")
-        (OldVectors.fromML(point), weight)
+      case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight)
     }
 
     if (handlePersistence) {
