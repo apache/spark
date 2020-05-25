@@ -18,51 +18,37 @@
 package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Project, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Wraps `LogicalRelation` to provide the number of buckets for coalescing.
- */
-case class CoalesceBuckets(
-    numCoalescedBuckets: Int,
-    child: LogicalRelation) extends UnaryNode {
-  require(numCoalescedBuckets > 0,
-    s"Number of coalesced buckets ($numCoalescedBuckets) must be positive.")
-
-  override def output: Seq[Attribute] = child.output
-}
-
-/**
- * This rule adds a `CoalesceBuckets` logical plan if the following conditions are met:
+ * This rule coalesces one side of the `SortMergeJoin` if the following conditions are met:
  *   - Two bucketed tables are joined.
- *   - Join is the equi-join.
  *   - The larger bucket number is divisible by the smaller bucket number.
  *   - "spark.sql.bucketing.coalesceBucketsInJoin.enabled" is set to true.
  *   - The difference in the number of buckets is less than the value set in
  *     "spark.sql.bucketing.coalesceBucketsInJoin.maxNumBucketsDiff".
  */
-object CoalesceBucketsInEquiJoin extends Rule[LogicalPlan]  {
-  private def isPlanEligible(plan: LogicalPlan): Boolean = {
-    def forall(plan: LogicalPlan)(p: LogicalPlan => Boolean): Boolean = {
+case class CoalesceBucketsInSortMergeJoin(conf: SQLConf) extends Rule[SparkPlan]  {
+  private def isPlanEligible(plan: SparkPlan): Boolean = {
+    def forall(plan: SparkPlan)(p: SparkPlan => Boolean): Boolean = {
       p(plan) && plan.children.forall(forall(_)(p))
     }
 
     forall(plan) {
-      case _: Filter | _: Project | _: LogicalRelation => true
+      case _: FilterExec | _: ProjectExec | _: FileSourceScanExec => true
       case _ => false
     }
   }
 
-  private def getBucketSpec(plan: LogicalPlan): Option[BucketSpec] = {
+  private def getBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
     if (isPlanEligible(plan)) {
       plan.collectFirst {
-        case _ @ LogicalRelation(r: HadoopFsRelation, _, _, _) if r.bucketSpec.nonEmpty =>
-          r.bucketSpec.get
+        case f: FileSourceScanExec
+          if f.relation.bucketSpec.nonEmpty && f.optionalNumCoalescedBuckets.isEmpty =>
+          f.relation.bucketSpec.get
       }
     } else {
       None
@@ -81,21 +67,21 @@ object CoalesceBucketsInEquiJoin extends Rule[LogicalPlan]  {
     }
   }
 
-  private def addCoalesceBuckets(plan: LogicalPlan, numCoalescedBuckets: Int): LogicalPlan = {
+  private def updateNumCoalescedBuckets(plan: SparkPlan, numCoalescedBuckets: Int): SparkPlan = {
     plan.transformUp {
-      case l @ LogicalRelation(_: HadoopFsRelation, _, _, _) =>
-        CoalesceBuckets(numCoalescedBuckets, l)
+      case f: FileSourceScanExec =>
+        f.copy(optionalNumCoalescedBuckets = Some(numCoalescedBuckets))
     }
   }
 
-  object ExtractJoinWithBuckets {
-    def unapply(plan: LogicalPlan): Option[(Join, Int, Int)] = {
+  object ExtractSortMergeJoinWithBuckets {
+    def unapply(plan: SparkPlan): Option[(SortMergeJoinExec, Int, Int)] = {
       plan match {
-        case join @ ExtractEquiJoinKeys(_, _, _, _, left, right, _) =>
-          val leftBucket = getBucketSpec(left)
-          val rightBucket = getBucketSpec(right)
+        case s: SortMergeJoinExec =>
+          val leftBucket = getBucketSpec(s.left)
+          val rightBucket = getBucketSpec(s.right)
           if (leftBucket.isDefined && rightBucket.isDefined) {
-            Some(join, leftBucket.get.numBuckets, rightBucket.get.numBuckets)
+            Some(s, leftBucket.get.numBuckets, rightBucket.get.numBuckets)
           } else {
             None
           }
@@ -104,20 +90,18 @@ object CoalesceBucketsInEquiJoin extends Rule[LogicalPlan]  {
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val sqlConf = SQLConf.get
-    if (sqlConf.coalesceBucketsInJoinEnabled) {
+  def apply(plan: SparkPlan): SparkPlan = {
+    if (conf.coalesceBucketsInJoinEnabled) {
       plan transform {
-        case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
-            if numLeftBuckets != numRightBuckets =>
-          mayCoalesce(numLeftBuckets, numRightBuckets, sqlConf).map { numCoalescedBuckets =>
+        case ExtractSortMergeJoinWithBuckets(smj, numLeftBuckets, numRightBuckets)
+          if numLeftBuckets != numRightBuckets =>
+          mayCoalesce(numLeftBuckets, numRightBuckets, conf).map { numCoalescedBuckets =>
             if (numCoalescedBuckets != numLeftBuckets) {
-              join.copy(left = addCoalesceBuckets(join.left, numCoalescedBuckets))
+              smj.copy(left = updateNumCoalescedBuckets(smj.left, numCoalescedBuckets))
             } else {
-              join.copy(right = addCoalesceBuckets(join.right, numCoalescedBuckets))
+              smj.copy(right = updateNumCoalescedBuckets(smj.right, numCoalescedBuckets))
             }
-          }.getOrElse(join)
-
+          }.getOrElse(smj)
         case other => other
       }
     } else {

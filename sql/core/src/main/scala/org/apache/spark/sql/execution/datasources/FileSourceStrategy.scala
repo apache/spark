@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.bucketing.CoalesceBuckets
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -138,8 +137,8 @@ object FileSourceStrategy extends Strategy with Logging {
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case ScanOperationWithCoalescedBuckets(projects, filters,
-      l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _), numCoalescedBuckets) =>
+    case ScanOperation(projects, filters,
+      l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -209,7 +208,7 @@ object FileSourceStrategy extends Strategy with Logging {
           outputSchema,
           partitionKeyFilters.toSeq,
           bucketSet,
-          numCoalescedBuckets,
+          None,
           dataFilters,
           table.map(_.identifier))
 
@@ -224,24 +223,5 @@ object FileSourceStrategy extends Strategy with Logging {
       withProjections :: Nil
 
     case _ => Nil
-  }
-}
-
-/**
- * Extractor that handles `CoalesceBuckets` in the child plan extracted from `ScanOperation`.
- */
-object ScanOperationWithCoalescedBuckets {
-  type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan, Option[Int])
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = {
-    plan match {
-      case ScanOperation(projects, filters, child) => child match {
-        case c: CoalesceBuckets =>
-          Some(projects, filters, c.child, Some(c.numCoalescedBuckets))
-        case _ =>
-          Some(projects, filters, child, None)
-      }
-      case _ => None
-    }
   }
 }
