@@ -59,7 +59,8 @@ object Cast {
     case (StringType, TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
-    case (_: FractionalType, TimestampType) => true
+    case (_: NumericType, TimestampType) =>
+      if (SQLConf.get.allowCastNumericToTimestamp) true else false
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
@@ -138,8 +139,10 @@ object Cast {
     case (_: CalendarIntervalType, StringType) => true
     case (NullType, _) => true
 
-    // spark forbid casting from integral to timestamp, more details in [SPARK-31790]
+    // Spark supports casting between long and timestamp, please see `longToTimestamp` and
+    // `timestampToLong` for details.
     case (TimestampType, LongType) => true
+    case (LongType, TimestampType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       resolvableNullability(fn, tn) && canUpCast(fromType, toType)
@@ -264,9 +267,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        if (child.dataType.isInstanceOf[IntegralType] && dataType.isInstanceOf[TimestampType]) {
+        if (child.dataType.isInstanceOf[NumericType] && dataType.isInstanceOf[TimestampType]) {
           s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}," +
-            s"please use function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instand"
+            s",you can enable the casting by setting" +
+            s"spark.sql.legacy.allowCastNumericToTimestamp =true;" +
+            s"but we strongly recommand using function" +
+            s"TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instand"
         } else {
           s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
         })
@@ -428,6 +434,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
+    case LongType =>
+      buildCast[Long](_, l => longToTimestamp(l))
+    case IntegerType =>
+      buildCast[Int](_, i => longToTimestamp(i.toLong))
+    case ShortType =>
+      buildCast[Short](_, s => longToTimestamp(s.toLong))
+    case ByteType =>
+      buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
       buildCast[Int](_, d => epochDaysToMicros(d, zoneId))
     // TimestampWritable.decimalToTimestamp
@@ -448,6 +462,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
   }
 
+  // converting seconds to us
+  private[this] def longToTimestamp(t: Long): Long = SECONDS.toMicros(t)
   // converting us to seconds
   private[this] def timestampToLong(ts: Long): Long = {
     Math.floorDiv(ts, MICROS_PER_SECOND)
@@ -1222,6 +1238,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
          """
     case BooleanType =>
       (c, evPrim, evNull) => code"$evPrim = $c ? 1L : 0L;"
+    case _: IntegralType =>
+      (c, evPrim, evNull) => code"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
       val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
@@ -1268,6 +1286,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     val block = inline"new java.math.BigDecimal($MICROS_PER_SECOND)"
     code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
   }
+  private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * (long)$MICROS_PER_SECOND"
   private[this] def timestampToLongCode(ts: ExprValue): Block =
     code"java.lang.Math.floorDiv($ts, $MICROS_PER_SECOND)"
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
