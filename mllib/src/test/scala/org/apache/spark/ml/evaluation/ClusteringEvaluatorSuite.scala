@@ -162,6 +162,7 @@ class ClusteringEvaluatorSuite
 
     assert(evaluator.evaluate(irisDataset) == silhouetteScoreCosin)
   }
+
   test("test weight support") {
     Seq("squaredEuclidean", "cosine").foreach { distanceMeasure =>
       val evaluator1 = new ClusteringEvaluator()
