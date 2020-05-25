@@ -400,9 +400,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       "GeneralizedLinearRegression was given data with 0 features, and with Param fitIntercept " +
         "set to false. To fit a model with 0 features, fitIntercept must be set to true." )
 
-    val w = if (!hasWeightCol) lit(1.0) else col($(weightCol))
-    val offset = if (!hasOffsetCol) lit(0.0)
-      else checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
+    val w = if (!hasWeightCol) lit(1.0) else checkNonNegativeWeight(col($(weightCol)))
+    val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
 
     val model = if (familyAndLink.family == Gaussian && familyAndLink.link == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
