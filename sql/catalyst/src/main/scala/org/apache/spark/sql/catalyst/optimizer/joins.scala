@@ -222,14 +222,14 @@ trait JoinSelectionHelper {
       right: LogicalPlan,
       joinType: JoinType,
       hint: JoinHint,
-      onlyLookingAtHint: Boolean,
+      hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (onlyLookingAtHint) {
+    val buildLeft = if (hintOnly) {
       hintToBroadcastLeft(hint)
     } else {
       canBroadcastBySize(left, conf) && !hintToNotBroadcastLeft(hint)
     }
-    val buildRight = if (onlyLookingAtHint) {
+    val buildRight = if (hintOnly) {
       hintToBroadcastRight(hint)
     } else {
       canBroadcastBySize(right, conf) && !hintToNotBroadcastRight(hint)
@@ -247,14 +247,14 @@ trait JoinSelectionHelper {
       right: LogicalPlan,
       joinType: JoinType,
       hint: JoinHint,
-      onlyLookingAtHint: Boolean,
+      hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (onlyLookingAtHint) {
+    val buildLeft = if (hintOnly) {
       hintToShuffleHashJoinLeft(hint)
     } else {
       canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
     }
-    val buildRight = if (onlyLookingAtHint) {
+    val buildRight = if (hintOnly) {
       hintToShuffleHashJoinRight(hint)
     } else {
       canBuildLocalHashMapBySize(right, conf) && muchSmaller(right, left)
