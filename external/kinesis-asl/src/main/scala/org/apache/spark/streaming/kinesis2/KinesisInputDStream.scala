@@ -36,22 +36,22 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 
 private[kinesis2] class KinesisInputDStream[T: ClassTag](_ssc: StreamingContext,
-                      val streamName: String,
-                      val endpointUrl: URI,
-                      val regionName: String,
-                      val kinesisCreds: SparkAWSCredentials,
-                      val dynamoDBCreds: Option[SparkAWSCredentials],
-                      val cloudWatchCreds: Option[SparkAWSCredentials],
-                      val cloudWatchUrl: Option[URI],
-                      val checkpointAppName: String,
-                      val checkpointInterval: Duration,
-                      val maxRecords: Option[Integer],
-                      val protocol: Option[Protocol],
-                      val initialPositionInStream: Option[InitialPositionInStream],
-                      val dynamoProxyHost: Option[String],
-                      val dynamoProxyPort: Option[Integer],
-                      val _storageLevel: StorageLevel,
-                      val messageHandler: KinesisClientRecord => T)
+                          val streamName: String,
+                          val endpointUrl: URI,
+                          val regionName: String,
+                          val kinesisCreds: SparkAWSCredentials,
+                          val dynamoDBCreds: Option[SparkAWSCredentials],
+                          val cloudWatchCreds: Option[SparkAWSCredentials],
+                          val cloudWatchUrl: Option[URI],
+                          val checkpointAppName: String,
+                          val checkpointInterval: Duration,
+                          val maxRecords: Option[Integer],
+                          val protocol: Option[Protocol],
+                          val initialPositionInStream: Option[InitialPositionInStream],
+                          val dynamoProxyHost: Option[String],
+                          val dynamoProxyPort: Option[Integer],
+                          storageLevel: StorageLevel,
+                          val messageHandler: KinesisClientRecord => T)
   extends ReceiverInputDStream[T](_ssc) {
 
   private[streaming]
@@ -93,7 +93,7 @@ private[kinesis2] class KinesisInputDStream[T: ClassTag](_ssc: StreamingContext,
     new KinesisReceiver(streamName, endpointUrl, regionName, kinesisCreds, dynamoDBCreds,
       cloudWatchCreds, cloudWatchUrl, checkpointAppName, checkpointInterval,
       initialPositionInStream, maxRecords, protocol, dynamoProxyHost, dynamoProxyPort,
-      _storageLevel, messageHandler)
+      storageLevel, messageHandler)
   }
 }
 
@@ -388,5 +388,6 @@ object KinesisInputDStream {
   private[kinesis2] val DEFAULT_STORAGE_LEVEL: StorageLevel = StorageLevel.MEMORY_AND_DISK_2
   private[kinesis2] val INITIAL_POSITION_INSTREAM:
     InitialPositionInStream = InitialPositionInStream.TRIM_HORIZON
+  private[kinesis2] val MAX_RECORDS: Integer = 10000
 }
 

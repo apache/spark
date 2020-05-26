@@ -66,9 +66,21 @@ import org.apache.spark.util.Utils
  * number for it own shard.
  *
  * @param streamName         Kinesis stream name
- * @param kinesisCreds
- * @param dynamoDBCreds
- * @param cloudWatchCreds
+ * @param endpointUrl        Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+ * @param kinesisCreds       Kinesis Credentials
+ * @param dynamoDBCreds      Dynamo DB Credentials
+ * @param cloudWatchCreds    Cloud Watch Credentials
+ * @param cloudWatchUrl      Cloud watch endpoint URL
+ * @param initialPositionInStream Instance of [[InitialPositionInStream]]
+ *                           In the absence of Kinesis checkpoint info, this is the
+ *                           worker's initial starting position in the stream.
+ *                           The values are either the beginning of the stream
+ *                           per Kinesis' limit of 24 hours
+ *                           ([[InitialPositionInStream.TRIM_HORIZON]]) or
+ *                           the tip of the stream ([[InitialPositionInStream.LATEST]]).
+ * @param maxRecords         Maximum number of records can be pulled from stream in single poll
+ * @param dynamoProxyHost    Dynamo DB proxy host
+ * @param dynamoProxyPort    Dynamo DB proxy Port
  * @param regionName         Region name used by the Kinesis Client Library for
  *                           DynamoDB (lease coordination and checkpointing) and
  *                           CloudWatch (metrics)
@@ -201,7 +213,7 @@ private[kinesis2] class KinesisReceiver[T](streamName: String,
     val pollingConfig = new PollingConfig(streamName, kinesisClient)
     val lease = configsBuilder.leaseManagementConfig()
     logInfo("Dynamo DB table name: " + lease.tableName + " " + lease.streamName)
-    val maxRecord = maxRecords.getOrElse(100: Integer)
+    val maxRecord = maxRecords.getOrElse(KinesisInputDStream.MAX_RECORDS)
     pollingConfig.maxRecords(maxRecord)
 
     scheduler = new Scheduler(
