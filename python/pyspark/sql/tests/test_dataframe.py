@@ -17,6 +17,8 @@
 
 import os
 import pydoc
+import shutil
+import tempfile
 import time
 import unittest
 
@@ -819,6 +821,21 @@ class DataFrameTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(ValueError, "should be of DataFrame.*int"):
                 self.spark.range(10).sameSemantics(1)
+
+    def test_input_files(self):
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.spark.range(1, 100, 1, 10).write.parquet(tmpPath)
+        # read parquet file and get the input files list
+        inputFilesList = self.spark.read.parquet(tmpPath).inputFiles()
+
+        # file list should contain 10 entries
+        self.assertEquals(len(inputFilesList), 10)
+        # all file paths in list must contain tmpPath
+        for filePath in inputFilesList:
+            self.assertTrue(tmpPath in filePath)
+
+        shutil.rmtree(tmpPath)
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
