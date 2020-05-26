@@ -357,7 +357,7 @@ case class Upper(child: Expression)
   """,
   since = "1.0.1")
 case class Lower(child: Expression)
-  extends UnaryExpression with String2StringExpression with NullIntolerant{
+  extends UnaryExpression with String2StringExpression with NullIntolerant {
 
   // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
@@ -1741,7 +1741,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Length(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant{
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
 
@@ -2002,7 +2002,7 @@ case class Base64(child: Expression)
   """,
   since = "1.5.0")
 case class UnBase64(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant{
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType)

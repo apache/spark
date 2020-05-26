@@ -3224,7 +3224,7 @@ case class ArrayDistinct(child: Expression)
  * Will become common base class for [[ArrayUnion]], [[ArrayIntersect]], and [[ArrayExcept]].
  */
 trait ArrayBinaryLike
-  extends BinaryArrayExpressionWithImplicitCast with ArraySetLike with NullIntolerant{
+  extends BinaryArrayExpressionWithImplicitCast with ArraySetLike with NullIntolerant {
   override protected def dt: DataType = dataType
   override protected def et: DataType = elementType
 
