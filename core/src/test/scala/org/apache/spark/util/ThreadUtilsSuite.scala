@@ -23,12 +23,26 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Random
-
 import org.scalatest.concurrent.Eventually._
-
+import org.slf4j.MDC
 import org.apache.spark.SparkFunSuite
 
 class ThreadUtilsSuite extends SparkFunSuite {
+
+  test("newDaemonSingleThreadExecutor with MDC") {
+    val appIdValue = s"appId-${System.currentTimeMillis()}"
+    MDC.put("appId", appIdValue)
+    val executor = ThreadUtils.newDaemonSingleThreadExecutor("this-is-a-thread-name")
+    @volatile var appId = ""
+    executor.submit(new Runnable {
+      override def run(): Unit = {
+        appId = MDC.get("appId")
+      }
+    })
+    executor.shutdown()
+    executor.awaitTermination(10, TimeUnit.SECONDS)
+    assert(appId === appIdValue)
+  }
 
   test("newDaemonSingleThreadExecutor") {
     val executor = ThreadUtils.newDaemonSingleThreadExecutor("this-is-a-thread-name")
