@@ -83,7 +83,7 @@ object SparkAWSCredentials {
      *  #credentials-default).
      * @param accessKeyId AWS access key ID
      * @param secretKey   AWS secret key
-     * @return Reference to this [[SparkAWSCredentials.Builder]]
+     * @return Reference to this SparkAWSCredentials.Builder
      */
     def basicCredentials(accessKeyId: String, secretKey: String): Builder = {
       basicCreds = Option(BasicCredentials(awsAccessKeyId = accessKeyId, awsSecretKey = secretKey))
@@ -110,11 +110,11 @@ object SparkAWSCredentials {
   }
 
   /**
-   * Creates a [[SparkAWSCredentials.Builder]] for constructing
+   * Creates a SparkAWSCredentials.Builder for constructing
    * [[SparkAWSCredentials]] instances.
    *
    * @since 2.2.0
-   * @return [[SparkAWSCredentials.Builder]] instance
+   * @return SparkAWSCredentials.Builder instance
    */
   def builder: Builder = new Builder
 }

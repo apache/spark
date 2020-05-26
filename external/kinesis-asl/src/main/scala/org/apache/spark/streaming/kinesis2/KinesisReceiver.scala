@@ -67,23 +67,13 @@ import org.apache.spark.util.Utils
  *
  * @param streamName         Kinesis stream name
  * @param endpointUrl        Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+ * @param regionName         Region name used by the Kinesis Client Library for
+ *                           DynamoDB (lease coordination and checkpointing) and
+ *                           CloudWatch (metrics)
  * @param kinesisCreds       Kinesis Credentials
  * @param dynamoDBCreds      Dynamo DB Credentials
  * @param cloudWatchCreds    Cloud Watch Credentials
  * @param cloudWatchUrl      Cloud watch endpoint URL
- * @param initialPositionInStream Instance of [[InitialPositionInStream]]
- *                           In the absence of Kinesis checkpoint info, this is the
- *                           worker's initial starting position in the stream.
- *                           The values are either the beginning of the stream
- *                           per Kinesis' limit of 24 hours
- *                           ([[InitialPositionInStream.TRIM_HORIZON]]) or
- *                           the tip of the stream ([[InitialPositionInStream.LATEST]]).
- * @param maxRecords         Maximum number of records can be pulled from stream in single poll
- * @param dynamoProxyHost    Dynamo DB proxy host
- * @param dynamoProxyPort    Dynamo DB proxy Port
- * @param regionName         Region name used by the Kinesis Client Library for
- *                           DynamoDB (lease coordination and checkpointing) and
- *                           CloudWatch (metrics)
  * @param checkpointAppName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
  *                           by the Kinesis Client Library.  If you change the App name or
  *                           Stream name,
@@ -92,6 +82,18 @@ import org.apache.spark.util.Utils
  * @param checkpointInterval Checkpoint interval for Kinesis checkpointing.
  *                           See the Kinesis Spark Streaming documentation for more
  *                           details on the different types of checkpoints.
+ * @param initialPositionInStream
+ *                           Instance of InitialPositionInStream
+ *                           In the absence of Kinesis checkpoint info, this is the
+ *                           worker's initial starting position in the stream.
+ *                           The values are either the beginning of the stream
+ *                           per Kinesis' limit of 24 hours
+ *                           (InitialPositionInStream.TRIM_HORIZON) or
+ *                           the tip of the stream (InitialPositionInStream.LATEST).
+ * @param maxRecords         Maximum number of records can be pulled from stream in single poll
+ * @param protocol           Protocol version HTTP2 or HTTP1.1
+ * @param dynamoProxyHost    Dynamo DB proxy host
+ * @param dynamoProxyPort    Dynamo DB proxy Port
  * @param storageLevel       Storage level to use for storing the received objects
  * @param messageHandler
  * @tparam T

@@ -352,10 +352,10 @@ object KinesisInputDStream {
     }
 
     /**
-     * Create a new instance of [[KinesisInputDStream]] with configured parameters and using the
-     * default message handler, which returns [[Array[Byte]]].
+     * Create a new instance of KinesisInputDStream with configured parameters and using the
+     * default message handler, which returns Array[Byte].
      *
-     * @return Instance of [[KinesisInputDStream]] constructed with configured parameters
+     * @return Instance of KinesisInputDStream constructed with configured parameters
      */
     def build(): KinesisInputDStream[Array[Byte]] = buildWithMessageHandler(defaultMessageHandler)
 
@@ -365,10 +365,10 @@ object KinesisInputDStream {
   }
 
   /**
-   * Creates a [[KinesisInputDStream.Builder]] for constructing [[KinesisInputDStream]] instances.
+   * Creates a KinesisInputDStream.Builder for constructing KinesisInputDStream instances.
    *
    * @since 2.2.0
-   * @return [[KinesisInputDStream.Builder]] instance
+   * @return KinesisInputDStream.Builder instance
    */
   def builder: Builder = new Builder
 
