@@ -1902,8 +1902,8 @@ private[spark] class BlockManager(
       (peer, runnable)
     }
     // A peer may have entered a decommissioning state, don't transfer any new blocks
-    deadPeers.map{peer =>
-        migrationPeers.get(peer).map(_.running = false)
+    deadPeers.foreach{peer =>
+        migrationPeers.get(peer).foreach(_.running = false)
     }
   }
 

@@ -114,15 +114,14 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // All tasks should be successful, nothing should have failed
     sc.listenerBus.waitUntilEmpty()
     if (shuffle) {
-      // 10 mappers & 10 reducers
-      assert(taskEndEvents.size === 20,
+      // 10 mappers & 10 reducers which succeeded
+      assert(taskEndEvents.count(_.reason == Success) === 20,
         s"Expected 20 tasks got ${taskEndEvents.size} (${taskEndEvents})")
     } else {
-      // 10 mappers
-      assert(taskEndEvents.size === 10,
+      // 10 mappers which executed successfully
+      assert(taskEndEvents.count(_.reason == Success) === 10,
         s"Expected 10 tasks got ${taskEndEvents.size} (${taskEndEvents})")
     }
-    assert(taskEndEvents.map(_.reason).toSet === Set(Success))
 
     // all blocks should have been shifted from decommissioned block manager
     // after some time
