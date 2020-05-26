@@ -773,6 +773,33 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     }
   }
 
+  test("SPARK-31534: text for tooltip should be escaped") {
+    withSpark(newSparkContext()) { sc =>
+      sc.setLocalProperty(CallSite.LONG_FORM, "collect at <console>:25")
+      sc.setLocalProperty(CallSite.SHORT_FORM, "collect at <console>:25")
+      sc.parallelize(1 to 10).collect
+
+      val driver = webDriver.asInstanceOf[HtmlUnitDriver]
+      driver.setJavascriptEnabled(true)
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs")
+        val jobDesc =
+          driver.findElement(By.cssSelector("div[class='application-timeline-content']"))
+        jobDesc.getAttribute("data-title") should include  ("collect at &lt;console&gt;:25")
+
+        goToUi(sc, "/jobs/job/?id=0")
+        val stageDesc = driver.findElement(By.cssSelector("div[class='job-timeline-content']"))
+        stageDesc.getAttribute("data-title") should include ("collect at &lt;console&gt;:25")
+
+        // Open DAG Viz.
+        driver.findElement(By.id("job-dag-viz")).click()
+        val nodeDesc = driver.findElement(By.cssSelector("g[class='node_0 node']"))
+        nodeDesc.getAttribute("name") should include ("collect at &lt;console&gt;:25")
+      }
+    }
+  }
+
   def goToUi(sc: SparkContext, path: String): Unit = {
     goToUi(sc.ui.get, path)
   }
