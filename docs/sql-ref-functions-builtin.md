@@ -70,7 +70,7 @@ license: |
 ### JSON Functions
 {% include_relative generated-json-funcs-table.html %}
 #### Examples
-{% include_relative generated-agg-funcs-examples.html %}
+{% include_relative generated-json-funcs-examples.html %}
         {% break %}
     {% endif %}
 {% endfor %}

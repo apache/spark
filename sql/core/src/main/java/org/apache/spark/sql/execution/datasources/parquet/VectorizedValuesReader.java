@@ -40,7 +40,9 @@ public interface VectorizedValuesReader {
   void readBooleans(int total, WritableColumnVector c, int rowId);
   void readBytes(int total, WritableColumnVector c, int rowId);
   void readIntegers(int total, WritableColumnVector c, int rowId);
+  void readIntegersWithRebase(int total, WritableColumnVector c, int rowId, boolean failIfRebase);
   void readLongs(int total, WritableColumnVector c, int rowId);
+  void readLongsWithRebase(int total, WritableColumnVector c, int rowId, boolean failIfRebase);
   void readFloats(int total, WritableColumnVector c, int rowId);
   void readDoubles(int total, WritableColumnVector c, int rowId);
   void readBinary(int total, WritableColumnVector c, int rowId);

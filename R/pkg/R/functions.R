@@ -3951,7 +3951,6 @@ setMethod("map_values",
 #' @rdname column_collection_functions
 #' @aliases map_zip_with map_zip_with,characterOrColumn,characterOrColumn,function-method
 #'
-#' @examples
 #' @note map_zip_with since 3.1.0
 setMethod("map_zip_with",
           signature(x = "characterOrColumn", y = "characterOrColumn", f = "function"),

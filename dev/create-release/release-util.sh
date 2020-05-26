@@ -19,9 +19,8 @@
 
 DRY_RUN=${DRY_RUN:-0}
 GPG="gpg --no-tty --batch"
-ASF_REPO="https://gitbox.apache.org/repos/asf/spark.git"
-ASF_REPO_WEBUI="https://gitbox.apache.org/repos/asf?p=spark.git"
-ASF_GITHUB_REPO="https://github.com/apache/spark"
+ASF_REPO="https://github.com/apache/spark"
+ASF_REPO_WEBUI="https://raw.githubusercontent.com/apache/spark"
 
 function error {
   echo "$*"
@@ -74,7 +73,7 @@ function fcreate_secure {
 }
 
 function check_for_tag {
-  curl -s --head --fail "$ASF_GITHUB_REPO/releases/tag/$1" > /dev/null
+  curl -s --head --fail "$ASF_REPO/releases/tag/$1" > /dev/null
 }
 
 function get_release_info {
@@ -91,7 +90,7 @@ function get_release_info {
   export GIT_BRANCH=$(read_config "Branch" "$GIT_BRANCH")
 
   # Find the current version for the branch.
-  local VERSION=$(curl -s "$ASF_REPO_WEBUI;a=blob_plain;f=pom.xml;hb=refs/heads/$GIT_BRANCH" |
+  local VERSION=$(curl -s "$ASF_REPO_WEBUI/$GIT_BRANCH/pom.xml" |
     parse_version)
   echo "Current branch version is $VERSION."
 

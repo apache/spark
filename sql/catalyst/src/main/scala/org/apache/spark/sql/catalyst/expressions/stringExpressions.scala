@@ -1619,7 +1619,11 @@ case class StringSpace(child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.",
+  usage = """
+    _FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
+
+    _FUNC_(str FROM pos[ FOR len]]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 5);
@@ -1627,6 +1631,12 @@ case class StringSpace(child: Expression)
       > SELECT _FUNC_('Spark SQL', -3);
        SQL
       > SELECT _FUNC_('Spark SQL', 5, 1);
+       k
+      > SELECT _FUNC_('Spark SQL' FROM 5);
+       k SQL
+      > SELECT _FUNC_('Spark SQL' FROM -3);
+       SQL
+      > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
        k
   """,
   since = "1.5.0")
@@ -1685,7 +1695,7 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(str, len)
 }
 
 /**
@@ -1707,7 +1717,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(str, len)
 }
 
 /**

@@ -57,7 +57,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
 
     val html = renderSQLPage(request, tab, statusStore).toString().toLowerCase(Locale.ROOT)
     assert(html.contains("failed queries"))
-    assert(!html.contains("1970"))
+    assert(!html.contains("1970/01/01"))
   }
 
   test("sorting should be successful") {

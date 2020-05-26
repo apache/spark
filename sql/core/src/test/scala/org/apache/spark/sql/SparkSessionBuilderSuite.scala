@@ -169,6 +169,31 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
   }
 
+  test("SPARK-31354: SparkContext only register one SparkSession ApplicationEnd listener") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-app-SPARK-31354-1")
+    val context = new SparkContext(conf)
+    SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+    val postFirstCreation = context.listenerBus.listeners.size()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+
+    SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+    val postSecondCreation = context.listenerBus.listeners.size()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    assert(postFirstCreation == postSecondCreation)
+  }
+
   test("SPARK-31532: should not propagate static sql configs to the existing" +
     " active/default SparkSession") {
     val session = SparkSession.builder()

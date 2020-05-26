@@ -36,7 +36,7 @@ from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.files import SparkFiles
-from pyspark.resourceinformation import ResourceInformation
+from pyspark.resource import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \

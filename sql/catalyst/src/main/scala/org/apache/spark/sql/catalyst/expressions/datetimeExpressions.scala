@@ -28,13 +28,14 @@ import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -62,7 +63,21 @@ trait TimeZoneAwareExpression extends Expression {
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current date at the start of query evaluation.",
+  usage = """
+    _FUNC_() - Returns the current date at the start of query evaluation.
+
+    _FUNC_ - Returns the current date at the start of query evaluation.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25
+      > SELECT _FUNC_;
+       2020-04-25
+  """,
+  note = """
+    The syntax without braces has been supported since 2.0.1.
+  """,
   group = "datetime_funcs",
   since = "1.5.0")
 case class CurrentDate(timeZoneId: Option[String] = None)
@@ -83,6 +98,13 @@ case class CurrentDate(timeZoneId: Option[String] = None)
   override def prettyName: String = "current_date"
 }
 
+abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallback {
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def dataType: DataType = TimestampType
+  override def eval(input: InternalRow): Any = currentTimestamp()
+}
+
 /**
  * Returns the current timestamp at the start of query evaluation.
  * All calls of current_timestamp within the same query return the same value.
@@ -90,19 +112,38 @@ case class CurrentDate(timeZoneId: Option[String] = None)
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.",
+  usage = """
+    _FUNC_() - Returns the current timestamp at the start of query evaluation.
+
+    _FUNC_ - Returns the current timestamp at the start of query evaluation.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+      > SELECT _FUNC_;
+       2020-04-25 15:49:11.914
+  """,
+  note = """
+    The syntax without braces has been supported since 2.0.1.
+  """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
-  override def foldable: Boolean = true
-  override def nullable: Boolean = false
+case class CurrentTimestamp() extends CurrentTimestampLike {
+  override def prettyName: String = "current_timestamp"
+}
 
-  override def dataType: DataType = TimestampType
-
-  override def eval(input: InternalRow): Any = currentTimestamp()
-
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_timestamp")
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+  """,
+  group = "datetime_funcs",
+  since = "1.6.0")
+case class Now() extends CurrentTimestampLike {
+  override def prettyName: String = "now"
 }
 
 /**
@@ -358,6 +399,83 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getDayInYear($c)")
   }
+}
+
+abstract class NumberToTimestampBase extends UnaryExpression
+  with ExpectsInputTypes {
+
+  protected def upScaleFactor: Long
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullSafeEval(input: Any): Any = {
+    Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (upScaleFactor == 1) {
+      defineCodeGen(ctx, ev, c => c)
+    } else {
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)")
+    }
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000);
+       2008-12-25 07:30:00
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class SecondsToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: Long = MICROS_PER_SECOND
+
+  override def prettyName: String = "timestamp_seconds"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(milliseconds) - Creates timestamp from the number of milliseconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000123);
+       2008-12-25 07:30:00.123
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class MillisToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: Long = MICROS_PER_MILLIS
+
+  override def prettyName: String = "timestamp_millis"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(microseconds) - Creates timestamp from the number of microseconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000123123);
+       2008-12-25 07:30:00.123123
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class MicrosToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: Long = 1L
+
+  override def prettyName: String = "timestamp_micros"
 }
 
 @ExpressionDescription(
@@ -762,6 +880,7 @@ abstract class ToTimestamp
         legacyFormat = SIMPLE_DATE_FORMAT,
         needVarLengthSecondFraction = true)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -943,6 +1062,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         legacyFormat = SIMPLE_DATE_FORMAT,
         needVarLengthSecondFraction = false)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -958,6 +1078,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           try {
             UTF8String.fromString(formatter.format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }
@@ -975,6 +1096,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
                 needVarLengthSecondFraction = false)
                 .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }
@@ -1158,6 +1280,81 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
+ * Subtract an interval from timestamp or date, which is only used to give a pretty sql string
+ * for `datetime - interval` operations
+ */
+case class DatetimeSub(
+    start: Expression,
+    interval: Expression,
+    child: Expression) extends RuntimeReplaceable {
+  override def exprsReplaced: Seq[Expression] = Seq(start, interval)
+  override def toString: String = s"$start - $interval"
+  override def mkString(childrenString: Seq[String]): String = childrenString.mkString(" - ")
+}
+
+/**
+ * Adds date and an interval.
+ *
+ * When ansi mode is on, the microseconds part of interval needs to be 0, otherwise a runtime
+ * [[IllegalArgumentException]] will be raised.
+ * When ansi mode is off, if the microseconds part of interval is 0, we perform date + interval
+ * for better performance. if the microseconds part is not 0, then the date will be converted to a
+ * timestamp to add with the whole interval parts.
+ */
+case class DateAddInterval(
+    start: Expression,
+    interval: Expression,
+    timeZoneId: Option[String] = None,
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends BinaryExpression with ExpectsInputTypes with TimeZoneAwareExpression {
+
+  override def left: Expression = start
+  override def right: Expression = interval
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, CalendarIntervalType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, interval: Any): Any = {
+    val itvl = interval.asInstanceOf[CalendarInterval]
+    if (ansiEnabled || itvl.microseconds == 0) {
+      DateTimeUtils.dateAddInterval(start.asInstanceOf[Int], itvl)
+    } else {
+      val startTs = DateTimeUtils.epochDaysToMicros(start.asInstanceOf[Int], zoneId)
+      val resultTs = DateTimeUtils.timestampAddInterval(
+        startTs, itvl.months, itvl.days, itvl.microseconds, zoneId)
+      DateTimeUtils.microsToEpochDays(resultTs, zoneId)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, (sd, i) => if (ansiEnabled) {
+      s"""${ev.value} = $dtu.dateAddInterval($sd, $i);"""
+    } else {
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      val startTs = ctx.freshName("startTs")
+      val resultTs = ctx.freshName("resultTs")
+      s"""
+         |if ($i.microseconds == 0) {
+         |  ${ev.value} = $dtu.dateAddInterval($sd, $i);
+         |} else {
+         |  long $startTs = $dtu.epochDaysToMicros($sd, $zid);
+         |  long $resultTs =
+         |    $dtu.timestampAddInterval($startTs, $i.months, $i.days, $i.microseconds, $zid);
+         |  ${ev.value} = $dtu.microsToEpochDays($resultTs, $zid);
+         |}
+         |""".stripMargin
+    })
+  }
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+}
+
+/**
  * This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
  * takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in UTC, and
  * renders that timestamp as a timestamp in the given time zone.
@@ -1225,41 +1422,6 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
         s"""$dtu.fromUTCTime($timestamp, $format.toString())"""
       })
     }
-  }
-}
-
-/**
- * Subtracts an interval from timestamp.
- */
-case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
-
-  def this(start: Expression, interval: Expression) = this(start, interval, None)
-
-  override def left: Expression = start
-  override def right: Expression = interval
-
-  override def toString: String = s"$left - $right"
-  override def sql: String = s"${left.sql} - ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
-
-  override def dataType: DataType = TimestampType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override def nullSafeEval(start: Any, interval: Any): Any = {
-    val itvl = interval.asInstanceOf[CalendarInterval]
-    DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.days, 0 - itvl.microseconds, zoneId)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.days, 0 - $i.microseconds, $zid)"""
-    })
   }
 }
 
@@ -1474,14 +1636,8 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
     this(left, None, Cast(left, DateType))
   }
 
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
   override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def sql: String = {
-    if (format.isDefined) {
-      s"$prettyName(${left.sql}, ${format.get.sql})"
-    } else {
-      s"$prettyName(${left.sql})"
-    }
-  }
 
   override def prettyName: String = "to_date"
 }
@@ -1522,13 +1678,7 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   def this(left: Expression) = this(left, None, Cast(left, TimestampType))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def sql: String = {
-    if (format.isDefined) {
-      s"$prettyName(${left.sql}, ${format.get.sql})"
-    } else {
-      s"$prettyName(${left.sql})"
-    }
-  }
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
 
   override def prettyName: String = "to_timestamp"
   override def dataType: DataType = TimestampType
@@ -2082,7 +2232,8 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
-  override def sql: String = s"$prettyName(${field.sql}, ${source.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(field, source)
+
   override def prettyName: String = "date_part"
 }
 
@@ -2142,8 +2293,12 @@ case class Extract(field: Expression, source: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
-  override def sql: String = s"$prettyName(${field.sql} FROM ${source.sql})"
-  override def prettyName: String = "extract"
+
+  override def exprsReplaced: Seq[Expression] = Seq(field, source)
+
+  override def mkString(childrenString: Seq[String]): String = {
+    prettyName + childrenString.mkString("(", " FROM ", ")")
+  }
 }
 
 /**

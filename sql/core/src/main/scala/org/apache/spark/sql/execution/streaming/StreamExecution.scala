@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdate
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
@@ -629,14 +630,9 @@ abstract class StreamExecution(
         writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
 
       case Update =>
-        // Although no v2 sinks really support Update mode now, but during tests we do want them
-        // to pretend to support Update mode, and treat Update mode same as Append mode.
-        if (Utils.isTesting) {
-          writeBuilder.buildForStreaming()
-        } else {
-          throw new IllegalArgumentException(
-            "Data source v2 streaming sinks does not support Update mode.")
-        }
+        require(writeBuilder.isInstanceOf[SupportsStreamingUpdate],
+          table.name + " does not support Update mode.")
+        writeBuilder.asInstanceOf[SupportsStreamingUpdate].update().buildForStreaming()
     }
   }
 

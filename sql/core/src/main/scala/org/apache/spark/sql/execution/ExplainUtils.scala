@@ -233,18 +233,10 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
 
   /**
    * Returns the operator identifier for the supplied plan by retrieving the
-   * `operationId` tag value.`
+   * `operationId` tag value.
    */
   def getOpId(plan: QueryPlan[_]): String = {
     plan.getTagValue(QueryPlan.OP_ID_TAG).map(v => s"$v").getOrElse("unknown")
-  }
-
-  /**
-   * Returns the operator identifier for the supplied plan by retrieving the
-   * `codegenId` tag value.`
-   */
-  def getCodegenId(plan: QueryPlan[_]): String = {
-    plan.getTagValue(QueryPlan.CODEGEN_ID_TAG).map(v => s"[codegen id : $v]").getOrElse("")
   }
 
   def removeTags(plan: QueryPlan[_]): Unit = {

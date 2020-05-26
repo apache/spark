@@ -629,7 +629,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case p: Predicate => p
       case e => Cast(e, BooleanType)
     }
-    Filter(predicate, plan)
+    UnresolvedHaving(predicate, plan)
   }
 
   /**
@@ -1534,7 +1534,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[CreateStruct]] expression.
    */
   override def visitStruct(ctx: StructContext): Expression = withOrigin(ctx) {
-    CreateStruct(ctx.argument.asScala.map(expression))
+    CreateStruct.create(ctx.argument.asScala.map(expression))
   }
 
   /**
@@ -3568,7 +3568,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitShowTblProperties(
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
-      UnresolvedTable(visitMultipartIdentifier(ctx.table)),
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.table)),
       Option(ctx.key).map(visitTablePropertyKey))
   }
 

@@ -27,6 +27,7 @@ import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -266,7 +267,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         // Test escaping of format
         GenerateUnsafeProjection.generate(
-          DateFormatClass(Literal(ts), Literal("\"quote"), JST_OPT) :: Nil)
+          DateFormatClass(Literal(ts), Literal("\""), JST_OPT) :: Nil)
 
         // SPARK-28072 The codegen path should work
         checkEvaluation(
@@ -358,6 +359,40 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
   }
 
+  test("date add interval") {
+    val d = Date.valueOf("2016-02-28")
+    Seq("true", "false") foreach { flag =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, flag)) {
+        checkEvaluation(
+          DateAddInterval(Literal(d), Literal(new CalendarInterval(0, 1, 0))),
+          DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+        checkEvaluation(
+          DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 0))),
+          DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-29")))
+        checkEvaluation(DateAddInterval(Literal(d), Literal.create(null, CalendarIntervalType)),
+          null)
+        checkEvaluation(DateAddInterval(Literal.create(null, DateType),
+          Literal(new CalendarInterval(1, 1, 0))),
+          null)
+      }
+    }
+
+    withSQLConf((SQLConf.ANSI_ENABLED.key, "true")) {
+      checkExceptionInExpression[IllegalArgumentException](
+        DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
+        "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
+    }
+
+    withSQLConf((SQLConf.ANSI_ENABLED.key, "false")) {
+      checkEvaluation(
+        DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25))),
+        DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-29")))
+      checkEvaluation(
+        DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
+        DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-30")))
+    }
+  }
+
   test("date_sub") {
     checkEvaluation(
       DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1.toByte)),
@@ -430,54 +465,54 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       sdf.setTimeZone(TimeZone.getTimeZone(zid))
 
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
-          Literal(new CalendarInterval(1, 0, 0)),
+          UnaryMinus(Literal(new CalendarInterval(1, 0, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-29 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
-          Literal(new CalendarInterval(1, 1, 0)),
+          UnaryMinus(Literal(new CalendarInterval(1, 1, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
-          Literal(new CalendarInterval(1, 0, 2000000.toLong)),
+          UnaryMinus(Literal(new CalendarInterval(1, 0, 2000000.toLong))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 23:59:59.000").getTime)))
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
-          Literal(new CalendarInterval(1, 1, 2000000.toLong)),
+          UnaryMinus(Literal(new CalendarInterval(1, 1, 2000000.toLong))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-27 23:59:59.000").getTime)))
 
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal.create(null, TimestampType),
-          Literal(new CalendarInterval(1, 2, 123000L)),
+          UnaryMinus(Literal(new CalendarInterval(1, 2, 123000L))),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal.create(null, CalendarIntervalType),
+          UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal.create(null, TimestampType),
-          Literal.create(null, CalendarIntervalType),
+          UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (start: Expression, interval: Expression) => TimeSub(start, interval, timeZoneId),
+      checkConsistencyBetweenInterpretedAndCodegen((start: Expression, interval: Expression) =>
+        TimeAdd(start, UnaryMinus(interval), timeZoneId),
         TimestampType, CalendarIntervalType)
     }
   }
@@ -1110,5 +1145,27 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal("2020-01-27T20:06:11.847-0800"),
           Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), "Fail to parse")
     }
+  }
+
+  test("SPARK-31710:Adds TIMESTAMP_SECONDS, " +
+    "TIMESTAMP_MILLIS and TIMESTAMP_MICROS functions") {
+    checkEvaluation(SecondsToTimestamp(Literal(1230219000)), 1230219000L * MICROS_PER_SECOND)
+    checkEvaluation(SecondsToTimestamp(Literal(-1230219000)), -1230219000L * MICROS_PER_SECOND)
+    checkEvaluation(SecondsToTimestamp(Literal(null, IntegerType)), null)
+    checkEvaluation(MillisToTimestamp(Literal(1230219000123L)), 1230219000123L * MICROS_PER_MILLIS)
+    checkEvaluation(MillisToTimestamp(
+      Literal(-1230219000123L)), -1230219000123L * MICROS_PER_MILLIS)
+    checkEvaluation(MillisToTimestamp(Literal(null, IntegerType)), null)
+    checkEvaluation(MicrosToTimestamp(Literal(1230219000123123L)), 1230219000123123L)
+    checkEvaluation(MicrosToTimestamp(Literal(-1230219000123123L)), -1230219000123123L)
+    checkEvaluation(MicrosToTimestamp(Literal(null, IntegerType)), null)
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(1230219000123123L)), "long overflow")
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(-1230219000123123L)), "long overflow")
+    checkExceptionInExpression[ArithmeticException](
+      MillisToTimestamp(Literal(92233720368547758L)), "long overflow")
+    checkExceptionInExpression[ArithmeticException](
+      MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
   }
 }
