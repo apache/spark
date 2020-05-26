@@ -29,6 +29,8 @@ import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
+import org.slf4j.MDC
+
 import org.apache.spark.SparkException
 
 private[spark] object ThreadUtils {
@@ -84,7 +86,7 @@ private[spark] object ThreadUtils {
 
     @inline
     private def getMDCMap: util.Map[String, String] = {
-      org.slf4j.MDC.getCopyOfContextMap match {
+      MDC.getCopyOfContextMap match {
         case null => new util.HashMap[String, String]()
         case m => m
       }
@@ -92,11 +94,11 @@ private[spark] object ThreadUtils {
 
     override def run(): Unit = {
       val threadMDC = getMDCMap
-      org.slf4j.MDC.setContextMap(callerThreadMDC)
+      MDC.setContextMap(callerThreadMDC)
       try {
         proxy.run()
       } finally {
-        org.slf4j.MDC.setContextMap(threadMDC)
+        MDC.setContextMap(threadMDC)
       }
     }
   }
