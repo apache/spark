@@ -313,7 +313,7 @@ case object NamePlaceholder extends LeafExpression with Unevaluable {
  */
 object CreateStruct {
   /**
-   * Returns a named struct with generating names or using the names when available.
+   * Returns a named struct with generated names or using the names when available.
    * It should not be used for `struct` expressions or functions explicitly called
    * by users.
    */
@@ -449,6 +449,9 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
        """.stripMargin, isNull = FalseLiteral)
   }
 
+  // There is an alias set at `CreateStruct.create`. If there is an alias,
+  // this is the struct function explicitly called by a user and we should
+  // respect it in the SQL string as `struct(...)`.
   override def prettyName: String = getTagValue(FUNC_ALIAS).getOrElse("named_struct")
 
   override def sql: String = getTagValue(FUNC_ALIAS).map { alias =>
