@@ -51,7 +51,6 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       .set(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED, shuffle)
 
     sc = new SparkContext(master, "test", conf)
-  }
 
     // Create input RDD with 10 partitions
     val input = sc.parallelize(1 to 10, 10)
