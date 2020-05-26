@@ -1115,8 +1115,8 @@ private[spark] class TaskSetManager(
 
   def executorDecommission(execId: String): Unit = {
     recomputeLocality()
-    if (executorDecommissionKillInterval.nonEmpty) {
-      val executorKillTime = clock.getTimeMillis() + executorDecommissionKillInterval.get
+    executorDecommissionKillInterval.foreach { interval =>
+      val executorKillTime = clock.getTimeMillis() + interval
       runningTasksSet.filter(taskInfos(_).executorId == execId).foreach { tid =>
         tidToExecutorKillTimeMapping(tid) = executorKillTime
       }
