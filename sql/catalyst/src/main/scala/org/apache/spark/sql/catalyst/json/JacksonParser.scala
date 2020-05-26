@@ -56,13 +56,13 @@ class JacksonParser(
 
   private val factory = options.buildJsonFactory()
 
-  private val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     needVarLengthSecondFraction = true)
-  private val dateFormatter = DateFormatter(
+  private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
