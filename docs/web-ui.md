@@ -407,6 +407,34 @@ Here is the list of SQL metrics:
 
 </table>
 
+## Structured Streaming Tab
+When running Structured Streaming jobs in micro-batch mode, a Structured Streaming tab will be 
+available on the Web UI. The overview page displays some brief statistics for running and completed
+queries. Also, you can check the latest exception of a failed query. For detailed statistics, please
+click a "run id" in the tables.
+
+<p style="text-align: center;">
+  <img src="img/webui-structured-streaming-detail.png" title="Structured Streaming Query Statistics" alt="Structured Streaming Query Statistics">
+</p>
+
+The statistics page displays some useful metrics for insight into the status of your streaming 
+queries. Currently, it contains the following metrics.
+
+* **Input Rate.** The aggregate (across all sources) rate of data arriving.
+* **Process Rate.** The aggregate (across all sources) rate at which Spark is processing data.
+* **Input Rows.** The aggregate (across all sources) number of records processed in a trigger.
+* **Batch Duration.** The process duration of each batch. 
+* **Operation Duration.** The amount of time taken to perform various operations in milliseconds.
+The tracked operations are listed as follows.
+    * addBatch: Adds result data of the current batch to the sink.
+    * getBatch: Gets a new batch of data to process.
+    * latestOffset: Gets the latest offsets for sources. 
+    * queryPlanning: Generates the execution plan.
+    * walCommit: Writes the offsets to the metadata log.
+    
+As an early-release version, the statistics page is still under development and will be improved in
+future releases.
+
 ## Streaming Tab
 The web UI includes a Streaming tab if the application uses Spark streaming. This tab displays
 scheduling delay and processing time for each micro-batch in the data stream, which can be useful
