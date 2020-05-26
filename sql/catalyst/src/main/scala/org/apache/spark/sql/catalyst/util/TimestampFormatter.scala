@@ -137,14 +137,14 @@ class FractionTimestampFormatter(zoneId: ZoneId)
     } else {
       var nanosString = nanos.toString
       // Add leading zeros
-      nanosString = "000000000".substring(0, 9 - nanosString.length) + nanosString
+      nanosString = ".000000000".substring(0, 10 - nanosString.length) + nanosString
       // Truncate trailing zeros
-      val nanosChar = new Array[Char](nanosString.length)
-      nanosString.getChars(0, nanosString.length, nanosChar, 0)
-      var truncIndex = 8
-      while (nanosChar(truncIndex) == '0') truncIndex -= 1
-
-      formatted + "." + new String(nanosChar, 0, truncIndex + 1)
+      val charBuff = new Array[Char](formatted.length + nanosString.length)
+      formatted.getChars(0, formatted.length, charBuff, 0)
+      nanosString.getChars(0, nanosString.length, charBuff, formatted.length)
+      var truncIndex = charBuff.size - 1
+      while (charBuff(truncIndex) == '0') truncIndex -= 1
+      new String(charBuff, 0, truncIndex + 1)
     }
   }
 }
