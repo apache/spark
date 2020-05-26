@@ -216,7 +216,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     String timestampString = String.valueOf(ts);
     String formatted = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(ts);
 
-    if (timestampString.length() > 19 && timestampString.substring(19) != ".0") {
+    if (timestampString.length() > 19 && !timestampString.substring(19).equals(".0")) {
       return formatted + timestampString.substring(19);
     } else {
       return formatted;
