@@ -56,13 +56,13 @@ class JacksonParser(
 
   private val factory = options.buildJsonFactory()
 
-  private val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     needVarLengthSecondFraction = true)
-  private val dateFormatter = DateFormatter(
+  private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
@@ -456,6 +456,7 @@ class JacksonParser(
         }
       }
     } catch {
+      case e: SparkUpgradeException => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by

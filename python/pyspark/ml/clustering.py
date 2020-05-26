@@ -802,7 +802,7 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
         Computes the sum of squared distances between the input points
         and their corresponding cluster centers.
 
-        ..note:: Deprecated in 3.0.0. It will be removed in future versions. Use
+        .. note:: Deprecated in 3.0.0. It will be removed in future versions. Use
            ClusteringEvaluator instead. You can also get the cost on the training dataset in the
            summary.
         """

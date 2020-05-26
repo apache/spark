@@ -98,6 +98,24 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
+    val metrics = getMetrics(dataset)
+    val metric = $(metricName) match {
+      case "areaUnderROC" => metrics.areaUnderROC()
+      case "areaUnderPR" => metrics.areaUnderPR()
+    }
+    metrics.unpersist()
+    metric
+  }
+
+  /**
+   * Get a BinaryClassificationMetrics, which can be used to get binary classification
+   * metrics such as areaUnderROC and areaUnderPR.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return BinaryClassificationMetrics
+   */
+  @Since("3.1.0")
+  def getMetrics(dataset: Dataset[_]): BinaryClassificationMetrics = {
     val schema = dataset.schema
     SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
     SchemaUtils.checkNumericType(schema, $(labelCol))
@@ -119,13 +137,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
         case Row(rawPrediction: Double, label: Double, weight: Double) =>
           (rawPrediction, label, weight)
       }
-    val metrics = new BinaryClassificationMetrics(scoreAndLabelsWithWeights, $(numBins))
-    val metric = $(metricName) match {
-      case "areaUnderROC" => metrics.areaUnderROC()
-      case "areaUnderPR" => metrics.areaUnderPR()
-    }
-    metrics.unpersist()
-    metric
+    new BinaryClassificationMetrics(scoreAndLabelsWithWeights, $(numBins))
   }
 
   @Since("1.5.0")

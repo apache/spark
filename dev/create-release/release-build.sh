@@ -103,7 +103,7 @@ if [ -z "$SPARK_VERSION" ]; then
   # Run $MVN in a separate command so that 'set -e' does the right thing.
   TMP=$(mktemp)
   $MVN help:evaluate -Dexpression=project.version > $TMP
-  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -v Download)
+  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -vi Download)
   rm $TMP
 fi
 
@@ -380,7 +380,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "</server></servers></settings>" >> $tmp_settings
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES deploy
 
@@ -412,7 +412,7 @@ if [[ "$1" == "publish-release" ]]; then
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   # TODO: revisit for Scala 2.13 support
 

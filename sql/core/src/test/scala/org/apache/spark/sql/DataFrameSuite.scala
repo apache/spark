@@ -2439,6 +2439,17 @@ class DataFrameSuite extends QueryTest
     val nestedDecArray = Array(decSpark)
     checkAnswer(Seq(nestedDecArray).toDF(), Row(Array(wrapRefArray(decJava))))
   }
+
+  test("SPARK-31750: eliminate UpCast if child's dataType is DecimalType") {
+    withTempPath { f =>
+      sql("select cast(1 as decimal(38, 0)) as d")
+        .write.mode("overwrite")
+        .parquet(f.getAbsolutePath)
+
+      val df = spark.read.parquet(f.getAbsolutePath).as[BigDecimal]
+      assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

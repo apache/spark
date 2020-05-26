@@ -563,6 +563,7 @@ class DefaultParamsReader(MLReader):
 class HasTrainingSummary(object):
     """
     Base class for models that provides Training summary.
+
     .. versionadded:: 3.0.0
     """
 
