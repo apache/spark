@@ -180,8 +180,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, writeOptions, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val filters = splitConjunctivePredicates(deleteExpr).map {
-        filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
-          throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
+        filter => DataSourceStrategy.translateFilter(deleteExpr,
+          supportNestedPredicatePushdown = true).getOrElse(
+            throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
       }.toArray
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
@@ -205,7 +206,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           // correctness depends on removing all matching data.
           val filters = DataSourceStrategy.normalizeExprs(condition.toSeq, output)
               .flatMap(splitConjunctivePredicates(_).map {
-                f => DataSourceStrategy.translateFilter(f).getOrElse(
+                f => DataSourceStrategy.translateFilter(f, true).getOrElse(
                   throw new AnalysisException(s"Exec update failed:" +
                       s" cannot translate expression to source filter: $f"))
               }).toArray

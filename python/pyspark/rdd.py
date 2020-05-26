@@ -47,9 +47,8 @@ from pyspark.join import python_join, python_left_outer_join, \
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
-from pyspark.resource.executorrequests import ExecutorResourceRequests
-from pyspark.resource.resourceprofile import ResourceProfile
-from pyspark.resource.taskrequests import TaskResourceRequests
+from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
+from pyspark.resource.profile import ResourceProfile
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
@@ -875,6 +874,19 @@ class RDD(object):
         """
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
+        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+
+    def collectWithJobGroup(self, groupId, description, interruptOnCancel=False):
+        """
+        .. note:: Experimental
+
+        When collect rdd, use this method to specify job group.
+
+        .. versionadded:: 3.0.0
+        """
+        with SCCallSiteSync(self.context) as css:
+            sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
+                self._jrdd.rdd(), groupId, description, interruptOnCancel)
         return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
     def reduce(self, f):

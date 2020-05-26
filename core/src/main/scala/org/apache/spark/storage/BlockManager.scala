@@ -1675,6 +1675,10 @@ private[spark] class BlockManager(
         peersForReplication = peersForReplication.tail
         peersReplicatedTo += peer
       } catch {
+        // Rethrow interrupt exception
+        case e: InterruptedException =>
+          throw e
+        // Everything else we may retry
         case NonFatal(e) =>
           logWarning(s"Failed to replicate $blockId to $peer, failure #$numFailures", e)
           peersFailedToReplicateTo += peer
@@ -1917,6 +1921,9 @@ private[spark] class BlockManager(
     if (replicateBlocksInfo.nonEmpty) {
       logInfo(s"Need to replicate ${replicateBlocksInfo.size} RDD blocks " +
         "for block manager decommissioning")
+    } else {
+      logWarning(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
+      return
     }
 
     // Maximum number of storage replication failure which replicateBlock can handle
@@ -1925,7 +1932,7 @@ private[spark] class BlockManager(
 
     // TODO: We can sort these blocks based on some policy (LRU/blockSize etc)
     //   so that we end up prioritize them over each other
-    val blocksFailedReplication = replicateBlocksInfo.map{
+    val blocksFailedReplication = replicateBlocksInfo.map {
       case ReplicateBlock(blockId, existingReplicas, maxReplicas) =>
         val replicatedSuccessfully = replicateBlock(
           blockId,
@@ -2022,11 +2029,15 @@ private[spark] class BlockManager(
   private class BlockManagerDecommissionManager(conf: SparkConf) {
     @volatile private var stopped = false
     private val blockMigrationThread = new Thread {
-    val sleepInterval = conf.get(
-      config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
+      val sleepInterval = conf.get(
+        config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
 
       override def run(): Unit = {
-        while (blockManagerDecommissioning && !stopped) {
+        var failures = 0
+        while (blockManagerDecommissioning
+          && !stopped
+          && !Thread.interrupted()
+          && failures < 20) {
           logInfo("Iterating on migrating from the block manager.")
           try {
             // If enabled we migrate shuffle blocks first as they are more expensive.
@@ -2053,8 +2064,9 @@ private[spark] class BlockManager(
               logInfo("Interrupted during migration, will not refresh migrations.")
               stopped = true
             case NonFatal(e) =>
-              logError("Error occurred while trying to " +
-                "replicate cached RDD blocks for block manager decommissioning", e)
+              failures += 1
+              logError("Error occurred while trying to replicate cached RDD blocks" +
+                s" for block manager decommissioning (failure count: $failures)", e)
           }
         }
       }

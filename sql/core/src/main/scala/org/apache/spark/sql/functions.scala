@@ -1306,7 +1306,7 @@ object functions {
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def struct(cols: Column*): Column = withExpr { CreateStruct(cols.map(_.expr)) }
+  def struct(cols: Column*): Column = withExpr { CreateStruct.create(cols.map(_.expr)) }
 
   /**
    * Creates a new struct column that composes multiple input columns.
@@ -3122,6 +3122,7 @@ object functions {
    *             cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @param format: 'year', 'yyyy', 'yy' to truncate by year,
    *               or 'month', 'mon', 'mm' to truncate by month
+   *               Other options are: 'week', 'quarter'
    *
    * @return A date, or null if `date` was a string that could not be cast to a date or `format`
    *         was an invalid value
@@ -3140,7 +3141,8 @@ object functions {
    * @param format: 'year', 'yyyy', 'yy' to truncate by year,
    *                'month', 'mon', 'mm' to truncate by month,
    *                'day', 'dd' to truncate by day,
-   *                Other options are: 'second', 'minute', 'hour', 'week', 'month', 'quarter'
+   *                Other options are:
+   *                'microsecond', 'millisecond', 'second', 'minute', 'hour', 'week', 'quarter'
    * @param timestamp A date, timestamp or string. If a string, the data must be in a format that
    *                  can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @return A timestamp, or null if `timestamp` was a string that could not be cast to a timestamp

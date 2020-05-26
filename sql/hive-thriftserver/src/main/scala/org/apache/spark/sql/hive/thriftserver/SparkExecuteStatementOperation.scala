@@ -274,6 +274,11 @@ private[hive] class SparkExecuteStatementOperation(
       val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
       Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
+      // Always set the session state classloader to `executionHiveClassLoader` even for sync mode
+      if (!runInBackground) {
+        parentSession.getSessionState.getConf.setClassLoader(executionHiveClassLoader)
+      }
+
       sqlContext.sparkContext.setJobGroup(statementId, statement)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())

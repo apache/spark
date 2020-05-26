@@ -26,9 +26,10 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSui
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ResetSystemProperties, ThreadUtils}
 
-class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
+class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
+    with ResetSystemProperties {
 
   val numExecs = 2
 
@@ -45,12 +46,12 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     val master = s"local-cluster[${numExecs}, 1, 1024]"
     val conf = new SparkConf().setAppName("test").setMaster(master)
       .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
-      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 100L)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_RDD_DECOMMISSION_ENABLED, persist)
       .set(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED, shuffle)
 
     sc = new SparkContext(master, "test", conf)
+  }
 
     // Create input RDD with 10 partitions
     val input = sc.parallelize(1 to 10, 10)
@@ -101,6 +102,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
     assert(execs.size == numExecs, s"Expected ${numExecs} executors but found ${execs.size}")
+
     val execToDecommission = execs.head
     logDebug(s"Decommissioning executor ${execToDecommission}")
     sched.decommissionExecutor(execToDecommission)

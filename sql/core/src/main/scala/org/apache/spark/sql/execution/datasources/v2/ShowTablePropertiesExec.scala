@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, GenericRowWithSchema}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog}
 
 /**
  * Physical plan node for showing table properties.
@@ -30,11 +30,15 @@ case class ShowTablePropertiesExec(
     catalogTable: Table,
     propertyKey: Option[String]) extends V2CommandExec {
 
+  override def producedAttributes: AttributeSet = AttributeSet(output)
+
   override protected def run(): Seq[InternalRow] = {
     import scala.collection.JavaConverters._
     val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
 
+    // The reservered properties are accessible through DESCRIBE
     val properties = catalogTable.properties.asScala
+      .filter { case (k, v) => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) }
     propertyKey match {
       case Some(p) =>
         val propValue = properties

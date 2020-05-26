@@ -27,71 +27,62 @@ in `partition_spec`. If no `partition_spec` is specified it will remove all part
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 TRUNCATE TABLE table_identifier [ partition_spec ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
+* **table_identifier**
+
+    Specifies a table name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions.<br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
-      </code>
-  </dd>
-</dl>
+    for partitions.
+
+    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Create table Student with partition
 CREATE TABLE Student (name STRING, rollno INT) PARTITIONED BY (age INT);
 
-SELECT * from Student;
-  +----+------+---+
-  |name|rollno|age|
-  +----+------+---+
-  | ABC|     1| 10|
-  | DEF|     2| 10|
-  | XYZ|     3| 12|
-  +----+------+---+
+SELECT * FROM Student;
++----+------+---+
+|name|rollno|age|
++----+------+---+
+| ABC|     1| 10|
+| DEF|     2| 10|
+| XYZ|     3| 12|
++----+------+---+
 
 -- Removes all rows from the table in the partition specified
 TRUNCATE TABLE Student partition(age=10);
 
 -- After truncate execution, records belonging to partition age=10 are removed
-SELECT * from Student;
-  +----+------+---+
-  |name|rollno|age|
-  +----+------+---+
-  | XYZ|     3| 12|
-  +----+------+---+
+SELECT * FROM Student;
++----+------+---+
+|name|rollno|age|
++----+------+---+
+| XYZ|     3| 12|
++----+------+---+
 
 -- Removes all rows from the table from all partitions
 TRUNCATE TABLE Student;
 
-SELECT * from Student;
-  +----+------+---+
-  |name|rollno|age|
-  +----+------+---+
-  +----+------+---+
-{% endhighlight %}
+SELECT * FROM Student;
++----+------+---+
+|name|rollno|age|
++----+------+---+
++----+------+---+
+```
 
 ### Related Statements
 
- * [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
- * [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
+* [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
+* [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)

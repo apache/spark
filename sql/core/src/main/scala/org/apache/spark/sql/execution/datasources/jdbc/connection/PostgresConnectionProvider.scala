@@ -30,7 +30,7 @@ private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOpti
     properties.getProperty("jaasApplicationName", "pgjdbc")
   }
 
-  override def setAuthenticationConfigIfNeeded(): Unit = {
+  override def setAuthenticationConfigIfNeeded(): Unit = SecurityConfigurationLock.synchronized {
     val (parent, configEntry) = getConfigWithAppEntry()
     if (configEntry == null || configEntry.isEmpty) {
       setAuthenticationConfig(parent)
