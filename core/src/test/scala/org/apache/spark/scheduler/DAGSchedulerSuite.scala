@@ -870,17 +870,20 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    * @param stageId - The current stageId
    * @param attemptIdx - The current attempt count
    * @param numShufflePartitions - The number of partitions in the next stage
-   * @param taskSetId - The task set
+   * @param taskSetOpt - The index of task set
+   * @param hostNames - Host on which each task in the task set is executed
+   * @param mapTaskIds - ID of each task in the task set
+   * @param execIds - ID of the executor in which each task in the task set is executed
    */
   private def completeShuffleMapStageSuccessfully(
       stageId: Int,
       attemptIdx: Int,
       numShufflePartitions: Int,
-      taskSetId: Option[Int] = None,
+      taskSetOpt: Option[Int] = None,
       hostNames: Seq[String] = Seq.empty[String],
       mapTaskIds: Seq[Long] = Seq.empty[Long],
       execIds: Seq[Int] = Seq.empty[Int]): Unit = {
-    val stageAttempt = taskSetId.map(taskSets(_)).getOrElse(taskSets.last)
+    val stageAttempt = taskSetOpt.map(taskSets(_)).getOrElse(taskSets.last)
     checkStageId(stageId, attemptIdx, stageAttempt)
     complete(stageAttempt, stageAttempt.tasks.zipWithIndex.map {
       case (task, idx) =>
