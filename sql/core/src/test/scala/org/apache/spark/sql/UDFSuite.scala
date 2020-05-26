@@ -608,6 +608,13 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val f3 = (s: Map[TestData, TestData]) => s.keys.head.key * s.values.head.value.toInt
     val myUdf3 = udf(f3)
     val df3 = Seq(("data", Map(TestData(50, "2") -> TestData(50, "2")))).toDF("col1", "col2")
-    checkAnswer(df2.select(myUdf2(Column("col2"))), Row(100) :: Nil)
+    checkAnswer(df3.select(myUdf3(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("case class as element of tuple") {
+    val f = (s: (TestData, Int)) => s._1.key * s._2
+    val myUdf = udf(f)
+    val df = Seq(("data", (TestData(50, "2"), 2))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
   }
 }

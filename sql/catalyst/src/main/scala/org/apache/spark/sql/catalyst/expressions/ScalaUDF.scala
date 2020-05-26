@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, DecimalType, StructType}
 
 /**
  * User-defined function.
@@ -112,17 +112,21 @@ case class ScalaUDF(
       val encoder = inputEncoders(i)
       encoder match {
         case Some(enc) =>
-          val fromRow = enc.resolveAndBind().createDeserializer()
           if (enc.isSerializedAsStructForTopLevel) {
+            val fromRow = enc.resolveAndBind().createDeserializer()
             row: Any => fromRow(row.asInstanceOf[InternalRow])
           } else {
+            val child = children(i)
+            val attrs = new StructType().add(s"$child", child.dataType).toAttributes
+            val fromRow = enc.resolveAndBind(attrs).createDeserializer()
+
             value: Any =>
               val row = new GenericInternalRow(1)
               row.update(0, value)
               fromRow(row)
           }
 
-        case None => createToScalaConverter(dataType)
+        case _ => createToScalaConverter(dataType)
       }
     }
   }
