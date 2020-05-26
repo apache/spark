@@ -80,7 +80,7 @@ class SourceConfigSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("Test executor source registration in local mode") {
+  test("SPARK-31711: Test executor source registration in local mode") {
     val conf = new SparkConf()
     val sc = new SparkContext("local", "test", conf)
     try {
