@@ -127,16 +127,14 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
 
   // The new formatter will omit the trailing 0 in the timestamp string, but the legacy formatter
-  // can't. Here we borrow the code from Spark 2.4 DateTimeUtils.timestampToString to omit the
-  // trailing 0 for the legacy formatter as well.
+  // can't. Here we use toString to eliminate trailing 0 and remove '.0' explicitly.
   override def format(ts: Timestamp): String = {
-    val timestampString = ts.toString
-    val formatted = legacyFormatter.format(ts)
-
-    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
-      formatted + timestampString.substring(19)
+    val s = ts.toString
+    val i = s.length - 2
+    if (s(i) == '.' && s(i + 1) == '0') {
+      s.substring(0, i)
     } else {
-      formatted
+      s
     }
   }
 }
