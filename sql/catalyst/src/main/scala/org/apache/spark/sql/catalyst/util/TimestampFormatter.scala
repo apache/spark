@@ -127,24 +127,21 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
 
   // The new formatter will omit the trailing 0 in the timestamp string, but the legacy formatter
-  // can't. Here we borrow the code from Spark 2.4 DateTimeUtils.timestampToString to omit the
-  // trailing 0 for the legacy formatter as well.
+  // can't. Here we use the legacy formatter to format the given timestamp up to seconds fractions,
+  // and custom implementation to format the fractional part without trailing zeros.
   override def format(ts: Timestamp): String = {
     val formatted = legacyFormatter.format(ts)
     val nanos = ts.getNanos
     if (nanos == 0) {
       formatted
     } else {
-      var nanosString = nanos.toString
+      val nanosString = nanos.toString
       // Add leading zeros
-      nanosString = ".000000000".substring(0, 10 - nanosString.length) + nanosString
+      val withZeros = formatted + ".000000000".substring(0, 10 - nanosString.length) + nanosString
       // Truncate trailing zeros
-      val charBuff = new Array[Char](formatted.length + nanosString.length)
-      formatted.getChars(0, formatted.length, charBuff, 0)
-      nanosString.getChars(0, nanosString.length, charBuff, formatted.length)
-      var truncIndex = charBuff.size - 1
-      while (charBuff(truncIndex) == '0') truncIndex -= 1
-      new String(charBuff, 0, truncIndex + 1)
+      var truncIndex = withZeros.length - 1
+      while (withZeros(truncIndex) == '0') truncIndex -= 1
+      withZeros.substring(0, truncIndex + 1)
     }
   }
 }
