@@ -23,6 +23,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Random
+
 import org.scalatest.concurrent.Eventually._
 import org.slf4j.MDC
 
