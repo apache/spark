@@ -830,9 +830,9 @@ class DataFrameTests(ReusedSQLTestCase):
             # read parquet file and get the input files list
             input_files_list = self.spark.read.parquet(tpath).inputFiles()
 
-            # file list should contain 10 entries
+            # input files list should contain 10 entries
             self.assertEquals(len(input_files_list), 10)
-            # all file paths in list must contain tmpPath
+            # all file paths in list must contain tpath
             for file_path in input_files_list:
                 self.assertTrue(tpath in file_path)
         finally:
