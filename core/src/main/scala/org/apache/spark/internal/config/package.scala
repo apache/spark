@@ -1850,7 +1850,7 @@ package object config {
         "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
         "used to decide what tasks running on decommission executors to speculate")
       .version("3.1.0")
-      .timeConf(TimeUnit.MILLISECONDS)
+      .timeConf(TimeUnit.SECONDS)
       .createOptional
 
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
