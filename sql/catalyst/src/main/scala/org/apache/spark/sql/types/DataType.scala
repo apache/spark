@@ -457,7 +457,7 @@ object DataType {
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == STRICT =>
         if (!Cast.canUpCast(w, r)) {
-          addError(s"Cannot safely cast '$context': $w to $r")
+          addError(s"Cannot safely cast '$context': ${w.simpleString} to ${r.simpleString}")
           false
         } else {
           true
@@ -467,7 +467,7 @@ object DataType {
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
         if (!Cast.canANSIStoreAssign(w, r)) {
-          addError(s"Cannot safely cast '$context': $w to $r")
+          addError(s"Cannot safely cast '$context': ${w.simpleString} to ${r.simpleString}")
           false
         } else {
           true
@@ -477,7 +477,8 @@ object DataType {
         true
 
       case (w, r) =>
-        addError(s"Cannot write '$context': $w is incompatible with $r")
+        addError(s"Cannot write '$context': " +
+          s"${w.simpleString} is incompatible with ${r.simpleString}")
         false
     }
   }

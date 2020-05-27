@@ -146,7 +146,7 @@ SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s
 -- mixture of agg/wfunc in the same window
 -- SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
 
--- Cannot safely cast 'enroll_date': StringType to DateType;
+-- Cannot safely cast 'enroll_date': string to date;
 -- SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
 -- SELECT *,
 --   CASE WHEN enroll_date < '2008-01-01' THEN 2008 - extract(year FROM enroll_date) END * 500 AS bonus,
