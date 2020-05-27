@@ -22,15 +22,17 @@ import java.util.Objects;
 /**
  * A shuffle stage fully qualified ID.
  */
-public class ShuffleFqid {
+public class ShuffleStageFqid {
   private final String appId;
   private final String execId;
   private final int shuffleId;
+  private final int stageAttempt;
 
-  public ShuffleFqid(String appId, String execId, int shuffleId) {
+  public ShuffleStageFqid(String appId, String execId, int shuffleId, int stageAttempt) {
     this.appId = appId;
     this.execId = execId;
     this.shuffleId = shuffleId;
+    this.stageAttempt = stageAttempt;
   }
 
   public String getAppId() {
@@ -45,27 +47,33 @@ public class ShuffleFqid {
     return shuffleId;
   }
 
+  public int getStageAttempt() {
+    return stageAttempt;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    ShuffleFqid that = (ShuffleFqid) o;
+    ShuffleStageFqid that = (ShuffleStageFqid) o;
     return shuffleId == that.shuffleId &&
+        stageAttempt == that.stageAttempt &&
         Objects.equals(appId, that.appId) &&
         Objects.equals(execId, that.execId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(appId, execId, shuffleId);
+    return Objects.hash(appId, execId, shuffleId, stageAttempt);
   }
 
   @Override
   public String toString() {
-    return "ShuffleFqid{" +
+    return "ShuffleStageFqid{" +
         "appId='" + appId + '\'' +
         ", execId='" + execId + '\'' +
         ", shuffleId=" + shuffleId +
+        ", stageAttempt=" + stageAttempt +
         '}';
   }
 }

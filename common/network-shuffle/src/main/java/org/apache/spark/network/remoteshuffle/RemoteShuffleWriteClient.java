@@ -48,7 +48,7 @@ public class RemoteShuffleWriteClient implements AutoCloseable {
   private TransportClientFactory clientFactory;
   private final String host;
   private final int port;
-  private final ShuffleFqid shuffleFqid;
+  private final ShuffleStageFqid shuffleStageFqid;
 
 
   /**
@@ -59,12 +59,12 @@ public class RemoteShuffleWriteClient implements AutoCloseable {
       String host,
       int port,
       long timeoutMs,
-      ShuffleFqid shuffleFqid,
+      ShuffleStageFqid shuffleStageFqid,
       Map<String, String> config) {
     this.host = host;
     this.port = port;
     this.timeoutMs = timeoutMs;
-    this.shuffleFqid = shuffleFqid;
+    this.shuffleStageFqid = shuffleStageFqid;
     this.conf = new TransportConf("remoteShuffle", new MapConfigProvider(config));
   }
 
@@ -73,9 +73,14 @@ public class RemoteShuffleWriteClient implements AutoCloseable {
     List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
     clientFactory = context.createClientFactory(bootstraps);
     try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
-      ByteBuffer connectWriteRequest = new ConnectWriteRequest(shuffleFqid.getAppId(), shuffleFqid.getExecId(), shuffleFqid.getShuffleId()).toByteBuffer();
+      ByteBuffer connectWriteRequest = new ConnectWriteRequest(
+          shuffleStageFqid.getAppId(),
+          shuffleStageFqid.getExecId(),
+          shuffleStageFqid.getShuffleId(),
+          shuffleStageFqid.getStageAttempt()).toByteBuffer();
       ByteBuffer connectWriteResponse = client.sendRpcSync(connectWriteRequest, timeoutMs);
-      ConnectWriteResponse msg = (ConnectWriteResponse)RemoteShuffleMessage.Decoder.fromByteBuffer(connectWriteResponse);
+      ConnectWriteResponse msg =
+          (ConnectWriteResponse)RemoteShuffleMessage.Decoder.fromByteBuffer(connectWriteResponse);
       logger.info("Write client connected to shuffle server: {}", msg);
     }
   }
