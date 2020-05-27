@@ -1306,7 +1306,7 @@ object functions {
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def struct(cols: Column*): Column = withExpr { CreateStruct(cols.map(_.expr)) }
+  def struct(cols: Column*): Column = withExpr { CreateStruct.create(cols.map(_.expr)) }
 
   /**
    * Creates a new struct column that composes multiple input columns.

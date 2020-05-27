@@ -19,10 +19,11 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * Evaluator for clustering results.
@@ -34,7 +35,8 @@ import org.apache.spark.sql.functions.col
  */
 @Since("2.3.0")
 class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: String)
-  extends Evaluator with HasPredictionCol with HasFeaturesCol with DefaultParamsWritable {
+  extends Evaluator with HasPredictionCol with HasFeaturesCol with HasWeightCol
+    with DefaultParamsWritable {
 
   @Since("2.3.0")
   def this() = this(Identifiable.randomUID("cluEval"))
@@ -52,6 +54,10 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
   /** @group setParam */
   @Since("2.3.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
    * param for metric name in evaluation
@@ -116,12 +122,26 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
    */
   @Since("3.1.0")
   def getMetrics(dataset: Dataset[_]): ClusteringMetrics = {
-    SchemaUtils.validateVectorCompatibleColumn(dataset.schema, $(featuresCol))
-    SchemaUtils.checkNumericType(dataset.schema, $(predictionCol))
+    val schema = dataset.schema
+    SchemaUtils.validateVectorCompatibleColumn(schema, $(featuresCol))
+    SchemaUtils.checkNumericType(schema, $(predictionCol))
+    if (isDefined(weightCol)) {
+      SchemaUtils.checkNumericType(schema, $(weightCol))
+    }
+
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
 
     val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
-    val df = dataset.select(col($(predictionCol)),
-      vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata))
+    val df = if (!isDefined(weightCol) || $(weightCol).isEmpty) {
+      dataset.select(col($(predictionCol)),
+        vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata),
+        lit(1.0).as(weightColName))
+    } else {
+      dataset.select(col($(predictionCol)),
+        vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata),
+        col(weightColName).cast(DoubleType))
+    }
+
     val metrics = new ClusteringMetrics(df)
     metrics.setDistanceMeasure($(distanceMeasure))
     metrics
