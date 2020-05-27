@@ -217,14 +217,14 @@ private object DateTimeFormatterHelper {
     toFormatter(builder, TimestampFormatter.defaultLocale)
   }
 
-  final val bugInStandAloneForm = {
+  private final val bugInStandAloneForm = {
     // Java 8 has a bug for stand-alone form. See https://bugs.openjdk.java.net/browse/JDK-8114833
     // Note: we only check the US locale so that it's a static check. It can produce false-negative
-    // as some locales are not affected by the bug. Since `L` is rarely used, we choose to not
+    // as some locales are not affected by the bug. Since `L`/`q` is rarely used, we choose to not
     // complicate the check here.
     // TODO: remove it when we drop Java 8 support.
-    val formatter = DateTimeFormatter.ofPattern("LLL", Locale.US)
-    formatter.format(LocalDate.of(2000, 1, 1)) == "1"
+    val formatter = DateTimeFormatter.ofPattern("LLL qqq", Locale.US)
+    formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
   }
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
   final val unsupportedNarrowTextStyle =
