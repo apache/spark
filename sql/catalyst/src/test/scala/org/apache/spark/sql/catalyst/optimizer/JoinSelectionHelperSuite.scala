@@ -174,4 +174,13 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     assert(broadcastSide === Some(BuildRight))
   }
 
+  test("getSmallerSide should return BuildRight") {
+    assert(getSmallerSide(left, right) === BuildRight)
+  }
+
+  test("canBroadcastBySize should return true if the plan size is less than 10MB") {
+    assert(canBroadcastBySize(left, SQLConf.get) === false)
+    assert(canBroadcastBySize(right, SQLConf.get) === true)
+  }
+
 }
