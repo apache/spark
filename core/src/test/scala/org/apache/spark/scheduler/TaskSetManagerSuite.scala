@@ -620,7 +620,7 @@ class TaskSetManagerSuite
     manager.executorAdded()
     sched.addExecutor("execC", "host2")
     manager.executorAdded()
-    assert(manager.resourceOffer("exec1", "host1", ANY)._1.isDefined)
+    assert(manager.resourceOffer("execB", "host1", ANY)._1.isDefined)
     sched.removeExecutor("execA")
     manager.executorLost(
       "execA",
@@ -632,6 +632,25 @@ class TaskSetManagerSuite
     manager.executorLost(
       "execC", "host2", ExecutorExited(1, true, "Terminated due to issue with running tasks"))
     assert(sched.taskSetsFailed.contains(taskSet.id))
+  }
+
+  test("Shift to the new higher locality level if there is when recomputeLocality") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val taskSet = FakeTask.createTaskSet(2,
+      Seq(TaskLocation("host1", "execA")),
+      Seq(TaskLocation("host1", "execA")))
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, 1, clock = clock)
+    // before any executors are added to TaskScheduler, the manager's
+    // locality level only has ANY, so tasks can be scheduled anyway.
+    assert(manager.resourceOffer("execB", "host2", ANY)._1.isDefined)
+    sched.addExecutor("execA", "host1")
+    manager.executorAdded()
+    // after adding a new executor, the manager locality has PROCESS_LOCAL, NODE_LOCAL, ANY.
+    // And we'll shift to the new highest locality level, which is PROCESS_LOCAL in this case.
+    assert(manager.resourceOffer("execC", "host3", ANY)._1.isEmpty)
+    assert(manager.resourceOffer("execA", "host1", ANY)._1.isDefined)
   }
 
   test("test RACK_LOCAL tasks") {

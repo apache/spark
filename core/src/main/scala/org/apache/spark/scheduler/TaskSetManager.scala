@@ -1107,10 +1107,16 @@ private[spark] class TaskSetManager(
   def recomputeLocality(): Unit = {
     // A zombie TaskSetManager may reach here while executorLost happens
     if (isZombie) return
+    val previousLocalityIndex = currentLocalityIndex
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
+    if (currentLocalityIndex > previousLocalityIndex) {
+      // there's new higher level locality, so shift to the highest
+      // locality level in terms of better data locality
+      currentLocalityIndex = 0
+    }
   }
 
   def executorAdded(): Unit = {
