@@ -1313,23 +1313,16 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-31710:fail casting from integral to timestamp by default") {
-    withSQLConf(SQLConf.LEGACY_AllOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "false") {
-      assert(!cast(2.toByte, TimestampType).resolved)
-      assert(!cast(10.toShort, TimestampType).resolved)
-      assert(!cast(3, TimestampType).resolved)
-      assert(!cast(10L, TimestampType).resolved)
-      assert(!cast(Decimal(1.2), TimestampType).resolved)
-      assert(!cast(1.7f, TimestampType).resolved)
-      assert(!cast(2.3d, TimestampType).resolved)
-    }
-    withSQLConf(SQLConf.LEGACY_AllOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      assert(cast(2.toByte, TimestampType).resolved)
-      assert(cast(10.toShort, TimestampType).resolved)
-      assert(cast(3, TimestampType).resolved)
-      assert(cast(10L, TimestampType).resolved)
-      assert(cast(Decimal(1.2), TimestampType).resolved)
-      assert(cast(1.7f, TimestampType).resolved)
-      assert(cast(2.3d, TimestampType).resolved)
+    Seq(true, false).foreach { enable =>
+      withSQLConf(SQLConf.LEGACY_AllOW_CAST_NUMERIC_TO_TIMESTAMP.key -> enable.toString) {
+        assert(cast(2.toByte, TimestampType).resolved == enable)
+        assert(cast(10.toShort, TimestampType).resolved == enable)
+        assert(cast(3, TimestampType).resolved == enable)
+        assert(cast(10L, TimestampType).resolved == enable)
+        assert(cast(Decimal(1.2), TimestampType).resolved == enable)
+        assert(cast(1.7f, TimestampType).resolved == enable)
+        assert(cast(2.3d, TimestampType).resolved == enable)
+      }
     }
   }
 }

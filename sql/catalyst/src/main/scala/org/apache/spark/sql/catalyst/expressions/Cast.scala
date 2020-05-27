@@ -268,7 +268,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       TypeCheckResult.TypeCheckFailure(
         if (child.dataType.isInstanceOf[NumericType] && dataType.isInstanceOf[TimestampType]) {
           s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}," +
-            ", you can enable the casting by setting " +
+            "you can enable the casting by setting " +
             s"${SQLConf.LEGACY_AllOW_CAST_NUMERIC_TO_TIMESTAMP.key} to true," +
             "but we strongly recommand using function " +
             "TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead."
