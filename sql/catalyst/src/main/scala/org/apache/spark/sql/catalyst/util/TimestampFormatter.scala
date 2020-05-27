@@ -138,7 +138,7 @@ class FractionTimestampFormatter(zoneId: ZoneId)
       // Formats non-zero seconds fraction w/o trailing zeros. For example:
       //   formatted = '2020-05:27 15:55:30'
       //   nanos = 001234000
-      // Counts trailing zeros in `nanos`: 001234000 -> 3
+      // Counts the length of the fractional part: 001234000 -> 6
       var fracLen = 9
       while (nanos % 10 == 0) {
         nanos /= 10
