@@ -21,9 +21,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.{createToCatalystConverter, createToScalaConverter, isPrimitive}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 
 /**
  * User-defined function.
@@ -40,6 +41,9 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, Stru
  * @param nullable  True if the UDF can return null value.
  * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
  *                          each time it is invoked with a particular input.
+ * @param inputDeserializers deserializers used to convert internal inputs from children
+ *                           to external data types, and they will only be instantiated
+ *                           by `PrepareInputDeserializerForUDF`.
  */
 case class ScalaUDF(
     function: AnyRef,
@@ -48,7 +52,8 @@ case class ScalaUDF(
     inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
-    udfDeterministic: Boolean = true)
+    udfDeterministic: Boolean = true,
+    inputDeserializers: Seq[Option[Deserializer[_]]] = Nil)
   extends Expression with NonSQLExpression with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
@@ -112,14 +117,10 @@ case class ScalaUDF(
       val encoder = inputEncoders(i)
       encoder match {
         case Some(enc) =>
+          val fromRow = inputDeserializers(i).get
           if (enc.isSerializedAsStructForTopLevel) {
-            val fromRow = enc.resolveAndBind().createDeserializer()
             row: Any => fromRow(row.asInstanceOf[InternalRow])
           } else {
-            val child = children(i)
-            val attrs = new StructType().add(s"$child", child.dataType).toAttributes
-            val fromRow = enc.resolveAndBind(attrs).createDeserializer()
-
             value: Any =>
               val row = new GenericInternalRow(1)
               row.update(0, value)

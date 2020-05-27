@@ -256,7 +256,8 @@ class Analyzer(
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
-      HandleNullInputsForUDF),
+      HandleNullInputsForUDF,
+      PrepareDeserializerForUDF),
     Batch("UpdateNullability", Once,
       UpdateAttributeNullability),
     Batch("Subquery", Once,
@@ -2813,7 +2814,7 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, _, _, _, _)
+        case udf @ ScalaUDF(_, _, inputs, _, _, _, _, _)
             if udf.inputPrimitives.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
@@ -2843,6 +2844,38 @@ class Analyzer(
           } else {
             udf
           }
+      }
+    }
+  }
+
+  object PrepareDeserializerForUDF extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case p if !p.resolved => p // Skip unresolved nodes.
+
+      case p => p transformExpressionsUp {
+
+        case udf @ ScalaUDF(_, _, inputs, encoders, _, _, _, desers)
+          if encoders.nonEmpty && desers.isEmpty =>
+          val deserializers = encoders.zipWithIndex.map { case (encOpt, i) =>
+            val dataType = inputs(i).dataType
+            if (CatalystTypeConverters.isPrimitive(dataType)) {
+              // primitive data types do not rely on `ExpressionEncoder` to
+              // convert data, see `ScalaUDF.scalaConverter`.
+              None
+            } else {
+              encOpt.map { enc =>
+                val attrs = if (enc.isSerializedAsStructForTopLevel) {
+                  dataType.asInstanceOf[StructType].toAttributes
+                } else {
+                  // the field name doesn't matter here, so we use
+                  // a simple literal to avoid any overhead
+                  new StructType().add(s"input", dataType).toAttributes
+                }
+                enc.resolveAndBind(attrs).createDeserializer()
+              }
+            }
+          }
+          udf.copy(inputDeserializers = deserializers)
       }
     }
   }
