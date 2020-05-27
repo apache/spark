@@ -135,6 +135,9 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("format fraction of second") {
     val formatter = TimestampFormatter.getFractionFormatter(UTC)
     Seq(
+      -999999 -> "1969-12-31 23:59:59.000001",
+      -999900 -> "1969-12-31 23:59:59.0001",
+      -1 -> "1969-12-31 23:59:59.999999",
       0 -> "1970-01-01 00:00:00",
       1 -> "1970-01-01 00:00:00.000001",
       1000 -> "1970-01-01 00:00:00.001",
