@@ -634,7 +634,7 @@ class TaskSetManagerSuite
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 
-  test("Shift to the new higher locality level if there is when recomputeLocality") {
+  test("SPARK-31837: Shift to the new highest locality level if there is when recomputeLocality") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc)
     val taskSet = FakeTask.createTaskSet(2,

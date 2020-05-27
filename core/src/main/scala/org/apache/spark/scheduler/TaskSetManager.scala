@@ -1113,8 +1113,8 @@ private[spark] class TaskSetManager(
     localityWaits = myLocalityLevels.map(getLocalityWait)
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
     if (currentLocalityIndex > previousLocalityIndex) {
-      // there's new higher level locality, so shift to the highest
-      // locality level in terms of better data locality
+      // SPARK-31837: there's new higher level locality, so shift to
+      // the highest locality level in terms of better data locality
       currentLocalityIndex = 0
     }
   }
