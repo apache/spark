@@ -25,6 +25,7 @@ import scala.concurrent.duration._
 import scala.util.Random
 import org.scalatest.concurrent.Eventually._
 import org.slf4j.MDC
+
 import org.apache.spark.SparkFunSuite
 
 class ThreadUtilsSuite extends SparkFunSuite {
