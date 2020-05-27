@@ -144,6 +144,9 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       // TODO: check defaults: maxTimeout, keepalive, maxBodySize, bodyRecieveDuration, etc.
       // Finally, start the server
       httpServer.start();
+      // in case it is configured with 0 which represents any free port, we should set it to the
+      // actual one
+      portNum = connector.getLocalPort();
       String msg = "Started " + ThriftHttpCLIService.class.getSimpleName() + " in " + schemeName
           + " mode on port " + portNum + " path=" + httpPath + " with " + minWorkerThreads + "..."
           + maxWorkerThreads + " worker threads";
