@@ -29,6 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature._
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -1429,7 +1430,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
         predictions.select(
           col(predictionCol),
           col(labelCol).cast(DoubleType),
-          col(weightCol).cast(DoubleType)).rdd.map {
+          checkNonNegativeWeight(col(weightCol).cast(DoubleType))).rdd.map {
           case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
         })
     } else {
@@ -1567,7 +1568,7 @@ sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
   @transient private val binaryMetrics = if (predictions.schema.fieldNames.contains(weightCol)) {
     new BinaryClassificationMetrics(
       predictions.select(col(probabilityCol), col(labelCol).cast(DoubleType),
-        col(weightCol).cast(DoubleType)).rdd.map {
+        checkNonNegativeWeight(col(weightCol).cast(DoubleType))).rdd.map {
         case Row(score: Vector, label: Double, weight: Double) => (score(1), label, weight)
       }, 100
     )

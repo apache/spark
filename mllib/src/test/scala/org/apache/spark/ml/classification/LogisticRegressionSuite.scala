@@ -333,13 +333,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(blorSummary.weightedRecall ~== blorSummary2.weightedRecall relTol 1e-6)
     assert(blorSummary.asBinary.areaUnderROC ~== blorSummary2.asBinary.areaUnderROC relTol 1e-6)
 
-    assert(blorModel2.summary.asBinary.accuracy ~==
+    assert(blorModel.summary.asBinary.accuracy ~==
       blorModel2.summary.asBinary.accuracy relTol 1e-6)
-    assert(blorModel2.summary.asBinary.weightedPrecision ~==
+    assert(blorModel.summary.asBinary.weightedPrecision ~==
       blorModel2.summary.asBinary.weightedPrecision relTol 1e-6)
-    assert(blorModel2.summary.asBinary.weightedRecall ~==
+    assert(blorModel.summary.asBinary.weightedRecall ~==
       blorModel2.summary.asBinary.weightedRecall relTol 1e-6)
-    assert(blorModel2.summary.asBinary.asBinary.areaUnderROC ~==
+    assert(blorModel.summary.asBinary.asBinary.areaUnderROC ~==
       blorModel2.summary.asBinary.areaUnderROC relTol 1e-6)
 
     assert(mlorSummary.accuracy ~== mlorSummary2.accuracy relTol 1e-6)
