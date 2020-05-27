@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, Tim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
-import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -1053,91 +1052,38 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  private lazy val formatter: TimestampFormatter =
-    try {
-      TimestampFormatter(
-        constFormat.toString,
-        zoneId,
-        legacyFormat = SIMPLE_DATE_FORMAT,
+  private lazy val formatter: Option[TimestampFormatter] =
+    if (right.foldable) {
+    Option(right.eval()).map { format =>
+      TimestampFormatter(format.toString, zoneId, legacyFormat = SIMPLE_DATE_FORMAT,
         needVarLengthSecondFraction = false)
-    } catch {
-      case e: SparkUpgradeException => throw e
-      case NonFatal(_) => null
     }
+  } else None
 
-  override def eval(input: InternalRow): Any = {
-    val time = left.eval(input)
-    if (time == null) {
-      null
-    } else {
-      if (format.foldable) {
-        if (constFormat == null || formatter == null) {
-          null
-        } else {
-          try {
-            UTF8String.fromString(formatter.format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
-          } catch {
-            case e: SparkUpgradeException => throw e
-            case NonFatal(_) => null
-          }
-        }
-      } else {
-        val f = format.eval(input)
-        if (f == null) {
-          null
-        } else {
-          try {
-            UTF8String.fromString(
-              TimestampFormatter(
-                f.toString,
-                zoneId,
-                legacyFormat = SIMPLE_DATE_FORMAT,
-                needVarLengthSecondFraction = false)
-                .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
-          } catch {
-            case e: SparkUpgradeException => throw e
-            case NonFatal(_) => null
-          }
-        }
-      }
-    }
+  override def nullSafeEval(seconds: Any, format: Any): Any = {
+    val ft = formatter.getOrElse(TimestampFormatter(format.toString, zoneId,
+      legacyFormat = SIMPLE_DATE_FORMAT, needVarLengthSecondFraction = false))
+    UTF8String.fromString(ft.format(seconds.asInstanceOf[Long] * MICROS_PER_SECOND))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val df = classOf[TimestampFormatter].getName
-    if (format.foldable) {
-      if (formatter == null) {
-        ExprCode.forNullValue(StringType)
-      } else {
-        val formatterName = ctx.addReferenceObj("formatter", formatter, df)
-        val t = left.genCode(ctx)
-        ev.copy(code = code"""
-          ${t.code}
-          boolean ${ev.isNull} = ${t.isNull};
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            try {
-              ${ev.value} = UTF8String.fromString($formatterName.format(${t.value} * 1000000L));
-            } catch (java.lang.IllegalArgumentException e) {
-              ${ev.isNull} = true;
-            }
-          }""")
-      }
-    } else {
-      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    formatter.map { f =>
+      val formatterName = ctx.addReferenceObj("formatter", f)
+      defineCodeGen(ctx, ev, (seconds, _) =>
+        s"UTF8String.fromString($formatterName.format($seconds * 1000000L))")
+    }.getOrElse {
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
       val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
-      nullSafeCodeGen(ctx, ev, (seconds, f) => {
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      defineCodeGen(ctx, ev, (seconds, format) =>
         s"""
-        try {
-          ${ev.value} = UTF8String.fromString(
-            $tf$$.MODULE$$.apply($f.toString(), $zid, $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(), false)
-              .format($seconds * 1000000L));
-        } catch (java.lang.IllegalArgumentException e) {
-          ${ev.isNull} = true;
-        }"""
-      })
+           |UTF8String.fromString(
+           |  $tf$$.MODULE$$.apply($format.toString(),
+           |  $zid,
+           |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+           |  false)
+           |  .format($seconds * 1000000L))
+           |""".stripMargin)
     }
   }
 }

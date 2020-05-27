@@ -160,3 +160,7 @@ select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampF
 select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+
+select from_unixtime(a, b) from
+ values (null, null), (12345, null), (null, 'invalid'), (null, 'yyyy-MM-dd'), (67890, 'yyyy-MM-dd') t(a, b);
+select from_unixtime(12345, 'invalid');

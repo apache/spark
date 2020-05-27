@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Instant, LocalDate, ZoneId}
+import java.time.format.DateTimeFormatter
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -777,8 +778,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           checkEvaluation(
             FromUnixTime(Literal(1000L), Literal.create(null, StringType), timeZoneId),
             null)
-          checkEvaluation(
-            FromUnixTime(Literal(0L), Literal("not a valid format"), timeZoneId), null)
 
           // SPARK-28072 The codegen path for non-literal input should also work
           checkEvaluation(
@@ -792,7 +791,39 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     // Test escaping of format
-    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote")) :: Nil)
+    val e = FromUnixTime(Literal(0L), Literal("\""))
+    GenerateUnsafeProjection.generate(e.withTimeZone(conf.sessionLocalTimeZone) :: Nil)
+  }
+
+  test("from_unixtime with invalid datetime pattern") {
+    val invalidForBoth = Seq("A", "c", "n", "e", "n", "p")
+    val invalidForNew = Seq("MMMMM", "GGGGG")
+
+    invalidForBoth.foreach { format =>
+      Seq("exception", "legacy", "corrected").foreach { policy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+          checkExceptionInExpression[IllegalArgumentException](
+            FromUnixTime(Literal(0L), Literal(format)), s"${format.head}")
+        }
+      }
+    }
+
+    invalidForNew.foreach { format =>
+      Seq("exception", "corrected").foreach { policy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+          checkExceptionInExpression[SparkUpgradeException](
+            FromUnixTime(Literal(0L), Literal(format)), s"${format.head}")
+        }
+      }
+    }
+
+    invalidForNew.foreach { format =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
+        checkEvaluation(
+          FromUnixTime(Literal(0L), Literal(format)),
+          new SimpleDateFormat(format).format(new Date(0)))
+      }
+    }
   }
 
   test("unix_timestamp") {
