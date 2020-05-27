@@ -28,7 +28,6 @@ import scala.language.higherKinds
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-
 import org.slf4j.MDC
 
 import org.apache.spark.SparkException
