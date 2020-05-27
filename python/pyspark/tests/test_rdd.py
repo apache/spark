@@ -166,15 +166,6 @@ class RDDTests(ReusedPySparkTestCase):
             set([(x, (x, x)) for x in 'abc'])
         )
 
-    def test_union_pair_rdd(self):
-        # Regression test for SPARK-31788
-        rdd = self.sc.parallelize([1, 2])
-        pair_rdd = rdd.zip(rdd)
-        self.assertEqual(
-            self.sc.union([pair_rdd, pair_rdd]).collect(),
-            [((1, 1), (2, 2)), ((1, 1), (2, 2))]
-        )
-
     def test_deleting_input_files(self):
         # Regression test for SPARK-1025
         tempFile = tempfile.NamedTemporaryFile(delete=False)
