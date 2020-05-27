@@ -29,48 +29,47 @@ import java.util.Objects;
 
 /** Response message for {@link ConnectWriteRequest}. */
 public class ConnectWriteResponse extends RemoteShuffleMessage {
-  public final String serverId;
+  public final long streamId;
 
-  public ConnectWriteResponse(String serverId) {
-    this.serverId = serverId;
+  public ConnectWriteResponse(long streamId) {
+    this.streamId = streamId;
   }
 
   @Override
   protected Type type() { return Type.CONNECT_WRITE_RESPONSE; }
 
   @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    ConnectWriteResponse that = (ConnectWriteResponse) o;
+    return streamId == that.streamId;
+  }
+
+  @Override
   public int hashCode() {
-    return Objects.hash(serverId);
+    return Objects.hash(streamId);
   }
 
   @Override
   public String toString() {
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("serverId", serverId)
-      .toString();
-  }
-
-  @Override
-  public boolean equals(Object other) {
-    if (other != null && other instanceof ConnectWriteResponse) {
-      ConnectWriteResponse o = (ConnectWriteResponse) other;
-      return Objects.equals(serverId, o.serverId);
-    }
-    return false;
+        .append("streamId", streamId)
+        .toString();
   }
 
   @Override
   public int encodedLength() {
-    return Encoders.Strings.encodedLength(serverId);
+    return Long.BYTES;
   }
 
   @Override
   public void encode(ByteBuf buf) {
-    Encoders.Strings.encode(buf, serverId);;
+    buf.writeLong(streamId);
   }
 
   public static ConnectWriteResponse decode(ByteBuf buf) {
-    String serverId = Encoders.Strings.decode(buf);
-    return new ConnectWriteResponse(serverId);
+    long streamId = buf.readLong();
+    return new ConnectWriteResponse(streamId);
   }
 }

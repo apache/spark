@@ -45,7 +45,7 @@ public class RemoteShuffleWriteClientSuite {
     int port = server.getBoundPort();
     long timeoutMs = 30000;
     ShuffleStageFqid shuffleStageFqid = new ShuffleStageFqid("app1", "1", 2, 3);
-    try (RemoteShuffleWriteClient client = new RemoteShuffleWriteClient("localhost", port, timeoutMs, shuffleStageFqid, new HashMap<>())) {
+    try (RemoteShuffleWriteClient client = new RemoteShuffleWriteClient("localhost", port, timeoutMs, shuffleStageFqid, 4, new HashMap<>())) {
       client.connect();
     }
   }

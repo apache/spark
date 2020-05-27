@@ -33,12 +33,14 @@ public class ConnectWriteRequest extends RemoteShuffleMessage {
   public final String execId;
   public final int shuffleId;
   public final int stageAttempt;
+  public final int numMaps;
 
-  public ConnectWriteRequest(String appId, String execId, int shuffleId, int stageAttempt) {
+  public ConnectWriteRequest(String appId, String execId, int shuffleId, int stageAttempt, int numMaps) {
     this.appId = appId;
     this.execId = execId;
     this.shuffleId = shuffleId;
     this.stageAttempt = stageAttempt;
+    this.numMaps = numMaps;
   }
 
   @Override
@@ -51,13 +53,14 @@ public class ConnectWriteRequest extends RemoteShuffleMessage {
     ConnectWriteRequest that = (ConnectWriteRequest) o;
     return shuffleId == that.shuffleId &&
         stageAttempt == that.stageAttempt &&
+        numMaps == that.numMaps &&
         Objects.equals(appId, that.appId) &&
         Objects.equals(execId, that.execId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(appId, execId, shuffleId, stageAttempt);
+    return Objects.hash(appId, execId, shuffleId, stageAttempt, numMaps);
   }
 
   @Override
@@ -67,6 +70,7 @@ public class ConnectWriteRequest extends RemoteShuffleMessage {
         .append("execId", execId)
         .append("shuffleId", shuffleId)
         .append("stageAttempt", stageAttempt)
+        .append("numMaps", numMaps)
         .toString();
   }
 
@@ -74,6 +78,7 @@ public class ConnectWriteRequest extends RemoteShuffleMessage {
   public int encodedLength() {
     return Encoders.Strings.encodedLength(appId)
       + Encoders.Strings.encodedLength(execId)
+      + Integer.BYTES
       + Integer.BYTES
       + Integer.BYTES;
   }
@@ -84,6 +89,7 @@ public class ConnectWriteRequest extends RemoteShuffleMessage {
     Encoders.Strings.encode(buf, execId);;
     buf.writeInt(shuffleId);
     buf.writeInt(stageAttempt);
+    buf.writeInt(numMaps);
   }
 
   public static ConnectWriteRequest decode(ByteBuf buf) {
@@ -91,6 +97,7 @@ public class ConnectWriteRequest extends RemoteShuffleMessage {
     String execId = Encoders.Strings.decode(buf);
     int shuffleId = buf.readInt();
     int stageAttempt = buf.readInt();
-    return new ConnectWriteRequest(appId, execId, shuffleId, stageAttempt);
+    int numMaps = buf.readInt();
+    return new ConnectWriteRequest(appId, execId, shuffleId, stageAttempt, numMaps);
   }
 }

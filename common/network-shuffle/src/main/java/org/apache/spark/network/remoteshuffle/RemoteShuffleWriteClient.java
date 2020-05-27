@@ -49,7 +49,7 @@ public class RemoteShuffleWriteClient implements AutoCloseable {
   private final String host;
   private final int port;
   private final ShuffleStageFqid shuffleStageFqid;
-
+  private final int numMaps;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -60,11 +60,13 @@ public class RemoteShuffleWriteClient implements AutoCloseable {
       int port,
       long timeoutMs,
       ShuffleStageFqid shuffleStageFqid,
+      int numMaps,
       Map<String, String> config) {
     this.host = host;
     this.port = port;
     this.timeoutMs = timeoutMs;
     this.shuffleStageFqid = shuffleStageFqid;
+    this.numMaps = numMaps;
     this.conf = new TransportConf("remoteShuffle", new MapConfigProvider(config));
   }
 
@@ -77,7 +79,8 @@ public class RemoteShuffleWriteClient implements AutoCloseable {
           shuffleStageFqid.getAppId(),
           shuffleStageFqid.getExecId(),
           shuffleStageFqid.getShuffleId(),
-          shuffleStageFqid.getStageAttempt()).toByteBuffer();
+          shuffleStageFqid.getStageAttempt(),
+          numMaps).toByteBuffer();
       ByteBuffer connectWriteResponse = client.sendRpcSync(connectWriteRequest, timeoutMs);
       ConnectWriteResponse msg =
           (ConnectWriteResponse)RemoteShuffleMessage.Decoder.fromByteBuffer(connectWriteResponse);

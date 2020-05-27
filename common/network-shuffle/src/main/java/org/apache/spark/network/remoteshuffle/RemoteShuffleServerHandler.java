@@ -60,7 +60,8 @@ public class RemoteShuffleServerHandler extends RpcHandler {
             client.getClientId(),
             getRemoteAddress(client.getChannel()));
       }
-      callback.onSuccess(new ConnectWriteResponse("TODO").toByteBuffer());
+      // TODO implement streamId for ConnectWriteResponse
+      callback.onSuccess(new ConnectWriteResponse(0L).toByteBuffer());
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
