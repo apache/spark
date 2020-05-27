@@ -229,14 +229,6 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Wrapper over newCachedThreadPool. Thread names are formatted as prefix-ID, where ID is a
-   * unique, sequentially assigned integer.
-   */
-  def newCachedThreadPool(threadFactory: ThreadFactory): ThreadPoolExecutor = {
-    MDCAwareThreadPoolExecutor.newCachedThreadPool(threadFactory)
-  }
-
-  /**
    * Create a cached thread pool whose max number of threads is `maxThreadNumber`. Thread names
    * are formatted as prefix-ID, where ID is a unique, sequentially assigned integer.
    */
