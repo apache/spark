@@ -115,6 +115,7 @@ case class CreateTableLikeCommand(
       CatalogTableType.EXTERNAL
     }
 
+    val newProperties = sourceTableDesc.properties ++ properties
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
@@ -124,7 +125,7 @@ case class CreateTableLikeCommand(
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec,
-        properties = properties,
+        properties = newProperties,
         tracksPartitionsInCatalog = sourceTableDesc.tracksPartitionsInCatalog)
 
     catalog.createTable(newTableDesc, ifNotExists)

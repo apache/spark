@@ -2632,7 +2632,6 @@ class HiveDDLSuite
       assert(source.properties("a") == "apple")
       sql("CREATE TABLE t LIKE s STORED AS parquet TBLPROPERTIES('f'='foo', 'b'='bar')")
       val table = catalog.getTableMetadata(TableIdentifier("t"))
-      assert(table.properties.get("a") === None)
       assert(table.properties("f") == "foo")
       assert(table.properties("b") == "bar")
     }
@@ -2718,6 +2717,25 @@ class HiveDDLSuite
       assert(targetTable.partitionColumnNames == Seq("ts"))
       sql("ALTER TABLE ta_part ADD PARTITION (ts=10)") // no exception
       checkAnswer(sql("SHOW PARTITIONS ta_part"), Row("ts=10") :: Nil)
+    }
+  }
+
+  test("SPARK-31828: Retain table properties at CreateTableLikeCommand") {
+    val catalog = spark.sessionState.catalog
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(c1 int) TBLPROPERTIES('k1'='v1', 'k2'='v2')")
+      val t1 = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(t1.properties("k1") == "v1")
+      assert(t1.properties("k2") == "v2")
+      sql("CREATE TABLE t2 LIKE t1 TBLPROPERTIES('k2'='v3', 'k4'='v4')")
+      val t2 = catalog.getTableMetadata(TableIdentifier("t2"))
+      assert(t2.properties("k1") == "v1")
+      assert(t2.properties("k2") == "v3")
+      assert(t2.properties("k4") == "v4")
+      sql("CREATE TABLE t3 LIKE t1")
+      val t3 = catalog.getTableMetadata(TableIdentifier("t3"))
+      assert(t3.properties("k1") == "v1")
+      assert(t3.properties("k2") == "v2")
     }
   }
 }
