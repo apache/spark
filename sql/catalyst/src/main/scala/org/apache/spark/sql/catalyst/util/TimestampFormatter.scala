@@ -131,17 +131,33 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   // and custom implementation to format the fractional part without trailing zeros.
   override def format(ts: Timestamp): String = {
     val formatted = legacyFormatter.format(ts)
-    val nanos = ts.getNanos
+    var nanos = ts.getNanos
     if (nanos == 0) {
       formatted
     } else {
-      val nanosString = nanos.toString
-      // Add leading zeros
-      val withZeros = formatted + ".000000000".substring(0, 10 - nanosString.length) + nanosString
-      // Truncate trailing zeros
-      var truncIndex = withZeros.length - 1
-      while (withZeros(truncIndex) == '0') truncIndex -= 1
-      withZeros.substring(0, truncIndex + 1)
+      // Formats non-zero seconds fraction w/o trailing zeros. For example:
+      //   formatted = '2020-05:27 15:55:30'
+      //   nanos = 001234000
+      // Counts trailing zeros in `nanos`: 001234000 -> 3
+      var fracLen = 9
+      while (nanos % 10 == 0) {
+        nanos /= 10
+        fracLen -= 1
+      }
+      // Places `nanos` = 1234 after '2020-05:27 15:55:30.'
+      val fracOffset = formatted.length + 1
+      val totalLen = fracOffset + fracLen
+      // The buffer for the final result: '2020-05:27 15:55:30.001234'
+      val buf = new Array[Char](totalLen)
+      formatted.getChars(0, formatted.length, buf, 0)
+      buf(formatted.length) = '.'
+      var i = totalLen
+      do {
+        i -= 1
+        buf(i) = ('0' + (nanos % 10)).toChar
+        nanos /= 10
+      } while (i > fracOffset)
+      new String(buf)
     }
   }
 }
