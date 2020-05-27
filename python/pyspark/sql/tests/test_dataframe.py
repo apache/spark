@@ -823,19 +823,20 @@ class DataFrameTests(ReusedSQLTestCase):
                 self.spark.range(10).sameSemantics(1)
 
     def test_input_files(self):
-        tmpPath = tempfile.mkdtemp()
-        shutil.rmtree(tmpPath)
-        self.spark.range(1, 100, 1, 10).write.parquet(tmpPath)
-        # read parquet file and get the input files list
-        inputFilesList = self.spark.read.parquet(tmpPath).inputFiles()
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            self.spark.range(1, 100, 1, 10).write.parquet(tpath)
+            # read parquet file and get the input files list
+            input_files_list = self.spark.read.parquet(tpath).inputFiles()
 
-        # file list should contain 10 entries
-        self.assertEquals(len(inputFilesList), 10)
-        # all file paths in list must contain tmpPath
-        for filePath in inputFilesList:
-            self.assertTrue(tmpPath in filePath)
-
-        shutil.rmtree(tmpPath)
+            # file list should contain 10 entries
+            self.assertEquals(len(input_files_list), 10)
+            # all file paths in list must contain tmpPath
+            for file_path in input_files_list:
+                self.assertTrue(tpath in file_path)
+        finally:
+            shutil.rmtree(tpath)
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

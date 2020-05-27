@@ -2231,7 +2231,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> len(df.inputFiles())
         1
         """
-        return [f for f in self._jdf.inputFiles()]
+        return list(self._jdf.inputFiles())
 
     where = copy_func(
         filter,
