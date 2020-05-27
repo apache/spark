@@ -217,9 +217,19 @@ private object DateTimeFormatterHelper {
     toFormatter(builder, TimestampFormatter.defaultLocale)
   }
 
+  private final val bugInStandAloneForm = {
+    // Java 8 has a bug for stand-alone form. See https://bugs.openjdk.java.net/browse/JDK-8114833
+    // Note: we only check the US locale so that it's a static check. It can produce false-negative
+    // as some locales are not affected by the bug. Since `L`/`q` is rarely used, we choose to not
+    // complicate the check here.
+    // TODO: remove it when we drop Java 8 support.
+    val formatter = DateTimeFormatter.ofPattern("LLL qqq", Locale.US)
+    formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
+  }
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
   final val unsupportedNarrowTextStyle =
-    Set("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu", "QQQQQ", "qqqqq", "uuuuu")
+    Seq("G", "M", "L", "E", "u", "Q", "q").map(_ * 5).toSet
+
   /**
    * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
    * parsing/formatting datetime values. The pattern string is incompatible with the one defined
@@ -242,6 +252,12 @@ private object DateTimeFormatterHelper {
           }
           for (style <- unsupportedNarrowTextStyle if patternPart.contains(style)) {
             throw new IllegalArgumentException(s"Too many pattern letters: ${style.head}")
+          }
+          if (bugInStandAloneForm && (patternPart.contains("LLL") || patternPart.contains("qqq"))) {
+            throw new IllegalArgumentException("Java 8 has a bug to support stand-alone " +
+              "form (3 or more 'L' or 'q' in the pattern string). Please use 'M' or 'Q' instead, " +
+              "or upgrade your Java version. For more details, please read " +
+              "https://bugs.openjdk.java.net/browse/JDK-8114833")
           }
           // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
           // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
