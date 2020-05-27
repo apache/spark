@@ -146,6 +146,15 @@ case class InsertIntoHiveTable(
            |Table partitions: ${table.partitionColumnNames.mkString(",")}""".stripMargin)
     }
 
+    val oldPart = if ( numDynamicPartitions == 0) {
+      externalCatalog.getPartitionOption(
+        table.database,
+        table.identifier.table,
+        partitionSpec) }
+    else {
+      Option.empty
+    }
+
     // Validate partition spec if there exist any dynamic partitions
     if (numDynamicPartitions > 0) {
       // Report error if dynamic partitioning is not enabled
@@ -163,6 +172,17 @@ case class InsertIntoHiveTable(
       val isDynamic = partitionColumnNames.map(partitionSpec(_).isEmpty)
       if (isDynamic.init.zip(isDynamic.tail).contains((true, false))) {
         throw new AnalysisException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
+      }
+    } else if (numStaticPartitions > 0) {
+      // scalastyle:off
+      // ifNotExists is only valid with static partition, refer to
+      // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
+      // scalastyle:on
+      if (!oldPart.isEmpty && ifPartitionNotExists) {
+        val partitionStr = partitionSpec.map(_.productIterator.mkString("=")).mkString("/")
+        logWarning(s"Partition '$partitionStr' already exist, skip running job to overwrite " +
+          s"since 'IF NOT EXISTS' is set.")
+        return
       }
     }
 
@@ -253,64 +273,51 @@ case class InsertIntoHiveTable(
           overwrite,
           numDynamicPartitions)
       } else {
-        // scalastyle:off
-        // ifNotExists is only valid with static partition, refer to
-        // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
-        // scalastyle:on
-        val oldPart =
-          externalCatalog.getPartitionOption(
-            table.database,
-            table.identifier.table,
-            partitionSpec)
-
         var doHiveOverwrite = overwrite
+        // SPARK-29295: When insert overwrite to a Hive external table partition, if the
+        // partition does not exist, Hive will not check if the external partition directory
+        // exists or not before copying files. So if users drop the partition, and then do
+        // insert overwrite to the same partition, the partition will have both old and new
+        // data. We construct partition path. If the path exists, we delete it manually.
+        val partitionPath = if (oldPart.isEmpty && overwrite
+            && table.tableType == CatalogTableType.EXTERNAL) {
+          val partitionColumnNames = table.partitionColumnNames
+          val tablePath = new Path(table.location)
+          Some(ExternalCatalogUtils.generatePartitionPath(partitionSpec,
+            partitionColumnNames, tablePath))
+        } else {
+          oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
+        }
 
-        if (oldPart.isEmpty || !ifPartitionNotExists) {
-          // SPARK-29295: When insert overwrite to a Hive external table partition, if the
-          // partition does not exist, Hive will not check if the external partition directory
-          // exists or not before copying files. So if users drop the partition, and then do
-          // insert overwrite to the same partition, the partition will have both old and new
-          // data. We construct partition path. If the path exists, we delete it manually.
-          val partitionPath = if (oldPart.isEmpty && overwrite
-              && table.tableType == CatalogTableType.EXTERNAL) {
-            val partitionColumnNames = table.partitionColumnNames
-            val tablePath = new Path(table.location)
-            Some(ExternalCatalogUtils.generatePartitionPath(partitionSpec,
-              partitionColumnNames, tablePath))
-          } else {
-            oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
-          }
-
-          // SPARK-18107: Insert overwrite runs much slower than hive-client.
-          // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
-          // version and we may not want to catch up new Hive version every time. We delete the
-          // Hive partition first and then load data file into the Hive partition.
-          if (partitionPath.nonEmpty && overwrite) {
-            partitionPath.foreach { path =>
-              val fs = path.getFileSystem(hadoopConf)
-              if (fs.exists(path)) {
-                if (!fs.delete(path, true)) {
-                  throw new RuntimeException(
-                    "Cannot remove partition directory '" + path.toString)
-                }
-                // Don't let Hive do overwrite operation since it is slower.
-                doHiveOverwrite = false
+        // SPARK-18107: Insert overwrite runs much slower than hive-client.
+        // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
+        // version and we may not want to catch up new Hive version every time. We delete the
+        // Hive partition first and then load data file into the Hive partition.
+        if (partitionPath.nonEmpty && overwrite) {
+          partitionPath.foreach { path =>
+            val fs = path.getFileSystem(hadoopConf)
+            if (fs.exists(path)) {
+              if (!fs.delete(path, true)) {
+                throw new RuntimeException(
+                  "Cannot remove partition directory '" + path.toString)
               }
+              // Don't let Hive do overwrite operation since it is slower.
+              doHiveOverwrite = false
             }
           }
-
-          // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
-          // which is currently considered as a Hive native command.
-          val inheritTableSpecs = true
-          externalCatalog.loadPartition(
-            table.database,
-            table.identifier.table,
-            tmpLocation.toString,
-            partitionSpec,
-            isOverwrite = doHiveOverwrite,
-            inheritTableSpecs = inheritTableSpecs,
-            isSrcLocal = false)
         }
+
+        // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
+        // which is currently considered as a Hive native command.
+        val inheritTableSpecs = true
+        externalCatalog.loadPartition(
+          table.database,
+          table.identifier.table,
+          tmpLocation.toString,
+          partitionSpec,
+          isOverwrite = doHiveOverwrite,
+          inheritTableSpecs = inheritTableSpecs,
+          isSrcLocal = false)
       }
     } else {
       externalCatalog.loadTable(
