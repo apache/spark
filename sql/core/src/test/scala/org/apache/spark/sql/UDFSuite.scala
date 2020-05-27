@@ -617,4 +617,33 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val df = Seq(("data", (TestData(50, "2"), 2))).toDF("col1", "col2")
     checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
   }
+
+  test("case class as generic type of Option") {
+    val f = (o: Option[TestData]) => o.map(t => t.key * t.value.toInt)
+    val myUdf = udf(f)
+    val df = Seq(("data", Some(TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("more input fields than expect for case class") {
+    val f = (t: TestData2) => t.a * t.b
+    val myUdf = udf(f)
+    val df = Seq(("data", TestData4(50, 2, 2))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("less input fields than expect for case class") {
+    val f = (t: TestData4) => t.a * t.b * t.c
+    val myUdf = udf(f)
+    val df = Seq(("data", TestData2(50, 2))).toDF("col1", "col2")
+    val error = intercept[AnalysisException] (df.select(myUdf(Column("col2"))))
+    assert(error.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"))
+  }
+
+  test("wrong order of input fields for case class") {
+    val f = (t: TestData) => t.key * t.value.toInt
+    val myUdf = udf(f)
+    val df = Seq(("data", TestData5("2", 50))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+  }
 }
