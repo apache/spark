@@ -59,8 +59,7 @@ object Cast {
     case (StringType, TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
-    case (_: NumericType, TimestampType) =>
-      if (SQLConf.get.allowCastNumericToTimestamp) true else false
+    case (_: NumericType, TimestampType) => SQLConf.get.allowCastNumericToTimestamp
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
@@ -269,10 +268,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       TypeCheckResult.TypeCheckFailure(
         if (child.dataType.isInstanceOf[NumericType] && dataType.isInstanceOf[TimestampType]) {
           s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}," +
-            s",you can enable the casting by setting" +
-            s"spark.sql.legacy.allowCastNumericToTimestamp =true;" +
-            s"but we strongly recommand using function" +
-            s"TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instand"
+            ", you can enable the casting by setting " +
+            s"${SQLConf.LEGACY_AllOW_CAST_NUMERIC_TO_TIMESTAMP.key} to true," +
+            "but we strongly recommand using function " +
+            "TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead."
         } else {
           s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
         })
