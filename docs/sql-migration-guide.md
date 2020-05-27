@@ -115,6 +115,8 @@ license: |
   - In Spark 3.0, when casting interval values to string type, there is no "interval" prefix, for example, `1 days 2 hours`. In Spark version 2.4 and below, the string contains the "interval" prefix like `interval 1 days 2 hours`.
 
   - In Spark 3.0, when casting string value to integral types(tinyint, smallint, int and bigint), datetime types(date, timestamp and interval) and boolean type, the leading and trailing whitespaces (<= ASCII 32) will be trimmed before converted to these type values, for example, `cast(' 1\t' as int)` results `1`, `cast(' 1\t' as boolean)` results `true`, `cast('2019-10-10\t as date)` results the date value `2019-10-10`. In Spark version 2.4 and below, when casting string to integrals and booleans, it does not trim the whitespaces from both ends; the foregoing results is `null`, while to datetimes, only the trailing spaces (= ASCII 32) are removed.
+  
+  - In Spark 3.0, casting numeric to timestamp will be forbidden by default, user can enable it by setting spark.sql.legacy.allowCastNumericToTimestamp to true, and functions(TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS) are strongly recommended to avoid possible inaccurate scenes, [SPARK-31710](https://issues.apache.org/jira/browse/SPARK-31710) for more details.
 
 ### Query Engine
 

@@ -3174,8 +3174,6 @@ class SQLConf extends Serializable with Logging {
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
-  def allowCastNumericToTimestamp: Boolean =
-    getConf(SQLConf.LEGACY_AllOW_CAST_NUMERIC_TO_TIMESTAMP)
 
   /** ********************** SQLConf functionality methods ************ */
 

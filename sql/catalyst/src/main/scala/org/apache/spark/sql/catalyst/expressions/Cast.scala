@@ -59,7 +59,8 @@ object Cast {
     case (StringType, TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
-    case (_: NumericType, TimestampType) => SQLConf.get.allowCastNumericToTimestamp
+    case (_: NumericType, TimestampType) =>
+      SQLConf.get.getConf(SQLConf.LEGACY_AllOW_CAST_NUMERIC_TO_TIMESTAMP)
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
