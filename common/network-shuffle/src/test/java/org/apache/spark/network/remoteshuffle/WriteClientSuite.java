@@ -50,11 +50,14 @@ public class WriteClientSuite {
     try (WriteClient client = new WriteClient(
         "localhost", port, timeoutMs, shuffleStageFqid, 4, new HashMap<>())) {
       client.connect();
-      client.writeRecord(1, 2, null, null);
-      client.writeRecord(1, 2, ByteBuffer.allocate(0), ByteBuffer.allocate(0));
+
+      long taskAttemptId = 2;
+      client.writeRecord(1, taskAttemptId, null, null);
+      client.writeRecord(1, taskAttemptId, ByteBuffer.allocate(0), ByteBuffer.allocate(0));
       ByteBuffer key = ByteBuffer.wrap("key1".getBytes(StandardCharsets.UTF_8));
       ByteBuffer value = ByteBuffer.wrap("value1".getBytes(StandardCharsets.UTF_8));
-      client.writeRecord(1, 2, key, value);
+      client.writeRecord(1, taskAttemptId, key, value);
+      client.finishTask(taskAttemptId);
     }
   }
 }

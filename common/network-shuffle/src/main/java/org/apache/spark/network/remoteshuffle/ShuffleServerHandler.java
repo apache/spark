@@ -21,8 +21,11 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.remoteshuffle.protocol.ConnectWriteRequest;
 import org.apache.spark.network.remoteshuffle.protocol.ConnectWriteResponse;
+import org.apache.spark.network.remoteshuffle.protocol.FinishTaskRequest;
+import org.apache.spark.network.remoteshuffle.protocol.FinishTaskResponse;
 import org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage;
 import org.apache.spark.network.remoteshuffle.protocol.StreamRecord;
+import org.apache.spark.network.remoteshuffle.protocol.TaskAttemptRecord;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.slf4j.Logger;
@@ -37,6 +40,12 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  */
 public class ShuffleServerHandler extends RpcHandler {
   private static final Logger logger = LoggerFactory.getLogger(ShuffleServerHandler.class);
+
+  private final ShuffleEngine shuffleEngine;
+
+  public ShuffleServerHandler(String rootDir) {
+    this.shuffleEngine = new ShuffleEngine(rootDir);
+  }
 
   @Override
   public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
@@ -61,11 +70,27 @@ public class ShuffleServerHandler extends RpcHandler {
             client.getClientId(),
             getRemoteAddress(client.getChannel()));
       }
-      // TODO implement streamId for ConnectWriteResponse
-      callback.onSuccess(new ConnectWriteResponse(0L).toByteBuffer());
+      long sessionId = shuffleEngine.createWriteSession(new ShuffleStageFqid(
+          msg.appId,
+          msg.execId,
+          msg.shuffleId,
+          msg.stageAttempt
+      ));
+      callback.onSuccess(new ConnectWriteResponse(sessionId).toByteBuffer());
     } else if (msgObj instanceof StreamRecord) {
-      // TODO write record to file
-      logger.info(msgObj.toString());
+      StreamRecord record = (StreamRecord)msgObj;
+      long taskAttempt = TaskAttemptRecord.getTaskAttemptId(record.taskData);
+      shuffleEngine.writeTaskData(record.sessionId, record.partition, taskAttempt, record.taskData);
+    } else if (msgObj instanceof FinishTaskRequest) {
+      FinishTaskRequest msg = (FinishTaskRequest)msgObj;
+      if (logger.isTraceEnabled()) {
+        logger.trace("Finish task for session {} for client {} from host {}",
+            msg.sessionId,
+            client.getClientId(),
+            getRemoteAddress(client.getChannel()));
+      }
+      shuffleEngine.finishTask(msg.sessionId, msg.taskAttempt);
+      callback.onSuccess(new FinishTaskResponse((byte)0).toByteBuffer());
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }

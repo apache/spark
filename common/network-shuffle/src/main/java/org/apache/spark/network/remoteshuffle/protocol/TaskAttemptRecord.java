@@ -113,4 +113,11 @@ public class TaskAttemptRecord implements Encodable {
     }
     return new TaskAttemptRecord(taskAttempt, key, value);
   }
+
+  public static long getTaskAttemptId(ByteBuffer data) {
+    data.mark();
+    long taskAttemptId = data.getLong();
+    data.reset();
+    return taskAttemptId;
+  }
 }

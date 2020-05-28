@@ -32,7 +32,8 @@ public abstract class RemoteShuffleMessage implements Encodable {
 
   /** Preceding every serialized message is its type, which allows us to deserialize it. */
   public enum Type {
-    CONNECT_WRITE_REQUEST(0), CONNECT_WRITE_RESPONSE(1), STREAM_RECORD(2);
+    CONNECT_WRITE_REQUEST(0), CONNECT_WRITE_RESPONSE(1), STREAM_RECORD(2),
+    FINISH_TASK_REQUEST(3), FINISH_TASK_RESPONSE(4);
 
     private final byte id;
 
@@ -54,6 +55,8 @@ public abstract class RemoteShuffleMessage implements Encodable {
         case 0: return ConnectWriteRequest.decode(buf);
         case 1: return ConnectWriteResponse.decode(buf);
         case 2: return StreamRecord.decode(buf);
+        case 3: return FinishTaskRequest.decode(buf);
+        case 4: return FinishTaskResponse.decode(buf);
         default: throw new IllegalArgumentException("Unknown message type: " + type);
       }
     }

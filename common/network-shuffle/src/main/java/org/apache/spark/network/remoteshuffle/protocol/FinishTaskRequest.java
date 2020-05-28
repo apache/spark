@@ -18,57 +18,63 @@
 package org.apache.spark.network.remoteshuffle.protocol;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
+import java.nio.ByteBuffer;
 import java.util.Objects;
 
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage.Type;
 
-/** Response message for {@link ConnectWriteRequest}. */
-public class ConnectWriteResponse extends RemoteShuffleMessage {
+/** Request to finish writing data from a map task. Returns {@link FinishTaskResponse}. */
+public class FinishTaskRequest extends RemoteShuffleMessage {
   public final long sessionId;
+  public final long taskAttempt;
 
-  public ConnectWriteResponse(long sessionId) {
+  public FinishTaskRequest(long sessionId, long taskAttempt) {
     this.sessionId = sessionId;
+    this.taskAttempt = taskAttempt;
   }
 
   @Override
-  protected Type type() { return Type.CONNECT_WRITE_RESPONSE; }
+  protected Type type() { return Type.FINISH_TASK_REQUEST; }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    ConnectWriteResponse that = (ConnectWriteResponse) o;
-    return sessionId == that.sessionId;
+    FinishTaskRequest that = (FinishTaskRequest) o;
+    return sessionId == that.sessionId &&
+        taskAttempt == that.taskAttempt;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(sessionId);
+    return Objects.hash(sessionId, taskAttempt);
   }
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-        .append("sessionId", sessionId)
-        .toString();
+    return "FinishTaskRequest{" +
+        "sessionId=" + sessionId +
+        ", taskAttempt=" + taskAttempt +
+        '}';
   }
 
   @Override
   public int encodedLength() {
-    return Long.BYTES;
+    return Long.BYTES
+      + Long.BYTES;
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(sessionId);
+    buf.writeLong(taskAttempt);
   }
 
-  public static ConnectWriteResponse decode(ByteBuf buf) {
-    long streamId = buf.readLong();
-    return new ConnectWriteResponse(streamId);
+  public static FinishTaskRequest decode(ByteBuf buf) {
+    long sessionId = buf.readLong();
+    long taskAttempt = buf.readLong();
+    return new FinishTaskRequest(sessionId, taskAttempt);
   }
 }

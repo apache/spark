@@ -24,6 +24,8 @@ import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.remoteshuffle.protocol.ConnectWriteRequest;
 import org.apache.spark.network.remoteshuffle.protocol.ConnectWriteResponse;
+import org.apache.spark.network.remoteshuffle.protocol.FinishTaskRequest;
+import org.apache.spark.network.remoteshuffle.protocol.FinishTaskResponse;
 import org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage;
 import org.apache.spark.network.remoteshuffle.protocol.StreamRecord;
 import org.apache.spark.network.remoteshuffle.protocol.TaskAttemptRecord;
@@ -94,15 +96,23 @@ public class WriteClient implements AutoCloseable {
   }
 
   public void writeRecord(int partition, long taskAttempt, ByteBuffer key, ByteBuffer value) {
-    if (sessionId == -1) {
-      throw new RuntimeException(String.format("Not connected to server %s:%s", host, port));
-    }
+    checkConnected();
 
     ByteBuffer record = new StreamRecord(
         sessionId,
         partition,
         new TaskAttemptRecord(taskAttempt, key, value).toByteBuffer()).toByteBuffer();
     client.send(record);
+  }
+
+  public void finishTask(long taskAttempt) {
+    checkConnected();
+
+    ByteBuffer request = new FinishTaskRequest(sessionId, taskAttempt).toByteBuffer();
+    ByteBuffer response = client.sendRpcSync(request, timeoutMs);
+    FinishTaskResponse msg =
+        (FinishTaskResponse)RemoteShuffleMessage.Decoder.fromByteBuffer(response);
+    logger.info("Write client finished task {}, response: {}", taskAttempt, msg);
   }
 
   @Override
@@ -115,6 +125,12 @@ public class WriteClient implements AutoCloseable {
     if (clientFactory != null) {
       clientFactory.close();
       clientFactory = null;
+    }
+  }
+
+  private void checkConnected() {
+    if (sessionId == -1) {
+      throw new RuntimeException(String.format("Not connected to server %s:%s", host, port));
     }
   }
 }

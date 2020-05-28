@@ -18,57 +18,55 @@
 package org.apache.spark.network.remoteshuffle.protocol;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import java.util.Objects;
 
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage.Type;
 
-/** Response message for {@link ConnectWriteRequest}. */
-public class ConnectWriteResponse extends RemoteShuffleMessage {
-  public final long sessionId;
+/** Response message for {@link FinishTaskRequest}. */
+public class FinishTaskResponse extends RemoteShuffleMessage {
+  public final byte status;
 
-  public ConnectWriteResponse(long sessionId) {
-    this.sessionId = sessionId;
+  public FinishTaskResponse(byte status) {
+    this.status = status;
   }
 
   @Override
-  protected Type type() { return Type.CONNECT_WRITE_RESPONSE; }
+  protected Type type() { return Type.FINISH_TASK_RESPONSE; }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    ConnectWriteResponse that = (ConnectWriteResponse) o;
-    return sessionId == that.sessionId;
+    FinishTaskResponse that = (FinishTaskResponse) o;
+    return status == that.status;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(sessionId);
+    return Objects.hash(status);
   }
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-        .append("sessionId", sessionId)
-        .toString();
+    return "FinishTaskResponse{" +
+        "status=" + status +
+        '}';
   }
 
   @Override
   public int encodedLength() {
-    return Long.BYTES;
+    return Byte.BYTES;
   }
 
   @Override
   public void encode(ByteBuf buf) {
-    buf.writeLong(sessionId);
+    buf.writeByte(status);
   }
 
-  public static ConnectWriteResponse decode(ByteBuf buf) {
-    long streamId = buf.readLong();
-    return new ConnectWriteResponse(streamId);
+  public static FinishTaskResponse decode(ByteBuf buf) {
+    byte status = buf.readByte();
+    return new FinishTaskResponse(status);
   }
 }

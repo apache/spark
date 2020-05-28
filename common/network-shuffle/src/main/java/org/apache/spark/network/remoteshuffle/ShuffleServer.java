@@ -23,6 +23,8 @@ import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +38,8 @@ public class ShuffleServer {
 
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
   private static final int DEFAULT_SPARK_SHUFFLE_SERVICE_PORT = 7337;
+
+  private static final String SPARK_SHUFFLE_SERVICE_ROOT_DIR_KEY = "spark.shuffle.service.rootDir";
 
   private final Map<String, String> config;
 
@@ -52,7 +56,15 @@ public class ShuffleServer {
     int port = Integer.parseInt(portConfigValue);
 
     TransportConf transportConf = new TransportConf("remoteShuffle", new MapConfigProvider(config));
-    shuffleHandler = new ShuffleServerHandler();
+    String rootDir = config.get(SPARK_SHUFFLE_SERVICE_ROOT_DIR_KEY);
+    if (rootDir == null || rootDir.isEmpty()) {
+      try {
+        rootDir = Files.createTempDirectory("remoteShuffle").toString();
+      } catch (IOException e) {
+        throw new RuntimeException("Failed to create temp directory for root dir", e);
+      }
+    }
+    shuffleHandler = new ShuffleServerHandler(rootDir);
     TransportContext transportContext = new TransportContext(transportConf, shuffleHandler);
     List<TransportServerBootstrap> bootstraps = Collections.emptyList();
     shuffleServer = transportContext.createServer(port, bootstraps);

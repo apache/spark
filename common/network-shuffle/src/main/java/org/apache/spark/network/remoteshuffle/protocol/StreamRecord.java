@@ -29,12 +29,12 @@ import java.util.Objects;
 public class StreamRecord extends RemoteShuffleMessage {
   public final long sessionId;
   public final int partition;
-  public final ByteBuffer taskAttemptRecord;
+  public final ByteBuffer taskData;
 
-  public StreamRecord(long sessionId, int partition, ByteBuffer taskAttemptRecord) {
+  public StreamRecord(long sessionId, int partition, ByteBuffer taskData) {
     this.sessionId = sessionId;
     this.partition = partition;
-    this.taskAttemptRecord = taskAttemptRecord;
+    this.taskData = taskData;
   }
 
   @Override
@@ -47,12 +47,12 @@ public class StreamRecord extends RemoteShuffleMessage {
     StreamRecord that = (StreamRecord) o;
     return sessionId == that.sessionId &&
         partition == that.partition &&
-        Objects.equals(taskAttemptRecord, that.taskAttemptRecord);
+        Objects.equals(taskData, that.taskData);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(sessionId, partition, taskAttemptRecord);
+    return Objects.hash(sessionId, partition, taskData);
   }
 
   @Override
@@ -60,7 +60,7 @@ public class StreamRecord extends RemoteShuffleMessage {
     return "StreamRecord{" +
         "sessionId=" + sessionId +
         ", partition=" + partition +
-        ", taskAttemptRecord=" + taskAttemptRecord.remaining() + " bytes" +
+        ", taskData=" + taskData.remaining() + " bytes" +
         '}';
   }
 
@@ -69,24 +69,24 @@ public class StreamRecord extends RemoteShuffleMessage {
     return Long.BYTES
       + Integer.BYTES
       + Integer.BYTES
-      + taskAttemptRecord.remaining();
+      + taskData.remaining();
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(sessionId);
     buf.writeInt(partition);
-    buf.writeInt(taskAttemptRecord.remaining());
-    buf.writeBytes(taskAttemptRecord);
+    buf.writeInt(taskData.remaining());
+    buf.writeBytes(taskData);
   }
 
   public static StreamRecord decode(ByteBuf buf) {
-    long streamId = buf.readLong();
+    long sessionId = buf.readLong();
     int partition = buf.readInt();
     int len = buf.readInt();
-    ByteBuffer taskAttemptRecord = ByteBuffer.allocate(len);
-    buf.readBytes(taskAttemptRecord);
-    taskAttemptRecord.flip();
-    return new StreamRecord(streamId, partition, taskAttemptRecord);
+    ByteBuffer taskData = ByteBuffer.allocate(len);
+    buf.readBytes(taskData);
+    taskData.flip();
+    return new StreamRecord(sessionId, partition, taskData);
   }
 }
