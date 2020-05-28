@@ -54,6 +54,7 @@ sealed trait TimestampFormatter extends Serializable {
   def format(us: Long): String
   def format(ts: Timestamp): String
   def format(instant: Instant): String
+  def validatePatternString(): Unit
 }
 
 class Iso8601TimestampFormatter(
@@ -99,6 +100,12 @@ class Iso8601TimestampFormatter(
   override def format(ts: Timestamp): String = {
     legacyFormatter.format(ts)
   }
+
+  override def validatePatternString(): Unit = {
+    try {
+      formatter
+    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+  }
 }
 
 /**
@@ -120,16 +127,37 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
 
   // The new formatter will omit the trailing 0 in the timestamp string, but the legacy formatter
-  // can't. Here we borrow the code from Spark 2.4 DateTimeUtils.timestampToString to omit the
-  // trailing 0 for the legacy formatter as well.
+  // can't. Here we use the legacy formatter to format the given timestamp up to seconds fractions,
+  // and custom implementation to format the fractional part without trailing zeros.
   override def format(ts: Timestamp): String = {
-    val timestampString = ts.toString
     val formatted = legacyFormatter.format(ts)
-
-    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
-      formatted + timestampString.substring(19)
-    } else {
+    var nanos = ts.getNanos
+    if (nanos == 0) {
       formatted
+    } else {
+      // Formats non-zero seconds fraction w/o trailing zeros. For example:
+      //   formatted = '2020-05:27 15:55:30'
+      //   nanos = 001234000
+      // Counts the length of the fractional part: 001234000 -> 6
+      var fracLen = 9
+      while (nanos % 10 == 0) {
+        nanos /= 10
+        fracLen -= 1
+      }
+      // Places `nanos` = 1234 after '2020-05:27 15:55:30.'
+      val fracOffset = formatted.length + 1
+      val totalLen = fracOffset + fracLen
+      // The buffer for the final result: '2020-05:27 15:55:30.001234'
+      val buf = new Array[Char](totalLen)
+      formatted.getChars(0, formatted.length, buf, 0)
+      buf(formatted.length) = '.'
+      var i = totalLen
+      do {
+        i -= 1
+        buf(i) = ('0' + (nanos % 10)).toChar
+        nanos /= 10
+      } while (i > fracOffset)
+      new String(buf)
     }
   }
 }
@@ -202,6 +230,8 @@ class LegacyFastTimestampFormatter(
   override def format(instant: Instant): String = {
     format(instantToMicros(instant))
   }
+
+  override def validatePatternString(): Unit = fastDateFormat
 }
 
 class LegacySimpleTimestampFormatter(
@@ -231,6 +261,8 @@ class LegacySimpleTimestampFormatter(
   override def format(instant: Instant): String = {
     format(instantToMicros(instant))
   }
+
+  override def validatePatternString(): Unit = sdf
 }
 
 object LegacyDateFormats extends Enumeration {
@@ -255,8 +287,10 @@ object TimestampFormatter {
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      new Iso8601TimestampFormatter(
+      val tf = new Iso8601TimestampFormatter(
         pattern, zoneId, locale, legacyFormat, needVarLengthSecondFraction)
+      tf.validatePatternString()
+      tf
     }
   }
 

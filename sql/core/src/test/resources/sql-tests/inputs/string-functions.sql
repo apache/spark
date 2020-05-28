@@ -49,3 +49,7 @@ SELECT trim(LEADING 'xy' FROM 'xyxXxyLAST WORD');
 SELECT trim(TRAILING 'xyz' FROM 'testxxzx');
 SELECT trim(TRAILING 'xyz' FROM 'xyztestxxzx');
 SELECT trim(TRAILING 'xy' FROM 'TURNERyxXxy');
+
+-- Check lpad/rpad with invalid length parameter
+SELECT lpad('hi', 'invalid_length');
+SELECT rpad('hi', 'invalid_length');

@@ -267,7 +267,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         // Test escaping of format
         GenerateUnsafeProjection.generate(
-          DateFormatClass(Literal(ts), Literal("\"quote"), JST_OPT) :: Nil)
+          DateFormatClass(Literal(ts), Literal("\""), JST_OPT) :: Nil)
 
         // SPARK-28072 The codegen path should work
         checkEvaluation(
@@ -792,7 +792,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     // Test escaping of format
-    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("unix_timestamp") {
@@ -862,7 +862,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("to_unix_timestamp") {
@@ -940,7 +940,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("datediff") {
@@ -1145,5 +1145,27 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal("2020-01-27T20:06:11.847-0800"),
           Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), "Fail to parse")
     }
+  }
+
+  test("SPARK-31710:Adds TIMESTAMP_SECONDS, " +
+    "TIMESTAMP_MILLIS and TIMESTAMP_MICROS functions") {
+    checkEvaluation(SecondsToTimestamp(Literal(1230219000)), 1230219000L * MICROS_PER_SECOND)
+    checkEvaluation(SecondsToTimestamp(Literal(-1230219000)), -1230219000L * MICROS_PER_SECOND)
+    checkEvaluation(SecondsToTimestamp(Literal(null, IntegerType)), null)
+    checkEvaluation(MillisToTimestamp(Literal(1230219000123L)), 1230219000123L * MICROS_PER_MILLIS)
+    checkEvaluation(MillisToTimestamp(
+      Literal(-1230219000123L)), -1230219000123L * MICROS_PER_MILLIS)
+    checkEvaluation(MillisToTimestamp(Literal(null, IntegerType)), null)
+    checkEvaluation(MicrosToTimestamp(Literal(1230219000123123L)), 1230219000123123L)
+    checkEvaluation(MicrosToTimestamp(Literal(-1230219000123123L)), -1230219000123123L)
+    checkEvaluation(MicrosToTimestamp(Literal(null, IntegerType)), null)
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(1230219000123123L)), "long overflow")
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(-1230219000123123L)), "long overflow")
+    checkExceptionInExpression[ArithmeticException](
+      MillisToTimestamp(Literal(92233720368547758L)), "long overflow")
+    checkExceptionInExpression[ArithmeticException](
+      MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
   }
 }

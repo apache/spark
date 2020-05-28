@@ -91,15 +91,21 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
 }
 
 
-/** Replaces the expression of CurrentDatabase with the current database name. */
-case class GetCurrentDatabase(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
+/**
+ * Replaces the expression of CurrentDatabase with the current database name.
+ * Replaces the expression of CurrentCatalog with the current catalog name.
+ */
+case class GetCurrentDatabaseAndCatalog(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val currentNamespace = catalogManager.currentNamespace.quoted
+    val currentCatalog = catalogManager.currentCatalog.name()
 
     plan transformAllExpressions {
       case CurrentDatabase() =>
         Literal.create(currentNamespace, StringType)
+      case CurrentCatalog() =>
+        Literal.create(currentCatalog, StringType)
     }
   }
 }

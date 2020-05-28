@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time._
 import java.time.chrono.IsoChronology
-import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, DateTimeParseException, ResolverStyle}
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.Locale
 
@@ -31,17 +31,52 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 trait DateTimeFormatterHelper {
+  private def getOrDefault(accessor: TemporalAccessor, field: ChronoField, default: Int): Int = {
+    if (accessor.isSupported(field)) {
+      accessor.get(field)
+    } else {
+      default
+    }
+  }
+
+  protected def toLocalDate(accessor: TemporalAccessor): LocalDate = {
+    val localDate = accessor.query(TemporalQueries.localDate())
+    // If all the date fields are specified, return the local date directly.
+    if (localDate != null) return localDate
+
+    // Users may want to parse only a few datetime fields from a string and extract these fields
+    // later, and we should provide default values for missing fields.
+    // To be compatible with Spark 2.4, we pick 1970 as the default value of year.
+    val year = getOrDefault(accessor, ChronoField.YEAR, 1970)
+    val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
+    val day = getOrDefault(accessor, ChronoField.DAY_OF_MONTH, 1)
+    LocalDate.of(year, month, day)
+  }
+
+  private def toLocalTime(accessor: TemporalAccessor): LocalTime = {
+    val localTime = accessor.query(TemporalQueries.localTime())
+    // If all the time fields are specified, return the local time directly.
+    if (localTime != null) return localTime
+
+    val hour = if (accessor.isSupported(ChronoField.HOUR_OF_DAY)) {
+      accessor.get(ChronoField.HOUR_OF_DAY)
+    } else if (accessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
+      // When we reach here, it means am/pm is not specified. Here we assume it's am.
+      accessor.get(ChronoField.HOUR_OF_AMPM)
+    } else {
+      0
+    }
+    val minute = getOrDefault(accessor, ChronoField.MINUTE_OF_HOUR, 0)
+    val second = getOrDefault(accessor, ChronoField.SECOND_OF_MINUTE, 0)
+    val nanoSecond = getOrDefault(accessor, ChronoField.NANO_OF_SECOND, 0)
+    LocalTime.of(hour, minute, second, nanoSecond)
+  }
+
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
   // if they does not exist in the parsed object.
-  protected def toZonedDateTime(
-      temporalAccessor: TemporalAccessor,
-      zoneId: ZoneId): ZonedDateTime = {
-    // Parsed input might not have time related part. In that case, time component is set to zeros.
-    val parsedLocalTime = temporalAccessor.query(TemporalQueries.localTime)
-    val localTime = if (parsedLocalTime == null) LocalTime.MIDNIGHT else parsedLocalTime
-    // Parsed input must have date component. At least, year must present in temporalAccessor.
-    val localDate = temporalAccessor.query(TemporalQueries.localDate)
-
+  protected def toZonedDateTime(accessor: TemporalAccessor, zoneId: ZoneId): ZonedDateTime = {
+    val localDate = toLocalDate(accessor)
+    val localTime = toLocalTime(accessor)
     ZonedDateTime.of(localDate, localTime, zoneId)
   }
 
@@ -72,19 +107,43 @@ trait DateTimeFormatterHelper {
   // DateTimeParseException will address by the caller side.
   protected def checkDiffResult[T](
       s: String, legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
-    case e: DateTimeParseException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
-      val res = try {
-        Some(legacyParseFunc(s))
+    case e: DateTimeException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
+      try {
+        legacyParseFunc(s)
       } catch {
-        case _: Throwable => None
+        case _: Throwable => throw e
       }
-      if (res.nonEmpty) {
-        throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
-          s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
-          s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
-      } else {
-        throw e
+      throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
+        s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
+        s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
+  }
+
+  /**
+   * When the new DateTimeFormatter failed to initialize because of invalid datetime pattern, it
+   * will throw IllegalArgumentException. If the pattern can be recognized by the legacy formatter
+   * it will raise SparkUpgradeException to tell users to restore the previous behavior via LEGACY
+   * policy or follow our guide to correct their pattern. Otherwise, the original
+   * IllegalArgumentException will be thrown.
+   *
+   * @param pattern the date time pattern
+   * @param tryLegacyFormatter a func to capture exception, identically which forces a legacy
+   *                           datetime formatter to be initialized
+   */
+
+  protected def checkLegacyFormatter(
+      pattern: String,
+      tryLegacyFormatter: => Unit): PartialFunction[Throwable, DateTimeFormatter] = {
+    case e: IllegalArgumentException =>
+      try {
+        tryLegacyFormatter
+      } catch {
+        case _: Throwable => throw e
       }
+      throw new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
+        s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
+        s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
+        s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+        e)
   }
 }
 
@@ -101,10 +160,6 @@ private object DateTimeFormatterHelper {
 
   def toFormatter(builder: DateTimeFormatterBuilder, locale: Locale): DateTimeFormatter = {
     builder
-      .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
-      .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
-      .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
-      .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
       .withResolverStyle(ResolverStyle.STRICT)
@@ -162,7 +217,18 @@ private object DateTimeFormatterHelper {
     toFormatter(builder, TimestampFormatter.defaultLocale)
   }
 
+  private final val bugInStandAloneForm = {
+    // Java 8 has a bug for stand-alone form. See https://bugs.openjdk.java.net/browse/JDK-8114833
+    // Note: we only check the US locale so that it's a static check. It can produce false-negative
+    // as some locales are not affected by the bug. Since `L`/`q` is rarely used, we choose to not
+    // complicate the check here.
+    // TODO: remove it when we drop Java 8 support.
+    val formatter = DateTimeFormatter.ofPattern("LLL qqq", Locale.US)
+    formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
+  }
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
+  final val unsupportedNarrowTextStyle =
+    Seq("G", "M", "L", "E", "u", "Q", "q").map(_ * 5).toSet
 
   /**
    * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
@@ -183,6 +249,15 @@ private object DateTimeFormatterHelper {
         if (index % 2 == 0) {
           for (c <- patternPart if unsupportedLetters.contains(c)) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
+          }
+          for (style <- unsupportedNarrowTextStyle if patternPart.contains(style)) {
+            throw new IllegalArgumentException(s"Too many pattern letters: ${style.head}")
+          }
+          if (bugInStandAloneForm && (patternPart.contains("LLL") || patternPart.contains("qqq"))) {
+            throw new IllegalArgumentException("Java 8 has a bug to support stand-alone " +
+              "form (3 or more 'L' or 'q' in the pattern string). Please use 'M' or 'Q' instead, " +
+              "or upgrade your Java version. For more details, please read " +
+              "https://bugs.openjdk.java.net/browse/JDK-8114833")
           }
           // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
           // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
