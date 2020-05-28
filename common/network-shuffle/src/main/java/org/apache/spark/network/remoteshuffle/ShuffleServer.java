@@ -30,18 +30,18 @@ import java.util.Map;
 /**
  * Remote shuffle server.
  */
-public class RemoteShuffleServer {
+public class ShuffleServer {
 
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
   private static final int DEFAULT_SPARK_SHUFFLE_SERVICE_PORT = 7337;
 
   private final Map<String, String> config;
 
-  private RemoteShuffleServerHandler shuffleHandler;
+  private ShuffleServerHandler shuffleHandler;
   private TransportServer shuffleServer;
   private int boundPort;
 
-  public RemoteShuffleServer(Map<String, String> config) {
+  public ShuffleServer(Map<String, String> config) {
     this.config = Collections.unmodifiableMap(config);
   }
 
@@ -50,7 +50,7 @@ public class RemoteShuffleServer {
     int port = Integer.parseInt(portConfigValue);
 
     TransportConf transportConf = new TransportConf("remoteShuffle", new MapConfigProvider(config));
-    shuffleHandler = new RemoteShuffleServerHandler();
+    shuffleHandler = new ShuffleServerHandler();
     TransportContext transportContext = new TransportContext(transportConf, shuffleHandler);
     List<TransportServerBootstrap> bootstraps = Collections.emptyList();
     shuffleServer = transportContext.createServer(port, bootstraps);

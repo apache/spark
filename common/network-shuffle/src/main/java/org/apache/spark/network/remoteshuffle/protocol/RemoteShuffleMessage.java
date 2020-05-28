@@ -20,12 +20,12 @@ package org.apache.spark.network.remoteshuffle.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.spark.network.protocol.Encodable;
-import org.apache.spark.network.remoteshuffle.RemoteShuffleServer;
+import org.apache.spark.network.remoteshuffle.ShuffleServer;
 
 import java.nio.ByteBuffer;
 
 /**
- * Messages handled by the {@link RemoteShuffleServer}
+ * Messages handled by the {@link ShuffleServer}
  */
 public abstract class RemoteShuffleMessage implements Encodable {
   protected abstract Type type();

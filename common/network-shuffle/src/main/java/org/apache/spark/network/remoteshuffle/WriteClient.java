@@ -39,8 +39,8 @@ import java.util.Map;
 /**
  * Client for writing shuffle data to remote shuffle server.
  */
-public class RemoteShuffleWriteClient implements AutoCloseable {
-  private static final Logger logger = LoggerFactory.getLogger(RemoteShuffleWriteClient.class);
+public class WriteClient implements AutoCloseable {
+  private static final Logger logger = LoggerFactory.getLogger(WriteClient.class);
 
   private final TransportConf conf;
   private final long timeoutMs;
@@ -55,7 +55,7 @@ public class RemoteShuffleWriteClient implements AutoCloseable {
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
    * then secretKeyHolder may be null.
    */
-  public RemoteShuffleWriteClient(
+  public WriteClient(
       String host,
       int port,
       long timeoutMs,

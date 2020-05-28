@@ -24,12 +24,12 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.HashMap;
 
-public class RemoteShuffleWriteClientSuite {
-  private RemoteShuffleServer server;
+public class WriteClientSuite {
+  private ShuffleServer server;
 
   @Before
   public void beforeEach() {
-    server = new RemoteShuffleServer(new HashMap<>());
+    server = new ShuffleServer(new HashMap<>());
     server.start();
   }
 
@@ -45,7 +45,7 @@ public class RemoteShuffleWriteClientSuite {
     int port = server.getBoundPort();
     long timeoutMs = 30000;
     ShuffleStageFqid shuffleStageFqid = new ShuffleStageFqid("app1", "1", 2, 3);
-    try (RemoteShuffleWriteClient client = new RemoteShuffleWriteClient("localhost", port, timeoutMs, shuffleStageFqid, 4, new HashMap<>())) {
+    try (WriteClient client = new WriteClient("localhost", port, timeoutMs, shuffleStageFqid, 4, new HashMap<>())) {
       client.connect();
     }
   }

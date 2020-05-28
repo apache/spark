@@ -34,8 +34,8 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 /***
  * Remote shuffle server handler.
  */
-public class RemoteShuffleServerHandler extends RpcHandler {
-  private static final Logger logger = LoggerFactory.getLogger(RemoteShuffleServerHandler.class);
+public class ShuffleServerHandler extends RpcHandler {
+  private static final Logger logger = LoggerFactory.getLogger(ShuffleServerHandler.class);
 
   @Override
   public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
