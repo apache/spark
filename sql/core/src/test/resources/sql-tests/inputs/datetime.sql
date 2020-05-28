@@ -157,6 +157,15 @@ select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'd
 select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 
+create temporary view dnf as select d, f from values
+ ('1986-05-23', 'yyyy-MM-dd'),
+ ('1986-05-23a', 'yyyy-MM-dd'),
+ ('1986-05-23', 'invalid'),
+ ('1986-05-23', null),
+ (null, 'yyyy-MM-dd'),
+ (null, 'invalid'),
+ (null, null) t(d, f);
+
 select date_format(null, null);
 select date_format(null, 'yyyy-MM-dd');
 select date_format(null, 'invalid');
@@ -172,6 +181,8 @@ select date_format(cast(null as timestamp ), 'yyyy-MM-dd');
 select date_format(timestamp '1986-05-23', null);
 select date_format(timestamp '1986-05-23', 'invalid');
 select date_format(timestamp '1986-05-23', 'yyyy-MM-dd');
+select date_format(d, f) from dnf where f != 'invalid' or d is null or f is null ;
+select date_format(d, f) from dnf where f = 'invalid';
 
 select from_unixtime(null);
 select from_unixtime(null , null);
@@ -179,6 +190,10 @@ select from_unixtime(12345 , null);
 select from_unixtime(null , 'invalid');
 select from_unixtime(null , 'yyyy-MM-dd');
 select from_unixtime(12345 , 'yyyy-MM-dd');
+select from_unixtime(12345, f) from dnf where f <> 'invalid';
+select from_unixtime(9223372036854775807L, f) from dnf where f <> 'invalid';
+select from_unixtime(12345, f) from dnf where f = 'invalid';
+select from_unixtime(null, f) from dnf;
 
 select unix_timestamp() = unix_timestamp();
 select unix_timestamp(null);
@@ -195,11 +210,19 @@ select unix_timestamp('1986-05-23');
 select unix_timestamp('1986-05-23', null);
 select unix_timestamp('1986-05-23', 'invalid');
 select unix_timestamp('1986-05-23', 'yyyy-MM-dd');
+select unix_timestamp('1986-05-23a', 'yyyy-MM-dd');
 select unix_timestamp(cast(null as timestamp ), 'yyyy-MM-dd');
 select unix_timestamp(timestamp '1986-05-23');
 select unix_timestamp(timestamp '1986-05-23', null);
 select unix_timestamp(timestamp '1986-05-23', 'invalid');
 select unix_timestamp(timestamp '1986-05-23', 'yyyy-MM-dd');
+-- these test un-foldable codegen version for [[ToTimestamp]] interface, covers all of its implementations
+-- which are unix_timestamp, to_unix_timestamp, to_timestamp and to_date
+select unix_timestamp(d, f) from dnf where d = '1986-05-23a';
+select unix_timestamp(d, f) from dnf where d != '1986-05-23a' and (f != 'invalid' or d is null or f is null);
+select unix_timestamp(d, f) from dnf where f = 'invalid' and d is null;
+select unix_timestamp(d, f) from dnf where f = 'invalid' and d is not null;
+select unix_timestamp(cast(d as date), f), unix_timestamp(cast(d as timestamp), f) from dnf;
 
 select to_unix_timestamp(null);
 select to_unix_timestamp(null, null);
