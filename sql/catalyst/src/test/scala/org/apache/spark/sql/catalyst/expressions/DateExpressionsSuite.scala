@@ -791,8 +791,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     // Test escaping of format
-    val e = FromUnixTime(Literal(0L), Literal("\""))
-    GenerateUnsafeProjection.generate(e.withTimeZone(conf.sessionLocalTimeZone) :: Nil)
+    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("from_unixtime with invalid datetime pattern") {
@@ -893,7 +892,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("to_unix_timestamp") {
@@ -971,7 +970,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("datediff") {
