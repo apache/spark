@@ -49,7 +49,7 @@ class DetermineTableStatsSuite extends QueryTest
 
           val hiveRelation = DDLUtils.readHiveTable(spark.sharedState
             .externalCatalog.getTable(SessionCatalog.DEFAULT_DATABASE, tName))
-          val ident = TableIdentifier(tName)
+          val ident = TableIdentifier(tName, Some(SessionCatalog.DEFAULT_DATABASE))
           val rule: DetermineTableStats = mock(classOf[DetermineTableStats])
 
           // define the mock methods behaviour
