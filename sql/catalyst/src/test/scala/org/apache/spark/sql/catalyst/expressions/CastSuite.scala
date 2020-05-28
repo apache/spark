@@ -286,7 +286,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1.5, "1.5")
 
     checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
-    checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
   }
 
   test("cast from string") {
