@@ -897,6 +897,27 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             result = df.withColumn('time', foo_udf(df.time))
             self.assertEquals(df.collect(), result.collect())
 
+    def test_udf_category_type(self):
+
+        @pandas_udf('string')
+        def to_category_func(x):
+            return x.astype('category')
+
+        pdf = pd.DataFrame({"A": [u"a", u"b", u"c", u"a"]})
+        df = self.spark.createDataFrame(pdf)
+        df = df.withColumn("B", to_category_func(df['A']))
+        result_spark = df.toPandas()
+
+        spark_type = df.dtypes[1][1]
+        # spark data frame and arrow execution mode enabled data frame type must match pandas
+        assert spark_type == 'string'
+
+        # Check result value of column 'B' must be equal to column 'A'
+        for i in range(0, len(result_spark["A"])):
+            assert result_spark["A"][i] == result_spark["B"][i]
+            assert isinstance(result_spark["A"][i], str)
+            assert isinstance(result_spark["B"][i], str)
+
     @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
     def test_type_annotation(self):
         # Regression test to check if type hints can be used. See SPARK-23569.
