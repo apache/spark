@@ -54,7 +54,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.shuffle.{ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.storage.memory._
@@ -256,8 +256,8 @@ private[spark] class BlockManager(
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
 
-  private lazy val indexShuffleResolver: IndexShuffleBlockResolver = {
-    shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
+  private lazy val migratableResolver: MigratableResolver = {
+    shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
 
   /**
@@ -660,7 +660,7 @@ private[spark] class BlockManager(
     if (blockId.isShuffle || blockId.isInternalShuffle) {
       logDebug(s"Putting shuffle block ${blockId}")
       try {
-        return indexShuffleResolver.putShuffleBlockAsStream(blockId, serializerManager)
+        return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
         case e: ClassCastException => throw new Exception(
           s"Unexpected shuffle block ${blockId} with unsupported shuffle " +
@@ -1841,24 +1841,18 @@ private[spark] class BlockManager(
               Thread.sleep(SLEEP_TIME_SECS * 1000L)
             case Some((shuffleId, mapId)) =>
               logInfo(s"Trying to migrate ${shuffleId},${mapId} to ${peer}")
-              val ((indexBlockId, indexBuffer), (dataBlockId, dataBuffer)) =
-                indexShuffleResolver.getMigrationBlocks(shuffleId, mapId)
-              blockTransferService.uploadBlockSync(
-                peer.host,
-                peer.port,
-                peer.executorId,
-                indexBlockId,
-                indexBuffer,
-                storageLevel,
-                null)// class tag, we don't need for shuffle
-              blockTransferService.uploadBlockSync(
-                peer.host,
-                peer.port,
-                peer.executorId,
-                dataBlockId,
-                dataBuffer,
-                storageLevel,
-                null)// class tag, we don't need for shuffle
+              val blocks =
+                migratableResolver.getMigrationBlocks(shuffleId, mapId)
+              blocks.foreach { case (blockId, buffer) =>
+                blockTransferService.uploadBlockSync(
+                  peer.host,
+                  peer.port,
+                  peer.executorId,
+                  blockId,
+                  buffer,
+                  storageLevel,
+                  null)// class tag, we don't need for shuffle
+              }
           }
         }
       } catch {
@@ -1885,7 +1879,7 @@ private[spark] class BlockManager(
   def offloadShuffleBlocks(): Unit = {
     // Update the queue of shuffles to be migrated
     logDebug("Offloading shuffle blocks")
-    val localShuffles = indexShuffleResolver.getStoredShuffles()
+    val localShuffles = migratableResolver.getStoredShuffles()
     logDebug(s"My local shuffles are ${localShuffles.toList}")
     val newShufflesToMigrate = localShuffles.&~(migratingShuffles).toSeq
     logDebug(s"My new shuffles to migrate ${newShufflesToMigrate.toList}")

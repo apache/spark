@@ -49,7 +49,7 @@ private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
     _blockManager: BlockManager = null)
   extends ShuffleBlockResolver
-  with Logging {
+  with Logging with MigratableResolver {
 
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
 
@@ -61,7 +61,7 @@ private[spark] class IndexShuffleBlockResolver(
   /**
    * Get the shuffle files that are stored locally. Used for block migrations.
    */
-  def getStoredShuffles(): Set[(Int, Long)] = {
+  override def getStoredShuffles(): Set[(Int, Long)] = {
     // Matches ShuffleIndexBlockId name
     val pattern = "shuffle_(\\d+)_(\\d+)_.+\\.index".r
     val rootDirs = blockManager.diskBlockManager.localDirs
@@ -176,7 +176,7 @@ private[spark] class IndexShuffleBlockResolver(
    * Requires the caller to delete any shuffle index blocks where the shuffle block fails to
    * put.
    */
-  def putShuffleBlockAsStream(blockId: BlockId, serializerManager: SerializerManager):
+  override def putShuffleBlockAsStream(blockId: BlockId, serializerManager: SerializerManager):
       StreamCallbackWithID = {
     val file = blockId match {
       case ShuffleIndexBlockId(shuffleId, mapId, _) =>
@@ -234,8 +234,7 @@ private[spark] class IndexShuffleBlockResolver(
   /**
    * Get the index & data block for migration.
    */
-  def getMigrationBlocks(shuffleId: Int, mapId: Long):
-      ((BlockId, ManagedBuffer), (BlockId, ManagedBuffer)) = {
+  def getMigrationBlocks(shuffleId: Int, mapId: Long): List[(BlockId, ManagedBuffer)] = {
     // Load the index block
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
@@ -246,7 +245,7 @@ private[spark] class IndexShuffleBlockResolver(
     val dataFile = getDataFile(shuffleId, mapId)
     val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     val dataBlockData = new FileSegmentManagedBuffer(transportConf, dataFile, 0, dataFile.length())
-    ((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
+    List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
   }
 
 
