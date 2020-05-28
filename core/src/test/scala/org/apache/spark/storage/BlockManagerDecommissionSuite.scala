@@ -22,7 +22,8 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, Success}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, Success,
+  TestUtils}
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
@@ -88,6 +89,11 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     if (persist) {
       testRdd.persist()
     }
+
+    // Wait for all of the executors to start
+    TestUtils.waitUntilExecutorsUp(sc = sc,
+      numExecutors = numExecs,
+      timeout = 10000) // 10s
 
     // Start the computation of RDD - this step will also cache the RDD
     val asyncCount = testRdd.countAsync()
