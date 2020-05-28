@@ -191,7 +191,7 @@ case class AdaptiveSparkPlanExec(
         events.drainTo(rem)
         (Seq(nextMsg) ++ rem.asScala).foreach {
           case StageSuccess(stage, res) =>
-            stage.resultOption = Some(res)
+            stage.resultOption.set(Some(res))
           case StageFailure(stage, ex) =>
             errors.append(
               new SparkException(s"Failed to materialize query stage: ${stage.treeString}.", ex))
@@ -328,11 +328,11 @@ case class AdaptiveSparkPlanExec(
       context.stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
           val stage = reuseQueryStage(existingStage, e)
-          // This is a leaf stage and is not materialized yet even if the reused exchange may has
-          // been completed. It will trigger re-optimization later and stage materialization will
-          // finish in instant if the underlying exchange is already completed.
+          val isMaterialized = stage.resultOption.get().isDefined
           CreateStageResult(
-            newPlan = stage, allChildStagesMaterialized = false, newStages = Seq(stage))
+            newPlan = stage,
+            allChildStagesMaterialized = isMaterialized,
+            newStages = if (isMaterialized) Seq.empty else Seq(stage))
 
         case _ =>
           val result = createQueryStages(e.child)
@@ -349,10 +349,11 @@ case class AdaptiveSparkPlanExec(
                 newStage = reuseQueryStage(queryStage, e)
               }
             }
-
-            // We've created a new stage, which is obviously not ready yet.
-            CreateStageResult(newPlan = newStage,
-              allChildStagesMaterialized = false, newStages = Seq(newStage))
+            val isMaterialized = newStage.resultOption.get().isDefined
+            CreateStageResult(
+              newPlan = newStage,
+              allChildStagesMaterialized = isMaterialized,
+              newStages = if (isMaterialized) Seq.empty else Seq(newStage))
           } else {
             CreateStageResult(newPlan = newPlan,
               allChildStagesMaterialized = false, newStages = result.newStages)
@@ -361,7 +362,7 @@ case class AdaptiveSparkPlanExec(
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q,
-        allChildStagesMaterialized = q.resultOption.isDefined, newStages = Seq.empty)
+        allChildStagesMaterialized = q.resultOption.get().isDefined, newStages = Seq.empty)
 
     case _ =>
       if (plan.children.isEmpty) {
