@@ -45,6 +45,10 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     runDecomTest(false, true)
   }
 
+  test(s"verify that both migrations can work at the same time.") {
+    runDecomTest(true, true)
+  }
+
   private def runDecomTest(persist: Boolean, shuffle: Boolean) = {
     val master = s"local-cluster[${numExecs}, 1, 1024]"
     val conf = new SparkConf().setAppName("test").setMaster(master)
@@ -65,7 +69,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // Create a new RDD where we have sleep in each partition, we are also increasing
     // the value of accumulator in each partition
     val sleepyRdd = input.mapPartitions { x =>
-      Thread.sleep(500)
+      Thread.sleep(300)
       accum.add(1)
       x.map(y => (y, y))
     }
@@ -110,7 +114,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     sem.acquire(1)
 
     // Give Spark a tiny bit to start the tasks after the listener says hello
-    Thread.sleep(100)
+    Thread.sleep(20)
 
     // Decommission one of the executor
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
