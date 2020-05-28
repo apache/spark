@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+set -e
+
 SELF=$(cd $(dirname $0) && pwd)
 . "$SELF/release-util.sh"
 
@@ -78,4 +80,10 @@ if should_build "publish"; then
     "$SELF/release-build.sh" publish-release
 else
   echo "Skipping publish step."
+fi
+
+if should_build "tag" && [ $SKIP_TAG = 0 ]; then
+  # Push the tag after success
+  git push origin "$RELEASE_TAG"
+  git push origin "HEAD:$GIT_BRANCH"
 fi
