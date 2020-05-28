@@ -910,13 +910,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         spark_type = df.dtypes[1][1]
         # spark data frame and arrow execution mode enabled data frame type must match pandas
-        assert spark_type == 'string'
+        self.assertEqual(spark_type, 'string')
 
-        # Check result value of column 'B' must be equal to column 'A'
-        for i in range(0, len(result_spark["A"])):
-            assert result_spark["A"][i] == result_spark["B"][i]
-            assert isinstance(result_spark["A"][i], str)
-            assert isinstance(result_spark["B"][i], str)
+        # Check result of column 'B' must be equal to column 'A' in type and values
+        pd.testing.assert_series_equal(result_spark["A"], result_spark["B"], check_names=False)
 
     @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
     def test_type_annotation(self):

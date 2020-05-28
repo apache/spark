@@ -435,11 +435,12 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(result_spark, result_arrow)
 
         # ensure original category elements are string
-        assert isinstance(category_first_element, str)
+        self.assertIsInstance(category_first_element, str)
         # spark data frame and arrow execution mode enabled data frame type must match pandas
-        assert spark_type == arrow_type == 'string'
-        assert isinstance(arrow_first_category_element, str)
-        assert isinstance(spark_first_category_element, str)
+        self.assertEqual(spark_type, 'string')
+        self.assertEqual(arrow_type, 'string')
+        self.assertIsInstance(arrow_first_category_element, str)
+        self.assertIsInstance(spark_first_category_element, str)
 
 
 @unittest.skipIf(
