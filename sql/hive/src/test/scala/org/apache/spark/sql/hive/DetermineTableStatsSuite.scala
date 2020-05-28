@@ -40,7 +40,7 @@ class DetermineTableStatsSuite extends QueryTest
     sql(s"CREATE TABLE $tName(id int, name STRING) STORED AS PARQUET".stripMargin)
   }
 
-  test("test if table size retrieved from cache") {
+  test("SPARK-31850: Test if table size retrieved from cache") {
     val flags = Seq(true, false)
     flags.foreach {
       hdfsFallbackEnabled =>
@@ -49,8 +49,7 @@ class DetermineTableStatsSuite extends QueryTest
 
           val hiveRelation = DDLUtils.readHiveTable(spark.sharedState
             .externalCatalog.getTable(SessionCatalog.DEFAULT_DATABASE, tName))
-          val tbl1 =
-            spark.sharedState.externalCatalog.getTable(SessionCatalog.DEFAULT_DATABASE, tName)
+          val ident = TableIdentifier(tName)
           val rule: DetermineTableStats = mock(classOf[DetermineTableStats])
 
           // define the mock methods behaviour
@@ -61,7 +60,7 @@ class DetermineTableStatsSuite extends QueryTest
 
           rule.apply(hiveRelation)
           assert(relationToSizeMap.nonEmpty == hdfsFallbackEnabled)
-          assert(relationToSizeMap.contains(tbl1.identifier) == hdfsFallbackEnabled)
+          assert(relationToSizeMap.contains(ident) == hdfsFallbackEnabled)
 
           // clear the map for next iteration
           relationToSizeMap.clear()
