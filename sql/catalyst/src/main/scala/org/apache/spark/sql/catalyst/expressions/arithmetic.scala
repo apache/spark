@@ -309,11 +309,17 @@ trait DivModLike extends BinaryArithmetic {
 
   override def nullable: Boolean = true
 
-  final override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (input2 == 0) {
+  final override def eval(input: InternalRow): Any = {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
       null
     } else {
-      evalOperation(input1, input2)
+      val input1 = left.eval(input)
+      if (input1 == null) {
+        null
+      } else {
+        evalOperation(input1, input2)
+      }
     }
   }
 
@@ -510,18 +516,24 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def nullable: Boolean = true
 
-  override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (input2 == 0) {
+  override def eval(input: InternalRow): Any = {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
       null
     } else {
-      input1 match {
-        case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
-        case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
-        case s: Short => pmod(s, input2.asInstanceOf[java.lang.Short])
-        case b: Byte => pmod(b, input2.asInstanceOf[java.lang.Byte])
-        case f: Float => pmod(f, input2.asInstanceOf[java.lang.Float])
-        case d: Double => pmod(d, input2.asInstanceOf[java.lang.Double])
-        case d: Decimal => pmod(d, input2.asInstanceOf[Decimal])
+      val input1 = left.eval(input)
+      if (input1 == null) {
+        null
+      } else {
+        input1 match {
+          case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
+          case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
+          case s: Short => pmod(s, input2.asInstanceOf[java.lang.Short])
+          case b: Byte => pmod(b, input2.asInstanceOf[java.lang.Byte])
+          case f: Float => pmod(f, input2.asInstanceOf[java.lang.Float])
+          case d: Double => pmod(d, input2.asInstanceOf[java.lang.Double])
+          case d: Decimal => pmod(d, input2.asInstanceOf[Decimal])
+        }
       }
     }
   }
