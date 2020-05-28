@@ -48,14 +48,15 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param columnName column name
  */
 private[hive] class SparkGetColumnsOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
     tableName: String,
     columnName: String)
   extends GetColumnsOperation(parentSession, catalogName, schemaName, tableName, columnName)
-    with Logging {
+  with SparkOperationUtils
+  with Logging {
 
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
 
@@ -64,6 +65,12 @@ private[hive] class SparkGetColumnsOperation(
   override def close(): Unit = {
     super.close()
     HiveThriftServer2.eventManager.onOperationClosed(statementId)
+  }
+
+  override def run(): Unit = {
+    withLocalProperties {
+      super.run()
+    }
   }
 
   override def runInternal(): Unit = {

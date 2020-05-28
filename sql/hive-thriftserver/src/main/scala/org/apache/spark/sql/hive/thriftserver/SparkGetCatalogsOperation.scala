@@ -36,15 +36,21 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param parentSession a HiveSession from SessionManager
  */
 private[hive] class SparkGetCatalogsOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession)
-  extends GetCatalogsOperation(parentSession) with Logging {
+  extends GetCatalogsOperation(parentSession) with SparkOperationUtils with Logging {
 
   private var statementId: String = _
 
   override def close(): Unit = {
     super.close()
     HiveThriftServer2.eventManager.onOperationClosed(statementId)
+  }
+
+  override def run(): Unit = {
+    withLocalProperties {
+      super.run()
+    }
   }
 
   override def runInternal(): Unit = {

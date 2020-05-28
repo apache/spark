@@ -181,9 +181,9 @@ public class ColumnValue {
     case VARCHAR_TYPE:
       return stringValue((HiveVarchar)value);
     case DATE_TYPE:
-      return dateValue((Date)value);
     case TIMESTAMP_TYPE:
-      return timestampValue((Timestamp)value);
+      // SPARK-31859, SPARK-31861: converted to string already in SparkExecuteStatementOperation
+      return stringValue((String)value);
     case INTERVAL_YEAR_MONTH_TYPE:
       return stringValue((HiveIntervalYearMonth) value);
     case INTERVAL_DAY_TIME_TYPE:

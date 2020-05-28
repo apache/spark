@@ -43,18 +43,26 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param functionName function name pattern
  */
 private[hive] class SparkGetFunctionsOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
     functionName: String)
-  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName) with Logging {
+  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName)
+  with SparkOperationUtils
+  with Logging {
 
   private var statementId: String = _
 
   override def close(): Unit = {
     super.close()
     HiveThriftServer2.eventManager.onOperationClosed(statementId)
+  }
+
+  override def run(): Unit = {
+    withLocalProperties {
+      super.run()
+    }
   }
 
   override def runInternal(): Unit = {

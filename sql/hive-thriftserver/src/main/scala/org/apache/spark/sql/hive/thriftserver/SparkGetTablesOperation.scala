@@ -46,20 +46,27 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param tableTypes list of allowed table types, e.g. "TABLE", "VIEW"
  */
 private[hive] class SparkGetTablesOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
     tableName: String,
     tableTypes: JList[String])
   extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
-    with SparkMetadataOperationUtils with Logging {
+  with SparkOperationUtils
+  with Logging {
 
   private var statementId: String = _
 
   override def close(): Unit = {
     super.close()
     HiveThriftServer2.eventManager.onOperationClosed(statementId)
+  }
+
+  override def run(): Unit = {
+    withLocalProperties {
+      super.run()
+    }
   }
 
   override def runInternal(): Unit = {

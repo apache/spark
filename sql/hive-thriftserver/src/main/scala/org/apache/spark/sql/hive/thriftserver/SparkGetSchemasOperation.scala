@@ -40,17 +40,25 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param schemaName database name, null or a concrete database name
  */
 private[hive] class SparkGetSchemasOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String)
-  extends GetSchemasOperation(parentSession, catalogName, schemaName) with Logging {
+  extends GetSchemasOperation(parentSession, catalogName, schemaName)
+  with SparkOperationUtils
+  with Logging {
 
   private var statementId: String = _
 
   override def close(): Unit = {
     super.close()
     HiveThriftServer2.eventManager.onOperationClosed(statementId)
+  }
+
+  override def run(): Unit = {
+    withLocalProperties {
+      super.run()
+    }
   }
 
   override def runInternal(): Unit = {
