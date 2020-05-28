@@ -13,10 +13,6 @@ select TIMESTAMP_MILLIS(-92233720368547758);
 -- [SPARK-16836] current_date and current_timestamp literals
 select current_date = current_date(), current_timestamp = current_timestamp();
 
-select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd');
-
-select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('2016-12-31', 'yyyy-MM-dd');
-
 select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'), dayofweek(null), dayofweek('1582-10-15 13:10:15');
 
 -- [SPARK-22333]: timeFunctionCall has conflicts with columnReference
@@ -161,6 +157,82 @@ select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'd
 select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 
-select from_unixtime(a, b) from
- values (null, null), (12345, null), (null, 'invalid'), (null, 'yyyy-MM-dd'), (67890, 'yyyy-MM-dd') t(a, b);
-select from_unixtime(12345, 'invalid');
+select date_format(null, null);
+select date_format(null, 'yyyy-MM-dd');
+select date_format(null, 'invalid');
+select date_format(cast(null as date), 'yyyy-MM-dd');
+select date_format(date '1986-05-23', null);
+select date_format(date '1986-05-23', 'invalid');
+select date_format(date '1986-05-23', 'yyyy-MM-dd');
+select date_format(cast(null as string), 'yyyy-MM-dd');
+select date_format('1986-05-23', null);
+select date_format('1986-05-23', 'invalid');
+select date_format('1986-05-23', 'yyyy-MM-dd');
+select date_format(cast(null as timestamp ), 'yyyy-MM-dd');
+select date_format(timestamp '1986-05-23', null);
+select date_format(timestamp '1986-05-23', 'invalid');
+select date_format(timestamp '1986-05-23', 'yyyy-MM-dd');
+
+select from_unixtime(null);
+select from_unixtime(null , null);
+select from_unixtime(12345 , null);
+select from_unixtime(null , 'invalid');
+select from_unixtime(null , 'yyyy-MM-dd');
+select from_unixtime(12345 , 'yyyy-MM-dd');
+
+select unix_timestamp();
+select unix_timestamp(null);
+select unix_timestamp(null, null);
+select unix_timestamp(null, 'yyyy-MM-dd');
+select unix_timestamp(null, 'invalid');
+select unix_timestamp(cast(null as date), 'yyyy-MM-dd');
+select unix_timestamp(date '1986-05-23');
+select unix_timestamp(date '1986-05-23', null);
+select unix_timestamp(date '1986-05-23', 'invalid');
+select unix_timestamp(date '1986-05-23', 'yyyy-MM-dd');
+select unix_timestamp(cast(null as string), 'yyyy-MM-dd');
+select unix_timestamp('1986-05-23');
+select unix_timestamp('1986-05-23', null);
+select unix_timestamp('1986-05-23', 'invalid');
+select unix_timestamp('1986-05-23', 'yyyy-MM-dd');
+select unix_timestamp(cast(null as timestamp ), 'yyyy-MM-dd');
+select unix_timestamp(timestamp '1986-05-23');
+select unix_timestamp(timestamp '1986-05-23', null);
+select unix_timestamp(timestamp '1986-05-23', 'invalid');
+select unix_timestamp(timestamp '1986-05-23', 'yyyy-MM-dd');
+
+select to_unix_timestamp(null);
+select to_unix_timestamp(null, null);
+select to_unix_timestamp(null, 'yyyy-MM-dd');
+select to_unix_timestamp(null, 'invalid');
+select to_unix_timestamp(cast(null as date), 'yyyy-MM-dd');
+select to_unix_timestamp(date '1986-05-23');
+select to_unix_timestamp(date '1986-05-23', null);
+select to_unix_timestamp(date '1986-05-23', 'invalid');
+select to_unix_timestamp(date '1986-05-23', 'yyyy-MM-dd');
+select to_unix_timestamp(cast(null as string), 'yyyy-MM-dd');
+select to_unix_timestamp('1986-05-23');
+select to_unix_timestamp('1986-05-23', null);
+select to_unix_timestamp('1986-05-23', 'invalid');
+select to_unix_timestamp('1986-05-23', 'yyyy-MM-dd');
+select to_unix_timestamp(cast(null as timestamp ), 'yyyy-MM-dd');
+select to_unix_timestamp(timestamp '1986-05-23');
+select to_unix_timestamp(timestamp '1986-05-23', null);
+select to_unix_timestamp(timestamp '1986-05-23', 'invalid');
+select to_unix_timestamp(timestamp '1986-05-23', 'yyyy-MM-dd');
+
+select to_timestamp(null);
+select to_timestamp(cast(null as string), 'yyyy-MM-dd');
+select to_timestamp(cast(null as string), 'invalid');
+select to_timestamp('1986-05-23');
+select to_timestamp('1986-05-23', null);
+select to_timestamp('1986-05-23', 'invalid');
+select to_timestamp('1986-05-23', 'yyyy-MM-dd');
+
+select to_date(null);
+select to_date(cast(null as string), 'yyyy-MM-dd');
+select to_date(cast(null as string), 'invalid');
+select to_date('1986-05-23');
+select to_date('1986-05-23', null);
+select to_date('1986-05-23', 'invalid');
+select to_date('1986-05-23', 'yyyy-MM-dd');

@@ -791,38 +791,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     // Test escaping of format
-    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote"), UTC_OPT) :: Nil)
-  }
-
-  test("from_unixtime with invalid datetime pattern") {
-    val invalidForBoth = Seq("A", "c", "n", "e", "n", "p")
-    val invalidForNew = Seq("MMMMM", "GGGGG")
-
-    invalidForBoth.foreach { format =>
-      Seq("exception", "legacy", "corrected").foreach { policy =>
-        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
-          checkExceptionInExpression[IllegalArgumentException](
-            FromUnixTime(Literal(0L), Literal(format)), s"${format.head}")
-        }
-      }
-    }
-
-    invalidForNew.foreach { format =>
-      Seq("exception", "corrected").foreach { policy =>
-        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
-          checkExceptionInExpression[SparkUpgradeException](
-            FromUnixTime(Literal(0L), Literal(format)), s"${format.head}")
-        }
-      }
-    }
-
-    invalidForNew.foreach { format =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
-        checkEvaluation(
-          FromUnixTime(Literal(0L), Literal(format)),
-          new SimpleDateFormat(format).format(new Date(0)))
-      }
-    }
+    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\""), UTC_OPT) :: Nil)
   }
 
   test("unix_timestamp") {
@@ -884,15 +853,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               UnixTimestamp(Literal(date1), Literal.create(null, StringType), timeZoneId),
               MICROSECONDS.toSeconds(
                 DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
-            checkEvaluation(
-              UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
           }
         }
       }
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
+      UnixTimestamp(Literal("2015-07-24"), Literal("\""), UTC_OPT) :: Nil)
   }
 
   test("to_unix_timestamp") {
@@ -950,10 +917,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(date1), Literal.create(null, StringType), timeZoneId),
               MICROSECONDS.toSeconds(
                 DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), zid)))
-            checkEvaluation(
-              ToUnixTimestamp(
-                Literal("2015-07-24"),
-                Literal("not a valid format"), timeZoneId), null)
 
             // SPARK-28072 The codegen path for non-literal input should also work
             checkEvaluation(
@@ -970,7 +933,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
+      ToUnixTimestamp(Literal("2015-07-24"), Literal("\""), UTC_OPT) :: Nil)
   }
 
   test("datediff") {
@@ -1197,5 +1160,51 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MillisToTimestamp(Literal(92233720368547758L)), "long overflow")
     checkExceptionInExpression[ArithmeticException](
       MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
+  }
+
+  test("invalid datetime pattern for parsing and formatting") {
+    val invalidForBoth = Seq("A", "c", "n", "e", "n", "p")
+    val invalidForNew = Seq("MMMMM", "GGGGG")
+
+    invalidForBoth.foreach { format =>
+      Seq("exception", "legacy", "corrected").foreach { policy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+          checkExceptionInExpression[IllegalArgumentException](
+            DateFormatClass(CurrentTimestamp(), Literal(format)), s"${format.head}")
+          checkExceptionInExpression[IllegalArgumentException](
+            FromUnixTime(Literal(0L), Literal(format)), s"${format.head}")
+          checkExceptionInExpression[IllegalArgumentException](
+            UnixTimestamp(Literal(date), Literal(format)), s"${format.head}")
+        }
+      }
+    }
+
+    invalidForNew.foreach { format =>
+      Seq("exception", "corrected").foreach { policy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+          checkExceptionInExpression[SparkUpgradeException](
+            DateFormatClass(CurrentTimestamp(), Literal(format)), s"${format.head}")
+          checkExceptionInExpression[SparkUpgradeException](
+            FromUnixTime(Literal(0L), Literal(format)), s"${format.head}")
+          checkExceptionInExpression[SparkUpgradeException](
+            UnixTimestamp(Literal(date), Literal(format)), s"${format.head}")
+          checkExceptionInExpression[SparkUpgradeException](
+            UnixTimestamp(Literal(date), Literal(format)), s"${format.head}")
+        }
+      }
+    }
+
+    invalidForNew.foreach { format =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
+        checkEvaluation(
+          DateFormatClass(Literal(ts), Literal(format)),
+          new SimpleDateFormat(format).format(ts))
+        checkEvaluation(
+          FromUnixTime(Literal(0L), Literal(format)),
+          new SimpleDateFormat(format).format(new Date(0)))
+        checkEvaluation(UnixTimestamp(Literal(date), Literal(format)), null)
+        checkEvaluation(ToUnixTimestamp(Literal(date), Literal(format)), null)
+      }
+    }
   }
 }
