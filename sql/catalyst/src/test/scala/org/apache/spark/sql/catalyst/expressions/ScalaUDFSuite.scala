@@ -27,13 +27,16 @@ import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType}
 
 class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  private val strEnc = ExpressionEncoder[String]()
+  private val strDeser = strEnc.resolveAndBind().createDeserializer()
+
   test("basic") {
     val intUdf = ScalaUDF((i: Int) => i + 1, IntegerType, Literal(1) :: Nil,
       Option(ExpressionEncoder[Int]()) :: Nil)
     checkEvaluation(intUdf, 2)
 
     val stringUdf = ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil,
-      Option(ExpressionEncoder[String]()) :: Nil)
+      Option(strEnc) :: Nil, inputDeserializers = Option(strDeser) :: Nil)
     checkEvaluation(stringUdf, "ax")
   }
 
@@ -42,7 +45,7 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
       (s: String) => s.toLowerCase(Locale.ROOT),
       StringType,
       Literal.create(null, StringType) :: Nil,
-      Option(ExpressionEncoder[String]()) :: Nil)
+      Option(strEnc) :: Nil, inputDeserializers = Option(strDeser) :: Nil)
 
     val e1 = intercept[SparkException](udf.eval())
     assert(e1.getMessage.contains("Failed to execute user defined function"))
@@ -56,17 +59,19 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22695: ScalaUDF should not use global variables") {
     val ctx = new CodegenContext
     ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil,
-      Option(ExpressionEncoder[String]()) :: Nil).genCode(ctx)
+      Option(strEnc) :: Nil, inputDeserializers = Option(strDeser) :: Nil).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
   }
 
   test("SPARK-28369: honor nullOnOverflow config for ScalaUDF") {
+    val decimalEnc = ExpressionEncoder[java.math.BigDecimal]()
+    val decimalDeser = decimalEnc.resolveAndBind().createDeserializer()
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val udf = ScalaUDF(
         (a: java.math.BigDecimal) => a.multiply(new java.math.BigDecimal(100)),
         DecimalType.SYSTEM_DEFAULT,
         Literal(BigDecimal("12345678901234567890.123")) :: Nil,
-        Option(ExpressionEncoder[java.math.BigDecimal]()) :: Nil)
+        Option(decimalEnc) :: Nil, inputDeserializers = Option(decimalDeser) :: Nil)
       val e1 = intercept[ArithmeticException](udf.eval())
       assert(e1.getMessage.contains("cannot be represented as Decimal"))
       val e2 = intercept[SparkException] {
@@ -79,7 +84,7 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
         (a: java.math.BigDecimal) => a.multiply(new java.math.BigDecimal(100)),
         DecimalType.SYSTEM_DEFAULT,
         Literal(BigDecimal("12345678901234567890.123")) :: Nil,
-        Option(ExpressionEncoder[java.math.BigDecimal]()) :: Nil)
+        Option(decimalEnc) :: Nil, inputDeserializers = Option(decimalDeser) :: Nil)
       checkEvaluation(udf, null)
     }
   }
