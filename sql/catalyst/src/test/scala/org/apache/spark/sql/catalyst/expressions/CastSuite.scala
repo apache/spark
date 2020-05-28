@@ -1369,7 +1369,7 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("SPARK-31710:fail casting from integral to timestamp by default") {
+  test("SPARK-31710:fail casting from numeric to timestamp by default") {
     Seq(true, false).foreach { enable =>
       withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> enable.toString) {
         assert(cast(2.toByte, TimestampType).resolved == enable)
