@@ -868,14 +868,14 @@ class SparkContext(object):
         gw = SparkContext._gateway
         jvm = SparkContext._jvm
         jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
-        jpair_jrdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
-        jdouble_jrdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
+        jpair_rdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
+        jdouble_rdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
         if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):
             cls = jrdd_cls
-        elif is_instance_of(gw, rdds[0]._jrdd, jpair_jrdd_cls):
-            cls = jpair_jrdd_cls
-        elif is_instance_of(gw, rdds[0]._jrdd, jdouble_jrdd_cls):
-            cls = jdouble_jrdd_cls
+        elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):
+            cls = jpair_rdd_cls
+        elif is_instance_of(gw, rdds[0]._jrdd, jdouble_rdd_cls):
+            cls = jdouble_rdd_cls
         else:
             cls_name = rdds[0]._jrdd.getClass().getCanonicalName()
             raise TypeError("Unsupported Java DStream class %s" % cls_name)
