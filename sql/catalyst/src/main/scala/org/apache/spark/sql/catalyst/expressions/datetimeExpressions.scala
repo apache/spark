@@ -23,8 +23,6 @@ import java.time.format.DateTimeParseException
 import java.time.temporal.IsoFields
 import java.util.Locale
 
-import scala.util.control.NonFatal
-
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.AnalysisException
