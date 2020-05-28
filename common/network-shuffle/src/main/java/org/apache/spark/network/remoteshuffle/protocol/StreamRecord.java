@@ -18,57 +18,69 @@
 package org.apache.spark.network.remoteshuffle.protocol;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import java.util.Objects;
 
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage.Type;
 
-/** Response message for {@link ConnectWriteRequest}. */
-public class ConnectWriteResponse extends RemoteShuffleMessage {
+/** A shuffle record streamed to server */
+public class StreamRecord extends RemoteShuffleMessage {
   public final long streamId;
+  public final int partition;
+  public final TaskAttemptRecord taskAttemptRecord;
 
-  public ConnectWriteResponse(long streamId) {
+  public StreamRecord(long streamId, int partition, TaskAttemptRecord taskAttemptRecord) {
     this.streamId = streamId;
+    this.partition = partition;
+    this.taskAttemptRecord = taskAttemptRecord;
   }
 
   @Override
-  protected Type type() { return Type.CONNECT_WRITE_RESPONSE; }
+  protected Type type() { return Type.STREAM_RECORD; }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    ConnectWriteResponse that = (ConnectWriteResponse) o;
-    return streamId == that.streamId;
+    StreamRecord that = (StreamRecord) o;
+    return streamId == that.streamId &&
+        partition == that.partition &&
+        Objects.equals(taskAttemptRecord, that.taskAttemptRecord);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(streamId);
+    return Objects.hash(streamId, partition, taskAttemptRecord);
   }
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-        .append("streamId", streamId)
-        .toString();
+    return "StreamRecord{" +
+        "streamId=" + streamId +
+        ", partition=" + partition +
+        ", taskAttemptRecord=" + taskAttemptRecord +
+        '}';
   }
 
   @Override
   public int encodedLength() {
-    return Long.BYTES;
+    return Long.BYTES
+      + Integer.BYTES
+      + taskAttemptRecord.encodedLength();
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(streamId);
+    buf.writeInt(partition);
+    taskAttemptRecord.encode(buf);
   }
 
-  public static ConnectWriteResponse decode(ByteBuf buf) {
+  public static StreamRecord decode(ByteBuf buf) {
     long streamId = buf.readLong();
-    return new ConnectWriteResponse(streamId);
+    int partition = buf.readInt();
+    TaskAttemptRecord taskAttemptRecord = TaskAttemptRecord.decode(buf);
+    return new StreamRecord(streamId, partition, taskAttemptRecord);
   }
 }

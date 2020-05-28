@@ -22,6 +22,7 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.remoteshuffle.protocol.ConnectWriteRequest;
 import org.apache.spark.network.remoteshuffle.protocol.ConnectWriteResponse;
 import org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage;
+import org.apache.spark.network.remoteshuffle.protocol.StreamRecord;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.slf4j.Logger;
@@ -62,6 +63,9 @@ public class ShuffleServerHandler extends RpcHandler {
       }
       // TODO implement streamId for ConnectWriteResponse
       callback.onSuccess(new ConnectWriteResponse(0L).toByteBuffer());
+    } else if (msgObj instanceof StreamRecord) {
+      // TODO write record to file
+      logger.info(msgObj.toString());
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }

@@ -18,6 +18,7 @@
 package org.apache.spark.network.remoteshuffle;
 
 import com.google.common.collect.Lists;
+import io.netty.buffer.ByteBuf;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
@@ -25,6 +26,8 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.remoteshuffle.protocol.ConnectWriteRequest;
 import org.apache.spark.network.remoteshuffle.protocol.ConnectWriteResponse;
 import org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage;
+import org.apache.spark.network.remoteshuffle.protocol.StreamRecord;
+import org.apache.spark.network.remoteshuffle.protocol.TaskAttemptRecord;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -45,11 +48,14 @@ public class WriteClient implements AutoCloseable {
   private final TransportConf conf;
   private final long timeoutMs;
 
-  private TransportClientFactory clientFactory;
   private final String host;
   private final int port;
   private final ShuffleStageFqid shuffleStageFqid;
   private final int numMaps;
+
+  private TransportClientFactory clientFactory;
+  private TransportClient client;
+  private long streamId = -1;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -74,22 +80,39 @@ public class WriteClient implements AutoCloseable {
     TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true);
     List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
     clientFactory = context.createClientFactory(bootstraps);
-    try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
-      ByteBuffer connectWriteRequest = new ConnectWriteRequest(
-          shuffleStageFqid.getAppId(),
-          shuffleStageFqid.getExecId(),
-          shuffleStageFqid.getShuffleId(),
-          shuffleStageFqid.getStageAttempt(),
-          numMaps).toByteBuffer();
-      ByteBuffer connectWriteResponse = client.sendRpcSync(connectWriteRequest, timeoutMs);
-      ConnectWriteResponse msg =
-          (ConnectWriteResponse)RemoteShuffleMessage.Decoder.fromByteBuffer(connectWriteResponse);
-      logger.info("Write client connected to shuffle server: {}", msg);
+    client = clientFactory.createUnmanagedClient(host, port);
+    ByteBuffer connectWriteRequest = new ConnectWriteRequest(
+        shuffleStageFqid.getAppId(),
+        shuffleStageFqid.getExecId(),
+        shuffleStageFqid.getShuffleId(),
+        shuffleStageFqid.getStageAttempt(),
+        numMaps).toByteBuffer();
+    ByteBuffer connectWriteResponse = client.sendRpcSync(connectWriteRequest, timeoutMs);
+    ConnectWriteResponse msg =
+        (ConnectWriteResponse)RemoteShuffleMessage.Decoder.fromByteBuffer(connectWriteResponse);
+    logger.info("Write client connected to shuffle server: {}", msg);
+    streamId = msg.streamId;
+  }
+
+  public void writeRecord(int partition, long taskAttempt, ByteBuffer key, ByteBuffer value) {
+    if (streamId == -1) {
+      throw new RuntimeException(String.format("Not connected to server %s:%s", host, port));
     }
+
+    ByteBuffer record = new StreamRecord(
+        streamId,
+        partition,
+        new TaskAttemptRecord(taskAttempt, key, value)).toByteBuffer();
+    client.send(record);
   }
 
   @Override
   public void close() {
+    if (client != null) {
+      client.close();
+      client = null;
+    }
+
     if (clientFactory != null) {
       clientFactory.close();
       clientFactory = null;

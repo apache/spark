@@ -22,6 +22,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 
 public class WriteClientSuite {
@@ -41,12 +43,18 @@ public class WriteClientSuite {
   }
 
   @Test
-  public void testConnect() throws IOException, InterruptedException {
+  public void testClient() throws IOException, InterruptedException {
     int port = server.getBoundPort();
     long timeoutMs = 30000;
     ShuffleStageFqid shuffleStageFqid = new ShuffleStageFqid("app1", "1", 2, 3);
-    try (WriteClient client = new WriteClient("localhost", port, timeoutMs, shuffleStageFqid, 4, new HashMap<>())) {
+    try (WriteClient client = new WriteClient(
+        "localhost", port, timeoutMs, shuffleStageFqid, 4, new HashMap<>())) {
       client.connect();
+      client.writeRecord(1, 2, null, null);
+      client.writeRecord(1, 2, ByteBuffer.allocate(0), ByteBuffer.allocate(0));
+      ByteBuffer key = ByteBuffer.wrap("key1".getBytes(StandardCharsets.UTF_8));
+      ByteBuffer value = ByteBuffer.wrap("value1".getBytes(StandardCharsets.UTF_8));
+      client.writeRecord(1, 2, key, value);
     }
   }
 }

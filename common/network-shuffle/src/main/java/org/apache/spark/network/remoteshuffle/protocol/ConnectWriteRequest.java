@@ -25,7 +25,7 @@ import org.apache.spark.network.protocol.Encoders;
 import java.util.Objects;
 
 // Needed by ScalaDoc. See SPARK-7726
-
+import static org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage.Type;
 
 /** Request to connect shuffle write. Returns {@link ConnectWriteResponse}. */
 public class ConnectWriteRequest extends RemoteShuffleMessage {
