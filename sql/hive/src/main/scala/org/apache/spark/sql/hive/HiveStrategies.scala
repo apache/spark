@@ -20,9 +20,12 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -111,19 +114,29 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
   }
 }
 
-class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
-  private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
-    val table = relation.tableMeta
+class DetermineTableStats(val session: SparkSession) extends Rule[LogicalPlan] {
+  private val relationToSizeMap: mutable.Map[TableIdentifier, Long] = mutable.Map.empty
+
+  private[hive] def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val partitionCols = relation.partitionCols
     val conf = session.sessionState.conf
     // For partitioned tables, the partition directory may be outside of the table directory.
     // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
     val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
       try {
-        val hadoopConf = session.sessionState.newHadoopConf()
-        val tablePath = new Path(table.location)
-        val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-        fs.getContentSummary(tablePath).getLength
+        val table = relation.tableMeta
+        val relationSizeMap = getRelationToSizeMap
+        if (relationSizeMap.contains(table.identifier)) {
+          logDebug(s"Table size found in cache for table: ${table.identifier} ")
+          relationSizeMap(table.identifier)
+        } else {
+          val hadoopConf = session.sessionState.newHadoopConf()
+          val tablePath = new Path(table.location)
+          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+          val size = fs.getContentSummary(tablePath).getLength
+          relationSizeMap.put(relation.tableMeta.identifier, size)
+          size
+        }
       } catch {
         case e: IOException =>
           logWarning("Failed to get table size from HDFS.", e)
@@ -133,9 +146,11 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       conf.defaultSizeInBytes
     }
 
-    val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))
+    val stats = Some(Statistics(sizeInBytes = sizeInBytes))
     relation.copy(tableStats = stats)
   }
+
+  def getRelationToSizeMap: mutable.Map[TableIdentifier, Long] = relationToSizeMap
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case relation: HiveTableRelation
