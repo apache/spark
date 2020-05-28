@@ -138,7 +138,8 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     val execIdToBlocksMapping = storageStatus.map(
       status => (status.blockManagerId.executorId, status.blocks)).toMap
     // No cached blocks should be present on executor which was decommissioned
-    assert(execIdToBlocksMapping(execToDecommission).keys.filter(_.isRDD).toSeq === Seq())
+    assert(execIdToBlocksMapping(execToDecommission).keys.filter(_.isRDD).toSeq === Seq(),
+      "Cache blocks should be migrated")
     if (persist) {
       // There should still be all 10 RDD blocks cached
       assert(execIdToBlocksMapping.values.flatMap(_.keys).count(_.isRDD) === 10)

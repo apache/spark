@@ -238,13 +238,13 @@ private[spark] class IndexShuffleBlockResolver(
       ((BlockId, ManagedBuffer), (BlockId, ManagedBuffer)) = {
     // Load the index block
     val indexFile = getIndexFile(shuffleId, mapId)
-    val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, 0)
+    val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     val indexFileSize = indexFile.length()
     val indexBlockData = new FileSegmentManagedBuffer(transportConf, indexFile, 0, indexFileSize)
 
     // Load the data block
     val dataFile = getDataFile(shuffleId, mapId)
-    val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, 0)
+    val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     val dataBlockData = new FileSegmentManagedBuffer(transportConf, dataFile, 0, dataFile.length())
     ((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
   }
