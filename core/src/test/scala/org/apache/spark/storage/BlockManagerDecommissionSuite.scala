@@ -22,15 +22,17 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
+import org.scalatest.concurrent.Eventually
+
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, Success,
   TestUtils}
 import org.apache.spark.internal.config
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.util.{ResetSystemProperties, ThreadUtils}
 
 class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
-    with ResetSystemProperties {
+    with ResetSystemProperties with Eventually {
 
   val numExecs = 2
 
@@ -72,9 +74,10 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       case false => sleepyRdd
     }
 
-    // Listen for the job
+    // Listen for the job & block updates
     val sem = new Semaphore(0)
     val taskEndEvents = ArrayBuffer.empty[SparkListenerTaskEnd]
+    val blocksUpdated = ArrayBuffer.empty[SparkListenerBlockUpdated]
     sc.addSparkListener(new SparkListener {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
        sem.release()
@@ -83,7 +86,12 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         taskEndEvents.append(taskEnd)
       }
+
+      override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
+        blocksUpdated.append(blockUpdated)
+      }
     })
+
 
     // Cache the RDD lazily
     if (persist) {
@@ -131,9 +139,26 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
         s"Expected 10 tasks got ${taskEndEvents.size} (${taskEndEvents})")
     }
 
-    // all blocks should have been shifted from decommissioned block manager
-    // after some time.
-    Thread.sleep(1000)
+    // Wait for our respective blocks to have migrated
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      // If cached we expect to see updates for rdd_1_1 on two different BMs
+      if (persist) {
+        val numLocs = blocksUpdated.filter{ update =>
+          update.blockUpdatedInfo.blockId.name == "rdd_1_1"
+        }.map {update =>
+          update.blockUpdatedInfo.blockManagerId }.toSet.size
+        assert(numLocs > 1, s"Block rdd_1_1 should have been on multiple BMs got ${numLocs}")
+      }
+      // If we're migrating shuffles we look for any shuffle block updates
+      // as there is no block update on the initial shuffle block write.
+      if (shuffle) {
+        val numLocs = blocksUpdated.filter{ update =>
+          val blockId = update.blockUpdatedInfo.blockId
+          blockId.isShuffle || blockId.isInternalShuffle
+        }.toSet.size
+        assert(numLocs > 0, s"No shuffle block updates in ${blocksUpdated}")
+      }
+    }
 
     // Since the RDD is cached or shuffled so further usage of same RDD should use the
     // cached data. Original RDD partitions should not be recomputed i.e. accum
