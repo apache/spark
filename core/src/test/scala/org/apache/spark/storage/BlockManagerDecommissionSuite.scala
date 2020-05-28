@@ -49,6 +49,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_RDD_DECOMMISSION_ENABLED, persist)
       .set(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED, shuffle)
+      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 1L)
 
     sc = new SparkContext(master, "test", conf)
 
@@ -125,7 +126,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     }
 
     // all blocks should have been shifted from decommissioned block manager
-    // after some time
+    // after some time.
     Thread.sleep(1000)
 
     // Since the RDD is cached or shuffled so further usage of same RDD should use the
