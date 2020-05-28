@@ -2586,7 +2586,7 @@ object SQLConf {
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
 
-  val LEGACY_AllOW_CAST_NUMERIC_TO_TIMESTAMP =
+  val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
     buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
       .internal()
       .doc("When true, allow cast numeric to timestamp, but for integral numbers," +

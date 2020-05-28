@@ -27,6 +27,8 @@ license: |
   - In Spark 3.1, grouping_id() returns long values. In Spark version 3.0 and earlier, this function returns int values. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.integerGroupingId` to `true`.
 
   - In Spark 3.1, SQL UI data adopts the `formatted` mode for the query plan explain results. To restore the behavior before Spark 3.0, you can set `spark.sql.ui.explainMode` to `extended`.
+  
+  - In Spark 3.1, casting numeric to timestamp will be forbidden by default, user can enable it by setting spark.sql.legacy.allowCastNumericToTimestamp to true, and functions(TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS) are strongly recommended to avoid possible inaccurate scenes, [SPARK-31710](https://issues.apache.org/jira/browse/SPARK-31710) for more details.
 
 ## Upgrading from Spark SQL 2.4 to 3.0
 
@@ -116,8 +118,6 @@ license: |
 
   - In Spark 3.0, when casting string value to integral types(tinyint, smallint, int and bigint), datetime types(date, timestamp and interval) and boolean type, the leading and trailing whitespaces (<= ASCII 32) will be trimmed before converted to these type values, for example, `cast(' 1\t' as int)` results `1`, `cast(' 1\t' as boolean)` results `true`, `cast('2019-10-10\t as date)` results the date value `2019-10-10`. In Spark version 2.4 and below, when casting string to integrals and booleans, it does not trim the whitespaces from both ends; the foregoing results is `null`, while to datetimes, only the trailing spaces (= ASCII 32) are removed.
   
-  - In Spark 3.0, casting numeric to timestamp will be forbidden by default, user can enable it by setting spark.sql.legacy.allowCastNumericToTimestamp to true, and functions(TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS) are strongly recommended to avoid possible inaccurate scenes, [SPARK-31710](https://issues.apache.org/jira/browse/SPARK-31710) for more details.
-
 ### Query Engine
 
   - In Spark version 2.4 and below, SQL queries such as `FROM <table>` or `FROM <table> UNION ALL FROM <table>` are supported by accident. In hive-style `FROM <table> SELECT <expr>`, the `SELECT` clause is not negligible. Neither Hive nor Presto support this syntax. These queries are treated as invalid in Spark 3.0.
