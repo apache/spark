@@ -140,14 +140,15 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     }
 
     // Wait for our respective blocks to have migrated
-    eventually(timeout(10.seconds), interval(10.milliseconds)) {
-      // If cached we expect to see updates for rdd_1_1 on two different BMs
+    eventually(timeout(15.seconds), interval(10.milliseconds)) {
       if (persist) {
-        val numLocs = blocksUpdated.filter{ update =>
-          update.blockUpdatedInfo.blockId.name == "rdd_1_1"
-        }.map {update =>
-          update.blockUpdatedInfo.blockManagerId }.toSet.size
-        assert(numLocs > 1, s"Block rdd_1_1 should have been on multiple BMs got ${numLocs}")
+        // One of our blocks should have moved.
+        val blockLocs = blocksUpdated.map{ update =>
+          (update.blockUpdatedInfo.blockId.name,
+            update.blockUpdatedInfo.blockManagerId)}
+        val blocksToManagers = blockLocs.groupBy(_._1).mapValues(_.toSet.size)
+        assert(!blocksToManagers.filter(_._2 > 1).isEmpty,
+          s"We should have a block that has been on multiple BMs in ${blocksUpdated}")
       }
       // If we're migrating shuffles we look for any shuffle block updates
       // as there is no block update on the initial shuffle block write.
