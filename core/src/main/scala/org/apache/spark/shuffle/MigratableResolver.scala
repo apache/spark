@@ -17,14 +17,17 @@
 
 package org.apache.spark.shuffle
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.BlockId
 
 /**
+ * :: Experimental ::
  * An experimental trait to allow Spark to migrate shuffle blocks.
  */
+@Experimental
 trait MigratableResolver {
   /**
    * Get the shuffle ids that are stored locally. Used for block migrations.

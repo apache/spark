@@ -1586,6 +1586,11 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.removeListener(listener)
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Deregister the listener from Spark's listener bus.
+   */
+  @DeveloperApi
   def getExecutorIds(): Seq[String] = {
     schedulerBackend match {
       case b: ExecutorAllocationClient =>
