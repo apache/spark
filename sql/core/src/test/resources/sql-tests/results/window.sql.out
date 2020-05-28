@@ -17,7 +17,8 @@ AS testData(val, val_long, val_double, val_date, val_timestamp, cate)
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+cannot resolve 'CAST(1501545600 AS TIMESTAMP)' due to data type mismatch: cannot cast int to timestamp,you can enable the casting by setting spark.sql.legacy.allowCastNumericToTimestamp to true,but we strongly recommand using function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.; line 2 pos 37
 
 
 -- !query
