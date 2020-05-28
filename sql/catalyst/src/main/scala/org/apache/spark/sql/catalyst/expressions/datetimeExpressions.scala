@@ -66,13 +66,11 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
     } else None
 
   final protected def getFormatter(fmt: String): TimestampFormatter = {
-    val formatter = TimestampFormatter(
+    TimestampFormatter(
       format = fmt,
       zoneId = zoneId,
       legacyFormat = SIMPLE_DATE_FORMAT,
       needVarLengthSecondFraction = isParsing)
-    formatter.validatePatternString()
-    formatter
   }
 }
 

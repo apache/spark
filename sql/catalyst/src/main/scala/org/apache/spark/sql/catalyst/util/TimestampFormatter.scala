@@ -284,14 +284,14 @@ object TimestampFormatter {
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
       needVarLengthSecondFraction: Boolean = false): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
-    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+    val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      val tf = new Iso8601TimestampFormatter(
+      new Iso8601TimestampFormatter(
         pattern, zoneId, locale, legacyFormat, needVarLengthSecondFraction)
-      tf.validatePatternString()
-      tf
     }
+    formatter.validatePatternString()
+    formatter
   }
 
   def getLegacyFormatter(
