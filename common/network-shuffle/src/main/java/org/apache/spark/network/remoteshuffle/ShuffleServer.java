@@ -28,7 +28,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Remote shuffle server.
+ * Remote shuffle server. It is a reference implementation of remote shuffle server to
+ * demonstrate the concept and basic design. It does not implement various techniques
+ * to improve performance.
  */
 public class ShuffleServer {
 

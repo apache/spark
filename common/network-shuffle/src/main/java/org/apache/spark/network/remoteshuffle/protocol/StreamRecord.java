@@ -23,16 +23,16 @@ import java.nio.ByteBuffer;
 import java.util.Objects;
 
 // Needed by ScalaDoc. See SPARK-7726
-import static org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage.Type;
+
 
 /** A shuffle record streamed to server */
 public class StreamRecord extends RemoteShuffleMessage {
-  public final long streamId;
+  public final long sessionId;
   public final int partition;
   public final ByteBuffer taskAttemptRecord;
 
-  public StreamRecord(long streamId, int partition, ByteBuffer taskAttemptRecord) {
-    this.streamId = streamId;
+  public StreamRecord(long sessionId, int partition, ByteBuffer taskAttemptRecord) {
+    this.sessionId = sessionId;
     this.partition = partition;
     this.taskAttemptRecord = taskAttemptRecord;
   }
@@ -45,20 +45,20 @@ public class StreamRecord extends RemoteShuffleMessage {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     StreamRecord that = (StreamRecord) o;
-    return streamId == that.streamId &&
+    return sessionId == that.sessionId &&
         partition == that.partition &&
         Objects.equals(taskAttemptRecord, that.taskAttemptRecord);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(streamId, partition, taskAttemptRecord);
+    return Objects.hash(sessionId, partition, taskAttemptRecord);
   }
 
   @Override
   public String toString() {
     return "StreamRecord{" +
-        "streamId=" + streamId +
+        "sessionId=" + sessionId +
         ", partition=" + partition +
         ", taskAttemptRecord=" + taskAttemptRecord.remaining() + " bytes" +
         '}';
@@ -74,7 +74,7 @@ public class StreamRecord extends RemoteShuffleMessage {
 
   @Override
   public void encode(ByteBuf buf) {
-    buf.writeLong(streamId);
+    buf.writeLong(sessionId);
     buf.writeInt(partition);
     buf.writeInt(taskAttemptRecord.remaining());
     buf.writeBytes(taskAttemptRecord);

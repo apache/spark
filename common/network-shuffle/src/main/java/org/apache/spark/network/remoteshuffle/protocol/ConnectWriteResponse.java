@@ -24,14 +24,14 @@ import org.apache.commons.lang3.builder.ToStringStyle;
 import java.util.Objects;
 
 // Needed by ScalaDoc. See SPARK-7726
-import static org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessage.Type;
+
 
 /** Response message for {@link ConnectWriteRequest}. */
 public class ConnectWriteResponse extends RemoteShuffleMessage {
-  public final long streamId;
+  public final long sessionId;
 
-  public ConnectWriteResponse(long streamId) {
-    this.streamId = streamId;
+  public ConnectWriteResponse(long sessionId) {
+    this.sessionId = sessionId;
   }
 
   @Override
@@ -42,18 +42,18 @@ public class ConnectWriteResponse extends RemoteShuffleMessage {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     ConnectWriteResponse that = (ConnectWriteResponse) o;
-    return streamId == that.streamId;
+    return sessionId == that.sessionId;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(streamId);
+    return Objects.hash(sessionId);
   }
 
   @Override
   public String toString() {
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-        .append("streamId", streamId)
+        .append("sessionId", sessionId)
         .toString();
   }
 
@@ -64,7 +64,7 @@ public class ConnectWriteResponse extends RemoteShuffleMessage {
 
   @Override
   public void encode(ByteBuf buf) {
-    buf.writeLong(streamId);
+    buf.writeLong(sessionId);
   }
 
   public static ConnectWriteResponse decode(ByteBuf buf) {

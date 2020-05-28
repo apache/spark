@@ -18,7 +18,6 @@
 package org.apache.spark.network.remoteshuffle;
 
 import com.google.common.collect.Lists;
-import io.netty.buffer.ByteBuf;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
@@ -55,7 +54,7 @@ public class WriteClient implements AutoCloseable {
 
   private TransportClientFactory clientFactory;
   private TransportClient client;
-  private long streamId = -1;
+  private long sessionId = -1;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -91,16 +90,16 @@ public class WriteClient implements AutoCloseable {
     ConnectWriteResponse msg =
         (ConnectWriteResponse)RemoteShuffleMessage.Decoder.fromByteBuffer(connectWriteResponse);
     logger.info("Write client connected to shuffle server: {}", msg);
-    streamId = msg.streamId;
+    sessionId = msg.sessionId;
   }
 
   public void writeRecord(int partition, long taskAttempt, ByteBuffer key, ByteBuffer value) {
-    if (streamId == -1) {
+    if (sessionId == -1) {
       throw new RuntimeException(String.format("Not connected to server %s:%s", host, port));
     }
 
     ByteBuffer record = new StreamRecord(
-        streamId,
+        sessionId,
         partition,
         new TaskAttemptRecord(taskAttempt, key, value).toByteBuffer()).toByteBuffer();
     client.send(record);

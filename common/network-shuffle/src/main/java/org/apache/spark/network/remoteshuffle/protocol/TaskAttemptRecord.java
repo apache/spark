@@ -24,7 +24,7 @@ import org.apache.spark.network.protocol.Encodable;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
-/** Task attempt id and record key/value data */
+/** Task attempt id and record key/value data. The first 8 bytes contain task attempt id. */
 public class TaskAttemptRecord implements Encodable {
   public final long taskAttempt;
   public final ByteBuffer key;
