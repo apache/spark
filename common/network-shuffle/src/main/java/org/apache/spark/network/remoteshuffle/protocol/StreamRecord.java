@@ -19,6 +19,7 @@ package org.apache.spark.network.remoteshuffle.protocol;
 
 import io.netty.buffer.ByteBuf;
 
+import java.nio.ByteBuffer;
 import java.util.Objects;
 
 // Needed by ScalaDoc. See SPARK-7726
@@ -28,9 +29,9 @@ import static org.apache.spark.network.remoteshuffle.protocol.RemoteShuffleMessa
 public class StreamRecord extends RemoteShuffleMessage {
   public final long streamId;
   public final int partition;
-  public final TaskAttemptRecord taskAttemptRecord;
+  public final ByteBuffer taskAttemptRecord;
 
-  public StreamRecord(long streamId, int partition, TaskAttemptRecord taskAttemptRecord) {
+  public StreamRecord(long streamId, int partition, ByteBuffer taskAttemptRecord) {
     this.streamId = streamId;
     this.partition = partition;
     this.taskAttemptRecord = taskAttemptRecord;
@@ -59,7 +60,7 @@ public class StreamRecord extends RemoteShuffleMessage {
     return "StreamRecord{" +
         "streamId=" + streamId +
         ", partition=" + partition +
-        ", taskAttemptRecord=" + taskAttemptRecord +
+        ", taskAttemptRecord=" + taskAttemptRecord.remaining() + " bytes" +
         '}';
   }
 
@@ -67,20 +68,25 @@ public class StreamRecord extends RemoteShuffleMessage {
   public int encodedLength() {
     return Long.BYTES
       + Integer.BYTES
-      + taskAttemptRecord.encodedLength();
+      + Integer.BYTES
+      + taskAttemptRecord.remaining();
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(streamId);
     buf.writeInt(partition);
-    taskAttemptRecord.encode(buf);
+    buf.writeInt(taskAttemptRecord.remaining());
+    buf.writeBytes(taskAttemptRecord);
   }
 
   public static StreamRecord decode(ByteBuf buf) {
     long streamId = buf.readLong();
     int partition = buf.readInt();
-    TaskAttemptRecord taskAttemptRecord = TaskAttemptRecord.decode(buf);
+    int len = buf.readInt();
+    ByteBuffer taskAttemptRecord = ByteBuffer.allocate(len);
+    buf.readBytes(taskAttemptRecord);
+    taskAttemptRecord.flip();
     return new StreamRecord(streamId, partition, taskAttemptRecord);
   }
 }

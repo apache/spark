@@ -18,6 +18,7 @@
 package org.apache.spark.network.remoteshuffle.protocol;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.apache.spark.network.protocol.Encodable;
 
 import java.nio.ByteBuffer;
@@ -83,6 +84,15 @@ public class TaskAttemptRecord implements Encodable {
       buf.writeInt(value.remaining());
       buf.writeBytes(value);
     }
+  }
+
+  public ByteBuffer toByteBuffer() {
+    int len = encodedLength();
+    ByteBuf buf = Unpooled.buffer(Integer.BYTES + len);
+    buf.writeInt(len);
+    encode(buf);
+    assert buf.writableBytes() == 0 : "Writable bytes remain: " + buf.writableBytes();
+    return buf.nioBuffer();
   }
 
   public static TaskAttemptRecord decode(ByteBuf buf) {

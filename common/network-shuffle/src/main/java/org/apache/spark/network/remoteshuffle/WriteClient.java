@@ -102,7 +102,7 @@ public class WriteClient implements AutoCloseable {
     ByteBuffer record = new StreamRecord(
         streamId,
         partition,
-        new TaskAttemptRecord(taskAttempt, key, value)).toByteBuffer();
+        new TaskAttemptRecord(taskAttempt, key, value).toByteBuffer()).toByteBuffer();
     client.send(record);
   }
 
