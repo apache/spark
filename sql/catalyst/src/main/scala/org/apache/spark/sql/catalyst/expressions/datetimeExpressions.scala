@@ -881,12 +881,20 @@ abstract class ToTimestamp
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
-    Option(left.eval(input)).map { t =>
+    val t = left.eval(input)
+    if (t == null) {
+      null
+    } else {
       left.dataType match {
-        case DateType => epochDaysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
-        case TimestampType => t.asInstanceOf[Long] / downScaleFactor
+        case DateType =>
+          epochDaysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
+        case TimestampType =>
+          t.asInstanceOf[Long] / downScaleFactor
         case StringType =>
-          Option(right.eval(input)).map { fmt =>
+          val fmt = right.eval(input)
+          if (fmt == null) {
+            null
+          } else {
             val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
             try {
               formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
@@ -895,9 +903,9 @@ abstract class ToTimestamp
                    _: DateTimeException |
                    _: ParseException => null
             }
-          }.orNull
+          }
       }
-    }.orNull
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -922,14 +930,16 @@ abstract class ToTimestamp
         val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
         val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
         val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
+        val timestampFormatter = ctx.freshName("timestampFormatter")
         nullSafeCodeGen(ctx, ev, (string, format) =>
           s"""
+             |$tf $timestampFormatter = $tf$$.MODULE$$.apply(
+             |  $format.toString(),
+             |  $zid,
+             |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+             |  true);
              |try {
-             |  ${ev.value} = $tf$$.MODULE$$.apply(
-             |    $format.toString(),
-             |    $zid,
-             |    $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
-             |    true).parse($string.toString()) / $downScaleFactor;
+             |  ${ev.value} = $timestampFormatter.parse($string.toString()) / $downScaleFactor;
              |} catch (java.time.format.DateTimeParseException e) {
              |    ${ev.isNull} = true;
              |} catch (java.time.DateTimeException e) {
@@ -1032,8 +1042,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
            |  $tf$$.MODULE$$.apply($format.toString(),
            |  $zid,
            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
-           |  false)
-           |  .format($seconds * 1000000L))
+           |  false).format($seconds * 1000000L))
            |""".stripMargin)
     }
   }

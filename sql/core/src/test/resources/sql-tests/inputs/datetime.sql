@@ -180,7 +180,7 @@ select from_unixtime(null , 'invalid');
 select from_unixtime(null , 'yyyy-MM-dd');
 select from_unixtime(12345 , 'yyyy-MM-dd');
 
--- select unix_timestamp(); disabled because nondeterministic
+select unix_timestamp() = unix_timestamp();
 select unix_timestamp(null);
 select unix_timestamp(null, null);
 select unix_timestamp(null, 'yyyy-MM-dd');
