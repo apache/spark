@@ -164,13 +164,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     val exprTypesToCheck = Seq(classOf[UnaryExpression], classOf[BinaryExpression],
       classOf[TernaryExpression], classOf[QuaternaryExpression], classOf[SeptenaryExpression])
 
-    // Do not check these expressions, because these expressions extend NullIntolerant
-    // and override the eval function.
-    val ignoreSet = Set(classOf[IntegralDivide], classOf[Divide], classOf[Remainder], classOf[Pmod])
-
     val candidateExprsToCheck = spark.sessionState.functionRegistry.listFunction()
       .map(spark.sessionState.catalog.lookupFunctionInfo).map(_.getClassName)
-      .filterNot(c => ignoreSet.exists(_.getName.equals(c)))
       .map(name => Utils.classForName(name))
       .filterNot(classOf[NonSQLExpression].isAssignableFrom)
 
@@ -180,8 +175,9 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
           superClass.getMethod("eval", classOf[InternalRow])
         val isNullIntolerantMixedIn = classOf[NullIntolerant].isAssignableFrom(clazz)
         if (isEvalOverrode && isNullIntolerantMixedIn) {
-          fail(s"${clazz.getName} should not extend ${classOf[NullIntolerant].getSimpleName}, " +
-            s"or add ${clazz.getName} in the ignoreSet of this test.")
+          fail(s"${clazz.getName} overrode the eval method and extended " +
+            s"${classOf[NullIntolerant].getSimpleName}, which may be incorrect. " +
+            s"You may need to override the nullSafeEval method.")
         } else if (!isEvalOverrode && !isNullIntolerantMixedIn) {
           fail(s"${clazz.getName} should extend ${classOf[NullIntolerant].getSimpleName}.")
         } else {
