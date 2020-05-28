@@ -880,6 +880,7 @@ abstract class ToTimestamp
         legacyFormat = SIMPLE_DATE_FORMAT,
         needVarLengthSecondFraction = true)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -1061,6 +1062,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         legacyFormat = SIMPLE_DATE_FORMAT,
         needVarLengthSecondFraction = false)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -1076,6 +1078,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           try {
             UTF8String.fromString(formatter.format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }
@@ -1093,6 +1096,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
                 needVarLengthSecondFraction = false)
                 .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }
