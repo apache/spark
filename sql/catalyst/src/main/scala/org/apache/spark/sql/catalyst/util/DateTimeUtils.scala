@@ -915,10 +915,8 @@ object DateTimeUtils {
    *         if the end date is before the start date.
    */
   def subtractDates(endDay: Int, startDay: Int): CalendarInterval = {
-    val period = Period.between(
-      LocalDate.ofEpochDay(startDay),
-      LocalDate.ofEpochDay(endDay))
-    val months = period.getMonths + 12 * period.getYears
+    val period = Period.between(LocalDate.ofEpochDay(startDay), LocalDate.ofEpochDay(endDay))
+    val months = Math.toIntExact(period.toTotalMonths)
     val days = period.getDays
     new CalendarInterval(months, days, 0)
   }
