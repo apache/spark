@@ -114,7 +114,11 @@ def convert_exception(e):
         return QueryExecutionException(s.split(': ', 1)[1], stacktrace, c)
     if s.startswith('java.lang.IllegalArgumentException: '):
         return IllegalArgumentException(s.split(': ', 1)[1], stacktrace, c)
-    if c is not None and c.toString().startswith('org.apache.spark.api.python.PythonException: '):
+    if c is not None and (
+            c.toString().startswith('org.apache.spark.api.python.PythonException: ')
+            # To make sure this only catches Python UDFs.
+            and any(map(lambda v: "org.apache.spark.sql.execution.python" in v.toString(),
+                        c.getStackTrace()))):
         msg = ("\n  An exception was thrown from Python worker in the executor. "
                "The below is the Python worker stacktrace.\n%s" % c.getMessage())
         return PythonException(msg, stacktrace)
