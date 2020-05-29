@@ -1168,5 +1168,4 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[ArithmeticException](
       MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
   }
-
 }
