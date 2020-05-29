@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Join Hints
-displayTitle: Join Hints
+title: Hints
+displayTitle: Hints
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,13 +21,44 @@ license: |
 
 ### Description
 
-Join Hints allow users to suggest the join strategy that Spark should use. Prior to Spark 3.0, only the `BROADCAST` Join Hint was supported. `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL` Joint Hints support was added in 3.0. When different join strategy hints are specified on both sides of a join, Spark prioritizes hints in the following order: `BROADCAST` over `MERGE` over `SHUFFLE_HASH` over `SHUFFLE_REPLICATE_NL`. When both sides are specified with the `BROADCAST` hint or the `SHUFFLE_HASH` hint, Spark will pick the build side based on the join type and the sizes of the relations. Since a given strategy may not support all join types, Spark is not guaranteed to use the join strategy suggested by the hint.
+Hints give users a way to suggest how Spark SQL to use specific approaches to generate its execution plan.
 
 ### Syntax
 
 ```sql
-/*+ join_hint [ , ... ] */
+/*+ hint [ , ... ] */
 ```
+
+### Coalesce/Repartition/Repartition_By_Range Hints
+
+Coalesce/Repartition/Repartition_By_Range hints have functionalities equivalent to those of the
+`Dataset` coalesce/repartition/repartitionByRange APIs. The Coalesce hint can be used to reduce
+the number of partitions to the specified number of partitions. The Repartition/Repartition_By_Range
+hint can be used to repartition to the specified number of partitions using the specified partitioning expressions.
+The Coalesce hint takes a partition number as a
+parameter. The Repartition hint takes a partition number, column names, or both as parameters.
+The Repartition_By_Range hint takes column names and an optional partition number as parameters.
+These hints give users a way to tune performance and control the number of output files in Spark SQL.
+
+### Examples
+```sql
+SELECT /*+ COALESCE(3) */ * FROM t;
+
+SELECT /*+ REPARTITION(3) */ * FROM t;
+
+SELECT /*+ REPARTITION(c) */ * FROM t;
+
+SELECT /*+ REPARTITION(3, c) */ * FROM t;
+
+SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t;
+
+SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
+```
+
+
+### Join Hints
+
+Join Hints allow users to suggest the join strategy that Spark should use. Prior to Spark 3.0, only the `BROADCAST` Join Hint was supported. `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL` Joint Hints support was added in 3.0. When different join strategy hints are specified on both sides of a join, Spark prioritizes hints in the following order: `BROADCAST` over `MERGE` over `SHUFFLE_HASH` over `SHUFFLE_REPLICATE_NL`. When both sides are specified with the `BROADCAST` hint or the `SHUFFLE_HASH` hint, Spark will pick the build side based on the join type and the sizes of the relations. Since a given strategy may not support all join types, Spark is not guaranteed to use the join strategy suggested by the hint.
 
 ### Join Hints Types
 

@@ -179,7 +179,7 @@ SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 </div>
 </div>
 
-For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html).
+For more details please refer to the documentation of [Hints](sql-ref-syntax-qry-select-hints.html).
 
 ## Coalesce Hints for SQL Queries
 
