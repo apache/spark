@@ -1109,13 +1109,16 @@ private[spark] class TaskSetManager(
     if (isZombie) return
     val previousLocalityIndex = currentLocalityIndex
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
+    val previousMyLocalityLevels = myLocalityLevels
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
     if (currentLocalityIndex > previousLocalityIndex) {
-      // SPARK-31837: there's new higher locality level, so shift to
-      // the highest locality level in terms of better data locality
-      currentLocalityIndex = 0
+      // SPARK-31837: there's more local locality level, so shift to the new most local locality
+      // level in terms of better data locality. For example, say the previous locality levels
+      // are [PROCESS, NODE, ANY] and current level is ANY. After recompute, the locality levels
+      // are [PROCESS, NODE, RACK, ANY]. Then, we'll shift to RACK level.
+      currentLocalityIndex = getLocalityIndex(myLocalityLevels.diff(previousMyLocalityLevels).head)
     }
   }
 
