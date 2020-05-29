@@ -73,9 +73,9 @@ true	true
 -- !query
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd')
 -- !query schema
-struct<to_date(NULL):date,to_date(2016-12-31):date,to_date(2016-12-31, yyyy-MM-dd):date>
+struct<>
 -- !query output
-NULL	2016-12-31	2016-12-31
+java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(unix_timestamp('2016-12-31', 'yyyy-MM-dd') AS TIMESTAMP)' due to data type mismatch: cannot cast bigint to timestamp,you can enable the casting by setting spark.sql.legacy.allowCastNumericToTimestamp to true,but we strongly recommand using function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.; line 1 pos 45
 
 
 -- !query
@@ -783,10 +783,9 @@ NULL
 -- !query
 select to_date("16", "dd")
 -- !query schema
-struct<to_date(16, dd):date>
+struct<>
 -- !query output
-1970-01-16
-
+java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(unix_timestamp('16', 'dd') AS TIMESTAMP)' due to data type mismatch: cannot cast bigint to timestamp,you can enable the casting by setting spark.sql.legacy.allowCastNumericToTimestamp to true,but we strongly recommand using function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.; line 1 pos 7
 
 -- !query
 select to_date("02-29", "MM-dd")
