@@ -159,7 +159,7 @@ case class CheckOverflowInSum(
     if (value == null) {
       if (nullOnOverflow) null else throw new ArithmeticException("Overflow in sum of decimals.")
     } else {
-      input.asInstanceOf[Decimal].toPrecision(
+      value.asInstanceOf[Decimal].toPrecision(
         dataType.precision,
         dataType.scale,
         Decimal.ROUND_HALF_UP,
