@@ -34,7 +34,7 @@ import org.apache.spark.util.{ResetSystemProperties, ThreadUtils}
 class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     with ResetSystemProperties with Eventually {
 
-  val numExecs = 2
+  val numExecs = 3
 
   test(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor") {
@@ -69,7 +69,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // Create a new RDD where we have sleep in each partition, we are also increasing
     // the value of accumulator in each partition
     val sleepyRdd = input.mapPartitions { x =>
-      Thread.sleep(300)
+      Thread.sleep(250)
       accum.add(1)
       x.map(y => (y, y))
     }
@@ -114,7 +114,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     sem.acquire(1)
 
     // Give Spark a tiny bit to start the tasks after the listener says hello
-    Thread.sleep(20)
+    Thread.sleep(50)
 
     // Decommission one of the executor
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
@@ -126,7 +126,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     sched.decommissionExecutor(execToDecommission)
 
     // Wait for job to finish
-    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 6.seconds)
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 15.seconds)
     assert(asyncCountResult === 10)
     // All 10 tasks finished, so accum should have been increased 10 times
     assert(accum.value === 10)
