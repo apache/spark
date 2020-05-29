@@ -143,8 +143,8 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       // TODO: check defaults: maxTimeout, keepalive, maxBodySize, bodyRecieveDuration, etc.
       // Finally, start the server
       httpServer.start();
-      // in case it is configured with 0 which represents any free port, we should set it to the
-      // actual one
+      // In case HIVE_SERVER2_THRIFT_HTTP_PORT or hive.server2.thrift.http.port is configured with
+      // 0 which represents any free port, we should set it to the actual one
       portNum = connector.getLocalPort();
       String msg = "Started " + ThriftHttpCLIService.class.getSimpleName() + " in " + schemeName
           + " mode on port " + connector.getLocalPort()+ " path=" + httpPath + " with " + minWorkerThreads + "..."
