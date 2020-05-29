@@ -878,7 +878,7 @@ class SparkContext(object):
             cls = jdouble_rdd_cls
         else:
             cls_name = rdds[0]._jrdd.getClass().getCanonicalName()
-            raise TypeError("Unsupported Java DStream class %s" % cls_name)
+            raise TypeError("Unsupported Java RDD class %s" % cls_name)
         jrdds = gw.new_array(cls, len(rdds))
         for i in range(0, len(rdds)):
             jrdds[i] = rdds[i]._jrdd
