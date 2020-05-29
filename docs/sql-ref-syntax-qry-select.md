@@ -156,6 +156,6 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
 * [JOIN](sql-ref-syntax-qry-select-join.html)
 * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
 * [Set Operators](sql-ref-syntax-qry-select-setops.html)
-* [TABLESAMPLE](sql-ref-syntax-qry-sampling.html)
+* [TABLESAMPLE](sql-ref-syntax-qry-select-sampling.html)
 * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
-* [Window Function](sql-ref-syntax-qry-window.html)
+* [Window Function](sql-ref-syntax-qry-select-window.html)
