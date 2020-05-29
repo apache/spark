@@ -99,7 +99,7 @@ one
 -- !query
 select concat(1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
 -- !query schema
-struct<[]>
+struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(unix_timestamp('20100309', 'yyyyMMdd') AS TIMESTAMP)' due to data type mismatch: cannot cast bigint to timestamp,you can enable the casting by setting spark.sql.legacy.allowCastNumericToTimestamp to true,but we strongly recommand using function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.; line 1 pos 41

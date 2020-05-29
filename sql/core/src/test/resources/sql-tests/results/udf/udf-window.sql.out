@@ -36,17 +36,10 @@ cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key,
 SELECT udf(val), cate, sum(val) OVER(PARTITION BY cate ORDER BY udf(val)
 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query schema
-struct<CAST(udf(cast(val as string)) AS INT):int,cate:string,sum(val) OVER (PARTITION BY cate ORDER BY CAST(udf(cast(val as string)) AS INT) ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):bigint>
+struct<>
 -- !query output
-NULL	NULL	3
-3	NULL	3
-NULL	a	1
-1	a	2
-1	a	4
-2	a	4
-1	b	3
-2	b	6
-3	b	6
+org.apache.spark.sql.AnalysisException
+cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 11
 
 
 -- !query

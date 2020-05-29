@@ -79,7 +79,7 @@ select current_date = current_date(), current_timestamp = current_timestamp()
 -- !query
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd')
 -- !query schema
-struct<[]>
+struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(unix_timestamp('2016-12-31', 'yyyy-MM-dd') AS TIMESTAMP)' due to data type mismatch: cannot cast bigint to timestamp,you can enable the casting by setting spark.sql.legacy.allowCastNumericToTimestamp to true,but we strongly recommand using function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.; line 1 pos 45
