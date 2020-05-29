@@ -1,10 +1,12 @@
 package org.apache.spark.network.remoteshuffle;
 
 import java.nio.ByteBuffer;
-import java.nio.file.Paths;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Main class to write shuffle records into files.
+ */
 public class ShuffleEngine {
   private static AtomicLong sessionIdGenerator = new AtomicLong();
 
@@ -38,7 +40,7 @@ public class ShuffleEngine {
 
   public void finishTask(long sessionId, long taskAttemptId) {
     ShuffleStage stage = sessions.get(sessionId);
-    // TODO optimize to reduce the frequency of flush operation
+    // TODO optimize to reduce the frequency of commit operation
     stage.commit(taskAttemptId);
   }
 }

@@ -7,6 +7,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+/***
+ * This class is an abstraction for a shuffle stage in the shuffle server. It contains
+ * multiple {@link PartitionWriter} and forward each shuffle record to corresponding
+ * {@link PartitionWriter}. Then {@link PartitionWriter} writes the record to file.
+ */
 public class ShuffleStage {
   private final ShuffleStageFqid shuffleStageFqid;
   private final String stageRootDir;

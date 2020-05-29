@@ -10,6 +10,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Paths;
 
+/***
+ * This class creates shuffle file and writes shuffle record to file.
+ */
 public class PartitionWriter implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(PartitionWriter.class);
 
