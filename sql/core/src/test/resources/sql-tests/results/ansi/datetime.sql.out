@@ -819,9 +819,9 @@ java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisExceptio
 -- !query
 select to_date("02-29", "MM-dd")
 -- !query schema
-struct<to_date(02-29, MM-dd):date>
+struct<>
 -- !query output
-NULL
+java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(unix_timestamp('02-29', 'MM-dd') AS TIMESTAMP)' due to data type mismatch: cannot cast bigint to timestamp,you can enable the casting by setting spark.sql.legacy.allowCastNumericToTimestamp to true,but we strongly recommand using function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.; line 1 pos 7
 
 
 -- !query
