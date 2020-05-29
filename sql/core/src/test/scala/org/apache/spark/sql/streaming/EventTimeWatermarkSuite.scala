@@ -185,7 +185,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Trigger.Once to ensure that first and only trigger picks up the new data.
 
       testStream(aggWithWatermark)(
-        StartStream(Trigger.Once), // to make sure the query is not running when adding data 1st time
+        // to make sure the query is not running when adding data 1st time
+        StartStream(Trigger.Once),
         awaitTermination(),
 
         AddData(inputData, 15),
