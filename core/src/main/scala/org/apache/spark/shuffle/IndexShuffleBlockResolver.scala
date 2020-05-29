@@ -180,8 +180,8 @@ private[spark] class IndexShuffleBlockResolver(
       StreamCallbackWithID = {
     val file = blockId match {
       case ShuffleIndexBlockId(shuffleId, mapId, _) =>
-        getIndexFile(shuffleId, mapId)
-      case ShuffleBlockBatchId(shuffleId, mapId, _, _) =>
+         getIndexFile(shuffleId, mapId)
+      case ShuffleDataBlockId(shuffleId, mapId, _) =>
         getDataFile(shuffleId, mapId)
       case _ =>
         throw new Exception(s"Unexpected shuffle block transfer ${blockId} as " +
