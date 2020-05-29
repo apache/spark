@@ -401,6 +401,83 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
   }
 }
 
+abstract class NumberToTimestampBase extends UnaryExpression
+  with ExpectsInputTypes {
+
+  protected def upScaleFactor: Long
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullSafeEval(input: Any): Any = {
+    Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (upScaleFactor == 1) {
+      defineCodeGen(ctx, ev, c => c)
+    } else {
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)")
+    }
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000);
+       2008-12-25 07:30:00
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class SecondsToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: Long = MICROS_PER_SECOND
+
+  override def prettyName: String = "timestamp_seconds"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(milliseconds) - Creates timestamp from the number of milliseconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000123);
+       2008-12-25 07:30:00.123
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class MillisToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: Long = MICROS_PER_MILLIS
+
+  override def prettyName: String = "timestamp_millis"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(microseconds) - Creates timestamp from the number of microseconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000123123);
+       2008-12-25 07:30:00.123123
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class MicrosToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: Long = 1L
+
+  override def prettyName: String = "timestamp_micros"
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
   examples = """
@@ -803,6 +880,7 @@ abstract class ToTimestamp
         legacyFormat = SIMPLE_DATE_FORMAT,
         needVarLengthSecondFraction = true)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -984,6 +1062,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         legacyFormat = SIMPLE_DATE_FORMAT,
         needVarLengthSecondFraction = false)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -999,6 +1078,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           try {
             UTF8String.fromString(formatter.format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }
@@ -1016,6 +1096,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
                 needVarLengthSecondFraction = false)
                 .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }

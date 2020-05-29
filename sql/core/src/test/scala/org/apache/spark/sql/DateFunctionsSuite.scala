@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -450,9 +450,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-hh-MM")),
       Seq(Row(null), Row(null), Row(null)))
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-dd-aa")),
-      Seq(Row(null), Row(null), Row(null)))
+    val e = intercept[SparkUpgradeException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
+    assert(e.getCause.isInstanceOf[IllegalArgumentException])
+    assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
     // february
     val x1 = "2016-02-29"
@@ -618,8 +618,16 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(secs(ts4.getTime)), Row(null), Row(secs(ts3.getTime)), Row(null)))
 
         // invalid format
-        checkAnswer(df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd aa:HH:ss')"), Seq(
-          Row(null), Row(null), Row(null), Row(null)))
+        val invalid = df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd aa:HH:ss')")
+        if (legacyParserPolicy == "legacy") {
+          checkAnswer(invalid,
+            Seq(Row(null), Row(null), Row(null), Row(null)))
+        } else {
+          val e = intercept[SparkUpgradeException](invalid.collect())
+          assert(e.getCause.isInstanceOf[IllegalArgumentException])
+          assert(
+            e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
+        }
 
         // february
         val y1 = "2016-02-29"

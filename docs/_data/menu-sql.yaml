@@ -76,14 +76,6 @@
 - text: SQL Reference
   url: sql-ref.html
   subitems:
-    - text: Data Types
-      url: sql-ref-datatypes.html
-    - text: Identifiers
-      url: sql-ref-identifier.html
-    - text: Literals
-      url: sql-ref-literals.html
-    - text: Null Semantics
-      url: sql-ref-null-semantics.html
     - text: ANSI Compliance
       url: sql-ref-ansi-compliance.html
       subitems:
@@ -93,6 +85,27 @@
           url: sql-ref-ansi-compliance.html#type-conversion
         - text: SQL Keywords
           url: sql-ref-ansi-compliance.html#sql-keywords
+    - text: Data Types
+      url: sql-ref-datatypes.html
+    - text: Datetime Pattern
+      url: sql-ref-datetime-pattern.html
+    - text: Functions
+      url: sql-ref-functions.html
+      subitems:
+      - text: Built-in Functions
+        url: sql-ref-functions-builtin.html
+      - text: Scalar UDFs (User-Defined Functions)
+        url: sql-ref-functions-udf-scalar.html
+      - text: UDAFs (User-Defined Aggregate Functions)
+        url: sql-ref-functions-udf-aggregate.html
+      - text: Integration with Hive UDFs/UDAFs/UDTFs
+        url: sql-ref-functions-udf-hive.html
+    - text: Identifiers
+      url: sql-ref-identifier.html
+    - text: Literals
+      url: sql-ref-literals.html
+    - text: Null Semantics
+      url: sql-ref-null-semantics.html
     - text: SQL Syntax
       url: sql-ref-syntax.html
       subitems:
@@ -247,16 +260,3 @@
                   url: sql-ref-syntax-aux-resource-mgmt-list-file.html
                 - text: LIST JAR
                   url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
-    - text: Functions
-      url: sql-ref-functions.html
-      subitems:
-      - text: Built-in Functions
-        url: sql-ref-functions-builtin.html
-      - text: Scalar UDFs (User-Defined Functions)
-        url: sql-ref-functions-udf-scalar.html
-      - text: UDAFs (User-Defined Aggregate Functions)
-        url: sql-ref-functions-udf-aggregate.html
-      - text: Integration with Hive UDFs/UDAFs/UDTFs
-        url: sql-ref-functions-udf-hive.html
-    - text: Datetime Pattern
-      url: sql-ref-datetime-pattern.html
