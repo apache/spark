@@ -27,7 +27,8 @@ ORDER BY cate, val
 -- !query schema
 struct<>
 -- !query output
-java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
+org.apache.spark.sql.AnalysisException
+cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
 
 
 -- !query
