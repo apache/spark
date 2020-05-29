@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.{Future, Promise}
 
@@ -82,7 +83,7 @@ abstract class QueryStageExec extends LeafExecNode {
   /**
    * Compute the statistics of the query stage if executed, otherwise None.
    */
-  def computeStats(): Option[Statistics] = resultOption.map { _ =>
+  def computeStats(): Option[Statistics] = resultOption.get().map { _ =>
     // Metrics `dataSize` are available in both `ShuffleExchangeExec` and `BroadcastExchangeExec`.
     val exchange = plan match {
       case r: ReusedExchangeExec => r.child
@@ -94,7 +95,9 @@ abstract class QueryStageExec extends LeafExecNode {
 
   @transient
   @volatile
-  private[adaptive] var resultOption: Option[Any] = None
+  protected var _resultOption = new AtomicReference[Option[Any]](None)
+
+  private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
 
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
@@ -152,9 +155,11 @@ case class ShuffleQueryStageExec(
   }
 
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
-    ShuffleQueryStageExec(
+    val reuse = ShuffleQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, shuffle))
+    reuse._resultOption = this._resultOption
+    reuse
   }
 
   override def cancel(): Unit = {
@@ -171,8 +176,8 @@ case class ShuffleQueryStageExec(
    * this method returns None, as there is no map statistics.
    */
   def mapStats: Option[MapOutputStatistics] = {
-    assert(resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
-    val stats = resultOption.get.asInstanceOf[MapOutputStatistics]
+    assert(resultOption.get().isDefined, "ShuffleQueryStageExec should already be ready")
+    val stats = resultOption.get().get.asInstanceOf[MapOutputStatistics]
     Option(stats)
   }
 }
@@ -212,9 +217,11 @@ case class BroadcastQueryStageExec(
   }
 
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
-    BroadcastQueryStageExec(
+    val reuse = BroadcastQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, broadcast))
+    reuse._resultOption = this._resultOption
+    reuse
   }
 
   override def cancel(): Unit = {
