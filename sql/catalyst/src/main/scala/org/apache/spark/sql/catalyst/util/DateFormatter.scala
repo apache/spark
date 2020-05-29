@@ -56,7 +56,7 @@ class Iso8601DateFormatter(
     val specialDate = convertSpecialDate(s.trim, zoneId)
     specialDate.getOrElse {
       try {
-        val localDate = toLocalDate(formatter.parse(s))
+        val localDate = toLocalDate(formatter.parse(s), locale)
         localDateToDays(localDate)
       } catch checkDiffResult(s, legacyFormatter.parse)
     }

@@ -1168,4 +1168,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[ArithmeticException](
       MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
   }
+
+  test("SPARK-31868: Restore the behaviour week-based-year for 2.4") {
+    checkEvaluation(
+      new ParseToTimestamp(Literal("2018-11-17 13:33:33"), Literal("YYYY-MM-dd HH:mm:ss")).child,
+      Timestamp.valueOf("2017-12-31 13:33:33.0"))
+    checkEvaluation(
+      new ParseToTimestamp(Literal("2018-11-17"), Literal("YYYY-MM-dd")).child,
+      Timestamp.valueOf("2017-12-31 00:00:00.0"))
+  }
 }

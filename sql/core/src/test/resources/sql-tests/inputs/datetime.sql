@@ -160,3 +160,9 @@ select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampF
 select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+
+-- SPARK-31868: Restore the behaviour week-based-year for 2.4
+select to_timestamp('1969-01-01', 'YYYY-MM-dd');
+select to_timestamp('1969-12-31', 'YYYY-MM-dd');
+select to_timestamp('2018-01-01', 'YYYY-MM-dd');
+select to_timestamp('2018-11-17 13:33:33', 'YYYY-MM-dd HH:mm:ss');

@@ -79,7 +79,7 @@ class Iso8601TimestampFormatter(
         val parsed = formatter.parse(s)
         val parsedZoneId = parsed.query(TemporalQueries.zone())
         val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
-        val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
+        val zonedDateTime = toZonedDateTime(parsed, timeZoneId, locale)
         val epochSeconds = zonedDateTime.toEpochSecond
         val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 

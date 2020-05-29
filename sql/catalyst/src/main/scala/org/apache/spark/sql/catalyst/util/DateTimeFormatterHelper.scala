@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time._
 import java.time.chrono.IsoChronology
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
-import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
+import java.time.temporal._
 import java.util.Locale
 
 import com.google.common.cache.CacheBuilder
@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 trait DateTimeFormatterHelper {
-  private def getOrDefault(accessor: TemporalAccessor, field: ChronoField, default: Int): Int = {
+  private def getOrDefault(accessor: TemporalAccessor, field: TemporalField, default: Int): Int = {
     if (accessor.isSupported(field)) {
       accessor.get(field)
     } else {
@@ -39,15 +39,22 @@ trait DateTimeFormatterHelper {
     }
   }
 
-  protected def toLocalDate(accessor: TemporalAccessor): LocalDate = {
+  protected def toLocalDate(accessor: TemporalAccessor, locale: Locale): LocalDate = {
     val localDate = accessor.query(TemporalQueries.localDate())
     // If all the date fields are specified, return the local date directly.
     if (localDate != null) return localDate
 
+    lazy val weekBasedYearField = WeekFields.of(locale).weekBasedYear()
     // Users may want to parse only a few datetime fields from a string and extract these fields
     // later, and we should provide default values for missing fields.
     // To be compatible with Spark 2.4, we pick 1970 as the default value of year.
-    val year = getOrDefault(accessor, ChronoField.YEAR, 1970)
+    val year = if (accessor.isSupported(ChronoField.YEAR)) {
+      accessor.get(ChronoField.YEAR)
+    } else if (accessor.isSupported(weekBasedYearField)) {
+      val year = accessor.get(weekBasedYearField) - 1
+      return LocalDate.of(year, 12, 1).`with`(TemporalAdjusters.lastInMonth(DayOfWeek.SUNDAY))
+    } else 1970
+
     val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
     val day = getOrDefault(accessor, ChronoField.DAY_OF_MONTH, 1)
     LocalDate.of(year, month, day)
@@ -74,8 +81,11 @@ trait DateTimeFormatterHelper {
 
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
   // if they does not exist in the parsed object.
-  protected def toZonedDateTime(accessor: TemporalAccessor, zoneId: ZoneId): ZonedDateTime = {
-    val localDate = toLocalDate(accessor)
+  protected def toZonedDateTime(
+      accessor: TemporalAccessor,
+      zoneId: ZoneId,
+      locale: Locale): ZonedDateTime = {
+    val localDate = toLocalDate(accessor, locale)
     val localTime = toLocalTime(accessor)
     ZonedDateTime.of(localDate, localTime, zoneId)
   }
