@@ -1357,6 +1357,10 @@
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP-java7</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
