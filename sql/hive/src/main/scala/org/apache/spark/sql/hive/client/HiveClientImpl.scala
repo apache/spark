@@ -648,7 +648,7 @@ private[hive] class HiveClientImpl(
         // We make a dummy one for the empty partition. See [SPARK-29786] for more details.
         parts.foreach { partition =>
           val partPath = partition.getPath.head
-          if (isExistPath(partPath)) {
+          if (!isExistPath(partPath)) {
             val fs = partPath.getFileSystem(conf)
             fs.mkdirs(partPath)
             fs.deleteOnExit(partPath)
