@@ -87,7 +87,6 @@ private[hive] trait SparkOperation extends Operation with Logging {
     }
   }
 
-
   def tableTypeString(tableType: CatalogTableType): String = tableType match {
     case EXTERNAL | MANAGED => "TABLE"
     case VIEW => "VIEW"
