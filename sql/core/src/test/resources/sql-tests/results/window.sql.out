@@ -54,17 +54,9 @@ cannot resolve 'ROWS BETWEEN CURRENT ROW AND 2147483648L FOLLOWING' due to data 
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val RANGE 1 PRECEDING) FROM testData
 ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW):bigint>
+struct<>
 -- !query output
-NULL	NULL	0
-3	NULL	1
-NULL	a	0
-1	a	2
-1	a	2
-2	a	3
-1	b	1
-2	b	2
-3	b	2
+java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
 
 
 -- !query

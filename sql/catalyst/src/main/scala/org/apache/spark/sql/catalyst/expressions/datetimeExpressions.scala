@@ -1617,8 +1617,6 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_('2009-07-30 04:17:52');
        2009-07-30
-      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
-       2016-12-31
   """,
   group = "datetime_funcs",
   since = "1.5.0")
