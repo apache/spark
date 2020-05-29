@@ -184,7 +184,8 @@ private[spark] class IndexShuffleBlockResolver(
       case ShuffleBlockBatchId(shuffleId, mapId, _, _) =>
         getDataFile(shuffleId, mapId)
       case _ =>
-        throw new Exception(s"Unexpected shuffle block transfer ${blockId}")
+        throw new Exception(s"Unexpected shuffle block transfer ${blockId} as " +
+          s"${blockId.getClass().getSimpleName()}")
     }
     val fileTmp = Utils.tempFileWith(file)
     val channel = Channels.newChannel(
