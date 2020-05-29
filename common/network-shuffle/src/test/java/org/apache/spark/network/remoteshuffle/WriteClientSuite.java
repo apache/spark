@@ -25,13 +25,16 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.Map;
 
 public class WriteClientSuite {
   private ShuffleServer server;
 
   @Before
   public void beforeEach() {
-    server = new ShuffleServer(new HashMap<>());
+    Map<String, String> config = new HashMap<>();
+    config.put(ShuffleServer.SPARK_SHUFFLE_SERVICE_PORT_KEY, "0");
+    server = new ShuffleServer(config);
     server.start();
   }
 

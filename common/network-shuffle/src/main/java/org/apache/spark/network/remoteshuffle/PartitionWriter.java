@@ -19,9 +19,9 @@ public class PartitionWriter implements AutoCloseable {
 
   private FileOutputStream fileStream;
 
-  public PartitionWriter(String rootDir) {
-    (new File(rootDir)).mkdirs();
-    this.filePath = Paths.get(rootDir, FILE_NAME).toString();
+  public PartitionWriter(String partitionRootDir) {
+    (new File(partitionRootDir)).mkdirs();
+    this.filePath = Paths.get(partitionRootDir, FILE_NAME).toString();
   }
 
   public synchronized void writeTaskData(ByteBuffer data) {

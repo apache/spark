@@ -19,12 +19,7 @@ public class ShuffleEngine {
   }
 
   public long createWriteSession(ShuffleStageFqid shuffleStageFqid) {
-    String stageRootDir = Paths.get(rootDir,
-        shuffleStageFqid.getAppId(),
-        shuffleStageFqid.getExecId(),
-        String.valueOf(shuffleStageFqid.getShuffleId()),
-        String.valueOf(shuffleStageFqid.getStageAttempt())).toString();
-    ShuffleStage stage = new ShuffleStage(shuffleStageFqid, stageRootDir);
+    ShuffleStage stage = new ShuffleStage(shuffleStageFqid, rootDir);
     ShuffleStage oldValue = shuffleStages.putIfAbsent(shuffleStageFqid, stage);
     if (oldValue != null) {
       stage = oldValue;

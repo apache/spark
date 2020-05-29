@@ -26,6 +26,7 @@ import org.apache.spark.network.util.TransportConf;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,10 +37,10 @@ import java.util.Map;
  */
 public class ShuffleServer {
 
-  private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
-  private static final int DEFAULT_SPARK_SHUFFLE_SERVICE_PORT = 7337;
+  public static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
+  public static final int DEFAULT_SPARK_SHUFFLE_SERVICE_PORT = 7337;
 
-  private static final String SPARK_SHUFFLE_SERVICE_ROOT_DIR_KEY = "spark.shuffle.service.rootDir";
+  public static final String SPARK_SHUFFLE_SERVICE_ROOT_DIR_KEY = "spark.shuffle.service.rootDir";
 
   private final Map<String, String> config;
 
@@ -64,8 +65,6 @@ public class ShuffleServer {
         throw new RuntimeException("Failed to create temp directory for root dir", e);
       }
     }
-    // TODO - To Investigate: shuffleHandler here is single instance, and may be shared by multiple server side threads?
-    // Will operations on shuffleHandler be out of order?
     shuffleHandler = new ShuffleServerHandler(rootDir);
     TransportContext transportContext = new TransportContext(transportConf, shuffleHandler);
     List<TransportServerBootstrap> bootstraps = Collections.emptyList();
@@ -84,5 +83,21 @@ public class ShuffleServer {
   }
 
   public static void main(String[] args) {
+    String rootDir = null;
+
+    for (int i = 0; i < args.length; ) {
+      String argName = args[i++];
+      if (argName.equalsIgnoreCase("-rootDir")) {
+        rootDir = args[i++];
+      }
+    }
+
+    Map<String, String> config = new HashMap<>();
+    if (rootDir != null) {
+      config.put(SPARK_SHUFFLE_SERVICE_ROOT_DIR_KEY, rootDir);
+    }
+
+    ShuffleServer server = new ShuffleServer(config);
+    server.start();
   }
 }

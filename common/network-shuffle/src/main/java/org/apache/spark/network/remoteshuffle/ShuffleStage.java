@@ -1,6 +1,7 @@
 package org.apache.spark.network.remoteshuffle;
 
 import java.nio.ByteBuffer;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -8,13 +9,17 @@ import java.util.Set;
 
 public class ShuffleStage {
   private final ShuffleStageFqid shuffleStageFqid;
-  private final String rootDir;
+  private final String stageRootDir;
   private final Map<Integer, PartitionWriter> partitionWriters = new HashMap<>();
   private final Set<Long> committedTaskAttempts = new HashSet<>();
 
   public ShuffleStage(ShuffleStageFqid shuffleStageFqid, String rootDir) {
     this.shuffleStageFqid = shuffleStageFqid;
-    this.rootDir = rootDir;
+    this.stageRootDir = Paths.get(rootDir,
+        shuffleStageFqid.getAppId(),
+        shuffleStageFqid.getExecId(),
+        String.valueOf(shuffleStageFqid.getShuffleId()),
+        String.valueOf(shuffleStageFqid.getStageAttempt())).toString();
   }
 
   public synchronized void writeTaskData(int partition, long taskAttemptId, ByteBuffer data) {
@@ -40,7 +45,7 @@ public class ShuffleStage {
   }
 
   private PartitionWriter getPartitionWriter(int partition) {
-    PartitionWriter partitionWriter = new PartitionWriter(rootDir);
+    PartitionWriter partitionWriter = new PartitionWriter(stageRootDir);
     PartitionWriter oldValue = partitionWriters.putIfAbsent(partition, partitionWriter);
     if (oldValue != null) {
       partitionWriter = oldValue;
