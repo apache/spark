@@ -29,20 +29,28 @@ Hints give users a way to suggest how Spark SQL to use specific approaches to ge
 /*+ hint [ , ... ] */
 ```
 
-### Coalesce/Repartition/Repartition_By_Range Hints
+### Partitioning Hints
 
-Coalesce/Repartition/Repartition_By_Range hints have functionalities equivalent to those of the
-`Dataset` coalesce/repartition/repartitionByRange APIs. The Coalesce hint can be used to reduce
-the number of partitions to the specified number of partitions. The Repartition/Repartition_By_Range
+`COALESCE`/`REPARTITION`/`REPARTITION_BY_RANGE` hints have functionalities equivalent to those of the
+`Dataset` `coalesce`/`repartition`/`repartitionByRange` APIs. The `COALESCE` hint can be used to reduce
+the number of partitions to the specified number of partitions. The `REPARTITION`/`REPARTITION_BY_RANGE`
 hint can be used to repartition to the specified number of partitions using the specified partitioning expressions.
-The Coalesce hint takes a partition number as a
-parameter. The Repartition hint takes a partition number, column names, or both as parameters.
-The Repartition_By_Range hint takes column names and an optional partition number as parameters.
+The `COALESCE` hint takes a partition number as a
+parameter. The `REPARTITION` hint takes a partition number, column names, or both as parameters.
+The `REPARTITION_BY_RANGE` hint takes column names and an optional partition number as parameters.
 These hints give users a way to tune performance and control the number of output files in Spark SQL.
 
 ### Examples
 ```sql
 SELECT /*+ COALESCE(3) */ * FROM t;
+
+EXPLAIN SELECT /*+ COALESCE(3) */ * FROM t;
+== Physical Plan ==
+Coalesce 3
++- *(1) ColumnarToRow
+   +- FileScan parquet default.t[name#5,c#6] Batched: true, DataFilters: [], Format: Parquet,
+      Location: CatalogFileIndex[file:/spark/spark-warehouse/t], PartitionFilters: [],
+      PushedFilters: [], ReadSchema: struct<name:string>
 
 SELECT /*+ REPARTITION(3) */ * FROM t;
 
@@ -50,9 +58,25 @@ SELECT /*+ REPARTITION(c) */ * FROM t;
 
 SELECT /*+ REPARTITION(3, c) */ * FROM t;
 
+EXPLAIN SELECT /*+ REPARTITION(3, c) */ * FROM t;
+== Physical Plan ==
+Exchange hashpartitioning(c#6, 3), false, [id=#148]
++- *(1) ColumnarToRow
+   +- FileScan parquet default.t[name#5,c#6] Batched: true, DataFilters: [], Format: Parquet,
+      Location: CatalogFileIndex[file:/spark/spark-warehouse/t], PartitionFilters: [],
+      PushedFilters: [], ReadSchema: struct<name:string>
+
 SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t;
 
 SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
+
+EXPLAIN SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
+== Physical Plan ==
+Exchange rangepartitioning(c#6 ASC NULLS FIRST, 3), false, [id=#167]
++- *(1) ColumnarToRow
+   +- FileScan parquet default.t[name#5,c#6] Batched: true, DataFilters: [], Format: Parquet,
+      Location: CatalogFileIndex[file:/spark/spark-warehouse/t], PartitionFilters: [],
+      PushedFilters: [], ReadSchema: struct<name:string>
 ```
 
 
