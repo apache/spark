@@ -160,3 +160,7 @@ select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampF
 select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+
+-- fix silent data change in date time formatters
+select from_unixtime(1, 'yyyyyyyyyyy-MM-dd');
+select date_format(date 'today', 'yyyyyyyyyyy-MM-dd');

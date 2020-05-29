@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.text.SimpleDateFormat
 import java.time.{LocalDate, ZoneId}
-import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale}
 
 import org.apache.commons.lang3.time.FastDateFormat
@@ -58,12 +57,15 @@ class Iso8601DateFormatter(
       try {
         val localDate = toLocalDate(formatter.parse(s))
         localDateToDays(localDate)
-      } catch checkDiffResult(s, legacyFormatter.parse)
+      } catch checkDiffParserResult(s, legacyFormatter.parse)
     }
   }
 
   override def format(localDate: LocalDate): String = {
-    localDate.format(formatter)
+    try {
+      localDate.format(formatter)
+    } catch checkDiffFormatResult(toJavaDate(localDateToDays(localDate)),
+      (d: Date) => format(d))
   }
 
   override def format(days: Int): String = {

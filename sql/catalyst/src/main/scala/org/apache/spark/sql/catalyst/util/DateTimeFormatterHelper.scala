@@ -21,7 +21,7 @@ import java.time._
 import java.time.chrono.IsoChronology
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
-import java.util.Locale
+import java.util.{Date, Locale}
 
 import com.google.common.cache.CacheBuilder
 
@@ -105,9 +105,9 @@ trait DateTimeFormatterHelper {
   // between legacy parser and new parser. If new parser fails but legacy parser works, throw a
   // SparkUpgradeException. On the contrary, if the legacy policy set to CORRECTED,
   // DateTimeParseException will address by the caller side.
-  protected def checkDiffResult[T](
+  protected def checkDiffParserResult[T](
       s: String, legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
-    case e: DateTimeException if SQLConf.get.legacyTimeParserPolicy == EXCEPTION =>
+    case e if needConvertToSparkUpgradeException(e) =>
       try {
         legacyParseFunc(s)
       } catch {
@@ -116,6 +116,31 @@ trait DateTimeFormatterHelper {
       throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
         s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
         s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
+  }
+
+  // When legacy time parser policy set to EXCEPTION, check whether we will get different results
+  // between legacy formatter and new formatter. If new formatter fails but legacy formatter works,
+  // throw a SparkUpgradeException. On the contrary, if the legacy policy set to CORRECTED,
+  // DateTimeParseException will address by the caller side.
+  protected def checkDiffFormatResult[T <: Date](
+      d: T,
+      legacyFormatFunc: T => String): PartialFunction[Throwable, String] = {
+    case e if needConvertToSparkUpgradeException(e) =>
+      val resultCandidate = try {
+      legacyFormatFunc(d)
+    } catch {
+      case _: Throwable => throw e
+    }
+    throw new SparkUpgradeException("3.0", s"Fail to format '$resultCandidate' in the new" +
+      s" formatter. You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore" +
+      s" the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid" +
+      s" datetime string.", e)
+  }
+
+  private def needConvertToSparkUpgradeException(e: Throwable): Boolean = e match {
+    case _: DateTimeException | _: ArrayIndexOutOfBoundsException
+      if SQLConf.get.legacyTimeParserPolicy == EXCEPTION => true
+    case _ => false
   }
 
   /**
@@ -129,7 +154,6 @@ trait DateTimeFormatterHelper {
    * @param tryLegacyFormatter a func to capture exception, identically which forces a legacy
    *                           datetime formatter to be initialized
    */
-
   protected def checkLegacyFormatter(
       pattern: String,
       tryLegacyFormatter: => Unit): PartialFunction[Throwable, DateTimeFormatter] = {
