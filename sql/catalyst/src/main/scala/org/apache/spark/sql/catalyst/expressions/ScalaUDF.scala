@@ -58,6 +58,13 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
+  override lazy val canonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    // if the canonicalized children and inputEncoders are equal,
+    // then we must have equal inputDeserializers as well.
+    this.copy(inputDeserializers = Nil).withNewChildren(canonicalizedChildren)
+  }
+
   override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
 
   /**
@@ -127,6 +134,7 @@ case class ScalaUDF(
               fromRow(row)
           }
 
+          // e.g. for UDF types
         case _ => createToScalaConverter(dataType)
       }
     }

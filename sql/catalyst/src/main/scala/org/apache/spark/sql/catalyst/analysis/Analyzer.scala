@@ -2858,9 +2858,10 @@ class Analyzer(
           if encoders.nonEmpty && desers.isEmpty =>
           val deserializers = encoders.zipWithIndex.map { case (encOpt, i) =>
             val dataType = inputs(i).dataType
-            if (CatalystTypeConverters.isPrimitive(dataType)) {
-              // primitive data types do not rely on `ExpressionEncoder` to
-              // convert data, see `ScalaUDF.scalaConverter`.
+            if (CatalystTypeConverters.isPrimitive(dataType) ||
+              dataType.isInstanceOf[UserDefinedType[_]]) {
+              // primitive/UDT data types use `CatalystTypeConverters` to
+              // convert internal data to external data.
               None
             } else {
               encOpt.map { enc =>
