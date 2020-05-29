@@ -1532,8 +1532,8 @@ class HiveDDLSuite
       "the unsupportedFeatures in the create table must be empty")
 
     val metastoreGeneratedProperties = DDLUtils.METASTORE_GENERATED_PROPERTIES
-    assert(targetTable.properties.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
-      "the table properties of source tables should not be copied in the created table")
+    assert(targetTable.properties.filterKeys(metastoreGeneratedProperties.contains).isEmpty,
+      "the table metastore properties of source tables should not be copied in the created table")
 
     provider match {
       case Some(_) =>
