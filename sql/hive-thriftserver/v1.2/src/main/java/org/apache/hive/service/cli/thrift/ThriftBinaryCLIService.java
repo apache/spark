@@ -76,6 +76,10 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
             keyStorePassword, sslVersionBlacklist);
       }
 
+      // In case HIVE_SERVER2_THRIFT_PORT or hive.server2.thrift.port is configured with 0 which
+      // represents any free port, we should set it to the actual one
+      portNum = serverSocket.getServerSocket().getLocalPort();
+
       // Server args
       int maxMessageSize = hiveConf.getIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_MAX_MESSAGE_SIZE);
       int requestTimeout = (int) hiveConf.getTimeVar(
