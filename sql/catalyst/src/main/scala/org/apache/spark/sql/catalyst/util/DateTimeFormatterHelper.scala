@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 trait DateTimeFormatterHelper {
-  private def getOrDefault(accessor: TemporalAccessor, field: TemporalField, default: Int): Int = {
+  private def getOrDefault(accessor: TemporalAccessor, field: ChronoField, default: Int): Int = {
     if (accessor.isSupported(field)) {
       accessor.get(field)
     } else {
