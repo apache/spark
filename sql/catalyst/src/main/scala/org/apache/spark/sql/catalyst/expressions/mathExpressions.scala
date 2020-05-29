@@ -491,7 +491,9 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
       > SELECT _FUNC_(1);
        0.0
   """)
-case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG")
+case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG") {
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("ln")
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 2.",
@@ -546,6 +548,7 @@ case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p,
 // scalastyle:on line.size.limit
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("rint")
 }
 
 @ExpressionDescription(

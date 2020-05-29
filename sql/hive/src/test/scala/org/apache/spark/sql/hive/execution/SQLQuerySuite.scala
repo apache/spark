@@ -1171,16 +1171,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-6785: HiveQuerySuite - Date comparison test 2") {
-    checkAnswer(
-      sql("SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1"),
-      Row(false))
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      checkAnswer(
+        sql("SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1"),
+        Row(false))
+    }
   }
 
   test("SPARK-6785: HiveQuerySuite - Date cast") {
-    // new Date(0) == 1970-01-01 00:00:00.0 GMT == 1969-12-31 16:00:00.0 PST
-    checkAnswer(
-      sql(
-        """
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      // new Date(0) == 1970-01-01 00:00:00.0 GMT == 1969-12-31 16:00:00.0 PST
+      checkAnswer(
+        sql(
+          """
           | SELECT
           | CAST(CAST(0 AS timestamp) AS date),
           | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
@@ -1188,16 +1191,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           | CAST(CAST(0 AS timestamp) AS string),
           | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
           | FROM src LIMIT 1
-        """.stripMargin),
-      Row(
-        Date.valueOf("1969-12-31"),
+        """.
+            stripMargin),
+      Row
+      (
+        Date.valueOf(
+          "1969-12-31"),
         String.valueOf("1969-12-31"),
         Timestamp.valueOf("1969-12-31 16:00:00"),
         String.valueOf("1969-12-31 16:00:00"),
-        Timestamp.valueOf("1970-01-01 00:00:00")))
-
-  }
-
+        Timestamp.valueOf("1970-01-01 00:00:00"
+        )))
+    }
+   }
   test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
     val df =
       createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))

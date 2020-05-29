@@ -99,7 +99,7 @@ one
 -- !query
 select concat(1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
 -- !query schema
-struct<concat(CAST(1 AS STRING), CAST(2 AS STRING), CAST(3 AS STRING), hello, CAST(true AS STRING), CAST(false AS STRING), CAST(to_date(20100309, yyyyMMdd) AS STRING)):string>
+struct<[]>
 -- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'CAST(unix_timestamp('20100309', 'yyyyMMdd') AS TIMESTAMP)' due to data type mismatch: cannot cast bigint to timestamp,you can enable the casting by setting spark.sql.legacy.allowCastNumericToTimestamp to true,but we strongly recommand using function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.; line 1 pos 41
@@ -116,10 +116,9 @@ one
 -- !query
 select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
 -- !query schema
-struct<concat_ws(#, CAST(1 AS STRING), CAST(2 AS STRING), CAST(3 AS STRING), hello, CAST(true AS STRING), CAST(false AS STRING), CAST(to_date(20100309, yyyyMMdd) AS STRING)):string>
+struct<[]>
 -- !query output
-1#x#x#hello#true#false#x-03-09
-
+cannot resolve 'CAST(unix_timestamp('20100309', 'yyyyMMdd') AS TIMESTAMP)' due to data type mismatch: cannot cast bigint to timestamp,you can enable the casting by setting spark.sql.legacy.allowCastNumericToTimestamp to true,but we strongly recommand using function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.; line 1 pos 48
 
 -- !query
 select concat_ws(',',10,20,null,30)

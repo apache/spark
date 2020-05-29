@@ -207,59 +207,61 @@ abstract class FileStreamSinkSuite extends StreamTest {
     // Since FileStreamSink currently only supports append mode, we will test FileStreamSink
     // with aggregations using event time windows and watermark, which allows
     // aggregation + append mode.
-    val inputData = MemoryStream[Long]
-    val inputDF = inputData.toDF.toDF("time")
-    val outputDf = inputDF
-      .selectExpr("CAST(time AS timestamp) AS timestamp")
-      .withWatermark("timestamp", "10 seconds")
-      .groupBy(window($"timestamp", "5 seconds"))
-      .count()
-      .select("window.start", "window.end", "count")
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      val inputData = MemoryStream[Long]
+      val inputDF = inputData.toDF.toDF("time")
+      val outputDf = inputDF
+        .selectExpr("CAST(time AS timestamp) AS timestamp")
+        .withWatermark("timestamp", "10 seconds")
+        .groupBy(window($"timestamp", "5 seconds"))
+        .count()
+        .select("window.start", "window.end", "count")
 
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+      val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+      val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
-    var query: StreamingQuery = null
+      var query: StreamingQuery = null
 
-    try {
-      query =
-        outputDf.writeStream
-          .option("checkpointLocation", checkpointDir)
-          .format("parquet")
-          .start(outputDir)
+      try {
+        query =
+          outputDf.writeStream
+            .option("checkpointLocation", checkpointDir)
+            .format("parquet")
+            .start(outputDir)
 
 
-      def addTimestamp(timestampInSecs: Int*): Unit = {
-        inputData.addData(timestampInSecs.map(_ * 1L): _*)
-        failAfter(streamingTimeout) {
-          query.processAllAvailable()
+        def addTimestamp(timestampInSecs: Int*): Unit = {
+          inputData.addData(timestampInSecs.map(_ * 1L): _*)
+          failAfter(streamingTimeout) {
+            query.processAllAvailable()
+          }
         }
-      }
 
-      def check(expectedResult: ((Long, Long), Long)*): Unit = {
-        val outputDf = spark.read.parquet(outputDir)
-          .selectExpr(
-            "CAST(start as BIGINT) AS start",
-            "CAST(end as BIGINT) AS end",
-            "count")
-          .orderBy("start") // sort the DataFrame in order to compare with the expected one.
-        checkDataset(
-          outputDf.as[(Long, Long, Long)],
-          expectedResult.map(x => (x._1._1, x._1._2, x._2)): _*)
-      }
+        def check(expectedResult: ((Long, Long), Long)*): Unit = {
+          val outputDf = spark.read.parquet(outputDir)
+            .selectExpr(
+              "CAST(start as BIGINT) AS start",
+              "CAST(end as BIGINT) AS end",
+              "count")
+            .orderBy("start") // sort the DataFrame in order to compare with the expected one.
+          checkDataset(
+            outputDf.as[(Long, Long, Long)],
+            expectedResult.map(x => (x._1._1, x._1._2, x._2)): _*)
+        }
 
-      addTimestamp(100) // watermark = None before this, watermark = 100 - 10 = 90 after this
-      check() // nothing emitted yet
+        addTimestamp(100) // watermark = None before this, watermark = 100 - 10 = 90 after this
+        check() // nothing emitted yet
 
-      addTimestamp(104, 123) // watermark = 90 before this, watermark = 123 - 10 = 113 after this
-      check((100L, 105L) -> 2L)  // no-data-batch emits results on 100-105,
+        addTimestamp(104, 123) // watermark = 90 before this, watermark = 123 - 10 = 113 after this
+        check((100L, 105L) -> 2L) // no-data-batch emits results on 100-105,
 
-      addTimestamp(140) // wm = 113 before this, emit results on 100-105, wm = 130 after this
-      check((100L, 105L) -> 2L, (120L, 125L) -> 1L)  // no-data-batch emits results on 120-125
+        addTimestamp(140) // wm = 113 before this, emit results on 100-105, wm = 130 after this
+        check((100L, 105L) -> 2L, (120L, 125L) -> 1L) // no-data-batch emits results on 120-125
 
-    } finally {
-      if (query != null) {
-        query.stop()
+      } finally {
+        if (query != null) {
+          query.stop()
+        }
       }
     }
   }

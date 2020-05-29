@@ -454,42 +454,44 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("store and retrieve column stats in different time zones") {
-    val (start, end) = (0, TimeUnit.DAYS.toSeconds(2))
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      val (start, end) = (0, TimeUnit.DAYS.toSeconds(2))
 
-    def checkTimestampStats(
-        t: DataType,
-        srcTimeZone: TimeZone,
-        dstTimeZone: TimeZone)(checker: ColumnStat => Unit): Unit = {
-      val table = "time_table"
-      val column = "T"
-      val original = TimeZone.getDefault
-      try {
-        withTable(table) {
-          TimeZone.setDefault(srcTimeZone)
-          spark.range(start, end)
-            .select('id.cast(TimestampType).cast(t).as(column))
-            .write.saveAsTable(table)
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
+      def checkTimestampStats(
+                               t: DataType,
+                               srcTimeZone: TimeZone,
+                               dstTimeZone: TimeZone)(checker: ColumnStat => Unit): Unit = {
+        val table = "time_table"
+        val column = "T"
+        val original = TimeZone.getDefault
+        try {
+          withTable(table) {
+            TimeZone.setDefault(srcTimeZone)
+            spark.range(start, end)
+              .select('id.cast(TimestampType).cast(t).as(column))
+              .write.saveAsTable(table)
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
 
-          TimeZone.setDefault(dstTimeZone)
-          val stats = getCatalogTable(table)
-            .stats.get.colStats(column).toPlanStat(column, t)
-          checker(stats)
+            TimeZone.setDefault(dstTimeZone)
+            val stats = getCatalogTable(table)
+              .stats.get.colStats(column).toPlanStat(column, t)
+            checker(stats)
+          }
+        } finally {
+          TimeZone.setDefault(original)
         }
-      } finally {
-        TimeZone.setDefault(original)
       }
-    }
 
-    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
-      val timeZone = TimeZone.getTimeZone(zid)
-      checkTimestampStats(DateType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
-        assert(stats.min.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(start))
-        assert(stats.max.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(end - 1))
-      }
-      checkTimestampStats(TimestampType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
-        assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
-        assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
+      DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+        val timeZone = TimeZone.getTimeZone(zid)
+        checkTimestampStats(DateType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
+          assert(stats.min.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(start))
+          assert(stats.max.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(end - 1))
+        }
+        checkTimestampStats(TimestampType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
+          assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
+          assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
+        }
       }
     }
   }

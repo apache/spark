@@ -186,85 +186,133 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 
   testWithAllStateVersions("state metrics - append mode") {
-    val inputData = MemoryStream[Int]
-    val aggWithWatermark = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
-      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      val inputData = MemoryStream[Int]
+      val aggWithWatermark = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    implicit class RichStreamExecution(query: StreamExecution) {
-      // this could be either empty row batch or actual batch
-      def stateNodes: Seq[SparkPlan] = {
-        query.lastExecution.executedPlan.collect {
-          case p if p.isInstanceOf[StateStoreSaveExec] => p
+      implicit class RichStreamExecution(query: StreamExecution) {
+        // this could be either empty row batch or actual batch
+        def stateNodes: Seq[SparkPlan] = {
+          query.lastExecution.executedPlan.collect {
+            case p if p.isInstanceOf[StateStoreSaveExec] => p
+          }
+        }
+
+        // Pick the latest progress that actually ran a batch
+        def lastExecutedBatch: StreamingQueryProgress = {
+          query.recentProgress.filter(_.durationMs.containsKey("addBatch")).last
+        }
+
+        def stateOperatorProgresses: Seq[StateOperatorProgress] = {
+          lastExecutedBatch.stateOperators
         }
       }
 
-      // Pick the latest progress that actually ran a batch
-      def lastExecutedBatch: StreamingQueryProgress = {
-        query.recentProgress.filter(_.durationMs.containsKey("addBatch")).last
-      }
+      val clock = new StreamManualClock()
 
-      def stateOperatorProgresses: Seq[StateOperatorProgress] = {
-        lastExecutedBatch.stateOperators
-      }
+      testStream(aggWithWatermark)(
+        // batchId 0
+        AddData(inputData, 15),
+        StartStream(Trigger.ProcessingTime("interval 1 second"), clock),
+        CheckAnswer(), // watermark = 0
+        AssertOnQuery {
+          _.stateNodes.size === 1
+        },
+        AssertOnQuery {
+          _.stateNodes.head.metrics("numOutputRows").value === 0
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsUpdated === 1
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsTotal === 1
+        },
+        AssertOnQuery {
+          _.lastExecutedBatch.sink.numOutputRows == 0
+        },
+
+        // batchId 1 without data
+        AdvanceManualClock(1000L), // watermark = 5
+        Execute { q => // wait for the no data batch to complete
+          eventually(timeout(streamingTimeout)) {
+            assert(q.lastProgress.batchId === 1)
+          }
+        },
+        CheckAnswer(),
+        AssertOnQuery {
+          _.stateNodes.head.metrics("numOutputRows").value === 0
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsUpdated === 0
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsTotal === 1
+        },
+        AssertOnQuery {
+          _.lastExecutedBatch.sink.numOutputRows == 0
+        },
+
+        // batchId 2 with data
+        AddData(inputData, 10, 12, 14),
+        AdvanceManualClock(1000L), // watermark = 5
+        CheckAnswer(),
+        AssertOnQuery {
+          _.stateNodes.head.metrics("numOutputRows").value === 0
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsUpdated === 1
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsTotal === 2
+        },
+        AssertOnQuery {
+          _.lastExecutedBatch.sink.numOutputRows == 0
+        },
+
+        // batchId 3 with data
+        AddData(inputData, 25),
+        AdvanceManualClock(1000L), // watermark = 5
+        CheckAnswer(),
+        AssertOnQuery {
+          _.stateNodes.head.metrics("numOutputRows").value === 0
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsUpdated === 1
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsTotal === 3
+        },
+        AssertOnQuery {
+          _.lastExecutedBatch.sink.numOutputRows == 0
+        },
+
+        // batchId 4 without data
+        AdvanceManualClock(1000L), // watermark = 15
+        Execute { q => // wait for the no data batch to complete
+          eventually(timeout(streamingTimeout)) {
+            assert(q.lastProgress.batchId === 4)
+          }
+        },
+        CheckAnswer((10, 3)),
+        AssertOnQuery {
+          _.stateNodes.head.metrics("numOutputRows").value === 1
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsUpdated === 0
+        },
+        AssertOnQuery {
+          _.stateOperatorProgresses.head.numRowsTotal === 2
+        },
+        AssertOnQuery {
+          _.lastExecutedBatch.sink.numOutputRows == 1
+        }
+      )
     }
-
-    val clock = new StreamManualClock()
-
-    testStream(aggWithWatermark)(
-      // batchId 0
-      AddData(inputData, 15),
-      StartStream(Trigger.ProcessingTime("interval 1 second"), clock),
-      CheckAnswer(), // watermark = 0
-      AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
-      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
-
-      // batchId 1 without data
-      AdvanceManualClock(1000L), // watermark = 5
-      Execute { q =>             // wait for the no data batch to complete
-        eventually(timeout(streamingTimeout)) { assert(q.lastProgress.batchId === 1) }
-      },
-      CheckAnswer(),
-      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 0 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
-      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
-
-      // batchId 2 with data
-      AddData(inputData, 10, 12, 14),
-      AdvanceManualClock(1000L), // watermark = 5
-      CheckAnswer(),
-      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
-      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
-
-      // batchId 3 with data
-      AddData(inputData, 25),
-      AdvanceManualClock(1000L), // watermark = 5
-      CheckAnswer(),
-      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 3 },
-      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
-
-      // batchId 4 without data
-      AdvanceManualClock(1000L), // watermark = 15
-      Execute { q =>             // wait for the no data batch to complete
-        eventually(timeout(streamingTimeout)) { assert(q.lastProgress.batchId === 4) }
-      },
-      CheckAnswer((10, 3)),
-      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 1 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 0 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
-      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 1 }
-    )
   }
 
   testWithAllStateVersions("state metrics - update/complete mode") {

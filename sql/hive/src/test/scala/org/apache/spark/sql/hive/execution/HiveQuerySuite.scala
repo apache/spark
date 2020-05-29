@@ -50,7 +50,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
-
+  private val originalLegacyAllowCastNumericToTimestamp =
+    TestHive.conf.legacyAllowCastNumericToTimestamp
   def spark: SparkSession = sparkSession
 
   override def beforeAll(): Unit = {
@@ -58,6 +59,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     TestHive.setCacheTables(true)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
+    TestHive.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
   }
 
   override def afterAll(): Unit = {
@@ -65,6 +67,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       TestHive.setCacheTables(false)
       sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
+      TestHive.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+        originalLegacyAllowCastNumericToTimestamp)
     } finally {
       super.afterAll()
     }

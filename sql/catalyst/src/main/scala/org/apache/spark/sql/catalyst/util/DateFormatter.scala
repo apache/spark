@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.text.SimpleDateFormat
 import java.time.{LocalDate, ZoneId}
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale}
 
 import org.apache.commons.lang3.time.FastDateFormat
@@ -33,6 +34,8 @@ sealed trait DateFormatter extends Serializable {
   def format(days: Int): String
   def format(date: Date): String
   def format(localDate: LocalDate): String
+
+  def validatePatternString(): Unit
 }
 
 class Iso8601DateFormatter(
@@ -53,7 +56,7 @@ class Iso8601DateFormatter(
     val specialDate = convertSpecialDate(s.trim, zoneId)
     specialDate.getOrElse {
       try {
-        val localDate = LocalDate.parse(s, formatter)
+        val localDate = toLocalDate(formatter.parse(s))
         localDateToDays(localDate)
       } catch checkDiffResult(s, legacyFormatter.parse)
     }
@@ -69,6 +72,12 @@ class Iso8601DateFormatter(
 
   override def format(date: Date): String = {
     legacyFormatter.format(date)
+  }
+
+  override def validatePatternString(): Unit = {
+    try {
+      formatter
+    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
   }
 }
 
@@ -93,6 +102,7 @@ class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDat
   private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
   override def parseToDate(s: String): Date = fdf.parse(s)
   override def format(d: Date): String = fdf.format(d)
+  override def validatePatternString(): Unit = fdf
 }
 
 class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
@@ -100,6 +110,8 @@ class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyD
   private lazy val sdf = new SimpleDateFormat(pattern, locale)
   override def parseToDate(s: String): Date = sdf.parse(s)
   override def format(d: Date): String = sdf.format(d)
+  override def validatePatternString(): Unit = sdf
+
 }
 
 object DateFormatter {
@@ -118,7 +130,9 @@ object DateFormatter {
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      new Iso8601DateFormatter(pattern, zoneId, locale, legacyFormat)
+      val df = new Iso8601DateFormatter(pattern, zoneId, locale, legacyFormat)
+      df.validatePatternString()
+      df
     }
   }
 

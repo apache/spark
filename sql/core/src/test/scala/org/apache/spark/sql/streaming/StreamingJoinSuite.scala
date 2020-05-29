@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -46,9 +47,12 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
   before {
     SparkSession.setActiveSession(spark)  // set this before force initializing 'joinExec'
     spark.streams.stateStoreCoordinator   // initialize the lazy coordinator
+    spark.conf.set(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key, true)
   }
 
   after {
+    spark.conf.set(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key,
+      SQLConf.get.legacyAllowCastNumericToTimestamp)
     StateStore.stop()
   }
 
@@ -489,9 +493,12 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
   before {
     SparkSession.setActiveSession(spark) // set this before force initializing 'joinExec'
     spark.streams.stateStoreCoordinator // initialize the lazy coordinator
+    spark.conf.set(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key, true)
   }
 
   after {
+    spark.conf.set(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key,
+      SQLConf.get.legacyAllowCastNumericToTimestamp)
     StateStore.stop()
   }
 
