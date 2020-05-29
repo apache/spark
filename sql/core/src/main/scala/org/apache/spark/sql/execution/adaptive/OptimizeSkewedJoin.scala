@@ -163,7 +163,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         if supportedJoinTypes.contains(joinType) =>
       assert(left.partitionsWithSizes.length == right.partitionsWithSizes.length)
       val numPartitions = left.partitionsWithSizes.length
-      // We use the median size of the original shuffle partitions to detect skewed partitions.
+      // Use the median size of the actual (coalesced) partition sizes to detect skewed partitions.
       val leftMedSize = medianSize(left.partitionsWithSizes.map(_._2))
       val rightMedSize = medianSize(right.partitionsWithSizes.map(_._2))
       logDebug(
