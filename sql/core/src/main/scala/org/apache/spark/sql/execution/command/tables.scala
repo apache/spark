@@ -116,7 +116,8 @@ case class CreateTableLikeCommand(
       CatalogTableType.EXTERNAL
     }
 
-    val newProperties = sourceTableDesc.properties ++ properties
+    val newProperties =
+      sourceTableDesc.properties -- DDLUtils.METASTORE_GENERATED_PROPERTIES ++ properties
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,

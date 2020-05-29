@@ -1531,18 +1531,7 @@ class HiveDDLSuite
     assert(targetTable.unsupportedFeatures.isEmpty,
       "the unsupportedFeatures in the create table must be empty")
 
-    val metastoreGeneratedProperties = Seq(
-      "CreateTime",
-      "transient_lastDdlTime",
-      "grantTime",
-      "lastUpdateTime",
-      "last_modified_by",
-      "last_modified_time",
-      "Owner:",
-      "totalNumberFiles",
-      "maxFileSize",
-      "minFileSize"
-    )
+    val metastoreGeneratedProperties = DDLUtils.METASTORE_GENERATED_PROPERTIES
     assert(targetTable.properties.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
       "the table properties of source tables should not be copied in the created table")
 
