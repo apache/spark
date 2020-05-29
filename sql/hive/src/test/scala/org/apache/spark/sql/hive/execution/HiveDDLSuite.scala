@@ -1531,10 +1531,6 @@ class HiveDDLSuite
     assert(targetTable.unsupportedFeatures.isEmpty,
       "the unsupportedFeatures in the create table must be empty")
 
-    val metastoreGeneratedProperties = DDLUtils.METASTORE_GENERATED_PROPERTIES
-    assert(targetTable.properties.filterKeys(metastoreGeneratedProperties.contains).isEmpty,
-      "the table metastore properties of source tables should not be copied in the created table")
-
     provider match {
       case Some(_) =>
         assert(targetTable.provider == provider)
@@ -2711,24 +2707,23 @@ class HiveDDLSuite
 
   test("SPARK-31828: Retain table properties at CreateTableLikeCommand") {
     val catalog = spark.sessionState.catalog
-    val metaKey = DDLUtils.METASTORE_GENERATED_PROPERTIES.head
     withTable("t1", "t2", "t3") {
-      sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES('k1'='v1', 'k2'='v2', '$metaKey'='meta')")
+      sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES('k1'='v1', 'k2'='v2', 'totalNumberFiles'='meta')")
       val t1 = catalog.getTableMetadata(TableIdentifier("t1"))
       assert(t1.properties("k1") == "v1")
       assert(t1.properties("k2") == "v2")
-      assert(t1.properties(s"$metaKey") == "meta")
+      assert(t1.properties(s"totalNumberFiles") == "meta")
       sql("CREATE TABLE t2 LIKE t1 TBLPROPERTIES('k2'='v3', 'k4'='v4')")
       val t2 = catalog.getTableMetadata(TableIdentifier("t2"))
       assert(t2.properties("k1") == "v1")
       assert(t2.properties("k2") == "v3")
       assert(t2.properties("k4") == "v4")
-      assert(t2.properties.get(s"$metaKey").isEmpty)
+      assert(t2.properties.get(s"totalNumberFiles").isEmpty)
       sql("CREATE TABLE t3 LIKE t1")
       val t3 = catalog.getTableMetadata(TableIdentifier("t3"))
       assert(t3.properties("k1") == "v1")
       assert(t3.properties("k2") == "v2")
-      assert(t3.properties.get(s"$metaKey").isEmpty)
+      assert(t3.properties.get(s"totalNumberFiles").isEmpty)
     }
   }
 }
