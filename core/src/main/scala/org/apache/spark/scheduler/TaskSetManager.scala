@@ -1114,10 +1114,10 @@ private[spark] class TaskSetManager(
     localityWaits = myLocalityLevels.map(getLocalityWait)
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
     if (currentLocalityIndex > previousLocalityIndex) {
-      // SPARK-31837: there's more local locality level, so shift to the new most local locality
-      // level in terms of better data locality. For example, say the previous locality levels
-      // are [PROCESS, NODE, ANY] and current level is ANY. After recompute, the locality levels
-      // are [PROCESS, NODE, RACK, ANY]. Then, we'll shift to RACK level.
+      // SPARK-31837: If the new level is more local, shift to the new most local locality
+      // level in terms of better data locality. For example, say the previous locality
+      // levels are [PROCESS, NODE, ANY] and current level is ANY. After recompute, the
+      // locality levels are [PROCESS, NODE, RACK, ANY]. Then, we'll shift to RACK level.
       currentLocalityIndex = getLocalityIndex(myLocalityLevels.diff(previousMyLocalityLevels).head)
     }
   }
