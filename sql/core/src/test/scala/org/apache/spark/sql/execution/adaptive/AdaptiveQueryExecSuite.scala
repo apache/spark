@@ -706,7 +706,7 @@ class AdaptiveQueryExecSuite
         val error = intercept[Exception] {
           agged.count()
         }
-        assert(error.getCause().toString contains "Early failed query stage found")
+        assert(error.getCause().toString contains "Invalid bucket file")
         assert(error.getSuppressed.size === 0)
       }
     }
