@@ -967,8 +967,8 @@ struct<from_unixtime(CAST(1 AS BIGINT), yyyyyyyyyyy-MM-dd):string>
 
 
 -- !query
-select date_format(date 'today', 'yyyyyyyyyyy-MM-dd')
+select date_format(date '2018-11-17', 'yyyyyyyyyyy-MM-dd')
 -- !query schema
-struct<date_format(CAST(DATE '2020-05-29' AS TIMESTAMP), yyyyyyyyyyy-MM-dd):string>
+struct<date_format(CAST(DATE '2018-11-17' AS TIMESTAMP), yyyyyyyyyyy-MM-dd):string>
 -- !query output
-00000002020-05-29
+00000002018-11-17

@@ -131,7 +131,7 @@ trait DateTimeFormatterHelper {
     } catch {
       case _: Throwable => throw e
     }
-    throw new SparkUpgradeException("3.0", s"Fail to format '$resultCandidate' in the new" +
+    throw new SparkUpgradeException("3.0", s"Fail to format it to '$resultCandidate' in the new" +
       s" formatter. You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore" +
       s" the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid" +
       s" datetime string.", e)

@@ -979,13 +979,13 @@ select from_unixtime(1, 'yyyyyyyyyyy-MM-dd')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to format '00000001969-12-31' in the new formatter. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
+You may get a different result due to the upgrading of Spark 3.0: Fail to format it to '00000001969-12-31' in the new formatter. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
-select date_format(date 'today', 'yyyyyyyyyyy-MM-dd')
+select date_format(date '2018-11-17', 'yyyyyyyyyyy-MM-dd')
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to format '00000002020-05-29' in the new formatter. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
+You may get a different result due to the upgrading of Spark 3.0: Fail to format it to '00000002018-11-17' in the new formatter. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.

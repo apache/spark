@@ -163,4 +163,4 @@ select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy
 
 -- fix silent data change in date time formatters
 select from_unixtime(1, 'yyyyyyyyyyy-MM-dd');
-select date_format(date 'today', 'yyyyyyyyyyy-MM-dd');
+select date_format(date '2018-11-17', 'yyyyyyyyyyy-MM-dd');

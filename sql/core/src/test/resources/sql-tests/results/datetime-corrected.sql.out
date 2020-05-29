@@ -982,7 +982,7 @@ NULL
 
 
 -- !query
-select date_format(date 'today', 'yyyyyyyyyyy-MM-dd')
+select date_format(date '2018-11-17', 'yyyyyyyyyyy-MM-dd')
 -- !query schema
 struct<>
 -- !query output
