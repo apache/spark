@@ -175,15 +175,12 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the number of microseconds since epoch from Julian day
-   * and nanoseconds in a day
+   * Returns the number of microseconds since epoch from Julian day and nanoseconds in a day.
    */
-  def fromJulianDay(days: Int, nanoseconds: Long): Long = {
+  def fromJulianDay(days: Int, nanos: Long): Long = {
     // use Long to avoid rounding errors
-    val seconds = (days - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY
-    val micros = SECONDS.toMicros(seconds) + NANOSECONDS.toMicros(nanoseconds)
-    val rebased = rebaseJulianToGregorianMicros(micros)
-    rebased
+    val micros = (days - JULIAN_DAY_OF_EPOCH).toLong * MICROS_PER_DAY + nanos / NANOS_PER_MICROS
+    rebaseJulianToGregorianMicros(micros)
   }
 
   /**
