@@ -200,7 +200,7 @@ jobs:
         architecture: x64
     - name: Install Python linter dependencies
       run: |
-        pip3 install flake8 sphinx numpy
+        pip3 install flake8 sphinx numpy pydata_sphinx_theme
     - name: Install R 3.6
       uses: r-lib/actions/setup-r@v1
       with:
@@ -218,7 +218,7 @@ jobs:
     - name: Install dependencies for documentation generation
       run: |
         sudo apt-get install -y libcurl4-openssl-dev pandoc
-        pip install sphinx mkdocs numpy
+        pip install sphinx mkdocs numpy pydata_sphinx_theme
         gem install jekyll jekyll-redirect-from rouge
         sudo Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"
     - name: Scala linter

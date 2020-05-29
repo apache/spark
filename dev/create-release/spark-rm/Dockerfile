@@ -33,7 +33,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
-ARG PIP_PKGS="sphinx==2.3.1 mkdocs==1.0.4 numpy==1.18.1"
+ARG PIP_PKGS="sphinx==2.3.1 mkdocs==1.0.4 numpy==1.18.1 pydata_sphinx_theme==0.3.1"
 ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 
 # Install extra needed repos and refresh.

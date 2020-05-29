@@ -173,10 +173,17 @@ function sphinx_test {
         return
     fi
 
-    # TODO(SPARK-32279): Install Sphinx in Python 3 of Jenkins machines
     PYTHON_HAS_SPHINX=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("sphinx") is not None)')
     if [[ "$PYTHON_HAS_SPHINX" == "False" ]]; then
         echo "$PYTHON_EXECUTABLE does not have Sphinx installed. Skipping Sphinx build for now."
+        echo
+        return
+    fi
+
+    # TODO(SPARK-32391): Install pydata_sphinx_theme in Jenkins machines
+    PYTHON_HAS_THEME=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("pydata_sphinx_theme") is not None)')
+    if [[ "$PYTHON_HAS_THEME" == "False" ]]; then
+        echo "$PYTHON_EXECUTABLE does not have pydata_sphinx_theme installed. Skipping Sphinx build for now."
         echo
         return
     fi
