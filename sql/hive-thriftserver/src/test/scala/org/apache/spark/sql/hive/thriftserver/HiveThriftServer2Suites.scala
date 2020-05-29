@@ -830,15 +830,13 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         st.execute("set spark.sql.session.timeZone=+03:15") // different than Thriftserver's JVM tz
       val rs = st.executeQuery("select timestamp '2020-05-28 10:00:00'")
         rs.next()
-        val ts = rs.getTimestamp(1)
-        val tsString = rs.getString(1)
         // The timestamp as string is the same as the literal
         assert(rs.getString(1) == "2020-05-28 10:00:00.0")
         // Parsing it to java.sql.Timestamp in the client will always result in a timestamp
         // in client default JVM timezone. The string value of the Timestamp will match the literal,
         // but if the JDBC application cares about the internal timezone and UTC offset of the
         // Timestamp object, it should set spark.sql.session.timeZone to match its client JVM tz.
-        assert(ts.toString() == "2020-05-28 10:00:00.0")
+        assert(rs.getTimestamp(1).toString() == "2020-05-28 10:00:00.0")
       }
     }
   }

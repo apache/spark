@@ -124,22 +124,6 @@ public class ColumnValue {
     return TColumnValue.stringVal(tStringValue);
   }
 
-  private static TColumnValue dateValue(Date value) {
-    TStringValue tStringValue = new TStringValue();
-    if (value != null) {
-      tStringValue.setValue(value.toString());
-    }
-    return new TColumnValue(TColumnValue.stringVal(tStringValue));
-  }
-
-  private static TColumnValue timestampValue(Timestamp value) {
-    TStringValue tStringValue = new TStringValue();
-    if (value != null) {
-      tStringValue.setValue(value.toString());
-    }
-    return TColumnValue.stringVal(tStringValue);
-  }
-
   private static TColumnValue stringValue(HiveIntervalYearMonth value) {
     TStringValue tStrValue = new TStringValue();
     if (value != null) {

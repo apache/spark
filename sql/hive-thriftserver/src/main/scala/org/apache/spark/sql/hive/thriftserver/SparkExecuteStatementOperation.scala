@@ -50,7 +50,7 @@ private[hive] class SparkExecuteStatementOperation(
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true)
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
-  with SparkOperationUtils
+  with SparkOperation
   with Logging {
 
   private var result: DataFrame = _
@@ -63,7 +63,6 @@ private[hive] class SparkExecuteStatementOperation(
   private var previousFetchStartOffset: Long = 0
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
-  private var statementId: String = _
 
   private lazy val resultSchema: TableSchema = {
     if (result == null || result.schema.isEmpty) {
@@ -72,13 +71,6 @@ private[hive] class SparkExecuteStatementOperation(
       logInfo(s"Result Schema: ${result.schema}")
       SparkExecuteStatementOperation.getTableSchema(result.schema)
     }
-  }
-
-  override def close(): Unit = {
-    // RDDs will be cleaned automatically upon garbage collection.
-    logInfo(s"Close statement with $statementId")
-    cleanup(OperationState.CLOSED)
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
   }
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int): Unit = {
@@ -195,15 +187,8 @@ private[hive] class SparkExecuteStatementOperation(
 
   def getResultSetSchema: TableSchema = resultSchema
 
-  override def run(): Unit = {
-    withLocalProperties {
-      super.run()
-    }
-  }
-
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
-    statementId = UUID.randomUUID().toString
     logInfo(s"Submitting query '$statement' with $statementId")
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
@@ -351,20 +336,21 @@ private[hive] class SparkExecuteStatementOperation(
     synchronized {
       if (!getStatus.getState.isTerminal) {
         logInfo(s"Cancel query with $statementId")
-        cleanup(OperationState.CANCELED)
+        cleanup()
+        setState(OperationState.CANCELED)
         HiveThriftServer2.eventManager.onStatementCanceled(statementId)
       }
     }
   }
 
-  private def cleanup(state: OperationState): Unit = {
-    setState(state)
+  override protected def cleanup(): Unit = {
     if (runInBackground) {
       val backgroundHandle = getBackgroundHandle()
       if (backgroundHandle != null) {
         backgroundHandle.cancel(true)
       }
     }
+    // RDDs will be cleaned automatically upon garbage collection.
     if (statementId != null) {
       sqlContext.sparkContext.cancelJobGroup(statementId)
     }

@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hive.service.cli.OperationState
+import org.apache.hive.service.cli.operation.Operation
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
@@ -29,9 +31,26 @@ import org.apache.spark.util.Utils
 /**
  * Utils for Spark operations.
  */
-private[hive] trait SparkOperationUtils {
+private[hive] trait SparkOperation extends Operation with Logging {
 
-  def sqlContext: SQLContext
+  protected def sqlContext: SQLContext
+
+  protected var statementId = getHandle().getHandleIdentifier().getPublicId().toString()
+
+  protected def cleanup(): Unit = Unit // noop by default
+
+  abstract override def run(): Unit = {
+    withLocalProperties {
+      super.run()
+    }
+  }
+
+  abstract override def close(): Unit = {
+    cleanup()
+    super.close()
+    logInfo(s"Close statement with $statementId")
+    HiveThriftServer2.eventManager.onOperationClosed(statementId)
+  }
 
   // Set thread local properties for the execution of the operation.
   // This method should be applied during the execution of the operation, by all the child threads.

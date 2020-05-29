@@ -39,20 +39,9 @@ import org.apache.spark.util.{Utils => SparkUtils}
 private[hive] class SparkGetTableTypesOperation(
     val sqlContext: SQLContext,
     parentSession: HiveSession)
-  extends GetTableTypesOperation(parentSession) with SparkOperationUtils with Logging {
-
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
-  }
-
-  override def run(): Unit = {
-    withLocalProperties {
-      super.run()
-    }
-  }
+  extends GetTableTypesOperation(parentSession)
+  with SparkOperation
+  with Logging {
 
   override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString

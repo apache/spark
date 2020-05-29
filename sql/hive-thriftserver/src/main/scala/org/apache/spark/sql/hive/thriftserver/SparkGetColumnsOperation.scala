@@ -55,26 +55,12 @@ private[hive] class SparkGetColumnsOperation(
     tableName: String,
     columnName: String)
   extends GetColumnsOperation(parentSession, catalogName, schemaName, tableName, columnName)
-  with SparkOperationUtils
+  with SparkOperation
   with Logging {
 
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
 
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
-  }
-
-  override def run(): Unit = {
-    withLocalProperties {
-      super.run()
-    }
-  }
-
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"

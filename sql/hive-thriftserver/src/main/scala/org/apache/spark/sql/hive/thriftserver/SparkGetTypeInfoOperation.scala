@@ -39,21 +39,8 @@ private[hive] class SparkGetTypeInfoOperation(
     val sqlContext: SQLContext,
     parentSession: HiveSession)
   extends GetTypeInfoOperation(parentSession)
-  with SparkOperationUtils
+  with SparkOperation
   with Logging {
-
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
-  }
-
-  override def run(): Unit = {
-    withLocalProperties {
-      super.run()
-    }
-  }
 
   override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString

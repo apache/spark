@@ -53,24 +53,10 @@ private[hive] class SparkGetTablesOperation(
     tableName: String,
     tableTypes: JList[String])
   extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
-  with SparkOperationUtils
+  with SparkOperation
   with Logging {
 
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
-  }
-
-  override def run(): Unit = {
-    withLocalProperties {
-      super.run()
-    }
-  }
-
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")

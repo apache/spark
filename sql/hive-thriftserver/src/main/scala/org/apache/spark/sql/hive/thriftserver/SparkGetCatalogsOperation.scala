@@ -38,23 +38,11 @@ import org.apache.spark.util.{Utils => SparkUtils}
 private[hive] class SparkGetCatalogsOperation(
     val sqlContext: SQLContext,
     parentSession: HiveSession)
-  extends GetCatalogsOperation(parentSession) with SparkOperationUtils with Logging {
-
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
-  }
-
-  override def run(): Unit = {
-    withLocalProperties {
-      super.run()
-    }
-  }
+  extends GetCatalogsOperation(parentSession)
+  with SparkOperation
+  with Logging {
 
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     val logMsg = "Listing catalogs"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
