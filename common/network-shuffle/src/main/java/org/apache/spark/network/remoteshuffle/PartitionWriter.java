@@ -9,8 +9,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Paths;
-import java.util.HashSet;
-import java.util.Set;
 
 public class PartitionWriter implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(PartitionWriter.class);

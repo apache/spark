@@ -1,7 +1,5 @@
 package org.apache.spark.network.remoteshuffle;
 
-import org.apache.spark.network.remoteshuffle.protocol.StreamRecord;
-
 import java.nio.ByteBuffer;
 import java.nio.file.Paths;
 import java.util.concurrent.ConcurrentHashMap;
