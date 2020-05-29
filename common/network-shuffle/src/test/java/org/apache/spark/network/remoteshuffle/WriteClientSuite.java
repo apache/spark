@@ -53,10 +53,15 @@ public class WriteClientSuite {
 
       long taskAttemptId = 2;
       client.writeRecord(1, taskAttemptId, null, null);
-      client.writeRecord(1, taskAttemptId, ByteBuffer.allocate(0), ByteBuffer.allocate(0));
+      client.writeRecord(2, taskAttemptId, ByteBuffer.allocate(0), ByteBuffer.allocate(0));
       ByteBuffer key = ByteBuffer.wrap("key1".getBytes(StandardCharsets.UTF_8));
       ByteBuffer value = ByteBuffer.wrap("value1".getBytes(StandardCharsets.UTF_8));
-      client.writeRecord(1, taskAttemptId, key, value);
+      client.writeRecord(3, taskAttemptId, key, value);
+      client.finishTask(taskAttemptId);
+
+      taskAttemptId = 3;
+      client.writeRecord(1, taskAttemptId, null, null);
+      client.writeRecord(2, taskAttemptId, ByteBuffer.allocate(0), ByteBuffer.allocate(0));
       client.finishTask(taskAttemptId);
     }
   }

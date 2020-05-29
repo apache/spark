@@ -64,6 +64,8 @@ public class ShuffleServer {
         throw new RuntimeException("Failed to create temp directory for root dir", e);
       }
     }
+    // TODO - To Investigate: shuffleHandler here is single instance, and may be shared by multiple server side threads?
+    // Will operations on shuffleHandler be out of order?
     shuffleHandler = new ShuffleServerHandler(rootDir);
     TransportContext transportContext = new TransportContext(transportConf, shuffleHandler);
     List<TransportServerBootstrap> bootstraps = Collections.emptyList();
