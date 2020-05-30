@@ -2709,7 +2709,7 @@ class HiveDDLSuite
   test("SPARK-31828: Retain table properties at CreateTableLikeCommand") {
     val catalog = spark.sessionState.catalog
     withTable("t1", "t2", "t3") {
-      sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES('k1'='v1', 'k2'='v2')")
+      sql("CREATE TABLE t1(c1 int) TBLPROPERTIES('k1'='v1', 'k2'='v2')")
       val t1 = catalog.getTableMetadata(TableIdentifier("t1"))
       assert(t1.properties("k1") == "v1")
       assert(t1.properties("k2") == "v2")
@@ -2730,7 +2730,7 @@ class HiveDDLSuite
     DDLUtils.METASTORE_GENERATED_PROPERTIES.foreach { meta =>
       withTable("t1", "t2") {
         val uuid = UUID.randomUUID().toString
-        sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES(s'$meta'='$uuid')")
+        sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES('$meta'='$uuid')")
         val t1 = catalog.getTableMetadata(TableIdentifier("t1"))
         assert(t1.properties(s"$meta") == s"$uuid")
         sql("CREATE TABLE t2 LIKE t1")
