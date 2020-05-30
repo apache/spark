@@ -23,10 +23,11 @@ import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
 import org.apache.spark.sql.catalyst.plans.logical.BROADCAST
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, PartitioningCollection}
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AdaptiveTestUtils, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -412,6 +413,95 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         testDf.collect()
       }
       AdaptiveTestUtils.assertExceptionMessage(e, s"Could not execute broadcast in $timeout secs.")
+    }
+  }
+
+  test("broadcast join where streamed side's output partitioning is PartitioningCollection") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "500") {
+      val t1 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i1", "j1")
+      val t2 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i2", "j2")
+      val t3 = (0 until 20).map(i => (i % 7, i % 11)).toDF("i3", "j3")
+      val t4 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i4", "j4")
+
+      // join1 is a sort merge join (shuffle on the both sides).
+      val join1 = t1.join(t2, t1("i1") === t2("i2"))
+      val plan1 = join1.queryExecution.executedPlan
+      assert(plan1.collect { case s: SortMergeJoinExec => s }.size == 1)
+      assert(plan1.collect { case e: ShuffleExchangeExec => e }.size == 2)
+
+      // join2 is a broadcast join where t3 is broadcasted. Note that output partitioning on the
+      // streamed side (join1) is PartitioningCollection (sort merge join)
+      val join2 = join1.join(t3, join1("i1") === t3("i3"))
+      val plan2 = join2.queryExecution.executedPlan
+      assert(plan2.collect { case s: SortMergeJoinExec => s }.size == 1)
+      assert(plan2.collect { case e: ShuffleExchangeExec => e }.size == 2)
+      val broadcastJoins = plan2.collect { case b: BroadcastHashJoinExec => b }
+      assert(broadcastJoins.size == 1)
+      broadcastJoins(0).outputPartitioning match {
+        case p: PartitioningCollection
+          if p.partitionings.forall(_.isInstanceOf[HashPartitioning]) =>
+          // two partitionings from sort merge join and one from build side.
+          assert(p.partitionings.size == 3)
+        case _ => fail()
+      }
+
+      // Join on the column from the broadcasted side (i3) and make sure output partitioning
+      // is maintained by checking no shuffle exchange is introduced. Note that one extra
+      // ShuffleExchangeExec is from t4, not from join2.
+      val join3 = join2.join(t4, join2("i3") === t4("i4"))
+      val plan3 = join3.queryExecution.executedPlan
+      assert(plan3.collect { case s: SortMergeJoinExec => s }.size == 2)
+      assert(plan3.collect { case b: BroadcastHashJoinExec => b }.size == 1)
+      assert(plan3.collect { case e: ShuffleExchangeExec => e }.size == 3)
+
+      // Validate the data with boradcast join off.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = join2.join(t4, join2("i3") === t4("i4"))
+        QueryTest.sameRows(join3.collect().toSeq, df.collect().toSeq)
+      }
+    }
+  }
+
+  test("broadcast join where streamed side's output partitioning is HashPartitioning") {
+    withTable("t1", "t3") {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "500") {
+        val df1 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i1", "j1")
+        val df2 = (0 until 20).map(i => (i % 7, i % 11)).toDF("i2", "j2")
+        val df3 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i3", "j3")
+        df1.write.format("parquet").bucketBy(8, "i1").saveAsTable("t1")
+        df3.write.format("parquet").bucketBy(8, "i3").saveAsTable("t3")
+        val t1 = spark.table("t1")
+        val t3 = spark.table("t3")
+
+        // join2 is a broadcast join where df2 is broadcasted. Note that output partitioning on the
+        // streamed side (t1) is HashPartitioning (bucketed files).
+        val join1 = t1.join(df2, t1("i1") === df2("i2"))
+        val plan1 = join1.queryExecution.executedPlan
+        assert(plan1.collect { case e: ShuffleExchangeExec => e }.isEmpty)
+        val broadcastJoins = plan1.collect { case b: BroadcastHashJoinExec => b }
+        assert(broadcastJoins.size == 1)
+        broadcastJoins(0).outputPartitioning match {
+          case p: PartitioningCollection
+            if p.partitionings.forall(_.isInstanceOf[HashPartitioning]) =>
+            // one partitioning from streamed side and one from build side.
+            assert(p.partitionings.size == 2)
+          case _ => fail()
+        }
+
+        // Join on the column from the broadcasted side (i2) and make sure output partitioning
+        // is maintained by checking no shuffle exchange is introduced.
+        val join2 = join1.join(t3, join1("i2") === t3("i3"))
+        val plan2 = join2.queryExecution.executedPlan
+        assert(plan2.collect { case s: SortMergeJoinExec => s }.size == 1)
+        assert(plan2.collect { case b: BroadcastHashJoinExec => b }.size == 1)
+        assert(plan2.collect { case e: ShuffleExchangeExec => e }.isEmpty)
+
+        // Validate the data with boradcast join off.
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val df = join1.join(t3, join1("i2") === t3("i3"))
+          QueryTest.sameRows(join2.collect().toSeq, df.collect().toSeq)
+        }
+      }
     }
   }
 }

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{BooleanType, LongType}
@@ -56,6 +56,21 @@ case class BroadcastHashJoinExec(
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
       case BuildRight =>
         UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
+    }
+  }
+
+  override def outputPartitioning: Partitioning = {
+    def buildKeys: Seq[Expression] = buildSide match {
+      case BuildLeft => leftKeys
+      case BuildRight => rightKeys
+    }
+
+    streamedPlan.outputPartitioning match {
+      case h: HashPartitioning =>
+        PartitioningCollection(Seq(h, HashPartitioning(buildKeys, h.numPartitions)))
+      case c: PartitioningCollection if c.partitionings.forall(_.isInstanceOf[HashPartitioning]) =>
+        PartitioningCollection(c.partitionings :+ HashPartitioning(buildKeys, c.numPartitions))
+      case other => other
     }
   }
 
