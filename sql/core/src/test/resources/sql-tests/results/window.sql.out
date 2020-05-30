@@ -64,17 +64,9 @@ java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisExceptio
 SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING):bigint>
+struct<>
 -- !query output
-NULL	NULL	NULL
-3	NULL	3
-NULL	a	NULL
-1	a	4
-1	a	4
-2	a	2
-1	b	3
-2	b	5
-3	b	3
+java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
 
 
 -- !query
