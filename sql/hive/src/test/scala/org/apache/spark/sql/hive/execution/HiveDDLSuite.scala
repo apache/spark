@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.util.UUID
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
@@ -2708,22 +2709,35 @@ class HiveDDLSuite
   test("SPARK-31828: Retain table properties at CreateTableLikeCommand") {
     val catalog = spark.sessionState.catalog
     withTable("t1", "t2", "t3") {
-      sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES('k1'='v1', 'k2'='v2', 'totalNumberFiles'='meta')")
+      sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES('k1'='v1', 'k2'='v2')")
       val t1 = catalog.getTableMetadata(TableIdentifier("t1"))
       assert(t1.properties("k1") == "v1")
       assert(t1.properties("k2") == "v2")
-      assert(t1.properties(s"totalNumberFiles") == "meta")
       sql("CREATE TABLE t2 LIKE t1 TBLPROPERTIES('k2'='v3', 'k4'='v4')")
       val t2 = catalog.getTableMetadata(TableIdentifier("t2"))
       assert(t2.properties("k1") == "v1")
       assert(t2.properties("k2") == "v3")
       assert(t2.properties("k4") == "v4")
-      assert(t2.properties.get(s"totalNumberFiles").isEmpty)
       sql("CREATE TABLE t3 LIKE t1")
       val t3 = catalog.getTableMetadata(TableIdentifier("t3"))
       assert(t3.properties("k1") == "v1")
       assert(t3.properties("k2") == "v2")
-      assert(t3.properties.get(s"totalNumberFiles").isEmpty)
+    }
+  }
+
+  test("SPARK-31828: Filters out Hive metastore properties in CreateTableLikeCommand") {
+    val catalog = spark.sessionState.catalog
+    DDLUtils.METASTORE_GENERATED_PROPERTIES.foreach { meta =>
+      withTable("t1", "t2") {
+        val uuid = UUID.randomUUID().toString
+        sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES(s'$meta'='$uuid')")
+        val t1 = catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(t1.properties(s"$meta") == s"$uuid")
+        sql("CREATE TABLE t2 LIKE t1")
+        val t2 = catalog.getTableMetadata(TableIdentifier("t2"))
+        // we don't copy source tbl properties, but they may be added by hive
+        assert(t2.properties.get(s"$meta").isEmpty || t2.properties(s"$meta") != s"$uuid")
+      }
     }
   }
 }

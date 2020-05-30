@@ -117,13 +117,13 @@ case class CreateTableLikeCommand(
     }
 
     val newProperties = sourceTableDesc.tableType match {
-      case VIEW =>
-        // For view, we just use new properties
-        properties
-      case _ =>
+      case MANAGED | EXTERNAL =>
         // Hive only retain the useful properties through serde class annotation.
         // For better compatible with Hive, we remove the metastore properties.
         sourceTableDesc.properties -- DDLUtils.METASTORE_GENERATED_PROPERTIES ++ properties
+      case VIEW =>
+        // For view, we just use new properties
+        properties
     }
     val newTableDesc =
       CatalogTable(

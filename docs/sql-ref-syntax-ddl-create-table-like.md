@@ -22,9 +22,6 @@ license: |
 ### Description
 
 The `CREATE TABLE` statement defines a new table using the definition/metadata of an existing table or view.
-And we copied from the source table are storage(inputFormat, outputFormat, serde, compressed, properties), schema, 
-provider, partitionColumnNames, bucketSpec, tblproperties
-by default.
 
 ### Syntax
 
@@ -60,6 +57,7 @@ CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier
 * **TBLPROPERTIES**
 
     Table properties that have to be set are specified, such as `created.by.user`, `owner`, etc.
+    And we copied from the source table are storage(inputFormat, outputFormat, serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec, tblproperties by default.
 
 * **LOCATION**
 
