@@ -27,48 +27,52 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
   import org.apache.spark.sql.internal.SQLConf
 
+  before {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
+  }
+
   after {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+      SQLConf.get.legacyAllowCastNumericToTimestamp)
     sqlContext.streams.active.foreach(_.stop())
   }
 
   test("SPARK-24156: do not plan a no-data batch again after it has already been planned") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      val inputData = MemoryStream[Int]
-      val df = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
-        .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
-        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-      testStream(df)(
-        AddData(inputData, 10, 11, 12, 13, 14, 15), // Set watermark to 5
-        CheckAnswer(),
-        AddData(inputData, 25), // Set watermark to 15 to make MicroBatchExecution run no-data batch
-        CheckAnswer((10, 5)), // Last batch should be a no-data batch
-        StopStream,
-        Execute { q =>
-          // Delete the last committed batch from the commit log to signify that the last batch
-          // (a no-data batch) never completed
-          val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L)
-          q.commitLog.purgeAfter(commit - 1)
-        },
-        // Add data before start so that MicroBatchExecution can plan a batch. It should not,
-        // it should first re-run the incomplete no-data batch and then run a new batch to process
-        // new data.
-        AddData(inputData, 30),
-        StartStream(),
-        CheckNewAnswer((15, 1)), // This should not throw the error reported in SPARK-24156
-        StopStream,
-        Execute { q =>
-          // Delete the entire commit log
-          val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L)
-          q.commitLog.purge(commit + 1)
-        },
-        AddData(inputData, 50),
-        StartStream(),
-        CheckNewAnswer((25, 1), (30, 1)) // This should not throw the error reported in SPARK-24156
-      )
-    }
+    testStream(df)(
+      AddData(inputData, 10, 11, 12, 13, 14, 15), // Set watermark to 5
+      CheckAnswer(),
+      AddData(inputData, 25), // Set watermark to 15 to make MicroBatchExecution run no-data batch
+      CheckAnswer((10, 5)),   // Last batch should be a no-data batch
+      StopStream,
+      Execute { q =>
+        // Delete the last committed batch from the commit log to signify that the last batch
+        // (a no-data batch) never completed
+        val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L)
+        q.commitLog.purgeAfter(commit - 1)
+      },
+      // Add data before start so that MicroBatchExecution can plan a batch. It should not,
+      // it should first re-run the incomplete no-data batch and then run a new batch to process
+      // new data.
+      AddData(inputData, 30),
+      StartStream(),
+      CheckNewAnswer((15, 1)),   // This should not throw the error reported in SPARK-24156
+      StopStream,
+      Execute { q =>
+        // Delete the entire commit log
+        val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L)
+        q.commitLog.purge(commit + 1)
+      },
+      AddData(inputData, 50),
+      StartStream(),
+      CheckNewAnswer((25, 1), (30, 1))   // This should not throw the error reported in SPARK-24156
+    )
   }
 }

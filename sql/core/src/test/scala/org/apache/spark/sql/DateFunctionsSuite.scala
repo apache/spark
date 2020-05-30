@@ -23,6 +23,8 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -32,9 +34,17 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class DateFunctionsSuite extends QueryTest with SharedSparkSession {
+class DateFunctionsSuite extends QueryTest with SharedSparkSession with BeforeAndAfter{
   import testImplicits._
 
+  before {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
+  }
+
+  after {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+      SQLConf.get.legacyAllowCastNumericToTimestamp)
+  }
   test("function current_date") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
     val d0 = DateTimeUtils.currentDate(ZoneId.systemDefault())
@@ -422,38 +432,37 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("to_date(s)"),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      // now with format
+    // now with format
+    checkAnswer(
+      df.select(to_date(col("t"), "yyyy-MM-dd")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2014-12-31"))))
+    checkAnswer(
+      df.select(to_date(col("d"), "yyyy-MM-dd")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
+        Row(Date.valueOf("2014-12-31"))))
+    val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
+    withSQLConf(confKey -> "corrected") {
       checkAnswer(
-        df.select(to_date(col("t"), "yyyy-MM-dd")),
-        Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
-          Row(Date.valueOf("2014-12-31"))))
-      checkAnswer(
-        df.select(to_date(col("d"), "yyyy-MM-dd")),
-        Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
-          Row(Date.valueOf("2014-12-31"))))
-      val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
-      withSQLConf(confKey -> "corrected") {
-        checkAnswer(
-          df.select(to_date(col("s"), "yyyy-MM-dd")),
-          Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
-      }
-      withSQLConf(confKey -> "exception") {
-        checkExceptionMessage(df.select(to_date(col("s"), "yyyy-MM-dd")))
-      }
-      // now switch format
-      checkAnswer(
-        df.select(to_date(col("s"), "yyyy-dd-MM")),
-        Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
-
-      // invalid format
-      checkAnswer(
-        df.select(to_date(col("s"), "yyyy-hh-MM")),
-        Seq(Row(null), Row(null), Row(null)))
-      val e = intercept[SparkUpgradeException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
-      assert(e.getCause.isInstanceOf[IllegalArgumentException])
-      assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
+        df.select(to_date(col("s"), "yyyy-MM-dd")),
+        Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
     }
+    withSQLConf(confKey -> "exception") {
+      checkExceptionMessage(df.select(to_date(col("s"), "yyyy-MM-dd")))
+    }
+
+    // now switch format
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-dd-MM")),
+      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
+
+    // invalid format
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-hh-MM")),
+      Seq(Row(null), Row(null), Row(null)))
+    val e = intercept[SparkUpgradeException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
+    assert(e.getCause.isInstanceOf[IllegalArgumentException])
+    assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
     // february
     val x1 = "2016-02-29"
@@ -573,8 +582,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("unix_timestamp") {
     Seq("corrected", "legacy").foreach { legacyParserPolicy =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy,
-        SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val date1 = Date.valueOf("2015-07-24")
         val date2 = Date.valueOf("2015-07-25")
         val ts1 = Timestamp.valueOf("2015-07-24 10:00:00.3")
@@ -700,8 +708,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("to_timestamp") {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy,
-        SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
         val date1 = Date.valueOf("2015-07-24")
         val date2 = Date.valueOf("2015-07-25")
         val ts_date1 = Timestamp.valueOf("2015-07-24 00:00:00")

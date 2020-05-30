@@ -23,7 +23,7 @@ import java.util.{Locale, TimeZone}
 import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.Assertions
+import org.scalatest.{Assertions, BeforeAndAfter}
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.rdd.BlockRDD
@@ -48,9 +48,18 @@ object FailureSingleton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
+class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions with BeforeAndAfter{
 
   import testImplicits._
+
+  before {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
+  }
+
+  after {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+      SQLConf.get.legacyAllowCastNumericToTimestamp)
+  }
 
   def executeFuncWithStateVersionSQLConf(
       stateVersion: Int,
@@ -186,133 +195,85 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 
   testWithAllStateVersions("state metrics - append mode") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      val inputData = MemoryStream[Int]
-      val aggWithWatermark = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
-        .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
-        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+    val inputData = MemoryStream[Int]
+    val aggWithWatermark = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-      implicit class RichStreamExecution(query: StreamExecution) {
-        // this could be either empty row batch or actual batch
-        def stateNodes: Seq[SparkPlan] = {
-          query.lastExecution.executedPlan.collect {
-            case p if p.isInstanceOf[StateStoreSaveExec] => p
-          }
-        }
-
-        // Pick the latest progress that actually ran a batch
-        def lastExecutedBatch: StreamingQueryProgress = {
-          query.recentProgress.filter(_.durationMs.containsKey("addBatch")).last
-        }
-
-        def stateOperatorProgresses: Seq[StateOperatorProgress] = {
-          lastExecutedBatch.stateOperators
+    implicit class RichStreamExecution(query: StreamExecution) {
+      // this could be either empty row batch or actual batch
+      def stateNodes: Seq[SparkPlan] = {
+        query.lastExecution.executedPlan.collect {
+          case p if p.isInstanceOf[StateStoreSaveExec] => p
         }
       }
 
-      val clock = new StreamManualClock()
+      // Pick the latest progress that actually ran a batch
+      def lastExecutedBatch: StreamingQueryProgress = {
+        query.recentProgress.filter(_.durationMs.containsKey("addBatch")).last
+      }
 
-      testStream(aggWithWatermark)(
-        // batchId 0
-        AddData(inputData, 15),
-        StartStream(Trigger.ProcessingTime("interval 1 second"), clock),
-        CheckAnswer(), // watermark = 0
-        AssertOnQuery {
-          _.stateNodes.size === 1
-        },
-        AssertOnQuery {
-          _.stateNodes.head.metrics("numOutputRows").value === 0
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsUpdated === 1
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsTotal === 1
-        },
-        AssertOnQuery {
-          _.lastExecutedBatch.sink.numOutputRows == 0
-        },
-
-        // batchId 1 without data
-        AdvanceManualClock(1000L), // watermark = 5
-        Execute { q => // wait for the no data batch to complete
-          eventually(timeout(streamingTimeout)) {
-            assert(q.lastProgress.batchId === 1)
-          }
-        },
-        CheckAnswer(),
-        AssertOnQuery {
-          _.stateNodes.head.metrics("numOutputRows").value === 0
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsUpdated === 0
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsTotal === 1
-        },
-        AssertOnQuery {
-          _.lastExecutedBatch.sink.numOutputRows == 0
-        },
-
-        // batchId 2 with data
-        AddData(inputData, 10, 12, 14),
-        AdvanceManualClock(1000L), // watermark = 5
-        CheckAnswer(),
-        AssertOnQuery {
-          _.stateNodes.head.metrics("numOutputRows").value === 0
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsUpdated === 1
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsTotal === 2
-        },
-        AssertOnQuery {
-          _.lastExecutedBatch.sink.numOutputRows == 0
-        },
-
-        // batchId 3 with data
-        AddData(inputData, 25),
-        AdvanceManualClock(1000L), // watermark = 5
-        CheckAnswer(),
-        AssertOnQuery {
-          _.stateNodes.head.metrics("numOutputRows").value === 0
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsUpdated === 1
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsTotal === 3
-        },
-        AssertOnQuery {
-          _.lastExecutedBatch.sink.numOutputRows == 0
-        },
-
-        // batchId 4 without data
-        AdvanceManualClock(1000L), // watermark = 15
-        Execute { q => // wait for the no data batch to complete
-          eventually(timeout(streamingTimeout)) {
-            assert(q.lastProgress.batchId === 4)
-          }
-        },
-        CheckAnswer((10, 3)),
-        AssertOnQuery {
-          _.stateNodes.head.metrics("numOutputRows").value === 1
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsUpdated === 0
-        },
-        AssertOnQuery {
-          _.stateOperatorProgresses.head.numRowsTotal === 2
-        },
-        AssertOnQuery {
-          _.lastExecutedBatch.sink.numOutputRows == 1
-        }
-      )
+      def stateOperatorProgresses: Seq[StateOperatorProgress] = {
+        lastExecutedBatch.stateOperators
+      }
     }
+
+    val clock = new StreamManualClock()
+
+    testStream(aggWithWatermark)(
+      // batchId 0
+      AddData(inputData, 15),
+      StartStream(Trigger.ProcessingTime("interval 1 second"), clock),
+      CheckAnswer(), // watermark = 0
+      AssertOnQuery { _.stateNodes.size === 1 },
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
+
+      // batchId 1 without data
+      AdvanceManualClock(1000L), // watermark = 5
+      Execute { q =>             // wait for the no data batch to complete
+        eventually(timeout(streamingTimeout)) { assert(q.lastProgress.batchId === 1) }
+      },
+      CheckAnswer(),
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
+
+      // batchId 2 with data
+      AddData(inputData, 10, 12, 14),
+      AdvanceManualClock(1000L), // watermark = 5
+      CheckAnswer(),
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
+
+      // batchId 3 with data
+      AddData(inputData, 25),
+      AdvanceManualClock(1000L), // watermark = 5
+      CheckAnswer(),
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 3 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
+
+      // batchId 4 without data
+      AdvanceManualClock(1000L), // watermark = 15
+      Execute { q =>             // wait for the no data batch to complete
+        eventually(timeout(streamingTimeout)) { assert(q.lastProgress.batchId === 4) }
+      },
+      CheckAnswer((10, 3)),
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 1 }
+    )
   }
 
   testWithAllStateVersions("state metrics - update/complete mode") {

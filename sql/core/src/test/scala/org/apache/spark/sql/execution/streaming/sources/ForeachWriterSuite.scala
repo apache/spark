@@ -34,7 +34,14 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
 
   import testImplicits._
   import org.apache.spark.sql.internal.SQLConf
+
+  before {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
+  }
+
   after {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+      SQLConf.get.legacyAllowCastNumericToTimestamp)
     sqlContext.streams.active.foreach(_.stop())
   }
 
@@ -160,91 +167,87 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
   }
 
   test("foreach with watermark: complete") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      val inputData = MemoryStream[Int]
+    val inputData = MemoryStream[Int]
 
-      val windowedAggregation = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
-        .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
-        .select($"count".as[Long])
-        .map(_.toInt)
-        .repartition(1)
+    val windowedAggregation = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"count".as[Long])
+      .map(_.toInt)
+      .repartition(1)
 
-      val query = windowedAggregation
-        .writeStream
-        .outputMode(OutputMode.Complete)
-        .foreach(new TestForeachWriter())
-        .start()
-      try {
-        inputData.addData(10, 11, 12)
-        query.processAllAvailable()
+    val query = windowedAggregation
+      .writeStream
+      .outputMode(OutputMode.Complete)
+      .foreach(new TestForeachWriter())
+      .start()
+    try {
+      inputData.addData(10, 11, 12)
+      query.processAllAvailable()
 
-        val allEvents = ForeachWriterSuite.allEvents()
-        assert(allEvents.size === 1)
-        val expectedEvents = Seq(
-          ForeachWriterSuite.Open(partition = 0, version = 0),
-          ForeachWriterSuite.Process(value = 3),
-          ForeachWriterSuite.Close(None)
-        )
-        assert(allEvents === Seq(expectedEvents))
-      } finally {
-        query.stop()
-      }
+      val allEvents = ForeachWriterSuite.allEvents()
+      assert(allEvents.size === 1)
+      val expectedEvents = Seq(
+        ForeachWriterSuite.Open(partition = 0, version = 0),
+        ForeachWriterSuite.Process(value = 3),
+        ForeachWriterSuite.Close(None)
+      )
+      assert(allEvents === Seq(expectedEvents))
+    } finally {
+      query.stop()
     }
   }
 
   test("foreach with watermark: append") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      val inputData = MemoryStream[Int]
+    val inputData = MemoryStream[Int]
 
-      val windowedAggregation = inputData.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
-        .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
-        .select($"count".as[Long])
-        .map(_.toInt)
-        .repartition(1)
+    val windowedAggregation = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"count".as[Long])
+      .map(_.toInt)
+      .repartition(1)
 
-      val query = windowedAggregation
-        .writeStream
-        .outputMode(OutputMode.Append)
-        .foreach(new TestForeachWriter())
-        .start()
-      try {
-        inputData.addData(10, 11, 12)
-        query.processAllAvailable()
-        inputData.addData(25) // Evict items less than previous watermark
-        query.processAllAvailable()
+    val query = windowedAggregation
+      .writeStream
+      .outputMode(OutputMode.Append)
+      .foreach(new TestForeachWriter())
+      .start()
+    try {
+      inputData.addData(10, 11, 12)
+      query.processAllAvailable()
+      inputData.addData(25) // Evict items less than previous watermark
+      query.processAllAvailable()
 
-        // There should be 3 batches and only does the last batch contain a value.
-        val allEvents = ForeachWriterSuite.allEvents()
-        assert(allEvents.size === 4)
-        val expectedEvents = Seq(
-          Seq(
-            ForeachWriterSuite.Open(partition = 0, version = 0),
-            ForeachWriterSuite.Close(None)
-          ),
-          Seq(
-            ForeachWriterSuite.Open(partition = 0, version = 1),
-            ForeachWriterSuite.Close(None)
-          ),
-          Seq(
-            ForeachWriterSuite.Open(partition = 0, version = 2),
-            ForeachWriterSuite.Close(None)
-          ),
-          Seq(
-            ForeachWriterSuite.Open(partition = 0, version = 3),
-            ForeachWriterSuite.Process(value = 3),
-            ForeachWriterSuite.Close(None)
-          )
+      // There should be 3 batches and only does the last batch contain a value.
+      val allEvents = ForeachWriterSuite.allEvents()
+      assert(allEvents.size === 4)
+      val expectedEvents = Seq(
+        Seq(
+          ForeachWriterSuite.Open(partition = 0, version = 0),
+          ForeachWriterSuite.Close(None)
+        ),
+        Seq(
+          ForeachWriterSuite.Open(partition = 0, version = 1),
+          ForeachWriterSuite.Close(None)
+        ),
+        Seq(
+          ForeachWriterSuite.Open(partition = 0, version = 2),
+          ForeachWriterSuite.Close(None)
+        ),
+        Seq(
+          ForeachWriterSuite.Open(partition = 0, version = 3),
+          ForeachWriterSuite.Process(value = 3),
+          ForeachWriterSuite.Close(None)
         )
-        assert(allEvents === expectedEvents)
-      } finally {
-        query.stop()
-      }
+      )
+      assert(allEvents === expectedEvents)
+    } finally {
+      query.stop()
     }
   }
 

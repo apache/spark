@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
+import org.scalatest.BeforeAndAfter
 import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.SparkFunSuite
@@ -26,7 +27,16 @@ import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
+class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession with BeforeAndAfter {
+
+  before {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
+  }
+
+  after {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+      SQLConf.get.legacyAllowCastNumericToTimestamp)
+  }
 
   test("Replace _FUNC_ in ExpressionInfo") {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("upper"))
@@ -105,57 +115,52 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   test("check outputs of expression examples") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      def unindentAndTrim(s: String): String = {
-        s.replaceAll("\n\\s+", "\n").trim
-      }
+    def unindentAndTrim(s: String): String = {
+      s.replaceAll("\n\\s+", "\n").trim
+    }
+    val beginSqlStmtRe = "  > ".r
+    val endSqlStmtRe = ";\n".r
+    def checkExampleSyntax(example: String): Unit = {
+      val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
+      val endStmtNum = endSqlStmtRe.findAllIn(example).length
+      assert(beginStmtNum === endStmtNum,
+        "The number of ` > ` does not match to the number of `;`")
+    }
+    val exampleRe = """^(.+);\n(?s)(.+)$""".r
+    val ignoreSet = Set(
+      // One of examples shows getting the current timestamp
+      "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
+      "org.apache.spark.sql.catalyst.expressions.CurrentDate",
+      "org.apache.spark.sql.catalyst.expressions.CurrentTimestamp",
+      "org.apache.spark.sql.catalyst.expressions.Now",
+      // Random output without a seed
+      "org.apache.spark.sql.catalyst.expressions.Rand",
+      "org.apache.spark.sql.catalyst.expressions.Randn",
+      "org.apache.spark.sql.catalyst.expressions.Shuffle",
+      "org.apache.spark.sql.catalyst.expressions.Uuid",
+      // The example calls methods that return unstable results.
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
 
-      val beginSqlStmtRe = "  > ".r
-      val endSqlStmtRe = ";\n".r
-
-      def checkExampleSyntax(example: String): Unit = {
-        val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
-        val endStmtNum = endSqlStmtRe.findAllIn(example).length
-        assert(beginStmtNum === endStmtNum,
-          "The number of ` > ` does not match to the number of `;`")
-      }
-
-      val exampleRe = """^(.+);\n(?s)(.+)$""".r
-      val ignoreSet = Set(
-        // One of examples shows getting the current timestamp
-        "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
-        "org.apache.spark.sql.catalyst.expressions.CurrentDate",
-        "org.apache.spark.sql.catalyst.expressions.CurrentTimestamp",
-        "org.apache.spark.sql.catalyst.expressions.Now",
-        // Random output without a seed
-        "org.apache.spark.sql.catalyst.expressions.Rand",
-        "org.apache.spark.sql.catalyst.expressions.Randn",
-        "org.apache.spark.sql.catalyst.expressions.Shuffle",
-        "org.apache.spark.sql.catalyst.expressions.Uuid",
-        // The example calls methods that return unstable results.
-        "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
-
-      val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
-      parFuncs.foreach { funcId =>
-        // Examples can change settings. We clone the session to prevent tests clashing.
-        val clonedSpark = spark.cloneSession()
-        // Coalescing partitions can change result order, so disable it.
-        clonedSpark.sessionState.conf.setConf(SQLConf.COALESCE_PARTITIONS_ENABLED, false)
-        val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
-        val className = info.getClassName
-        if (!ignoreSet.contains(className)) {
-          withClue(s"Function '${info.getName}', Expression class '$className'") {
-            val example = info.getExamples
-            checkExampleSyntax(example)
-            example.split("  > ").toList.foreach {
-              case exampleRe(sql, output) =>
-                val df = clonedSpark.sql(sql)
-                val actual = unindentAndTrim(
-                  hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
-                val expected = unindentAndTrim(output)
-                assert(actual === expected)
-              case _ =>
-            }
+    val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
+    parFuncs.foreach { funcId =>
+      // Examples can change settings. We clone the session to prevent tests clashing.
+      val clonedSpark = spark.cloneSession()
+      // Coalescing partitions can change result order, so disable it.
+      clonedSpark.sessionState.conf.setConf(SQLConf.COALESCE_PARTITIONS_ENABLED, false)
+      val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
+      val className = info.getClassName
+      if (!ignoreSet.contains(className)) {
+        withClue(s"Function '${info.getName}', Expression class '$className'") {
+          val example = info.getExamples
+          checkExampleSyntax(example)
+          example.split("  > ").toList.foreach {
+            case exampleRe(sql, output) =>
+              val df = clonedSpark.sql(sql)
+              val actual = unindentAndTrim(
+                hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+              val expected = unindentAndTrim(output)
+              assert(actual === expected)
+            case _ =>
           }
         }
       }

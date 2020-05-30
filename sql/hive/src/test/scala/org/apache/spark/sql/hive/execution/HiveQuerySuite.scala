@@ -52,6 +52,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
   private val originalLegacyAllowCastNumericToTimestamp =
     TestHive.conf.legacyAllowCastNumericToTimestamp
+
   def spark: SparkSession = sparkSession
 
   override def beforeAll(): Unit = {

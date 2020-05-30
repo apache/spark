@@ -48,7 +48,7 @@ ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'ROWS BETWEEN CURRENT ROW AND 2147483648L FOLLOWING' due to data type mismatch: The data type of the upper bound 'bigint' does not match the expected data type 'int'.; line 1 pos 41
+cannot resolve '`val_long`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
 
 
 -- !query
@@ -57,7 +57,8 @@ ORDER BY cate, val
 -- !query schema
 struct<>
 -- !query output
-java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
+org.apache.spark.sql.AnalysisException
+cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
 
 
 -- !query
@@ -73,17 +74,9 @@ java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisExceptio
 SELECT val_long, cate, sum(val_long) OVER(PARTITION BY cate ORDER BY val_long
 RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, val_long
 -- !query schema
-struct<val_long:bigint,cate:string,sum(val_long) OVER (PARTITION BY cate ORDER BY val_long ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING):bigint>
+struct<>
 -- !query output
-NULL	NULL	NULL
-1	NULL	1
-1	a	4
-1	a	4
-2	a	2147483652
-2147483650	a	2147483650
-NULL	b	NULL
-3	b	2147483653
-2147483650	b	2147483650
+java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve '`val_long`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
 
 
 -- !query

@@ -21,7 +21,7 @@ import java.io.File
 import java.sql.Date
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfter
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
@@ -45,12 +45,21 @@ case class RunningCount(count: Long)
 
 case class Result(key: Long, count: Int)
 
-class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
+class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfter {
 
   import testImplicits._
   import GroupStateImpl._
   import GroupStateTimeout._
   import FlatMapGroupsWithStateSuite._
+
+  before {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
+  }
+
+  after {
+    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+      SQLConf.get.legacyAllowCastNumericToTimestamp)
+  }
 
   test("GroupState - get, exists, update, remove") {
     var state: GroupStateImpl[String] = null
@@ -806,138 +815,123 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     // Function to maintain the max event time as state and set the timeout timestamp based on the
     // current max event time seen. It returns the max event time in the state, or -1 if the state
     // was removed by timeout.
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
-        assertCanGetProcessingTime {
-          state.getCurrentProcessingTimeMs() >= 0
-        }
-        assertCanGetWatermark {
-          state.getCurrentWatermarkMs() >= -1
-        }
+    val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+      assertCanGetWatermark { state.getCurrentWatermarkMs() >= -1 }
 
-        val timeoutDelaySec = 5
-        if (state.hasTimedOut) {
-          state.remove()
-          Iterator((key, -1))
-        } else {
-          val valuesSeq = values.toSeq
-          val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
-          val timeoutTimestampSec = maxEventTimeSec + timeoutDelaySec
-          state.update(maxEventTimeSec)
-          state.setTimeoutTimestamp(timeoutTimestampSec * 1000)
-          Iterator((key, maxEventTimeSec.toInt))
-        }
+      val timeoutDelaySec = 5
+      if (state.hasTimedOut) {
+        state.remove()
+        Iterator((key, -1))
+      } else {
+        val valuesSeq = values.toSeq
+        val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
+        val timeoutTimestampSec = maxEventTimeSec + timeoutDelaySec
+        state.update(maxEventTimeSec)
+        state.setTimeoutTimestamp(timeoutTimestampSec * 1000)
+        Iterator((key, maxEventTimeSec.toInt))
       }
-      val inputData = MemoryStream[(String, Int)]
-      val result =
-        inputData.toDS
-          .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
-          .withWatermark("eventTime", "10 seconds")
-          .as[(String, Long)]
-          .groupByKey(_._1)
-          .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
-
-      testStream(result, Update)(
-        StartStream(),
-
-        AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
-        // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
-        CheckNewAnswer(("a", 15)), // Output = max event time of a
-
-        AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
-        CheckNewAnswer(), // No output as data should get filtered by watermark
-
-        AddData(inputData, ("a", 10)), // Add data newer than watermark for "a"
-        CheckNewAnswer(("a", 15)), // Max event time is still the same
-        // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
-        // Watermark is still 5 as max event time for all data is still 15.
-
-        AddData(inputData, ("b", 31)), // Add data newer than watermark for "b", not "a"
-        // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
-        CheckNewAnswer(("a", -1), ("b", 31)) // State for "a" should timeout and emit -1
-      )
     }
+    val inputData = MemoryStream[(String, Int)]
+    val result =
+      inputData.toDS
+        .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
+        .withWatermark("eventTime", "10 seconds")
+        .as[(String, Long)]
+        .groupByKey(_._1)
+        .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
+
+    testStream(result, Update)(
+      StartStream(),
+
+      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+      // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+      CheckNewAnswer(("a", 15)),  // Output = max event time of a
+
+      AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
+      CheckNewAnswer(),                   // No output as data should get filtered by watermark
+
+      AddData(inputData, ("a", 10)),      // Add data newer than watermark for "a"
+      CheckNewAnswer(("a", 15)),          // Max event time is still the same
+      // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
+      // Watermark is still 5 as max event time for all data is still 15.
+
+      AddData(inputData, ("b", 31)),      // Add data newer than watermark for "b", not "a"
+      // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
+      CheckNewAnswer(("a", -1), ("b", 31))           // State for "a" should timeout and emit -1
+    )
   }
 
   test("flatMapGroupsWithState - uses state format version 2 by default") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
-        val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-        state.update(RunningCount(count))
-        Iterator((key, count.toString))
-      }
+    val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      state.update(RunningCount(count))
+      Iterator((key, count.toString))
+    }
 
-      val inputData = MemoryStream[String]
-      val result = inputData.toDS()
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS()
         .groupByKey(x => x)
         .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout)(stateFunc)
 
-      testStream(result, Update)(
-        AddData(inputData, "a"),
-        CheckNewAnswer(("a", "1")),
-        Execute { query =>
-          // Verify state format = 2
-          val f = query.lastExecution.executedPlan.collect
-          { case f: FlatMapGroupsWithStateExec => f }
-          assert(f.size == 1)
-          assert(f.head.stateFormatVersion == 2)
-        }
-      )
-    }
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      CheckNewAnswer(("a", "1")),
+      Execute { query =>
+        // Verify state format = 2
+        val f = query.lastExecution.executedPlan.collect { case f: FlatMapGroupsWithStateExec => f }
+        assert(f.size == 1)
+        assert(f.head.stateFormatVersion == 2)
+      }
+    )
   }
 
   test("flatMapGroupsWithState - recovery from checkpoint uses state format version 1") {
     // Function to maintain the max event time as state and set the timeout timestamp based on the
     // current max event time seen. It returns the max event time in the state, or -1 if the state
     // was removed by timeout.
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
-        assertCanGetProcessingTime {
-          state.getCurrentProcessingTimeMs() >= 0
-        }
-        assertCanGetWatermark {
-          state.getCurrentWatermarkMs() >= -1
-        }
+    val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+      assertCanGetWatermark { state.getCurrentWatermarkMs() >= -1 }
 
-        val timeoutDelaySec = 5
-        if (state.hasTimedOut) {
-          state.remove()
-          Iterator((key, -1))
-        } else {
-          val valuesSeq = values.toSeq
-          val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
-          val timeoutTimestampSec = maxEventTimeSec + timeoutDelaySec
-          state.update(maxEventTimeSec)
-          state.setTimeoutTimestamp(timeoutTimestampSec * 1000)
-          Iterator((key, maxEventTimeSec.toInt))
-        }
+      val timeoutDelaySec = 5
+      if (state.hasTimedOut) {
+        state.remove()
+        Iterator((key, -1))
+      } else {
+        val valuesSeq = values.toSeq
+        val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
+        val timeoutTimestampSec = maxEventTimeSec + timeoutDelaySec
+        state.update(maxEventTimeSec)
+        state.setTimeoutTimestamp(timeoutTimestampSec * 1000)
+        Iterator((key, maxEventTimeSec.toInt))
       }
-      val inputData = MemoryStream[(String, Int)]
-      val result =
-        inputData.toDS
-          .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
-          .withWatermark("eventTime", "10 seconds")
-          .as[(String, Long)]
-          .groupByKey(_._1)
-          .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
+    }
+    val inputData = MemoryStream[(String, Int)]
+    val result =
+      inputData.toDS
+        .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
+        .withWatermark("eventTime", "10 seconds")
+        .as[(String, Long)]
+        .groupByKey(_._1)
+        .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
 
-      val resourceUri = this.getClass.getResource(
-        "/structured-streaming/checkpoint-version-2.3.1-flatMapGroupsWithState-state-format-1/")
-        .toURI
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.3.1-flatMapGroupsWithState-state-format-1/").toURI
 
-      val checkpointDir = Utils.createTempDir().getCanonicalFile
-      // Copy the checkpoint to a temp dir to prevent changes to the original.
-      // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-      FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
 
-      inputData.addData(("a", 11), ("a", 13), ("a", 15))
-      inputData.addData(("a", 4))
+    inputData.addData(("a", 11), ("a", 13), ("a", 15))
+    inputData.addData(("a", 4))
 
-      testStream(result, Update)(
-        StartStream(
-          checkpointLocation = checkpointDir.getAbsolutePath,
-          additionalConfs = Map(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> "2")),
-        /*
+    testStream(result, Update)(
+      StartStream(
+        checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> "2")),
+      /*
       Note: The checkpoint was generated using the following input in Spark version 2.3.1
 
       AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
@@ -948,24 +942,22 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       CheckNewAnswer(),                   // No output as data should get filtered by watermark
       */
 
-        AddData(inputData, ("a", 10)), // Add data newer than watermark for "a"
-        CheckNewAnswer(("a", 15)), // Max event time is still the same
-        // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
-        // Watermark is still 5 as max event time for all data is still 15.
+      AddData(inputData, ("a", 10)),      // Add data newer than watermark for "a"
+      CheckNewAnswer(("a", 15)),          // Max event time is still the same
+      // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
+      // Watermark is still 5 as max event time for all data is still 15.
 
-        Execute { query =>
-          // Verify state format = 1
-          val f = query.lastExecution.executedPlan.collect { case f:
-            FlatMapGroupsWithStateExec => f }
-          assert(f.size == 1)
-          assert(f.head.stateFormatVersion == 1)
-        },
+      Execute { query =>
+        // Verify state format = 1
+        val f = query.lastExecution.executedPlan.collect { case f: FlatMapGroupsWithStateExec => f }
+        assert(f.size == 1)
+        assert(f.head.stateFormatVersion == 1)
+      },
 
-        AddData(inputData, ("b", 31)), // Add data newer than watermark for "b", not "a"
-        // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
-        CheckNewAnswer(("a", -1), ("b", 31)) // State for "a" should timeout and emit -1
-      )
-    }
+      AddData(inputData, ("b", 31)),      // Add data newer than watermark for "b", not "a"
+      // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
+      CheckNewAnswer(("a", -1), ("b", 31))           // State for "a" should timeout and emit -1
+    )
   }
 
 
@@ -1111,37 +1103,35 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     test("SPARK-20714: watermark does not fail query when timeout = " + timeoutConf) {
       // Function to maintain running count up to 2, and then remove the count
       // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
-      withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-        val stateFunc =
-          (key: String, values: Iterator[(String, Long)], state: GroupState[RunningCount]) => {
-            if (state.hasTimedOut) {
-              state.remove()
-              Iterator((key, "-1"))
-            } else {
-              val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-              state.update(RunningCount(count))
-              state.setTimeoutDuration("10 seconds")
-              Iterator((key, count.toString))
-            }
-          }
-
-        val clock = new StreamManualClock
-        val inputData = MemoryStream[(String, Long)]
-        val result =
-          inputData.toDF().toDF("key", "time")
-            .selectExpr("key", "cast(time as timestamp) as timestamp")
-            .withWatermark("timestamp", "10 second")
-            .as[(String, Long)]
-            .groupByKey(x => x._1)
-            .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
-
-        testStream(result, Update)(
-          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
-          AddData(inputData, ("a", 1L)),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "1"))
-        )
+      val stateFunc =
+      (key: String, values: Iterator[(String, Long)], state: GroupState[RunningCount]) => {
+        if (state.hasTimedOut) {
+          state.remove()
+          Iterator((key, "-1"))
+        } else {
+          val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+          state.update(RunningCount(count))
+          state.setTimeoutDuration("10 seconds")
+          Iterator((key, count.toString))
+        }
       }
+
+      val clock = new StreamManualClock
+      val inputData = MemoryStream[(String, Long)]
+      val result =
+        inputData.toDF().toDF("key", "time")
+          .selectExpr("key", "cast(time as timestamp) as timestamp")
+          .withWatermark("timestamp", "10 second")
+          .as[(String, Long)]
+          .groupByKey(x => x._1)
+          .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
+
+      testStream(result, Update)(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, ("a", 1L)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("a", "1"))
+      )
     }
   }
   testWithTimeout(NoTimeout)
