@@ -37,7 +37,7 @@ and `REPARTITION_BY_RANGE` hints are supported and are equivalent to `coalesce`,
 a way to tune performance and control the number of output files in Spark SQL. When multiple partitioning hints are
 specified, multiple nodes are inserted into the logical plan, but the leftmost hint is picked by the optimizer.
 
-### Partitioning Hints Types
+#### Partitioning Hints Types
 
 * **COALESCE**
 
@@ -51,8 +51,8 @@ specified, multiple nodes are inserted into the logical plan, but the leftmost h
 
   The `REPARTITION_BY_RANGE` hint can be used to repartition to the specified number of partitions using the specified partitioning expressions. It takes column names and an optional partition number as parameters.
 
+#### Examples
 
-### Examples
 ```sql
 SELECT /*+ COALESCE(3) */ * FROM t;
 
@@ -66,8 +66,7 @@ SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t;
 
 SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
 
--- When multiple partitioning hints are specified, multiple nodes are inserted into the logical plan,
--- but the leftmost hint is picked by the optimizer.
+-- multiple partitioning hints
 EXPLAIN EXTENDED SELECT /*+ REPARTITION(100), COALESCE(500), REPARTITION_BY_RANGE(3, c) */ * FROM t;
 == Parsed Logical Plan ==
 'UnresolvedHint REPARTITION, [100]
@@ -101,7 +100,7 @@ Exchange RoundRobinPartitioning(100), false, [id=#121]
 
 Join hints allow users to suggest the join strategy that Spark should use. Prior to Spark 3.0, only the `BROADCAST` Join Hint was supported. `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL` Joint Hints support was added in 3.0. When different join strategy hints are specified on both sides of a join, Spark prioritizes hints in the following order: `BROADCAST` over `MERGE` over `SHUFFLE_HASH` over `SHUFFLE_REPLICATE_NL`. When both sides are specified with the `BROADCAST` hint or the `SHUFFLE_HASH` hint, Spark will pick the build side based on the join type and the sizes of the relations. Since a given strategy may not support all join types, Spark is not guaranteed to use the join strategy suggested by the hint.
 
-### Join Hints Types
+#### Join Hints Types
 
 * **BROADCAST**
 
@@ -119,7 +118,7 @@ Join hints allow users to suggest the join strategy that Spark should use. Prior
 
     Suggests that Spark use shuffle-and-replicate nested loop join.
 
-### Examples
+#### Examples
 
 ```sql
 -- Join Hints for broadcast join
