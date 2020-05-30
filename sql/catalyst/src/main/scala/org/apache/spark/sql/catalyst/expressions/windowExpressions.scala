@@ -521,6 +521,8 @@ case class NthValue(input: Expression, offset: Expression)
       TypeCheckFailure("The 'offset' parameter must be a int literal.")
     }
   }
+
+  override def prettyName: String = "nth_value"
 }
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {
