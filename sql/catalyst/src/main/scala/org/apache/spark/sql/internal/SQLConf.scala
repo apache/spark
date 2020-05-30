@@ -2586,21 +2586,21 @@ object SQLConf {
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
 
-  val COALESCE_BUCKETS_IN_JOIN_ENABLED =
-    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.enabled")
+  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.enabled")
       .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
         "the side with a bigger number of buckets will be coalesced to have the same number " +
-        "of buckets as the other side. This bucket coalescing can happen only when the bigger " +
-        "number of buckets is divisible by the smaller number of buckets.")
+        "of buckets as the other side. Bucket coalescing is applied only to sort-merge joins " +
+        "and only when the bigger number of buckets is divisible by the smaller number of buckets.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
-  val COALESCE_BUCKETS_IN_JOIN_MAX_NUM_BUCKETS_DIFF =
-    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.maxNumBucketsDiff")
+  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_NUM_BUCKETS_DIFF =
+    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.maxNumBucketsDiff")
       .doc("The difference in count of two buckets being coalesced should be less than or " +
         "equal to this value for bucket coalescing to be applied. This configuration only " +
-        s"has an effect when '${COALESCE_BUCKETS_IN_JOIN_ENABLED.key}' is set to true.")
+        s"has an effect when '${COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key}' is set to true.")
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
@@ -2905,10 +2905,11 @@ class SQLConf extends Serializable with Logging {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
 
-  def coalesceBucketsInJoinEnabled: Boolean = getConf(COALESCE_BUCKETS_IN_JOIN_ENABLED)
+  def coalesceBucketsInSortMergeJoinEnabled: Boolean =
+    getConf(COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED)
 
-  def coalesceBucketsInJoinMaxNumBucketsDiff: Int =
-    getConf(COALESCE_BUCKETS_IN_JOIN_MAX_NUM_BUCKETS_DIFF)
+  def coalesceBucketsInSortMergeJoinMaxNumBucketsDiff: Int =
+    getConf(COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_NUM_BUCKETS_DIFF)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

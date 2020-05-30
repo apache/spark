@@ -18,16 +18,21 @@
 package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkSession {
+  case class BucketSetting(
+      numBuckets: Int,
+      expectedCoalescedNumBuckets: Option[Int])
+
   private def newRelation(numBuckets: Int): HadoopFsRelation = HadoopFsRelation(
     location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
     partitionSchema = StructType(Seq(StructField("a", IntegerType))),
@@ -37,105 +42,75 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
     options = Map.empty)(spark)
 
   private def run(
-      leftNumBuckets: Int,
-      rightNumBuckets: Int,
-      isSortMergeJoin: Boolean,
-      expectedLeftCoalescedNumBuckets: Option[Int],
-      expectedRightCoalescedNumBuckets: Option[Int]): Unit = {
-    val leftRelation = newRelation(leftNumBuckets)
-    val rightRelation = newRelation(rightNumBuckets)
-    val left = FileSourceScanExec(
-      leftRelation, Nil, leftRelation.dataSchema, Nil, None, None, Nil, None)
-    val right = FileSourceScanExec(
-      rightRelation, Nil, rightRelation.dataSchema, Nil, None, None, Nil, None)
-    val join = if (isSortMergeJoin) {
-      SortMergeJoinExec(Nil, Nil, Inner, None, left, right)
-    } else {
-      BroadcastHashJoinExec(Nil, Nil, Inner, BuildLeft, None, left, right)
-    }
-
-    val plan = CoalesceBucketsInSortMergeJoin(spark.sessionState.conf)(join)
-
-    def verify(expected: Option[Int], subPlan: SparkPlan): Unit = {
-      val coalesced = subPlan.collect {
-        case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.nonEmpty =>
-          f.optionalNumCoalescedBuckets.get
-      }
-      if (expected.isDefined) {
-        assert(coalesced.size == 1 && coalesced(0) == expected.get)
+      bucket1: BucketSetting,
+      bucket2: BucketSetting,
+      isSortMergeJoin: Boolean): Unit = {
+    Seq((bucket1, bucket2), (bucket2, bucket1)).foreach { case (l, r) =>
+      val lRelation = newRelation(l.numBuckets)
+      val rRelation = newRelation(r.numBuckets)
+      val lScan = FileSourceScanExec(
+        lRelation, Nil, lRelation.dataSchema, Nil, None, None, Nil, None)
+      val rScan = FileSourceScanExec(
+        rRelation, Nil, rRelation.dataSchema, Nil, None, None, Nil, None)
+      val join = if (isSortMergeJoin) {
+        SortMergeJoinExec(Nil, Nil, Inner, None, lScan, rScan)
       } else {
-        assert(coalesced.isEmpty)
+        BroadcastHashJoinExec(Nil, Nil, Inner, BuildLeft, None, lScan, rScan)
       }
-    }
 
-    verify(expectedLeftCoalescedNumBuckets, plan.asInstanceOf[BinaryExecNode].left)
-    verify(expectedRightCoalescedNumBuckets, plan.asInstanceOf[BinaryExecNode].right)
+      val plan = CoalesceBucketsInSortMergeJoin(spark.sessionState.conf)(join)
+
+      def verify(expected: Option[Int], subPlan: SparkPlan): Unit = {
+        val coalesced = subPlan.collect {
+          case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.nonEmpty =>
+            f.optionalNumCoalescedBuckets.get
+        }
+        if (expected.isDefined) {
+          assert(coalesced.size == 1 && coalesced(0) == expected.get)
+        } else {
+          assert(coalesced.isEmpty)
+        }
+      }
+
+      verify(l.expectedCoalescedNumBuckets, plan.asInstanceOf[BinaryExecNode].left)
+      verify(r.expectedCoalescedNumBuckets, plan.asInstanceOf[BinaryExecNode].right)
+    }
   }
 
   test("bucket coalescing - basic") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
-      run(
-        leftNumBuckets = 4,
-        rightNumBuckets = 8,
-        isSortMergeJoin = true,
-        expectedLeftCoalescedNumBuckets = None,
-        expectedRightCoalescedNumBuckets = Some(4))
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+      run(BucketSetting(4, None), BucketSetting(8, Some(4)), isSortMergeJoin = true)
     }
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
-      run(
-        leftNumBuckets = 4,
-        rightNumBuckets = 8,
-        isSortMergeJoin = true,
-        expectedLeftCoalescedNumBuckets = None,
-        expectedRightCoalescedNumBuckets = None)
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "false") {
+      run(BucketSetting(4, None), BucketSetting(8, None), isSortMergeJoin = true)
     }
   }
 
   test("bucket coalescing should work only for sort merge join") {
     Seq(true, false).foreach { enabled =>
-      withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> enabled.toString) {
-        run(
-          leftNumBuckets = 4,
-          rightNumBuckets = 8,
-          isSortMergeJoin = false,
-          expectedLeftCoalescedNumBuckets = None,
-          expectedRightCoalescedNumBuckets = None)
+      withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> enabled.toString) {
+        run(BucketSetting(4, None), BucketSetting(8, None), isSortMergeJoin = false)
       }
     }
   }
 
   test("bucket coalescing shouldn't be applied when the number of buckets are the same") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
-      run(
-        leftNumBuckets = 8,
-        rightNumBuckets = 8,
-        isSortMergeJoin = true,
-        expectedLeftCoalescedNumBuckets = None,
-        expectedRightCoalescedNumBuckets = None)
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+      run(BucketSetting(8, None), BucketSetting(8, None), isSortMergeJoin = true)
     }
   }
 
   test("number of bucket is not divisible by other number of bucket") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
-      run(
-        leftNumBuckets = 8,
-        rightNumBuckets = 3,
-        isSortMergeJoin = true,
-        expectedLeftCoalescedNumBuckets = None,
-        expectedRightCoalescedNumBuckets = None)
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+      run(BucketSetting(3, None), BucketSetting(8, None), isSortMergeJoin = true)
     }
   }
 
   test("the difference in the number of buckets is greater than max allowed") {
     withSQLConf(
-      SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_NUM_BUCKETS_DIFF.key -> "2") {
-      run(
-        leftNumBuckets = 8,
-        rightNumBuckets = 4,
-        isSortMergeJoin = true,
-        expectedLeftCoalescedNumBuckets = None,
-        expectedRightCoalescedNumBuckets = None)
+      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true",
+      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_NUM_BUCKETS_DIFF.key -> "2") {
+      run(BucketSetting(4, None), BucketSetting(8, None), isSortMergeJoin = true)
     }
   }
 }
