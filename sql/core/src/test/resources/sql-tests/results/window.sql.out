@@ -17,28 +17,41 @@ AS testData(val, val_long, val_double, val_date, val_timestamp, cate)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1501545600 AS TIMESTAMP)' due to data type mismatch: cannot cast int to timestamp,you can enable the casting by setting spark.sql.legacy.allowCastNumericToTimestamp to true,but we strongly recommand using function TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.; line 2 pos 37
+
 
 
 -- !query
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val ROWS CURRENT ROW) FROM testData
 ORDER BY cate, val
 -- !query schema
-struct<>
+struct<val:int,cate:string,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
+NULL	NULL	0
+3	NULL	1
+NULL	a	0
+1	a	1
+1	a	1
+2	a	1
+1	b	1
+2	b	1
+3	b	1
 
 
 -- !query
 SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val
 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query schema
-struct<>
+struct<val:int,cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
+NULL	NULL	3
+3	NULL	3
+NULL	a	1
+1	a	2
+1	a	4
+2	a	4
+1	b	3
+2	b	6
+3	b	6
 
 
 -- !query
@@ -48,35 +61,58 @@ ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`val_long`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
+cannot resolve 'ROWS BETWEEN CURRENT ROW AND 2147483648L FOLLOWING' due to data type mismatch: The data type of the upper bound 'bigint' does not match the expected data type 'int'.; line 1 pos 41
 
 
 -- !query
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val RANGE 1 PRECEDING) FROM testData
 ORDER BY cate, val
 -- !query schema
-struct<>
+struct<val:int,cate:string,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
+NULL	NULL	0
+3	NULL	1
+NULL	a	0
+1	a	2
+1	a	2
+2	a	3
+1	b	1
+2	b	2
+3	b	2
 
 
 -- !query
 SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query schema
-struct<>
+struct<val:int,cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING):bigint>
 -- !query output
-java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve '`val`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
+NULL	NULL	NULL
+3	NULL	3
+NULL	a	NULL
+1	a	4
+1	a	4
+2	a	2
+1	b	3
+2	b	5
+3	b	3
 
 
 -- !query
 SELECT val_long, cate, sum(val_long) OVER(PARTITION BY cate ORDER BY val_long
 RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, val_long
 -- !query schema
-struct<>
+struct<val_long:bigint,cate:string,sum(val_long) OVER (PARTITION BY cate ORDER BY val_long ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING):bigint>
 -- !query output
-java.sql.SQLException Error running query: org.apache.spark.sql.AnalysisException: cannot resolve '`val_long`' given input columns: [spark_catalog.default.testdata.key, spark_catalog.default.testdata.value]; line 1 pos 7
+NULL	NULL	NULL
+1	NULL	1
+1	a	4
+1	a	4
+2	a	2147483652
+2147483650	a	2147483650
+NULL	b	NULL
+3	b	2147483653
+2147483650	b	2147483650
 
 
 -- !query

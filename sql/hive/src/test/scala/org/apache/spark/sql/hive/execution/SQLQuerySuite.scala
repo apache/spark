@@ -25,6 +25,7 @@ import java.util.{Locale, Set}
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
@@ -68,9 +69,19 @@ case class Order(
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHiveSingleton {
+abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHiveSingleton
+  with BeforeAndAfter {
   import hiveContext._
   import spark.implicits._
+
+  before {
+    spark.sessionState.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
+  }
+
+  after {
+    spark.sessionState.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+      SQLConf.get.legacyAllowCastNumericToTimestamp)
+  }
 
   test("query global temp view") {
     val df = Seq(1).toDF("i1")
@@ -1171,19 +1182,16 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-6785: HiveQuerySuite - Date comparison test 2") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      checkAnswer(
-        sql("SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1"),
-        Row(false))
-    }
+    checkAnswer(
+      sql("SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1"),
+      Row(false))
   }
 
   test("SPARK-6785: HiveQuerySuite - Date cast") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
-      // new Date(0) == 1970-01-01 00:00:00.0 GMT == 1969-12-31 16:00:00.0 PST
-      checkAnswer(
-        sql(
-          """
+    // new Date(0) == 1970-01-01 00:00:00.0 GMT == 1969-12-31 16:00:00.0 PST
+    checkAnswer(
+      sql(
+        """
           | SELECT
           | CAST(CAST(0 AS timestamp) AS date),
           | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
@@ -1191,19 +1199,16 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           | CAST(CAST(0 AS timestamp) AS string),
           | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
           | FROM src LIMIT 1
-        """.
-            stripMargin),
-      Row
-      (
-        Date.valueOf(
-          "1969-12-31"),
+        """.stripMargin),
+      Row(
+        Date.valueOf("1969-12-31"),
         String.valueOf("1969-12-31"),
         Timestamp.valueOf("1969-12-31 16:00:00"),
         String.valueOf("1969-12-31 16:00:00"),
-        Timestamp.valueOf("1970-01-01 00:00:00"
-        )))
-    }
-   }
+        Timestamp.valueOf("1970-01-01 00:00:00")))
+
+  }
+
   test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
     val df =
       createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))

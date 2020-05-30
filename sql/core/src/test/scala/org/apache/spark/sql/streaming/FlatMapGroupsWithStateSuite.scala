@@ -21,7 +21,7 @@ import java.io.File
 import java.sql.Date
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.BeforeAndAfter
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException

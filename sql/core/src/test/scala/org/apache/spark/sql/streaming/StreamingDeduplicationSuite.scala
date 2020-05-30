@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
