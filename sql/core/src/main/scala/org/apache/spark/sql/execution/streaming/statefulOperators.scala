@@ -137,11 +137,11 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 
   protected def applyRemovingRowsOlderThanWatermark(
       iter: Iterator[InternalRow],
-      predicate: BasePredicate): Iterator[InternalRow] = {
-    iter.filter { row =>
-      val filteredIn = !predicate.eval(row)
-      if (!filteredIn) longMetric("numLateInputs") += 1
-      filteredIn
+      predicateFilterOutLateInput: BasePredicate): Iterator[InternalRow] = {
+    iter.filterNot { row =>
+      val lateInput = predicateFilterOutLateInput.eval(row)
+      if (lateInput) longMetric("numLateInputs") += 1
+      lateInput
     }
   }
 
