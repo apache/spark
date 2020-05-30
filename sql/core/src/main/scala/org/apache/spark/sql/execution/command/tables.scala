@@ -124,6 +124,9 @@ case class CreateTableLikeCommand(
       case VIEW =>
         // For view, we just use new properties
         properties
+      case other =>
+        throw new IllegalArgumentException(
+          s"Unknown table type is found at createTableLikeCommand: $other")
     }
     val newTableDesc =
       CatalogTable(
