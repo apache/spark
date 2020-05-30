@@ -18,7 +18,6 @@
 import contextlib
 import io
 import os
-import subprocess
 import tempfile
 import unittest
 from datetime import datetime, time, timedelta
@@ -32,9 +31,10 @@ from airflow.cli import cli_parser
 from airflow.cli.commands import dag_command
 from airflow.exceptions import AirflowException
 from airflow.models import DagBag, DagModel, DagRun
-from airflow.settings import Session
 from airflow.utils import timezone
+from airflow.utils.session import create_session
 from airflow.utils.state import State
+from airflow.utils.types import DagRunType
 from tests.test_utils.config import conf_vars
 
 dag_folder_path = '/'.join(os.path.realpath(__file__).split('/')[:-1])
@@ -238,23 +238,30 @@ class TestCliDags(unittest.TestCase):
             verbose=False,
         )
 
-    @pytest.mark.quarantined
     def test_next_execution(self):
-        # A scaffolding function
-        def reset_dr_db(dag_id):
-            session = Session()
-            dr = session.query(DagRun).filter_by(dag_id=dag_id)
-            dr.delete()
-            session.commit()
-            session.close()
-
         dag_ids = ['example_bash_operator',  # schedule_interval is '0 0 * * *'
                    'latest_only',  # schedule_interval is timedelta(hours=4)
                    'example_python_operator',  # schedule_interval=None
                    'example_xcom']  # schedule_interval="@once"
 
+        # Delete DagRuns
+        with create_session() as session:
+            dr = session.query(DagRun).filter(DagRun.dag_id.in_(dag_ids))
+            dr.delete(synchronize_session=False)
+
+        args = self.parser.parse_args(['dags',
+                                       'next_execution',
+                                       dag_ids[0]])
+
+        with contextlib.redirect_stdout(io.StringIO()) as temp_stdout:
+            dag_command.dag_next_execution(args)
+            out = temp_stdout.getvalue()
+            # `next_execution` function is inapplicable if no execution record found
+            # It prints `None` in such cases
+            self.assertIn("None", out)
+
         # The details below is determined by the schedule_interval of example DAGs
-        now = timezone.utcnow()
+        now = DEFAULT_DATE
         next_execution_time_for_dag1 = pytz.utc.localize(
             datetime.combine(
                 now.date() + timedelta(days=1),
@@ -267,43 +274,29 @@ class TestCliDags(unittest.TestCase):
                            "None",
                            "None"]
 
-        for i in range(len(dag_ids)):  # pylint: disable=consider-using-enumerate
-            dag_id = dag_ids[i]
-
-            # Clear dag run so no execution history fo each DAG
-            reset_dr_db(dag_id)
-
-            proc = subprocess.Popen(["airflow", "dags", "next_execution", dag_id,
-                                     "--subdir", EXAMPLE_DAGS_FOLDER],
-                                    stdout=subprocess.PIPE)
-            proc.wait()
-            stdout = []
-            for line in proc.stdout:
-                stdout.append(str(line.decode("utf-8").rstrip()))
-
-            # `next_execution` function is inapplicable if no execution record found
-            # It prints `None` in such cases
-            self.assertEqual(stdout[-1], "None")
+        for i, dag_id in enumerate(dag_ids):
+            args = self.parser.parse_args(['dags',
+                                           'next_execution',
+                                           dag_id])
 
             dag = self.dagbag.dags[dag_id]
             # Create a DagRun for each DAG, to prepare for next step
             dag.create_dagrun(
-                run_id='manual__' + now.isoformat(),
+                run_id=DagRunType.MANUAL.value,
                 execution_date=now,
                 start_date=now,
                 state=State.FAILED
             )
 
-            proc = subprocess.Popen(["airflow", "dags", "next_execution", dag_id,
-                                     "--subdir", EXAMPLE_DAGS_FOLDER],
-                                    stdout=subprocess.PIPE)
-            proc.wait()
-            stdout = []
-            for line in proc.stdout:
-                stdout.append(str(line.decode("utf-8").rstrip()))
-            self.assertEqual(stdout[-1], expected_output[i])
+            with contextlib.redirect_stdout(io.StringIO()) as temp_stdout:
+                dag_command.dag_next_execution(args)
+                out = temp_stdout.getvalue()
+            self.assertIn(expected_output[i], out)
 
-            reset_dr_db(dag_id)
+        # Clean up before leaving
+        with create_session() as session:
+            dr = session.query(DagRun).filter(DagRun.dag_id.in_(dag_ids))
+            dr.delete(synchronize_session=False)
 
     @conf_vars({
         ('core', 'load_examples'): 'true'
