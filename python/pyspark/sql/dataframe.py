@@ -2219,6 +2219,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self._jdf.semanticHash()
 
+    @since(3.1)
+    def inputFiles(self):
+        """
+        Returns a best-effort snapshot of the files that compose this :class:`DataFrame`.
+        This method simply asks each constituent BaseRelation for its respective files and
+        takes the union of all results. Depending on the source relations, this may not find
+        all input files. Duplicates are removed.
+
+        >>> df = spark.read.load("examples/src/main/resources/people.json", format="json")
+        >>> len(df.inputFiles())
+        1
+        """
+        return list(self._jdf.inputFiles())
+
     where = copy_func(
         filter,
         sinceversion=1.3,

@@ -117,6 +117,34 @@ trait DateTimeFormatterHelper {
         s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
         s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
   }
+
+  /**
+   * When the new DateTimeFormatter failed to initialize because of invalid datetime pattern, it
+   * will throw IllegalArgumentException. If the pattern can be recognized by the legacy formatter
+   * it will raise SparkUpgradeException to tell users to restore the previous behavior via LEGACY
+   * policy or follow our guide to correct their pattern. Otherwise, the original
+   * IllegalArgumentException will be thrown.
+   *
+   * @param pattern the date time pattern
+   * @param tryLegacyFormatter a func to capture exception, identically which forces a legacy
+   *                           datetime formatter to be initialized
+   */
+
+  protected def checkLegacyFormatter(
+      pattern: String,
+      tryLegacyFormatter: => Unit): PartialFunction[Throwable, DateTimeFormatter] = {
+    case e: IllegalArgumentException =>
+      try {
+        tryLegacyFormatter
+      } catch {
+        case _: Throwable => throw e
+      }
+      throw new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
+        s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
+        s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
+        s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+        e)
+  }
 }
 
 private object DateTimeFormatterHelper {
@@ -189,7 +217,18 @@ private object DateTimeFormatterHelper {
     toFormatter(builder, TimestampFormatter.defaultLocale)
   }
 
+  private final val bugInStandAloneForm = {
+    // Java 8 has a bug for stand-alone form. See https://bugs.openjdk.java.net/browse/JDK-8114833
+    // Note: we only check the US locale so that it's a static check. It can produce false-negative
+    // as some locales are not affected by the bug. Since `L`/`q` is rarely used, we choose to not
+    // complicate the check here.
+    // TODO: remove it when we drop Java 8 support.
+    val formatter = DateTimeFormatter.ofPattern("LLL qqq", Locale.US)
+    formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
+  }
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
+  final val unsupportedNarrowTextStyle =
+    Seq("G", "M", "L", "E", "u", "Q", "q").map(_ * 5).toSet
 
   /**
    * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
@@ -210,6 +249,15 @@ private object DateTimeFormatterHelper {
         if (index % 2 == 0) {
           for (c <- patternPart if unsupportedLetters.contains(c)) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
+          }
+          for (style <- unsupportedNarrowTextStyle if patternPart.contains(style)) {
+            throw new IllegalArgumentException(s"Too many pattern letters: ${style.head}")
+          }
+          if (bugInStandAloneForm && (patternPart.contains("LLL") || patternPart.contains("qqq"))) {
+            throw new IllegalArgumentException("Java 8 has a bug to support stand-alone " +
+              "form (3 or more 'L' or 'q' in the pattern string). Please use 'M' or 'Q' instead, " +
+              "or upgrade your Java version. For more details, please read " +
+              "https://bugs.openjdk.java.net/browse/JDK-8114833")
           }
           // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
           // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
