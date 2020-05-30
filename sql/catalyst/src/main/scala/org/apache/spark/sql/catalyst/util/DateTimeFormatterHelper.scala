@@ -115,7 +115,7 @@ trait DateTimeFormatterHelper {
       }
       throw new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
         s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
-        s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
+        "before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
   }
 
   // When legacy time parser policy set to EXCEPTION, check whether we will get different results
@@ -133,10 +133,15 @@ trait DateTimeFormatterHelper {
     }
     throw new SparkUpgradeException("3.0", s"Fail to format it to '$resultCandidate' in the new" +
       s" formatter. You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore" +
-      s" the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid" +
-      s" datetime string.", e)
+      " the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid" +
+      " datetime string.", e)
   }
 
+  /**
+   * In general, the [[DateTimeException]] is used to indicate a problem while calculating a
+   * datetime. In practice, some unchecked exceptions in the new parser could also lead us to silent
+   * data change, e.g. SPARK-31867.
+   */
   private def needConvertToSparkUpgradeException(e: Throwable): Boolean = e match {
     case _: DateTimeException | _: ArrayIndexOutOfBoundsException
       if SQLConf.get.legacyTimeParserPolicy == EXCEPTION => true
