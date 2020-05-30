@@ -267,7 +267,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         // Test escaping of format
         GenerateUnsafeProjection.generate(
-          DateFormatClass(Literal(ts), Literal("\"quote"), JST_OPT) :: Nil)
+          DateFormatClass(Literal(ts), Literal("\""), JST_OPT) :: Nil)
 
         // SPARK-28072 The codegen path should work
         checkEvaluation(
@@ -792,7 +792,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     // Test escaping of format
-    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("unix_timestamp") {
@@ -862,7 +862,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("to_unix_timestamp") {
@@ -940,7 +940,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("datediff") {

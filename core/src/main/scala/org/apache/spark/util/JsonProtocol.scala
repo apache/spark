@@ -487,6 +487,7 @@ private[spark] object JsonProtocol {
     ("Callsite" -> rddInfo.callSite) ~
     ("Parent IDs" -> parentIds) ~
     ("Storage Level" -> storageLevel) ~
+    ("Barrier" -> rddInfo.isBarrier) ~
     ("Number of Partitions" -> rddInfo.numPartitions) ~
     ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
     ("Memory Size" -> rddInfo.memSize) ~

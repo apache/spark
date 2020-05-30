@@ -175,19 +175,19 @@ private[ui] class SqlStatsPagedTable(
   private val (sortColumn, desc, pageSize) =
     getTableParameters(request, sqlStatsTableTag, "Start Time")
 
-  override val dataSource = new SqlStatsTableDataSource(data, pageSize, sortColumn, desc)
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
 
   private val parameterPath =
     s"$basePath/$subPath/?${getParameterOtherTable(request, sqlStatsTableTag)}"
 
+  override val dataSource = new SqlStatsTableDataSource(data, pageSize, sortColumn, desc)
+
   override def tableId: String = sqlStatsTableTag
 
   override def tableCssClass: String =
-    "table table-bordered table-sm table-striped " +
-      "table-head-clickable table-cell-width-limited"
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$sqlStatsTableTag.sort=$encodedSortColumn" +
@@ -200,11 +200,9 @@ private[ui] class SqlStatsPagedTable(
 
   override def pageNumberFormField: String = s"$sqlStatsTableTag.page"
 
-  override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+  override def goButtonFormPath: String =
     s"$parameterPath&$sqlStatsTableTag.sort=$encodedSortColumn" +
       s"&$sqlStatsTableTag.desc=$desc#$sqlStatsTableTag"
-  }
 
   override def headers: Seq[Node] = {
     val sqlTableHeadersAndTooltips: Seq[(String, Boolean, Option[String])] =
@@ -307,19 +305,19 @@ private[ui] class SessionStatsPagedTable(
   private val (sortColumn, desc, pageSize) =
     getTableParameters(request, sessionStatsTableTag, "Start Time")
 
-  override val dataSource = new SessionStatsTableDataSource(data, pageSize, sortColumn, desc)
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
 
   private val parameterPath =
     s"$basePath/$subPath/?${getParameterOtherTable(request, sessionStatsTableTag)}"
 
+  override val dataSource = new SessionStatsTableDataSource(data, pageSize, sortColumn, desc)
+
   override def tableId: String = sessionStatsTableTag
 
   override def tableCssClass: String =
-    "table table-bordered table-sm table-striped " +
-      "table-head-clickable table-cell-width-limited"
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$sessionStatsTableTag.sort=$encodedSortColumn" +
@@ -332,11 +330,9 @@ private[ui] class SessionStatsPagedTable(
 
   override def pageNumberFormField: String = s"$sessionStatsTableTag.page"
 
-  override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+  override def goButtonFormPath: String =
     s"$parameterPath&$sessionStatsTableTag.sort=$encodedSortColumn" +
       s"&$sessionStatsTableTag.desc=$desc#$sessionStatsTableTag"
-  }
 
   override def headers: Seq[Node] = {
     val sessionTableHeadersAndTooltips: Seq[(String, Boolean, Option[String])] =
@@ -370,108 +366,94 @@ private[ui] class SessionStatsPagedTable(
   }
 }
 
-  private[ui] class SqlStatsTableRow(
+private[ui] class SqlStatsTableRow(
     val jobId: Seq[String],
     val duration: Long,
     val executionTime: Long,
     val executionInfo: ExecutionInfo,
     val detail: String)
 
-  private[ui] class SqlStatsTableDataSource(
+private[ui] class SqlStatsTableDataSource(
     info: Seq[ExecutionInfo],
     pageSize: Int,
     sortColumn: String,
     desc: Boolean) extends PagedDataSource[SqlStatsTableRow](pageSize) {
 
-    // Convert ExecutionInfo to SqlStatsTableRow which contains the final contents to show in
-    // the table so that we can avoid creating duplicate contents during sorting the data
-    private val data = info.map(sqlStatsTableRow).sorted(ordering(sortColumn, desc))
+  // Convert ExecutionInfo to SqlStatsTableRow which contains the final contents to show in
+  // the table so that we can avoid creating duplicate contents during sorting the data
+  private val data = info.map(sqlStatsTableRow).sorted(ordering(sortColumn, desc))
 
-    private var _slicedStartTime: Set[Long] = null
+  override def dataSize: Int = data.size
 
-    override def dataSize: Int = data.size
+  override def sliceData(from: Int, to: Int): Seq[SqlStatsTableRow] = data.slice(from, to)
 
-    override def sliceData(from: Int, to: Int): Seq[SqlStatsTableRow] = {
-      val r = data.slice(from, to)
-      _slicedStartTime = r.map(_.executionInfo.startTimestamp).toSet
-      r
-    }
+  private def sqlStatsTableRow(executionInfo: ExecutionInfo): SqlStatsTableRow = {
+    val duration = executionInfo.totalTime(executionInfo.closeTimestamp)
+    val executionTime = executionInfo.totalTime(executionInfo.finishTimestamp)
+    val detail = Option(executionInfo.detail).filter(!_.isEmpty)
+      .getOrElse(executionInfo.executePlan)
+    val jobId = executionInfo.jobId.toSeq.sorted
 
-    private def sqlStatsTableRow(executionInfo: ExecutionInfo): SqlStatsTableRow = {
-      val duration = executionInfo.totalTime(executionInfo.closeTimestamp)
-      val executionTime = executionInfo.totalTime(executionInfo.finishTimestamp)
-      val detail = Option(executionInfo.detail).filter(!_.isEmpty)
-        .getOrElse(executionInfo.executePlan)
-      val jobId = executionInfo.jobId.toSeq.sorted
-
-      new SqlStatsTableRow(jobId, duration, executionTime, executionInfo, detail)
-
-    }
-
-    /**
-     * Return Ordering according to sortColumn and desc.
-     */
-    private def ordering(sortColumn: String, desc: Boolean): Ordering[SqlStatsTableRow] = {
-      val ordering: Ordering[SqlStatsTableRow] = sortColumn match {
-        case "User" => Ordering.by(_.executionInfo.userName)
-        case "JobID" => Ordering by (_.jobId.headOption)
-        case "GroupID" => Ordering.by(_.executionInfo.groupId)
-        case "Start Time" => Ordering.by(_.executionInfo.startTimestamp)
-        case "Finish Time" => Ordering.by(_.executionInfo.finishTimestamp)
-        case "Close Time" => Ordering.by(_.executionInfo.closeTimestamp)
-        case "Execution Time" => Ordering.by(_.executionTime)
-        case "Duration" => Ordering.by(_.duration)
-        case "Statement" => Ordering.by(_.executionInfo.statement)
-        case "State" => Ordering.by(_.executionInfo.state)
-        case "Detail" => Ordering.by(_.detail)
-        case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
-      }
-      if (desc) {
-        ordering.reverse
-      } else {
-        ordering
-      }
-    }
-
+    new SqlStatsTableRow(jobId, duration, executionTime, executionInfo, detail)
   }
 
-  private[ui] class SessionStatsTableDataSource(
+  /**
+   * Return Ordering according to sortColumn and desc.
+   */
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[SqlStatsTableRow] = {
+    val ordering: Ordering[SqlStatsTableRow] = sortColumn match {
+      case "User" => Ordering.by(_.executionInfo.userName)
+      case "JobID" => Ordering by (_.jobId.headOption)
+      case "GroupID" => Ordering.by(_.executionInfo.groupId)
+      case "Start Time" => Ordering.by(_.executionInfo.startTimestamp)
+      case "Finish Time" => Ordering.by(_.executionInfo.finishTimestamp)
+      case "Close Time" => Ordering.by(_.executionInfo.closeTimestamp)
+      case "Execution Time" => Ordering.by(_.executionTime)
+      case "Duration" => Ordering.by(_.duration)
+      case "Statement" => Ordering.by(_.executionInfo.statement)
+      case "State" => Ordering.by(_.executionInfo.state)
+      case "Detail" => Ordering.by(_.detail)
+      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
+    }
+    if (desc) {
+      ordering.reverse
+    } else {
+      ordering
+    }
+  }
+}
+
+private[ui] class SessionStatsTableDataSource(
     info: Seq[SessionInfo],
     pageSize: Int,
     sortColumn: String,
     desc: Boolean) extends PagedDataSource[SessionInfo](pageSize) {
 
-    // Sorting SessionInfo data
-    private val data = info.sorted(ordering(sortColumn, desc))
+  // Sorting SessionInfo data
+  private val data = info.sorted(ordering(sortColumn, desc))
 
-    private var _slicedStartTime: Set[Long] = null
+  override def dataSize: Int = data.size
 
-    override def dataSize: Int = data.size
+  override def sliceData(from: Int, to: Int): Seq[SessionInfo] = data.slice(from, to)
 
-    override def sliceData(from: Int, to: Int): Seq[SessionInfo] = {
-      val r = data.slice(from, to)
-      _slicedStartTime = r.map(_.startTimestamp).toSet
-      r
+  /**
+   * Return Ordering according to sortColumn and desc.
+   */
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[SessionInfo] = {
+    val ordering: Ordering[SessionInfo] = sortColumn match {
+      case "User" => Ordering.by(_.userName)
+      case "IP" => Ordering.by(_.ip)
+      case "Session ID" => Ordering.by(_.sessionId)
+      case "Start Time" => Ordering by (_.startTimestamp)
+      case "Finish Time" => Ordering.by(_.finishTimestamp)
+      case "Duration" => Ordering.by(_.totalTime)
+      case "Total Execute" => Ordering.by(_.totalExecution)
+      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
-
-    /**
-     * Return Ordering according to sortColumn and desc.
-     */
-    private def ordering(sortColumn: String, desc: Boolean): Ordering[SessionInfo] = {
-      val ordering: Ordering[SessionInfo] = sortColumn match {
-        case "User" => Ordering.by(_.userName)
-        case "IP" => Ordering.by(_.ip)
-        case "Session ID" => Ordering.by(_.sessionId)
-        case "Start Time" => Ordering by (_.startTimestamp)
-        case "Finish Time" => Ordering.by(_.finishTimestamp)
-        case "Duration" => Ordering.by(_.totalTime)
-        case "Total Execute" => Ordering.by(_.totalExecution)
-        case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
-      }
-      if (desc) {
-        ordering.reverse
-      } else {
-        ordering
-      }
+    if (desc) {
+      ordering.reverse
+    } else {
+      ordering
     }
   }
+}
