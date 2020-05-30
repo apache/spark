@@ -474,7 +474,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         val t1 = spark.table("t1")
         val t3 = spark.table("t3")
 
-        // join2 is a broadcast join where df2 is broadcasted. Note that output partitioning on the
+        // join1 is a broadcast join where df2 is broadcasted. Note that output partitioning on the
         // streamed side (t1) is HashPartitioning (bucketed files).
         val join1 = t1.join(df2, t1("i1") === df2("i2"))
         val plan1 = join1.queryExecution.executedPlan
