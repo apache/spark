@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - The difference in the number of buckets is less than the value set in
  *     COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_NUM_BUCKETS_DIFF.
  */
-case class CoalesceBucketsInSortMergeJoin(conf: SQLConf) extends Rule[SparkPlan]  {
+case class CoalesceBucketsInSortMergeJoin(conf: SQLConf) extends Rule[SparkPlan] {
   private def mayCoalesce(numBuckets1: Int, numBuckets2: Int, conf: SQLConf): Option[Int] = {
     assert(numBuckets1 != numBuckets2)
     val (small, large) = (math.min(numBuckets1, numBuckets2), math.max(numBuckets1, numBuckets2))
