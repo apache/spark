@@ -66,7 +66,7 @@ FROM   (VALUES ('x', 'a', 10), ('y', 'b', 20) ) AS t (c1, c2, c3)
 GROUP  BY GROUPING SETS ( ( c1 ), ( c2 ) )
 HAVING GROUPING__ID > 1
 -- !query schema
-struct<c1:string,c2:string,sum(c3):bigint,grouping__id:int>
+struct<c1:string,c2:string,sum(c3):bigint,grouping__id:bigint>
 -- !query output
 NULL	a	10	2
 NULL	b	20	2
@@ -138,7 +138,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'ROLLUP' expecting <EOF>(line 1, pos 53)
+extraneous input 'ROLLUP' expecting {<EOF>, ';'}(line 1, pos 53)
 
 == SQL ==
 SELECT a, b, c, count(d) FROM grouping GROUP BY WITH ROLLUP
@@ -152,7 +152,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'CUBE' expecting <EOF>(line 1, pos 53)
+extraneous input 'CUBE' expecting {<EOF>, ';'}(line 1, pos 53)
 
 == SQL ==
 SELECT a, b, c, count(d) FROM grouping GROUP BY WITH CUBE
@@ -184,7 +184,7 @@ struct<k1:int,k2:int,avg(v):double>
 -- !query
 SELECT grouping__id, k1, k2, avg(v) FROM (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) GROUP BY GROUPING SETS ((k1),(k1,k2),(k2,k1))
 -- !query schema
-struct<grouping__id:int,k1:int,k2:int,avg(v):double>
+struct<grouping__id:bigint,k1:int,k2:int,avg(v):double>
 -- !query output
 0	1	1	1.0
 0	1	1	1.0

@@ -390,11 +390,11 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         # Function returns a pdf with required column names, but order could be arbitrary using dict
         def change_col_order(pdf):
             # Constructing a DataFrame from a dict should result in the same order,
-            # but use from_items to ensure the pdf column order is different than schema
-            return pd.DataFrame.from_items([
+            # but use OrderedDict to ensure the pdf column order is different than schema
+            return pd.DataFrame.from_dict(OrderedDict([
                 ('id', pdf.id),
                 ('u', pdf.v * 2),
-                ('v', pdf.v)])
+                ('v', pdf.v)]))
 
         ordered_udf = pandas_udf(
             change_col_order,

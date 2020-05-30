@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Im
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
@@ -758,6 +759,7 @@ class SessionCatalog(
     val name = metadata.identifier
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
+    val multiParts = Seq(CatalogManager.SESSION_CATALOG_NAME, db, table)
 
     if (metadata.tableType == CatalogTableType.VIEW) {
       val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
@@ -769,9 +771,9 @@ class SessionCatalog(
         desc = metadata,
         output = metadata.schema.toAttributes,
         child = parser.parsePlan(viewText))
-      SubqueryAlias(table, db, child)
+      SubqueryAlias(multiParts, child)
     } else {
-      SubqueryAlias(table, db, UnresolvedCatalogRelation(metadata))
+      SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata))
     }
   }
 
@@ -826,6 +828,8 @@ class SessionCatalog(
         getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
       } catch {
         case _: NoSuchTableException => false
+        case _: NoSuchDatabaseException => false
+        case _: NoSuchNamespaceException => false
       }
     }
   }
@@ -874,6 +878,25 @@ class SessionCatalog(
     } else {
       dbTables
     }
+  }
+
+  /**
+   * List all matching views in the specified database, including local temporary views.
+   */
+  def listViews(db: String, pattern: String): Seq[TableIdentifier] = {
+    val dbName = formatDatabaseName(db)
+    val dbViews = if (dbName == globalTempViewManager.database) {
+      globalTempViewManager.listViewNames(pattern).map { name =>
+        TableIdentifier(name, Some(globalTempViewManager.database))
+      }
+    } else {
+      requireDbExists(dbName)
+      externalCatalog.listViews(dbName, pattern).map { name =>
+        TableIdentifier(name, Some(dbName))
+      }
+    }
+
+    dbViews ++ listLocalTempViews(pattern)
   }
 
   /**
@@ -1340,6 +1363,10 @@ class SessionCatalog(
       functionRegistry.functionExists(name) &&
       !FunctionRegistry.builtin.functionExists(name) &&
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
+  }
+
+  def isTempFunction(name: String): Boolean = {
+    isTemporaryFunction(FunctionIdentifier(name))
   }
 
   /**

@@ -25,7 +25,8 @@ test_that("Check masked functions", {
   namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
                      "summary", "transform", "drop", "window", "as.data.frame", "union", "not")
-  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
+  version <- packageVersion("base")
+  if (as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3) {
     namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
   }
   masked <- conflicts(detail = TRUE)$`package:SparkR`

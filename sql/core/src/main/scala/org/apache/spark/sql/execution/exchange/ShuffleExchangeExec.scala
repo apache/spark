@@ -30,11 +30,10 @@ import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProces
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Divide, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{LocalShuffledRowRDD, SkewedShuffledRowRDD}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -49,11 +48,9 @@ case class ShuffleExchangeExec(
     child: SparkPlan,
     canChangeNumPartitions: Boolean = true) extends Exchange {
 
-  // NOTE: coordinator can be null after serialization/deserialization,
-  //       e.g. it can be null on the Executor side
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
-  private lazy val readMetrics =
+  private[sql] lazy val readMetrics =
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size")
@@ -90,24 +87,6 @@ case class ShuffleExchangeExec(
       writeMetrics)
   }
 
-  def createShuffledRDD(
-      partitionRanges: Option[Array[(Int, Int)]]): ShuffledRowRDD = {
-    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionRanges)
-  }
-
-  def createLocalShuffleRDD(
-      partitionStartIndicesPerMapper: Array[Array[Int]]): LocalShuffledRowRDD = {
-    new LocalShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndicesPerMapper)
-  }
-
-  def createSkewedShuffleRDD(
-      partitionIndex: Int,
-      startMapIndex: Int,
-      endMapIndex: Int): SkewedShuffledRowRDD = {
-    new SkewedShuffledRowRDD(shuffleDependency,
-      partitionIndex, startMapIndex, endMapIndex, readMetrics)
-  }
-
   /**
    * Caches the created ShuffleRowRDD so we can reuse that.
    */
@@ -116,7 +95,7 @@ case class ShuffleExchangeExec(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = createShuffledRDD(None)
+      cachedShuffleRDD = new ShuffledRowRDD(shuffleDependency, readMetrics)
     }
     cachedShuffleRDD
   }

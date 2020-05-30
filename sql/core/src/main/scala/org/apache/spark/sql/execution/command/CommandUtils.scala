@@ -78,7 +78,7 @@ object CommandUtils extends Logging {
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       val paths = partitions.map(_.storage.locationUri)
-      calculateTotalLocationSize(spark, catalogTable.identifier, paths)
+      calculateMultipleLocationSizes(spark, catalogTable.identifier, paths).sum
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
@@ -137,14 +137,14 @@ object CommandUtils extends Logging {
     size
   }
 
-  def calculateTotalLocationSize(
+  def calculateMultipleLocationSizes(
       sparkSession: SparkSession,
       tid: TableIdentifier,
-      paths: Seq[Option[URI]]): Long = {
+      paths: Seq[Option[URI]]): Seq[Long] = {
     if (sparkSession.sessionState.conf.parallelFileListingInStatsComputation) {
-      calculateLocationSizeParallel(sparkSession, paths.map(_.map(new Path(_))))
+      calculateMultipleLocationSizesInParallel(sparkSession, paths.map(_.map(new Path(_))))
     } else {
-      paths.map(p => calculateSingleLocationSize(sparkSession.sessionState, tid, p)).sum
+      paths.map(p => calculateSingleLocationSize(sparkSession.sessionState, tid, p))
     }
   }
 
@@ -153,11 +153,12 @@ object CommandUtils extends Logging {
    * for each path.
    * @param sparkSession the [[SparkSession]]
    * @param paths the Seq of [[Option[Path]]]s
-   * @return total size of all partitions
+   * @return a Seq of same size as `paths` where i-th element is total size of `paths(i)` or 0
+   *         if `paths(i)` is None
    */
-  def calculateLocationSizeParallel(
+  def calculateMultipleLocationSizesInParallel(
       sparkSession: SparkSession,
-      paths: Seq[Option[Path]]): Long = {
+      paths: Seq[Option[Path]]): Seq[Long] = {
     val stagingDir = sparkSession.sessionState.conf
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
@@ -166,7 +167,7 @@ object CommandUtils extends Logging {
       case (_, files) => files.map(_.getLen).sum
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
-    paths.zipWithIndex.filter(_._1.isDefined).map(i => sizes(i._2)).sum
+    paths.zipWithIndex.map { case (p, idx) => p.map(_ => sizes(idx)).getOrElse(0L) }
   }
 
   def compareAndGetNewStats(
@@ -384,5 +385,13 @@ object CommandUtils extends Logging {
 
   private def isDataPath(path: Path, stagingDir: String): Boolean = {
     !path.getName.startsWith(stagingDir) && DataSourceUtils.isDataPath(path)
+  }
+
+  def uncacheTableOrView(sparkSession: SparkSession, name: String): Unit = {
+    try {
+      sparkSession.catalog.uncacheTable(name)
+    } catch {
+      case NonFatal(e) => logWarning("Exception when attempting to uncache $name", e)
+    }
   }
 }

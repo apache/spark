@@ -161,7 +161,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                             "Array (%s). It can be caused by overflows or other unsafe " + \
                             "conversions warned by Arrow. Arrow safe type check can be " + \
                             "disabled by using SQL config " + \
-                            "`spark.sql.execution.pandas.arrowSafeTypeConversion`."
+                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                 raise RuntimeError(error_msg % (s.dtype, t), e)
             return array
 

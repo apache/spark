@@ -16,15 +16,18 @@
 #
 
 import sys
+from abc import ABCMeta
 
 from pyspark import since, keyword_only
+from pyspark.ml import Predictor, PredictionModel
+from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param.shared import *
 from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _TreeEnsembleModel, _TreeEnsembleParams, _RandomForestParams, _GBTParams, \
     _HasVarianceImpurity, _TreeRegressorParams
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
-    JavaPredictor, JavaPredictionModel, _JavaPredictorParams, JavaWrapper
+    JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 
@@ -41,26 +44,48 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'FMRegressor', 'FMRegressionModel']
 
 
-class JavaRegressor(JavaPredictor, _JavaPredictorParams):
+class Regressor(Predictor, _PredictorParams):
+    """
+    Regressor for regression tasks.
+
+    .. versionadded:: 3.0.0
+    """
+
+    __metaclass__ = ABCMeta
+
+
+class RegressionModel(PredictionModel, _PredictorParams):
+    """
+    Model produced by a ``Regressor``.
+
+    .. versionadded:: 3.0.0
+    """
+
+    __metaclass__ = ABCMeta
+
+
+class _JavaRegressor(Regressor, JavaPredictor):
     """
     Java Regressor for regression tasks.
 
     .. versionadded:: 3.0.0
     """
-    pass
+
+    __metaclass__ = ABCMeta
 
 
-class JavaRegressionModel(JavaPredictionModel, _JavaPredictorParams):
+class _JavaRegressionModel(RegressionModel, JavaPredictionModel):
     """
     Java Model produced by a ``_JavaRegressor``.
-    To be mixed in with class:`pyspark.ml.JavaModel`
+    To be mixed in with :class:`pyspark.ml.JavaModel`
 
     .. versionadded:: 3.0.0
     """
-    pass
+
+    __metaclass__ = ABCMeta
 
 
-class _LinearRegressionParams(_JavaPredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
+class _LinearRegressionParams(_PredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
                               HasTol, HasFitIntercept, HasStandardization, HasWeightCol, HasSolver,
                               HasAggregationDepth, HasLoss, HasBlockSize):
     """
@@ -88,7 +113,7 @@ class _LinearRegressionParams(_JavaPredictorParams, HasRegParam, HasElasticNetPa
 
 
 @inherit_doc
-class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, JavaMLReadable):
+class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, JavaMLReadable):
     """
     Linear regression.
 
@@ -124,14 +149,14 @@ class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, J
     >>> lr.setRegParam(0.0)
     LinearRegression...
     >>> model = lr.fit(df)
-    >>> model.getBlockSize()
-    1024
     >>> model.setFeaturesCol("features")
     LinearRegressionModel...
     >>> model.setPredictionCol("newPrediction")
     LinearRegressionModel...
     >>> model.getMaxIter()
     5
+    >>> model.getBlockSize()
+    1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.predict(test0.head().features) - (-1.0)) < 0.001
     True
@@ -171,18 +196,18 @@ class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, J
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                 loss="squaredError", epsilon=1.35, blockSize=1024):
+                 loss="squaredError", epsilon=1.35, blockSize=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                 loss="squaredError", epsilon=1.35, blockSize=1024)
+                 loss="squaredError", epsilon=1.35, blockSize=1)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid)
         self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35,
-                         blockSize=1024)
+                         blockSize=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -191,12 +216,12 @@ class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, J
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                  loss="squaredError", epsilon=1.35, blockSize=1024):
+                  loss="squaredError", epsilon=1.35, blockSize=1):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                  loss="squaredError", epsilon=1.35, blockSize=1024)
+                  loss="squaredError", epsilon=1.35, blockSize=1)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -272,7 +297,7 @@ class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, J
         """
         return self._set(lossType=value)
 
-    @since("3.0.0")
+    @since("3.1.0")
     def setBlockSize(self, value):
         """
         Sets the value of :py:attr:`blockSize`.
@@ -280,7 +305,7 @@ class LinearRegression(JavaRegressor, _LinearRegressionParams, JavaMLWritable, J
         return self._set(blockSize=value)
 
 
-class LinearRegressionModel(JavaRegressionModel, _LinearRegressionParams, GeneralJavaMLWritable,
+class LinearRegressionModel(_JavaRegressionModel, _LinearRegressionParams, GeneralJavaMLWritable,
                             JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by :class:`LinearRegression`.
@@ -787,7 +812,7 @@ class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, Ha
 
 
 @inherit_doc
-class DecisionTreeRegressor(JavaRegressor, _DecisionTreeRegressorParams, JavaMLWritable,
+class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaMLWritable,
                             JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
@@ -983,7 +1008,7 @@ class DecisionTreeRegressor(JavaRegressor, _DecisionTreeRegressorParams, JavaMLW
 
 @inherit_doc
 class DecisionTreeRegressionModel(
-    JavaRegressionModel, _DecisionTreeModel, _DecisionTreeRegressorParams,
+    _JavaRegressionModel, _DecisionTreeModel, _DecisionTreeRegressorParams,
     JavaMLWritable, JavaMLReadable
 ):
     """
@@ -1031,7 +1056,7 @@ class _RandomForestRegressorParams(_RandomForestParams, _TreeRegressorParams):
 
 
 @inherit_doc
-class RandomForestRegressor(JavaRegressor, _RandomForestRegressorParams, JavaMLWritable,
+class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaMLWritable,
                             JavaMLReadable):
     """
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
@@ -1240,7 +1265,7 @@ class RandomForestRegressor(JavaRegressor, _RandomForestRegressorParams, JavaMLW
 
 
 class RandomForestRegressionModel(
-    JavaRegressionModel, _TreeEnsembleModel, _RandomForestRegressorParams,
+    _JavaRegressionModel, _TreeEnsembleModel, _RandomForestRegressorParams,
     JavaMLWritable, JavaMLReadable
 ):
     """
@@ -1294,7 +1319,7 @@ class _GBTRegressorParams(_GBTParams, _TreeRegressorParams):
 
 
 @inherit_doc
-class GBTRegressor(JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
+class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
@@ -1536,7 +1561,7 @@ class GBTRegressor(JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRea
 
 
 class GBTRegressionModel(
-    JavaRegressionModel, _TreeEnsembleModel, _GBTRegressorParams,
+    _JavaRegressionModel, _TreeEnsembleModel, _GBTRegressorParams,
     JavaMLWritable, JavaMLReadable
 ):
     """
@@ -1581,8 +1606,8 @@ class GBTRegressionModel(
         return self._call_java("evaluateEachIteration", dataset, loss)
 
 
-class _AFTSurvivalRegressionParams(_JavaPredictorParams, HasMaxIter, HasTol, HasFitIntercept,
-                                   HasAggregationDepth):
+class _AFTSurvivalRegressionParams(_PredictorParams, HasMaxIter, HasTol, HasFitIntercept,
+                                   HasAggregationDepth, HasBlockSize):
     """
     Params for :py:class:`AFTSurvivalRegression` and :py:class:`AFTSurvivalRegressionModel`.
 
@@ -1628,7 +1653,7 @@ class _AFTSurvivalRegressionParams(_JavaPredictorParams, HasMaxIter, HasTol, Has
 
 
 @inherit_doc
-class AFTSurvivalRegression(JavaRegressor, _AFTSurvivalRegressionParams,
+class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
                             JavaMLWritable, JavaMLReadable):
     """
     Accelerated Failure Time (AFT) Model Survival Regression
@@ -1649,6 +1674,8 @@ class AFTSurvivalRegression(JavaRegressor, _AFTSurvivalRegressionParams,
     10
     >>> aftsr.clear(aftsr.maxIter)
     >>> model = aftsr.fit(df)
+    >>> model.getBlockSize()
+    1
     >>> model.setFeaturesCol("features")
     AFTSurvivalRegressionModel...
     >>> model.predict(Vectors.dense(6.3))
@@ -1685,19 +1712,19 @@ class AFTSurvivalRegression(JavaRegressor, _AFTSurvivalRegressionParams,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-                 quantilesCol=None, aggregationDepth=2):
+                 quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                 quantilesCol=None, aggregationDepth=2)
+                 quantilesCol=None, aggregationDepth=2, blockSize=1)
         """
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
         self._setDefault(censorCol="censor",
                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-                         maxIter=100, tol=1E-6)
+                         maxIter=100, tol=1E-6, blockSize=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1706,12 +1733,12 @@ class AFTSurvivalRegression(JavaRegressor, _AFTSurvivalRegressionParams,
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                   quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-                  quantilesCol=None, aggregationDepth=2):
+                  quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                   quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                  quantilesCol=None, aggregationDepth=2):
+                  quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -1768,8 +1795,15 @@ class AFTSurvivalRegression(JavaRegressor, _AFTSurvivalRegressionParams,
         """
         return self._set(aggregationDepth=value)
 
+    @since("3.1.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
-class AFTSurvivalRegressionModel(JavaRegressionModel, _AFTSurvivalRegressionParams,
+
+class AFTSurvivalRegressionModel(_JavaRegressionModel, _AFTSurvivalRegressionParams,
                                  JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`AFTSurvivalRegression`.
@@ -1823,7 +1857,7 @@ class AFTSurvivalRegressionModel(JavaRegressionModel, _AFTSurvivalRegressionPara
         return self._call_java("predictQuantiles", features)
 
 
-class _GeneralizedLinearRegressionParams(_JavaPredictorParams, HasFitIntercept, HasMaxIter,
+class _GeneralizedLinearRegressionParams(_PredictorParams, HasFitIntercept, HasMaxIter,
                                          HasTol, HasRegParam, HasWeightCol, HasSolver,
                                          HasAggregationDepth):
     """
@@ -1901,7 +1935,7 @@ class _GeneralizedLinearRegressionParams(_JavaPredictorParams, HasFitIntercept, 
 
 
 @inherit_doc
-class GeneralizedLinearRegression(JavaRegressor, _GeneralizedLinearRegressionParams,
+class GeneralizedLinearRegression(_JavaRegressor, _GeneralizedLinearRegressionParams,
                                   JavaMLWritable, JavaMLReadable):
     """
     Generalized Linear Regression.
@@ -2106,7 +2140,7 @@ class GeneralizedLinearRegression(JavaRegressor, _GeneralizedLinearRegressionPar
         return self._set(aggregationDepth=value)
 
 
-class GeneralizedLinearRegressionModel(JavaRegressionModel, _GeneralizedLinearRegressionParams,
+class GeneralizedLinearRegressionModel(_JavaRegressionModel, _GeneralizedLinearRegressionParams,
                                        JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by :class:`GeneralizedLinearRegression`.
@@ -2338,7 +2372,7 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
         return self._call_java("toString")
 
 
-class _FactorizationMachinesParams(_JavaPredictorParams, HasMaxIter, HasStepSize, HasTol,
+class _FactorizationMachinesParams(_PredictorParams, HasMaxIter, HasStepSize, HasTol,
                                    HasSolver, HasSeed, HasFitIntercept, HasRegParam):
     """
     Params for :py:class:`FMRegressor`, :py:class:`FMRegressionModel`, :py:class:`FMClassifier`
@@ -2394,7 +2428,7 @@ class _FactorizationMachinesParams(_JavaPredictorParams, HasMaxIter, HasStepSize
 
 
 @inherit_doc
-class FMRegressor(JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, JavaMLReadable):
+class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, JavaMLReadable):
     """
     Factorization Machines learning algorithm for regression.
 
@@ -2558,7 +2592,7 @@ class FMRegressor(JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, J
         return self._set(regParam=value)
 
 
-class FMRegressionModel(JavaRegressionModel, _FactorizationMachinesParams, JavaMLWritable,
+class FMRegressionModel(_JavaRegressionModel, _FactorizationMachinesParams, JavaMLWritable,
                         JavaMLReadable):
     """
     Model fitted by :class:`FMRegressor`.

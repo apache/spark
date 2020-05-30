@@ -26,13 +26,15 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.hive.client.hive._
 
 
 /**
@@ -106,7 +108,7 @@ case class InsertIntoHiveTable(
     }
 
     // un-cache this table.
-    sparkSession.catalog.uncacheTable(table.identifier.quotedString)
+    CommandUtils.uncacheTableOrView(sparkSession, table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
 
     CommandUtils.updateTableStats(sparkSession, table)
@@ -285,7 +287,21 @@ case class InsertIntoHiveTable(
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
           // version and we may not want to catch up new Hive version every time. We delete the
           // Hive partition first and then load data file into the Hive partition.
-          if (partitionPath.nonEmpty && overwrite) {
+          val hiveVersion = externalCatalog.asInstanceOf[ExternalCatalogWithListener]
+            .unwrapped.asInstanceOf[HiveExternalCatalog]
+            .client
+            .version
+          // SPARK-31684:
+          // For Hive 2.0.0 and onwards, as https://issues.apache.org/jira/browse/HIVE-11940
+          // has been fixed, and there is no performance issue anymore. We should leave the
+          // overwrite logic to hive to avoid failure in `FileSystem#checkPath` when the table
+          // and partition locations do not belong to the same `FileSystem`
+          // TODO(SPARK-31675): For Hive 2.2.0 and earlier, if the table and partition locations
+          // do not belong together, we will still get the same error thrown by hive encryption
+          // check. see https://issues.apache.org/jira/browse/HIVE-14380.
+          // So we still disable for Hive overwrite for Hive 1.x for better performance because
+          // the partition and table are on the same cluster in most cases.
+          if (partitionPath.nonEmpty && overwrite && hiveVersion < v2_0) {
             partitionPath.foreach { path =>
               val fs = path.getFileSystem(hadoopConf)
               if (fs.exists(path)) {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -138,7 +138,7 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 }
 
 
@@ -158,7 +158,7 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 }
 
 
@@ -177,7 +177,7 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 }
 
 
@@ -199,7 +199,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
   }
 
   override def flatArguments: Iterator[Any] = Iterator(expr1, expr2, expr3)
-  override def sql: String = s"$prettyName(${expr1.sql}, ${expr2.sql}, ${expr3.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(expr1, expr2, expr3)
 }
 
 

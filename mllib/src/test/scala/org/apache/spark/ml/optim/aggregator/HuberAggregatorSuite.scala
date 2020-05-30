@@ -19,34 +19,35 @@ package org.apache.spark.ml.optim.aggregator
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  import DifferentiableLossAggregatorSuite.getRegressionSummarizers
-
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
   @transient var instancesConstantFeatureFiltered: Array[Instance] = _
+  @transient var standardizedInstances: Array[Instance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    instances = standardize(Array(
+    instances = Array(
       Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.5, 1.0)),
       Instance(2.0, 0.3, Vectors.dense(4.0, 0.5))
-    ))
-    instancesConstantFeature = standardize(Array(
+    )
+    instancesConstantFeature = Array(
       Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.0, 1.0)),
       Instance(2.0, 0.3, Vectors.dense(1.0, 0.5))
-    ))
-    instancesConstantFeatureFiltered = standardize(Array(
+    )
+    instancesConstantFeatureFiltered = Array(
       Instance(0.0, 0.1, Vectors.dense(2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.0)),
       Instance(2.0, 0.3, Vectors.dense(0.5))
-    ))
+    )
+    standardizedInstances = standardize(instances)
   }
 
   /** Get summary statistics for some data and create a new HuberAggregator. */
@@ -55,29 +56,20 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       parameters: Vector,
       fitIntercept: Boolean,
       epsilon: Double): HuberAggregator = {
-    val (featuresSummarizer, _) = getRegressionSummarizers(instances)
-    val numFeatures = featuresSummarizer.variance.size
+    val (featuresSummarizer, _) = Summarizer.getRegressionSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
+    val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcParameters = spark.sparkContext.broadcast(parameters)
-    new HuberAggregator(numFeatures, fitIntercept, epsilon)(bcParameters)
+    new HuberAggregator(fitIntercept, epsilon, bcFeaturesStd)(bcParameters)
   }
 
-  private def standardize(
-      instances: Array[Instance],
-      std: Array[Double] = null): Array[Instance] = {
-    val stdArray = if (std == null) {
-      getRegressionSummarizers(instances)._1.variance.toArray.map(math.sqrt)
-    } else {
-      std
-    }
-    val numFeatures = stdArray.length
-    instances.map { case Instance(label, weight, features) =>
-      val standardized = Array.ofDim[Double](numFeatures)
-      features.foreachNonZero { (i, v) =>
-        val std = stdArray(i)
-        if (std != 0) standardized(i) = v / std
-      }
-      Instance(label, weight, Vectors.dense(standardized).compressed)
-    }
+  /** Get summary statistics for some data and create a new BlockHingeAggregator. */
+  private def getNewBlockAggregator(
+      parameters: Vector,
+      fitIntercept: Boolean,
+      epsilon: Double): BlockHuberAggregator = {
+    val bcParameters = spark.sparkContext.broadcast(parameters)
+    new BlockHuberAggregator(fitIntercept, epsilon)(bcParameters)
   }
 
   test("aggregator add method should check input size") {
@@ -117,8 +109,8 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("check correctness") {
     val parameters = Vectors.dense(1.0, 2.0, 3.0, 4.0)
     val numFeatures = 2
-    val (featuresSummarizer, _) = getRegressionSummarizers(instances)
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val (featuresSummarizer, _) = Summarizer.getRegressionSummarizers(sc.parallelize(instances))
+    val featuresStd = featuresSummarizer.std.toArray
     val epsilon = 1.35
     val weightSum = instances.map(_.weight).sum
 
@@ -166,6 +158,23 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(loss ~== agg.loss relTol 0.01)
     assert(gradient ~== agg.gradient relTol 0.01)
+
+    Seq(1, 2, 4).foreach { blockSize =>
+      val blocks1 = standardizedInstances
+        .grouped(blockSize)
+        .map(seq => InstanceBlock.fromInstances(seq))
+        .toArray
+      val blocks2 = blocks1.map { block =>
+        new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)
+      }
+
+      Seq(blocks1, blocks2).foreach { blocks =>
+        val blockAgg = getNewBlockAggregator(parameters, fitIntercept = true, epsilon)
+        blocks.foreach(blockAgg.add)
+        assert(agg.loss ~== blockAgg.loss relTol 1e-9)
+        assert(agg.gradient ~== blockAgg.gradient relTol 1e-9)
+      }
+    }
   }
 
   test("check with zero standard deviation") {
@@ -173,15 +182,9 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val parametersFiltered = Vectors.dense(2.0, 3.0, 4.0)
     val aggConstantFeature = getNewAggregator(instancesConstantFeature, parameters,
       fitIntercept = true, epsilon = 1.35)
-    // std of instancesConstantFeature
-    val stdConstantFeature = getRegressionSummarizers(instancesConstantFeature)
-      ._1.variance.toArray.map(math.sqrt)
-    // Since 3.0.0, we start to standardize input outside of gradient computation,
-    // so here we use std of instancesConstantFeature to standardize instances
-    standardize(instances, stdConstantFeature).foreach(aggConstantFeature.add)
-
     val aggConstantFeatureFiltered = getNewAggregator(instancesConstantFeatureFiltered,
       parametersFiltered, fitIntercept = true, epsilon = 1.35)
+    instances.foreach(aggConstantFeature.add)
     instancesConstantFeatureFiltered.foreach(aggConstantFeatureFiltered.add)
     // constant features should not affect gradient
     def validateGradient(grad: Vector, gradFiltered: Vector): Unit = {
@@ -190,20 +193,5 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     validateGradient(aggConstantFeature.gradient, aggConstantFeatureFiltered.gradient)
-  }
-
-  test("add instance block") {
-    val paramWithIntercept = Vectors.dense(1.0, 2.0, 3.0, 4.0)
-    val agg1 = getNewAggregator(instances, paramWithIntercept,
-      fitIntercept = true, epsilon = 1.35)
-    instances.foreach(agg1.add)
-
-    val agg2 = getNewAggregator(instances, paramWithIntercept,
-      fitIntercept = true, epsilon = 1.35)
-    val block = InstanceBlock.fromInstances(instances)
-    agg2.add(block)
-
-    assert(agg1.loss ~== agg2.loss relTol 1e-8)
-    assert(agg1.gradient ~== agg2.gradient relTol 1e-8)
   }
 }

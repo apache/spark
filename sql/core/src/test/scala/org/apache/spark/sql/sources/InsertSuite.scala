@@ -26,6 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -523,15 +524,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("new partitions should be added to catalog after writing to catalog table") {
     val table = "partitioned_catalog_table"
+    val tempTable = "partitioned_catalog_temp_table"
     val numParts = 210
     withTable(table) {
-      val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
-      val tempTable = "partitioned_catalog_temp_table"
-      df.createOrReplaceTempView(tempTable)
-      sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
-      sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
-      val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
-      assert(partitions.size == numParts)
+      withTempView(tempTable) {
+        val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
+        df.createOrReplaceTempView(tempTable)
+        sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
+        sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
+        val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
+        assert(partitions.size == numParts)
+      }
     }
   }
 
@@ -753,6 +756,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
+    SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
+      withSQLConf(
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
+        withTable("t") {
+          sql("create table t(a int, b string) using parquet partitioned by (a)")
+          policy match {
+            case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+              val errorMsg = intercept[NumberFormatException] {
+                sql("insert into t partition(a='ansi') values('ansi')")
+              }.getMessage
+              assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+            case SQLConf.StoreAssignmentPolicy.LEGACY =>
+              sql("insert into t partition(a='ansi') values('ansi')")
+              checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
     withTempPath { path =>
       Seq((1, 1), (2, 2)).toDF("i", "part")
@@ -819,6 +843,28 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "org.apache.hadoop.fs.FileAlreadyExistsException"))
       }
     }
+  }
+
+  test("SPARK-29174 Support LOCAL in INSERT OVERWRITE DIRECTORY to data source") {
+    withTempPath { dir =>
+      val path = dir.toURI.getPath
+      sql(s"""create table tab1 ( a int) using parquet location '$path'""")
+      sql("insert into tab1 values(1)")
+      checkAnswer(sql("select * from tab1"), Seq(1).map(i => Row(i)))
+      sql("create table tab2 ( a int) using parquet")
+      sql("insert into tab2 values(2)")
+      checkAnswer(sql("select * from tab2"), Seq(2).map(i => Row(i)))
+      sql(s"""insert overwrite local directory '$path' using parquet select * from tab2""")
+      sql("refresh table tab1")
+      checkAnswer(sql("select * from tab1"), Seq(2).map(i => Row(i)))
+    }
+  }
+
+  test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {
+    val message = intercept[ParseException] {
+      sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
+    }.getMessage
+    assert(message.contains("LOCAL is supported only with file: scheme"))
   }
 }
 

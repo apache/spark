@@ -186,7 +186,8 @@ public class ColumnValue {
     case INTERVAL_DAY_TIME_TYPE:
       return stringValue((HiveIntervalDayTime) value);
     case DECIMAL_TYPE:
-      return stringValue(((BigDecimal)value).toPlainString());
+      String plainStr = value == null ? null : ((BigDecimal)value).toPlainString();
+      return stringValue(plainStr);
     case BINARY_TYPE:
       String strVal = value == null ? null : UTF8String.fromBytes((byte[])value).toString();
       return stringValue(strVal);

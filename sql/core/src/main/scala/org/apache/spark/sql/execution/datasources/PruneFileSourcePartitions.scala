@@ -26,6 +26,19 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileScan}
 import org.apache.spark.sql.types.StructType
 
+/**
+ * Prune the partitions of file source based table using partition filters. Currently, this rule
+ * is applied to [[HadoopFsRelation]] with [[CatalogFileIndex]] and [[DataSourceV2ScanRelation]]
+ * with [[FileScan]].
+ *
+ * For [[HadoopFsRelation]], the location will be replaced by pruned file index, and corresponding
+ * statistics will be updated. And the partition filters will be kept in the filters of returned
+ * logical plan.
+ *
+ * For [[DataSourceV2ScanRelation]], both partition filters and data filters will be added to
+ * its underlying [[FileScan]]. And the partition filters will be removed in the filters of
+ * returned logical plan.
+ */
 private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
 
   private def getPartitionKeyFiltersAndDataFilters(

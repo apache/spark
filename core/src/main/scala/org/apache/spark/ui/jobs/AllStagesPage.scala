@@ -51,7 +51,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
 
     val summary: NodeSeq =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           {summaries.flatten}
         </ul>
       </div>

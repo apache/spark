@@ -179,7 +179,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
   test("sparse coefficients in HingeAggregator") {
     val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val agg = new HingeAggregator(1, true)(bcCoefficients)
+    val agg = new HingeAggregator(bcFeaturesStd, true)(bcCoefficients)
     val thrown = withClue("LinearSVCAggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
@@ -205,6 +205,21 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
       dataset.as[LabeledPoint], estimator, 2, modelEquals, outlierRatio = 3)
     MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
+  }
+
+  test("LinearSVC on blocks") {
+    for (dataset <- Seq(smallBinaryDataset, smallSparseBinaryDataset);
+         fitIntercept <- Seq(true, false)) {
+      val lsvc = new LinearSVC()
+        .setFitIntercept(fitIntercept)
+        .setMaxIter(5)
+      val model = lsvc.fit(dataset)
+      Seq(4, 16, 64).foreach { blockSize =>
+        val model2 = lsvc.setBlockSize(blockSize).fit(dataset)
+        assert(model.intercept ~== model2.intercept relTol 1e-9)
+        assert(model.coefficients ~== model2.coefficients relTol 1e-9)
+      }
+    }
   }
 
   test("prediction on single instance") {

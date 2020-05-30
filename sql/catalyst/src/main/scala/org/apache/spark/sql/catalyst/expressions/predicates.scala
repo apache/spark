@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
 
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
@@ -519,7 +520,9 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   override def sql: String = {
     val valueSQL = child.sql
-    val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
+    val listSQL = hset.toSeq
+      .map(elem => Literal(elem, child.dataType).sql)
+      .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
 }
@@ -925,66 +928,6 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = ">="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
-}
-
-trait BooleanTest extends UnaryExpression with Predicate with ExpectsInputTypes {
-
-  def boolValueForComparison: Boolean
-  def boolValueWhenNull: Boolean
-
-  override def nullable: Boolean = false
-  override def inputTypes: Seq[DataType] = Seq(BooleanType)
-
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    Option(value) match {
-      case None => boolValueWhenNull
-      case other => if (boolValueWhenNull) {
-        value == !boolValueForComparison
-      } else {
-        value == boolValueForComparison
-      }
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
-    ev.copy(code = code"""
-      ${eval.code}
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      if (${eval.isNull}) {
-        ${ev.value} = $boolValueWhenNull;
-      } else if ($boolValueWhenNull) {
-        ${ev.value} = ${eval.value} == !$boolValueForComparison;
-      } else {
-        ${ev.value} = ${eval.value} == $boolValueForComparison;
-      }
-      """, isNull = FalseLiteral)
-  }
-}
-
-case class IsTrue(child: Expression) extends BooleanTest {
-  override def boolValueForComparison: Boolean = true
-  override def boolValueWhenNull: Boolean = false
-  override def sql: String = s"(${child.sql} IS TRUE)"
-}
-
-case class IsNotTrue(child: Expression) extends BooleanTest {
-  override def boolValueForComparison: Boolean = true
-  override def boolValueWhenNull: Boolean = true
-  override def sql: String = s"(${child.sql} IS NOT TRUE)"
-}
-
-case class IsFalse(child: Expression) extends BooleanTest {
-  override def boolValueForComparison: Boolean = false
-  override def boolValueWhenNull: Boolean = false
-  override def sql: String = s"(${child.sql} IS FALSE)"
-}
-
-case class IsNotFalse(child: Expression) extends BooleanTest {
-  override def boolValueForComparison: Boolean = false
-  override def boolValueWhenNull: Boolean = true
-  override def sql: String = s"(${child.sql} IS NOT FALSE)"
 }
 
 /**

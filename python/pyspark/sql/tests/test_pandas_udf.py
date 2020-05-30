@@ -211,14 +211,14 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         # Since 0.11.0, PyArrow supports the feature to raise an error for unsafe cast.
         with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": True}):
+                "spark.sql.execution.pandas.convertToArrowArraySafely": True}):
             with self.assertRaisesRegexp(Exception,
                                          "Exception thrown when converting pandas.Series"):
                 df.select(['A']).withColumn('udf', udf('A')).collect()
 
         # Disabling Arrow safe type check.
         with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
+                "spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             df.select(['A']).withColumn('udf', udf('A')).collect()
 
     def test_pandas_udf_arrow_overflow(self):
@@ -232,13 +232,13 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         # When enabling safe type check, Arrow 0.11.0+ disallows overflow cast.
         with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": True}):
+                "spark.sql.execution.pandas.convertToArrowArraySafely": True}):
             with self.assertRaisesRegexp(Exception,
                                          "Exception thrown when converting pandas.Series"):
                 df.withColumn('udf', udf('id')).collect()
 
         # Disabling safe type check, let Arrow do the cast anyway.
-        with self.sql_conf({"spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
+        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             df.withColumn('udf', udf('id')).collect()
 
 

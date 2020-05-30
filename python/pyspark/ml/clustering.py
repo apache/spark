@@ -98,7 +98,8 @@ class ClusteringSummary(JavaWrapper):
 
 @inherit_doc
 class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                             HasProbabilityCol, HasTol, HasAggregationDepth, HasWeightCol):
+                             HasProbabilityCol, HasTol, HasAggregationDepth, HasWeightCol,
+                             HasBlockSize):
     """
     Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
 
@@ -238,11 +239,13 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> gm = GaussianMixture(k=3, tol=0.0001, seed=10)
     >>> gm.getMaxIter()
     100
-    >>> gm.setMaxIter(10)
+    >>> gm.setMaxIter(30)
     GaussianMixture...
     >>> gm.getMaxIter()
-    10
+    30
     >>> model = gm.fit(df)
+    >>> model.getBlockSize()
+    1
     >>> model.getAggregationDepth()
     2
     >>> model.getFeaturesCol()
@@ -252,7 +255,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> model.predict(df.head().features)
     2
     >>> model.predictProbability(df.head().features)
-    DenseVector([0.0, 0.4736, 0.5264])
+    DenseVector([0.0, 0.0, 1.0])
     >>> model.hasSummary
     True
     >>> summary = model.summary
@@ -261,7 +264,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> summary.clusterSizes
     [2, 2, 2]
     >>> summary.logLikelihood
-    8.14636...
+    65.02945...
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -270,19 +273,16 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     3
     >>> gaussians[0].mean
     DenseVector([0.825, 0.8675])
-    >>> gaussians[0].cov.toArray()
-    array([[ 0.005625  , -0.0050625 ],
-           [-0.0050625 ,  0.00455625]])
+    >>> gaussians[0].cov
+    DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], 0)
     >>> gaussians[1].mean
-    DenseVector([-0.4777, -0.4096])
-    >>> gaussians[1].cov.toArray()
-    array([[ 0.1679695 ,  0.13181786],
-           [ 0.13181786,  0.10524592]])
+    DenseVector([-0.87, -0.72])
+    >>> gaussians[1].cov
+    DenseMatrix(2, 2, [0.0016, 0.0016, 0.0016, 0.0016], 0)
     >>> gaussians[2].mean
-    DenseVector([-0.4473, -0.3853])
-    >>> gaussians[2].cov.toArray()
-    array([[ 0.16730412,  0.13112435],
-           [ 0.13112435,  0.10469614]])
+    DenseVector([-0.055, -0.075])
+    >>> gaussians[2].cov
+    DenseMatrix(2, 2, [0.002, -0.0011, -0.0011, 0.0006], 0)
     >>> model.gaussiansDF.select("mean").head()
     Row(mean=DenseVector([0.825, 0.8675]))
     >>> model.gaussiansDF.select("cov").head()
@@ -330,16 +330,16 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                 aggregationDepth=2, weightCol=None):
+                 aggregationDepth=2, weightCol=None, blockSize=1):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                 aggregationDepth=2, weightCol=None)
+                 aggregationDepth=2, weightCol=None, blockSize=1)
         """
         super(GaussianMixture, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.GaussianMixture",
                                             self.uid)
-        self._setDefault(k=2, tol=0.01, maxIter=100, aggregationDepth=2)
+        self._setDefault(k=2, tol=0.01, maxIter=100, aggregationDepth=2, blockSize=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -350,11 +350,11 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     @since("2.0.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                  aggregationDepth=2, weightCol=None):
+                  aggregationDepth=2, weightCol=None, blockSize=1):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                  aggregationDepth=2, weightCol=None)
+                  aggregationDepth=2, weightCol=None, blockSize=1)
 
         Sets params for GaussianMixture.
         """
@@ -423,6 +423,13 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
         Sets the value of :py:attr:`aggregationDepth`.
         """
         return self._set(aggregationDepth=value)
+
+    @since("3.1.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
 
 class GaussianMixtureSummary(ClusteringSummary):
@@ -795,7 +802,7 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
         Computes the sum of squared distances between the input points
         and their corresponding cluster centers.
 
-        ..note:: Deprecated in 3.0.0. It will be removed in future versions. Use
+        .. note:: Deprecated in 3.0.0. It will be removed in future versions. Use
            ClusteringEvaluator instead. You can also get the cost on the training dataset in the
            summary.
         """

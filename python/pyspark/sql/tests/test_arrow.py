@@ -297,9 +297,9 @@ class ArrowTests(ReusedSQLTestCase):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
         # Use a nanosecond value to make sure it is not truncated
-        pdf.ix[0, '8_timestamp_t'] = pd.Timestamp(1)
+        pdf.iloc[0, 7] = pd.Timestamp(1)
         # Integers with nulls will get NaNs filled with 0 and will be casted
-        pdf.ix[1, '2_int_t'] = None
+        pdf.iloc[1, 1] = None
         pdf_copy = pdf.copy(deep=True)
         self.spark.createDataFrame(pdf, schema=self.schema)
         self.assertTrue(pdf.equals(pdf_copy))

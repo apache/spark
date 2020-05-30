@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>3.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -117,7 +117,7 @@
     <maven.compiler.target>${java.version}</maven.compiler.target>
     <maven.version>3.6.3</maven.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>1.7.16</slf4j.version>
+    <slf4j.version>1.7.30</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>2.7.4</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
@@ -127,15 +127,15 @@
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.6</hive.version>
-    <hive23.version>2.3.6</hive23.version>
+    <hive.version>2.3.7</hive.version>
+    <hive23.version>2.3.7</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.4.0</kafka.version>
+    <kafka.version>2.5.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.9</orc.version>
+    <orc.version>1.5.10</orc.version>
     <orc.classifier></orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
@@ -149,7 +149,7 @@
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
-    <aws.java.sdk.version>1.11.271</aws.java.sdk.version>
+    <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
@@ -167,7 +167,7 @@
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.10.0</fasterxml.jackson.version>
-    <snappy.version>1.1.7.3</snappy.version>
+    <snappy.version>1.1.7.5</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.10</commons-codec.version>
     <commons-io.version>2.4</commons-io.version>
@@ -178,7 +178,8 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <janino.version>3.0.15</janino.version>
+    <guava.version>14.0.1</guava.version>
+    <janino.version>3.0.16</janino.version>
     <jersey.version>2.30</jersey.version>
     <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -253,7 +254,7 @@
         See https://storage-download.googleapis.com/maven-central/index.html
       -->
       <name>GCS Maven Central mirror</name>
-      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -284,7 +285,7 @@
         See https://storage-download.googleapis.com/maven-central/index.html
       -->
       <name>GCS Maven Central mirror</name>
-      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -444,7 +445,7 @@
       <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
-        <version>14.0.1</version>
+        <version>${guava.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
@@ -612,7 +613,6 @@
         <groupId>xml-apis</groupId>
         <artifactId>xml-apis</artifactId>
         <version>1.4.01</version>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
@@ -699,7 +699,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.42.Final</version>
+        <version>4.1.47.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -932,8 +932,9 @@
       <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
-        <version>5.0.2</version>
+        <version>8.14.1</version>
         <scope>test</scope>
+        <classifier>shaded</classifier>
         <exclusions>
           <exclusion>
             <artifactId>guava</artifactId>
@@ -952,9 +953,21 @@
         <scope>test</scope>
       </dependency>
       <dependency>
+        <groupId>org.mariadb.jdbc</groupId>
+        <artifactId>mariadb-java-client</artifactId>
+        <version>2.5.4</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
         <version>42.2.6</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.ibm.db2</groupId>
+        <artifactId>jcc</artifactId>
+        <version>11.5.0.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1083,6 +1096,12 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <!-- Managed up to match Hadoop in HADOOP-16530 -->
+      <dependency>
+        <groupId>xerces</groupId>
+        <artifactId>xercesImpl</artifactId>
+        <version>2.12.0</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
@@ -1199,6 +1218,10 @@
           <exclusion>
             <groupId>com.sun.jersey.contribs</groupId>
             <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>jdk.tools</groupId>
+            <artifactId>jdk.tools</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1449,6 +1472,11 @@
             <artifactId>hive-service</artifactId>
           </exclusion>
           <exclusion>
+            <!-- All classes are covered by spark's hive-thriftserver module -->
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-service-rpc</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
           </exclusion>
@@ -1503,6 +1531,11 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service</artifactId>
+          </exclusion>
+          <exclusion>
+            <!-- All classes are covered by spark's hive-thriftserver module -->
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-service-rpc</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -1758,6 +1791,11 @@
             <artifactId>hive-service</artifactId>
           </exclusion>
           <exclusion>
+            <!-- All classes are covered by spark's hive-thriftserver module -->
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-service-rpc</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
           </exclusion>
@@ -1907,6 +1945,11 @@
             <artifactId>groovy-all</artifactId>
           </exclusion>
           <!-- Begin of Hive 2.3 exclusion -->
+          <exclusion>
+            <!-- All classes are covered by spark's hive-thriftserver module -->
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-service-rpc</artifactId>
+          </exclusion>
           <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.10.1 -->
           <exclusion>
             <groupId>org.apache.parquet</groupId>

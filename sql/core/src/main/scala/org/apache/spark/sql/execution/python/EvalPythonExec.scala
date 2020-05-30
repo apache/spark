@@ -57,8 +57,9 @@ import org.apache.spark.util.Utils
  * there should be always some rows buffered in the socket or Python process, so the pulling from
  * RowQueue ALWAYS happened after pushing into it.
  */
-abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
-  extends UnaryExecNode {
+trait EvalPythonExec extends UnaryExecNode {
+  def udfs: Seq[PythonUDF]
+  def resultAttrs: Seq[Attribute]
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 

@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable
-
 import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 
@@ -109,45 +107,8 @@ private[spark] object InstanceBlock {
     } else {
       Array.emptyDoubleArray
     }
-    val numRows = instances.length
-    val numCols = instances.head.features.size
-    val denseSize = Matrices.getDenseSize(numCols, numRows)
-    val nnz = instances.iterator.map(_.features.numNonzeros).sum
-    val sparseSize = Matrices.getSparseSize(nnz, numRows + 1)
-    val matrix = if (denseSize < sparseSize) {
-      val values = Array.ofDim[Double](numRows * numCols)
-      var offset = 0
-      var j = 0
-      while (j < numRows) {
-        instances(j).features.foreachNonZero { (i, v) =>
-          values(offset + i) = v
-        }
-        offset += numCols
-        j += 1
-      }
-      new DenseMatrix(numRows, numCols, values, true)
-    } else {
-      val colIndices = mutable.ArrayBuilder.make[Int]
-      val values = mutable.ArrayBuilder.make[Double]
-      val rowPtrs = mutable.ArrayBuilder.make[Int]
-      var rowPtr = 0
-      rowPtrs += 0
-      var j = 0
-      while (j < numRows) {
-        var nnz = 0
-        instances(j).features.foreachNonZero { (i, v) =>
-          colIndices += i
-          values += v
-          nnz += 1
-        }
-        rowPtr += nnz
-        rowPtrs += rowPtr
-        j += 1
-      }
-      new SparseMatrix(numRows, numCols, rowPtrs.result(),
-        colIndices.result(), values.result(), true)
-    }
-    InstanceBlock(labels, weights, matrix)
+    val matrix = Matrices.fromVectors(instances.map(_.features))
+    new InstanceBlock(labels, weights, matrix)
   }
 
   def blokify(instances: RDD[Instance], blockSize: Int): RDD[InstanceBlock] = {

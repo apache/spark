@@ -27,7 +27,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, FloatType}
 
 /**
- * Evaluator for regression, which expects two input columns: prediction and label.
+ * Evaluator for regression, which expects input columns prediction, label and
+ * an optional weight column.
  */
 @Since("1.4.0")
 final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
@@ -96,6 +97,25 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
+    val metrics = getMetrics(dataset)
+    $(metricName) match {
+      case "rmse" => metrics.rootMeanSquaredError
+      case "mse" => metrics.meanSquaredError
+      case "r2" => metrics.r2
+      case "mae" => metrics.meanAbsoluteError
+      case "var" => metrics.explainedVariance
+    }
+  }
+
+  /**
+   * Get a RegressionMetrics, which can be used to get regression
+   * metrics such as rootMeanSquaredError, meanSquaredError, etc.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return RegressionMetrics
+   */
+  @Since("3.1.0")
+  def getMetrics(dataset: Dataset[_]): RegressionMetrics = {
     val schema = dataset.schema
     SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
     SchemaUtils.checkNumericType(schema, $(labelCol))
@@ -106,14 +126,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       .rdd
       .map { case Row(prediction: Double, label: Double, weight: Double) =>
         (prediction, label, weight) }
-    val metrics = new RegressionMetrics(predictionAndLabelsWithWeights, $(throughOrigin))
-    $(metricName) match {
-      case "rmse" => metrics.rootMeanSquaredError
-      case "mse" => metrics.meanSquaredError
-      case "r2" => metrics.r2
-      case "mae" => metrics.meanAbsoluteError
-      case "var" => metrics.explainedVariance
-    }
+    new RegressionMetrics(predictionAndLabelsWithWeights, $(throughOrigin))
   }
 
   @Since("1.4.0")

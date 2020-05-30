@@ -153,43 +153,47 @@ object SparkPlanGraph {
  * @param name the name of this SparkPlan node
  * @param metrics metrics that this SparkPlan node will track
  */
-private[ui] class SparkPlanGraphNode(
+class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
     val metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val builder = new mutable.StringBuilder(name)
+    val builder = new mutable.StringBuilder("<b>" + name + "</b>")
 
     val values = for {
       metric <- metrics
       value <- metricsValue.get(metric.accumulatorId)
     } yield {
-      metric.name + ": " + value
+      // The value may contain ":" to extend the name, like `total (min, med, max): ...`
+      if (value.contains(":")) {
+        metric.name + " " + value
+      } else {
+        metric.name + ": " + value
+      }
     }
-
-    // If there are metrics, display each entry in a separate line.
-    // Note: whitespace between two "\n"s is to create an empty line between the name of
-    // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-    builder ++= "\n \n"
 
     if (values.nonEmpty) {
-      builder ++= values.mkString("\n")
+      // If there are metrics, display each entry in a separate line.
+      // Note: whitespace between two "\n"s is to create an empty line between the name of
+      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
+      builder ++= "<br><br>"
+      builder ++= values.mkString("<br>")
+      val labelStr = StringEscapeUtils.escapeJava(builder.toString().replaceAll("\n", "<br>"))
+      s"""  $id [labelType="html" label="${labelStr}"];"""
     } else {
-      // A certain level of height is needed for a rect as a node in a sub-graph
-      // to avoid layout collapse for sub-graphs.
-      builder ++= " "
+      // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
+      // so that there won't be gaps between an edge and a small node.
+      s"""  $id [labelType="html" label="<br><b>$name</b><br><br>"];"""
     }
-
-    s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
   }
 }
 
 /**
  * Represent a tree of SparkPlan for WholeStageCodegen.
  */
-private[ui] class SparkPlanGraphCluster(
+class SparkPlanGraphCluster(
     id: Long,
     name: String,
     desc: String,
@@ -212,6 +216,7 @@ private[ui] class SparkPlanGraphCluster(
     }
     s"""
        |  subgraph cluster${id} {
+       |    isCluster="true";
        |    label="${StringEscapeUtils.escapeJava(labelStr)}";
        |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
        |  }
@@ -224,7 +229,7 @@ private[ui] class SparkPlanGraphCluster(
  * Represent an edge in the SparkPlan tree. `fromId` is the child node id, and `toId` is the parent
  * node id.
  */
-private[ui] case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
+case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
 
   def makeDotEdge: String = s"""  $fromId->$toId;\n"""
 }

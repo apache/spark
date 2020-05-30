@@ -47,6 +47,7 @@ import org.apache.spark.sql.types._
     The function is non-deterministic because its results depends on the order of the rows
     which may be non-deterministic after a shuffle.
   """,
+  group = "agg_funcs",
   since = "2.0.0")
 case class Last(child: Expression, ignoreNullsExpr: Expression)
   extends DeclarativeAggregate with ExpectsInputTypes {
@@ -114,8 +115,6 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
   }
 
   override lazy val evaluateExpression: AttributeReference = last
-
-  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("last")
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 }

@@ -329,6 +329,11 @@ abstract class SchemaPruningSuite
           checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
         }
         checkAnswer(query2, Row("Susan", Array("Z.")) :: Nil)
+
+        val query3 = spark.table("contacts")
+          .select(explode(col("friends.first")), col("friends.middle"), col("friends.last"))
+        checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+        checkAnswer(query3, Row("Susan", Array("Z."), Array("Smith")) :: Nil)
       }
     }
   }

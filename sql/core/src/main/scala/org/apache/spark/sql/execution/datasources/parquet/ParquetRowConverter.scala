@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
-import java.util.TimeZone
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -33,8 +33,11 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -118,14 +121,17 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
  *        types should have been expanded.
- * @param convertTz the optional time zone to convert to for int96 data
+ * @param convertTz the optional time zone to convert to int96 data
+ * @param datetimeRebaseMode the mode of rebasing date/timestamp from Julian to Proleptic Gregorian
+ *                           calendar
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetToSparkSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
-    convertTz: Option[TimeZone],
+    convertTz: Option[ZoneId],
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -154,8 +160,6 @@ private[parquet] class ParquetRowConverter(
        |${catalystType.prettyJson}
      """.stripMargin)
 
-  private[this] val UTC = DateTimeUtils.TimeZoneUTC
-
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
    * converted filed values to the `ordinal`-th cell in `currentRow`.
@@ -178,10 +182,23 @@ private[parquet] class ParquetRowConverter(
    */
   def currentRecord: InternalRow = currentRow
 
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+    datetimeRebaseMode, "Parquet")
+
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+    datetimeRebaseMode, "Parquet")
+
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
+    // (SPARK-31116) Use case insensitive map if spark.sql.caseSensitive is false
+    // to prevent throwing IllegalArgumentException when searching catalyst type's field index
+    val catalystFieldNameToIndex = if (SQLConf.get.caseSensitiveAnalysis) {
+      catalystType.fieldNames.zipWithIndex.toMap
+    } else {
+      CaseInsensitiveMap(catalystType.fieldNames.zipWithIndex.toMap)
+    }
     parquetType.getFields.asScala.map { parquetField =>
-      val fieldIndex = catalystType.fieldIndex(parquetField.getName)
+      val fieldIndex = catalystFieldNameToIndex(parquetField.getName)
       val catalystField = catalystType(fieldIndex)
       // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
       newConverter(parquetField, catalystField.dataType, new RowUpdater(currentRow, fieldIndex))
@@ -267,14 +284,15 @@ private[parquet] class ParquetRowConverter(
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MICROS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(value)
+            updater.setLong(timestampRebaseFunc(value))
           }
         }
 
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(DateTimeUtils.fromMillis(value))
+            val micros = DateTimeUtils.millisToMicros(value)
+            updater.setLong(timestampRebaseFunc(micros))
           }
         }
 
@@ -292,7 +310,8 @@ private[parquet] class ParquetRowConverter(
             val timeOfDayNanos = buf.getLong
             val julianDay = buf.getInt
             val rawTime = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
-            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, UTC)).getOrElse(rawTime)
+            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, ZoneOffset.UTC))
+              .getOrElse(rawTime)
             updater.setLong(adjTime)
           }
         }
@@ -300,8 +319,7 @@ private[parquet] class ParquetRowConverter(
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
-            // DateType is not specialized in `SpecificMutableRow`, have to box it here.
-            updater.set(value.asInstanceOf[DateType#InternalType])
+            updater.set(dateRebaseFunc(value))
           }
         }
 
@@ -349,7 +367,12 @@ private[parquet] class ParquetRowConverter(
           }
         }
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, convertTz, wrappedUpdater)
+          schemaConverter,
+          parquetType.asGroupType(),
+          t,
+          convertTz,
+          datetimeRebaseMode,
+          wrappedUpdater)
 
       case t =>
         throw new RuntimeException(

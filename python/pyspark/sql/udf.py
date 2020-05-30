@@ -297,17 +297,18 @@ class UDFRegistration(object):
             >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
             [Row(random_udf()=82)]
 
-            >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-            >>> @pandas_udf("integer", PandasUDFType.SCALAR)  # doctest: +SKIP
-            ... def add_one(x):
-            ...     return x + 1
+            >>> import pandas as pd  # doctest: +SKIP
+            >>> from pyspark.sql.functions import pandas_udf
+            >>> @pandas_udf("integer")  # doctest: +SKIP
+            ... def add_one(s: pd.Series) -> pd.Series:
+            ...     return s + 1
             ...
             >>> _ = spark.udf.register("add_one", add_one)  # doctest: +SKIP
             >>> spark.sql("SELECT add_one(id) FROM range(3)").collect()  # doctest: +SKIP
             [Row(add_one(id)=1), Row(add_one(id)=2), Row(add_one(id)=3)]
 
-            >>> @pandas_udf("integer", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
-            ... def sum_udf(v):
+            >>> @pandas_udf("integer")  # doctest: +SKIP
+            ... def sum_udf(v: pd.Series) -> int:
             ...     return v.sum()
             ...
             >>> _ = spark.udf.register("sum_udf", sum_udf)  # doctest: +SKIP
@@ -414,6 +415,9 @@ def _test():
         .appName("sql.udf tests")\
         .getOrCreate()
     globs['spark'] = spark
+    # Hack to skip the unit tests in register. These are currently being tested in proper tests.
+    # We should reenable this test once we completely drop Python 2.
+    del pyspark.sql.udf.UDFRegistration.register
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.udf, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)

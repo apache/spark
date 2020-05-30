@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -258,9 +259,10 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns a user-facing string representation of this expression's name.
    * This should usually match the name of the function in SQL.
    */
-  def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
+  def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(nodeName.toLowerCase(Locale.ROOT))
 
-  protected def flatArguments: Iterator[Any] = productIterator.flatMap {
+  protected def flatArguments: Iterator[Any] = stringArgs.flatMap {
     case t: Iterable[_] => t
     case single => single :: Nil
   }
@@ -322,6 +324,19 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
   override lazy val canonicalized: Expression = child.canonicalized
+
+  /**
+   * Only used to generate SQL representation of this expression.
+   *
+   * Implementations should override this with original parameters
+   */
+  def exprsReplaced: Seq[Expression]
+
+  override def sql: String = mkString(exprsReplaced.map(_.sql))
+
+  def mkString(childrenString: Seq[String]): String = {
+    prettyName + childrenString.mkString("(", ", ", ")")
+  }
 }
 
 /**

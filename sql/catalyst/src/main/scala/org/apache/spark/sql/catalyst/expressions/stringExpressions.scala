@@ -27,7 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
@@ -683,11 +683,22 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 
 trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
+  protected def srcStr: Expression
+  protected def trimStr: Option[Expression]
+  protected def direction: String
+
+  override def children: Seq[Expression] = srcStr +: trimStr.toSeq
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def sql: String = if (trimStr.isDefined) {
+    s"TRIM($direction ${trimStr.get.sql} FROM ${srcStr.sql})"
+  } else {
+    super.sql
+  }
 }
 
 object StringTrim {
@@ -719,8 +730,6 @@ object StringTrim {
 
     _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
 
-    _FUNC_(str, trimStr) - Remove the leading and trailing `trimStr` characters from `str`.
-
     _FUNC_(trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
 
     _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
@@ -750,8 +759,6 @@ object StringTrim {
        SparkSQL
       > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
            SparkSQL
-      > SELECT _FUNC_('SSparkSQLS', 'SL');
-       parkSQ
       > SELECT _FUNC_('SL' FROM 'SSparkSQLS');
        parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
@@ -767,17 +774,14 @@ case class StringTrim(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
   override def prettyName: String = "trim"
 
-  override def children: Seq[Expression] = if (trimStr.isDefined) {
-    srcStr :: trimStr.get :: Nil
-  } else {
-    srcStr :: Nil
-  }
+  override protected def direction: String = "BOTH"
+
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
     if (srcString == null) {
@@ -846,8 +850,6 @@ object StringTrimLeft {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
-
-    _FUNC_(str, trimStr) - Removes the leading string contains the characters from the trim string
   """,
   arguments = """
     Arguments:
@@ -858,8 +860,6 @@ object StringTrimLeft {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('SparkSQLS', 'Sp');
-       arkSQLS
   """,
   since = "1.5.0")
 case class StringTrimLeft(
@@ -867,17 +867,13 @@ case class StringTrimLeft(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
   override def prettyName: String = "ltrim"
 
-  override def children: Seq[Expression] = if (trimStr.isDefined) {
-    srcStr :: trimStr.get :: Nil
-  } else {
-    srcStr :: Nil
-  }
+  override protected def direction: String = "LEADING"
 
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
@@ -948,8 +944,6 @@ object StringTrimRight {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
-
-    _FUNC_(str, trimStr) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
@@ -960,8 +954,6 @@ object StringTrimRight {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('SSparkSQLS', 'SQLS');
-       SSpark
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
@@ -970,17 +962,13 @@ case class StringTrimRight(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
   override def prettyName: String = "rtrim"
 
-  override def children: Seq[Expression] = if (trimStr.isDefined) {
-    srcStr :: trimStr.get :: Nil
-  } else {
-    srcStr :: Nil
-  }
+  override protected def direction: String = "TRAILING"
 
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
@@ -1462,7 +1450,7 @@ case class ParseUrl(children: Seq[Expression])
 // scalastyle:on line.size.limit
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
-  require(children.nonEmpty, "format_string() should take at least 1 argument")
+  require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
@@ -1529,7 +1517,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       }""")
   }
 
-  override def prettyName: String = "format_string"
+  override def prettyName: String = getTagValue(
+    FunctionRegistry.FUNC_ALIAS).getOrElse("format_string")
 }
 
 /**
@@ -1630,7 +1619,11 @@ case class StringSpace(child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.",
+  usage = """
+    _FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
+
+    _FUNC_(str FROM pos[ FOR len]]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 5);
@@ -1638,6 +1631,12 @@ case class StringSpace(child: Expression)
       > SELECT _FUNC_('Spark SQL', -3);
        SQL
       > SELECT _FUNC_('Spark SQL', 5, 1);
+       k
+      > SELECT _FUNC_('Spark SQL' FROM 5);
+       k SQL
+      > SELECT _FUNC_('Spark SQL' FROM -3);
+       SQL
+      > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
        k
   """,
   since = "1.5.0")
@@ -1696,7 +1695,7 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(str, len)
 }
 
 /**
@@ -1718,7 +1717,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
   }
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(str, len)
 }
 
 /**

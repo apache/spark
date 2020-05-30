@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
@@ -26,8 +26,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * A mix-in interface of {@link Table}, to indicate that it's readable. This adds
  * {@link #newScanBuilder(CaseInsensitiveStringMap)} that is used to create a scan for batch,
  * micro-batch, or continuous processing.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface SupportsRead extends Table {
 
   /**

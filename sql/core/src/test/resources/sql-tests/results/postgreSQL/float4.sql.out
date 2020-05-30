@@ -322,9 +322,10 @@ struct<CAST(CAST(2147483520 AS FLOAT) AS INT):int>
 -- !query
 SELECT int(float('2147483647'))
 -- !query schema
-struct<CAST(CAST(2147483647 AS FLOAT) AS INT):int>
+struct<>
 -- !query output
-2147483647
+java.lang.ArithmeticException
+Casting 2.14748365E9 to int causes overflow
 
 
 -- !query

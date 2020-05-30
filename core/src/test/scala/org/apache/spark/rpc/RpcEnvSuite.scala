@@ -209,7 +209,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-abort")
     try {
-      val e = intercept[RpcAbortException] {
+      val e = intercept[SparkException] {
         val timeout = new RpcTimeout(10.seconds, shortProp)
         val abortableRpcFuture = rpcEndpointRef.askAbortable[String](
           "hello", timeout)
@@ -217,15 +217,15 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
         new Thread {
           override def run: Unit = {
             Thread.sleep(100)
-            abortableRpcFuture.abort("TestAbort")
+            abortableRpcFuture.abort(new RuntimeException("TestAbort"))
           }
         }.start()
 
-        timeout.awaitResult(abortableRpcFuture.toFuture)
+        timeout.awaitResult(abortableRpcFuture.future)
       }
-      // The SparkException cause should be a RpcAbortException with "TestAbort" message
-      assert(e.isInstanceOf[RpcAbortException])
-      assert(e.getMessage.contains("TestAbort"))
+      // The SparkException cause should be a RuntimeException with "TestAbort" message
+      assert(e.getCause.isInstanceOf[RuntimeException])
+      assert(e.getCause.getMessage.contains("TestAbort"))
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
@@ -988,6 +988,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 }
+
+case class Register(ref: RpcEndpointRef)
 
 class UnserializableClass
 

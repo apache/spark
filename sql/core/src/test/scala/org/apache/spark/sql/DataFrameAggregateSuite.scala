@@ -530,6 +530,22 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-31500: collect_set() of BinaryType returns duplicate elements") {
+    val bytesTest1 = "test1".getBytes
+    val bytesTest2 = "test2".getBytes
+    val df = Seq(bytesTest1, bytesTest1, bytesTest2).toDF("a")
+    checkAnswer(df.select(size(collect_set($"a"))), Row(2) :: Nil)
+
+    val a = "aa".getBytes
+    val b = "bb".getBytes
+    val c = "cc".getBytes
+    val d = "dd".getBytes
+    val df1 = Seq((a, b), (a, b), (c, d))
+      .toDF("x", "y")
+      .select(struct($"x", $"y").as("a"))
+    checkAnswer(df1.select(size(collect_set($"a"))), Row(2) :: Nil)
+  }
+
   test("collect_set functions cannot have maps") {
     val df = Seq((1, 3, 0), (2, 3, 0), (3, 4, 1))
       .toDF("a", "x", "y")
@@ -615,34 +631,33 @@ class DataFrameAggregateSuite extends QueryTest
          Seq((true, true), (true, false), (false, true), (false, false))) {
       withSQLConf(
         (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
-        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString),
-        (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false")) {
-        // When enable AQE, the WholeStageCodegenExec is added during QueryStageExec.
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
 
         val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
 
         // test case for HashAggregate
         val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        hashAggDF.collect()
         val hashAggPlan = hashAggDF.queryExecution.executedPlan
         if (wholeStage) {
-          assert(hashAggPlan.find {
+          assert(find(hashAggPlan) {
             case WholeStageCodegenExec(_: HashAggregateExec) => true
             case _ => false
           }.isDefined)
         } else {
-          assert(hashAggPlan.isInstanceOf[HashAggregateExec])
+          assert(stripAQEPlan(hashAggPlan).isInstanceOf[HashAggregateExec])
         }
-        hashAggDF.collect()
 
         // test case for ObjectHashAggregate and SortAggregate
         val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
-        val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
+        objHashAggOrSortAggDF.collect()
+        val objHashAggOrSortAggPlan =
+          stripAQEPlan(objHashAggOrSortAggDF.queryExecution.executedPlan)
         if (useObjectHashAgg) {
           assert(objHashAggOrSortAggPlan.isInstanceOf[ObjectHashAggregateExec])
         } else {
           assert(objHashAggOrSortAggPlan.isInstanceOf[SortAggregateExec])
         }
-        objHashAggOrSortAggDF.collect()
       }
     }
   }
@@ -959,16 +974,42 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
-  test("calendar interval agg support hash aggregate") {
-    val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df2, Row(new CalendarInterval(0, 2, 0)) :: Nil)
-    assert(find(df2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-    val df3 = df1.groupBy($"a").agg(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df3,
-      Row(1, new CalendarInterval(0, 1, 0)) ::
-        Row(2, new CalendarInterval(0, 2, 0)) ::
-        Row(3, new CalendarInterval(0, 3, 0)) :: Nil)
-    assert(find(df3.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+  Seq(true, false).foreach { value =>
+    test(s"SPARK-31620: agg with subquery (whole-stage-codegen = $value)") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
+        withTempView("t1", "t2") {
+          sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
+          sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")
+
+          // test without grouping keys
+          checkAnswer(sql("select sum(if(c > (select a from t1), d, 0)) as csum from t2"),
+            Row(4) :: Nil)
+
+          // test with grouping keys
+          checkAnswer(sql("select c, sum(if(c > (select a from t1), d, 0)) as csum from " +
+            "t2 group by c"), Row(3, 4) :: Nil)
+
+          // test with distinct
+          checkAnswer(sql("select avg(distinct(d)), sum(distinct(if(c > (select a from t1)," +
+            " d, 0))) as csum from t2 group by c"), Row(4, 4) :: Nil)
+
+          // test subquery with agg
+          checkAnswer(sql("select sum(distinct(if(c > (select sum(distinct(a)) from t1)," +
+            " d, 0))) as csum from t2 group by c"), Row(4) :: Nil)
+
+          // test SortAggregateExec
+          var df = sql("select max(if(c > (select a from t1), 'str1', 'str2')) as csum from t2")
+          assert(df.queryExecution.executedPlan
+            .find { case _: SortAggregateExec => true }.isDefined)
+          checkAnswer(df, Row("str1") :: Nil)
+
+          // test ObjectHashAggregateExec
+          df = sql("select collect_list(d), sum(if(c > (select a from t1), d, 0)) as csum from t2")
+          assert(df.queryExecution.executedPlan
+            .find { case _: ObjectHashAggregateExec => true }.isDefined)
+          checkAnswer(df, Row(Array(4), 4) :: Nil)
+        }
+      }
+    }
   }
 }

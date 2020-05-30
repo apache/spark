@@ -554,28 +554,14 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("arrayOfString", arrayOfString)
       .add("arrayOfArrayOfString", ArrayType(arrayOfString))
       .add("arrayOfArrayOfInt", ArrayType(ArrayType(IntegerType)))
-      .add("arrayOfMap", ArrayType(mapOfString))
       .add("arrayOfStruct", ArrayType(structOfString))
       .add("arrayOfUDT", arrayOfUDT))
-
-  testHash(
-    new StructType()
-      .add("mapOfIntAndString", MapType(IntegerType, StringType))
-      .add("mapOfStringAndArray", MapType(StringType, arrayOfString))
-      .add("mapOfArrayAndInt", MapType(arrayOfString, IntegerType))
-      .add("mapOfArray", MapType(arrayOfString, arrayOfString))
-      .add("mapOfStringAndStruct", MapType(StringType, structOfString))
-      .add("mapOfStructAndString", MapType(structOfString, StringType))
-      .add("mapOfStruct", MapType(structOfString, structOfString)))
 
   testHash(
     new StructType()
       .add("structOfString", structOfString)
       .add("structOfStructOfString", new StructType().add("struct", structOfString))
       .add("structOfArray", new StructType().add("array", arrayOfString))
-      .add("structOfMap", new StructType().add("map", mapOfString))
-      .add("structOfArrayAndMap",
-        new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
 
   test("hive-hash for decimal") {
@@ -713,11 +699,11 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
-    val encoder = RowEncoder(inputSchema)
+    val toRow = RowEncoder(inputSchema).createSerializer()
     val seed = scala.util.Random.nextInt()
     test(s"murmur3/xxHash64/hive hash: ${inputSchema.simpleString}") {
       for (_ <- 1 to 10) {
-        val input = encoder.toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
+        val input = toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
         val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
           case (value, dt) => Literal.create(value, dt)
         }
@@ -731,7 +717,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val longSeed = Math.abs(seed).toLong + Integer.MAX_VALUE.toLong
     test(s"SPARK-30633: xxHash64 with long seed: ${inputSchema.simpleString}") {
       for (_ <- 1 to 10) {
-        val input = encoder.toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
+        val input = toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
         val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
           case (value, dt) => Literal.create(value, dt)
         }

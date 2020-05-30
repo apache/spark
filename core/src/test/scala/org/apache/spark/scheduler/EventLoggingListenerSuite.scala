@@ -38,6 +38,7 @@ import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
 import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -438,12 +439,14 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   private def createStageSubmittedEvent(stageId: Int) = {
     SparkListenerStageSubmitted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
+      Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
   }
 
   private def createStageCompletedEvent(stageId: Int) = {
     SparkListenerStageCompleted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
+      Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
   }
 
   private def createExecutorAddedEvent(executorId: Int) = {

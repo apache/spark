@@ -31,6 +31,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin, SQLHelper}
@@ -433,10 +434,11 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
     // Converts AliasIdentifier to JSON
     assertJSON(
-      AliasIdentifier("alias"),
+      AliasIdentifier("alias", Seq("ns1", "ns2")),
       JObject(
         "product-class" -> JString(classOf[AliasIdentifier].getName),
-          "identifier" -> "alias"))
+          "name" -> "alias",
+          "qualifier" -> "[ns1, ns2]"))
 
     // Converts SubqueryAlias to JSON
     assertJSON(
@@ -445,8 +447,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         JObject(
           "class" -> classOf[SubqueryAlias].getName,
           "num-children" -> 1,
-          "name" -> JObject("product-class" -> JString(classOf[AliasIdentifier].getName),
-            "identifier" -> "t1"),
+          "identifier" -> JObject("product-class" -> JString(classOf[AliasIdentifier].getName),
+            "name" -> "t1",
+            "qualifier" -> JArray(Nil)),
           "child" -> 0),
         JObject(
           "class" -> classOf[JsonTestTreeNode].getName,
@@ -592,7 +595,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("toJSON should not throws java.lang.StackOverflowError") {
-    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr), false :: Nil)
+    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr),
+      Option(ExpressionEncoder[String]()) :: Nil)
     // Should not throw java.lang.StackOverflowError
     udf.toJSON
   }

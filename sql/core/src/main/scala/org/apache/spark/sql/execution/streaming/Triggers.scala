@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToMillis
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.UTF8String
@@ -36,7 +37,8 @@ private object Triggers {
     if (cal.months != 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }
-    TimeUnit.MICROSECONDS.toMillis(cal.microseconds + cal.days * MICROS_PER_DAY)
+    val microsInDays = Math.multiplyExact(cal.days, MICROS_PER_DAY)
+    microsToMillis(Math.addExact(cal.microseconds, microsInDays))
   }
 
   def convert(interval: Duration): Long = interval.toMillis
