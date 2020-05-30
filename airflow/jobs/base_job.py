@@ -293,7 +293,7 @@ class BaseJob(Base, LoggingMixin):
             if ti.key not in queued_tis and ti.key not in running_tis:
                 tis_to_reset.append(ti)
 
-        if len(tis_to_reset) == 0:
+        if not tis_to_reset:
             return []
 
         def query(result, items):
@@ -316,8 +316,7 @@ class BaseJob(Base, LoggingMixin):
                                              [],
                                              self.max_tis_per_query)
 
-        task_instance_str = '\n\t'.join(
-            [repr(x) for x in reset_tis])
+        task_instance_str = '\n\t'.join([repr(x) for x in reset_tis])
         session.commit()
 
         self.log.info(
