@@ -40,21 +40,15 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param schemaName database name, null or a concrete database name
  */
 private[hive] class SparkGetSchemasOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String)
-  extends GetSchemasOperation(parentSession, catalogName, schemaName) with Logging {
-
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
-  }
+  extends GetSchemasOperation(parentSession, catalogName, schemaName)
+  with SparkOperation
+  with Logging {
 
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing databases '$cmdStr'"
