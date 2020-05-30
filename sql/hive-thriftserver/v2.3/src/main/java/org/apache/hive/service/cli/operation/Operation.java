@@ -298,7 +298,10 @@ public abstract class Operation {
     throw new UnsupportedOperationException("SQLOperation.cancel()");
   }
 
-  public abstract void close() throws HiveSQLException;
+  public void close() throws HiveSQLException {
+    setState(OperationState.CLOSED);
+    cleanupOperationLog();
+  }
 
   public abstract TableSchema getResultSetSchema() throws HiveSQLException;
 
