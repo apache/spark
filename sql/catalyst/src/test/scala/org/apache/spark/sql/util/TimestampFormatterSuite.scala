@@ -135,6 +135,9 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("format fraction of second") {
     val formatter = TimestampFormatter.getFractionFormatter(UTC)
     Seq(
+      -999999 -> "1969-12-31 23:59:59.000001",
+      -999900 -> "1969-12-31 23:59:59.0001",
+      -1 -> "1969-12-31 23:59:59.999999",
       0 -> "1970-01-01 00:00:00",
       1 -> "1970-01-01 00:00:00.000001",
       1000 -> "1970-01-01 00:00:00.001",
@@ -395,5 +398,16 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     val formatter = TimestampFormatter("yyyy HH", UTC)
     val micros = formatter.parse("2009 11")
     assert(micros === date(2009, 1, 1, 11))
+  }
+
+  test("explicitly forbidden datetime patterns") {
+    // not support by the legacy one too
+    Seq("QQQQQ", "qqqqq", "A", "c", "e", "n", "N", "p").foreach { pattern =>
+      intercept[IllegalArgumentException](TimestampFormatter(pattern, UTC).format(0))
+    }
+    // supported by the legacy one, then we will suggest users with SparkUpgradeException
+    Seq("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu", "aa", "aaa").foreach { pattern =>
+      intercept[SparkUpgradeException](TimestampFormatter(pattern, UTC).format(0))
+    }
   }
 }

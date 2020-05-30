@@ -156,7 +156,7 @@ case class AdaptiveSparkPlanExec(
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
-      val errors = new mutable.ArrayBuffer[SparkException]()
+      val errors = new mutable.ArrayBuffer[Throwable]()
       var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
@@ -176,9 +176,7 @@ case class AdaptiveSparkPlanExec(
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
               case e: Throwable =>
-                val ex = new SparkException(
-                  s"Early failed query stage found: ${stage.treeString}", e)
-                cleanUpAndThrowException(Seq(ex), Some(stage.id))
+                cleanUpAndThrowException(Seq(e), Some(stage.id))
             }
           }
         }
@@ -191,10 +189,9 @@ case class AdaptiveSparkPlanExec(
         events.drainTo(rem)
         (Seq(nextMsg) ++ rem.asScala).foreach {
           case StageSuccess(stage, res) =>
-            stage.resultOption = Some(res)
+            stage.resultOption.set(Some(res))
           case StageFailure(stage, ex) =>
-            errors.append(
-              new SparkException(s"Failed to materialize query stage: ${stage.treeString}.", ex))
+            errors.append(ex)
         }
 
         // In case of errors, we cancel all running stages and throw exception.
@@ -328,11 +325,11 @@ case class AdaptiveSparkPlanExec(
       context.stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
           val stage = reuseQueryStage(existingStage, e)
-          // This is a leaf stage and is not materialized yet even if the reused exchange may has
-          // been completed. It will trigger re-optimization later and stage materialization will
-          // finish in instant if the underlying exchange is already completed.
+          val isMaterialized = stage.resultOption.get().isDefined
           CreateStageResult(
-            newPlan = stage, allChildStagesMaterialized = false, newStages = Seq(stage))
+            newPlan = stage,
+            allChildStagesMaterialized = isMaterialized,
+            newStages = if (isMaterialized) Seq.empty else Seq(stage))
 
         case _ =>
           val result = createQueryStages(e.child)
@@ -349,10 +346,11 @@ case class AdaptiveSparkPlanExec(
                 newStage = reuseQueryStage(queryStage, e)
               }
             }
-
-            // We've created a new stage, which is obviously not ready yet.
-            CreateStageResult(newPlan = newStage,
-              allChildStagesMaterialized = false, newStages = Seq(newStage))
+            val isMaterialized = newStage.resultOption.get().isDefined
+            CreateStageResult(
+              newPlan = newStage,
+              allChildStagesMaterialized = isMaterialized,
+              newStages = if (isMaterialized) Seq.empty else Seq(newStage))
           } else {
             CreateStageResult(newPlan = newPlan,
               allChildStagesMaterialized = false, newStages = result.newStages)
@@ -361,7 +359,7 @@ case class AdaptiveSparkPlanExec(
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q,
-        allChildStagesMaterialized = q.resultOption.isDefined, newStages = Seq.empty)
+        allChildStagesMaterialized = q.resultOption.get().isDefined, newStages = Seq.empty)
 
     case _ =>
       if (plan.children.isEmpty) {
@@ -537,31 +535,28 @@ case class AdaptiveSparkPlanExec(
    * materialization errors and stage cancellation errors.
    */
   private def cleanUpAndThrowException(
-       errors: Seq[SparkException],
+       errors: Seq[Throwable],
        earlyFailedStage: Option[Int]): Unit = {
-    val runningStages = currentPhysicalPlan.collect {
+    currentPhysicalPlan.foreach {
       // earlyFailedStage is the stage which failed before calling doMaterialize,
       // so we should avoid calling cancel on it to re-trigger the failure again.
-      case s: QueryStageExec if !earlyFailedStage.contains(s.id) => s
-    }
-    val cancelErrors = new mutable.ArrayBuffer[SparkException]()
-    try {
-      runningStages.foreach { s =>
+      case s: QueryStageExec if !earlyFailedStage.contains(s.id) =>
         try {
           s.cancel()
         } catch {
           case NonFatal(t) =>
-            cancelErrors.append(
-              new SparkException(s"Failed to cancel query stage: ${s.treeString}", t))
+            logError(s"Exception in cancelling query stage: ${s.treeString}", t)
         }
-      }
-    } finally {
-      val ex = new SparkException(
-        "Adaptive execution failed due to stage materialization failures.", errors.head)
-      errors.tail.foreach(ex.addSuppressed)
-      cancelErrors.foreach(ex.addSuppressed)
-      throw ex
+      case _ =>
     }
+    val e = if (errors.size == 1) {
+      errors.head
+    } else {
+      val se = new SparkException("Multiple failures in stage materialization.", errors.head)
+      errors.tail.foreach(se.addSuppressed)
+      se
+    }
+    throw e
   }
 }
 
