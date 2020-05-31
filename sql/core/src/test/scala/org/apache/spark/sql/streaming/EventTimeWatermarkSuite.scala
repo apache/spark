@@ -790,7 +790,12 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   private def assertNumLateInputs(numLateInputs: Long): AssertOnQuery = AssertOnQuery { q =>
     q.processAllAvailable()
-    val progressWithData = q.recentProgress.lastOption.get
+    val progressWithData = q.recentProgress.filterNot { p =>
+      // filter out batches which are falling into one of types:
+      // 1) doesn't execute the batch run
+      // 2) empty input batch
+      p.inputRowsPerSecond == 0
+    }.lastOption.get
     assert(progressWithData.stateOperators(0).numLateInputs === numLateInputs)
     true
   }
