@@ -99,6 +99,17 @@ class Arg:
         parser.add_argument(*self.flags, **self.kwargs)
 
 
+def positive_int(value):
+    """Define a positive int type for an argument."""
+    try:
+        value = int(value)
+        if value > 0:
+            return value
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError(f"invalid positive int value: '{value}'")
+
+
 # Shared
 ARG_DAG_ID = Arg(
     ("dag_id",),
@@ -181,6 +192,13 @@ ARG_STATE = Arg(
 ARG_LIMIT = Arg(
     ("--limit",),
     help="Return a limited number of records")
+
+# next_execution
+ARG_NUM_EXECUTIONS = Arg(
+    ("-n", "--num-executions"),
+    default=1,
+    type=positive_int,
+    help="The number of next execution datetimes to show")
 
 # backfill
 ARG_MARK_SUCCESS = Arg(
@@ -793,9 +811,10 @@ DAGS_COMMANDS = (
     ),
     ActionCommand(
         name='next_execution',
-        help="Get the next execution datetime of a DAG",
+        help="Get the next execution datetimes of a DAG. It returns one execution unless the "
+             "num-executions option is given",
         func=lazy_load_command('airflow.cli.commands.dag_command.dag_next_execution'),
-        args=(ARG_DAG_ID, ARG_SUBDIR),
+        args=(ARG_DAG_ID, ARG_SUBDIR, ARG_NUM_EXECUTIONS),
     ),
     ActionCommand(
         name='pause',
