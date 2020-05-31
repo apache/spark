@@ -72,7 +72,6 @@ object HiveResult {
     }
   }
 
-  private def zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
   // Date formatting does not depend on time zone ID because it converts local days
   // since the epoch to local date string. Time zone id does matter only in parsing
   // when the parser has to handle special values like `now`, `yesterday` and etc.
@@ -85,7 +84,8 @@ object HiveResult {
     locale = DateFormatter.defaultLocale,
     // Use `FastDateFormat` as the legacy formatter because it is thread-safe.
     legacyFormat = LegacyDateFormats.FAST_DATE_FORMAT)
-  private def timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
+  private def timestampFormatter = TimestampFormatter.getFractionFormatter(
+    DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
   def toHiveString(a: (Any, DataType), nested: Boolean = false): String = a match {
