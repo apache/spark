@@ -44,7 +44,6 @@ class InvokeTargetClass extends Serializable {
   def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
   def filterPrimitiveInt(e: Int): Boolean = e > 0
   def binOp(e1: Int, e2: Double): Double = e1 + e2
-  def mapFunc(e: Any): Tuple2[Any, Any] = (e, e)
 }
 
 class InvokeTargetSubClass extends InvokeTargetClass {
@@ -201,20 +200,6 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkObjectExprEvaluation(
       Invoke(funcSubObj, "binOp", DoubleType, inputSum), 0.75, InternalRow.apply(1, 0.25))
-  }
-
-  test("SPARK-31854: Invoke in MapElementsExec should not propagate null") {
-    val targetObject = new InvokeTargetClass
-    val funcClass = classOf[InvokeTargetClass]
-    val funcObj = Literal.create(targetObject, ObjectType(funcClass))
-    val inputInt = Seq(BoundReference(0, ObjectType(classOf[Any]), true))
-    val outputType = ObjectType(classOf[(Any, Any)])
-    val inputRow = InternalRow.fromSeq(Seq(null.asInstanceOf[java.lang.Integer]))
-    val createExpr = (propagateNull: Boolean) => {
-      Invoke(funcObj, "mapFunc", outputType, inputInt, propagateNull)
-    }
-    checkObjectExprEvaluation(createExpr(true), null, inputRow)
-    checkObjectExprEvaluation(createExpr(false), (null, null), inputRow)
   }
 
   test("SPARK-23593: InitializeJavaBean should support interpreted execution") {

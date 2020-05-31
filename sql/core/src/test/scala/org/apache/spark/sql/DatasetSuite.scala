@@ -1918,7 +1918,6 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-31854: Invoke in MapElementsExec should not propagate null") {
-    spark.conf.set("spark.sql.codegen.wholeStage", false)
     Seq("true", "false").foreach { wholeStage =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
         val ds = Seq(1.asInstanceOf[Integer], null.asInstanceOf[Integer]).toDS()
