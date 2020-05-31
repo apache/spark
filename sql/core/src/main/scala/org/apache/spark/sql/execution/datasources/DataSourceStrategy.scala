@@ -263,13 +263,13 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       i.copy(table = readDataSourceTable(tableMeta))
 
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
-      i.copy(table = DDLUtils.readHiveTable(tableMeta))
+      i.copy(table = DDLUtils.readHiveTable(sparkSession.sessionState.catalog, tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
       readDataSourceTable(tableMeta)
 
     case UnresolvedCatalogRelation(tableMeta) =>
-      DDLUtils.readHiveTable(tableMeta)
+      DDLUtils.readHiveTable(sparkSession.sessionState.catalog, tableMeta)
   }
 }
 

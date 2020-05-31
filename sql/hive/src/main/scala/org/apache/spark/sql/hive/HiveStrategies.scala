@@ -20,12 +20,10 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.Locale
 
-import scala.collection.mutable
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.QualifiedTableName
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -36,7 +34,6 @@ import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-
 
 /**
  * Determine the database, serde/format and schema of the Hive serde table, according to the storage
@@ -115,7 +112,6 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 }
 
 class DetermineTableStats(val session: SparkSession) extends Rule[LogicalPlan] {
-  private val relationToSizeMap: mutable.Map[TableIdentifier, Long] = mutable.Map.empty
 
   private[hive] def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val partitionCols = relation.partitionCols
@@ -125,18 +121,11 @@ class DetermineTableStats(val session: SparkSession) extends Rule[LogicalPlan] {
     val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
       try {
         val table = relation.tableMeta
-        val relationSizeMap = getRelationToSizeMap
-        if (relationSizeMap.contains(table.identifier)) {
-          logDebug(s"Table size found in cache for table: ${table.identifier} ")
-          relationSizeMap(table.identifier)
-        } else {
-          val hadoopConf = session.sessionState.newHadoopConf()
-          val tablePath = new Path(table.location)
-          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-          val size = fs.getContentSummary(tablePath).getLength
-          relationSizeMap.put(relation.tableMeta.identifier, size)
-          size
-        }
+        val hadoopConf = session.sessionState.newHadoopConf()
+        val tablePath = new Path(table.location)
+        val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+        val size = fs.getContentSummary(tablePath).getLength
+        size
       } catch {
         case e: IOException =>
           logWarning("Failed to get table size from HDFS.", e)
@@ -145,16 +134,19 @@ class DetermineTableStats(val session: SparkSession) extends Rule[LogicalPlan] {
     } else {
       conf.defaultSizeInBytes
     }
-
     val stats = Some(Statistics(sizeInBytes = sizeInBytes))
-    relation.copy(tableStats = stats)
+    val catalog = session.sessionState.catalog
+    val tableIdentifier =
+      QualifiedTableName(relation.tableMeta.database, relation.tableMeta.identifier.table)
+    val newRelation = relation.copy(tableStats = stats)
+    catalog.invalidateCachedTable(tableIdentifier)
+    catalog.cacheTable(tableIdentifier, newRelation)
+    newRelation
   }
 
-  def getRelationToSizeMap: mutable.Map[TableIdentifier, Long] = relationToSizeMap
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case relation: HiveTableRelation
-      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+    case relation: HiveTableRelation if DDLUtils.isHiveTable(relation.tableMeta)
+      && relation.tableMeta.stats.isEmpty && relation.tableStats.isEmpty =>
       hiveTableWithStats(relation)
 
     // handles InsertIntoStatement specially as the table in InsertIntoStatement is not added in its

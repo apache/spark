@@ -135,7 +135,10 @@ class SessionCatalog(
 
   private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
     val cacheSize = conf.tableRelationCacheSize
-    CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
+    CacheBuilder
+      .newBuilder()
+      .recordStats()
+      .maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
   }
 
   /** This method provides a way to get a cached plan. */

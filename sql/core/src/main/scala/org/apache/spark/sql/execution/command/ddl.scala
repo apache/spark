@@ -24,14 +24,12 @@ import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
-
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -851,12 +849,21 @@ object DDLUtils {
     table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
   }
 
-  def readHiveTable(table: CatalogTable): HiveTableRelation = {
-    HiveTableRelation(
-      table,
-      // Hive table columns are always nullable.
-      table.dataSchema.asNullable.toAttributes,
-      table.partitionSchema.asNullable.toAttributes)
+  def readHiveTable(catalog: SessionCatalog, table: CatalogTable): HiveTableRelation = {
+    val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
+    val tbl = catalog.getCachedPlan(qualifiedTableName, () => {
+      HiveTableRelation(
+        table,
+        // Hive table columns are always nullable.
+        table.dataSchema.asNullable.toAttributes,
+        table.partitionSchema.asNullable.toAttributes)
+    })
+    tbl match {
+      case rel: HiveTableRelation =>
+        rel
+      case _ =>
+        throw new AnalysisException("Expected Hive Relation, Got logical relation")
+    }
   }
 
   /**

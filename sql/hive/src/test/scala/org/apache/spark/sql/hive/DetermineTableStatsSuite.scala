@@ -16,14 +16,14 @@
  */
 package org.apache.spark.sql.hive
 
-import scala.collection.mutable
-
-import org.mockito.Mockito._
+import com.google.common.cache.{Cache, CacheStats}
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.execution.datasources.FindDataSourceTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -32,7 +32,6 @@ class DetermineTableStatsSuite extends QueryTest
   with TestHiveSingleton
   with SQLTestUtils {
 
-  val relationToSizeMap: mutable.Map[TableIdentifier, Long] = mutable.Map.empty
   val tName = "t1"
 
   override def beforeAll(): Unit = {
@@ -40,36 +39,41 @@ class DetermineTableStatsSuite extends QueryTest
     sql(s"CREATE TABLE $tName(id int, name STRING) STORED AS PARQUET".stripMargin)
   }
 
-  test("SPARK-31850: Test if table size retrieved from cache") {
-    val flags = Seq(true, false)
-    flags.foreach {
-      hdfsFallbackEnabled =>
-        withSQLConf((SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key,
-          hdfsFallbackEnabled.toString)) {
-
-          val hiveRelation = DDLUtils.readHiveTable(spark.sharedState
-            .externalCatalog.getTable(SessionCatalog.DEFAULT_DATABASE, tName))
-          val ident = TableIdentifier(tName, Some(SessionCatalog.DEFAULT_DATABASE))
-          val rule: DetermineTableStats = mock(classOf[DetermineTableStats])
-
-          // define the mock methods behaviour
-          when(rule.session).thenReturn(spark)
-          when(rule.getRelationToSizeMap).thenReturn(relationToSizeMap)
-          when(rule.hiveTableWithStats(hiveRelation)).thenCallRealMethod()
-          when(rule.apply(hiveRelation)).thenCallRealMethod()
-
-          rule.apply(hiveRelation)
-          assert(relationToSizeMap.nonEmpty == hdfsFallbackEnabled)
-          assert(relationToSizeMap.contains(ident) == hdfsFallbackEnabled)
-
-          // clear the map for next iteration
-          relationToSizeMap.clear()
-        }
-    }
-  }
-
   override def afterAll(): Unit = {
     spark.sql(s"drop table $tName")
     super.afterAll()
+  }
+
+  test("SPARK-31850: Test if table size retrieved from cache") {
+
+
+    spark.sql(s"set ${SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key}=true")
+    spark.sql(s"set ${HiveUtils.CONVERT_METASTORE_PARQUET.key}=false")
+    val catalog = spark.sessionState.catalog
+    val cacheMethod = classOf[SessionCatalog].getDeclaredMethod("tableRelationCache")
+    cacheMethod.setAccessible(true)
+    val cache = cacheMethod.invoke(catalog)
+      .asInstanceOf[Cache[QualifiedTableName, LogicalPlan]]
+
+    def getStats: CacheStats = {
+      cache.stats()
+    }
+    val df = catalog.lookupRelation(TableIdentifier(tName))
+    catalog.invalidateAllCachedTables()
+    val baseStats: CacheStats = getStats
+
+    Analyzer.execute(df.queryExecution.logical)
+    var stats = getStats
+    assert(stats.missCount() == baseStats.missCount() + 1)
+
+    Analyzer.execute(df.queryExecution.logical)
+    stats = getStats
+    assert(stats.missCount() == baseStats.missCount() + 1)
+  }
+
+  object Analyzer extends RuleExecutor[LogicalPlan] {
+    val batches: List[Batch] = Batch("DetermineTableStatsTest", Once,
+      new FindDataSourceTable(spark),
+      new DetermineTableStats(spark)) :: Nil
   }
 }
