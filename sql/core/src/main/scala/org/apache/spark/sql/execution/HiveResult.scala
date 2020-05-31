@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, ZoneOffset}
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -77,9 +77,14 @@ object HiveResult {
   // since the epoch to local date string. Time zone id does matter only in parsing
   // when the parser has to handle special values like `now`, `yesterday` and etc.
   // Here, `dateFormatter` is used only for formatting, so, we can initialize it by
-  // any time zone once, for instance, by the current session time zone. And we can
-  // reuse it even when the session time zone might be changed.
-  private val dateFormatter = DateFormatter(zoneId)
+  // any time zone once, for instance, by the UTC time zone. And we can reuse it even
+  // when the session time zone might be changed.
+  private val dateFormatter = DateFormatter(
+    format = DateFormatter.defaultPattern,
+    zoneId = ZoneOffset.UTC,
+    locale = DateFormatter.defaultLocale,
+    // Use `FastDateFormat` as the legacy formatter because it is thread-safe.
+    legacyFormat = LegacyDateFormats.FAST_DATE_FORMAT)
   private def timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
