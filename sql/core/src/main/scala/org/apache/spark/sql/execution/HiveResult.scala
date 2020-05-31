@@ -73,7 +73,13 @@ object HiveResult {
   }
 
   private def zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-  private def dateFormatter = DateFormatter(zoneId)
+  // Date formatting does not depend on time zone ID because it converts local days
+  // since the epoch to local date string. Time zone id does matter only in parsing
+  // when the parser has to handle special values like `now`, `yesterday` and etc.
+  // Here, `dateFormatter` is used only for formatting, so, we can initialize it by
+  // any time zone once, for instance, by the current session time zone. And we can
+  // reuse it even when the session time zone might be changed.
+  private val dateFormatter = DateFormatter(zoneId)
   private def timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
