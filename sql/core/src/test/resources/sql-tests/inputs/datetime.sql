@@ -166,3 +166,14 @@ select to_timestamp('1969-01-01', 'YYYY-MM-dd');
 select to_timestamp('1969-12-31', 'YYYY-MM-dd');
 select to_timestamp('2018-01-01', 'YYYY-MM-dd');
 select to_timestamp('2018-11-17 13:33:33', 'YYYY-MM-dd HH:mm:ss');
+select to_timestamp('1969 1 1', 'yyyy w u');
+select to_timestamp('1969 1 1', 'yyyy M u');
+select to_timestamp('1 1969 1', 'M YYYY u');
+select to_timestamp('1969 1 1', 'YYYY M u');
+select to_timestamp('1969 1 6 1', 'yyyy M d u');
+select to_timestamp('1969 1 5 1', 'yyyy M d u');
+-- YYYY-ww-dd
+select to_timestamp('1969 11 11', 'YYYY ww dd');
+select to_timestamp('1969 2 11', 'YYYY W dd');
+select to_timestamp('1969 5 11 11', 'YYYY M ww dd');
+

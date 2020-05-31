@@ -1170,11 +1170,35 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-31868: Restore the behaviour week-based-year for 2.4") {
+//    checkEvaluation(
+//      new ParseToTimestamp(Literal("2018-11-17 13:33:33"), Literal("YYYY-MM-dd HH:mm:ss")).child,
+//      Timestamp.valueOf("2017-12-31 13:33:33.0"))
+//    checkEvaluation(
+//      new ParseToTimestamp(Literal("2018-11-17"), Literal("YYYY-MM-dd")).child,
+//      Timestamp.valueOf("2017-12-31 00:00:00.0"))
+//
+//    checkEvaluation(
+//      new ParseToTimestamp(Literal("1969 1 2"), Literal("YYYY w u")).child,
+//      Timestamp.valueOf("1968-12-30 00:00:00.0"))
+//
+//    checkEvaluation(
+//      new ParseToTimestamp(Literal("2018-46-7 13:33:33"), Literal("YYYY-ww-u HH:mm:ss")).child,
+//      Timestamp.valueOf("2018-11-17 13:33:33.0"))
+
+//    checkEvaluation(
+//      new ParseToTimestamp(Literal("2018-11-17"), Literal("YYYY-ww-dd")).child,
+//      Timestamp.valueOf("2017-12-31 00:00:00.0"))
+
+//    checkEvaluation(
+//      new ParseToTimestamp(Literal("2018-11-2-17"), Literal("yyyy-ww-W-dd")).child,
+//      Timestamp.valueOf("2017-12-31 00:00:00.0"))
+
     checkEvaluation(
-      new ParseToTimestamp(Literal("2018-11-17 13:33:33"), Literal("YYYY-MM-dd HH:mm:ss")).child,
-      Timestamp.valueOf("2017-12-31 13:33:33.0"))
-    checkEvaluation(
-      new ParseToTimestamp(Literal("2018-11-17"), Literal("YYYY-MM-dd")).child,
+      new ParseToTimestamp(Literal("1969 1 6 1"), Literal("yyyy M d u")).child,
       Timestamp.valueOf("2017-12-31 00:00:00.0"))
+
+    checkEvaluation(
+      new ParseToTimestamp(Literal("1969 5 11 11"), Literal("YYYY M ww dd")).child,
+      Timestamp.valueOf("1969-01-01 00:00:00.0"))
   }
 }

@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 trait DateTimeFormatterHelper {
-  private def getOrDefault(accessor: TemporalAccessor, field: ChronoField, default: Int): Int = {
+  private def getOrDefault(accessor: TemporalAccessor, field: TemporalField, default: Int): Int = {
     if (accessor.isSupported(field)) {
       accessor.get(field)
     } else {
@@ -44,20 +44,46 @@ trait DateTimeFormatterHelper {
     // If all the date fields are specified, return the local date directly.
     if (localDate != null) return localDate
 
-    lazy val weekBasedYearField = WeekFields.of(locale).weekBasedYear()
+    val weekFields = WeekFields.of(locale)
+    lazy val weekBasedYearField = weekFields.weekBasedYear()
     // Users may want to parse only a few datetime fields from a string and extract these fields
     // later, and we should provide default values for missing fields.
     // To be compatible with Spark 2.4, we pick 1970 as the default value of year.
     val year = if (accessor.isSupported(ChronoField.YEAR)) {
       accessor.get(ChronoField.YEAR)
     } else if (accessor.isSupported(weekBasedYearField)) {
+      // If we reach
       val year = accessor.get(weekBasedYearField) - 1
-      return LocalDate.of(year, 12, 1).`with`(TemporalAdjusters.lastInMonth(DayOfWeek.SUNDAY))
+      return LocalDate.of(year, 12, 1)
+        .`with`(TemporalAdjusters.lastInMonth(weekFields.getFirstDayOfWeek))
     } else 1970
 
     val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
     val day = getOrDefault(accessor, ChronoField.DAY_OF_MONTH, 1)
-    LocalDate.of(year, month, day)
+    val weekBasedYear = if (accessor.isSupported(weekFields.weekBasedYear())) {
+      Option(accessor.get(weekFields.weekBasedYear()))
+    } else {
+      None
+    }
+    if (accessor.isSupported(weekFields.weekOfMonth())) {
+      Option(accessor.get(weekFields.weekOfMonth()))
+    } else {
+      None
+    }
+    val week = if (accessor.isSupported(weekFields.weekOfWeekBasedYear())) {
+      Option(accessor.get(weekFields.weekOfWeekBasedYear()))
+    } else {
+      None
+    }
+    val dayOfWeek = if (accessor.isSupported(weekFields.dayOfWeek())) {
+      Option(accessor.get(weekFields.dayOfWeek()))
+    } else {
+      None
+    }
+
+
+    val date = LocalDate.of(year, month, day)
+    date
   }
 
   private def toLocalTime(accessor: TemporalAccessor): LocalTime = {
