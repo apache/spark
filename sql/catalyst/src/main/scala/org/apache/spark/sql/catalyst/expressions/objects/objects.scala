@@ -366,11 +366,15 @@ case class Invoke(
       // If the function can return null, we do an extra check to make sure our null bit is still
       // set correctly.
       val assignResult = if (!returnNullable) {
-        s"${ev.value} = (${CodeGenerator.boxedType(javaType)}) $funcResult;"
+        s"""
+          ${ev.value} = (${CodeGenerator.boxedType(javaType)}) $funcResult;
+          ${ev.isNull} = false;
+         """
       } else {
         s"""
           if ($funcResult != null) {
             ${ev.value} = (${CodeGenerator.boxedType(javaType)}) $funcResult;
+            ${ev.isNull} = false;
           } else {
             ${ev.isNull} = true;
           }
@@ -383,26 +387,15 @@ case class Invoke(
       """
     }
 
-    val evalFunc = if (propagateNull) {
-      s"""
-        ${ev.isNull} = $resultIsNull;
-        if (!${ev.isNull}) {
-          $evaluate
-        }
-      """
-    } else {
-      s"""
-        ${ev.isNull} = false;
-        $evaluate
-      """
-    }
-
     val code = obj.code + code"""
       boolean ${ev.isNull} = true;
       $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${obj.isNull}) {
         $argCode
-        $evalFunc
+        ${ev.isNull} = $resultIsNull;
+        if (!${ev.isNull}) {
+          $evaluate
+        }
       }
      """
     ev.copy(code = code)

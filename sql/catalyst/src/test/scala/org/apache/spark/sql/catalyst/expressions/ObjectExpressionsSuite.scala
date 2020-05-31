@@ -203,7 +203,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Invoke(funcSubObj, "binOp", DoubleType, inputSum), 0.75, InternalRow.apply(1, 0.25))
   }
 
-  test("SPARK-31854 Invoke in MapElementsExec should respect propagateNull") {
+  test("SPARK-31854 Invoke in MapElementsExec should not propagate null") {
     val targetObject = new InvokeTargetClass
     val funcClass = classOf[InvokeTargetClass]
     val funcObj = Literal.create(targetObject, ObjectType(funcClass))
