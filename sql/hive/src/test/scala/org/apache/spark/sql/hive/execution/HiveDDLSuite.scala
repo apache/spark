@@ -2732,11 +2732,11 @@ class HiveDDLSuite
         val uuid = UUID.randomUUID().toString
         sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES('$meta'='$uuid')")
         val t1 = catalog.getTableMetadata(TableIdentifier("t1"))
-        // Be sure the property exists, the value may be changed by hive
+        // Be sure the metastore property exists, the value may be changed by hive
         assert(t1.properties.get(s"$meta").isDefined)
         sql("CREATE TABLE t2 LIKE t1")
         val t2 = catalog.getTableMetadata(TableIdentifier("t2"))
-        // we don't copy source tbl properties, but they may be added by hive
+        // We don't copy source tbl metastore properties, but they may be added by hive
         assert(t2.properties.get(s"$meta").isEmpty || t2.properties(s"$meta") != s"$uuid")
       }
     }
