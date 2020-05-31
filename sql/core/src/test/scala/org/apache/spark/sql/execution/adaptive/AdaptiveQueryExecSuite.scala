@@ -540,24 +540,21 @@ class AdaptiveQueryExecSuite
   }
 
   test("Avoid plan change if cost is greater") {
-    val testData2 = spark.table("testData2")
-    val newTestData2 = testData2.withColumn("c", testData2("a"))
-    newTestData2.createTempView("newTestData2")
     val origPlan = sql("SELECT * FROM testData " +
-      "join newTestData2 t2 ON key = t2.a " +
-      "join testData2 t3 on t2.c = t3.a where t2.b = 1").queryExecution.executedPlan
+      "join testData2 t2 ON key = t2.a " +
+      "join testData2 t3 on t2.a = t3.a where t2.b = 1").queryExecution.executedPlan
 
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData " +
-          "join newTestData2 t2 ON key = t2.a " +
-          "join testData2 t3 on t2.c = t3.a where t2.b = 1")
+          "join testData2 t2 ON key = t2.a " +
+          "join testData2 t3 on t2.a = t3.a where t2.b = 1")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 2)
       val smj2 = findTopLevelSortMergeJoin(adaptivePlan)
-      assert(smj2.size == 2, origPlan.toString)
+      assert(smj2.size == 1, origPlan.toString)
     }
   }
 

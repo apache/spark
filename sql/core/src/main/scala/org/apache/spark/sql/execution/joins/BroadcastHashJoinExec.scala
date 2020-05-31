@@ -66,12 +66,17 @@ case class BroadcastHashJoinExec(
       case BuildRight => rightKeys
     }
 
-    streamedPlan.outputPartitioning match {
-      case h: HashPartitioning =>
-        PartitioningCollection(Seq(h, HashPartitioning(buildKeys, h.numPartitions)))
-      case c: PartitioningCollection if c.partitionings.forall(_.isInstanceOf[HashPartitioning]) =>
-        PartitioningCollection(c.partitionings :+ HashPartitioning(buildKeys, c.numPartitions))
-      case other => other
+    joinType match {
+      case _: InnerLike =>
+        streamedPlan.outputPartitioning match {
+          case h: HashPartitioning =>
+            PartitioningCollection(Seq(h, HashPartitioning(buildKeys, h.numPartitions)))
+          case c: PartitioningCollection
+            if c.partitionings.forall(_.isInstanceOf[HashPartitioning]) =>
+            PartitioningCollection(c.partitionings :+ HashPartitioning(buildKeys, c.numPartitions))
+          case other => other
+        }
+      case _ => streamedPlan.outputPartitioning
     }
   }
 
