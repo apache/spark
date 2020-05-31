@@ -27,11 +27,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.write.{DataWriter, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{DataWriter, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.python.PythonForeachWriter
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdate
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A write-only table for forwarding data into the specified [[ForeachWriter]].
@@ -54,31 +54,28 @@ case class ForeachWriterTable[T](
     Set(TableCapability.STREAMING_WRITE).asJava
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-    new WriteBuilder with SupportsTruncate {
-      private var inputSchema: StructType = _
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdate {
+      private var inputSchema: StructType = info.schema()
 
-      override def withInputDataSchema(schema: StructType): WriteBuilder = {
-        this.inputSchema = schema
-        this
-      }
-
-      // Do nothing for truncate. Foreach sink is special that it just forwards all the records to
-      // ForeachWriter.
+      // Do nothing for truncate/update. Foreach sink is special and it just forwards all the
+      // records to ForeachWriter.
       override def truncate(): WriteBuilder = this
+      override def update(): WriteBuilder = this
 
       override def buildForStreaming(): StreamingWrite = {
         new StreamingWrite {
           override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
           override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
-          override def createStreamingWriterFactory(): StreamingDataWriterFactory = {
+          override def createStreamingWriterFactory(
+              info: PhysicalWriteInfo): StreamingDataWriterFactory = {
             val rowConverter: InternalRow => T = converter match {
               case Left(enc) =>
                 val boundEnc = enc.resolveAndBind(
                   inputSchema.toAttributes,
                   SparkSession.getActiveSession.get.sessionState.analyzer)
-                boundEnc.fromRow
+                boundEnc.createDeserializer()
               case Right(func) =>
                 func
             }
@@ -134,7 +131,7 @@ class ForeachDataWriter[T](
 
   // If open returns false, we should skip writing rows.
   private val opened = writer.open(partitionId, epochId)
-  private var closeCalled: Boolean = false
+  private var errorOrNull: Throwable = _
 
   override def write(record: InternalRow): Unit = {
     if (!opened) return
@@ -143,25 +140,24 @@ class ForeachDataWriter[T](
       writer.process(rowConverter(record))
     } catch {
       case t: Throwable =>
-        closeWriter(t)
+        errorOrNull = t
         throw t
     }
+
   }
 
   override def commit(): WriterCommitMessage = {
-    closeWriter(null)
     ForeachWriterCommitMessage
   }
 
   override def abort(): Unit = {
-    closeWriter(new SparkException("Foreach writer has been aborted due to a task failure"))
+    if (errorOrNull == null) {
+      errorOrNull = new SparkException("Foreach writer has been aborted due to a task failure")
+    }
   }
 
-  private def closeWriter(errorOrNull: Throwable): Unit = {
-    if (!closeCalled) {
-      closeCalled = true
-      writer.close(errorOrNull)
-    }
+  override def close(): Unit = {
+    writer.close(errorOrNull)
   }
 }
 

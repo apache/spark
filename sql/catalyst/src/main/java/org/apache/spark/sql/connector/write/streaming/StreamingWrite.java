@@ -19,14 +19,15 @@ package org.apache.spark.sql.connector.write.streaming;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.write.DataWriter;
+import org.apache.spark.sql.connector.write.PhysicalWriteInfo;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 
 /**
  * An interface that defines how to write the data to data source in streaming queries.
  *
  * The writing procedure is:
- *   1. Create a writer factory by {@link #createStreamingWriterFactory()}, serialize and send it to
- *      all the partitions of the input data(RDD).
+ *   1. Create a writer factory by {@link #createStreamingWriterFactory(PhysicalWriteInfo)},
+ *      serialize and send it to all the partitions of the input data(RDD).
  *   2. For each epoch in each partition, create the data writer, and write the data of the epoch in
  *      the partition with this writer. If all the data are written successfully, call
  *      {@link DataWriter#commit()}. If exception happens during the writing, call
@@ -39,6 +40,8 @@ import org.apache.spark.sql.connector.write.WriterCommitMessage;
  * do it manually in their Spark applications if they want to retry.
  *
  * Please refer to the documentation of commit/abort methods for detailed specifications.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface StreamingWrite {
@@ -48,8 +51,10 @@ public interface StreamingWrite {
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
+   *
+   * @param info Information about the RDD that will be written to this data writer
    */
-  StreamingDataWriterFactory createStreamingWriterFactory();
+  StreamingDataWriterFactory createStreamingWriterFactory(PhysicalWriteInfo info);
 
   /**
    * Commits this writing job for the specified epoch with a list of commit messages. The commit

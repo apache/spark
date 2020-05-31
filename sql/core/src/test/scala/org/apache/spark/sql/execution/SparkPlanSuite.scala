@@ -34,6 +34,7 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     intercept[IllegalStateException] { plan.executeToIterator() }
     intercept[IllegalStateException] { plan.executeBroadcast() }
     intercept[IllegalStateException] { plan.executeTake(1) }
+    intercept[IllegalStateException] { plan.executeTail(1) }
   }
 
   test("SPARK-23731 plans should be canonicalizable after being (de)serialized") {
@@ -82,5 +83,9 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
         assert(SparkPlanInfo.fromSparkPlan(f.queryExecution.sparkPlan).metadata.nonEmpty)
       }
     }
+  }
+
+  test("SPARK-30780 empty LocalTableScan should use RDD without partitions") {
+    assert(LocalTableScanExec(Nil, Nil).execute().getNumPartitions == 0)
   }
 }

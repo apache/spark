@@ -144,13 +144,13 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if ((!is.list(coll) && !is.vector(coll)) || is.data.frame(coll)) {
   # nolint end
     if (is.data.frame(coll)) {
-      message(paste("context.R: A data frame is parallelized by columns."))
+      message("context.R: A data frame is parallelized by columns.")
     } else {
       if (is.matrix(coll)) {
-        message(paste("context.R: A matrix is parallelized by elements."))
+        message("context.R: A matrix is parallelized by elements.")
       } else {
-        message(paste("context.R: parallelize() currently only supports lists and vectors.",
-                      "Calling as.list() to coerce coll into a list."))
+        message("context.R: parallelize() currently only supports lists and vectors. ",
+                "Calling as.list() to coerce coll into a list.")
       }
     }
     coll <- as.list(coll)
@@ -416,7 +416,7 @@ spark.getSparkFiles <- function(fileName) {
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' doubled <- spark.lapply(1:10, function(x){2 * x})
+#' doubled <- spark.lapply(1:10, function(x) {2 * x})
 #'}
 #' @note spark.lapply since 2.0.0
 spark.lapply <- function(list, func) {

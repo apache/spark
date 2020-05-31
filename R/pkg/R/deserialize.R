@@ -57,7 +57,7 @@ readTypedObject <- function(con, type) {
     "s" = readStruct(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
-    stop(paste("Unsupported type for deserialization", type)))
+    stop("Unsupported type for deserialization ", type))
 }
 
 readStringData <- function(con, len) {
@@ -242,7 +242,7 @@ readDeserializeInArrow <- function(inputCon) {
     # for now.
     dataLen <- readInt(inputCon)
     arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
-    batches <- arrow::RecordBatchStreamReader(arrowData)$batches()
+    batches <- arrow::RecordBatchStreamReader$create(arrowData)$batches()
 
     if (useAsTibble) {
       as_tibble <- get("as_tibble", envir = asNamespace("arrow"))

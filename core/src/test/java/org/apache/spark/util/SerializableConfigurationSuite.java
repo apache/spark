@@ -50,6 +50,6 @@ public class SerializableConfigurationSuite {
     hadoopConfiguration.set("test.property", "value");
     SerializableConfiguration scs = new SerializableConfiguration(hadoopConfiguration);
     SerializableConfiguration actual = rdd.map(val -> scs).collect().get(0);
-    assertEquals(actual.value().get("test.property"), "value");
+    assertEquals("value", actual.value().get("test.property"));
   }
 }

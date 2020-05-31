@@ -18,13 +18,15 @@
 package org.apache.spark.repl
 
 import java.io._
+import java.nio.file.Files
 
 import scala.tools.nsc.interpreter.SimpleReader
 
-import org.apache.log4j.{Level, LogManager}
+import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
@@ -297,4 +299,114 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     assertContains("successful", output)
   }
 
+  test("SPARK-30167: Log4j configuration for REPL should override root logger properly") {
+    val testConfiguration =
+      """
+        |# Set everything to be logged to the console
+        |log4j.rootCategory=INFO, console
+        |log4j.appender.console=org.apache.log4j.ConsoleAppender
+        |log4j.appender.console.target=System.err
+        |log4j.appender.console.layout=org.apache.log4j.PatternLayout
+        |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+        |
+        |# Set the log level for this class to WARN same as the default setting.
+        |log4j.logger.org.apache.spark.repl.Main=ERROR
+        |""".stripMargin
+
+    val log4jprops = Files.createTempFile("log4j.properties.d", "log4j.properties")
+    Files.write(log4jprops, testConfiguration.getBytes)
+
+    val originalRootLogger = LogManager.getRootLogger
+    val originalRootAppender = originalRootLogger.getAppender("file")
+    val originalStderr = System.err
+    val originalReplThresholdLevel = Logging.sparkShellThresholdLevel
+
+    val replLoggerLogMessage = "Log level for REPL: "
+    val warnLogMessage1 = "warnLogMessage1 should not be output"
+    val errorLogMessage1 = "errorLogMessage1 should be output"
+    val infoLogMessage1 = "infoLogMessage2 should be output"
+    val infoLogMessage2 = "infoLogMessage3 should be output"
+
+    val out = try {
+      PropertyConfigurator.configure(log4jprops.toAbsolutePath.toString)
+
+      // Re-initialization is needed to set SparkShellLoggingFilter to ConsoleAppender
+      Main.initializeForcefully(true, false)
+      runInterpreter("local",
+        s"""
+           |import java.io.{ByteArrayOutputStream, PrintStream}
+           |
+           |import org.apache.log4j.{ConsoleAppender, Level, LogManager}
+           |
+           |val replLogger = LogManager.getLogger("${Main.getClass.getName.stripSuffix("$")}")
+           |
+           |// Log level for REPL is expected to be ERROR
+           |"$replLoggerLogMessage" + replLogger.getLevel()
+           |
+           |val bout = new ByteArrayOutputStream()
+           |
+           |// Configure stderr to let log messages output to ByteArrayOutputStream.
+           |val defaultErrStream: PrintStream = System.err
+           |try {
+           |  System.setErr(new PrintStream(bout))
+           |
+           |  // Reconfigure ConsoleAppender to reflect the stderr setting.
+           |  val consoleAppender =
+           |    LogManager.getRootLogger.getAllAppenders.nextElement.asInstanceOf[ConsoleAppender]
+           |  consoleAppender.activateOptions()
+           |
+           |  // customLogger1 is not explicitly configured neither its log level nor appender
+           |  // so this inherits the settings of rootLogger
+           |  // but ConsoleAppender can use a different log level.
+           |  val customLogger1 = LogManager.getLogger("customLogger1")
+           |  customLogger1.warn("$warnLogMessage1")
+           |  customLogger1.error("$errorLogMessage1")
+           |
+           |  // customLogger2 is explicitly configured its log level as INFO
+           |  // so info level messages logged via customLogger2 should be output.
+           |  val customLogger2 = LogManager.getLogger("customLogger2")
+           |  customLogger2.setLevel(Level.INFO)
+           |  customLogger2.info("$infoLogMessage1")
+           |
+           |  // customLogger2 is explicitly configured its log level
+           |  // so its child should inherit the settings.
+           |  val customLogger3 = LogManager.getLogger("customLogger2.child")
+           |  customLogger3.info("$infoLogMessage2")
+           |
+           |  // echo log messages
+           |  bout.toString
+           |} finally {
+           |  System.setErr(defaultErrStream)
+           |}
+           |""".stripMargin)
+    } finally {
+      // Restore log4j settings for this suite
+      val log4jproperties = Thread.currentThread()
+        .getContextClassLoader.getResource("log4j.properties")
+      LogManager.resetConfiguration()
+      PropertyConfigurator.configure(log4jproperties)
+      Logging.sparkShellThresholdLevel = originalReplThresholdLevel
+    }
+
+    // Ensure stderr configuration is successfully restored.
+    assert(originalStderr eq System.err)
+
+    // Ensure log4j settings are successfully restored.
+    val restoredRootLogger = LogManager.getRootLogger
+    val restoredRootAppender = restoredRootLogger.getAppender("file")
+    assert(originalRootAppender.getClass == restoredRootAppender.getClass)
+    assert(originalRootLogger.getLevel == restoredRootLogger.getLevel)
+
+    // Ensure loggers added in this test case are successfully removed.
+    assert(LogManager.getLogger("customLogger2").getLevel == null)
+    assert(LogManager.getLogger("customLogger2.child").getLevel == null)
+
+    // Ensure log level threshold for REPL is ERROR.
+    assertContains(replLoggerLogMessage + "ERROR", out)
+
+    assertDoesNotContain(warnLogMessage1, out)
+    assertContains(errorLogMessage1, out)
+    assertContains(infoLogMessage1, out)
+    assertContains(infoLogMessage2, out)
+  }
 }

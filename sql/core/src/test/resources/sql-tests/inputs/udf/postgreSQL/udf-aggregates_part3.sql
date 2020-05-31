@@ -229,7 +229,6 @@ select udf(max(min(unique1))) from tenk1;
 
 -- drop table bytea_test_table;
 
--- [SPARK-27986] Support Aggregate Expressions with filter
 -- FILTER tests
 
 -- select min(unique1) filter (where unique1 > 100) from tenk1;

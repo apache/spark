@@ -149,7 +149,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     withTempView(table) {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800D) FROM $table"),
+        spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800) FROM $table"),
         Row(Seq(499))
       )
     }

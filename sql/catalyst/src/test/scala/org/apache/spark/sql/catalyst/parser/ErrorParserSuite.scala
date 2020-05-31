@@ -95,9 +95,30 @@ class ErrorParserSuite extends AnalysisTest {
       """
         |ALTER TABLE t
         |CHANGE COLUMN
-        |test-col BIGINT
+        |test-col TYPE BIGINT
+      """.stripMargin, 4, 4, 5, msg + " test-col")
+    intercept(
+      """
+        |ALTER TABLE t
+        |RENAME COLUMN
+        |test-col TO test
+      """.stripMargin, 4, 4, 5, msg + " test-col")
+    intercept(
+      """
+        |ALTER TABLE t
+        |RENAME COLUMN
+        |test TO test-col
+      """.stripMargin, 4, 12, 13, msg + " test-col")
+    intercept(
+      """
+        |ALTER TABLE t
+        |DROP COLUMN
+        |test-col, test
       """.stripMargin, 4, 4, 5, msg + " test-col")
     intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute")
+    intercept("CREATE FUNCTION test-func as org.test.func", 1, 20, 21, msg + " test-func")
+    intercept("DROP FUNCTION test-func as org.test.func", 1, 18, 19, msg + " test-func")
+    intercept("SHOW FUNCTIONS LIKE test-func", 1, 24, 25, msg + " test-func")
     intercept(
       """
         |CREATE TABLE IF NOT EXISTS mydb.page-view
@@ -106,6 +127,11 @@ class ErrorParserSuite extends AnalysisTest {
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
         |AS SELECT * FROM src""".stripMargin, 2, 36, 37, msg + " page-view")
+    intercept(
+      """
+        |CREATE TABLE IF NOT EXISTS tab
+        |USING test-provider
+        |AS SELECT * FROM src""".stripMargin, 3, 10, 11, msg + " test-provider")
     intercept("SHOW TABLES IN hyphen-database", 1, 21, 22, msg + " hyphen-database")
     intercept("SHOW TABLE EXTENDED IN hyphen-db LIKE \"str\"", 1, 29, 30, msg + " hyphen-db")
     intercept("SHOW COLUMNS IN t FROM test-db", 1, 27, 28, msg + " test-db")

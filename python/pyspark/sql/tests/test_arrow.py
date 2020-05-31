@@ -163,22 +163,19 @@ class ArrowTests(ReusedSQLTestCase):
     def test_toPandas_respect_session_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
 
-        timezone = "America/New_York"
-        with self.sql_conf({
-                "spark.sql.execution.pandas.respectSessionTimeZone": False,
-                "spark.sql.session.timeZone": timezone}):
+        timezone = "America/Los_Angeles"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
             pdf_la, pdf_arrow_la = self._toPandas_arrow_toggle(df)
             assert_frame_equal(pdf_arrow_la, pdf_la)
 
-        with self.sql_conf({
-                "spark.sql.execution.pandas.respectSessionTimeZone": True,
-                "spark.sql.session.timeZone": timezone}):
+        timezone = "America/New_York"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
             pdf_ny, pdf_arrow_ny = self._toPandas_arrow_toggle(df)
             assert_frame_equal(pdf_arrow_ny, pdf_ny)
 
             self.assertFalse(pdf_ny.equals(pdf_la))
 
-            from pyspark.sql.types import _check_series_convert_timestamps_local_tz
+            from pyspark.sql.pandas.types import _check_series_convert_timestamps_local_tz
             pdf_la_corrected = pdf_la.copy()
             for field in self.schema:
                 if isinstance(field.dataType, TimestampType):
@@ -234,18 +231,15 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_respect_session_timezone(self):
         from datetime import timedelta
         pdf = self.create_pandas_data_frame()
-        timezone = "America/New_York"
-        with self.sql_conf({
-                "spark.sql.execution.pandas.respectSessionTimeZone": False,
-                "spark.sql.session.timeZone": timezone}):
+        timezone = "America/Los_Angeles"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
             df_no_arrow_la, df_arrow_la = self._createDataFrame_toggle(pdf, schema=self.schema)
             result_la = df_no_arrow_la.collect()
             result_arrow_la = df_arrow_la.collect()
             self.assertEqual(result_la, result_arrow_la)
 
-        with self.sql_conf({
-                "spark.sql.execution.pandas.respectSessionTimeZone": True,
-                "spark.sql.session.timeZone": timezone}):
+        timezone = "America/New_York"
+        with self.sql_conf({"spark.sql.session.timeZone": timezone}):
             df_no_arrow_ny, df_arrow_ny = self._createDataFrame_toggle(pdf, schema=self.schema)
             result_ny = df_no_arrow_ny.collect()
             result_arrow_ny = df_arrow_ny.collect()
@@ -303,15 +297,15 @@ class ArrowTests(ReusedSQLTestCase):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
         # Use a nanosecond value to make sure it is not truncated
-        pdf.ix[0, '8_timestamp_t'] = pd.Timestamp(1)
+        pdf.iloc[0, 7] = pd.Timestamp(1)
         # Integers with nulls will get NaNs filled with 0 and will be casted
-        pdf.ix[1, '2_int_t'] = None
+        pdf.iloc[1, 1] = None
         pdf_copy = pdf.copy(deep=True)
         self.spark.createDataFrame(pdf, schema=self.schema)
         self.assertTrue(pdf.equals(pdf_copy))
 
     def test_schema_conversion_roundtrip(self):
-        from pyspark.sql.types import from_arrow_schema, to_arrow_schema
+        from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
         arrow_schema = to_arrow_schema(self.schema)
         schema_rt = from_arrow_schema(arrow_schema)
         self.assertEquals(self.schema, schema_rt)
@@ -420,6 +414,33 @@ class ArrowTests(ReusedSQLTestCase):
 
         for case in cases:
             run_test(*case)
+
+    def test_createDateFrame_with_category_type(self):
+        pdf = pd.DataFrame({"A": [u"a", u"b", u"c", u"a"]})
+        pdf["B"] = pdf["A"].astype('category')
+        category_first_element = dict(enumerate(pdf['B'].cat.categories))[0]
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
+            arrow_df = self.spark.createDataFrame(pdf)
+            arrow_type = arrow_df.dtypes[1][1]
+            result_arrow = arrow_df.toPandas()
+            arrow_first_category_element = result_arrow["B"][0]
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            df = self.spark.createDataFrame(pdf)
+            spark_type = df.dtypes[1][1]
+            result_spark = df.toPandas()
+            spark_first_category_element = result_spark["B"][0]
+
+        assert_frame_equal(result_spark, result_arrow)
+
+        # ensure original category elements are string
+        self.assertIsInstance(category_first_element, str)
+        # spark data frame and arrow execution mode enabled data frame type must match pandas
+        self.assertEqual(spark_type, 'string')
+        self.assertEqual(arrow_type, 'string')
+        self.assertIsInstance(arrow_first_category_element, str)
+        self.assertIsInstance(spark_first_category_element, str)
 
 
 @unittest.skipIf(

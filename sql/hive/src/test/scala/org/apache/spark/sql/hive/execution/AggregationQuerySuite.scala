@@ -31,6 +31,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.UnsafeAlignedOffset
 
 
 class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFunction {
@@ -203,11 +204,13 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("group by function") {
-    Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("data")
+    withTempView("data") {
+      Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("data")
 
-    checkAnswer(
-      sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
-      Row(1, Array(2)) :: Nil)
+      checkAnswer(
+        sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
+        Row(1, Array(2)) :: Nil)
+    }
   }
 
   test("empty table") {
@@ -799,43 +802,45 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       (5, 8, 17),
       (6, 2, 11)).toDF("a", "b", "c")
 
-    covar_tab.createOrReplaceTempView("covar_tab")
+    withTempView("covar_tab") {
+      covar_tab.createOrReplaceTempView("covar_tab")
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT corr(b, c) FROM covar_tab WHERE a < 1
-        """.stripMargin),
-      Row(null) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT corr(b, c) FROM covar_tab WHERE a < 1
+          """.stripMargin),
+        Row(null) :: Nil)
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT corr(b, c) FROM covar_tab WHERE a < 3
-        """.stripMargin),
-      Row(null) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT corr(b, c) FROM covar_tab WHERE a < 3
+          """.stripMargin),
+        Row(null) :: Nil)
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT corr(b, c) FROM covar_tab WHERE a = 3
-        """.stripMargin),
-      Row(Double.NaN) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT corr(b, c) FROM covar_tab WHERE a = 3
+          """.stripMargin),
+        Row(Double.NaN) :: Nil)
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
-        """.stripMargin),
-      Row(1, null) ::
-      Row(2, null) ::
-      Row(3, Double.NaN) ::
-      Row(4, Double.NaN) ::
-      Row(5, Double.NaN) ::
-      Row(6, Double.NaN) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
+          """.stripMargin),
+        Row(1, null) ::
+        Row(2, null) ::
+        Row(3, Double.NaN) ::
+        Row(4, Double.NaN) ::
+        Row(5, Double.NaN) ::
+        Row(6, Double.NaN) :: Nil)
 
-    val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
-    assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
+      val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
+      assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
+    }
   }
 
   test("covariance: covar_pop and covar_samp") {
@@ -1055,30 +1060,35 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
     Seq("true", "false").foreach { enableTwoLevelMaps =>
       withSQLConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key ->
         enableTwoLevelMaps) {
-        (1 to 3).foreach { fallbackStartsAt =>
-          withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
-            s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {
-            // Create a new df to make sure its physical operator picks up
-            // spark.sql.TungstenAggregate.testFallbackStartsAt.
-            // todo: remove it?
-            val newActual = Dataset.ofRows(spark, actual.logicalPlan)
+        Seq(4, 8).foreach { uaoSize =>
+          UnsafeAlignedOffset.setUaoSize(uaoSize)
+          (1 to 3).foreach { fallbackStartsAt =>
+            withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
+              s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {
+              // Create a new df to make sure its physical operator picks up
+              // spark.sql.TungstenAggregate.testFallbackStartsAt.
+              // todo: remove it?
+              val newActual = Dataset.ofRows(spark, actual.logicalPlan)
 
-            QueryTest.checkAnswer(newActual, expectedAnswer) match {
-              case Some(errorMessage) =>
-                val newErrorMessage =
-                  s"""
-                     |The following aggregation query failed when using HashAggregate with
-                     |controlled fallback (it falls back to bytes to bytes map once it has processed
-                     |${fallbackStartsAt - 1} input rows and to sort-based aggregation once it has
-                     |processed $fallbackStartsAt input rows). The query is ${actual.queryExecution}
-                     |
-                    |$errorMessage
-                  """.stripMargin
+              QueryTest.getErrorMessageInCheckAnswer(newActual, expectedAnswer) match {
+                case Some(errorMessage) =>
+                  val newErrorMessage =
+                    s"""
+                       |The following aggregation query failed when using HashAggregate with
+                       |controlled fallback (it falls back to bytes to bytes map once it has
+                       |processed ${fallbackStartsAt - 1} input rows and to sort-based aggregation
+                       |once it has processed $fallbackStartsAt input rows).
+                       |The query is ${actual.queryExecution}
+                       |$errorMessage
+                    """.stripMargin
 
-                fail(newErrorMessage)
-              case None => // Success
+                  fail(newErrorMessage)
+                case None => // Success
+              }
             }
           }
+          // reset static uaoSize to avoid affect other tests
+          UnsafeAlignedOffset.setUaoSize(0)
         }
       }
     }

@@ -287,3 +287,21 @@ users can set the `spark.sql.thriftserver.scheduler.pool` variable:
 {% highlight SQL %}
 SET spark.sql.thriftserver.scheduler.pool=accounting;
 {% endhighlight %}
+
+## Concurrent Jobs in PySpark
+
+PySpark, by default, does not support to synchronize PVM threads with JVM threads and 
+launching multiple jobs in multiple PVM threads does not guarantee to launch each job
+in each corresponding JVM thread. Due to this limitation, it is unable to set a different job group
+via `sc.setJobGroup` in a separate PVM thread, which also disallows to cancel the job via `sc.cancelJobGroup`
+later.
+
+In order to synchronize PVM threads with JVM threads, you should set `PYSPARK_PIN_THREAD` environment variable
+to `true`. This pinned thread mode allows one PVM thread has one corresponding JVM thread.
+
+However, currently it cannot inherit the local properties from the parent thread although it isolates
+each thread with its own local properties. To work around this, you should manually copy and set the
+local properties from the parent thread to the child thread when you create another thread in PVM.
+
+Note that `PYSPARK_PIN_THREAD` is currently experimental and not recommended for use in production.
+

@@ -24,6 +24,7 @@ import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.ui.TestFilter
@@ -50,8 +51,8 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
 
   private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
       extends YarnSchedulerBackend(scheduler, sc) {
-    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[String, Int]): Unit = {
-      this.hostToLocalTaskCount = hostToLocalTaskCount
+    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[Int, Map[String, Int]]): Unit = {
+      this.rpHostToLocalTaskCount = hostToLocalTaskCount
     }
   }
 
@@ -62,20 +63,24 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     val yarnSchedulerBackendExtended = new TestYarnSchedulerBackend(sched, sc)
     yarnSchedulerBackend = yarnSchedulerBackendExtended
     val ser = new JavaSerializer(sc.conf).newInstance()
+    val defaultResourceProf = ResourceProfile.getOrCreateDefaultProfile(sc.getConf)
     for {
       blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
       numRequested <- 0 until 10
       hostToLocalCount <- IndexedSeq(
-        Map[String, Int](),
-        Map("a" -> 1, "b" -> 2)
+        Map(defaultResourceProf.id -> Map.empty[String, Int]),
+        Map(defaultResourceProf.id -> Map("a" -> 1, "b" -> 2))
       )
     } {
       yarnSchedulerBackendExtended.setHostToLocalTaskCount(hostToLocalCount)
       sched.setNodeBlacklist(blacklist)
-      val req = yarnSchedulerBackendExtended.prepareRequestExecutors(numRequested)
-      assert(req.requestedTotal === numRequested)
+      val request = Map(defaultResourceProf -> numRequested)
+      val req = yarnSchedulerBackendExtended.prepareRequestExecutors(request)
+      assert(req.resourceProfileToTotalExecs(defaultResourceProf) === numRequested)
       assert(req.nodeBlacklist === blacklist)
-      assert(req.hostToLocalTaskCount.keySet.intersect(blacklist).isEmpty)
+      val hosts =
+        req.hostToLocalTaskCount(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID).keySet
+      assert(hosts.intersect(blacklist).isEmpty)
       // Serialize to make sure serialization doesn't throw an error
       ser.serialize(req)
     }

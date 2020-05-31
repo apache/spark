@@ -29,24 +29,20 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Base SQL parsing infrastructure.
  */
 abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Logging {
 
-  /**
-   * Creates [[CalendarInterval]] for a given SQL String. Throws [[ParseException]] if the SQL
-   * string is not a valid interval format.
-   */
-  def parseInterval(sqlText: String): CalendarInterval = parse(sqlText) { parser =>
-    astBuilder.visitSingleInterval(parser.singleInterval())
-  }
-
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
+  }
+
+  /** Similar to `parseDataType`, but without CHAR/VARCHAR replacement. */
+  override def parseRawDataType(sqlText: String): DataType = parse(sqlText) { parser =>
+    astBuilder.parseRawDataType(parser.singleDataType())
   }
 
   /** Creates Expression for a given SQL string. */
@@ -101,7 +97,8 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.ansi = conf.ansiEnabled
+    lexer.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    lexer.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -109,7 +106,8 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    parser.ansi = conf.ansiEnabled
+    parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    parser.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     try {
       try {

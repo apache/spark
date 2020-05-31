@@ -19,16 +19,16 @@ limitations under the License.
   <div id="showAdditionalMetrics"></div>
   <h4 class="title-table">Summary</h4>
   <div class="container-fluid">
-    <div class="container-fluid">
-      <table id="summary-execs-table" class="table table-striped compact cell-border">
+      <table id="summary-execs-table" class="table table-striped compact cell-border" style="width: 100%">
         <thead>
+          <tr>
         <th></th>
         <th>RDD Blocks</th>
-        <th><span data-toggle="tooltip"
+        <th><span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">Storage Memory</span>
         </th>
         <th>
-          <span data-toggle="tooltip"
+          <span data-toggle="tooltip" data-placement="top"
                 title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">On Heap Storage Memory</span>
         </th>
         <th>
@@ -41,43 +41,39 @@ limitations under the License.
         <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks that have failed on this executor. Darker shading highlights executors with a high proportion of failed tasks.">Failed Tasks</span></th>
         <th>Complete Tasks</th>
         <th>Total Tasks</th>
-        <th><span data-toggle="tooltip"
+        <th><span data-toggle="tooltip" data-placement="top"
                   title="Shaded red when garbage collection (GC) time is over 10% of task time">
           Task Time (GC Time)</span></th>
-        <th><span data-toggle="tooltip"
+        <th><span data-toggle="tooltip" data-placement="top"
                   title="Bytes and records read from Hadoop or from Spark storage.">Input</span></th>
-        <th><span data-toggle="tooltip"
+        <th><span data-toggle="tooltip" data-placement="top"
                   title="Total shuffle bytes and records read (includes both data read locally and data read from remote executors).">
           Shuffle Read</span></th>
         <th>
-          <span data-toggle="tooltip" data-placement="left"
+          <span data-toggle="tooltip" data-placement="top"
                 title="Bytes and records written to disk in order to be read by a shuffle in a future stage.">
             Shuffle Write</span>
         </th>
         <th>
-          <span data-toggle="tooltip" data-placement="left"
+          <span data-toggle="tooltip" data-placement="top"
                 title="Number of executors blacklisted by the scheduler due to task failures.">
             Blacklisted</span>
         </th>
+          </tr>
         </thead>
         <tbody>
         </tbody>
       </table>
-    </div>
   </div>
   <h4 class="title-table">Executors</h4>
   <div class="container-fluid">
-    <div class="container-fluid">
-      <table id="active-executors-table" class="table table-striped compact cell-border">
+      <table id="active-executors-table" class="table table-striped compact cell-border" style="width: 100%">
         <thead>
         <tr>
-          <th>
-            <span data-toggle="tooltip" data-placement="right" title="ID of the executor">Executor ID</span></th>
-          <th>
-            <span data-toggle="tooltip" data-placement="top" title="Address">Address</span></th>
-          <th><span data-toggle="tooltip" data-placement="top" title="Status">Status</span></th>
-          <th>
-            <span data-toggle="tooltip" data-placement="top" title="RDD Blocks">RDD Blocks</span></th>
+          <th>Executor ID</th>
+          <th>Address</th>
+          <th>Status</th>
+          <th>RDD Blocks</th>
           <th>
             <span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">
@@ -87,21 +83,22 @@ limitations under the License.
                   title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">
               On Heap Storage Memory</span></th>
           <th>
-            <span data-toggle="tooltip"
+            <span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">
               Off Heap Storage Memory</span></th>
-          <th><span data-toggle="tooltip" data-placement="top" title="Disk Used">Disk Used</span></th>
-          <th><span data-toggle="tooltip" data-placement="top" title="Cores">Cores</span></th>
-          <th><span data-toggle="tooltip" data-placement="top" title="Resources">Resources</span></th>
+          <th>Disk Used</th>
+          <th>Cores</th>
+          <th>Resources</th>
+          <th>Resource Profile Id</th>
           <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks currently executing. Darker shading highlights executors with more active tasks.">Active Tasks</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks that have failed on this executor. Darker shading highlights executors with a high proportion of failed tasks.">Failed Tasks</span></th>
-          <th><span data-toggle="tooltip" data-placement="top" title="Complete Tasks">Complete Tasks</span></th>
-          <th><span data-toggle="tooltip" data-placement="top" title="Total Tasks">Total Tasks</span></th>
+          <th>Complete Tasks</th>
+          <th>Total Tasks</th>
           <th>
-            <scan data-toggle="tooltip" data-placement="top"
+            <span data-toggle="tooltip" data-placement="top"
                   title="Shaded red when garbage collection (GC) time is over 10% of task time">
               Task Time (GC Time)
-            </scan>
+            </span>
           </th>
           <th><span data-toggle="tooltip" data-placement="top"
                     title="Bytes and records read from Hadoop or from Spark storage.">Input</span></th>
@@ -110,19 +107,15 @@ limitations under the License.
                   title="Total shuffle bytes and records read (includes both data read locally and data read from remote executors).">
               Shuffle Read</span></th>
           <th>
-            <!-- Place the shuffle write tooltip on the left (rather than the default position
-            of on top) because the shuffle write column is the last column on the right side and
-            the tooltip is wider than the column, so it doesn't fit on top. -->
-            <span data-toggle="tooltip" data-placement="left"
+            <span data-toggle="tooltip" data-placement="top"
                   title="Bytes and records written to disk in order to be read by a shuffle in a future stage.">
               Shuffle Write</span></th>
-          <th><span data-toggle="tooltip" data-placement="left" title="Logs">Logs</span></th>
-          <th><span data-toggle="tooltip" data-placement="left" title="Thread Dump">Thread Dump</span></th>
+          <th>Logs</th>
+          <th>Thread Dump</th>
         </tr>
         </thead>
         <tbody>
         </tbody>
       </table>
-    </div>
   </div>
 </script>

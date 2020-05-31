@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -56,9 +57,10 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   testBothCodegenAndInterpreted("variable-length types") {
     val proj = createMutableProjection(variableLengthTypes)
-    val scalaValues = Seq("abc", BigDecimal(10), IntervalUtils.fromString("interval 1 day"),
+    val scalaValues = Seq("abc", BigDecimal(10),
+      IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 day")),
       Array[Byte](1, 2), Array("123", "456"), Map(1 -> "a", 2 -> "b"), Row(1, "a"),
-      new java.lang.Integer(5))
+      Integer.valueOf(5))
     val inputRow = InternalRow.fromSeq(scalaValues.zip(variableLengthTypes).map {
       case (v, dataType) => CatalystTypeConverters.createToCatalystConverter(dataType)(v)
     })

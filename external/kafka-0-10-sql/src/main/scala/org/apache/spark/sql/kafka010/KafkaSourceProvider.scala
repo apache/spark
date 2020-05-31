@@ -33,9 +33,10 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.connector.write.{BatchWrite, WriteBuilder}
+import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdate}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -51,7 +52,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with StreamSinkProvider
     with RelationProvider
     with CreatableRelationProvider
-    with TableProvider
+    with SimpleTableProvider
     with Logging {
   import KafkaSourceProvider._
 
@@ -392,17 +393,13 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
       () => new KafkaScan(options)
 
-    override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-      new WriteBuilder {
-        private var inputSchema: StructType = _
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+      new WriteBuilder with SupportsTruncate with SupportsStreamingUpdate {
+        private val options = info.options
+        private val inputSchema: StructType = info.schema()
         private val topic = Option(options.get(TOPIC_OPTION_KEY)).map(_.trim)
         private val producerParams =
           kafkaParamsForProducer(CaseInsensitiveMap(options.asScala.toMap))
-
-        override def withInputDataSchema(schema: StructType): WriteBuilder = {
-          this.inputSchema = schema
-          this
-        }
 
         override def buildForBatch(): BatchWrite = {
           assert(inputSchema != null)
@@ -413,6 +410,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           assert(inputSchema != null)
           new KafkaStreamingWrite(topic, producerParams, inputSchema)
         }
+
+        override def truncate(): WriteBuilder = this
+        override def update(): WriteBuilder = this
       }
     }
   }

@@ -23,8 +23,8 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelectStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
+import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.IntegerType
@@ -40,18 +40,16 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
-  import df.sparkSession.sessionState.analyzer.CatalogObjectIdentifier
+  import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
 
   private val df: DataFrame = ds.toDF()
 
   private val sparkSession = ds.sparkSession
 
-  private val catalogManager = sparkSession.sessionState.analyzer.catalogManager
-
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
   private val (catalog, identifier) = {
-    val CatalogObjectIdentifier(catalog, identifier) = tableName
+    val CatalogAndIdentifier(catalog, identifier) = tableName
     (catalog.asTableCatalog, identifier)
   }
 
@@ -95,19 +93,21 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   @scala.annotation.varargs
   override def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T] = {
+    def ref(name: String): NamedReference = LogicalExpressions.parseReference(name)
+
     val asTransforms = (column +: columns).map(_.expr).map {
       case Years(attr: Attribute) =>
-        LogicalExpressions.years(attr.name)
+        LogicalExpressions.years(ref(attr.name))
       case Months(attr: Attribute) =>
-        LogicalExpressions.months(attr.name)
+        LogicalExpressions.months(ref(attr.name))
       case Days(attr: Attribute) =>
-        LogicalExpressions.days(attr.name)
+        LogicalExpressions.days(ref(attr.name))
       case Hours(attr: Attribute) =>
-        LogicalExpressions.hours(attr.name)
+        LogicalExpressions.hours(ref(attr.name))
       case Bucket(Literal(numBuckets: Int, IntegerType), attr: Attribute) =>
-        LogicalExpressions.bucket(numBuckets, attr.name)
+        LogicalExpressions.bucket(numBuckets, Array(ref(attr.name)))
       case attr: Attribute =>
-        LogicalExpressions.identity(attr.name)
+        LogicalExpressions.identity(ref(attr.name))
       case expr =>
         throw new AnalysisException(s"Invalid partition transformation: ${expr.sql}")
     }
@@ -117,18 +117,19 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   override def create(): Unit = {
-    // create and replace could alternatively create ParsedPlan statements, like
-    // `CreateTableFromDataFrameStatement(UnresolvedRelation(tableName), ...)`, to keep the catalog
-    // resolution logic in the analyzer.
     runCommand("create") {
-      CreateTableAsSelect(
-        catalog,
-        identifier,
-        partitioning.getOrElse(Seq.empty),
+      CreateTableAsSelectStatement(
+        tableName,
         logicalPlan,
-        properties = provider.map(p => properties + ("provider" -> p)).getOrElse(properties).toMap,
-        writeOptions = options.toMap,
-        ignoreIfExists = false)
+        partitioning.getOrElse(Seq.empty),
+        None,
+        properties.toMap,
+        provider,
+        Map.empty,
+        None,
+        None,
+        options.toMap,
+        ifNotExists = false)
     }
   }
 
@@ -154,7 +155,9 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   def append(): Unit = {
     val append = loadTable(catalog, identifier) match {
       case Some(t) =>
-        AppendData.byName(DataSourceV2Relation.create(t), logicalPlan, options.toMap)
+        AppendData.byName(
+          DataSourceV2Relation.create(t, Some(catalog), Some(identifier)),
+          logicalPlan, options.toMap)
       case _ =>
         throw new NoSuchTableException(identifier)
     }
@@ -177,7 +180,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val overwrite = loadTable(catalog, identifier) match {
       case Some(t) =>
         OverwriteByExpression.byName(
-          DataSourceV2Relation.create(t), logicalPlan, condition.expr, options.toMap)
+          DataSourceV2Relation.create(t, Some(catalog), Some(identifier)),
+          logicalPlan, condition.expr, options.toMap)
       case _ =>
         throw new NoSuchTableException(identifier)
     }
@@ -203,7 +207,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val dynamicOverwrite = loadTable(catalog, identifier) match {
       case Some(t) =>
         OverwritePartitionsDynamic.byName(
-          DataSourceV2Relation.create(t), logicalPlan, options.toMap)
+          DataSourceV2Relation.create(t, Some(catalog), Some(identifier)),
+          logicalPlan, options.toMap)
       case _ =>
         throw new NoSuchTableException(identifier)
     }
@@ -218,18 +223,22 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private def runCommand(name: String)(command: LogicalPlan): Unit = {
     val qe = sparkSession.sessionState.executePlan(command)
     // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(sparkSession, qe, Some(name))(qe.toRdd)
+    SQLExecution.withNewExecutionId(qe, Some(name))(qe.toRdd)
   }
 
   private def internalReplace(orCreate: Boolean): Unit = {
     runCommand("replace") {
-      ReplaceTableAsSelect(
-        catalog,
-        identifier,
-        partitioning.getOrElse(Seq.empty),
+      ReplaceTableAsSelectStatement(
+        tableName,
         logicalPlan,
-        properties = provider.map(p => properties + ("provider" -> p)).getOrElse(properties).toMap,
-        writeOptions = options.toMap,
+        partitioning.getOrElse(Seq.empty),
+        None,
+        properties.toMap,
+        provider,
+        Map.empty,
+        None,
+        None,
+        options.toMap,
         orCreate = orCreate)
     }
   }
@@ -238,6 +247,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 /**
  * Configuration methods common to create/replace operations and insert/overwrite operations.
  * @tparam R builder type to return
+ * @since 3.0.0
  */
 trait WriteConfigMethods[R] {
   /**
@@ -285,6 +295,8 @@ trait WriteConfigMethods[R] {
 
 /**
  * Trait to restrict calls to create and replace operations.
+ *
+ * @since 3.0.0
  */
 trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
   /**

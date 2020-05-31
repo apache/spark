@@ -22,8 +22,10 @@ import scala.reflect.ClassTag
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.logical.BROADCAST
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.functions._
@@ -38,7 +40,8 @@ import org.apache.spark.sql.types.{LongType, ShortType}
  * unsafe map in [[org.apache.spark.sql.execution.joins.UnsafeHashedRelation]] is not triggered
  * without serializing the hashed relation, which does not happen in local mode.
  */
-class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
+abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   protected var spark: SparkSession = null
@@ -122,7 +125,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
         df2.cache()
         val df3 = df1.join(broadcast(df2), Seq("key"), "inner")
-        val numBroadCastHashJoin = df3.queryExecution.executedPlan.collect {
+        val numBroadCastHashJoin = collect(df3.queryExecution.executedPlan) {
           case b: BroadcastHashJoinExec => b
         }.size
         assert(numBroadCastHashJoin === 1)
@@ -140,13 +143,13 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         broadcast(df2).cache()
 
         val df3 = df1.join(df2, Seq("key"), "inner")
-        val numCachedPlan = df3.queryExecution.executedPlan.collect {
+        val numCachedPlan = collect(df3.queryExecution.executedPlan) {
           case i: InMemoryTableScanExec => i
         }.size
         // df2 should be cached.
         assert(numCachedPlan === 1)
 
-        val numBroadCastHashJoin = df3.queryExecution.executedPlan.collect {
+        val numBroadCastHashJoin = collect(df3.queryExecution.executedPlan) {
           case b: BroadcastHashJoinExec => b
         }.size
         // df2 should not be broadcasted.
@@ -205,24 +208,25 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
   test("broadcast hint in SQL") {
     import org.apache.spark.sql.catalyst.plans.logical.Join
+    withTempView("t", "u") {
+      spark.range(10).createOrReplaceTempView("t")
+      spark.range(10).createOrReplaceTempView("u")
 
-    spark.range(10).createOrReplaceTempView("t")
-    spark.range(10).createOrReplaceTempView("u")
+      for (name <- Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN")) {
+        val plan1 = sql(s"SELECT /*+ $name(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+          .optimizedPlan
+        val plan2 = sql(s"SELECT /*+ $name(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+          .optimizedPlan
+        val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+          .optimizedPlan
 
-    for (name <- Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN")) {
-      val plan1 = sql(s"SELECT /*+ $name(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-        .optimizedPlan
-      val plan2 = sql(s"SELECT /*+ $name(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-        .optimizedPlan
-      val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-        .optimizedPlan
-
-      assert(plan1.asInstanceOf[Join].hint.leftHint.get.strategy.contains(BROADCAST))
-      assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
-      assert(plan2.asInstanceOf[Join].hint.leftHint.isEmpty)
-      assert(plan2.asInstanceOf[Join].hint.rightHint.get.strategy.contains(BROADCAST))
-      assert(plan3.asInstanceOf[Join].hint.leftHint.isEmpty)
-      assert(plan3.asInstanceOf[Join].hint.rightHint.isEmpty)
+        assert(plan1.asInstanceOf[Join].hint.leftHint.get.strategy.contains(BROADCAST))
+        assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
+        assert(plan2.asInstanceOf[Join].hint.leftHint.isEmpty)
+        assert(plan2.asInstanceOf[Join].hint.rightHint.get.strategy.contains(BROADCAST))
+        assert(plan3.asInstanceOf[Join].hint.leftHint.isEmpty)
+        assert(plan3.asInstanceOf[Join].hint.rightHint.isEmpty)
+      }
     }
   }
 
@@ -272,7 +276,6 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("Shouldn't change broadcast join buildSide if user clearly specified") {
-
     withTempView("t1", "t2") {
       Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
       Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
@@ -378,7 +381,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   private val bl = BroadcastNestedLoopJoinExec.toString
 
   private def assertJoinBuildSide(sqlStr: String, joinMethod: String, buildSide: BuildSide): Any = {
-    val executedPlan = sql(sqlStr).queryExecution.executedPlan
+    val executedPlan = stripAQEPlan(sql(sqlStr).queryExecution.executedPlan)
     executedPlan match {
       case b: BroadcastNestedLoopJoinExec =>
         assert(b.getClass.getSimpleName === joinMethod)
@@ -398,4 +401,22 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         }
     }
   }
+
+  test("Broadcast timeout") {
+    val timeout = 5
+    val slowUDF = udf({ x: Int => Thread.sleep(timeout * 10 * 1000); x })
+    val df1 = spark.range(10).select($"id" as 'a)
+    val df2 = spark.range(5).select(slowUDF($"id") as 'a)
+    val testDf = df1.join(broadcast(df2), "a")
+    withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> timeout.toString) {
+      val e = intercept[Exception] {
+        testDf.collect()
+      }
+      assert(e.getMessage.contains(s"Could not execute broadcast in $timeout secs."))
+    }
+  }
 }
+
+class BroadcastJoinSuite extends BroadcastJoinSuiteBase with DisableAdaptiveExecutionSuite
+
+class BroadcastJoinSuiteAE extends BroadcastJoinSuiteBase with EnableAdaptiveExecutionSuite

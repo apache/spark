@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import java.net.{HttpURLConnection, URL}
+import java.net.URL
 import java.util.Locale
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
@@ -44,10 +44,11 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
+import org.apache.spark.util.CallSite
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
-  private val cssWhiteList = List("bootstrap.min.css", "vis.min.css")
+  private val cssWhiteList = List("bootstrap.min.css", "vis-timeline-graph2d.min.css")
 
   private def isInWhileList(uri: String): Boolean = cssWhiteList.exists(uri.endsWith)
 
@@ -687,29 +688,29 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
           "label=&quot;Stage 0&quot;;\n    subgraph "))
         assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
-          "0 [label=&quot;ParallelCollectionRDD [0]"))
+          "0 [labelType=&quot;html&quot; label=&quot;ParallelCollectionRDD [0]"))
         assert(stage0.contains("{\n      label=&quot;map&quot;;\n      " +
-          "1 [label=&quot;MapPartitionsRDD [1]"))
+          "1 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [1]"))
         assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "2 [label=&quot;MapPartitionsRDD [2]"))
+          "2 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [2]"))
 
         val stage1 = Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=1&attempt=0&expandDagViz=true").mkString
         assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
           "label=&quot;Stage 1&quot;;\n    subgraph "))
         assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "3 [label=&quot;ShuffledRDD [3]"))
+          "3 [labelType=&quot;html&quot; label=&quot;ShuffledRDD [3]"))
         assert(stage1.contains("{\n      label=&quot;map&quot;;\n      " +
-          "4 [label=&quot;MapPartitionsRDD [4]"))
+          "4 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [4]"))
         assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "5 [label=&quot;MapPartitionsRDD [5]"))
+          "5 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [5]"))
 
         val stage2 = Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=2&attempt=0&expandDagViz=true").mkString
         assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
           "label=&quot;Stage 2&quot;;\n    subgraph "))
         assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "6 [label=&quot;ShuffledRDD [6]"))
+          "6 [labelType=&quot;html&quot; label=&quot;ShuffledRDD [6]"))
       }
     }
   }
@@ -752,6 +753,22 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         }
       } finally {
         f.cancel()
+      }
+    }
+  }
+
+  test("description for empty jobs") {
+    withSpark(newSparkContext()) { sc =>
+      sc.emptyRDD[Int].collect
+      val description = "This is my job"
+      sc.setJobDescription(description)
+      sc.emptyRDD[Int].collect
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs")
+        val descriptions = findAll(className("description-input")).toArray
+        descriptions(0).text should be (description)
+        descriptions(1).text should include ("collect")
       }
     }
   }

@@ -19,6 +19,8 @@
 import re
 import sys
 import traceback
+import os
+import warnings
 import inspect
 from py4j.protocol import Py4JJavaError
 
@@ -112,6 +114,33 @@ def fail_on_stopiteration(f):
     return wrapper
 
 
+def _warn_pin_thread(name):
+    if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
+        msg = (
+            "PYSPARK_PIN_THREAD feature is enabled. "
+            "However, note that it cannot inherit the local properties from the parent thread "
+            "although it isolates each thread on PVM and JVM with its own local properties. "
+            "\n"
+            "To work around this, you should manually copy and set the local properties from "
+            "the parent thread to the child thread when you create another thread.")
+    else:
+        msg = (
+            "Currently, '%s' (set to local properties) with multiple threads does "
+            "not properly work. "
+            "\n"
+            "Internally threads on PVM and JVM are not synced, and JVM thread can be reused "
+            "for multiple threads on PVM, which fails to isolate local properties for each "
+            "thread on PVM. "
+            "\n"
+            "To work around this, you can set PYSPARK_PIN_THREAD to true (see SPARK-22340). "
+            "However, note that it cannot inherit the local properties from the parent thread "
+            "although it isolates each thread on PVM and JVM with its own local properties. "
+            "\n"
+            "To work around this, you should manually copy and set the local properties from "
+            "the parent thread to the child thread when you create another thread." % name)
+    warnings.warn(msg, UserWarning)
+
+
 def _print_missing_jar(lib_name, pkg_name, jar_name, spark_version):
     print("""
 ________________________________________________________________________________________________
@@ -138,6 +167,21 @@ ________________________________________________________________________________
         "spark_version": spark_version
     })
 
+
+def _parse_memory(s):
+    """
+    Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
+    return the value in MiB
+
+    >>> _parse_memory("256m")
+    256
+    >>> _parse_memory("2g")
+    2048
+    """
+    units = {'g': 1024, 'm': 1, 't': 1 << 20, 'k': 1.0 / 1024}
+    if s[-1].lower() not in units:
+        raise ValueError("invalid format: " + s)
+    return int(float(s[:-1]) * units[s[-1].lower()])
 
 if __name__ == "__main__":
     import doctest

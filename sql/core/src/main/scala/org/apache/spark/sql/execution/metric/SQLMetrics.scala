@@ -50,14 +50,19 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   override def reset(): Unit = _value = _zeroValue
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value += o.value
+    case o: SQLMetric =>
+      if (_value < 0) _value = 0
+      if (o.value > 0) _value += o.value
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   override def isZero(): Boolean = _value == _zeroValue
 
-  override def add(v: Long): Unit = _value += v
+  override def add(v: Long): Unit = {
+    if (_value < 0) _value = 0
+    _value += v
+  }
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
@@ -65,7 +70,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def set(v: Long): Unit = _value = v
 
-  def +=(v: Long): Unit = _value += v
+  def +=(v: Long): Unit = add(v)
 
   override def value: Long = _value
 
@@ -111,23 +116,23 @@ object SQLMetrics {
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
     val acc = new SQLMetric(SIZE_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
 
   def createTimingMetric(sc: SparkContext, name: String): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
-    // duration(min, med, max):
+    // duration total (min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
 
   def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
     // Same with createTimingMetric, just normalize the unit of time to millisecond.
     val acc = new SQLMetric(NS_TIMING_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
 
@@ -142,33 +147,51 @@ object SQLMetrics {
     // probe avg (min, med, max):
     // (1.2, 2.2, 6.3)
     val acc = new SQLMetric(AVERAGE_METRIC)
-    acc.register(sc, name = Some(s"$name (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
+
+  private def toNumberFormat(value: Long): String = {
+    val numberFormat = NumberFormat.getNumberInstance(Locale.US)
+    numberFormat.format(value.toDouble / baseForAvgMetric)
+  }
+
+  def metricNeedsMax(metricsType: String): Boolean = {
+    metricsType != SUM_METRIC
+  }
+
+  private val METRICS_NAME_SUFFIX = "(min, med, max (stageId: taskId))"
 
   /**
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
-   */
-  def stringValue(metricsType: String, values: Array[Long]): String = {
+    */
+  def stringValue(metricsType: String, values: Array[Long], maxMetrics: Array[Long]): String = {
+    // taskInfo = "(driver)" OR (stage ${stageId}.${attemptId}: task $taskId)
+    val taskInfo = if (maxMetrics.isEmpty) {
+      "(driver)"
+    } else {
+      s"(stage ${maxMetrics(1)}.${maxMetrics(2)}: task ${maxMetrics(3)})"
+    }
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
     } else if (metricsType == AVERAGE_METRIC) {
-      val numberFormat = NumberFormat.getNumberInstance(Locale.US)
-
       val validValues = values.filter(_ > 0)
-      val Seq(min, med, max) = {
-        val metric = if (validValues.isEmpty) {
-          Seq.fill(3)(0L)
-        } else {
+      // When there are only 1 metrics value (or None), no need to display max/min/median. This is
+      // common for driver-side SQL metrics.
+      if (validValues.length <= 1) {
+        toNumberFormat(validValues.headOption.getOrElse(0))
+      } else {
+        val Seq(min, med, max) = {
           Arrays.sort(validValues)
-          Seq(validValues(0), validValues(validValues.length / 2),
-            validValues(validValues.length - 1))
+          Seq(
+            toNumberFormat(validValues(0)),
+            toNumberFormat(validValues(validValues.length / 2)),
+            toNumberFormat(validValues(validValues.length - 1)))
         }
-        metric.map(v => numberFormat.format(v.toDouble / baseForAvgMetric))
+        s"$METRICS_NAME_SUFFIX:\n($min, $med, $max $taskInfo)"
       }
-      s"\n($min, $med, $max)"
     } else {
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
         Utils.bytesToString
@@ -181,17 +204,31 @@ object SQLMetrics {
       }
 
       val validValues = values.filter(_ >= 0)
-      val Seq(sum, min, med, max) = {
-        val metric = if (validValues.isEmpty) {
-          Seq.fill(4)(0L)
-        } else {
+      // When there are only 1 metrics value (or None), no need to display max/min/median. This is
+      // common for driver-side SQL metrics.
+      if (validValues.length <= 1) {
+        strFormat(validValues.headOption.getOrElse(0))
+      } else {
+        val Seq(sum, min, med, max) = {
           Arrays.sort(validValues)
-          Seq(validValues.sum, validValues(0), validValues(validValues.length / 2),
-            validValues(validValues.length - 1))
+          Seq(
+            strFormat(validValues.sum),
+            strFormat(validValues(0)),
+            strFormat(validValues(validValues.length / 2)),
+            strFormat(validValues(validValues.length - 1)))
         }
-        metric.map(strFormat)
+        s"total $METRICS_NAME_SUFFIX\n$sum ($min, $med, $max $taskInfo)"
       }
-      s"\n$sum ($min, $med, $max)"
+    }
+  }
+
+  def postDriverMetricsUpdatedByValue(
+      sc: SparkContext,
+      executionId: String,
+      accumUpdates: Seq[(Long, Long)]): Unit = {
+    if (executionId != null) {
+      sc.listenerBus.post(
+        SparkListenerDriverAccumUpdates(executionId.toLong, accumUpdates))
     }
   }
 

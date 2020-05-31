@@ -32,8 +32,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
-import org.apache.spark.resource.ResourceInformation
-import org.apache.spark.resource.ResourceUtils
+import org.apache.spark.resource._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.shuffle.MetadataFetchFailedException
@@ -93,7 +92,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap))
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
     val executorUnblacklisted =
@@ -120,6 +119,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       SparkListenerStageExecutorMetrics("1", 2, 3,
         new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
           321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L)))
+    val rprofBuilder = new ResourceProfileBuilder()
+    val taskReq = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    val execReq =
+      new ExecutorResourceRequests().cores(2).resource("gpu", 2, "myscript")
+    rprofBuilder.require(taskReq).require(execReq)
+    val resourceProfile = rprofBuilder.build
+    resourceProfile.setResourceProfileId(21)
+    val resourceProfileAdded = SparkListenerResourceProfileAdded(resourceProfile)
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
     testEvent(taskStart, taskStartJsonString)
@@ -145,6 +152,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
     testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
+    testEvent(resourceProfileAdded, resourceProfileJsonString)
   }
 
   test("Dependent Classes") {
@@ -230,6 +238,20 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(info.name === newInfo.name)
     assert("" === newInfo.details)
     assert(0 === newInfo.accumulables.size)
+  }
+
+  test("StageInfo resourceProfileId") {
+    val info = makeStageInfo(1, 2, 3, 4L, 5L, 5)
+    val json = JsonProtocol.stageInfoToJson(info)
+
+    // Fields added after 1.0.0.
+    assert(info.details.nonEmpty)
+    assert(info.resourceProfileId === 5)
+
+    val newInfo = JsonProtocol.stageInfoFromJson(json)
+
+    assert(info.name === newInfo.name)
+    assert(5 === newInfo.resourceProfileId)
   }
 
   test("InputMetrics backward compatibility") {
@@ -341,7 +363,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageIds = Seq[Int](1, 2, 3, 4)
     val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
     val dummyStageInfos =
-      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown"))
+      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown",
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
     val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
     val expectedJobStart =
@@ -383,9 +406,11 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("StageInfo backward compatibility (parent IDs)") {
     // Prior to Spark 1.4.0, StageInfo did not have the "Parent IDs" property
-    val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details")
+    val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val oldStageInfo = JsonProtocol.stageInfoToJson(stageInfo).removeField({ _._1 == "Parent IDs"})
-    val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details")
+    val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
   }
 
@@ -480,6 +505,28 @@ class JsonProtocolSuite extends SparkFunSuite {
     // For anything else, we just cast the value to a string
     testAccumValue(Some("anything"), blocks, JString(blocks.toString))
     testAccumValue(Some("anything"), 123, JString("123"))
+  }
+
+  test("SPARK-30936: forwards compatibility - ignore unknown fields") {
+    val expected = TestListenerEvent("foo", 123)
+    val unknownFieldsJson =
+      """{
+        |  "Event" : "org.apache.spark.util.TestListenerEvent",
+        |  "foo" : "foo",
+        |  "bar" : 123,
+        |  "unknown" : "unknown"
+        |}""".stripMargin
+    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
+  }
+
+  test("SPARK-30936: backwards compatibility - set default values for missing fields") {
+    val expected = TestListenerEvent("foo", 0)
+    val unknownFieldsJson =
+      """{
+        |  "Event" : "org.apache.spark.util.TestListenerEvent",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
   }
 }
 
@@ -841,6 +888,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(ste1.getFileName === ste2.getFileName)
   }
 
+  private def assertEquals(rp1: ResourceProfile, rp2: ResourceProfile): Unit = {
+    assert(rp1 === rp2)
+  }
+
   /** ----------------------------------- *
    | Util methods for constructing events |
    * ------------------------------------ */
@@ -871,9 +922,16 @@ private[spark] object JsonProtocolSuite extends Assertions {
     r
   }
 
-  private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
+  private def makeStageInfo(
+      a: Int,
+      b: Int,
+      c: Int,
+      d: Long,
+      e: Long,
+      rpId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
-    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details")
+    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details",
+      resourceProfileId = rpId)
     val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
     stageInfo.accumulables(acc1.id) = acc1
     stageInfo.accumulables(acc2.id) = acc2
@@ -1009,7 +1067,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": false,
       |        "Count Failed Values": false
       |      }
-      |    ]
+      |    ],
+      |    "Resource Profile Id" : 0
       |  },
       |  "Properties": {
       |    "France": "Paris",
@@ -1041,6 +1100,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Deserialized": true,
       |          "Replication": 1
       |        },
+      |        "Barrier" : false,
       |        "Number of Partitions": 201,
       |        "Number of Cached Partitions": 301,
       |        "Memory Size": 401,
@@ -1066,7 +1126,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": false,
       |        "Count Failed Values": false
       |      }
-      |    ]
+      |    ],
+      |    "Resource Profile Id" : 0
       |  }
       |}
     """.stripMargin
@@ -1563,6 +1624,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 200,
       |          "Number of Cached Partitions": 300,
       |          "Memory Size": 400,
@@ -1588,7 +1650,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
-      |      ]
+      |      ],
+      |      "Resource Profile Id" : 0
       |    },
       |    {
       |      "Stage ID": 2,
@@ -1607,6 +1670,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 400,
       |          "Number of Cached Partitions": 600,
       |          "Memory Size": 800,
@@ -1623,6 +1687,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 401,
       |          "Number of Cached Partitions": 601,
       |          "Memory Size": 801,
@@ -1648,7 +1713,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
-      |      ]
+      |      ],
+      |      "Resource Profile Id" : 0
       |    },
       |    {
       |      "Stage ID": 3,
@@ -1667,6 +1733,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 600,
       |          "Number of Cached Partitions": 900,
       |          "Memory Size": 1200,
@@ -1683,6 +1750,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 601,
       |          "Number of Cached Partitions": 901,
       |          "Memory Size": 1201,
@@ -1699,6 +1767,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 602,
       |          "Number of Cached Partitions": 902,
       |          "Memory Size": 1202,
@@ -1724,7 +1793,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
-      |      ]
+      |      ],
+      |      "Resource Profile Id" : 0
       |    },
       |    {
       |      "Stage ID": 4,
@@ -1743,6 +1813,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 800,
       |          "Number of Cached Partitions": 1200,
       |          "Memory Size": 1600,
@@ -1759,6 +1830,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 801,
       |          "Number of Cached Partitions": 1201,
       |          "Memory Size": 1601,
@@ -1775,6 +1847,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 802,
       |          "Number of Cached Partitions": 1202,
       |          "Memory Size": 1602,
@@ -1791,6 +1864,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
+      |          "Barrier" : false,
       |          "Number of Partitions": 803,
       |          "Number of Cached Partitions": 1203,
       |          "Memory Size": 1603,
@@ -1816,7 +1890,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
-      |      ]
+      |      ],
+      |      "Resource Profile Id" : 0
       |    }
       |  ],
       |  "Stage IDs": [
@@ -1963,7 +2038,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "name" : "gpu",
       |        "addresses" : [ "0", "1" ]
       |      }
-      |    }
+      |    },
+      |    "Resource Profile Id": 4
       |  }
       |}
     """.stripMargin
@@ -2309,4 +2385,38 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "hostId" : "node1"
       |}
     """.stripMargin
+  private val resourceProfileJsonString =
+    """
+      |{
+      |  "Event":"SparkListenerResourceProfileAdded",
+      |  "Resource Profile Id":21,
+      |  "Executor Resource Requests":{
+      |    "cores" : {
+      |      "Resource Name":"cores",
+      |      "Amount":2,
+      |      "Discovery Script":"",
+      |      "Vendor":""
+      |    },
+      |    "gpu":{
+      |      "Resource Name":"gpu",
+      |      "Amount":2,
+      |      "Discovery Script":"myscript",
+      |      "Vendor":""
+      |    }
+      |  },
+      |  "Task Resource Requests":{
+      |    "cpus":{
+      |      "Resource Name":"cpus",
+      |      "Amount":1.0
+      |    },
+      |    "gpu":{
+      |      "Resource Name":"gpu",
+      |      "Amount":1.0
+      |    }
+      |  }
+      |}
+    """.stripMargin
+
 }
+
+case class TestListenerEvent(foo: String, bar: Int) extends SparkListenerEvent

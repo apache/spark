@@ -50,14 +50,16 @@ private[spark] class BlockStoreShuffleReader[K, C](
     } else {
       true
     }
+    val useOldFetchProtocol = conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)
 
     val doBatchFetch = shouldBatchFetch && serializerRelocatable &&
-      (!compressed || codecConcatenation)
+      (!compressed || codecConcatenation) && !useOldFetchProtocol
     if (shouldBatchFetch && !doBatchFetch) {
       logDebug("The feature tag of continuous shuffle block fetching is set to true, but " +
         "we can not enable the feature because other conditions are not satisfied. " +
         s"Shuffle compress: $compressed, serializer relocatable: $serializerRelocatable, " +
-        s"codec concatenation: $codecConcatenation.")
+        s"codec concatenation: $codecConcatenation, use old shuffle fetch protocol: " +
+        s"$useOldFetchProtocol.")
     }
     doBatchFetch
   }

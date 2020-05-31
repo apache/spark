@@ -82,9 +82,14 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
     }.head
   }
 
+  // Make sure we set the config values to TestHive.conf.
+  override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit =
+    SQLConf.withExistingConf(TestHive.conf)(super.withSQLConf(pairs: _*)(f))
+
   test("Test the default fileformat for Hive-serde tables") {
     withSQLConf("hive.default.fileformat" -> "orc") {
-      val (desc, exists) = extractTableDesc("CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
+      val (desc, exists) = extractTableDesc(
+        "CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
       assert(exists)
       assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
       assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))

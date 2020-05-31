@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
-import java.util.{Base64, TimeZone}
+import java.util.Base64
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -29,12 +29,13 @@ import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{Private, Stable, Unstable}
+import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, Decimal, MapType, StringType, StructType, UserDefinedType}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * @since 1.3.0
@@ -164,8 +165,11 @@ trait Row extends Serializable {
    *   StringType -> String
    *   DecimalType -> java.math.BigDecimal
    *
-   *   DateType -> java.sql.Date
-   *   TimestampType -> java.sql.Timestamp
+   *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
+   *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
+   *
+   *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
+   *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
    *
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
@@ -189,8 +193,11 @@ trait Row extends Serializable {
    *   StringType -> String
    *   DecimalType -> java.math.BigDecimal
    *
-   *   DateType -> java.sql.Date
-   *   TimestampType -> java.sql.Timestamp
+   *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
+   *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
+   *
+   *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
+   *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
    *
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
@@ -564,14 +571,11 @@ trait Row extends Serializable {
       case (s: String, _) => JString(s)
       case (b: Array[Byte], BinaryType) =>
         JString(Base64.getEncoder.encodeToString(b))
-      case (d: LocalDate, _) =>
-        JString(dateFormatter.format(DateTimeUtils.localDateToDays(d)))
-      case (d: Date, _) =>
-        JString(dateFormatter.format(DateTimeUtils.fromJavaDate(d)))
-      case (i: Instant, _) =>
-        JString(timestampFormatter.format(DateTimeUtils.instantToMicros(i)))
-      case (t: Timestamp, _) =>
-        JString(timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t)))
+      case (d: LocalDate, _) => JString(dateFormatter.format(d))
+      case (d: Date, _) => JString(dateFormatter.format(d))
+      case (i: Instant, _) => JString(timestampFormatter.format(i))
+      case (t: Timestamp, _) => JString(timestampFormatter.format(t))
+      case (i: CalendarInterval, _) => JString(i.toString)
       case (a: Array[_], ArrayType(elementType, _)) =>
         iteratorToJsonArray(a.iterator, elementType)
       case (s: Seq[_], ArrayType(elementType, _)) =>

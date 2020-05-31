@@ -21,7 +21,8 @@ import unittest
 if sys.version > '3':
     basestring = str
 
-from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.classification import BinaryLogisticRegressionSummary, LogisticRegression, \
+    LogisticRegressionSummary
 from pyspark.ml.clustering import BisectingKMeans, GaussianMixture, KMeans
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.regression import GeneralizedLinearRegression, LinearRegression
@@ -149,6 +150,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
+        self.assertTrue(isinstance(sameSummary, BinaryLogisticRegressionSummary))
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
     def test_multiclass_logistic_regression_summary(self):
@@ -187,6 +189,8 @@ class TrainingSummaryTest(SparkSessionTestCase):
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
+        self.assertTrue(isinstance(sameSummary, LogisticRegressionSummary))
+        self.assertFalse(isinstance(sameSummary, BinaryLogisticRegressionSummary))
         self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
 
     def test_gaussian_mixture_summary(self):

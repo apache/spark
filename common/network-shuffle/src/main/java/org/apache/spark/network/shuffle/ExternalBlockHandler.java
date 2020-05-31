@@ -150,6 +150,12 @@ public class ExternalBlockHandler extends RpcHandler {
       int numRemovedBlocks = blockManager.removeBlocks(msg.appId, msg.execId, msg.blockIds);
       callback.onSuccess(new BlocksRemoved(numRemovedBlocks).toByteBuffer());
 
+    } else if (msgObj instanceof GetLocalDirsForExecutors) {
+      GetLocalDirsForExecutors msg = (GetLocalDirsForExecutors) msgObj;
+      checkAuth(client, msg.appId);
+      Map<String, String[]> localDirs = blockManager.getLocalDirs(msg.appId, msg.execIds);
+      callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
+
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
@@ -223,8 +229,6 @@ public class ExternalBlockHandler extends RpcHandler {
     private final Meter blockTransferRateBytes = new Meter();
     // Number of active connections to the shuffle service
     private Counter activeConnections = new Counter();
-    // Number of registered connections to the shuffle service
-    private Counter registeredConnections = new Counter();
     // Number of exceptions caught in connections to the shuffle service
     private Counter caughtExceptions = new Counter();
 
@@ -236,7 +240,6 @@ public class ExternalBlockHandler extends RpcHandler {
       allMetrics.put("registeredExecutorsSize",
                      (Gauge<Integer>) () -> blockManager.getRegisteredExecutorsSize());
       allMetrics.put("numActiveConnections", activeConnections);
-      allMetrics.put("numRegisteredConnections", registeredConnections);
       allMetrics.put("numCaughtExceptions", caughtExceptions);
     }
 

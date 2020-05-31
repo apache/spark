@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import java.time.{LocalDateTime, ZoneOffset}
+import java.util.Arrays
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
@@ -101,6 +104,24 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
 }
 
+private[sql] case class FooWithDate(date: LocalDateTime, s: String, i: Int)
+
+private[sql] class LocalDateTimeUDT extends UserDefinedType[LocalDateTime] {
+  override def sqlType: DataType = LongType
+
+  override def serialize(obj: LocalDateTime): Long = {
+    obj.toEpochSecond(ZoneOffset.UTC)
+  }
+
+  def deserialize(datum: Any): LocalDateTime = datum match {
+    case value: Long => LocalDateTime.ofEpochSecond(value, 0, ZoneOffset.UTC)
+  }
+
+  override def userClass: Class[LocalDateTime] = classOf[LocalDateTime]
+
+  private[spark] override def asNullable: LocalDateTimeUDT = this
+}
+
 class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with ParquetTest
     with ExpressionEvalHelper {
   import testImplicits._
@@ -129,12 +150,14 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   }
 
   test("UDTs and UDFs") {
-    spark.udf.register("testType",
-      (d: TestUDT.MyDenseVector) => d.isInstanceOf[TestUDT.MyDenseVector])
-    pointsRDD.createOrReplaceTempView("points")
-    checkAnswer(
-      sql("SELECT testType(features) from points"),
-      Seq(Row(true), Row(true)))
+    withTempView("points") {
+      spark.udf.register("testType",
+        (d: TestUDT.MyDenseVector) => d.isInstanceOf[TestUDT.MyDenseVector])
+      pointsRDD.createOrReplaceTempView("points")
+      checkAnswer(
+        sql("SELECT testType(features) from points"),
+        Seq(Row(true), Row(true)))
+    }
   }
 
   testStandardAndLegacyModes("UDTs with Parquet") {
@@ -276,5 +299,31 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   test("SPARK-28497 Can't up cast UserDefinedType to string") {
     val udt = new TestUDT.MyDenseVectorUDT()
     assert(!Cast.canUpCast(udt, StringType))
+  }
+
+  test("typeof user defined type") {
+    val schema = new StructType().add("a", new TestUDT.MyDenseVectorUDT())
+    val data = Arrays.asList(
+      RowFactory.create(new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))))
+    checkAnswer(spark.createDataFrame(data, schema).selectExpr("typeof(a)"),
+      Seq(Row("array<double>")))
+  }
+
+  test("SPARK-30993: UserDefinedType matched to fixed length SQL type shouldn't be corrupted") {
+    def concatFoo(a: FooWithDate, b: FooWithDate): FooWithDate = {
+      FooWithDate(b.date, a.s + b.s, a.i)
+    }
+
+    UDTRegistration.register(classOf[LocalDateTime].getName, classOf[LocalDateTimeUDT].getName)
+
+    // remove sub-millisecond part as we only use millis based timestamp while serde
+    val date = LocalDateTime.ofEpochSecond(LocalDateTime.now().toEpochSecond(ZoneOffset.UTC),
+      0, ZoneOffset.UTC)
+    val inputDS = List(FooWithDate(date, "Foo", 1), FooWithDate(date, "Foo", 3),
+      FooWithDate(date, "Foo", 3)).toDS()
+    val agg = inputDS.groupByKey(x => x.i).mapGroups((_, iter) => iter.reduce(concatFoo))
+    val result = agg.collect()
+
+    assert(result.toSet === Set(FooWithDate(date, "FooFoo", 3), FooWithDate(date, "Foo", 1)))
   }
 }

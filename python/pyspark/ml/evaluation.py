@@ -110,7 +110,8 @@ class JavaEvaluator(JavaParams, Evaluator):
 class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol, HasWeightCol,
                                     JavaMLReadable, JavaMLWritable):
     """
-    Evaluator for binary classification, which expects two input columns: rawPrediction and label.
+    Evaluator for binary classification, which expects input columns rawPrediction, label
+    and an optional weight column.
     The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
     1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
 
@@ -374,6 +375,10 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "truePositiveRateByLabel",
     ...     evaluator.metricLabel: 1.0})
     0.75...
+    >>> evaluator.setMetricName("hammingLoss")
+    MulticlassClassificationEvaluator...
+    >>> evaluator.evaluate(dataset)
+    0.33...
     >>> mce_path = temp_path + "/mce"
     >>> evaluator.save(mce_path)
     >>> evaluator2 = MulticlassClassificationEvaluator.load(mce_path)
@@ -405,10 +410,10 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|accuracy|weightedPrecision|weightedRecall|weightedTruePositiveRate|"
-                       "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel|"
-                       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel|"
-                       "logLoss)",
+                       "(f1|accuracy|weightedPrecision|weightedRecall|weightedTruePositiveRate| "
+                       "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel| "
+                       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel| "
+                       "logLoss|hammingLoss)",
                        typeConverter=TypeConverters.toString)
     metricLabel = Param(Params._dummy(), "metricLabel",
                         "The class whose metric will be computed in truePositiveRateByLabel|"
@@ -649,7 +654,7 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
 
 @inherit_doc
-class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
+class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol, HasWeightCol,
                           JavaMLReadable, JavaMLWritable):
     """
     Evaluator for Clustering results, which expects two input
@@ -672,6 +677,18 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     ClusteringEvaluator...
     >>> evaluator.evaluate(dataset)
     0.9079...
+    >>> featureAndPredictionsWithWeight = map(lambda x: (Vectors.dense(x[0]), x[1], x[2]),
+    ...     [([0.0, 0.5], 0.0, 2.5), ([0.5, 0.0], 0.0, 2.5), ([10.0, 11.0], 1.0, 2.5),
+    ...     ([10.5, 11.5], 1.0, 2.5), ([1.0, 1.0], 0.0, 2.5), ([8.0, 6.0], 1.0, 2.5)])
+    >>> dataset = spark.createDataFrame(
+    ...     featureAndPredictionsWithWeight, ["features", "prediction", "weight"])
+    >>> evaluator = ClusteringEvaluator()
+    >>> evaluator.setPredictionCol("prediction")
+    ClusteringEvaluator...
+    >>> evaluator.setWeightCol("weight")
+    ClusteringEvaluator...
+    >>> evaluator.evaluate(dataset)
+    0.9079...
     >>> ce_path = temp_path + "/ce"
     >>> evaluator.save(ce_path)
     >>> evaluator2 = ClusteringEvaluator.load(ce_path)
@@ -689,10 +706,10 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
 
     @keyword_only
     def __init__(self, predictionCol="prediction", featuresCol="features",
-                 metricName="silhouette", distanceMeasure="squaredEuclidean"):
+                 metricName="silhouette", distanceMeasure="squaredEuclidean", weightCol=None):
         """
         __init__(self, predictionCol="prediction", featuresCol="features", \
-                 metricName="silhouette", distanceMeasure="squaredEuclidean")
+                 metricName="silhouette", distanceMeasure="squaredEuclidean", weightCol=None)
         """
         super(ClusteringEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -704,10 +721,10 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     @keyword_only
     @since("2.3.0")
     def setParams(self, predictionCol="prediction", featuresCol="features",
-                  metricName="silhouette", distanceMeasure="squaredEuclidean"):
+                  metricName="silhouette", distanceMeasure="squaredEuclidean", weightCol=None):
         """
         setParams(self, predictionCol="prediction", featuresCol="features", \
-                  metricName="silhouette", distanceMeasure="squaredEuclidean")
+                  metricName="silhouette", distanceMeasure="squaredEuclidean", weightCol=None)
         Sets params for clustering evaluator.
         """
         kwargs = self._input_kwargs
@@ -752,6 +769,13 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
+
+    @since("3.1.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
 
 
 @inherit_doc

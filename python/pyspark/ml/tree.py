@@ -56,9 +56,6 @@ class _DecisionTreeModel(JavaPredictionModel):
         """
         return self._call_java("predictLeaf", value)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
     """
@@ -208,9 +205,6 @@ class _TreeEnsembleModel(JavaPredictionModel):
         """
         return self._call_java("predictLeaf", value)
 
-    def __repr__(self):
-        return self._call_java("toString")
-
 
 class _TreeEnsembleParams(_DecisionTreeParams):
     """
@@ -260,6 +254,9 @@ class _RandomForestParams(_TreeEnsembleParams):
     numTrees = Param(Params._dummy(), "numTrees", "Number of trees to train (>= 1).",
                      typeConverter=TypeConverters.toInt)
 
+    bootstrap = Param(Params._dummy(), "bootstrap", "Whether bootstrap samples are used "
+                      "when building trees.", typeConverter=TypeConverters.toBoolean)
+
     def __init__(self):
         super(_RandomForestParams, self).__init__()
 
@@ -269,6 +266,13 @@ class _RandomForestParams(_TreeEnsembleParams):
         Gets the value of numTrees or its default value.
         """
         return self.getOrDefault(self.numTrees)
+
+    @since("3.0.0")
+    def getBootstrap(self):
+        """
+        Gets the value of bootstrap or its default value.
+        """
+        return self.getOrDefault(self.bootstrap)
 
 
 class _GBTParams(_TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndicatorCol):
@@ -319,7 +323,7 @@ class _HasVarianceImpurity(Params):
         return self.getOrDefault(self.impurity)
 
 
-class _TreeClassifierParams(object):
+class _TreeClassifierParams(Params):
     """
     Private class to track supported impurity measures.
 

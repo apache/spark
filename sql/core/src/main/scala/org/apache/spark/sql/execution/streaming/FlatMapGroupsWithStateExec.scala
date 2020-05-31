@@ -54,7 +54,7 @@ case class FlatMapGroupsWithStateExec(
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
-    override val eventTimeWatermark: Option[Long],
+    eventTimeWatermark: Option[Long],
     child: SparkPlan
   ) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter with WatermarkSupport {
 

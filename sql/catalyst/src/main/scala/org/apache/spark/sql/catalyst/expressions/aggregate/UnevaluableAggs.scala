@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -51,9 +51,10 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
       > SELECT _FUNC_(col) FROM VALUES (true), (false), (true) AS tab(col);
        false
   """,
+  group = "agg_funcs",
   since = "3.0.0")
-case class EveryAgg(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = "Every"
+case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
+  override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_and")
 }
 
 @ExpressionDescription(
@@ -67,7 +68,8 @@ case class EveryAgg(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
       > SELECT _FUNC_(col) FROM VALUES (false), (false), (NULL) AS tab(col);
        false
   """,
+  group = "agg_funcs",
   since = "3.0.0")
-case class AnyAgg(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = "Any"
+case class BoolOr(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
+  override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_or")
 }

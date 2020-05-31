@@ -23,7 +23,6 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
@@ -49,7 +48,6 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       .set("spark.master", "local[1]")
       .setIfMissing("spark.driver.memory", "3g")
       .setIfMissing("spark.executor.memory", "3g")
-      .setIfMissing(UI_ENABLED, false)
       .setIfMissing("orc.compression", "snappy")
       .setIfMissing("spark.sql.parquet.compression.codec", "snappy")
 
@@ -119,7 +117,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       val name = s"Parquet Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
       benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
-          spark.sql(s"SELECT $selectExpr FROM parquetTable WHERE $whereExpr").collect()
+          spark.sql(s"SELECT $selectExpr FROM parquetTable WHERE $whereExpr").noop()
         }
       }
     }
@@ -128,7 +126,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       val name = s"Native ORC Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
       benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
-          spark.sql(s"SELECT $selectExpr FROM orcTable WHERE $whereExpr").collect()
+          spark.sql(s"SELECT $selectExpr FROM orcTable WHERE $whereExpr").noop()
         }
       }
     }

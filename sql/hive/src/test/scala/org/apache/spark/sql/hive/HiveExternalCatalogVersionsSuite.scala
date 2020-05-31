@@ -237,11 +237,12 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
       Source.fromURL(s"${releaseMirror}/spark").mkString
         .split("\n")
         .filter(_.contains("""<li><a href="spark-"""))
+        .filterNot(_.contains("preview"))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
     } catch {
       // do not throw exception during object initialization.
-      case NonFatal(_) => Nil
+      case NonFatal(_) => Seq("2.3.4", "2.4.5") // A temporary fallback to use a specific version
     }
   }
 

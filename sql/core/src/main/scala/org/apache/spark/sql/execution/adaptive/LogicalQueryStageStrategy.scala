@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
@@ -36,9 +37,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
 object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
 
   private def isBroadcastStage(plan: LogicalPlan): Boolean = plan match {
-    case LogicalQueryStage(_, physicalPlan)
-        if BroadcastQueryStageExec.isBroadcastQueryStageExec(physicalPlan) =>
-      true
+    case LogicalQueryStage(_, _: BroadcastQueryStageExec) => true
     case _ => false
   }
 

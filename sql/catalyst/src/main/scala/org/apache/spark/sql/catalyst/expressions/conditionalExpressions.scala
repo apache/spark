@@ -111,9 +111,9 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   examples = """
     Examples:
       > SELECT CASE WHEN 1 > 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END;
-       1
+       1.0
       > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 > 0 THEN 2.0 ELSE 1.2 END;
-       2
+       2.0
       > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 < 0 THEN 2.0 END;
        NULL
   """)
@@ -185,7 +185,7 @@ case class CaseWhen(
     "CASE" + cases + elseCase + " END"
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  private def multiBranchesCodegen(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // This variable holds the state of the result:
     // -1 means the condition is not met yet and the result is unknown.
     val NOT_MATCHED = -1
@@ -278,6 +278,18 @@ case class CaseWhen(
          |// TRUE if any condition is met and the result is null, or no any condition is met.
          |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
        """.stripMargin)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (branches.length == 1) {
+      // If we have only single branch we can use If expression and its codeGen
+      If(
+        branches(0)._1,
+        branches(0)._2,
+        elseValue.getOrElse(Literal.create(null, branches(0)._2.dataType))).doGenCode(ctx, ev)
+    } else {
+      multiBranchesCodegen(ctx, ev)
+    }
   }
 }
 

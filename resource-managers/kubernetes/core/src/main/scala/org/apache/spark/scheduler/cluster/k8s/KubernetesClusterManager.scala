@@ -23,7 +23,7 @@ import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -51,7 +51,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         "If the application is deployed using spark-submit in cluster mode, the driver pod name " +
           "must be provided.")
       (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
-        KUBERNETES_MASTER_INTERNAL_URL,
+        sc.conf.get(KUBERNETES_DRIVER_MASTER_URL),
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
     } else {
@@ -59,6 +59,17 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         KubernetesUtils.parseMasterUrl(masterURL),
         None,
         None)
+    }
+
+    // If KUBERNETES_EXECUTOR_POD_NAME_PREFIX is not set, initialize it so that all executors have
+    // the same prefix. This is needed for client mode, where the feature steps code that sets this
+    // configuration is not used.
+    //
+    // If/when feature steps are executed in client mode, they should instead take care of this,
+    // and this code should be removed.
+    if (!sc.conf.contains(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)) {
+      sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX,
+        KubernetesConf.getResourceNamePrefix(sc.conf.get("spark.app.name")))
     }
 
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(

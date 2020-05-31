@@ -20,6 +20,7 @@ license: |
 ---
 
 ### Description
+
 The `CREATE FUNCTION` statement is used to create a temporary or permanent function
 in Spark. Temporary functions are scoped at a session level where as permanent
 functions are created in the persistent catalog and are made available to
@@ -27,70 +28,64 @@ all sessions. The resources specified in the `USING` clause are made available
 to all executors when they are executed for the first time. In addition to the
 SQL interface, spark allows users to create custom user defined scalar and
 aggregate functions using Scala, Python and Java APIs. Please refer to 
-[scalar_functions](sql-getting-started.html#scalar-functions) and 
-[aggregate functions](sql-getting-started#aggregations) for more information.
+[Scalar UDFs](sql-ref-functions-udf-scalar.html) and
+[UDAFs](sql-ref-functions-udf-aggregate.html) for more information.
 
 ### Syntax
-{% highlight sql %}
+
+```sql
 CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     function_name AS class_name [ resource_locations ]
-{% endhighlight %}
+```
 
 ### Parameters
-<dl>
-  <dt><code><em>OR REPLACE</em></code></dt>
-  <dd>
+
+* **OR REPLACE**
+
     If specified, the resources for the function are reloaded. This is mainly useful
     to pick up any changes made to the implementation of the function. This
-    parameter is mutually exclusive to <code>IF NOT EXISTS</code> and can not
+    parameter is mutually exclusive to `IF NOT EXISTS` and can not
     be specified together.
-  </dd>
-  <dt><code><em>TEMPORARY</em></code></dt>
-  <dd>
-    Indicates the scope of function being created. When <code>TEMPORARY</code> is specified, the
+
+* **TEMPORARY**
+
+    Indicates the scope of function being created. When `TEMPORARY` is specified, the
     created function is valid and visible in the current session. No persistent
     entry is made in the catalog for these kind of functions.
-  </dd>
-  <dt><code><em>IF NOT EXISTS</em></code></dt>
-  <dd>
+
+* **IF NOT EXISTS**
+
     If specified, creates the function only when it does not exist. The creation
     of function succeeds (no error is thrown) if the specified function already
-    exists in the system. This parameter is mutually exclusive to <code> OR REPLACE</code> 
+    exists in the system. This parameter is mutually exclusive to `OR REPLACE`
     and can not be specified together.
-  </dd>
-  <dt><code><em>function_name</em></code></dt>
-  <dd>
-    Specifies a name of funnction to be created. The function name may be
-    optionally qualified with a database name. <br><br>
-    <b>Syntax:</b>
-      <code>
-        [database_name.]function_name
-      </code>
-  </dd>
-  <dt><code><em>class_name</em></code></dt>
-  <dd>
+
+* **function_name**
+
+    Specifies a name of function to be created. The function name may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] function_name`
+
+* **class_name**
+
     Specifies the name of the class that provides the implementation for function to be created.
     The implementing class should extend one of the base classes as follows:
-    <ul>
-      <li>Should extend <code>UDF</code> or <code>UDAF</code> in <code>org.apache.hadoop.hive.ql.exec</code> package.</li>
-      <li>Should extend <code>AbstractGenericUDAFResolver</code>, <code>GenericUDF</code>, or
-          <code>GenericUDTF</code> in <code>org.apache.hadoop.hive.ql.udf.generic</code> package.</li>
-      <li>Should extend <code>UserDefinedAggregateFunction</code> in <code>org.apache.spark.sql.expressions</code> package.</li>
-    </ul>
-  </dd>
-  <dt><code><em>resource_locations</em></code></dt>
-  <dd>
+
+    * Should extend `UDF` or `UDAF` in `org.apache.hadoop.hive.ql.exec` package.
+    * Should extend `AbstractGenericUDAFResolver`, `GenericUDF`, or
+      `GenericUDTF` in `org.apache.hadoop.hive.ql.udf.generic` package.
+    * Should extend `UserDefinedAggregateFunction` in `org.apache.spark.sql.expressions` package.
+
+* **resource_locations**
+
     Specifies the list of resources that contain the implementation of the function
-    along with its dependencies. <br><br>
-    <b>Syntax:</b>
-      <code>
-        USING { { (JAR | FILE ) resource_uri} , ...}
-      </code>
-  </dd>
-</dl>
+    along with its dependencies.
+
+    **Syntax:** `USING { { (JAR | FILE ) resource_uri } , ... }`
 
 ### Examples
-{% highlight sql %}
+
+```sql
 -- 1. Create a simple UDF `SimpleUdf` that increments the supplied integral value by 10.
 --    import org.apache.hadoop.hive.ql.exec.UDF;
 --    public class SimpleUdf extends UDF {
@@ -106,39 +101,39 @@ INSERT INTO test VALUES (1), (2);
 
 -- Create a permanent function called `simple_udf`. 
 CREATE FUNCTION simple_udf AS 'SimpleUdf'
-  USING JAR '/tmp/SimpleUdf.jar';
+    USING JAR '/tmp/SimpleUdf.jar';
 
 -- Verify that the function is in the registry.
 SHOW USER FUNCTIONS;
-  +------------------+
-  |          function|
-  +------------------+
-  |default.simple_udf|
-  +------------------+
++------------------+
+|          function|
++------------------+
+|default.simple_udf|
++------------------+
 
 -- Invoke the function. Every selected value should be incremented by 10.
 SELECT simple_udf(c1) AS function_return_value FROM t1;
-  +---------------------+                                                         
-  |function_return_value|
-  +---------------------+
-  |                   11|
-  |                   12|
-  +---------------------+
++---------------------+
+|function_return_value|
++---------------------+
+|                   11|
+|                   12|
++---------------------+
 
 -- Created a temporary function.
 CREATE TEMPORARY FUNCTION simple_temp_udf AS 'SimpleUdf' 
-  USING JAR '/tmp/SimpleUdf.jar';
+    USING JAR '/tmp/SimpleUdf.jar';
 
 -- Verify that the newly created temporary function is in the registry.
 -- Please note that the temporary function does not have a qualified
 -- database associated with it.
 SHOW USER FUNCTIONS;
-  +------------------+
-  |          function|
-  +------------------+
-  |default.simple_udf|
-  |   simple_temp_udf|
-  +------------------+
++------------------+
+|          function|
++------------------+
+|default.simple_udf|
+|   simple_temp_udf|
++------------------+
 
 -- 1. Modify `SimpleUdf`'s implementation to add supplied integral value by 20.
 --    import org.apache.hadoop.hive.ql.exec.UDF;
@@ -152,20 +147,20 @@ SHOW USER FUNCTIONS;
 
 -- Replace the implementation of `simple_udf`
 CREATE OR REPLACE FUNCTION simple_udf AS 'SimpleUdfR'
-  USING JAR '/tmp/SimpleUdfR.jar';
+    USING JAR '/tmp/SimpleUdfR.jar';
 
 -- Invoke the function. Every selected value should be incremented by 20.
 SELECT simple_udf(c1) AS function_return_value FROM t1;
-+---------------------+                                                         
++---------------------+
 |function_return_value|
 +---------------------+
 |                   21|
 |                   22|
 +---------------------+
+```
 
-{% endhighlight %}
+### Related Statements
 
-### Related statements
-- [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
-- [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
-- [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)
+* [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
+* [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+* [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)

@@ -123,7 +123,8 @@ public final class ArrowColumnVector extends ColumnVector {
 
   @Override
   public ColumnarMap getMap(int rowId) {
-    throw new UnsupportedOperationException();
+    if (isNullAt(rowId)) return null;
+    return accessor.getMap(rowId);
   }
 
   @Override
@@ -156,6 +157,9 @@ public final class ArrowColumnVector extends ColumnVector {
       accessor = new DateAccessor((DateDayVector) vector);
     } else if (vector instanceof TimeStampMicroTZVector) {
       accessor = new TimestampAccessor((TimeStampMicroTZVector) vector);
+    } else if (vector instanceof MapVector) {
+      MapVector mapVector = (MapVector) vector;
+      accessor = new MapAccessor(mapVector);
     } else if (vector instanceof ListVector) {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
@@ -234,6 +238,10 @@ public final class ArrowColumnVector extends ColumnVector {
     }
 
     ColumnarArray getArray(int rowId) {
+      throw new UnsupportedOperationException();
+    }
+
+    ColumnarMap getMap(int rowId) {
       throw new UnsupportedOperationException();
     }
   }
@@ -470,6 +478,28 @@ public final class ArrowColumnVector extends ColumnVector {
 
     StructAccessor(StructVector vector) {
       super(vector);
+    }
+  }
+
+  private static class MapAccessor extends ArrowVectorAccessor {
+    private final MapVector accessor;
+    private final ArrowColumnVector keys;
+    private final ArrowColumnVector values;
+
+    MapAccessor(MapVector vector) {
+      super(vector);
+      this.accessor = vector;
+      StructVector entries = (StructVector) vector.getDataVector();
+      this.keys = new ArrowColumnVector(entries.getChild(MapVector.KEY_NAME));
+      this.values = new ArrowColumnVector(entries.getChild(MapVector.VALUE_NAME));
+    }
+
+    @Override
+    final ColumnarMap getMap(int rowId) {
+      int index = rowId * MapVector.OFFSET_WIDTH;
+      int offset = accessor.getOffsetBuffer().getInt(index);
+      int length = accessor.getInnerValueCountAt(rowId);
+      return new ColumnarMap(keys, values, offset, length);
     }
   }
 }

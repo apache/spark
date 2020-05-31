@@ -58,7 +58,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |STORED AS PARQUET
         |TBLPROPERTIES('prop1Key'="prop1Val", '`prop2Key`'="prop2Val")
       """.stripMargin)
-    sql("CREATE TABLE parquet_tab3(col1 int, `col 2` int)")
+    sql("CREATE TABLE parquet_tab3(col1 int, `col 2` int) USING hive")
     sql("CREATE TABLE parquet_tab4 (price int, qty int) partitioned by (year int, month int)")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 1) SELECT 1, 1")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 2) SELECT 2, 2")
@@ -117,6 +117,52 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
+  test("show views") {
+    withView("show1a", "show2b", "global_temp.temp1", "temp2") {
+      sql("CREATE VIEW show1a AS SELECT 1 AS id")
+      sql("CREATE VIEW show2b AS SELECT 1 AS id")
+      sql("CREATE GLOBAL TEMP VIEW temp1 AS SELECT 1 AS id")
+      sql("CREATE TEMP VIEW temp2 AS SELECT 1 AS id")
+      checkAnswer(
+        sql("SHOW VIEWS"),
+        Row("default", "show1a", false) ::
+          Row("default", "show2b", false) ::
+          Row("default", "parquet_view1", false) ::
+          Row("", "temp2", true) :: Nil)
+      checkAnswer(
+        sql("SHOW VIEWS IN default"),
+        Row("default", "show1a", false) ::
+          Row("default", "show2b", false) ::
+          Row("default", "parquet_view1", false) ::
+          Row("", "temp2", true) :: Nil)
+      checkAnswer(
+        sql("SHOW VIEWS FROM default"),
+        Row("default", "show1a", false) ::
+          Row("default", "show2b", false) ::
+          Row("default", "parquet_view1", false) ::
+          Row("", "temp2", true) :: Nil)
+      checkAnswer(
+        sql("SHOW VIEWS FROM global_temp"),
+        Row("global_temp", "temp1", true) ::
+          Row("", "temp2", true) :: Nil)
+      checkAnswer(
+        sql("SHOW VIEWS 'show1*|show2*'"),
+        Row("default", "show1a", false) ::
+          Row("default", "show2b", false) :: Nil)
+      checkAnswer(
+        sql("SHOW VIEWS LIKE 'show1*|show2*'"),
+        Row("default", "show1a", false) ::
+          Row("default", "show2b", false) :: Nil)
+      checkAnswer(
+        sql("SHOW VIEWS IN default 'show1*'"),
+        Row("default", "show1a", false) :: Nil)
+      checkAnswer(
+        sql("SHOW VIEWS IN default LIKE 'show1*|show2*'"),
+        Row("default", "show1a", false) ::
+          Row("default", "show2b", false) :: Nil)
+    }
+  }
+
   test("show tblproperties of data source tables - basic") {
     checkAnswer(
       sql("SHOW TBLPROPERTIES parquet_tab1").filter(s"key = 'my_key1'"),
@@ -130,10 +176,10 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show tblproperties for datasource table - errors") {
-    val message1 = intercept[NoSuchTableException] {
+    val message = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message1.contains("Table or view 'badtable' not found in database 'default'"))
+    assert(message.contains("Table or view not found: badtable"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
@@ -145,19 +191,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   test("show tblproperties for hive table") {
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('prop1Key')"), Row("prop1Val"))
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("prop2Val"))
-  }
-
-  test("show tblproperties for spark temporary table - empty row") {
-    withTempView("parquet_temp") {
-      sql(
-        """
-         |CREATE TEMPORARY VIEW parquet_temp (c1 INT, c2 STRING)
-         |USING org.apache.spark.sql.parquet.DefaultSource
-        """.stripMargin)
-
-      // An empty sequence of row is returned for session temporary table.
-      checkAnswer(sql("SHOW TBLPROPERTIES parquet_temp"), Nil)
-    }
   }
 
   Seq(true, false).foreach { local =>

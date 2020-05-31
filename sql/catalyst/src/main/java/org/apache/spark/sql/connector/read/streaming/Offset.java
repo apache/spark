@@ -25,6 +25,8 @@ import org.apache.spark.annotation.Evolving;
  * During execution, offsets provided by the data source implementation will be logged and used as
  * restart checkpoints. Each source should provide an offset implementation which the source can use
  * to reconstruct a position in the stream up to which data has been seen/processed.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public abstract class Offset {

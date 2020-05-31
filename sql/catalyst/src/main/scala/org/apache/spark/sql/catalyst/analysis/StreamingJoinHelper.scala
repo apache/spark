@@ -24,9 +24,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-
 
 /**
  * Helper object for stream joins. See [[StreamingSymmetricHashJoinExec]] in SQL for more details.
@@ -232,8 +232,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           collect(left, negate) ++ collect(right, !negate)
         case TimeAdd(left, right, _) =>
           collect(left, negate) ++ collect(right, negate)
-        case TimeSub(left, right, _) =>
-          collect(left, negate) ++ collect(right, !negate)
+        case DatetimeSub(_, _, child) => collect(child, negate)
         case UnaryMinus(child) =>
           collect(child, !negate)
         case CheckOverflow(child, _, _) =>
@@ -256,7 +255,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           val castedLit = lit.dataType match {
             case CalendarIntervalType =>
               val calendarInterval = lit.value.asInstanceOf[CalendarInterval]
-              if (calendarInterval.months > 0) {
+              if (calendarInterval.months != 0) {
                 invalid = true
                 logWarning(
                   s"Failed to extract state value watermark from condition $exprToCollectFrom " +
@@ -264,7 +263,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                     s"watermark calculation. Use interval in terms of day instead.")
                 Literal(0.0)
               } else {
-                Literal(calendarInterval.microseconds.toDouble)
+                Literal(calendarInterval.days * MICROS_PER_DAY.toDouble +
+                  calendarInterval.microseconds.toDouble)
               }
             case DoubleType =>
               Multiply(lit, Literal(1000000.0))

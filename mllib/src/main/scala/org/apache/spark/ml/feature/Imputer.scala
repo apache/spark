@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCols}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -32,7 +32,8 @@ import org.apache.spark.sql.types._
 /**
  * Params for [[Imputer]] and [[ImputerModel]].
  */
-private[feature] trait ImputerParams extends Params with HasInputCols with HasOutputCols {
+private[feature] trait ImputerParams extends Params with HasInputCol with HasInputCols
+  with HasOutputCol with HasOutputCols with HasRelativeError {
 
   /**
    * The imputation strategy. Currently only "mean" and "median" are supported.
@@ -63,15 +64,26 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
   /** @group getParam */
   def getMissingValue: Double = $(missingValue)
 
+  /** Returns the input and output column names corresponding in pair. */
+  private[feature] def getInOutCols(): (Array[String], Array[String]) = {
+    if (isSet(inputCol)) {
+      (Array($(inputCol)), Array($(outputCol)))
+    } else {
+      ($(inputCols), $(outputCols))
+    }
+  }
+
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    require($(inputCols).length == $(inputCols).distinct.length, s"inputCols contains" +
-      s" duplicates: (${$(inputCols).mkString(", ")})")
-    require($(outputCols).length == $(outputCols).distinct.length, s"outputCols contains" +
-      s" duplicates: (${$(outputCols).mkString(", ")})")
-    require($(inputCols).length == $(outputCols).length, s"inputCols(${$(inputCols).length})" +
-      s" and outputCols(${$(outputCols).length}) should have the same length")
-    val outputFields = $(inputCols).zip($(outputCols)).map { case (inputCol, outputCol) =>
+    ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol), Seq(outputCols))
+    val (inputColNames, outputColNames) = getInOutCols()
+    require(inputColNames.length == inputColNames.distinct.length, s"inputCols contains" +
+      s" duplicates: (${inputColNames.mkString(", ")})")
+    require(outputColNames.length == outputColNames.distinct.length, s"outputCols contains" +
+      s" duplicates: (${outputColNames.mkString(", ")})")
+    require(inputColNames.length == outputColNames.length, s"inputCols(${inputColNames.length})" +
+      s" and outputCols(${outputColNames.length}) should have the same length")
+    val outputFields = inputColNames.zip(outputColNames).map { case (inputCol, outputCol) =>
       val inputField = schema(inputCol)
       SchemaUtils.checkNumericType(schema, inputCol)
       StructField(outputCol, inputField.dataType, inputField.nullable)
@@ -102,6 +114,14 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   def this() = this(Identifiable.randomUID("imputer"))
 
   /** @group setParam */
+  @Since("3.0.0")
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
   @Since("2.2.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
@@ -120,13 +140,19 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   @Since("2.2.0")
   def setMissingValue(value: Double): this.type = set(missingValue, value)
 
+  /** @group expertSetParam */
+  @Since("3.0.0")
+  def setRelativeError(value: Double): this.type = set(relativeError, value)
+
   setDefault(strategy -> Imputer.mean, missingValue -> Double.NaN)
 
   override def fit(dataset: Dataset[_]): ImputerModel = {
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
 
-    val cols = $(inputCols).map { inputCol =>
+    val (inputColumns, _) = getInOutCols()
+
+    val cols = inputColumns.map { inputCol =>
       when(col(inputCol).equalTo($(missingValue)), null)
         .when(col(inputCol).isNaN, null)
         .otherwise(col(inputCol))
@@ -139,7 +165,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         // Function avg will ignore null automatically.
         // For a column only containing null, avg will return null.
         val row = dataset.select(cols.map(avg): _*).head()
-        Array.range(0, $(inputCols).length).map { i =>
+        Array.range(0, inputColumns.length).map { i =>
           if (row.isNullAt(i)) {
             Double.NaN
           } else {
@@ -150,7 +176,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
       case Imputer.median =>
         // Function approxQuantile will ignore null automatically.
         // For a column only containing null, approxQuantile will return an empty array.
-        dataset.select(cols: _*).stat.approxQuantile($(inputCols), Array(0.5), 0.001)
+        dataset.select(cols: _*).stat.approxQuantile(inputColumns, Array(0.5), $(relativeError))
           .map { array =>
             if (array.isEmpty) {
               Double.NaN
@@ -160,7 +186,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
           }
     }
 
-    val emptyCols = $(inputCols).zip(results).filter(_._2.isNaN).map(_._1)
+    val emptyCols = inputColumns.zip(results).filter(_._2.isNaN).map(_._1)
     if (emptyCols.nonEmpty) {
       throw new SparkException(s"surrogate cannot be computed. " +
         s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
@@ -168,7 +194,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     }
 
     val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(results)))
-    val schema = StructType($(inputCols).map(col => StructField(col, DoubleType, nullable = false)))
+    val schema = StructType(inputColumns.map(col => StructField(col, DoubleType, nullable = false)))
     val surrogateDF = spark.createDataFrame(rows, schema)
     copyValues(new ImputerModel(uid, surrogateDF).setParent(this))
   }
@@ -206,6 +232,14 @@ class ImputerModel private[ml] (
   import ImputerModel._
 
   /** @group setParam */
+  @Since("3.0.0")
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
@@ -213,9 +247,11 @@ class ImputerModel private[ml] (
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val surrogates = surrogateDF.select($(inputCols).map(col): _*).head().toSeq
+    val (inputColumns, outputColumns) = getInOutCols
+    val surrogates = surrogateDF.select(inputColumns.map(col): _*).head().toSeq
 
-    val newCols = $(inputCols).zip($(outputCols)).zip(surrogates).map {
+
+    val newCols = inputColumns.zip(outputColumns).zip(surrogates).map {
       case ((inputCol, outputCol), surrogate) =>
         val inputType = dataset.schema(inputCol).dataType
         val ic = col(inputCol).cast(DoubleType)
@@ -224,7 +260,7 @@ class ImputerModel private[ml] (
           .otherwise(ic)
           .cast(inputType)
     }
-    dataset.withColumns($(outputCols), newCols).toDF()
+    dataset.withColumns(outputColumns, newCols).toDF()
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -238,6 +274,13 @@ class ImputerModel private[ml] (
 
   @Since("2.2.0")
   override def write: MLWriter = new ImputerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ImputerModel: uid=$uid, strategy=${$(strategy)}, missingValue=${$(missingValue)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(outputCols).map(c => s", numOutputCols=${c.length}").getOrElse("")
+  }
 }
 
 

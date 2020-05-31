@@ -2,134 +2,134 @@
 -- Number of queries: 51
 
 
--- !query 0
+-- !query
 WITH q1(x,y) AS (SELECT 1,2)
 SELECT * FROM q1, q1 AS q2
--- !query 0 schema
+-- !query schema
 struct<x:int,y:int,x:int,y:int>
--- !query 0 output
+-- !query output
 1	2	1	2
 
 
--- !query 1
+-- !query
 SELECT count(*) FROM (
   WITH q1(x) AS (SELECT rand() FROM (SELECT EXPLODE(SEQUENCE(1, 5))))
     SELECT * FROM q1
   UNION
     SELECT * FROM q1
 ) ss
--- !query 1 schema
+-- !query schema
 struct<count(1):bigint>
--- !query 1 output
+-- !query output
 10
 
 
--- !query 2
+-- !query
 CREATE TABLE department (
 	id INTEGER,  -- department ID
 	parent_department INTEGER, -- upper department ID
 	name string -- department name
 ) USING parquet
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 INSERT INTO department VALUES (0, NULL, 'ROOT')
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 INSERT INTO department VALUES (1, 0, 'A')
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 INSERT INTO department VALUES (2, 1, 'B')
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 INSERT INTO department VALUES (3, 2, 'C')
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 INSERT INTO department VALUES (4, 2, 'D')
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 INSERT INTO department VALUES (5, 0, 'E')
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 
 
 
--- !query 9
+-- !query
 INSERT INTO department VALUES (6, 4, 'F')
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 
 
 
--- !query 10
+-- !query
 INSERT INTO department VALUES (7, 5, 'G')
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 
 
 
--- !query 11
+-- !query
 CREATE TABLE tree(
     id INTEGER,
     parent_id INTEGER
 ) USING parquet
--- !query 11 schema
+-- !query schema
 struct<>
--- !query 11 output
+-- !query output
 
 
 
--- !query 12
+-- !query
 INSERT INTO tree
 VALUES (1, NULL), (2, 1), (3,1), (4,2), (5,2), (6,2), (7,3), (8,3),
        (9,4), (10,4), (11,7), (12,7), (13,7), (14, 9), (15,11), (16,11)
--- !query 12 schema
+-- !query schema
 struct<>
--- !query 12 output
+-- !query output
 
 
 
--- !query 13
+-- !query
 create table graph( f int, t int, label string ) USING parquet
--- !query 13 schema
+-- !query schema
 struct<>
--- !query 13 output
+-- !query output
 
 
 
--- !query 14
+-- !query
 insert into graph values
 	(1, 2, 'arc 1 -> 2'),
 	(1, 3, 'arc 1 -> 3'),
@@ -137,61 +137,61 @@ insert into graph values
 	(1, 4, 'arc 1 -> 4'),
 	(4, 5, 'arc 4 -> 5'),
 	(5, 1, 'arc 5 -> 1')
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 
 
 
--- !query 15
+-- !query
 CREATE TABLE y (a INTEGER) USING parquet
--- !query 15 schema
+-- !query schema
 struct<>
--- !query 15 output
+-- !query output
 
 
 
--- !query 16
+-- !query
 INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 10))
--- !query 16 schema
+-- !query schema
 struct<>
--- !query 16 output
+-- !query output
 
 
 
--- !query 17
+-- !query
 DROP TABLE y
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 
 
 
--- !query 18
+-- !query
 CREATE TABLE y (a INTEGER) USING parquet
--- !query 18 schema
+-- !query schema
 struct<>
--- !query 18 output
+-- !query output
 
 
 
--- !query 19
+-- !query
 INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 10))
--- !query 19 schema
+-- !query schema
 struct<>
--- !query 19 output
+-- !query output
 
 
 
--- !query 20
+-- !query
 with cte(foo) as ( select 42 ) select * from ((select foo from cte)) q
--- !query 20 schema
+-- !query schema
 struct<foo:int>
--- !query 20 output
+-- !query output
 42
 
 
--- !query 21
+-- !query
 WITH outermost(x) AS (
   SELECT 1
   UNION (WITH innermost as (SELECT 2)
@@ -199,15 +199,15 @@ WITH outermost(x) AS (
          UNION SELECT 3)
 )
 SELECT * FROM outermost ORDER BY 1
--- !query 21 schema
+-- !query schema
 struct<x:int>
--- !query 21 output
+-- !query output
 1
 2
 3
 
 
--- !query 22
+-- !query
 WITH outermost(x) AS (
   SELECT 1
   UNION (WITH innermost as (SELECT 2)
@@ -215,26 +215,26 @@ WITH outermost(x) AS (
          UNION SELECT * FROM innermost)
 )
 SELECT * FROM outermost ORDER BY 1
--- !query 22 schema
+-- !query schema
 struct<>
--- !query 22 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Table or view not found: outermost; line 4 pos 23
 
 
--- !query 23
+-- !query
 CREATE TABLE withz USING parquet AS SELECT i AS k, CAST(i || ' v' AS string) v FROM (SELECT EXPLODE(SEQUENCE(1, 16, 3)) i)
--- !query 23 schema
+-- !query schema
 struct<>
--- !query 23 output
+-- !query output
 
 
 
--- !query 24
+-- !query
 SELECT * FROM withz ORDER BY k
--- !query 24 schema
+-- !query schema
 struct<k:int,v:string>
--- !query 24 output
+-- !query output
 1	1 v
 4	4 v
 7	7 v
@@ -243,111 +243,111 @@ struct<k:int,v:string>
 16	16 v
 
 
--- !query 25
+-- !query
 DROP TABLE withz
--- !query 25 schema
+-- !query schema
 struct<>
--- !query 25 output
+-- !query output
 
 
 
--- !query 26
+-- !query
 TRUNCATE TABLE y
--- !query 26 schema
+-- !query schema
 struct<>
--- !query 26 output
+-- !query output
 
 
 
--- !query 27
+-- !query
 INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 3))
--- !query 27 schema
+-- !query schema
 struct<>
--- !query 27 output
+-- !query output
 
 
 
--- !query 28
+-- !query
 CREATE TABLE yy (a INTEGER) USING parquet
--- !query 28 schema
+-- !query schema
 struct<>
--- !query 28 output
+-- !query output
 
 
 
--- !query 29
+-- !query
 SELECT * FROM y
--- !query 29 schema
+-- !query schema
 struct<a:int>
--- !query 29 output
+-- !query output
 1
 2
 3
 
 
--- !query 30
+-- !query
 SELECT * FROM yy
--- !query 30 schema
+-- !query schema
 struct<a:int>
--- !query 30 output
+-- !query output
 
 
 
--- !query 31
+-- !query
 SELECT * FROM y
--- !query 31 schema
+-- !query schema
 struct<a:int>
--- !query 31 output
+-- !query output
 1
 2
 3
 
 
--- !query 32
+-- !query
 SELECT * FROM yy
--- !query 32 schema
+-- !query schema
 struct<a:int>
--- !query 32 output
+-- !query output
 
 
 
--- !query 33
+-- !query
 CREATE TABLE parent ( id int, val string ) USING parquet
--- !query 33 schema
+-- !query schema
 struct<>
--- !query 33 output
+-- !query output
 
 
 
--- !query 34
+-- !query
 INSERT INTO parent VALUES ( 1, 'p1' )
--- !query 34 schema
+-- !query schema
 struct<>
--- !query 34 output
+-- !query output
 
 
 
--- !query 35
+-- !query
 SELECT * FROM parent
--- !query 35 schema
+-- !query schema
 struct<id:int,val:string>
--- !query 35 output
+-- !query output
 1	p1
 
 
--- !query 36
+-- !query
 SELECT * FROM parent
--- !query 36 schema
+-- !query schema
 struct<id:int,val:string>
--- !query 36 output
+-- !query output
 1	p1
 
 
--- !query 37
+-- !query
 create table foo (with baz)
--- !query 37 schema
+-- !query schema
 struct<>
--- !query 37 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 no viable alternative at input 'with'(line 1, pos 18)
@@ -357,11 +357,11 @@ create table foo (with baz)
 ------------------^^^
 
 
--- !query 38
+-- !query
 create table foo (with ordinality)
--- !query 38 schema
+-- !query schema
 struct<>
--- !query 38 output
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
 no viable alternative at input 'with'(line 1, pos 18)
@@ -371,98 +371,98 @@ create table foo (with ordinality)
 ------------------^^^
 
 
--- !query 39
+-- !query
 with ordinality as (select 1 as x) select * from ordinality
--- !query 39 schema
+-- !query schema
 struct<x:int>
--- !query 39 output
+-- !query output
 1
 
 
--- !query 40
+-- !query
 WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
--- !query 40 schema
+-- !query schema
 struct<>
--- !query 40 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Table not found: test;
 
 
--- !query 41
+-- !query
 create table test (i int) USING parquet
--- !query 41 schema
+-- !query schema
 struct<>
--- !query 41 output
+-- !query output
 
 
 
--- !query 42
+-- !query
 with test as (select 42) insert into test select * from test
--- !query 42 schema
+-- !query schema
 struct<>
--- !query 42 output
+-- !query output
 
 
 
--- !query 43
+-- !query
 select * from test
--- !query 43 schema
+-- !query schema
 struct<i:int>
--- !query 43 output
+-- !query output
 42
 
 
--- !query 44
+-- !query
 drop table test
--- !query 44 schema
+-- !query schema
 struct<>
--- !query 44 output
+-- !query output
 
 
 
--- !query 45
+-- !query
 DROP TABLE department
--- !query 45 schema
+-- !query schema
 struct<>
--- !query 45 output
+-- !query output
 
 
 
--- !query 46
+-- !query
 DROP TABLE tree
--- !query 46 schema
+-- !query schema
 struct<>
--- !query 46 output
+-- !query output
 
 
 
--- !query 47
+-- !query
 DROP TABLE graph
--- !query 47 schema
+-- !query schema
 struct<>
--- !query 47 output
+-- !query output
 
 
 
--- !query 48
+-- !query
 DROP TABLE y
--- !query 48 schema
+-- !query schema
 struct<>
--- !query 48 output
+-- !query output
 
 
 
--- !query 49
+-- !query
 DROP TABLE yy
--- !query 49 schema
+-- !query schema
 struct<>
--- !query 49 output
+-- !query output
 
 
 
--- !query 50
+-- !query
 DROP TABLE parent
--- !query 50 schema
+-- !query schema
 struct<>
--- !query 50 output
+-- !query output
 

@@ -18,9 +18,11 @@
 package org.apache.spark.sql.internal
 
 import java.net.URL
-import java.util.{Locale, UUID}
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -32,12 +34,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.streaming.StreamingQueryManager
+import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
-
 
 /**
  * A class that holds all state shared across sessions in a given [[SQLContext]].
@@ -50,45 +53,12 @@ private[sql] class SharedState(
     initialConfigs: scala.collection.Map[String, String])
   extends Logging {
 
-  // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
-  // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
-  val warehousePath: String = {
-    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
-    if (configFile != null) {
-      logInfo(s"loading hive config file: $configFile")
-      sparkContext.hadoopConfiguration.addResource(configFile)
-    }
+  SharedState.setFsUrlStreamHandlerFactory(sparkContext.conf, sparkContext.hadoopConfiguration)
 
-    // hive.metastore.warehouse.dir only stay in hadoopConf
-    sparkContext.conf.remove("hive.metastore.warehouse.dir")
-    // Set the Hive metastore warehouse path to the one we use
-    val hiveWarehouseDir = sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir")
-    if (hiveWarehouseDir != null && !sparkContext.conf.contains(WAREHOUSE_PATH.key)) {
-      // If hive.metastore.warehouse.dir is set and spark.sql.warehouse.dir is not set,
-      // we will respect the value of hive.metastore.warehouse.dir.
-      sparkContext.conf.set(WAREHOUSE_PATH.key, hiveWarehouseDir)
-      logInfo(s"${WAREHOUSE_PATH.key} is not set, but hive.metastore.warehouse.dir " +
-        s"is set. Setting ${WAREHOUSE_PATH.key} to the value of " +
-        s"hive.metastore.warehouse.dir ('$hiveWarehouseDir').")
-      hiveWarehouseDir
-    } else {
-      // If spark.sql.warehouse.dir is set, we will override hive.metastore.warehouse.dir using
-      // the value of spark.sql.warehouse.dir.
-      // When neither spark.sql.warehouse.dir nor hive.metastore.warehouse.dir is set,
-      // we will set hive.metastore.warehouse.dir to the default value of spark.sql.warehouse.dir.
-      val sparkWarehouseDir = sparkContext.conf.get(WAREHOUSE_PATH)
-      logInfo(s"Setting hive.metastore.warehouse.dir ('$hiveWarehouseDir') to the value of " +
-        s"${WAREHOUSE_PATH.key} ('$sparkWarehouseDir').")
-      sparkContext.hadoopConfiguration.set("hive.metastore.warehouse.dir", sparkWarehouseDir)
-      sparkWarehouseDir
-    }
-  }
-  logInfo(s"Warehouse path is '$warehousePath'.")
-
-  // These 2 variables should be initiated after `warehousePath`, because in the first place we need
-  // to load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
-  // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
   private val (conf, hadoopConf) = {
+    // Load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
+    // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
+    SharedState.loadHiveConfFile(sparkContext.conf, sparkContext.hadoopConfiguration)
     val confClone = sparkContext.conf.clone()
     val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
     // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
@@ -112,11 +82,15 @@ private[sql] class SharedState(
    */
   val cacheManager: CacheManager = new CacheManager
 
+  /** A global lock for all streaming query lifecycle tracking and management. */
+  private[sql] val activeQueriesLock = new Object
+
   /**
    * A map of active streaming queries to the session specific StreamingQueryManager that manages
    * the lifecycle of that stream.
    */
-  private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamingQueryManager]()
+  @GuardedBy("activeQueriesLock")
+  private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamExecution]()
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
@@ -132,6 +106,22 @@ private[sql] class SharedState(
   }
 
   /**
+   * A [[StreamingQueryListener]] for structured streaming ui, it contains all streaming query ui
+   * data to show.
+   */
+  lazy val streamingQueryStatusListener: Option[StreamingQueryStatusListener] = {
+    sparkContext.ui.flatMap { ui =>
+      if (conf.get(STREAMING_UI_ENABLED)) {
+        val statusListener = new StreamingQueryStatusListener(conf)
+        new StreamingQueryTab(statusListener, ui)
+        Some(statusListener)
+      } else {
+        None
+      }
+    }
+  }
+
+  /**
    * A catalog that interacts with external systems.
    */
   lazy val externalCatalog: ExternalCatalogWithListener = {
@@ -141,7 +131,7 @@ private[sql] class SharedState(
     val defaultDbDefinition = CatalogDatabase(
       SessionCatalog.DEFAULT_DATABASE,
       "default database",
-      CatalogUtils.stringToURI(warehousePath),
+      CatalogUtils.stringToURI(conf.get(WAREHOUSE_PATH)),
       Map())
     // Create default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
@@ -163,9 +153,6 @@ private[sql] class SharedState(
    * A manager for global temporary views.
    */
   lazy val globalTempViewManager: GlobalTempViewManager = {
-    // System preserved database should not exists in metastore. However it's hard to guarantee it
-    // for every session, because case-sensitivity differs. Here we always lowercase it to make our
-    // life easier.
     val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(
@@ -185,11 +172,23 @@ private[sql] class SharedState(
 }
 
 object SharedState extends Logging {
-  try {
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
-  } catch {
-    case e: Error =>
-      logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+  @volatile private var fsUrlStreamHandlerFactoryInitialized = false
+
+  private def setFsUrlStreamHandlerFactory(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    if (!fsUrlStreamHandlerFactoryInitialized &&
+        conf.get(DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED)) {
+      synchronized {
+        if (!fsUrlStreamHandlerFactoryInitialized) {
+          try {
+            URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hadoopConf))
+            fsUrlStreamHandlerFactoryInitialized = true
+          } catch {
+            case NonFatal(_) =>
+              logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+          }
+        }
+      }
+    }
   }
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
@@ -220,5 +219,47 @@ object SharedState extends Logging {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
     }
+  }
+
+  /**
+   * Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
+   * the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
+   */
+  def loadHiveConfFile(
+      sparkConf: SparkConf,
+      hadoopConf: Configuration): Unit = {
+    val hiveWarehouseKey = "hive.metastore.warehouse.dir"
+    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    if (configFile != null) {
+      logInfo(s"loading hive config file: $configFile")
+      val hadoopConfTemp = new Configuration()
+      hadoopConfTemp.addResource(configFile)
+      hadoopConfTemp.asScala.foreach { entry =>
+        hadoopConf.setIfUnset(entry.getKey, entry.getValue)
+      }
+    }
+    // hive.metastore.warehouse.dir only stay in hadoopConf
+    sparkConf.remove(hiveWarehouseKey)
+    // Set the Hive metastore warehouse path to the one we use
+    val hiveWarehouseDir = hadoopConf.get(hiveWarehouseKey)
+    val warehousePath = if (hiveWarehouseDir != null && !sparkConf.contains(WAREHOUSE_PATH.key)) {
+      // If hive.metastore.warehouse.dir is set and spark.sql.warehouse.dir is not set,
+      // we will respect the value of hive.metastore.warehouse.dir.
+      sparkConf.set(WAREHOUSE_PATH.key, hiveWarehouseDir)
+      logInfo(s"${WAREHOUSE_PATH.key} is not set, but $hiveWarehouseKey is set. Setting" +
+        s" ${WAREHOUSE_PATH.key} to the value of $hiveWarehouseKey ('$hiveWarehouseDir').")
+      hiveWarehouseDir
+    } else {
+      // If spark.sql.warehouse.dir is set, we will override hive.metastore.warehouse.dir using
+      // the value of spark.sql.warehouse.dir.
+      // When neither spark.sql.warehouse.dir nor hive.metastore.warehouse.dir is set
+      // we will set hive.metastore.warehouse.dir to the default value of spark.sql.warehouse.dir.
+      val sparkWarehouseDir = sparkConf.get(WAREHOUSE_PATH)
+      logInfo(s"Setting $hiveWarehouseKey ('$hiveWarehouseDir') to the value of " +
+        s"${WAREHOUSE_PATH.key} ('$sparkWarehouseDir').")
+      hadoopConf.set(hiveWarehouseKey, sparkWarehouseDir)
+      sparkWarehouseDir
+    }
+    logInfo(s"Warehouse path is '$warehousePath'.")
   }
 }

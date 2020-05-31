@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.1.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -88,12 +88,11 @@
       <version>${protobuf.version}</version>
     </dependency>
 -->
-<!--
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
+      <scope>${hive.common.scope}</scope>
     </dependency>
--->
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
@@ -103,16 +102,26 @@
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
     </dependency>
-    <!--
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-serde</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-shims</artifactId>
-        </dependency>
-    -->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-serde</artifactId>
+      <scope>${hive.serde.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-shims</artifactId>
+      <scope>${hive.shims.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-llap-common</artifactId>
+      <scope>${hive.llap.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-llap-client</artifactId>
+      <scope>${hive.llap.scope}</scope>
+    </dependency>
     <!-- hive-serde already depends on avro, but this brings in customized config of avro deps from parent -->
     <dependency>
       <groupId>org.apache.avro</groupId>
@@ -208,31 +217,6 @@
         </plugins>
       </build>
     </profile>
-    <profile>
-      <id>hadoop-3.2</id>
-      <dependencies>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-common</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-serde</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-shims</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hive</groupId>
-          <artifactId>hive-llap-common</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hive</groupId>
-          <artifactId>hive-llap-client</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
   </profiles>
 
   <build>
@@ -244,7 +228,7 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
       <plugin>

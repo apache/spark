@@ -122,7 +122,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     val blockString = "Hello, world!"
     val blockBuffer = new NioManagedBuffer(ByteBuffer.wrap(
       blockString.getBytes(StandardCharsets.UTF_8)))
-    when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)
+    when(blockManager.getLocalBlockData(blockId)).thenReturn(blockBuffer)
 
     val securityManager0 = new SecurityManager(conf0)
     val exec0 = new NettyBlockTransferService(conf0, securityManager0, "localhost", "localhost", 0,

@@ -358,7 +358,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
     // Make sure we do throw correct exception when users use a relation provider that
     // only implements the RelationProvider or the SchemaRelationProvider.
     Seq("TEMPORARY VIEW", "TABLE").foreach { tableType =>
-      val schemaNotAllowed = intercept[Exception] {
+      val schemaNotMatch = intercept[Exception] {
         sql(
           s"""
              |CREATE $tableType relationProvierWithSchema (i int)
@@ -369,7 +369,8 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
              |)
            """.stripMargin)
       }
-      assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas"))
+      assert(schemaNotMatch.getMessage.contains(
+        "The user-specified schema doesn't match the actual schema"))
 
       val schemaNeeded = intercept[Exception] {
         sql(

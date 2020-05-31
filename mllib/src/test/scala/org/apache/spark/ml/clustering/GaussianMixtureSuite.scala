@@ -24,6 +24,7 @@ import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.functions._
 
 
 class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
@@ -71,9 +72,14 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getK === 2)
     assert(gm.getFeaturesCol === "features")
     assert(gm.getPredictionCol === "prediction")
+    assert(gm.getProbabilityCol === "probability")
     assert(gm.getMaxIter === 100)
     assert(gm.getTol === 0.01)
     val model = gm.setMaxIter(1).fit(dataset)
+
+    val transformed = model.transform(dataset)
+    checkNominalOnDF(transformed, "prediction", model.weights.length)
+    checkVectorSizeOnDF(transformed, "probability", model.weights.length)
 
     MLTestingUtils.checkCopyAndUids(gm, model)
     assert(model.hasSummary)
@@ -175,15 +181,6 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  test("check distributed decomposition") {
-    val k = 5
-    val d = decompositionData.head.size
-    assert(GaussianMixture.shouldDistributeGaussians(k, d))
-
-    val gmm = new GaussianMixture().setK(k).setSeed(seed).fit(decompositionDataset)
-    assert(gmm.getK === k)
-  }
-
   test("multivariate data and check againt R mvnormalmixEM") {
     /*
       Using the following R code to generate data and train the model using mixtools package.
@@ -267,6 +264,18 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(trueLikelihood ~== floatLikelihood absTol 1e-6)
   }
 
+  test("GMM support instance weighting") {
+    val gm1 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed)
+    val gm2 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed).setWeightCol("weight")
+
+    Seq(1.0, 10.0, 100.0).foreach { w =>
+      val gmm1 = gm1.fit(dataset)
+      val ds2 = dataset.select(col("features"), lit(w).as("weight"))
+      val gmm2 = gm2.fit(ds2)
+      modelEquals(gmm1, gmm2)
+    }
+  }
+
   test("prediction on single instance") {
     val gmm = new GaussianMixture().setSeed(123L)
     val model = gmm.fit(dataset)
@@ -275,6 +284,17 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
     testClusteringModelSingleProbabilisticPrediction(model, model.predictProbability, dataset,
       model.getFeaturesCol, model.getProbabilityCol)
+  }
+
+  test("GMM on blocks") {
+    Seq(dataset, sparseDataset, denseDataset, rDataset).foreach { dataset =>
+      val gmm = new GaussianMixture().setK(k).setMaxIter(20).setBlockSize(1).setSeed(seed)
+      val model = gmm.fit(dataset)
+      Seq(2, 4, 8, 16, 32).foreach { blockSize =>
+        val model2 = gmm.setBlockSize(blockSize).fit(dataset)
+        modelEquals(model, model2)
+      }
+    }
   }
 }
 
@@ -319,10 +339,14 @@ object GaussianMixtureSuite extends SparkFunSuite {
 
   def modelEquals(m1: GaussianMixtureModel, m2: GaussianMixtureModel): Unit = {
     assert(m1.weights.length === m2.weights.length)
+    val s1 = m1.weights.zip(m1.gaussians).sortBy(_._1)
+    val s2 = m2.weights.zip(m2.gaussians).sortBy(_._1)
     for (i <- m1.weights.indices) {
-      assert(m1.weights(i) ~== m2.weights(i) absTol 1E-3)
-      assert(m1.gaussians(i).mean ~== m2.gaussians(i).mean absTol 1E-3)
-      assert(m1.gaussians(i).cov ~== m2.gaussians(i).cov absTol 1E-3)
+      val (w1, g1) = s1(i)
+      val (w2, g2) = s2(i)
+      assert(w1 ~== w2 absTol 1E-3)
+      assert(g1.mean ~== g2.mean absTol 1E-3)
+      assert(g1.cov ~== g2.cov absTol 1E-3)
     }
   }
 }

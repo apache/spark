@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog}
 import org.apache.spark.sql.types.StructType
 
 case class DescribeTableExec(
@@ -31,17 +31,38 @@ case class DescribeTableExec(
     table: Table,
     isExtended: Boolean) extends V2CommandExec {
 
-  private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
+  private val toRow = {
+    RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
+  }
 
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
+    addPartitioning(rows)
 
     if (isExtended) {
-      addPartitioning(rows)
-      addProperties(rows)
+      addTableDetails(rows)
     }
     rows
+  }
+
+  private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
+    rows += emptyRow()
+    rows += toCatalystRow("# Detailed Table Information", "", "")
+    rows += toCatalystRow("Name", table.name(), "")
+
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES.foreach(propKey => {
+      if (table.properties.containsKey(propKey)) {
+        rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
+      }
+    })
+    val properties =
+      table.properties.asScala.toList
+        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
+        .sortBy(_._1).map {
+        case (key, value) => key + "=" + value
+      }.mkString("[", ",", "]")
+    rows += toCatalystRow("Table Properties", properties, "")
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -53,8 +74,7 @@ case class DescribeTableExec(
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
-    rows += toCatalystRow(" Partitioning", "", "")
-    rows += toCatalystRow("--------------", "", "")
+    rows += toCatalystRow("# Partitioning", "", "")
     if (table.partitioning.isEmpty) {
       rows += toCatalystRow("Not partitioned", "", "")
     } else {
@@ -64,18 +84,9 @@ case class DescribeTableExec(
     }
   }
 
-  private def addProperties(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows += emptyRow()
-    rows += toCatalystRow(" Table Property", " Value", "")
-    rows += toCatalystRow("----------------", "-------", "")
-    rows ++= table.properties.asScala.toList.sortBy(_._1).map {
-      case (key, value) => toCatalystRow(key, value, "")
-    }
-  }
-
   private def emptyRow(): InternalRow = toCatalystRow("", "", "")
 
   private def toCatalystRow(strs: String*): InternalRow = {
-    encoder.toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
+    toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
   }
 }

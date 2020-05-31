@@ -2,7 +2,7 @@
 -- Number of queries: 22
 
 
--- !query 0
+-- !query
 CREATE TEMPORARY VIEW tab1 AS SELECT * FROM VALUES
     (1, 2), 
     (1, 2),
@@ -12,13 +12,13 @@ CREATE TEMPORARY VIEW tab1 AS SELECT * FROM VALUES
     (null, null),
     (null, null)
     AS tab1(k, v)
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 CREATE TEMPORARY VIEW tab2 AS SELECT * FROM VALUES
     (1, 2), 
     (1, 2), 
@@ -27,19 +27,19 @@ CREATE TEMPORARY VIEW tab2 AS SELECT * FROM VALUES
     (null, null),
     (null, null)
     AS tab2(k, v)
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 SELECT udf(k), v FROM tab1
 INTERSECT ALL
 SELECT k, udf(v) FROM tab2
--- !query 2 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,v:int>
--- !query 2 output
+-- !query output
 1	2
 1	2
 2	3
@@ -47,80 +47,80 @@ NULL	NULL
 NULL	NULL
 
 
--- !query 3
+-- !query
 SELECT k, udf(v) FROM tab1
 INTERSECT ALL
 SELECT udf(k), v FROM tab1 WHERE udf(k) = 1
--- !query 3 schema
+-- !query schema
 struct<k:int,CAST(udf(cast(v as string)) AS INT):int>
--- !query 3 output
+-- !query output
 1	2
 1	2
 1	3
 1	3
 
 
--- !query 4
+-- !query
 SELECT udf(k), udf(v) FROM tab1 WHERE k > udf(2)
 INTERSECT ALL
 SELECT udf(k), udf(v) FROM tab2
--- !query 4 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(v as string)) AS INT):int>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 SELECT udf(k), v FROM tab1
 INTERSECT ALL
 SELECT udf(k), v FROM tab2 WHERE udf(udf(k)) > 3
--- !query 5 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,v:int>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 SELECT udf(k), v FROM tab1
 INTERSECT ALL
 SELECT CAST(udf(1) AS BIGINT), CAST(udf(2) AS BIGINT)
--- !query 6 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):bigint,v:bigint>
--- !query 6 output
+-- !query output
 1	2
 
 
--- !query 7
+-- !query
 SELECT k, udf(v) FROM tab1
 INTERSECT ALL
 SELECT array(1), udf(2)
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 IntersectAll can only be performed on tables with the compatible column types. array<int> <> int at the first column of the second table;
 
 
--- !query 8
+-- !query
 SELECT udf(k) FROM tab1
 INTERSECT ALL
 SELECT udf(k), udf(v) FROM tab2
--- !query 8 schema
+-- !query schema
 struct<>
--- !query 8 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 IntersectAll can only be performed on tables with the same number of columns, but the first table has 1 columns and the second table has 2 columns;
 
 
--- !query 9
+-- !query
 SELECT udf(k), v FROM tab2
 INTERSECT ALL
 SELECT k, udf(v) FROM tab1
 INTERSECT ALL
 SELECT udf(k), udf(v) FROM tab2
--- !query 9 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,v:int>
--- !query 9 output
+-- !query output
 1	2
 1	2
 2	3
@@ -128,7 +128,7 @@ NULL	NULL
 NULL	NULL
 
 
--- !query 10
+-- !query
 SELECT udf(k), v FROM tab1
 EXCEPT
 SELECT k, udf(v) FROM tab2
@@ -136,9 +136,9 @@ UNION ALL
 SELECT k, udf(udf(v)) FROM tab1
 INTERSECT ALL
 SELECT udf(k), v FROM tab2
--- !query 10 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,v:int>
--- !query 10 output
+-- !query output
 1	2
 1	2
 1	3
@@ -147,7 +147,7 @@ NULL	NULL
 NULL	NULL
 
 
--- !query 11
+-- !query
 SELECT udf(k), udf(v) FROM tab1
 EXCEPT
 SELECT udf(k), v FROM tab2
@@ -155,13 +155,13 @@ EXCEPT
 SELECT k, udf(v) FROM tab1
 INTERSECT ALL
 SELECT udf(k), udf(udf(v)) FROM tab2
--- !query 11 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(v as string)) AS INT):int>
--- !query 11 output
+-- !query output
 1	3
 
 
--- !query 12
+-- !query
 (
   (
     (
@@ -175,13 +175,13 @@ struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(v as string)) AS IN
   INTERSECT ALL
   SELECT udf(k), udf(v) FROM tab2
 )
--- !query 12 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,v:int>
--- !query 12 output
+-- !query output
 
 
 
--- !query 13
+-- !query
 SELECT * 
 FROM   (SELECT udf(tab1.k),
                udf(tab2.v)
@@ -195,9 +195,9 @@ FROM   (SELECT udf(tab1.k),
         FROM   tab1 
                JOIN tab2 
                  ON udf(tab1.k) = udf(udf(tab2.k)))
--- !query 13 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(v as string)) AS INT):int>
--- !query 13 output
+-- !query output
 1	2
 1	2
 1	2
@@ -209,7 +209,7 @@ struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(v as string)) AS IN
 2	3
 
 
--- !query 14
+-- !query
 SELECT * 
 FROM   (SELECT udf(tab1.k),
                udf(tab2.v)
@@ -223,33 +223,33 @@ FROM   (SELECT udf(tab2.v) AS k,
         FROM   tab1 
                JOIN tab2 
                  ON tab1.k = udf(tab2.k))
--- !query 14 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(v as string)) AS INT):int>
--- !query 14 output
+-- !query output
 
 
 
--- !query 15
+-- !query
 SELECT udf(v) FROM tab1 GROUP BY v
 INTERSECT ALL
 SELECT udf(udf(k)) FROM tab2 GROUP BY k
--- !query 15 schema
+-- !query schema
 struct<CAST(udf(cast(v as string)) AS INT):int>
--- !query 15 output
+-- !query output
 2
 3
 NULL
 
 
--- !query 16
+-- !query
 SET spark.sql.legacy.setopsPrecedence.enabled= true
--- !query 16 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 16 output
+-- !query output
 spark.sql.legacy.setopsPrecedence.enabled	true
 
 
--- !query 17
+-- !query
 SELECT udf(k), v FROM tab1
 EXCEPT
 SELECT k, udf(v) FROM tab2
@@ -257,9 +257,9 @@ UNION ALL
 SELECT udf(k), udf(v) FROM tab1
 INTERSECT ALL
 SELECT udf(udf(k)), udf(v) FROM tab2
--- !query 17 schema
+-- !query schema
 struct<CAST(udf(cast(k as string)) AS INT):int,v:int>
--- !query 17 output
+-- !query output
 1	2
 1	2
 2	3
@@ -267,7 +267,7 @@ NULL	NULL
 NULL	NULL
 
 
--- !query 18
+-- !query
 SELECT k, udf(v) FROM tab1
 EXCEPT
 SELECT udf(k), v FROM tab2
@@ -275,33 +275,33 @@ UNION ALL
 SELECT udf(k), udf(v) FROM tab1
 INTERSECT
 SELECT udf(k), udf(udf(v)) FROM tab2
--- !query 18 schema
+-- !query schema
 struct<k:int,CAST(udf(cast(v as string)) AS INT):int>
--- !query 18 output
+-- !query output
 1	2
 2	3
 NULL	NULL
 
 
--- !query 19
+-- !query
 SET spark.sql.legacy.setopsPrecedence.enabled = false
--- !query 19 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 19 output
+-- !query output
 spark.sql.legacy.setopsPrecedence.enabled	false
 
 
--- !query 20
+-- !query
 DROP VIEW IF EXISTS tab1
--- !query 20 schema
+-- !query schema
 struct<>
--- !query 20 output
+-- !query output
 
 
 
--- !query 21
+-- !query
 DROP VIEW IF EXISTS tab2
--- !query 21 schema
+-- !query schema
 struct<>
--- !query 21 output
+-- !query output
 

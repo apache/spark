@@ -18,26 +18,31 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+
 ### Description
+
 You can alter metadata associated with a database by setting `DBPROPERTIES`.  The specified property
 values override any existing value with the same property name. Please note that the usage of 
-`SCHEMA` and `DATABASE` are interchangable and one can be used in place of the other. An error message
+`SCHEMA` and `DATABASE` are interchangeable and one can be used in place of the other. An error message
 is issued if the database is not found in the system. This command is mostly used to record the metadata
 for a database and may be used for auditing purposes.
 
 ### Syntax
-{% highlight sql %}
-ALTER {DATABASE | SCHEMA} database_name SET DBPROPERTIES (propery_name=property_value, ...);
-{% endhighlight %}
+
+```sql
+ALTER { DATABASE | SCHEMA } database_name
+    SET DBPROPERTIES ( property_name = property_value [ , ... ] )
+```
 
 ### Parameters
-<dl>
-  <dt><code><em>database_name</em></code></dt>
-  <dd>Specifies the name of the database to be altered.</dd>
-</dl>
+
+* **database_name**
+
+    Specifies the name of the database to be altered.
 
 ### Examples
-{% highlight sql %}
+
+```sql
 -- Creates a database named `inventory`.
 CREATE DATABASE inventory;
 
@@ -46,16 +51,16 @@ ALTER DATABASE inventory SET DBPROPERTIES ('Edited-by' = 'John', 'Edit-date' = '
 
 -- Verify that properties are set.
 DESCRIBE DATABASE EXTENDED inventory;
-
-   +-------------------------+--------------------------------------------+
-   |database_description_item|database_description_value                  |
-   +-------------------------+--------------------------------------------+
-   |Database Name            |inventory                                   |
-   |Description              |                                            |
-   |Location                 |file:/temp/spark-warehouse/inventory.db     |
-   |Properties               |((Edit-date,01/01/2001), (Edited-by,John))  |
-   +-------------------------+--------------------------------------------+
-{% endhighlight %}
++-------------------------+------------------------------------------+
+|database_description_item|                database_description_value|
++-------------------------+------------------------------------------+
+|            Database Name|                                 inventory|
+|              Description|                                          |
+|                 Location|   file:/temp/spark-warehouse/inventory.db|
+|               Properties|((Edit-date,01/01/2001), (Edited-by,John))|
++-------------------------+------------------------------------------+
+```
 
 ### Related Statements
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+
+* [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)

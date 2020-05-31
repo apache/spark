@@ -310,7 +310,7 @@ case class InMemoryTableScanExec(
     val buffers = relation.cacheBuilder.cachedColumnBuffers
 
     buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
-      val partitionFilter = newPredicate(
+      val partitionFilter = Predicate.create(
         partitionFilters.reduceOption(And).getOrElse(Literal(true)),
         schema)
       partitionFilter.initialize(index)

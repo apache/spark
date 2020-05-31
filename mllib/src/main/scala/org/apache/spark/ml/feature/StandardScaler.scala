@@ -24,10 +24,8 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.feature.{StandardScaler => OldStandardScaler}
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -109,13 +107,13 @@ class StandardScaler @Since("1.4.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map {
-      case Row(v: Vector) => OldVectors.fromML(v)
-    }
-    val scaler = new OldStandardScaler(withMean = $(withMean), withStd = $(withStd))
-    val scalerModel = scaler.fit(input)
-    copyValues(new StandardScalerModel(uid, scalerModel.std.compressed,
-      scalerModel.mean.compressed).setParent(this))
+
+    val Row(mean: Vector, std: Vector) = dataset
+      .select(Summarizer.metrics("mean", "std").summary(col($(inputCol))).as("summary"))
+      .select("summary.mean", "summary.std")
+      .first()
+
+    copyValues(new StandardScalerModel(uid, std.compressed, mean.compressed).setParent(this))
   }
 
   @Since("1.4.0")
@@ -159,7 +157,7 @@ class StandardScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val shift = if ($(withMean)) mean.toArray else Array.emptyDoubleArray
     val scale = if ($(withStd)) {
       std.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
@@ -168,12 +166,18 @@ class StandardScalerModel private[ml] (
     val func = getTransformFunc(shift, scale, $(withMean), $(withStd))
     val transformer = udf(func)
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), mean.size)
+    }
+    outputSchema
   }
 
   @Since("1.4.1")
@@ -184,6 +188,12 @@ class StandardScalerModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new StandardScalerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"StandardScalerModel: uid=$uid, numFeatures=${mean.size}, withMean=${$(withMean)}, " +
+      s"withStd=${$(withStd)}"
+  }
 }
 
 @Since("1.6.0")
@@ -271,7 +281,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     values
   }
 
-  private[ml] def getTransformFunc(
+  private[spark] def getTransformFunc(
       shift: Array[Double],
       scale: Array[Double],
       withShift: Boolean,

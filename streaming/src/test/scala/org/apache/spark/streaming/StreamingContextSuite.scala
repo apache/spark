@@ -293,7 +293,8 @@ class StreamingContextSuite
     }
   }
 
-  test("stop gracefully") {
+  // TODO (SPARK-31728): re-enable it
+  ignore("stop gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.dummyTimeConfig", "3600s")
     val sc = new SparkContext(conf)
@@ -984,7 +985,7 @@ object SlowTestReceiver {
 }
 
 /** Streaming application for testing DStream and RDD creation sites */
-package object testPackage extends Assertions {
+object testPackage extends Assertions {
   def test(): Unit = {
     val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
     val ssc = new StreamingContext(conf, Milliseconds(100))

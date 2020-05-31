@@ -20,6 +20,7 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConverters._
 import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
 
@@ -27,7 +28,7 @@ import com.google.common.collect.Interners
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
@@ -62,6 +63,7 @@ private[spark] abstract class LiveEntity {
 private class LiveJob(
     val jobId: Int,
     name: String,
+    description: Option[String],
     val submissionTime: Option[Date],
     val stageIds: Seq[Int],
     jobGroup: Option[String],
@@ -92,7 +94,7 @@ private class LiveJob(
     val info = new v1.JobData(
       jobId,
       name,
-      None, // description is always None?
+      description,
       submissionTime,
       completionTime,
       stageIds,
@@ -183,6 +185,19 @@ private class LiveTask(
       info.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis()))
     }
 
+    val hasMetrics = metrics.executorDeserializeTime >= 0
+
+    /**
+     * SPARK-26260: For non successful tasks, store the metrics as negative to avoid
+     * the calculation in the task summary. `toApi` method in the `TaskDataWrapper` will make
+     * it actual value.
+     */
+    val taskMetrics: v1.TaskMetrics = if (hasMetrics && !info.successful) {
+      makeNegative(metrics)
+    } else {
+      metrics
+    }
+
     new TaskDataWrapper(
       info.taskId,
       info.index,
@@ -198,30 +213,31 @@ private class LiveTask(
       newAccumulatorInfos(info.accumulables),
       errorMessage,
 
-      metrics.executorDeserializeTime,
-      metrics.executorDeserializeCpuTime,
-      metrics.executorRunTime,
-      metrics.executorCpuTime,
-      metrics.resultSize,
-      metrics.jvmGcTime,
-      metrics.resultSerializationTime,
-      metrics.memoryBytesSpilled,
-      metrics.diskBytesSpilled,
-      metrics.peakExecutionMemory,
-      metrics.inputMetrics.bytesRead,
-      metrics.inputMetrics.recordsRead,
-      metrics.outputMetrics.bytesWritten,
-      metrics.outputMetrics.recordsWritten,
-      metrics.shuffleReadMetrics.remoteBlocksFetched,
-      metrics.shuffleReadMetrics.localBlocksFetched,
-      metrics.shuffleReadMetrics.fetchWaitTime,
-      metrics.shuffleReadMetrics.remoteBytesRead,
-      metrics.shuffleReadMetrics.remoteBytesReadToDisk,
-      metrics.shuffleReadMetrics.localBytesRead,
-      metrics.shuffleReadMetrics.recordsRead,
-      metrics.shuffleWriteMetrics.bytesWritten,
-      metrics.shuffleWriteMetrics.writeTime,
-      metrics.shuffleWriteMetrics.recordsWritten,
+      hasMetrics,
+      taskMetrics.executorDeserializeTime,
+      taskMetrics.executorDeserializeCpuTime,
+      taskMetrics.executorRunTime,
+      taskMetrics.executorCpuTime,
+      taskMetrics.resultSize,
+      taskMetrics.jvmGcTime,
+      taskMetrics.resultSerializationTime,
+      taskMetrics.memoryBytesSpilled,
+      taskMetrics.diskBytesSpilled,
+      taskMetrics.peakExecutionMemory,
+      taskMetrics.inputMetrics.bytesRead,
+      taskMetrics.inputMetrics.recordsRead,
+      taskMetrics.outputMetrics.bytesWritten,
+      taskMetrics.outputMetrics.recordsWritten,
+      taskMetrics.shuffleReadMetrics.remoteBlocksFetched,
+      taskMetrics.shuffleReadMetrics.localBlocksFetched,
+      taskMetrics.shuffleReadMetrics.fetchWaitTime,
+      taskMetrics.shuffleReadMetrics.remoteBytesRead,
+      taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk,
+      taskMetrics.shuffleReadMetrics.localBytesRead,
+      taskMetrics.shuffleReadMetrics.recordsRead,
+      taskMetrics.shuffleWriteMetrics.bytesWritten,
+      taskMetrics.shuffleWriteMetrics.writeTime,
+      taskMetrics.shuffleWriteMetrics.recordsWritten,
 
       stageId,
       stageAttemptId)
@@ -229,7 +245,22 @@ private class LiveTask(
 
 }
 
-private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
+private class LiveResourceProfile(
+    val resourceProfileId: Int,
+    val executorResources: Map[String, ExecutorResourceRequest],
+    val taskResources: Map[String, TaskResourceRequest],
+    val maxTasksPerExecutor: Option[Int]) extends LiveEntity {
+
+  def toApi(): v1.ResourceProfileInfo = {
+    new v1.ResourceProfileInfo(resourceProfileId, executorResources, taskResources)
+  }
+
+  override protected def doUpdate(): Any = {
+    new ResourceProfileWrapper(toApi())
+  }
+}
+
+private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
 
   var hostPort: String = null
   var host: String = null
@@ -268,6 +299,8 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   var totalOffHeap = 0L
   var usedOnHeap = 0L
   var usedOffHeap = 0L
+
+  var resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
   def hasMemoryInfo: Boolean = totalOnHeap >= 0L
 
@@ -311,7 +344,8 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       blacklistedInStages,
       Some(peakExecutorMetrics).filter(_.isSet),
       attributes,
-      resources)
+      resources,
+      resourceProfileId)
     new ExecutorSummaryWrapper(info)
   }
 }
@@ -449,7 +483,8 @@ private class LiveStage extends LiveEntity {
       accumulatorUpdates = newAccumulatorInfos(info.accumulables.values),
       tasks = None,
       executorSummary = None,
-      killedTasksSummary = killedSummary)
+      killedTasksSummary = killedSummary,
+      resourceProfileId = info.resourceProfileId)
   }
 
   override protected def doUpdate(): Any = {
@@ -610,10 +645,22 @@ private class SchedulerPool(name: String) extends LiveEntity {
 
 }
 
-private object LiveEntityHelpers {
+private[spark] object LiveEntityHelpers {
 
   private val stringInterner = Interners.newWeakInterner[String]()
 
+  private def accuValuetoString(value: Any): String = value match {
+    case list: java.util.List[_] =>
+      // SPARK-30379: For collection accumulator, string representation might
+      // takes much more memory (e.g. long => string of it) and cause OOM.
+      // So we only show first few elements.
+      if (list.size() > 5) {
+        list.asScala.take(5).mkString("[", ",", "," + "... " + (list.size() - 5) + " more items]")
+      } else {
+        list.toString
+      }
+    case _ => value.toString
+  }
 
   def newAccumulatorInfos(accums: Iterable[AccumulableInfo]): Seq[v1.AccumulableInfo] = {
     accums
@@ -626,8 +673,8 @@ private object LiveEntityHelpers {
         new v1.AccumulableInfo(
           acc.id,
           acc.name.map(weakIntern).orNull,
-          acc.update.map(_.toString()),
-          acc.value.map(_.toString()).orNull)
+          acc.update.map(accuValuetoString),
+          acc.value.map(accuValuetoString).orNull)
       }
       .toSeq
   }
@@ -707,6 +754,46 @@ private object LiveEntityHelpers {
   /** Subtract m2 values from m1. */
   def subtractMetrics(m1: v1.TaskMetrics, m2: v1.TaskMetrics): v1.TaskMetrics = {
     addMetrics(m1, m2, -1)
+  }
+
+  /**
+   * Convert all the metric values to negative as well as handle zero values.
+   * This method assumes that all the metric values are greater than or equal to zero
+   */
+  def makeNegative(m: v1.TaskMetrics): v1.TaskMetrics = {
+    // To handle 0 metric value, add  1 and make the metric negative.
+    // To recover actual value do `math.abs(metric + 1)`
+    // Eg: if the metric values are (5, 3, 0, 1) => Updated metric values will be (-6, -4, -1, -2)
+    // To get actual metric value, do math.abs(metric + 1) => (5, 3, 0, 1)
+    def updateMetricValue(metric: Long): Long = {
+      metric * -1L - 1L
+    }
+
+    createMetrics(
+      updateMetricValue(m.executorDeserializeTime),
+      updateMetricValue(m.executorDeserializeCpuTime),
+      updateMetricValue(m.executorRunTime),
+      updateMetricValue(m.executorCpuTime),
+      updateMetricValue(m.resultSize),
+      updateMetricValue(m.jvmGcTime),
+      updateMetricValue(m.resultSerializationTime),
+      updateMetricValue(m.memoryBytesSpilled),
+      updateMetricValue(m.diskBytesSpilled),
+      updateMetricValue(m.peakExecutionMemory),
+      updateMetricValue(m.inputMetrics.bytesRead),
+      updateMetricValue(m.inputMetrics.recordsRead),
+      updateMetricValue(m.outputMetrics.bytesWritten),
+      updateMetricValue(m.outputMetrics.recordsWritten),
+      updateMetricValue(m.shuffleReadMetrics.remoteBlocksFetched),
+      updateMetricValue(m.shuffleReadMetrics.localBlocksFetched),
+      updateMetricValue(m.shuffleReadMetrics.fetchWaitTime),
+      updateMetricValue(m.shuffleReadMetrics.remoteBytesRead),
+      updateMetricValue(m.shuffleReadMetrics.remoteBytesReadToDisk),
+      updateMetricValue(m.shuffleReadMetrics.localBytesRead),
+      updateMetricValue(m.shuffleReadMetrics.recordsRead),
+      updateMetricValue(m.shuffleWriteMetrics.bytesWritten),
+      updateMetricValue(m.shuffleWriteMetrics.writeTime),
+      updateMetricValue(m.shuffleWriteMetrics.recordsWritten))
   }
 
   private def addMetrics(m1: v1.TaskMetrics, m2: v1.TaskMetrics, mult: Int): v1.TaskMetrics = {

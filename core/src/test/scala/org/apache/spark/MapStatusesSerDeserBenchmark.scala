@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.benchmark.BenchmarkBase
 import org.apache.spark.scheduler.CompressedMapStatus

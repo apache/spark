@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -59,10 +60,12 @@ object TypeCoercion {
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
-      Division(conf) ::
+      Division ::
+      IntegralDivision ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
+      StringLiteralCoercion ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -132,12 +135,9 @@ object TypeCoercion {
     case (NullType, StringType) => Some(StringType)
 
     // Cast to TimestampType when we compare DateType with TimestampType
-    // if conf.compareDateTimestampInTimestamp is true
     // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
-    case (TimestampType, DateType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
-    case (DateType, TimestampType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
+    case (TimestampType, DateType) => Some(TimestampType)
+    case (DateType, TimestampType) => Some(TimestampType)
 
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
@@ -246,7 +246,7 @@ object TypeCoercion {
    * string. If the wider decimal type exceeds system limitation, this rule will truncate
    * the decimal type before return it.
    */
-  private[analysis] def findWiderTypeWithoutStringPromotionForTwo(
+  private[catalyst] def findWiderTypeWithoutStringPromotionForTwo(
       t1: DataType,
       t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
@@ -473,8 +473,7 @@ object TypeCoercion {
         val rhs = sub.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeForBinaryComparison(l.dataType, r.dataType, conf)
-            .orElse(findTightestCommonType(l.dataType, r.dataType))
+          findWiderTypeForTwo(l.dataType, r.dataType)
         }
 
         // The number of columns/expressions must match between LHS and RHS of an
@@ -557,10 +556,10 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ CreateArray(children) if !haveSameType(children.map(_.dataType)) =>
+      case a @ CreateArray(children, _) if !haveSameType(children.map(_.dataType)) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
-          case Some(finalDataType) => CreateArray(children.map(castIfNotSameType(_, finalDataType)))
+          case Some(finalDataType) => a.copy(children.map(castIfNotSameType(_, finalDataType)))
           case None => a
         }
 
@@ -596,7 +595,7 @@ object TypeCoercion {
           case None => m
         }
 
-      case m @ CreateMap(children) if m.keys.length == m.values.length &&
+      case m @ CreateMap(children, _) if m.keys.length == m.values.length &&
           (!haveSameType(m.keys.map(_.dataType)) || !haveSameType(m.values.map(_.dataType))) =>
         val keyTypes = m.keys.map(_.dataType)
         val newKeys = findWiderCommonType(keyTypes) match {
@@ -610,7 +609,7 @@ object TypeCoercion {
           case None => m.values
         }
 
-        CreateMap(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
+        m.copy(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
@@ -666,7 +665,7 @@ object TypeCoercion {
    * Hive only performs integral division with the DIV operator. The arguments to / are always
    * converted to fractional types.
    */
-  case class Division(conf: SQLConf)  extends TypeCoercionRule {
+  object Division extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
@@ -677,18 +676,29 @@ object TypeCoercion {
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
       case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
-        val preferIntegralDivision = conf.usePostgreSQLDialect
-        (left.dataType, right.dataType) match {
-          case (_: IntegralType, _: IntegralType) if preferIntegralDivision =>
-            IntegralDivide(left, right)
-          case _ =>
-            Divide(Cast(left, DoubleType), Cast(right, DoubleType))
-        }
+        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
     }
 
     private def isNumericOrNull(ex: Expression): Boolean = {
       // We need to handle null types in case a query contains null literals.
       ex.dataType.isInstanceOf[NumericType] || ex.dataType == NullType
+    }
+  }
+
+  /**
+   * The DIV operator always returns long-type value.
+   * This rule cast the integral inputs to long type, to avoid overflow during calculation.
+   */
+  object IntegralDivision extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case e if !e.childrenResolved => e
+      case d @ IntegralDivide(left, right) =>
+        IntegralDivide(mayCastToLong(left), mayCastToLong(right))
+    }
+
+    private def mayCastToLong(expr: Expression): Expression = expr.dataType match {
+      case _: ByteType | _: ShortType | _: IntegerType => Cast(expr, LongType)
+      case _ => expr
     }
   }
 
@@ -825,39 +835,21 @@ object TypeCoercion {
     }
   }
 
-  /**
-   * 1. Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
-   *    to TimeAdd/TimeSub.
-   * 2. Turns Add/Subtract of TimestampType/DateType/IntegerType
-   *    and TimestampType/IntegerType/DateType to DateAdd/DateSub/SubtractDates and
-   *    to SubtractTimestamps.
-   */
   object DateTimeOperations extends Rule[LogicalPlan] {
-
-    private val acceptedTypes = Seq(DateType, TimestampType, StringType)
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
+      case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case Add(l @ CalendarIntervalType(), r) if acceptedTypes.contains(r.dataType) =>
-        Cast(TimeAdd(r, l), r.dataType)
-      case Add(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
-        Cast(TimeAdd(l, r), l.dataType)
-      case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
-        Cast(TimeSub(l, r), l.dataType)
+      case s @ SubtractTimestamps(DateType(), _) =>
+        s.copy(endTimestamp = Cast(s.endTimestamp, TimestampType))
+      case s @ SubtractTimestamps(_, DateType()) =>
+        s.copy(startTimestamp = Cast(s.startTimestamp, TimestampType))
 
-      case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
-      case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
-      case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
-      case Subtract(l @ DateType(), r @ DateType()) =>
-        if (SQLConf.get.usePostgreSQLDialect) DateDiff(l, r) else SubtractDates(l, r)
-      case Subtract(l @ TimestampType(), r @ TimestampType()) =>
-        SubtractTimestamps(l, r)
-      case Subtract(l @ TimestampType(), r @ DateType()) =>
-        SubtractTimestamps(l, Cast(r, TimestampType))
-      case Subtract(l @ DateType(), r @ TimestampType()) =>
-        SubtractTimestamps(Cast(l, TimestampType), r)
+      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }
   }
 
@@ -865,14 +857,26 @@ object TypeCoercion {
    * Casts types according to the expected input types for [[Expression]]s.
    */
   object ImplicitTypeCasts extends TypeCoercionRule {
+
+    private def canHandleTypeCoercion(leftType: DataType, rightType: DataType): Boolean = {
+      (leftType, rightType) match {
+        case (_: DecimalType, NullType) => true
+        case (NullType, _: DecimalType) => true
+        case _ =>
+          // If DecimalType operands are involved except for the two cases above,
+          // DecimalPrecision will handle it.
+          !leftType.isInstanceOf[DecimalType] && !rightType.isInstanceOf[DecimalType] &&
+            leftType != rightType
+      }
+    }
+
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      // If DecimalType operands are involved, DecimalPrecision will handle it
-      case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
-          !right.dataType.isInstanceOf[DecimalType] && left.dataType != right.dataType =>
+      case b @ BinaryOperator(left, right)
+          if canHandleTypeCoercion(left.dataType, right.dataType) =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.
@@ -1065,6 +1069,34 @@ object TypeCoercion {
           Cast(e, t)
         case _ => boundary
       }
+    }
+  }
+
+  /**
+   * A special rule to support string literal as the second argument of date_add/date_sub functions,
+   * to keep backward compatibility as a temporary workaround.
+   * TODO(SPARK-28589): implement ANSI type type coercion and handle string literals.
+   */
+  object StringLiteralCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+      case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
+        val days = try {
+          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+        } catch {
+          case e: NumberFormatException => throw new AnalysisException(
+            "The second argument of 'date_add' function needs to be an integer.", cause = Some(e))
+        }
+        DateAdd(l, Literal(days))
+      case DateSub(l, r) if r.dataType == StringType && r.foldable =>
+        val days = try {
+          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+        } catch {
+          case e: NumberFormatException => throw new AnalysisException(
+            "The second argument of 'date_sub' function needs to be an integer.", cause = Some(e))
+        }
+        DateSub(l, Literal(days))
     }
   }
 }

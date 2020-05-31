@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming.continuous
 
+import java.sql.Timestamp
+
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql._
@@ -100,6 +102,21 @@ class ContinuousSuite extends ContinuousSuiteBase {
       CheckAnswer(0, 1, 2, 3, 4, 5))
   }
 
+  test("SPARK-29642: basic with various types") {
+    val input = ContinuousMemoryStream[String]
+
+    testStream(input.toDF())(
+      AddData(input, "0", "1", "2"),
+      CheckAnswer("0", "1", "2"))
+
+    val input2 = ContinuousMemoryStream[(String, Timestamp)]
+
+    val timestamp = Timestamp.valueOf("2015-06-11 10:10:10.100")
+    testStream(input2.toDF())(
+      AddData(input2, ("0", timestamp), ("1", timestamp)),
+      CheckAnswer(("0", timestamp), ("1", timestamp)))
+  }
+
   test("map") {
     val input = ContinuousMemoryStream[Int]
     val df = input.toDF().map(_.getInt(0) * 2)
@@ -164,17 +181,19 @@ class ContinuousSuite extends ContinuousSuiteBase {
   }
 
   test("subquery alias") {
-    val input = ContinuousMemoryStream[Int]
-    input.toDF().createOrReplaceTempView("memory")
-    val test = spark.sql("select value from memory where value > 2")
+    withTempView("memory") {
+      val input = ContinuousMemoryStream[Int]
+      input.toDF().createOrReplaceTempView("memory")
+      val test = spark.sql("select value from memory where value > 2")
 
-    testStream(test)(
-      AddData(input, 0, 1),
-      CheckAnswer(),
-      StopStream,
-      AddData(input, 2, 3, 4),
-      StartStream(),
-      CheckAnswer(3, 4))
+      testStream(test)(
+        AddData(input, 0, 1),
+        CheckAnswer(),
+        StopStream,
+        AddData(input, 2, 3, 4),
+        StartStream(),
+        CheckAnswer(3, 4))
+    }
   }
 
   test("repeatedly restart") {

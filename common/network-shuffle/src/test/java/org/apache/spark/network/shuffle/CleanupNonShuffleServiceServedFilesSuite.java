@@ -30,7 +30,6 @@ import java.util.stream.Stream;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -42,7 +41,7 @@ import org.apache.spark.network.util.TransportConf;
 public class CleanupNonShuffleServiceServedFilesSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
-  private Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
+  private Executor sameThreadExecutor = Runnable::run;
 
   private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 

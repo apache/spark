@@ -20,68 +20,58 @@ license: |
 ---
 
 ### Description
+
 The `INSERT OVERWRITE DIRECTORY` with Hive format overwrites the existing data in the directory with the new values using Hive `SerDe`.
 Hive support must be enabled to use this command. The inserted rows can be specified by value expressions or result from a query.
 
 ### Syntax
-{% highlight sql %}
+
+```sql
 INSERT OVERWRITE [ LOCAL ] DIRECTORY directory_path
-   [ ROW FORMAT row_format ] [ STORED AS file_format ]
-   { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
-{% endhighlight %}
+    [ ROW FORMAT row_format ] [ STORED AS file_format ]
+    { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
+```
 
 ### Parameters
-<dl>
-  <dt><code><em>directory_path</em></code></dt>
-  <dd>
-  Specifies the destination directory. The <code>LOCAL</code> keyword is used to specify that the directory is on the local file system.
-  </dd>
-</dl>
 
-<dl>
-  <dt><code><em>row_format</em></code></dt>
-  <dd>
-  Specifies the row format for this insert. Valid options are <code>SERDE</code> clause and <code>DELIMITED</code> clause. <code>SERDE</code> clause can be used to specify a custom <code>SerDe</code> for this insert. Alternatively, <code>DELIMITED</code> clause can be used to specify the native <code>SerDe</code> and state the delimiter, escape character, null character, and so on.
-  </dd>
-</dl>
+* **directory_path**
 
-<dl>
-  <dt><code><em>file_format</em></code></dt>
-  <dd>
-  Specifies the file format for this insert. Valid options are <code>TEXTFILE</code>, <code>SEQUENCEFILE</code>, <code>RCFILE</code>, <code>ORC</code>, <code>PARQUET</code>, and <code>AVRO</code>. You can also specify your own input and output format using <code>INPUTFORMAT</code> and <code>OUTPUTFORMAT</code>. <code>ROW FORMAT SERDE</code> can only be used with <code>TEXTFILE</code>, <code>SEQUENCEFILE</code>, or <code>RCFILE</code>, while <code>ROW FORMAT DELIMITED</code> can only be used with <code>TEXTFILE</code>.
-  </dd>
-</dl>
+    Specifies the destination directory. The `LOCAL` keyword is used to specify that the directory is on the local file system.
 
-<dl>
-  <dt><code><em>VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]</em></code></dt>
-  <dd>
-  Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.
-  </dd>
-</dl>
+* **row_format**
 
-<dl>
-  <dt><code><em>query</em></code></dt>
-  <dd>A query that produces the rows to be inserted. It can be in one of following formats:
-    <ul>
-      <li>a <code>SELECT</code> statement</li>
-      <li>a <code>TABLE</code> statement</li>
-      <li>a <code>FROM</code> statement</li>
-    </ul>
-   </dd>
-</dl>
+    Specifies the row format for this insert. Valid options are `SERDE` clause and `DELIMITED` clause. `SERDE` clause can be used to specify a custom `SerDe` for this insert. Alternatively, `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
+
+* **file_format**
+
+    Specifies the file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. You can also specify your own input and output format using `INPUTFORMAT` and `OUTPUTFORMAT`. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`.
+
+* **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
+
+    Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted.
+    A comma must be used to separate each value in the clause. More than one set of values can be specified to insert multiple rows.
+
+* **query**
+
+    A query that produces the rows to be inserted. It can be in one of following formats:
+    * a `SELECT` statement
+    * a `TABLE` statement
+    * a `FROM` statement
 
 ### Examples
-{% highlight sql %}
- INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
-     STORED AS orc
-     SELECT * FROM test_table;
 
- INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
-     ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-     SELECT * FROM test_table;
-{% endhighlight %}
+```sql
+INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
+    STORED AS orc
+    SELECT * FROM test_table;
+
+INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+    SELECT * FROM test_table;
+```
 
 ### Related Statements
-  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
-  * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
-  * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
+
+* [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
+* [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
+* [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)

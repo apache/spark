@@ -157,19 +157,44 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
-      val mergeExpressions = functions.zip(expressions).flatMap {
-        case (ae: DeclarativeAggregate, expression) =>
-          expression.mode match {
-            case Partial | Complete => ae.updateExpressions
-            case PartialMerge | Final => ae.mergeExpressions
+      val mergeExpressions =
+        functions.zip(expressions.map(ae => (ae.mode, ae.isDistinct, ae.filter))).flatMap {
+          case (ae: DeclarativeAggregate, (mode, isDistinct, filter)) =>
+            mode match {
+              case Partial | Complete =>
+                if (filter.isDefined) {
+                  ae.updateExpressions.zip(ae.aggBufferAttributes).map {
+                    case (updateExpr, attr) => If(filter.get, updateExpr, attr)
+                  }
+                } else {
+                  ae.updateExpressions
+                }
+              case PartialMerge | Final => ae.mergeExpressions
+            }
+          case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+        }
+      // Initialize predicates for aggregate functions if necessary
+      val predicateOptions = expressions.map {
+        case AggregateExpression(_, mode, _, Some(filter), _) =>
+          mode match {
+            case Partial | Complete =>
+              val predicate = Predicate.create(filter, inputAttributes)
+              predicate.initialize(partIndex)
+              Some(predicate)
+            case _ => None
           }
-        case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+        case _ => None
       }
       val updateFunctions = functions.zipWithIndex.collect {
         case (ae: ImperativeAggregate, i) =>
           expressions(i).mode match {
             case Partial | Complete =>
-              (buffer: InternalRow, row: InternalRow) => ae.update(buffer, row)
+              if (predicateOptions(i).isDefined) {
+                (buffer: InternalRow, row: InternalRow) =>
+                  if (predicateOptions(i).get.eval(row)) { ae.update(buffer, row) }
+              } else {
+                (buffer: InternalRow, row: InternalRow) => ae.update(buffer, row)
+              }
             case PartialMerge | Final =>
               (buffer: InternalRow, row: InternalRow) => ae.merge(buffer, row)
           }

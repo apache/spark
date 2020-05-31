@@ -32,13 +32,13 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.Utils
 
@@ -53,7 +53,9 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with BlockingOperatorWithCodegen {
+  extends BaseAggregateExec
+    with BlockingOperatorWithCodegen
+    with AliasAwareOutputPartitioning {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -75,7 +77,7 @@ case class HashAggregateExec(
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
 
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
@@ -126,8 +128,8 @@ case class HashAggregateExec(
             initialInputBufferOffset,
             resultExpressions,
             (expressions, inputSchema) =>
-              newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
-            child.output,
+              MutableProjection.create(expressions, inputSchema),
+            inputAttributes,
             iter,
             testFallbackStartsAt,
             numOutputRows,
@@ -152,8 +154,10 @@ case class HashAggregateExec(
   override def usedInputs: AttributeSet = inputSet
 
   override def supportCodegen: Boolean = {
-    // ImperativeAggregate is not supported right now
-    !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
+    // ImperativeAggregate and filter predicate are not supported right now
+    // TODO: SPARK-30027 Support codegen for filter exprs in HashAggregateExec
+    !(aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) ||
+        aggregateExpressions.exists(_.filter.isDefined))
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -330,7 +334,7 @@ case class HashAggregateExec(
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ child.output
+    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ inputAttributes
     // To individually generate code for each aggregate function, an element in `updateExprs` holds
     // all the expressions for the buffer of an aggregation function.
     val updateExprs = aggregateExpressions.map { e =>
@@ -365,10 +369,10 @@ case class HashAggregateExec(
          """.stripMargin
       }
       code"""
-         |// do aggregate for ${aggNames(i)}
-         |// evaluate aggregate function
+         |${ctx.registerComment(s"do aggregate for ${aggNames(i)}")}
+         |${ctx.registerComment("evaluate aggregate function")}
          |${evaluateVariables(bufferEvalsForOneFunc)}
-         |// update aggregation buffers
+         |${ctx.registerComment("update aggregation buffers")}
          |${updates.mkString("\n").trim}
        """.stripMargin
     }
@@ -486,10 +490,9 @@ case class HashAggregateExec(
 
       // Create a MutableProjection to merge the rows of same key together
       val mergeExpr = declFunctions.flatMap(_.mergeExpressions)
-      val mergeProjection = newMutableProjection(
+      val mergeProjection = MutableProjection.create(
         mergeExpr,
-        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes),
-        subexpressionEliminationEnabled)
+        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes))
       val joinedRow = new JoinedRow()
 
       var currentKey: UnsafeRow = null
@@ -644,7 +647,8 @@ case class HashAggregateExec(
   private def checkIfFastHashMapSupported(ctx: CodegenContext): Boolean = {
     val isSupported =
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
-        f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
+        f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
+        f.dataType.isInstanceOf[CalendarIntervalType]) &&
         bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
 
     // For vectorized hash map, We do not support byte array based decimal type for aggregate values
@@ -656,7 +660,7 @@ case class HashAggregateExec(
     val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
       .forall(!DecimalType.isByteArrayDecimalType(_))
 
-    isSupported  && isNotByteArrayDecimalType
+    isSupported && isNotByteArrayDecimalType
   }
 
   private def enableTwoLevelHashMap(ctx: CodegenContext): Unit = {
@@ -685,9 +689,9 @@ case class HashAggregateExec(
 
     val thisPlan = ctx.addReferenceObj("plan", this)
 
-    // Create a name for the iterator from the fast hash map.
-    val iterTermForFastHashMap = if (isFastHashMapEnabled) {
-      // Generates the fast hash map class and creates the fash hash map term.
+    // Create a name for the iterator from the fast hash map, and the code to create fast hash map.
+    val (iterTermForFastHashMap, createFastHashMap) = if (isFastHashMapEnabled) {
+      // Generates the fast hash map class and creates the fast hash map term.
       val fastHashMapClassName = ctx.freshName("FastHashMap")
       if (isVectorizedHashMapEnabled) {
         val generatedMap = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
@@ -695,25 +699,30 @@ case class HashAggregateExec(
         ctx.addInnerClass(generatedMap)
 
         // Inline mutable state since not many aggregation operations in a task
-        fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, "vectorizedHastHashMap",
-          v => s"$v = new $fastHashMapClassName();", forceInline = true)
-        ctx.addMutableState(s"java.util.Iterator<InternalRow>", "vectorizedFastHashMapIter",
+        fastHashMapTerm = ctx.addMutableState(
+          fastHashMapClassName, "vectorizedFastHashMap", forceInline = true)
+        val iter = ctx.addMutableState(
+          "java.util.Iterator<InternalRow>",
+          "vectorizedFastHashMapIter",
           forceInline = true)
+        val create = s"$fastHashMapTerm = new $fastHashMapClassName();"
+        (iter, create)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
           fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
         ctx.addInnerClass(generatedMap)
 
         // Inline mutable state since not many aggregation operations in a task
-        fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, "fastHashMap",
-          v => s"$v = new $fastHashMapClassName(" +
-            s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());",
-          forceInline = true)
-        ctx.addMutableState(
+        fastHashMapTerm = ctx.addMutableState(
+          fastHashMapClassName, "fastHashMap", forceInline = true)
+        val iter = ctx.addMutableState(
           "org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>",
           "fastHashMapIter", forceInline = true)
+        val create = s"$fastHashMapTerm = new $fastHashMapClassName(" +
+          s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());"
+        (iter, create)
       }
-    }
+    } else ("", "")
 
     // Create a name for the iterator from the regular hash map.
     // Inline mutable state since not many aggregation operations in a task
@@ -721,8 +730,7 @@ case class HashAggregateExec(
       "mapIter", forceInline = true)
     // create hashMap
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
-    hashMapTerm = ctx.addMutableState(hashMapClassName, "hashMap",
-      v => s"$v = $thisPlan.createHashMap();", forceInline = true)
+    hashMapTerm = ctx.addMutableState(hashMapClassName, "hashMap", forceInline = true)
     sorterTerm = ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, "sorter",
       forceInline = true)
 
@@ -825,6 +833,8 @@ case class HashAggregateExec(
     s"""
        |if (!$initAgg) {
        |  $initAgg = true;
+       |  $createFastHashMap
+       |  $hashMapTerm = $thisPlan.createHashMap();
        |  long $beforeAgg = System.nanoTime();
        |  $doAggFuncName();
        |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
@@ -921,7 +931,7 @@ case class HashAggregateExec(
       }
     }
 
-    val inputAttr = aggregateBufferAttributes ++ child.output
+    val inputAttr = aggregateBufferAttributes ++ inputAttributes
     // Here we set `currentVars(0)` to `currentVars(numBufferSlots)` to null, so that when
     // generating code for buffer columns, we use `INPUT_ROW`(will be the buffer row), while
     // generating input columns, we use `currentVars`.
@@ -967,9 +977,9 @@ case class HashAggregateExec(
           CodeGenerator.updateColumn(unsafeRowBuffer, dt, bufferOffset + j, ev, nullable)
         }
         code"""
-           |// evaluate aggregate function for ${aggNames(i)}
+           |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
            |${evaluateVariables(rowBufferEvalsForOneFunc)}
-           |// update unsafe row buffer
+           |${ctx.registerComment("update unsafe row buffer")}
            |${updateRowBuffers.mkString("\n").trim}
          """.stripMargin
       }
@@ -1022,9 +1032,9 @@ case class HashAggregateExec(
                 isVectorized = true)
             }
             code"""
-               |// evaluate aggregate function for ${aggNames(i)}
+               |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
                |${evaluateVariables(fastRowEvalsForOneFunc)}
-               |// update fast row
+               |${ctx.registerComment("update fast row")}
                |${updateRowBuffer.mkString("\n").trim}
              """.stripMargin
           }

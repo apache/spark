@@ -16,19 +16,23 @@ CREATE TABLE TIMESTAMP_TBL (d1 timestamp) USING parquet;
 -- block is entered exactly at local midnight; then 'now' and 'today' have
 -- the same values and the counts will come out different.
 
-INSERT INTO TIMESTAMP_TBL VALUES ('now');
+-- PostgreSQL implicitly casts string literals to data with timestamp types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'));
 -- SELECT pg_sleep(0.1);
 
 -- BEGIN;
 
-INSERT INTO TIMESTAMP_TBL VALUES ('now');
-INSERT INTO TIMESTAMP_TBL VALUES ('today');
-INSERT INTO TIMESTAMP_TBL VALUES ('yesterday');
-INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow');
+-- PostgreSQL implicitly casts string literals to data with timestamp types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('today'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('yesterday'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow'));
 -- time zone should be ignored by this data type
-INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow EST');
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow EST'));
 -- [SPARK-29024] Ignore case while resolving time zones
-INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow Zulu');
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow Zulu'));
 
 SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp 'today';
 SELECT count(*) AS Three FROM TIMESTAMP_TBL WHERE d1 = timestamp 'tomorrow';
@@ -54,7 +58,9 @@ TRUNCATE TABLE TIMESTAMP_TBL;
 -- Special values
 -- INSERT INTO TIMESTAMP_TBL VALUES ('-infinity');
 -- INSERT INTO TIMESTAMP_TBL VALUES ('infinity');
-INSERT INTO TIMESTAMP_TBL VALUES ('epoch');
+-- PostgreSQL implicitly casts string literals to data with timestamp types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('epoch'));
 -- [SPARK-27923] Spark SQL insert there obsolete special values to NULL
 -- Obsolete special values
 -- INSERT INTO TIMESTAMP_TBL VALUES ('invalid');
@@ -73,14 +79,16 @@ INSERT INTO TIMESTAMP_TBL VALUES ('epoch');
 -- INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.6 1997 PST');
 
 -- ISO 8601 format
-INSERT INTO TIMESTAMP_TBL VALUES ('1997-01-02');
-INSERT INTO TIMESTAMP_TBL VALUES ('1997-01-02 03:04:05');
-INSERT INTO TIMESTAMP_TBL VALUES ('1997-02-10 17:32:01-08');
+-- PostgreSQL implicitly casts string literals to data with timestamp types, but
+-- Spark does not support that kind of implicit casts.
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('1997-01-02'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('1997-01-02 03:04:05'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('1997-02-10 17:32:01-08'));
 -- INSERT INTO TIMESTAMP_TBL VALUES ('1997-02-10 17:32:01-0800');
 -- INSERT INTO TIMESTAMP_TBL VALUES ('1997-02-10 17:32:01 -08:00');
 -- INSERT INTO TIMESTAMP_TBL VALUES ('19970210 173201 -0800');
 -- INSERT INTO TIMESTAMP_TBL VALUES ('1997-06-10 17:32:01 -07:00');
-INSERT INTO TIMESTAMP_TBL VALUES ('2001-09-22T18:19:20');
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp('2001-09-22T18:19:20'));
 
 -- POSIX format (note that the timezone abbrev is just decoration here)
 -- INSERT INTO TIMESTAMP_TBL VALUES ('2000-03-15 08:14:01 GMT+8');
@@ -192,15 +200,15 @@ SELECT '' AS `54`, d1 as `timestamp`,
     date_part( 'minute', d1) AS `minute`, date_part( 'second', d1) AS `second`
     FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01';
 
-SELECT '' AS `54`, d1 as `timestamp`,
-    date_part( 'quarter', d1) AS quarter, date_part( 'msec', d1) AS msec,
-    date_part( 'usec', d1) AS usec
-    FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01';
+-- SELECT '' AS `54`, d1 as `timestamp`,
+--     date_part( 'quarter', d1) AS quarter, date_part( 'msec', d1) AS msec,
+--     date_part( 'usec', d1) AS usec
+--     FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01';
 
-SELECT '' AS `54`, d1 as `timestamp`,
-    date_part( 'isoyear', d1) AS isoyear, date_part( 'week', d1) AS week,
-    date_part( 'dow', d1) AS dow
-    FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01';
+-- SELECT '' AS `54`, d1 as `timestamp`,
+--     date_part( 'isoyear', d1) AS isoyear, date_part( 'week', d1) AS week,
+--     date_part( 'dow', d1) AS dow
+--     FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01';
 
 -- [SPARK-28137] Data Type Formatting Functions
 -- TO_CHAR()

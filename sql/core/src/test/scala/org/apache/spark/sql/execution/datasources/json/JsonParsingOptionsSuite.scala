@@ -103,7 +103,7 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
   }
 
   // The following two tests are not really working - need to look into Jackson's
-  // JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS.
+  // JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.
   ignore("allowNonNumericNumbers off") {
     val str = """{"age": NaN}"""
     val df = spark.read.json(Seq(str).toDS())

@@ -29,12 +29,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.sasl.SaslRpcHandler;
+import org.apache.spark.network.server.AbstractAuthRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -46,7 +45,7 @@ import org.apache.spark.network.util.TransportConf;
  * The delegate will only receive messages if the given connection has been successfully
  * authenticated. A connection may be authenticated at most once.
  */
-class AuthRpcHandler extends RpcHandler {
+class AuthRpcHandler extends AbstractAuthRpcHandler {
   private static final Logger LOG = LoggerFactory.getLogger(AuthRpcHandler.class);
 
   /** Transport configuration. */
@@ -55,36 +54,31 @@ class AuthRpcHandler extends RpcHandler {
   /** The client channel. */
   private final Channel channel;
 
-  /**
-   * RpcHandler we will delegate to for authenticated connections. When falling back to SASL
-   * this will be replaced with the SASL RPC handler.
-   */
-  @VisibleForTesting
-  RpcHandler delegate;
-
   /** Class which provides secret keys which are shared by server and client on a per-app basis. */
   private final SecretKeyHolder secretKeyHolder;
 
-  /** Whether auth is done and future calls should be delegated. */
+  /** RPC handler for auth handshake when falling back to SASL auth. */
   @VisibleForTesting
-  boolean doDelegate;
+  SaslRpcHandler saslHandler;
 
   AuthRpcHandler(
       TransportConf conf,
       Channel channel,
       RpcHandler delegate,
       SecretKeyHolder secretKeyHolder) {
+    super(delegate);
     this.conf = conf;
     this.channel = channel;
-    this.delegate = delegate;
     this.secretKeyHolder = secretKeyHolder;
   }
 
   @Override
-  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
-    if (doDelegate) {
-      delegate.receive(client, message, callback);
-      return;
+  protected boolean doAuthChallenge(
+      TransportClient client,
+      ByteBuffer message,
+      RpcResponseCallback callback) {
+    if (saslHandler != null) {
+      return saslHandler.doAuthChallenge(client, message, callback);
     }
 
     int position = message.position();
@@ -98,18 +92,17 @@ class AuthRpcHandler extends RpcHandler {
       if (conf.saslFallback()) {
         LOG.warn("Failed to parse new auth challenge, reverting to SASL for client {}.",
           channel.remoteAddress());
-        delegate = new SaslRpcHandler(conf, channel, delegate, secretKeyHolder);
+        saslHandler = new SaslRpcHandler(conf, channel, null, secretKeyHolder);
         message.position(position);
         message.limit(limit);
-        delegate.receive(client, message, callback);
-        doDelegate = true;
+        return saslHandler.doAuthChallenge(client, message, callback);
       } else {
         LOG.debug("Unexpected challenge message from client {}, closing channel.",
           channel.remoteAddress());
         callback.onFailure(new IllegalArgumentException("Unknown challenge message."));
         channel.close();
       }
-      return;
+      return false;
     }
 
     // Here we have the client challenge, so perform the new auth protocol and set up the channel.
@@ -125,12 +118,13 @@ class AuthRpcHandler extends RpcHandler {
       response.encode(responseData);
       callback.onSuccess(responseData.nioBuffer());
       engine.sessionCipher().addToChannel(channel);
+      client.setClientId(challenge.appId);
     } catch (Exception e) {
       // This is a fatal error: authentication has failed. Close the channel explicitly.
       LOG.debug("Authentication failed for client {}, closing channel.", channel.remoteAddress());
       callback.onFailure(new IllegalArgumentException("Authentication failed."));
       channel.close();
-      return;
+      return false;
     } finally {
       if (engine != null) {
         try {
@@ -142,40 +136,6 @@ class AuthRpcHandler extends RpcHandler {
     }
 
     LOG.debug("Authorization successful for client {}.", channel.remoteAddress());
-    doDelegate = true;
+    return true;
   }
-
-  @Override
-  public void receive(TransportClient client, ByteBuffer message) {
-    delegate.receive(client, message);
-  }
-
-  @Override
-  public StreamCallbackWithID receiveStream(
-      TransportClient client,
-      ByteBuffer message,
-      RpcResponseCallback callback) {
-    return delegate.receiveStream(client, message, callback);
-  }
-
-  @Override
-  public StreamManager getStreamManager() {
-    return delegate.getStreamManager();
-  }
-
-  @Override
-  public void channelActive(TransportClient client) {
-    delegate.channelActive(client);
-  }
-
-  @Override
-  public void channelInactive(TransportClient client) {
-    delegate.channelInactive(client);
-  }
-
-  @Override
-  public void exceptionCaught(Throwable cause, TransportClient client) {
-    delegate.exceptionCaught(cause, client);
-  }
-
 }

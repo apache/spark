@@ -20,49 +20,54 @@ license: |
 ---
 
 ### Description
+
 Views are based on the result-set of an `SQL` query. `CREATE VIEW` constructs
 a virtual table that has no physical data therefore other operations like
 `ALTER VIEW` and `DROP VIEW` only change metadata. 
 
 ### Syntax
-{% highlight sql %}
-CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_name
-    create_view_clauses
-    AS query;
-{% endhighlight %}
+
+```sql
+CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_identifier
+    create_view_clauses AS query
+```
 
 ### Parameters
-<dl>
-  <dt><code><em>OR REPLACE</em></code></dt>
-  <dd>If a view of same name already exists, it will be replaced.</dd>
-</dl>
-<dl>
-  <dt><code><em>[GLOBAL] TEMPORARY</em></code></dt>
-  <dd>TEMPORARY views are session-scoped and will be dropped when session ends 
-      because it skips persisting the definition in the underlying metastore, if any.
-      GLOBAL TEMPORARY views are tied to a system preserved temporary database `global_temp`.</dd>
-</dl>
-<dl>
-  <dt><code><em>IF NOT EXISTS</em></code></dt>
-  <dd>Creates a view if it does not exists.</dd>
-</dl>
-<dl>
-  <dt><code><em>create_view_clauses</em></code></dt>
-  <dd>These clauses are optional and order insensitive. It can be of following formats.
-    <ul>
-      <li><code>[(column_name [COMMENT column_comment], ...) ]</code> to specify column-level comments.</li>
-      <li><code>[COMMENT view_comment]</code> to specify view-level comments.</li>
-      <li><code>[TBLPROPERTIES (property_name = property_value, ...)]</code> to add metadata key-value pairs.</li>
-    </ul>  
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>query</em></code></dt>
-  <dd>A <a href="sql-ref-syntax-qry-select.md">SELECT</a> statement that constructs the view from base tables or other views.</dd>
-</dl>
+
+* **OR REPLACE**
+
+    If a view of same name already exists, it will be replaced.
+
+* **[ GLOBAL ] TEMPORARY**
+
+    TEMPORARY views are session-scoped and will be dropped when session ends
+    because it skips persisting the definition in the underlying metastore, if any.
+    GLOBAL TEMPORARY views are tied to a system preserved temporary database `global_temp`.
+
+* **IF NOT EXISTS**
+
+    Creates a view if it does not exist.
+
+* **view_identifier**
+
+    Specifies a view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
+
+* **create_view_clauses**
+
+    These clauses are optional and order insensitive. It can be of following formats.
+
+    * `[ ( column_name [ COMMENT column_comment ], ... ) ]` to specify column-level comments.
+    * `[ COMMENT view_comment ]` to specify view-level comments.
+    * `[ TBLPROPERTIES ( property_name = property_value [ , ... ] ) ]` to add metadata key-value pairs.
+
+* **query**
+  A [SELECT](sql-ref-syntax-qry-select.html) statement that constructs the view from base tables or other views.
 
 ### Examples
-{% highlight sql %}
+
+```sql
 -- Create or replace view for `experienced_employee` with comments.
 CREATE OR REPLACE VIEW experienced_employee
     (ID COMMENT 'Unique identification number', Name) 
@@ -75,8 +80,10 @@ CREATE GLOBAL TEMPORARY VIEW IF NOT EXISTS subscribed_movies
     AS SELECT mo.member_id, mb.full_name, mo.movie_title
         FROM movies AS mo INNER JOIN members AS mb 
         ON mo.member_id = mb.id;
-{% endhighlight %}
+```
 
 ### Related Statements
-- [ALTER VIEW](sql-ref-syntax-ddl-alter-view.md)
-- [DROP VIEW](sql-ref-syntax-ddl-drop-view.md)
+
+* [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
+* [DROP VIEW](sql-ref-syntax-ddl-drop-view.html)
+* [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)

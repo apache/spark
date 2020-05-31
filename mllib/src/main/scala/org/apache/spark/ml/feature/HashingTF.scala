@@ -42,14 +42,17 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
  * otherwise the features will not be mapped evenly to the columns.
  */
 @Since("1.2.0")
-class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+class HashingTF @Since("3.0.0") private[ml] (
+    @Since("1.4.0") override val uid: String,
+    @Since("3.1.0") val hashFuncVersion: Int)
   extends Transformer with HasInputCol with HasOutputCol with HasNumFeatures
     with DefaultParamsWritable {
 
-  private var hashFunc: Any => Int = FeatureHasher.murmur3Hash
-
   @Since("1.2.0")
-  def this() = this(Identifiable.randomUID("hashingTF"))
+  def this() = this(Identifiable.randomUID("hashingTF"), HashingTF.SPARK_3_MURMUR3_HASH)
+
+  @Since("1.4.0")
+  def this(uid: String) = this(uid, hashFuncVersion = HashingTF.SPARK_3_MURMUR3_HASH)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -122,15 +125,37 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    */
   @Since("3.0.0")
   def indexOf(term: Any): Int = {
-    Utils.nonNegativeMod(hashFunc(term), $(numFeatures))
+    val hashValue = hashFuncVersion match {
+      case HashingTF.SPARK_2_MURMUR3_HASH => OldHashingTF.murmur3Hash(term)
+      case HashingTF.SPARK_3_MURMUR3_HASH => FeatureHasher.murmur3Hash(term)
+      case _ => throw new IllegalArgumentException("Illegal hash function version setting.")
+    }
+    Utils.nonNegativeMod(hashValue, $(numFeatures))
   }
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"HashingTF: uid=$uid, binary=${$(binary)}, numFeatures=${$(numFeatures)}"
+  }
+
+  @Since("3.0.0")
+  override def save(path: String): Unit = {
+    require(hashFuncVersion == HashingTF.SPARK_3_MURMUR3_HASH,
+      "Cannot save model which is loaded from lower version spark saved model. We can address " +
+      "it by (1) use old spark version to save the model, or (2) use new version spark to " +
+      "re-train the pipeline.")
+    super.save(path)
+  }
 }
 
 @Since("1.6.0")
 object HashingTF extends DefaultParamsReadable[HashingTF] {
+
+  private[ml] val SPARK_2_MURMUR3_HASH = 1
+  private[ml] val SPARK_3_MURMUR3_HASH = 2
 
   private class HashingTFReader extends MLReader[HashingTF] {
 
@@ -138,16 +163,18 @@ object HashingTF extends DefaultParamsReadable[HashingTF] {
 
     override def load(path: String): HashingTF = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val hashingTF = new HashingTF(metadata.uid)
-      metadata.getAndSetParams(hashingTF)
 
       // We support loading old `HashingTF` saved by previous Spark versions.
       // Previous `HashingTF` uses `mllib.feature.HashingTF.murmur3Hash`, but new `HashingTF` uses
       // `ml.Feature.FeatureHasher.murmur3Hash`.
       val (majorVersion, _) = majorMinorVersion(metadata.sparkVersion)
-      if (majorVersion < 3) {
-        hashingTF.hashFunc = OldHashingTF.murmur3Hash
+      val hashFuncVersion = if (majorVersion < 3) {
+        SPARK_2_MURMUR3_HASH
+      } else {
+        SPARK_3_MURMUR3_HASH
       }
+      val hashingTF = new HashingTF(metadata.uid, hashFuncVersion = hashFuncVersion)
+      metadata.getAndSetParams(hashingTF)
       hashingTF
     }
   }

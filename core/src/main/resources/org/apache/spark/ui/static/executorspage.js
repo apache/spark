@@ -119,7 +119,7 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 var sumOptionalColumns = [3, 4];
-var execOptionalColumns = [5, 6, 9];
+var execOptionalColumns = [5, 6, 9, 10];
 var execDataTable;
 var sumDataTable;
 
@@ -415,6 +415,7 @@ $(document).ready(function () {
                         {data: 'diskUsed', render: formatBytes},
                         {data: 'totalCores'},
                         {name: 'resourcesCol', data: 'resources', render: formatResourceCells, orderable: false},
+                        {name: 'resourceProfileIdCol', data: 'resourceProfileId'},
                         {
                             data: 'activeTasks',
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
@@ -461,8 +462,10 @@ $(document).ready(function () {
                     "columnDefs": [
                         {"visible": false, "targets": 5},
                         {"visible": false, "targets": 6},
-                        {"visible": false, "targets": 9}
-                    ]
+                        {"visible": false, "targets": 9},
+                        {"visible": false, "targets": 10}
+                    ],
+                    "deferRender": true
                 };
 
                 execDataTable = $(selector).DataTable(conf);
@@ -560,22 +563,23 @@ $(document).ready(function () {
                 $('#execSummary [data-toggle="tooltip"]').tooltip();
 
                 $("#showAdditionalMetrics").append(
-                    "<div><a id='additionalMetrics'>" +
+                    "<div><a id='additionalMetrics' class='collapse-table'>" +
                     "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle-optional-metrics'></span>" +
                     "Show Additional Metrics" +
                     "</a></div>" +
-                    "<div class='container-fluid container-fluid-div' id='toggle-metrics' hidden>" +
+                    "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
                     "<div><input type='checkbox' class='toggle-vis' id='select-all-box'>Select All</div>" +
                     "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'>On Heap Memory</div>" +
                     "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'>Off Heap Memory</div>" +
                     "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9'>Resources</div>" +
+                    "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'>Resource Profile Id</div>" +
                     "</div>");
 
                 reselectCheckboxesBasedOnTaskTableState();
 
                 $("#additionalMetrics").click(function() {
                     $("#arrowtoggle-optional-metrics").toggleClass("arrow-open arrow-closed");
-                    $("#toggle-metrics").toggle();
+                    $("#toggle-metrics").toggleClass("d-none");
                     if (window.localStorage) {
                         window.localStorage.setItem("arrowtoggle-optional-metrics-class", $("#arrowtoggle-optional-metrics").attr('class'));
                     }
@@ -611,7 +615,7 @@ $(document).ready(function () {
                     if (window.localStorage.getItem("arrowtoggle-optional-metrics-class") != null &&
                         window.localStorage.getItem("arrowtoggle-optional-metrics-class").includes("arrow-open")) {
                         $("#arrowtoggle-optional-metrics").toggleClass("arrow-open arrow-closed");
-                        $("#toggle-metrics").toggle();
+                        $("#toggle-metrics").toggleClass("d-none");
                     }
                 }
             });

@@ -745,10 +745,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     manager.add(3, () => output += 3)
     manager.add(2, () => output += 2)
     manager.add(4, () => output += 4)
+    manager.add(Int.MinValue, () => output += Int.MinValue)
+    manager.add(Int.MinValue, () => output += Int.MinValue)
+    manager.add(Int.MaxValue, () => output += Int.MaxValue)
+    manager.add(Int.MaxValue, () => output += Int.MaxValue)
     manager.remove(hook1)
 
     manager.runAll()
-    assert(output.toList === List(4, 3, 2))
+    assert(output.toList === List(Int.MaxValue, Int.MaxValue, 4, 3, 2, Int.MinValue, Int.MinValue))
   }
 
   test("isInDirectory") {
@@ -847,36 +851,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     stream.print("test circular test circular test circular test circular test circular")
     assert(buffer.toString === "st circular test circular")
-  }
-
-  test("nanSafeCompareDoubles") {
-    def shouldMatchDefaultOrder(a: Double, b: Double): Unit = {
-      assert(Utils.nanSafeCompareDoubles(a, b) === JDouble.compare(a, b))
-      assert(Utils.nanSafeCompareDoubles(b, a) === JDouble.compare(b, a))
-    }
-    shouldMatchDefaultOrder(0d, 0d)
-    shouldMatchDefaultOrder(0d, 1d)
-    shouldMatchDefaultOrder(Double.MinValue, Double.MaxValue)
-    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NaN) === 0)
-    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.PositiveInfinity) === 1)
-    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NegativeInfinity) === 1)
-    assert(Utils.nanSafeCompareDoubles(Double.PositiveInfinity, Double.NaN) === -1)
-    assert(Utils.nanSafeCompareDoubles(Double.NegativeInfinity, Double.NaN) === -1)
-  }
-
-  test("nanSafeCompareFloats") {
-    def shouldMatchDefaultOrder(a: Float, b: Float): Unit = {
-      assert(Utils.nanSafeCompareFloats(a, b) === JFloat.compare(a, b))
-      assert(Utils.nanSafeCompareFloats(b, a) === JFloat.compare(b, a))
-    }
-    shouldMatchDefaultOrder(0f, 0f)
-    shouldMatchDefaultOrder(1f, 1f)
-    shouldMatchDefaultOrder(Float.MinValue, Float.MaxValue)
-    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NaN) === 0)
-    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.PositiveInfinity) === 1)
-    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NegativeInfinity) === 1)
-    assert(Utils.nanSafeCompareFloats(Float.PositiveInfinity, Float.NaN) === -1)
-    assert(Utils.nanSafeCompareFloats(Float.NegativeInfinity, Float.NaN) === -1)
   }
 
   test("isDynamicAllocationEnabled") {
@@ -1273,6 +1247,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     intercept[IllegalArgumentException] {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
+
+    intercept[IllegalArgumentException] {
+      Utils.checkAndGetK8sMasterUrl("k8s:///https://host:port")
+    }
   }
 
   test("stringHalfWidth") {
@@ -1322,6 +1300,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(Utils.trimExceptCRLF(s"a${s}") === "a")
       assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
     }
+  }
+
+  test("pathsToMetadata") {
+    val paths = (0 to 4).map(i => new Path(s"path$i"))
+    assert(Utils.buildLocationMetadata(paths, 5) == "[path0]")
+    assert(Utils.buildLocationMetadata(paths, 10) == "[path0, path1]")
+    assert(Utils.buildLocationMetadata(paths, 15) == "[path0, path1, path2]")
+    assert(Utils.buildLocationMetadata(paths, 25) == "[path0, path1, path2, path3]")
   }
 }
 

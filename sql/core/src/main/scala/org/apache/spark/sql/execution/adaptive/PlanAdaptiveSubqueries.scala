@@ -18,19 +18,28 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.ListQuery
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{ExecSubqueryExpression, SparkPlan}
+import org.apache.spark.sql.execution
+import org.apache.spark.sql.execution.{InSubqueryExec, SparkPlan, SubqueryExec}
 
-case class PlanAdaptiveSubqueries(
-    subqueryMap: scala.collection.Map[Long, ExecSubqueryExpression]) extends Rule[SparkPlan] {
+case class PlanAdaptiveSubqueries(subqueryMap: Map[Long, SubqueryExec]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case expressions.ScalarSubquery(_, _, exprId) =>
-        subqueryMap(exprId.id)
-      case expressions.InSubquery(_, ListQuery(_, _, exprId, _)) =>
-        subqueryMap(exprId.id)
+        execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
+      case expressions.InSubquery(values, ListQuery(_, _, exprId, _)) =>
+        val expr = if (values.length == 1) {
+          values.head
+        } else {
+          CreateNamedStruct(
+            values.zipWithIndex.flatMap { case (v, index) =>
+              Seq(Literal(s"col_$index"), v)
+            }
+          )
+        }
+        InSubqueryExec(expr, subqueryMap(exprId.id), exprId)
     }
   }
 }

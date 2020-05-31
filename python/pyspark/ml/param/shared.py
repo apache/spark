@@ -283,6 +283,24 @@ class HasTol(Params):
         return self.getOrDefault(self.tol)
 
 
+class HasRelativeError(Params):
+    """
+    Mixin for param relativeError: the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]
+    """
+
+    relativeError = Param(Params._dummy(), "relativeError", "the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self):
+        super(HasRelativeError, self).__init__()
+        self._setDefault(relativeError=0.001)
+
+    def getRelativeError(self):
+        """
+        Gets the value of relativeError or its default value.
+        """
+        return self.getOrDefault(self.relativeError)
+
+
 class HasStepSize(Params):
     """
     Mixin for param stepSize: Step size to be used for each iteration of optimization (>= 0).
@@ -562,3 +580,20 @@ class HasValidationIndicatorCol(Params):
         Gets the value of validationIndicatorCol or its default value.
         """
         return self.getOrDefault(self.validationIndicatorCol)
+
+
+class HasBlockSize(Params):
+    """
+    Mixin for param blockSize: block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.
+    """
+
+    blockSize = Param(Params._dummy(), "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasBlockSize, self).__init__()
+
+    def getBlockSize(self):
+        """
+        Gets the value of blockSize or its default value.
+        """
+        return self.getOrDefault(self.blockSize)

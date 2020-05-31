@@ -241,6 +241,23 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
 
   /**
+   * Returns Hamming-loss
+   */
+  @Since("3.0.0")
+  lazy val hammingLoss: Double = {
+    var numerator = 0.0
+    var denominator = 0.0
+    confusions.iterator.foreach {
+      case ((label, prediction), weight) =>
+        if (label != prediction) {
+          numerator += weight
+        }
+        denominator += weight
+    }
+    numerator / denominator
+  }
+
+  /**
    * Returns the log-loss, aka logistic loss or cross-entropy loss.
    * @param eps log-loss is undefined for p=0 or p=1, so probabilities are
    *            clipped to max(eps, min(1 - eps, p)).
@@ -266,7 +283,8 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         (loss * weight, weight)
 
       case other =>
-        throw new IllegalArgumentException(s"Expected quadruples, got $other")
+        throw new IllegalArgumentException(s"Invalid RDD value for MulticlassMetrics.logLoss. " +
+          s"Expected quadruples, got $other")
     }.treeReduce { case ((l1, w1), (l2, w2)) =>
       (l1 + l2, w1 + w2)
     }

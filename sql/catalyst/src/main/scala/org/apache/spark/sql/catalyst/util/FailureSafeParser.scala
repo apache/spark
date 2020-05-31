@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 class FailureSafeParser[IN](
-    rawParser: IN => Seq[InternalRow],
+    rawParser: IN => Iterable[InternalRow],
     mode: ParseMode,
     schema: StructType,
     columnNameOfCorruptRecord: String) {

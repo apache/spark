@@ -2,47 +2,47 @@
 -- Number of queries: 15
 
 
--- !query 0
+-- !query
 CREATE TABLE t (key STRING, value STRING, ds STRING, hr INT) USING parquet
     PARTITIONED BY (ds, hr)
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 INSERT INTO TABLE t PARTITION (ds='2017-08-01', hr=10)
 VALUES ('k1', 100), ('k2', 200), ('k3', 300)
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 INSERT INTO TABLE t PARTITION (ds='2017-08-01', hr=11)
 VALUES ('k1', 101), ('k2', 201), ('k3', 301), ('k4', 401)
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 INSERT INTO TABLE t PARTITION (ds='2017-09-01', hr=5)
 VALUES ('k1', 102), ('k2', 202)
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=10)
--- !query 4 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 4 output
+-- !query output
 key                 	string              	                    
 value               	string              	                    
 ds                  	string              	                    
@@ -64,19 +64,19 @@ Last Access [not included in comparison]
 Location [not included in comparison]/{warehouse_dir}/t
 
 
--- !query 5
+-- !query
 ANALYZE TABLE t PARTITION (ds='2017-08-01', hr=10) COMPUTE STATISTICS
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=10)
--- !query 6 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 6 output
+-- !query output
 key                 	string              	                    
 value               	string              	                    
 ds                  	string              	                    
@@ -99,19 +99,19 @@ Partition Statistics	[not included in comparison] bytes, 3 rows
 Location [not included in comparison]/{warehouse_dir}/t
 
 
--- !query 7
+-- !query
 ANALYZE TABLE t PARTITION (ds='2017-08-01') COMPUTE STATISTICS
--- !query 7 schema
+-- !query schema
 struct<>
--- !query 7 output
+-- !query output
 
 
 
--- !query 8
+-- !query
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=10)
--- !query 8 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 8 output
+-- !query output
 key                 	string              	                    
 value               	string              	                    
 ds                  	string              	                    
@@ -134,11 +134,11 @@ Partition Statistics	[not included in comparison] bytes, 3 rows
 Location [not included in comparison]/{warehouse_dir}/t
 
 
--- !query 9
+-- !query
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=11)
--- !query 9 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 9 output
+-- !query output
 key                 	string              	                    
 value               	string              	                    
 ds                  	string              	                    
@@ -161,19 +161,19 @@ Partition Statistics	[not included in comparison] bytes, 4 rows
 Location [not included in comparison]/{warehouse_dir}/t
 
 
--- !query 10
+-- !query
 ANALYZE TABLE t PARTITION (ds, hr) COMPUTE STATISTICS
--- !query 10 schema
+-- !query schema
 struct<>
--- !query 10 output
+-- !query output
 
 
 
--- !query 11
+-- !query
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=10)
--- !query 11 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 11 output
+-- !query output
 key                 	string              	                    
 value               	string              	                    
 ds                  	string              	                    
@@ -196,11 +196,11 @@ Partition Statistics	[not included in comparison] bytes, 3 rows
 Location [not included in comparison]/{warehouse_dir}/t
 
 
--- !query 12
+-- !query
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=11)
--- !query 12 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 12 output
+-- !query output
 key                 	string              	                    
 value               	string              	                    
 ds                  	string              	                    
@@ -223,11 +223,11 @@ Partition Statistics	[not included in comparison] bytes, 4 rows
 Location [not included in comparison]/{warehouse_dir}/t
 
 
--- !query 13
+-- !query
 DESC EXTENDED t PARTITION (ds='2017-09-01', hr=5)
--- !query 13 schema
+-- !query schema
 struct<col_name:string,data_type:string,comment:string>
--- !query 13 output
+-- !query output
 key                 	string              	                    
 value               	string              	                    
 ds                  	string              	                    
@@ -250,9 +250,9 @@ Partition Statistics	[not included in comparison] bytes, 2 rows
 Location [not included in comparison]/{warehouse_dir}/t
 
 
--- !query 14
+-- !query
 DROP TABLE t
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 

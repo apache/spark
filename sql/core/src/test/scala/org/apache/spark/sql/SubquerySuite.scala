@@ -22,11 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SubquerySuite extends QueryTest with SharedSparkSession {
+class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -152,29 +153,31 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("uncorrelated scalar subquery on a DataFrame generated query") {
-    val df = Seq((1, "one"), (2, "two"), (3, "three")).toDF("key", "value")
-    df.createOrReplaceTempView("subqueryData")
+    withTempView("subqueryData") {
+      val df = Seq((1, "one"), (2, "two"), (3, "three")).toDF("key", "value")
+      df.createOrReplaceTempView("subqueryData")
 
-    checkAnswer(
-      sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1"),
-      Array(Row(4))
-    )
+      checkAnswer(
+        sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1"),
+        Array(Row(4))
+      )
 
-    checkAnswer(
-      sql("select -(select max(key) from subqueryData)"),
-      Array(Row(-3))
-    )
+      checkAnswer(
+        sql("select -(select max(key) from subqueryData)"),
+        Array(Row(-3))
+      )
 
-    checkAnswer(
-      sql("select (select value from subqueryData limit 0)"),
-      Array(Row(null))
-    )
+      checkAnswer(
+        sql("select (select value from subqueryData limit 0)"),
+        Array(Row(null))
+      )
 
-    checkAnswer(
-      sql("select (select min(value) from subqueryData" +
-        " where key = (select max(key) from subqueryData) - 1)"),
-      Array(Row("two"))
-    )
+      checkAnswer(
+        sql("select (select min(value) from subqueryData" +
+          " where key = (select max(key) from subqueryData) - 1)"),
+        Array(Row("two"))
+      )
+    }
   }
 
   test("SPARK-15677: Queries against local relations with scalar subquery in Select list") {
@@ -201,154 +204,6 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql("SELECT c1, (select max(c1) from t2 where t1.c2 = t2.c2) from t1"),
         Row(1, 1) :: Row(2, 2) :: Nil)
-    }
-  }
-
-  test("SPARK-29145: JOIN Condition use QueryList") {
-    withTempView("s1", "s2", "s3") {
-      Seq(1, 3, 5, 7, 9).toDF("id").createOrReplaceTempView("s1")
-      Seq(1, 3, 4, 6, 9).toDF("id").createOrReplaceTempView("s2")
-      Seq(3, 4, 6, 9).toDF("id").createOrReplaceTempView("s3")
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id FROM s1
-            | JOIN s2 ON s1.id = s2.id
-            | AND s1.id IN (SELECT 9)
-          """.stripMargin),
-        Row(9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id FROM s1
-            | JOIN s2 ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT 9)
-          """.stripMargin),
-        Row(1) :: Row(3) :: Nil)
-
-      // case `IN`
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id FROM s1
-            | JOIN s2 ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(3) :: Row(9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id AS id2 FROM s1
-            | LEFT SEMI JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(3) :: Row(9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id as id2 FROM s1
-            | LEFT ANTI JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1) :: Row(5) :: Row(7) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id as id2 FROM s1
-            | LEFT OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, null) :: Row(3, 3) :: Row(5, null) :: Row(7, null) :: Row(9, 9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id as id2 FROM s1
-            | RIGHT OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(null, 1) :: Row(3, 3) :: Row(null, 4) :: Row(null, 6) :: Row(9, 9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id AS id2 FROM s1
-            | FULL OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, null) :: Row(3, 3) :: Row(5, null) :: Row(7, null) :: Row(9, 9) ::
-          Row(null, 1) :: Row(null, 4) :: Row(null, 6) :: Nil)
-
-      // case `NOT IN`
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id FROM s1
-            | JOIN s2 ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id AS id2 FROM s1
-            | LEFT SEMI JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id AS id2 FROM s1
-            | LEFT ANTI JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(3) :: Row(5) :: Row(7) :: Row(9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id AS id2 FROM s1
-            | LEFT OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, 1) :: Row(3, null) :: Row(5, null) :: Row(7, null) :: Row(9, null) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id AS id2 FROM s1
-            | RIGHT OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, 1) :: Row(null, 3) :: Row(null, 4) :: Row(null, 6) :: Row(null, 9) :: Nil)
-
-      checkAnswer(
-        sql(
-          """
-            | SELECT s1.id, s2.id AS id2 FROM s1
-            | FULL OUTER JOIN s2
-            | ON s1.id = s2.id
-            | AND s1.id NOT IN (SELECT id FROM s3)
-          """.stripMargin),
-        Row(1, 1) :: Row(3, null) :: Row(5, null) :: Row(7, null) :: Row(9, null) ::
-          Row(null, 3) :: Row(null, 4) :: Row(null, 6) :: Row(null, 9) :: Nil)
     }
   }
 
@@ -435,10 +290,10 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
         " or l.a in (select c from r where l.b < r.d)"),
       Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
 
-    intercept[AnalysisException] {
+    checkAnswer(
       sql("select * from l where a not in (select c from r)" +
-        " or a not in (select c from r where c is not null)")
-    }
+        " or a not in (select c from r where c is not null)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Nil)
   }
 
   test("complex IN predicate subquery") {
@@ -1039,9 +894,9 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
 
         val sqlText =
           """
-            |SELECT * FROM t1
+            |SELECT * FROM t1 a
             |WHERE
-            |NOT EXISTS (SELECT * FROM t1)
+            |NOT EXISTS (SELECT * FROM t1 b WHERE a.i = b.i)
           """.stripMargin
         val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
         val join = optimizedPlan.collectFirst { case j: Join => j }.get
@@ -1228,9 +1083,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
            |                    HAVING max(c2) > 0
            |                    ORDER  BY c1)
         """.stripMargin
-      // The rule to remove redundant sorts is not able to remove the inner sort under
-      // an Aggregate operator. We only remove the top level sort.
-      assert(getNumSortsInQuery(query6) == 1)
+
+      assert(getNumSortsInQuery(query6) == 0)
 
       // Cases when sort is not removed from the plan
       // Limit on top of sort
@@ -1420,12 +1274,29 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Cannot remove sort for floating-point order-sensitive aggregates from subquery") {
+    Seq("float", "double").foreach { typeName =>
+      Seq("SUM", "AVG", "KURTOSIS", "SKEWNESS", "STDDEV_POP", "STDDEV_SAMP",
+          "VAR_POP", "VAR_SAMP").foreach { aggName =>
+        val query =
+          s"""
+            |SELECT k, $aggName(v) FROM (
+            |  SELECT k, v
+            |  FROM VALUES (1, $typeName(2.0)), (2, $typeName(1.0)) t(k, v)
+            |  ORDER BY v)
+            |GROUP BY k
+          """.stripMargin
+        assert(getNumSortsInQuery(query) == 1)
+      }
+    }
+  }
+
   test("SPARK-25482: Forbid pushdown to datasources of filters containing subqueries") {
     withTempView("t1", "t2") {
       sql("create temporary view t1(a int) using parquet")
       sql("create temporary view t2(b int) using parquet")
       val plan = sql("select * from t2 where b > (select max(a) from t1)")
-      val subqueries = plan.queryExecution.executedPlan.collect {
+      val subqueries = stripAQEPlan(plan.queryExecution.executedPlan).collect {
         case p => p.subqueries
       }.flatten
       assert(subqueries.length == 1)
@@ -1440,7 +1311,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
       val df = sql("SELECT * FROM a WHERE p <= (SELECT MIN(id) FROM b)")
       checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
       // need to execute the query before we can examine fs.inputRDDs()
-      assert(df.queryExecution.executedPlan match {
+      assert(stripAQEPlan(df.queryExecution.executedPlan) match {
         case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
             fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _)))) =>
           partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
@@ -1488,7 +1359,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-27279: Reuse Subquery") {
+  test("SPARK-27279: Reuse Subquery", DisableAdaptiveExecution("reuse is dynamic in AQE")) {
     Seq(true, false).foreach { reuse =>
       withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
         val df = sql(
