@@ -37,11 +37,6 @@
   <dependencies>
     <!-- Added for Hive Parquet SerDe -->
     <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-core</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>${hive.parquet.group}</groupId>
       <artifactId>parquet-hadoop-bundle</artifactId>
     </dependency>
