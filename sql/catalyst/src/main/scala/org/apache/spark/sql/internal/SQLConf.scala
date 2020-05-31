@@ -2106,6 +2106,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val OPTIMIZER_HINTS_ENABLED =
+    buildConf("spark.sql.optimizer.hints.enabled")
+      .internal()
+      .doc("Hints are additional directives that aids optimizer in better planning of a query. " +
+        "This configuration when set to `false`, disables the application of user " +
+        "specified hints.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST =
     buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources")
       .internal()
@@ -3193,6 +3203,8 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def optimizerHintsEnabled: Boolean = getConf(OPTIMIZER_HINTS_ENABLED)
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
