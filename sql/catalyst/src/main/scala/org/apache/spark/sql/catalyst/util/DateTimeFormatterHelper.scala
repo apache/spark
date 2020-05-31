@@ -231,8 +231,10 @@ private object DateTimeFormatterHelper {
     // SPARK-31771: Disable Narrow-form TextStyle to avoid silent data change, as it is Full-form in
     // 2.4
     Seq("G", "M", "L", "E", "u", "Q", "q").map(_ * 5) ++
-    // SPARK-31771: Disable year pattern longer than 10 which will cause Java time library throw
-    // unchecked ArrayIndexOutOfBoundsException
+      // SPARK-31867: Disable year pattern longer than 10 which will cause Java time library throw
+      // unchecked `ArrayIndexOutOfBoundsException` by the `NumberPrinterParser` for formatting. It
+      // makes the call side difficult to handle exceptions and easily leads to silent data change
+      // because of the exceptions being suppressed.
       Seq("y", "Y").map(_ * 11)
   }.toSet
 
