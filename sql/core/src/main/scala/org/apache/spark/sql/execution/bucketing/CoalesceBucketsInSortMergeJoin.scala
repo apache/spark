@@ -52,45 +52,6 @@ case class CoalesceBucketsInSortMergeJoin(conf: SQLConf) extends Rule[SparkPlan]
     }
   }
 
-  object ExtractSortMergeJoinWithBuckets {
-    private def isScanOperation(plan: SparkPlan): Boolean = {
-      def forall(plan: SparkPlan)(p: SparkPlan => Boolean): Boolean = {
-        p(plan) && plan.children.forall(forall(_)(p))
-      }
-
-      forall(plan) {
-        case _: FilterExec | _: ProjectExec | _: FileSourceScanExec => true
-        case _ => false
-      }
-    }
-
-    private def getBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
-      if (isScanOperation(plan)) {
-        plan.collectFirst {
-          case f: FileSourceScanExec
-            if f.relation.bucketSpec.nonEmpty && f.optionalNumCoalescedBuckets.isEmpty =>
-            f.relation.bucketSpec.get
-        }
-      } else {
-        None
-      }
-    }
-
-    def unapply(plan: SparkPlan): Option[(SortMergeJoinExec, Int, Int)] = {
-      plan match {
-        case s: SortMergeJoinExec =>
-          val leftBucket = getBucketSpec(s.left)
-          val rightBucket = getBucketSpec(s.right)
-          if (leftBucket.isDefined && rightBucket.isDefined) {
-            Some(s, leftBucket.get.numBuckets, rightBucket.get.numBuckets)
-          } else {
-            None
-          }
-        case _ => None
-      }
-    }
-  }
-
   def apply(plan: SparkPlan): SparkPlan = {
     if (conf.coalesceBucketsInSortMergeJoinEnabled) {
       plan transform {
@@ -107,6 +68,49 @@ case class CoalesceBucketsInSortMergeJoin(conf: SQLConf) extends Rule[SparkPlan]
       }
     } else {
       plan
+    }
+  }
+}
+
+/**
+ * An extractor that extracts `SortMergeJoinExec` where both sides of the join have the bucketed
+ * tables and are consisted of only the scan operation.
+ */
+object ExtractSortMergeJoinWithBuckets {
+  private def isScanOperation(plan: SparkPlan): Boolean = {
+    def forall(plan: SparkPlan)(p: SparkPlan => Boolean): Boolean = {
+      p(plan) && plan.children.forall(forall(_)(p))
+    }
+
+    forall(plan) {
+      case _: FilterExec | _: ProjectExec | _: FileSourceScanExec => true
+      case _ => false
+    }
+  }
+
+  private def getBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
+    if (isScanOperation(plan)) {
+      plan.collectFirst {
+        case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty &&
+            f.optionalNumCoalescedBuckets.isEmpty =>
+          f.relation.bucketSpec.get
+      }
+    } else {
+      None
+    }
+  }
+
+  def unapply(plan: SparkPlan): Option[(SortMergeJoinExec, Int, Int)] = {
+    plan match {
+      case s: SortMergeJoinExec =>
+        val leftBucket = getBucketSpec(s.left)
+        val rightBucket = getBucketSpec(s.right)
+        if (leftBucket.isDefined && rightBucket.isDefined) {
+          Some(s, leftBucket.get.numBuckets, rightBucket.get.numBuckets)
+        } else {
+          None
+        }
+      case _ => None
     }
   }
 }
