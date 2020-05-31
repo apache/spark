@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -1353,5 +1354,33 @@ class FilterPushdownSuite extends PlanTest {
       || (("y.a".attr > 2) && ("y.c".attr < 1))))).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test(s"Disable rewrite to CNF by setting ${SQLConf.MAX_REWRITING_CNF_DEPTH.key}=0") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, condition = Some(("x.b".attr === "y.b".attr)
+        && ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5))
+        || (("y.a".attr > 2) && ("y.c".attr < 1)))))
+    }
+
+    Seq(0, 10).foreach { depth =>
+      withSQLConf(SQLConf.MAX_REWRITING_CNF_DEPTH.key -> depth.toString) {
+        val optimized = Optimize.execute(originalQuery.analyze)
+        val (left, right) = if (depth == 0) {
+          (testRelation.subquery('x), testRelation.subquery('y))
+        } else {
+          (testRelation.subquery('x),
+            testRelation.where('c <= 5 || ('a > 2 && 'c < 1)).subquery('y))
+        }
+        val correctAnswer = left.join(right, condition = Some("x.b".attr === "y.b".attr
+          && ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5))
+          || (("y.a".attr > 2) && ("y.c".attr < 1))))).analyze
+
+        comparePlans(optimized, correctAnswer)
+      }
+    }
   }
 }

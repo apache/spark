@@ -20,12 +20,10 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -121,6 +119,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
         rulesWithoutInferFiltersFromConstraints: _*) ::
+      // Set strategy to Once to avoid pushing filter every time because we do not change the
+      // join condition.
       Batch("Push predicate through join by conjunctive normal form", Once,
         PushPredicateThroughJoinByCNF) :: Nil
     }
@@ -1381,80 +1381,65 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
  * more predicate.
  */
 object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHelper {
-
-  // Used to group same side expressions to avoid generating too many duplicate predicates.
-  private case class SameSide(exps: Seq[Expression]) extends CodegenFallback {
-    override def children: Seq[Expression] = exps
-    override def nullable: Boolean = true
-    override def dataType: DataType = throw new UnsupportedOperationException
-    override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
-  }
-
   /**
    * Rewrite pattern:
    * 1. (a && b) || c --> (a || c) && (b || c)
    * 2. a || (b && c) --> (a || b) && (a || c)
-   * 3. !(a || b) --> !a && !b
+   *
+   * To avoid generating too many predicates, we first group the filter columns from the same table.
    */
-  private def rewriteToCNF(condition: Expression, depth: Int = 0): Expression = {
+  private def toCNF(condition: Expression, depth: Int = 0): Expression = {
     if (depth < SQLConf.get.maxRewritingCNFDepth) {
-      val nextDepth = depth + 1
       condition match {
-        case Or(And(a, b), c) =>
-          And(rewriteToCNF(Or(rewriteToCNF(a, nextDepth), rewriteToCNF(c, nextDepth)), nextDepth),
-            rewriteToCNF(Or(rewriteToCNF(b, nextDepth), rewriteToCNF(c, nextDepth)), nextDepth))
-        case Or(a, And(b, c)) =>
-          And(rewriteToCNF(Or(rewriteToCNF(a, nextDepth), rewriteToCNF(b, nextDepth)), nextDepth),
-            rewriteToCNF(Or(rewriteToCNF(a, nextDepth), rewriteToCNF(c, nextDepth)), nextDepth))
-        case Not(Or(a, b)) =>
-          And(rewriteToCNF(Not(rewriteToCNF(a, nextDepth)), nextDepth),
-            rewriteToCNF(Not(rewriteToCNF(b, nextDepth)), nextDepth))
-        case And(a, b) =>
-          And(rewriteToCNF(a, nextDepth), rewriteToCNF(b, nextDepth))
-        case other => other
+        case or @ Or(left: And, right: And) =>
+          val lhs = splitConjunctivePredicates(left).groupBy(_.references.map(_.qualifier))
+          val rhs = splitConjunctivePredicates(right).groupBy(_.references.map(_.qualifier))
+          if (lhs.size > 1) {
+            lhs.values.map(_.reduceLeft(And)).map { c =>
+              toCNF(Or(toCNF(c, depth + 1), toCNF(right, depth + 1)), depth + 1)
+            }.reduce(And)
+          } else if (rhs.size > 1) {
+            rhs.values.map(_.reduceLeft(And)).map { c =>
+              toCNF(Or(toCNF(left, depth + 1), toCNF(c, depth + 1)), depth + 1)
+            }.reduce(And)
+          } else {
+            or
+          }
+
+        case or @ Or(left: And, right) =>
+          val lhs = splitConjunctivePredicates(left).groupBy(_.references.map(_.qualifier))
+          if (lhs.size > 1) {
+            lhs.values.map(_.reduceLeft(And)).map {
+              c => toCNF(Or(toCNF(c, depth + 1), toCNF(right, depth + 1)), depth + 1)
+            }.reduce(And)
+          } else {
+            or
+          }
+
+        case or @ Or(left, right: And) =>
+          val rhs = splitConjunctivePredicates(right).groupBy(_.references.map(_.qualifier))
+          if (rhs.size > 1) {
+            rhs.values.map(_.reduceLeft(And)).map { c =>
+              toCNF(Or(toCNF(left, depth + 1), toCNF(c, depth + 1)), depth + 1)
+            }.reduce(And)
+          } else {
+            or
+          }
+
+        case And(left, right) =>
+          And(toCNF(left, depth + 1), toCNF(right, depth + 1))
+
+        case other =>
+          other
       }
     } else {
       condition
     }
   }
 
-  /**
-   * Split And expression by single side references. For example,
-   *   t1.a > 1 and t1.a < 10 and t2.a < 10 -->
-   *     SameSide(t1.a > 1, t1.a < 10) and SameSide(t2.a < 10)
-   */
-  private def splitAndExp(and: And, outputSet: AttributeSet) = {
-    val (leftSide, rightSide) =
-      splitConjunctivePredicates(and).partition(_.references.subsetOf(outputSet))
-    Seq(SameSide(leftSide), SameSide(rightSide)).filter(_.exps.nonEmpty).reduceLeft(And)
-  }
-
-  private def splitCondition(condition: Expression, outputSet: AttributeSet): Expression = {
-    condition.transformUp {
-      case Or(a: And, b: And) =>
-        Or(splitAndExp(a, outputSet), splitAndExp(b, outputSet))
-      case Or(a: And, b) =>
-        Or(splitAndExp(a, outputSet), b)
-      case Or(a, b: And) =>
-        Or(a, splitAndExp(b, outputSet))
-    }
-  }
-
-  // Restore expressions from SameSide.
-  private def restoreExps(condition: Expression): Expression = {
-    condition match {
-      case SameSide(exps) =>
-        exps.reduceLeft(And)
-      case Or(a, b) =>
-        Or(restoreExps(a), restoreExps(b))
-      case And(a, b) =>
-        And(restoreExps(a), restoreExps(b))
-      case other => other
-    }
-  }
-
   private def maybeWithFilter(joinCondition: Option[Expression], plan: LogicalPlan) = {
     (joinCondition, plan) match {
+      // Avoid adding the same filter.
       case (Some(condition), filter: Filter) if condition.semanticEquals(filter.condition) =>
         plan
       case (Some(condition), _) =>
@@ -1470,17 +1455,14 @@ object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHel
     case j @ Join(left, right, joinType, Some(joinCondition), hint) =>
 
       val pushDownCandidates =
-        splitConjunctivePredicates(rewriteToCNF(splitCondition(joinCondition, left.outputSet)))
-          .filter(_.deterministic)
+        splitConjunctivePredicates(toCNF(joinCondition)).filter(_.deterministic)
       val (leftEvaluateCondition, rest) =
         pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
       val (rightEvaluateCondition, _) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-      val newLeft =
-        maybeWithFilter(leftEvaluateCondition.reduceLeftOption(And).map(restoreExps), left)
-      val newRight =
-        maybeWithFilter(rightEvaluateCondition.reduceLeftOption(And).map(restoreExps), right)
+      val newLeft = maybeWithFilter(leftEvaluateCondition.reduceLeftOption(And), left)
+      val newRight = maybeWithFilter(rightEvaluateCondition.reduceLeftOption(And), right)
 
       joinType match {
         case _: InnerLike | LeftSemi =>
