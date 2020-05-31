@@ -1917,7 +1917,7 @@ class DatasetSuite extends QueryTest
     assert(df3.semanticHash === df4.semanticHash)
   }
 
-  test("SPARK-31854 Invoke in MapElementsExec should not propagate null") {
+  test("SPARK-31854: Invoke in MapElementsExec should not propagate null") {
     spark.conf.set("spark.sql.codegen.wholeStage", false)
     Seq("true", "false").foreach { wholeStage =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
