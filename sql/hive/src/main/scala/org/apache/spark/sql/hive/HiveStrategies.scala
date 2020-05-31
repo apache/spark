@@ -111,7 +111,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
   }
 }
 
-class DetermineTableStats(val session: SparkSession) extends Rule[LogicalPlan] {
+class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
   private[hive] def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val partitionCols = relation.partitionCols
