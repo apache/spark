@@ -383,15 +383,26 @@ case class Invoke(
       """
     }
 
+    val evalFunc = if (propagateNull) {
+      s"""
+        ${ev.isNull} = $resultIsNull;
+        if (!${ev.isNull}) {
+          $evaluate
+        }
+      """
+    } else {
+      s"""
+        ${ev.isNull} = false;
+        $evaluate
+      """
+    }
+
     val code = obj.code + code"""
       boolean ${ev.isNull} = true;
       $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${obj.isNull}) {
         $argCode
-        ${ev.isNull} = $resultIsNull;
-        if (!${ev.isNull}) {
-          $evaluate
-        }
+        $evalFunc
       }
      """
     ev.copy(code = code)

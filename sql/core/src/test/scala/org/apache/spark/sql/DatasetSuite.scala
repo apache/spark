@@ -1916,6 +1916,17 @@ class DatasetSuite extends QueryTest
     assert(df1.semanticHash !== df3.semanticHash)
     assert(df3.semanticHash === df4.semanticHash)
   }
+
+  test("SPARK-31854 Invoke in MapElementsExec should respect propagateNull") {
+    spark.conf.set("spark.sql.codegen.wholeStage", false)
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val ds = Seq(1.asInstanceOf[Integer], null.asInstanceOf[Integer]).toDS()
+        val expectedAnswer = Seq[(Integer, Integer)]((1, 1), (null, null))
+        checkDataset(ds.map(v => (v, v)), expectedAnswer: _*)
+      }
+    }
+  }
 }
 
 object AssertExecutionId {
