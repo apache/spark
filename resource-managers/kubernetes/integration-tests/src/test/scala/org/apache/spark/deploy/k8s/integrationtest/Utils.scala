@@ -26,6 +26,7 @@ import scala.util.Try
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import okhttp3.Response
 import org.apache.commons.io.output.ByteArrayOutputStream
+import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.internal.Logging
@@ -135,7 +136,6 @@ object Utils extends Logging {
   }
 
   def isHadoop3(): Boolean = {
-    val clazz = "org.apache.hadoop.yarn.api.records.ResourceInformation"
-    Try(SparkUtils.classForName(clazz)).isSuccess
+    VersionInfo.getVersion.startsWith("3")
   }
 }
