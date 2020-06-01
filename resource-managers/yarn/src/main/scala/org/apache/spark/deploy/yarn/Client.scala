@@ -173,11 +173,14 @@ private[spark] class Client(
 
       try {
         logInfo(s"Requesting a new application from cluster" +
-          s" ${hadoopConf.get(YarnConfiguration.RM_ADDRESS, YarnConfiguration.DEFAULT_RM_ADDRESS)}" +
+          s" ${hadoopConf.get(YarnConfiguration.RM_ADDRESS,
+            YarnConfiguration.DEFAULT_RM_ADDRESS)}" +
           s" with %d NodeManagers.".format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Yarn client may not implement the given API $e")
+          logWarning(s"Failed to request YARN cluster information from cluster " +
+            s"${hadoopConf.get(YarnConfiguration.RM_ADDRESS,
+              YarnConfiguration.DEFAULT_RM_ADDRESS)}" + " with excepation: $e")
       }
 
       // Get a new application from our RM
