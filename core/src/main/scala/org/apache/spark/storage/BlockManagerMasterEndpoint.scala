@@ -492,7 +492,20 @@ class BlockManagerMasterEndpoint(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
-    logDebug(s"Updating block info on master ${blockId} for ${blockManagerId}")
+    logInfo(s"Updating block info on master ${blockId} for ${blockManagerId}")
+
+    if (blockId.isInternalShuffle) {
+      blockId match {
+        case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+          // Don't update the map output on just the index block
+          logDebug("Received shuffle index block update for ${shuffleId} ${mapId}")
+        case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
+          logInfo("Received shuffle data block update for ${shuffleId} ${mapId}, performing update")
+          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
+        case _ =>
+          logDebug(s"Unexpected shuffle block type ${blockId}")
+      }
+    }
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
@@ -507,18 +520,6 @@ class BlockManagerMasterEndpoint(
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       return true
-    }
-
-    if (blockId.isInternalShuffle && storageLevel.isValid) {
-      blockId match {
-        case ShuffleIndexBlockId(shuffleId, mapId, _) =>
-          // Don't update the map output on just the index block
-          logDebug("Received shuffle index block update for ${shuffleId} ${mapId}")
-        case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
-          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
-        case _ =>
-          logError(s"Unexpected shuffle block type ${blockId}")
-      }
     }
 
     blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)

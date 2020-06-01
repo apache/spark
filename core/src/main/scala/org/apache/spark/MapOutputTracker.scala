@@ -128,6 +128,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
     val mapStatusOpt = mapStatuses.find(_.mapId == mapId)
     mapStatusOpt match {
       case Some(mapStatus) =>
+        logInfo("Updating map output for ${mapId} to ${bmAddress}")
         mapStatus.updateLocation(bmAddress)
         invalidateSerializedMapOutputStatusCache()
       case None =>
@@ -141,6 +142,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    * different block manager.
    */
   def removeMapOutput(mapIndex: Int, bmAddress: BlockManagerId): Unit = withWriteLock {
+    logDebug(s"Removing existing map output ${mapIndex} ${bmAddress}")
     if (mapStatuses(mapIndex) != null && mapStatuses(mapIndex).location == bmAddress) {
       _numAvailableOutputs -= 1
       mapStatuses(mapIndex) = null
@@ -153,6 +155,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    * outputs which are served by an external shuffle server (if one exists).
    */
   def removeOutputsOnHost(host: String): Unit = withWriteLock {
+    logDebug(s"Removing outputs for host ${host}")
     removeOutputsByFilter(x => x.host == host)
   }
 
@@ -162,6 +165,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    * still registered with that execId.
    */
   def removeOutputsOnExecutor(execId: String): Unit = withWriteLock {
+    logDebug(s"Removing outputs for execId ${execId}")
     removeOutputsByFilter(x => x.executorId == execId)
   }
 
@@ -279,7 +283,6 @@ private[spark] class MapOutputTrackerMasterEndpoint(
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
-      logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
       tracker.post(new GetMapOutputMessage(shuffleId, context))
 
     case StopMapOutputTracker =>
@@ -463,7 +466,7 @@ private[spark] class MapOutputTrackerMaster(
             val context = data.context
             val shuffleId = data.shuffleId
             val hostPort = context.senderAddress.hostPort
-            logDebug("Handling request to send map output locations for shuffle " + shuffleId +
+            logInfo("Handling request to send map output locations for shuffle " + shuffleId +
               " to " + hostPort)
             val shuffleStatus = shuffleStatuses.get(shuffleId).head
             context.reply(
@@ -495,8 +498,11 @@ private[spark] class MapOutputTrackerMaster(
 
   def updateMapOutput(shuffleId: Int, mapId: Long, bmAddress: BlockManagerId): Unit = {
     shuffleStatuses.get(shuffleId) match {
-      case Some(shuffleStatus) => shuffleStatus.updateMapOutput(mapId, bmAddress)
-      case None => logError("Asked to update map output for unknown shuffle ${shuffleId}")
+      case Some(shuffleStatus) =>
+        shuffleStatus.updateMapOutput(mapId, bmAddress)
+        shuffleStatus.invalidateSerializedMapOutputStatusCache()
+      case None =>
+        logError(s"Asked to update map output for unknown shuffle ${shuffleId}")
     }
   }
 
