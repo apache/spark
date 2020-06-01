@@ -173,9 +173,11 @@ function renderDagViz(forJob) {
   });
 
   metadataContainer().selectAll(".barrier-rdd").each(function() {
-    var rddId = d3.select(this).text().trim();
-    var clusterId = VizConstants.clusterPrefix + rddId;
-    svg.selectAll("g." + clusterId).classed("barrier", true)
+    var opId = d3.select(this).text().trim();
+    var opClusterId = VizConstants.clusterPrefix + opId;
+    var stageId = $(this).parents(".stage-metadata").attr("stage-id");
+    var stageClusterId = VizConstants.graphPrefix + stageId;
+    svg.selectAll("g[id=" + stageClusterId + "] g." + opClusterId).classed("barrier", true)
   });
 
   resizeSvg(svg);

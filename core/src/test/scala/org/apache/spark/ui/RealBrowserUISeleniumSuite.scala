@@ -78,6 +78,35 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
     }
   }
 
+
+  test("SPARK-31886: Color barrier execution mode RDD correctly") {
+    withSpark(newSparkContext()) { sc =>
+      sc.parallelize(1 to 10).barrier.mapPartitions(identity).repartition(1).collect()
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs/job/?id=0")
+        webDriver.findElement(By.id("job-dag-viz")).click()
+
+        val stage0 = webDriver.findElement(By.cssSelector("g[id='graph_0']"))
+        val stage1 = webDriver.findElement(By.cssSelector("g[id='graph_1']"))
+        val barrieredOps = webDriver.findElements(By.className("barrier-rdd")).iterator()
+
+        while (barrieredOps.hasNext) {
+          val barrieredOpId = barrieredOps.next().getAttribute("innerHTML")
+          val foundInStage0 =
+            stage0.findElements(
+              By.cssSelector("g.barrier.cluster.cluster_" + barrieredOpId))
+          assert(foundInStage0.size === 1)
+
+          val foundInStage1 =
+            stage1.findElements(
+              By.cssSelector("g.barrier.cluster.cluster_" + barrieredOpId))
+          assert(foundInStage1.size === 0)
+        }
+      }
+    }
+  }
+
   /**
    * Create a test SparkContext with the SparkUI enabled.
    * It is safe to `get` the SparkUI directly from the SparkContext returned here.
