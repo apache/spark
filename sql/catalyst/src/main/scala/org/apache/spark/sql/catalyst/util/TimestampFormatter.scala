@@ -273,8 +273,7 @@ object LegacyDateFormats extends Enumeration {
 object TimestampFormatter {
   import LegacyDateFormats._
 
-  val defaultLocale: Locale =
-    new Locale.Builder().setLocale(Locale.US).setExtension('u', "fw-mon").build()
+  val defaultLocale: Locale = Locale.US
 
   def defaultPattern(): String = s"${DateFormatter.defaultPattern} HH:mm:ss"
 

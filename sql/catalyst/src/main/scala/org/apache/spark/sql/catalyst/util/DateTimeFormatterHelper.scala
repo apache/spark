@@ -23,6 +23,8 @@ import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverSt
 import java.time.temporal._
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.SparkUpgradeException
@@ -31,59 +33,92 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
 trait DateTimeFormatterHelper {
-  private def getOrDefault(accessor: TemporalAccessor, field: TemporalField, default: Int): Int = {
+  private def getFieldValue(
+      accessor: TemporalAccessor,
+      field: TemporalField): Option[Int] = {
     if (accessor.isSupported(field)) {
-      accessor.get(field)
+      try {
+        Option(accessor.get(field))
+      } catch {
+        case NonFatal(_) => None
+      }
     } else {
-      default
+      None
     }
   }
 
+  @throws[DateTimeException]
   protected def toLocalDate(accessor: TemporalAccessor, locale: Locale): LocalDate = {
     val localDate = accessor.query(TemporalQueries.localDate())
-    // If all the date fields are specified, return the local date directly.
+    // If all the date fields are resolved(yMd or Ywu), return the local date directly.
     if (localDate != null) return localDate
 
+    var res = LocalDate.of(1970, 1, 1)
+
     val weekFields = WeekFields.of(locale)
-    lazy val weekBasedYearField = weekFields.weekBasedYear()
-    // Users may want to parse only a few datetime fields from a string and extract these fields
-    // later, and we should provide default values for missing fields.
-    // To be compatible with Spark 2.4, we pick 1970 as the default value of year.
-    val year = if (accessor.isSupported(ChronoField.YEAR)) {
-      accessor.get(ChronoField.YEAR)
-    } else if (accessor.isSupported(weekBasedYearField)) {
-      // If we reach
-      val year = accessor.get(weekBasedYearField) - 1
-      return LocalDate.of(year, 12, 1)
-        .`with`(TemporalAdjusters.lastInMonth(weekFields.getFirstDayOfWeek))
-    } else 1970
+    val weekBasedYearField = weekFields.weekBasedYear
+    var weekBasedYearEnabled = false
 
-    val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
-    val day = getOrDefault(accessor, ChronoField.DAY_OF_MONTH, 1)
-    val weekBasedYear = if (accessor.isSupported(weekFields.weekBasedYear())) {
-      Option(accessor.get(weekFields.weekBasedYear()))
-    } else {
-      None
-    }
-    if (accessor.isSupported(weekFields.weekOfMonth())) {
-      Option(accessor.get(weekFields.weekOfMonth()))
-    } else {
-      None
-    }
-    val week = if (accessor.isSupported(weekFields.weekOfWeekBasedYear())) {
-      Option(accessor.get(weekFields.weekOfWeekBasedYear()))
-    } else {
-      None
-    }
-    val dayOfWeek = if (accessor.isSupported(weekFields.dayOfWeek())) {
-      Option(accessor.get(weekFields.dayOfWeek()))
-    } else {
-      None
+    val year = getFieldValue(accessor, weekBasedYearField).map { y =>
+      weekBasedYearEnabled = true
+      y
+    }.orElse {
+      getFieldValue(accessor, ChronoField.YEAR)
     }
 
+    val week = getFieldValue(accessor, weekFields.weekOfWeekBasedYear())
+    val dayOfWeek = getFieldValue(accessor, weekFields.dayOfWeek())
 
-    val date = LocalDate.of(year, month, day)
-    date
+    // TODO: How to check 'W' week-of-month field, not like other week-based field, it always throw
+    // UnsupportedTemporalTypeException to get it even `accessor.isSupported` passed.
+
+    if (weekBasedYearEnabled) {
+      // If the week-based-year field exists, only the week-based fields matters.
+      res.`with`(weekFields.weekOfWeekBasedYear, week.getOrElse(1).toLong)
+        .`with`(weekFields.dayOfWeek(), dayOfWeek.getOrElse(1).toLong)
+        .`with`(weekBasedYearField, year.get)
+    } else {
+      if (year.isDefined) {
+        res = res.withYear(year.get)
+      }
+
+      val month = getFieldValue(accessor, ChronoField.MONTH_OF_YEAR)
+      val day = getFieldValue(accessor, ChronoField.DAY_OF_MONTH)
+
+      if (month.isDefined && week.isDefined) {
+        // check the week fall into the correct month of the year
+        res = res.`with`(weekFields.weekOfWeekBasedYear(), week.get)
+        if (res.getMonthValue != month.get) {
+          throw new DateTimeException(
+            s"week-of-week-based-year value: ${week.get} conflicts with month-of-year value:" +
+              s" ${month.get} which should be ${res.getMonthValue} instead.")
+        }
+      } else if (month.isDefined) {
+        res = res.withMonth(month.get)
+      } else if (week.isDefined) {
+        if (day.isDefined) {
+          throw new DateTimeException(
+            s"Can not use week-of-week-based-year and day-of-month together in non-week-based" +
+              s" mode.")
+        }
+        res = res.`with`(weekFields.weekOfWeekBasedYear, week.get)
+      }
+
+      if (dayOfWeek.isDefined && day.isDefined) {
+        // check whether the days matches
+        res = res.`with`(weekFields.dayOfWeek(), dayOfWeek.get)
+        if (res.getDayOfMonth != day.get) {
+          throw new DateTimeException(
+            s"day-of-week value: ${dayOfWeek.get} conflicts with day-of-month value:" +
+              s" ${day.get} which should be ${res.getDayOfMonth} instead.")
+        }
+      } else if (day.isDefined) {
+        res = res.withDayOfMonth(day.get)
+      } else if (dayOfWeek.isDefined) {
+        res = res.`with`(weekFields.dayOfWeek(), dayOfWeek.get)
+      }
+      res
+    }
   }
 
   private def toLocalTime(accessor: TemporalAccessor): LocalTime = {
@@ -99,10 +134,10 @@ trait DateTimeFormatterHelper {
     } else {
       0
     }
-    val minute = getOrDefault(accessor, ChronoField.MINUTE_OF_HOUR, 0)
-    val second = getOrDefault(accessor, ChronoField.SECOND_OF_MINUTE, 0)
-    val nanoSecond = getOrDefault(accessor, ChronoField.NANO_OF_SECOND, 0)
-    LocalTime.of(hour, minute, second, nanoSecond)
+    val minute = getFieldValue(accessor, ChronoField.MINUTE_OF_HOUR)
+    val second = getFieldValue(accessor, ChronoField.SECOND_OF_MINUTE)
+    val nanoSecond = getFieldValue(accessor, ChronoField.NANO_OF_SECOND)
+    LocalTime.of(hour, minute.getOrElse(0), second.getOrElse(0), nanoSecond.getOrElse(0))
   }
 
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros

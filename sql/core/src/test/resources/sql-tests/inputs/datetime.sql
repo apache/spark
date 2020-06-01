@@ -162,6 +162,7 @@ select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 
 -- SPARK-31868: Restore the behaviour week-based-year for 2.4
+select to_timestamp('2018-11-17 13:33:33', 'YYYY-MM-dd HH:mm:ss'); -- only the week-based year matters for the date part
 select to_timestamp('1969-01-01', 'YYYY-MM-dd');
 select to_timestamp('1969-12-31', 'YYYY-MM-dd');
 select to_timestamp('2018-01-01', 'YYYY-MM-dd');
@@ -173,7 +174,15 @@ select to_timestamp('1969 1 1', 'YYYY M u');
 select to_timestamp('1969 1 6 1', 'yyyy M d u');
 select to_timestamp('1969 1 5 1', 'yyyy M d u');
 -- YYYY-ww-dd
-select to_timestamp('1969 11 11', 'YYYY ww dd');
+select to_timestamp('2018 11 17', 'YYYY ww dd');
 select to_timestamp('1969 2 11', 'YYYY W dd');
 select to_timestamp('1969 5 11 11', 'YYYY M ww dd');
 
+select to_timestamp('2020 1 3 2', 'yyyy M w u');
+select to_timestamp('2018-11-2-17', 'yyyy-ww-W-dd');
+select to_timestamp('2018-11-2-11', 'yyyy-ww-W-dd');
+select to_timestamp('2018-11-3-12', 'yyyy-ww-W-dd');
+select to_timestamp('2018-11-10', 'yyyy-ww-dd');
+select to_timestamp('1', 'u');
+select to_timestamp('5 2', 'u d');
+select to_timestamp('5 3', 'u d');
