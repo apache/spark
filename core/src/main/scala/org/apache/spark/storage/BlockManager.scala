@@ -623,6 +623,7 @@ private[spark] class BlockManager(
    */
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
+      logInfo(s"Getting local shuffle block ${blockId}")
       shuffleManager.shuffleBlockResolver.getBlockData(blockId)
     } else {
       getLocalBytes(blockId) match {
@@ -658,7 +659,7 @@ private[spark] class BlockManager(
       classTag: ClassTag[_]): StreamCallbackWithID = {
     // Delegate shuffle blocks here to resolver if supported
     if (blockId.isShuffle || blockId.isInternalShuffle) {
-      logDebug(s"Putting shuffle block ${blockId}")
+      logInfo(s"Putting shuffle block ${blockId}")
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
@@ -667,7 +668,7 @@ private[spark] class BlockManager(
           s"resolver ${shuffleManager.shuffleBlockResolver}")
       }
     }
-    logDebug(s"Putting regular block ${blockId}")
+    logInfo(s"Putting regular block ${blockId}")
     // All other blocks
     val (_, tmpFile) = diskBlockManager.createTempLocalBlock()
     val channel = new CountingWritableChannel(
@@ -1829,21 +1830,25 @@ private[spark] class BlockManager(
         useOffHeap = false,
         deserialized = false,
         replication = 1)
+      logInfo(s"Starting migration thread for ${peer}")
       // Once a block fails to transfer to an executor stop trying to transfer more blocks
       try {
         while (running) {
           val migrating = Option(shufflesToMigrate.poll())
           migrating match {
             case None =>
+              logInfo("Nothing to migrate")
               // Nothing to do right now, but maybe a transfer will fail or a new block
               // will finish being committed.
-              val SLEEP_TIME_SECS = 5
+              val SLEEP_TIME_SECS = 1
               Thread.sleep(SLEEP_TIME_SECS * 1000L)
             case Some((shuffleId, mapId)) =>
-              logInfo(s"Trying to migrate ${shuffleId},${mapId} to ${peer}")
+              logInfo(s"Trying to migrate shuffle ${shuffleId},${mapId} to ${peer}")
               val blocks =
                 migratableResolver.getMigrationBlocks(shuffleId, mapId)
+              logInfo(s"Got migration sub-blocks ${blocks}")
               blocks.foreach { case (blockId, buffer) =>
+                logInfo(s"Migrating sub-block ${blockId}")
                 blockTransferService.uploadBlockSync(
                   peer.host,
                   peer.port,
@@ -1852,9 +1857,13 @@ private[spark] class BlockManager(
                   buffer,
                   storageLevel,
                   null)// class tag, we don't need for shuffle
+                logInfo(s"Migrated sub block ${blockId}")
               }
+              logInfo(s"Migrated ${shuffleId},${mapId} to ${peer}")
           }
         }
+        // This catch is intentionally outside of the while running block.
+        // if we encounter errors migrating to an executor we want to stop.
       } catch {
         case e: Exception =>
           migrating match {
@@ -1878,11 +1887,11 @@ private[spark] class BlockManager(
    */
   def offloadShuffleBlocks(): Unit = {
     // Update the queue of shuffles to be migrated
-    logDebug("Offloading shuffle blocks")
+    logInfo("Offloading shuffle blocks")
     val localShuffles = migratableResolver.getStoredShuffles()
-    logDebug(s"My local shuffles are ${localShuffles.toList}")
+    logInfo(s"My local shuffles are ${localShuffles.toList}")
     val newShufflesToMigrate = localShuffles.&~(migratingShuffles).toSeq
-    logDebug(s"My new shuffles to migrate ${newShufflesToMigrate.toList}")
+    logInfo(s"My new shuffles to migrate ${newShufflesToMigrate.toList}")
     shufflesToMigrate.addAll(newShufflesToMigrate.asJava)
     migratingShuffles ++= newShufflesToMigrate
 
@@ -2036,9 +2045,9 @@ private[spark] class BlockManager(
           try {
             // If enabled we migrate shuffle blocks first as they are more expensive.
             if (conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
-              logDebug(s"Attempting to replicate all cached RDD blocks")
+              logDebug(s"Attempting to replicate all shuffle blocks")
               offloadShuffleBlocks()
-              logInfo(s"Attempt to replicate all cached blocks done")
+              logInfo(s"Done starting workers to migrate shuffle blocks")
             }
             if (conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED)) {
               logDebug(s"Attempting to replicate all cached RDD blocks")

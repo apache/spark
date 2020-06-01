@@ -35,16 +35,16 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
 
   val numExecs = 3
   val numParts = 3
-
+/*
   test(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor") {
     runDecomTest(true, false, true)
   }
-
+*/
   test(s"verify that shuffle blocks are migrated with force to disk") {
     runDecomTest(false, true, false, remoteBlockSize = "1")
   }
-
+/*
   test(s"verify that shuffle blocks are migrated") {
     runDecomTest(false, true, false)
   }
@@ -52,7 +52,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
   test(s"verify that both migrations can work at the same time.") {
     runDecomTest(true, true, false)
   }
-
+ */
   private def runDecomTest(persist: Boolean, shuffle: Boolean, migrateDuring: Boolean,
     remoteBlockSize: String = "100000") = {
 
