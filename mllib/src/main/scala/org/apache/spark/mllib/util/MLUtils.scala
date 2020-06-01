@@ -28,7 +28,7 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.functions._
@@ -245,6 +245,17 @@ object MLUtils extends Logging {
       val validation = new PartitionwiseSampledRDD(rdd, sampler, true, seed)
       val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), true, seed)
       (training, validation)
+    }.toArray
+  }
+
+  /**
+   * Version of `kFold()` taking a fold column name.
+   */
+  @Since("3.1.0")
+  def kFold(df: DataFrame, numFolds: Int, foldColName: String): Array[(RDD[Row], RDD[Row])] = {
+    val foldCol = df.col(foldColName)
+    (0 until numFolds).map { fold =>
+      (df.filter(foldCol =!= fold).drop(foldCol).rdd, df.filter(foldCol === fold).drop(foldCol).rdd)
     }.toArray
   }
 
