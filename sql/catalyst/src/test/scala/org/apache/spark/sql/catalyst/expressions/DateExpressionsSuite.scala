@@ -1170,16 +1170,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-31868: Restore the behaviour week-based-year for 2.4") {
-    // TODO: Locale.US is Sunday started day of week, which affects the new formatter,
-    // while in 2.4 it's Monday first.
-    checkEvaluation(
-      new ParseToTimestamp(Literal("2018-11-17"), Literal("YYYY-MM-dd")).child,
-      Timestamp.valueOf("2017-12-31 00:00:00.0"))
-
-    checkEvaluation(
-      new ParseToTimestamp(Literal("2018-11-17 13:33:33"), Literal("YYYY-MM-dd HH:mm:ss")).child,
-      Timestamp.valueOf("2017-12-31 13:33:33.0"))
-
     checkEvaluation(
       new ParseToTimestamp(Literal("1969 1 2"), Literal("YYYY w u")).child,
       Timestamp.valueOf("1968-12-30 00:00:00.0"))
@@ -1187,46 +1177,34 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // the existence of 'W' is not for generating the timestamp but likely for checking whether
     // the timestamp falling into it.
     checkEvaluation(
-      new ParseToTimestamp(Literal("1969 5 1 2"), Literal("YYYY W w u")).child,
+      new ParseToTimestamp(Literal("1969 1 2"), Literal("YYYY w u")).child,
       Timestamp.valueOf("1968-12-30 00:00:00.0"))
 
     checkEvaluation(
       new ParseToTimestamp(Literal("1969 5 2"), Literal("YYYY W u")).child,
       Timestamp.valueOf("1968-12-30 00:00:00.0"))
 
-//    // the legacy parser does not support 'W' and results null, so SparkUpgradeException will come
-//    checkExceptionInExpression[SparkUpgradeException](
-//      new ParseToTimestamp(Literal("1969 4 2"), Literal("YYYY W u")).child, "3.0")
-//    checkExceptionInExpression[SparkUpgradeException](
-//      new ParseToTimestamp(Literal("5"), Literal("W")).child, "3.0")
-
+    checkEvaluation(
+      new ParseToTimestamp(Literal("2018-11-2-17"), Literal("yyyy-ww-dd")).child,
+      null)
     // https://bugs.openjdk.java.net/browse/JDK-8145633
     // Adjacent value parsing not supported for Localized Patterns
     checkExceptionInExpression[SparkUpgradeException](
       new ParseToTimestamp(Literal("196940"), Literal("YYYYww")).child, "3.0")
 
-    checkEvaluation(
-      new ParseToTimestamp(Literal("2020 1 3 2"), Literal("yyyy M w u")).child,
-      Timestamp.valueOf("2020-01-13 00:00:00.0"))
+    checkExceptionInExpression[SparkUpgradeException](
+      new ParseToTimestamp(Literal("2018-11-17 13:33:33"), Literal("YYYY-MM-dd HH:mm:ss")).child,
+      "3.0")
 
     checkEvaluation(
       new ParseToTimestamp(Literal("2018-46-7 13:33:33"), Literal("YYYY-ww-u HH:mm:ss")).child,
       Timestamp.valueOf("2018-11-17 13:33:33.0"))
 
-    checkEvaluation(
-      new ParseToTimestamp(Literal("2018-11-17"), Literal("YYYY-ww-dd")).child,
-      Timestamp.valueOf("2018-03-11 00:00:00.0"))
+    checkExceptionInExpression[SparkUpgradeException](
+      new ParseToTimestamp(Literal("2018-11-17"), Literal("YYYY-ww-dd")).child, "3.0")
 
-    checkEvaluation(
-      new ParseToTimestamp(Literal("2018-11-2-17"), Literal("yyyy-ww-dd")).child,
-      null)
-
-    // problem of first day of week change
     checkExceptionInExpression[SparkUpgradeException](
       new ParseToTimestamp(Literal("1969 1 6 1"), Literal("yyyy M d u")).child, "3.0")
 
-    checkEvaluation(
-      new ParseToTimestamp(Literal("1969 5 11 11"), Literal("YYYY M ww dd")).child,
-      Timestamp.valueOf("1969-03-09 00:00:00.0"))
   }
 }

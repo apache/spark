@@ -1002,41 +1002,46 @@ You may get a different result due to the upgrading of Spark 3.0: Fail to recogn
 -- !query
 select to_timestamp('2018-11-17 13:33:33', 'YYYY-MM-dd HH:mm:ss')
 -- !query schema
-struct<to_timestamp(2018-11-17 13:33:33, YYYY-MM-dd HH:mm:ss):timestamp>
+struct<>
 -- !query output
-2017-12-31 13:33:33
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '2018-11-17 13:33:33' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
 select to_timestamp('1969-01-01', 'YYYY-MM-dd')
 -- !query schema
-struct<to_timestamp(1969-01-01, YYYY-MM-dd):timestamp>
+struct<>
 -- !query output
-1968-12-29 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '1969-01-01' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
 select to_timestamp('1969-12-31', 'YYYY-MM-dd')
 -- !query schema
-struct<to_timestamp(1969-12-31, YYYY-MM-dd):timestamp>
+struct<>
 -- !query output
-1968-12-29 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '1969-12-31' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
 select to_timestamp('2018-01-01', 'YYYY-MM-dd')
 -- !query schema
-struct<to_timestamp(2018-01-01, YYYY-MM-dd):timestamp>
+struct<>
 -- !query output
-2017-12-31 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '2018-01-01' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
 select to_timestamp('2018-11-17 13:33:33', 'YYYY-MM-dd HH:mm:ss')
 -- !query schema
-struct<to_timestamp(2018-11-17 13:33:33, YYYY-MM-dd HH:mm:ss):timestamp>
+struct<>
 -- !query output
-2017-12-31 13:33:33
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '2018-11-17 13:33:33' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
@@ -1044,31 +1049,34 @@ select to_timestamp('1969 1 1', 'yyyy w u')
 -- !query schema
 struct<to_timestamp(1969 1 1, yyyy w u):timestamp>
 -- !query output
-1968-12-29 00:00:00
+NULL
 
 
 -- !query
 select to_timestamp('1969 1 1', 'yyyy M u')
 -- !query schema
-struct<to_timestamp(1969 1 1, yyyy M u):timestamp>
+struct<>
 -- !query output
-1968-12-29 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '1969 1 1' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
 select to_timestamp('1 1969 1', 'M YYYY u')
 -- !query schema
-struct<to_timestamp(1 1969 1, M YYYY u):timestamp>
+struct<>
 -- !query output
-1968-12-29 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '1 1969 1' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
 select to_timestamp('1969 1 1', 'YYYY M u')
 -- !query schema
-struct<to_timestamp(1969 1 1, YYYY M u):timestamp>
+struct<>
 -- !query output
-1968-12-29 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '1969 1 1' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
@@ -1091,9 +1099,10 @@ struct<to_timestamp(1969 1 5 1, yyyy M d u):timestamp>
 -- !query
 select to_timestamp('2018 11 17', 'YYYY ww dd')
 -- !query schema
-struct<to_timestamp(2018 11 17, YYYY ww dd):timestamp>
+struct<>
 -- !query output
-2018-03-11 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '2018 11 17' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
@@ -1101,23 +1110,25 @@ select to_timestamp('1969 2 11', 'YYYY W dd')
 -- !query schema
 struct<to_timestamp(1969 2 11, YYYY W dd):timestamp>
 -- !query output
-1968-12-29 00:00:00
+NULL
 
 
 -- !query
 select to_timestamp('1969 5 11 11', 'YYYY M ww dd')
 -- !query schema
-struct<to_timestamp(1969 5 11 11, YYYY M ww dd):timestamp>
+struct<>
 -- !query output
-1969-03-09 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '1969 5 11 11' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
 select to_timestamp('2020 1 3 2', 'yyyy M w u')
 -- !query schema
-struct<to_timestamp(2020 1 3 2, yyyy M w u):timestamp>
+struct<>
 -- !query output
-2020-01-13 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '2020 1 3 2' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
@@ -1180,14 +1191,16 @@ NULL
 -- !query
 select to_timestamp('2020 2020', 'YYYY yyyy')
 -- !query schema
-struct<to_timestamp(2020 2020, YYYY yyyy):timestamp>
+struct<>
 -- !query output
-2019-12-29 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '2020 2020' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
 select to_timestamp('2020 2020', 'YYYY yyyy')
 -- !query schema
-struct<to_timestamp(2020 2020, YYYY yyyy):timestamp>
+struct<>
 -- !query output
-2019-12-29 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to parse '2020 2020' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
