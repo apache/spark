@@ -21,6 +21,7 @@ import java.nio.file.{Files, Path}
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import okhttp3.Response
@@ -28,6 +29,7 @@ import org.apache.commons.io.output.ByteArrayOutputStream
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.{Utils => SparkUtils}
 
 object Utils extends Logging {
 
@@ -130,5 +132,10 @@ object Utils extends Logging {
       case _ => throw new SparkException(s"No valid $jarName file was found " +
         s"under spark home test dir ${sparkHomeDir.toAbsolutePath}!")
     }
+  }
+
+  def isHadoop3(): Boolean = {
+    val clazz = "org.apache.hadoop.yarn.api.records.ResourceInformation"
+    Try(SparkUtils.classForName(clazz)).isSuccess
   }
 }
