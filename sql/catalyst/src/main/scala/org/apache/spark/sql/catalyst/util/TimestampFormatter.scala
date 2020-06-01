@@ -279,13 +279,10 @@ object TimestampFormatter {
   import LegacyDateFormats._
 
   /**
-   * This is change from Locale.US to GB, because:
-   * The first day-of-week varies by culture.
-   * For example, the US uses Sunday, while the United Kingdom and the ISO-8601 standard use Monday.
-   *
-   * Using `US` makes functions which rely on the Locale to express the first day of week
-   * inconsistent with Spark 2.4
-   * see https://issues.apache.org/jira/browse/SPARK-31879
+   * Before Spark 3.0, the first day-of-week is always Monday. Since Spark 3.0, it depends on the
+   * locale.
+   * We pick GB as the default locale instead of US, to be compatible with Spark 2.x, as US locale
+   * uses Sunday as the first day-of-week. See SPARK-31879.
    */
   val defaultLocale: Locale = new Locale("en", "GB")
 
