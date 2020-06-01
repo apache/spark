@@ -94,9 +94,14 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // Listen for the job & block updates
     val taskStartSem = new Semaphore(0)
     val broadcastSem = new Semaphore(0)
+    val executorRemovedSem = new Semaphore(0)
     val taskEndEvents = ArrayBuffer.empty[SparkListenerTaskEnd]
     val blocksUpdated = ArrayBuffer.empty[SparkListenerBlockUpdated]
     sc.addSparkListener(new SparkListener {
+
+      override def onExecutorRemoved(execRemoved: SparkListenerExecutorRemoved): Unit = {
+        executorRemovedSem.release()
+      }
 
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         taskStartSem.release()
@@ -223,5 +228,18 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       // There should still be all the RDD blocks cached
       assert(execIdToBlocksMapping.values.flatMap(_.keys).count(_.isRDD) === numParts)
     }
+
+    // Make the executor we decommissioned exit
+    sched.client.killExecutors(List(execToDecommission))
+
+    // Wait for the executor to be removed
+    executorRemovedSem.acquire(1)
+
+    // Since the RDD is cached or shuffled so further usage of same RDD should use the
+    // cached data. Original RDD partitions should not be recomputed i.e. accum
+    // should have same value like before
+    assert(testRdd.count() === numParts)
+    assert(accum.value === numParts)
+
   }
 }
