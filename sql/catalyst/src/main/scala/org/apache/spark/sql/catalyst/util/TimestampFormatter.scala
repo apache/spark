@@ -121,6 +121,7 @@ class FractionTimestampFormatter(zoneId: ZoneId)
     TimestampFormatter.defaultPattern,
     zoneId,
     TimestampFormatter.defaultLocale,
+    LegacyDateFormats.FAST_DATE_FORMAT,
     needVarLengthSecondFraction = false) {
 
   @transient
@@ -224,7 +225,11 @@ class LegacyFastTimestampFormatter(
   }
 
   override def format(ts: Timestamp): String = {
-    format(fromJavaTimestamp(ts))
+    if (ts.getNanos == 0) {
+      fastDateFormat.format(ts)
+    } else {
+      format(fromJavaTimestamp(ts))
+    }
   }
 
   override def format(instant: Instant): String = {

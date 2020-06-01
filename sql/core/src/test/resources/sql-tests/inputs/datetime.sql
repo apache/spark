@@ -161,6 +161,10 @@ select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'd
 select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 
+select from_unixtime(1, 'yyyyyyyyyyy-MM-dd');
+select date_format(timestamp '2018-11-17 13:33:33', 'yyyyyyyyyy-MM-dd HH:mm:ss');
+select date_format(date '2018-11-17', 'yyyyyyyyyyy-MM-dd');
+
 -- SPARK-31868: Restore the behaviour week-based-year for 2.4
 select to_timestamp('2018-11-17 13:33:33', 'YYYY-MM-dd HH:mm:ss'); -- only the week-based year matters for the date part
 select to_timestamp('1969-01-01', 'YYYY-MM-dd');
@@ -186,3 +190,5 @@ select to_timestamp('2018-11-10', 'yyyy-ww-dd');
 select to_timestamp('1', 'u');
 select to_timestamp('5 2', 'u d');
 select to_timestamp('5 3', 'u d');
+select to_timestamp('2020 2020', 'YYYY yyyy');
+select to_timestamp('2020 2020', 'YYYY yyyy');

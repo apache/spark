@@ -298,8 +298,16 @@ private object DateTimeFormatterHelper {
     formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
   }
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
-  final val unsupportedNarrowTextStyle =
-    Seq("G", "M", "L", "E", "u", "Q", "q").map(_ * 5).toSet
+  final val unsupportedPatternLengths = {
+    // SPARK-31771: Disable Narrow-form TextStyle to avoid silent data change, as it is Full-form in
+    // 2.4
+    Seq("G", "M", "L", "E", "u", "Q", "q").map(_ * 5) ++
+      // SPARK-31867: Disable year pattern longer than 10 which will cause Java time library throw
+      // unchecked `ArrayIndexOutOfBoundsException` by the `NumberPrinterParser` for formatting. It
+      // makes the call side difficult to handle exceptions and easily leads to silent data change
+      // because of the exceptions being suppressed.
+      Seq("y", "Y").map(_ * 11)
+  }.toSet
 
   /**
    * In Spark 3.0, we switch to the Proleptic Gregorian calendar and use DateTimeFormatter for
@@ -321,7 +329,7 @@ private object DateTimeFormatterHelper {
           for (c <- patternPart if unsupportedLetters.contains(c)) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
           }
-          for (style <- unsupportedNarrowTextStyle if patternPart.contains(style)) {
+          for (style <- unsupportedPatternLengths if patternPart.contains(style)) {
             throw new IllegalArgumentException(s"Too many pattern letters: ${style.head}")
           }
           if (bugInStandAloneForm && (patternPart.contains("LLL") || patternPart.contains("qqq"))) {
