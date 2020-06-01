@@ -25,6 +25,7 @@ import org.apache.spark.{FutureAction, MapOutputStatistics, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -147,7 +148,7 @@ case class ShuffleQueryStageExec(
       throw new IllegalStateException("wrong plan for shuffle stage:\n " + plan.treeString)
   }
 
-  override def doMaterialize(): Future[Any] = {
+  override def doMaterialize(): Future[Any] = attachTree(this, "execute") {
     shuffle.mapOutputStatisticsFuture
   }
 

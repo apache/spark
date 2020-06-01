@@ -171,22 +171,22 @@
                   url: sql-ref-syntax-qry-select-limit.html
                 - text: Common Table Expression
                   url: sql-ref-syntax-qry-select-cte.html
+                - text: Hints
+                  url: sql-ref-syntax-qry-select-hints.html
                 - text: Inline Table
                   url: sql-ref-syntax-qry-select-inline-table.html
                 - text: JOIN
                   url: sql-ref-syntax-qry-select-join.html
-                - text: Join Hints
-                  url: sql-ref-syntax-qry-select-hints.html
                 - text: LIKE Predicate
                   url: sql-ref-syntax-qry-select-like.html
                 - text: Set Operators
                   url: sql-ref-syntax-qry-select-setops.html
                 - text: TABLESAMPLE
-                  url: sql-ref-syntax-qry-sampling.html
+                  url: sql-ref-syntax-qry-select-sampling.html
                 - text: Table-valued Function
                   url: sql-ref-syntax-qry-select-tvf.html
                 - text: Window Function
-                  url: sql-ref-syntax-qry-window.html
+                  url: sql-ref-syntax-qry-select-window.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements
