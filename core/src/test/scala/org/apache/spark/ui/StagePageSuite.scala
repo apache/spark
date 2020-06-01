@@ -98,7 +98,6 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
       val taskTable = new TaskPagedTable(
         stageData,
         basePath = "/a/b/c",
-        currentTime = 0,
         pageSize = 10,
         sortColumn = "Index",
         desc = false,
