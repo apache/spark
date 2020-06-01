@@ -91,7 +91,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
-    String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
+    String indexCacheSize = conf.get("spark.shuffle.service.mergedIndex.cache.size", "100m");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
         new CacheLoader<File, ShuffleIndexInformation>() {
           public ShuffleIndexInformation load(File file) throws IOException {
