@@ -66,10 +66,8 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // workload we need to worry about.
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 1L)
 
-    // Force fetching to local disk
-    if (shuffle) {
-      conf.set("spark.network.maxRemoteBlockSizeFetchToMem", "1")
-    }
+    // Allow force fetching to local disk
+    conf.set("spark.network.maxRemoteBlockSizeFetchToMem", remoteBlockSize)
 
     sc = new SparkContext(master, "test", conf)
 
