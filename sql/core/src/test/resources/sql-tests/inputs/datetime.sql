@@ -59,6 +59,8 @@ select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678';
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
 select timestamp'2019-10-06 10:11:12.345678' - null;
 select null - timestamp'2019-10-06 10:11:12.345678';
+select timestamp'2019-10-06 10:11:12.345678' - '2019-10-05 10:11:12.345678';
+select '2019-10-06 10:11:12.345678' - timestamp'2019-10-05 10:11:12.345678';
 
 -- date add/sub
 select date_add('2011-11-11', 1Y);

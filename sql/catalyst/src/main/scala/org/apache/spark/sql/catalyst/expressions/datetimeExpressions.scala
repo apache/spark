@@ -2322,7 +2322,7 @@ case class Extract(field: Expression, source: Expression, child: Expression)
  * between the given timestamps.
  */
 case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expression)
-  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = endTimestamp
   override def right: Expression = startTimestamp
