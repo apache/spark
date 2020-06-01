@@ -2109,9 +2109,8 @@ object SQLConf {
   val OPTIMIZER_HINTS_ENABLED =
     buildConf("spark.sql.optimizer.hints.enabled")
       .internal()
-      .doc("Hints are additional directives that aids optimizer in better planning of a query. " +
-        "This configuration when set to `false`, disables the application of user " +
-        "specified hints.")
+      .doc("When false, the optimizer will ignore user-specified hints that are additional " +
+        "directives for better planning of a query.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
