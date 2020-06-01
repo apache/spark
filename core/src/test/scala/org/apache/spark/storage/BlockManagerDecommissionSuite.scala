@@ -41,7 +41,11 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     runDecomTest(true, false, true)
   }
 
-  test(s"verify that shuffle blocks are migrated.") {
+  test(s"verify that shuffle blocks are migrated with force to disk") {
+    runDecomTest(false, true, false, remoteBlockSize = "1")
+  }
+
+  test(s"verify that shuffle blocks are migrated") {
     runDecomTest(false, true, false)
   }
 
@@ -49,7 +53,9 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     runDecomTest(true, true, false)
   }
 
-  private def runDecomTest(persist: Boolean, shuffle: Boolean, migrateDuring: Boolean) = {
+  private def runDecomTest(persist: Boolean, shuffle: Boolean, migrateDuring: Boolean,
+    remoteBlockSize: String = "100000") = {
+
     val master = s"local-cluster[${numExecs}, 1, 1024]"
     val conf = new SparkConf().setAppName("test").setMaster(master)
       .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
@@ -75,7 +81,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
 
     // Create a new RDD where we have sleep in each partition, we are also increasing
     // the value of accumulator in each partition
-    val sleepyRdd = input.mapPartitions { x =>
+    val baseRdd = input.mapPartitions { x =>
       if (migrateDuring) {
         Thread.sleep(500)
       }
@@ -83,8 +89,8 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       x.map(y => (y, y))
     }
     val testRdd = shuffle match {
-      case true => sleepyRdd.reduceByKey(_ + _)
-      case false => sleepyRdd
+      case true => baseRdd.reduceByKey(_ + _)
+      case false => baseRdd
     }
 
     // Listen for the job & block updates
@@ -182,7 +188,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
         val blockLocs = rddUpdates.map{ update =>
           (update.blockUpdatedInfo.blockId.name,
             update.blockUpdatedInfo.blockManagerId)}
-        val blocksToManagers = blockLocs.groupBy(_._1).mapValues(_.toSet.size)
+        val blocksToManagers = blockLocs.groupBy(_._1).mapValues(_.size)
         assert(!blocksToManagers.filter(_._2 > 1).isEmpty,
           s"We should have a block that has been on multiple BMs in rdds:\n ${rddUpdates} from:\n" +
           s"${blocksUpdated}\n but instead we got:\n ${blocksToManagers}")
@@ -193,11 +199,11 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
         val numDataLocs = blocksUpdated.filter{ update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleDataBlockId]
-        }.toSet.size
+        }.size
         val numIndexLocs = blocksUpdated.filter{ update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleIndexBlockId]
-        }.toSet.size
+        }.size
         assert(numDataLocs >= 1, s"Expect shuffle data block updates in ${blocksUpdated}")
         assert(numIndexLocs >= 1, s"Expect shuffle index block updates in ${blocksUpdated}")
       }
