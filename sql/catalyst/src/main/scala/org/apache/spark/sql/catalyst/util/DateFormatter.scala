@@ -117,7 +117,16 @@ class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyD
 object DateFormatter {
   import LegacyDateFormats._
 
-  val defaultLocale: Locale = Locale.US
+  /**
+   * This is change from Locale.US to GB, because:
+   * The first day-of-week varies by culture.
+   * For example, the US uses Sunday, while the United Kingdom and the ISO-8601 standard use Monday.
+   *
+   * Using `US` makes functions which rely on the Locale to express the first day of week
+   * inconsistent with Spark 2.4
+   * see https://issues.apache.org/jira/browse/SPARK-31879
+   */
+  val defaultLocale: Locale = new Locale("en", "GB")
 
   val defaultPattern: String = "yyyy-MM-dd"
 
